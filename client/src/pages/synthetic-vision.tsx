@@ -16,7 +16,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Demo2DMapSurface from "@/components/demo/Demo2DMapSurface";
 import type {
   DemoDiversion,
@@ -2450,133 +2449,196 @@ export default function SyntheticVisionPage() {
     [flightFrame, remainingMinutes],
   );
 
+  const flightDeckGlassClass = "rounded-[30px] border border-[#1E2D42] bg-[linear-gradient(180deg,rgba(12,18,27,0.96)_0%,rgba(8,12,18,0.96)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur";
+  const flightDeckPanelClass = "rounded-[24px] border border-[#1E2D42] bg-[#0A0E14]/92 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
+  const flightDeckPillClass = "rounded-full border border-[#22324A] bg-[#091018]/88 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]";
+  const flightDeckMetricClass = "rounded-[20px] border border-[#1E2D42] bg-[#091018]/92 px-4 py-3";
+
   return (
-    <div className="min-h-screen bg-[#060A10] text-[#E8EDF4]">
-      <section className="border-b border-[#1E2D42] bg-[radial-gradient(circle_at_top_left,#16345E_0%,#0A1428_32%,#060A10_78%)] py-12">
-        <div className="container mx-auto px-4 space-y-6">
+    <div className="min-h-screen overflow-x-hidden bg-[#060A10] text-[#E8EDF4]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[540px] bg-[radial-gradient(circle_at_18%_12%,rgba(74,159,212,0.24),transparent_34%),radial-gradient(circle_at_78%_0%,rgba(200,146,42,0.22),transparent_28%),linear-gradient(180deg,#08101B_0%,rgba(6,10,16,0.94)_64%,#060A10_100%)]" />
+      <section className="relative border-b border-[#122033] px-4 pb-10 pt-12">
+        <div className="container mx-auto space-y-8">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className={`${RSF_COCKPIT_SHELL_CLASS} hover:bg-[#111820]`}>Web Demo</Badge>
-            <Badge className={`${RSF_COCKPIT_SHELL_CLASS} ${RSF_COCKPIT_MUTED_TEXT_CLASS} hover:bg-[#111820]`}>Map-first FlightDeck preview</Badge>
+            <Badge className={`${flightDeckPillClass} border-[#27415D] bg-[#0A1725] text-[#CFE7FF] hover:bg-[#0A1725]`}>FlightDeck Web Demo</Badge>
+            <Badge className={`${flightDeckPillClass} hover:bg-[#091018]`}>App-parity build in progress</Badge>
+            <Badge className={`${flightDeckPillClass} border-[#3D2F18] bg-[#140F09] text-[#DDB86C] hover:bg-[#140F09]`}>Map-first cockpit preview</Badge>
           </div>
-          <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-            <div className="space-y-4">
-              <h1 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
-                Flight demo for the new mobile cockpit.
-              </h1>
-              <p className={`max-w-3xl text-base leading-7 ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>
-                Enter a departure and arrival airport, then preview a browser simulation of the new Ready Set Fly
-                in-flight experience. The map follows the aircraft, the route uses live airport geometry, and playback
-                runs up to 8x speed.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button asChild variant="outline" className={`${RSF_COCKPIT_SHELL_CLASS} hover:bg-[#1A2332]`}>
-                  <Link href="/flight-planner">Open planner</Link>
-                </Button>
-                <Button asChild variant="outline" className={`${RSF_COCKPIT_SHELL_CLASS} hover:bg-[#1A2332]`}>
-                  <Link href="/ifr-tools">IFR tools</Link>
-                </Button>
+
+          <div className="grid gap-8 xl:grid-cols-[1.2fr_0.8fr] xl:items-start">
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="max-w-[920px]">
+                  <h1 className="font-display text-4xl font-semibold tracking-[-0.03em] sm:text-5xl xl:text-6xl">
+                    FlightDeck is now the front door, not a side demo.
+                  </h1>
+                  <p className={`mt-4 max-w-3xl text-base leading-7 sm:text-lg ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>
+                    This public web surface is being brought into visual and interaction alignment with the app: map-first
+                    routing, synthetic vision, runway-aware guidance, terrain, traffic, and a darker cockpit-grade presentation.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className={flightDeckMetricClass}>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Demo profile</div>
+                    <div className="mt-3 flex items-center gap-2 text-sm font-semibold text-[#E8EDF4]">
+                      <Gauge className="h-4 w-4 text-[#4A9FD4]" />
+                      {DEMO_CRUISE_KTS} KTAS
+                    </div>
+                    <div className="mt-1 text-xs text-[#7A9BB8]">{DEMO_ALTITUDE_FT.toLocaleString()} ft cruise target</div>
+                  </div>
+                  <div className={flightDeckMetricClass}>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Current route</div>
+                    <div className="mt-3 text-sm font-semibold text-[#E8EDF4]">{routeLabel || `${departureInput} ${arrivalInput}`}</div>
+                    <div className="mt-1 text-xs text-[#7A9BB8]">{totalRouteNm ? `${totalRouteNm.toFixed(1)} NM planned` : "Build a route to preview the map stack"}</div>
+                  </div>
+                  <div className={flightDeckMetricClass}>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Playback</div>
+                    <div className="mt-3 text-sm font-semibold text-[#E8EDF4]">{speed}</div>
+                    <div className="mt-1 text-xs text-[#7A9BB8]">{running ? "Live playback active" : "Paused for inspection"}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`${flightDeckGlassClass} overflow-hidden`}>
+                <div className="border-b border-[#162334] px-6 py-5">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7A9BB8]">Build route</div>
+                      <div className="text-2xl font-semibold tracking-[-0.02em]">Launch the same FlightDeck experience users will expect in the app.</div>
+                      <div className="max-w-2xl text-sm text-[#7A9BB8]">
+                        Enter departure and arrival only. RSF fills helper waypoints, runway guidance, comms context, and the tactical preview layers around the route.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button asChild variant="outline" className="border-[#22324A] bg-[#101923] text-[#E8EDF4] hover:bg-[#162130]">
+                        <Link href="/flight-planner">Open planner</Link>
+                      </Button>
+                      <Button asChild variant="outline" className="border-[#22324A] bg-[#101923] text-[#E8EDF4] hover:bg-[#162130]">
+                        <Link href="/ifr-tools">IFR tools</Link>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-5 px-6 py-6 lg:grid-cols-[1.2fr_0.8fr]">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className={flightDeckPanelClass}>
+                      <div className="px-4 pb-2 pt-4 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Departure</div>
+                      <div className="px-4 pb-4">
+                        <Input
+                          list="rsf-demo-departures"
+                          value={departureInput}
+                          onChange={(event) => setDepartureInput(normalizeAirportCode(event.target.value))}
+                          className="h-14 border-[#22324A] bg-[#071018] font-mono text-2xl text-[#E8EDF4]"
+                          placeholder="KDAL"
+                        />
+                        <datalist id="rsf-demo-departures">
+                          {departureSuggestions.map((airport) => (
+                            <option key={`dep-${airport.icao}`} value={airport.icao}>
+                              {airport.name || airport.city || airport.icao}
+                            </option>
+                          ))}
+                        </datalist>
+                      </div>
+                    </div>
+
+                    <div className={flightDeckPanelClass}>
+                      <div className="px-4 pb-2 pt-4 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Arrival</div>
+                      <div className="px-4 pb-4">
+                        <Input
+                          list="rsf-demo-arrivals"
+                          value={arrivalInput}
+                          onChange={(event) => setArrivalInput(normalizeAirportCode(event.target.value))}
+                          className="h-14 border-[#22324A] bg-[#071018] font-mono text-2xl text-[#E8EDF4]"
+                          placeholder="KHOU"
+                        />
+                        <datalist id="rsf-demo-arrivals">
+                          {arrivalSuggestions.map((airport) => (
+                            <option key={`arr-${airport.icao}`} value={airport.icao}>
+                              {airport.name || airport.city || airport.icao}
+                            </option>
+                          ))}
+                        </datalist>
+                      </div>
+                    </div>
+
+                    <div className={`${flightDeckPanelClass} sm:col-span-2`}>
+                      <div className="grid gap-4 px-4 py-4 md:grid-cols-[0.9fr_1.1fr]">
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Playback speed</div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {(["1x", "2x", "4x", "8x"] as DemoSpeed[]).map((value) => (
+                              <Button
+                                key={value}
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className={value === speed ? "border-[#C8922A] bg-[#1A2332] text-[#E8EDF4]" : "border-[#22324A] bg-[#111820] text-[#7A9BB8]"}
+                                onClick={() => setSpeed(value)}
+                              >
+                                {value}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <div className="rounded-2xl border border-[#182536] bg-[#091018] px-3 py-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Playback</div>
+                            <div className="mt-2 text-sm font-semibold text-[#E8EDF4]">{running ? "Running" : "Paused"}</div>
+                          </div>
+                          <div className="rounded-2xl border border-[#182536] bg-[#091018] px-3 py-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Map mode</div>
+                            <div className="mt-2 text-sm font-semibold text-[#E8EDF4] capitalize">{viewMode}</div>
+                          </div>
+                          <div className="rounded-2xl border border-[#182536] bg-[#091018] px-3 py-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Route remain</div>
+                            <div className="mt-2 text-sm font-semibold text-[#E8EDF4]">{routeProgress?.remainingRouteNm ? `${routeProgress.remainingRouteNm.toFixed(1)} NM` : "--"}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`${flightDeckPanelClass} flex flex-col justify-between`}>
+                    <div className="space-y-3 px-5 pt-5">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7A9BB8]">Launch profile</div>
+                      <div className="text-2xl font-semibold tracking-[-0.02em] text-[#E8EDF4]">
+                        {routeLabel || `${departureInput} ${arrivalInput}`}
+                      </div>
+                      <div className="text-sm text-[#7A9BB8]">
+                        Public-facing map, synthetic vision, and globe modes are meant to mirror the app feel rather than behave like a stripped-down marketing page.
+                      </div>
+                    </div>
+                    <div className="space-y-3 border-t border-[#162334] px-5 pb-5 pt-4">
+                      <Button
+                        onClick={() => void loadDemoRoute()}
+                        disabled={loading}
+                        className="h-12 w-full bg-[#C8922A] text-base font-semibold text-[#0A0E14] hover:bg-[#d5a042]"
+                      >
+                        {loading ? "Building route..." : "Launch FlightDeck"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 w-full border-[#22324A] bg-[#101923] text-[#E8EDF4] hover:bg-[#162130]"
+                        onClick={() => {
+                          setProgressNm(0);
+                          setRunning(false);
+                        }}
+                      >
+                        Reset position
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-
-            <Card className={`${RSF_COCKPIT_SHELL_CLASS} shadow-none`}>
-              <CardHeader>
-                <CardTitle>Build demo route</CardTitle>
-                <CardDescription className="text-[#7A9BB8]">
-                  Departure and arrival are enough. RSF will fill in helper waypoints when it can.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Departure</label>
-                    <Input
-                      list="rsf-demo-departures"
-                      value={departureInput}
-                      onChange={(event) => setDepartureInput(normalizeAirportCode(event.target.value))}
-                      className="border-[#1E2D42] bg-[#0A0E14] font-mono text-lg text-[#E8EDF4]"
-                      placeholder="KDAL"
-                    />
-                    <datalist id="rsf-demo-departures">
-                      {departureSuggestions.map((airport) => (
-                        <option key={`dep-${airport.icao}`} value={airport.icao}>
-                          {airport.name || airport.city || airport.icao}
-                        </option>
-                      ))}
-                    </datalist>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Arrival</label>
-                    <Input
-                      list="rsf-demo-arrivals"
-                      value={arrivalInput}
-                      onChange={(event) => setArrivalInput(normalizeAirportCode(event.target.value))}
-                      className="border-[#1E2D42] bg-[#0A0E14] font-mono text-lg text-[#E8EDF4]"
-                      placeholder="KHOU"
-                    />
-                    <datalist id="rsf-demo-arrivals">
-                      {arrivalSuggestions.map((airport) => (
-                        <option key={`arr-${airport.icao}`} value={airport.icao}>
-                          {airport.name || airport.city || airport.icao}
-                        </option>
-                      ))}
-                    </datalist>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className={`rounded-2xl px-4 py-3 ${RSF_COCKPIT_PANEL_CLASS}`}>
-                    <div className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>Demo profile</div>
-                    <div className="mt-2 flex items-center gap-2 text-sm text-[#E8EDF4]">
-                      <Gauge className="h-4 w-4 text-[#4A9FD4]" />
-                      {DEMO_CRUISE_KTS} KTAS at {DEMO_ALTITUDE_FT.toLocaleString()} ft
-                    </div>
-                  </div>
-                  <div className={`rounded-2xl px-4 py-3 ${RSF_COCKPIT_PANEL_CLASS}`}>
-                    <div className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>Playback</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {(["1x", "2x", "4x", "8x"] as DemoSpeed[]).map((value) => (
-                        <Button
-                          key={value}
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className={value === speed ? "border-[#C8922A] bg-[#1A2332] text-[#E8EDF4]" : "border-[#1E2D42] bg-[#111820] text-[#7A9BB8]"}
-                          onClick={() => setSpeed(value)}
-                        >
-                          {value}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    onClick={() => void loadDemoRoute()}
-                    disabled={loading}
-                    className="bg-[#C8922A] text-[#0A0E14] hover:bg-[#d5a042]"
-                  >
-                    {loading ? "Building..." : "Launch Flight Demo"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-[#1E2D42] bg-[#111820] text-[#E8EDF4] hover:bg-[#1A2332]"
-                    onClick={() => {
-                      setProgressNm(0);
-                      setRunning(false);
-                    }}
-                  >
-                    Reset position
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </section>
 
-      <section className="container mx-auto px-4 py-8 space-y-6">
+      <section className="relative container mx-auto px-4 py-8 space-y-6">
         {error ? (
           <Alert className="border-[#E8453C]/30 bg-[#2A1212] text-[#E8EDF4]">
             <AlertTitle>Unable to build demo</AlertTitle>
@@ -2584,27 +2646,57 @@ export default function SyntheticVisionPage() {
           </Alert>
         ) : null}
 
-        <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>FlightDeck demo</div>
-                <div className="mt-1 flex items-center gap-2 text-2xl font-semibold">
-                  <RouteIcon className="h-5 w-5 text-[#C8922A]" />
-                  {routeLabel || `${departureInput} ${arrivalInput}`}
+        <div className="grid gap-6 xl:grid-cols-[1.38fr_0.62fr]">
+          <div className="space-y-5">
+            <div className={`${flightDeckGlassClass} px-5 py-4 sm:px-6`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7A9BB8]">FlightDeck live preview</div>
+                  <div className="mt-1 flex items-center gap-2 text-2xl font-semibold tracking-[-0.02em]">
+                    <RouteIcon className="h-5 w-5 text-[#C8922A]" />
+                    {routeLabel || `${departureInput} ${arrivalInput}`}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <div className={flightDeckPillClass}>{phaseLabel}</div>
+                  <div className={flightDeckPillClass}>{totalRouteNm ? `${totalRouteNm.toFixed(1)} NM` : "Route pending"}</div>
                 </div>
               </div>
-              <RsfModeToggle
-                value={viewMode}
-                options={RSF_DEMO_VIEW_MODE_OPTIONS.map((option) => ({
-                  ...option,
-                  icon:
-                    option.value === "map" ? <MapIcon className="h-4 w-4" /> :
-                    option.value === "vision" ? <Navigation className="h-4 w-4" /> :
-                    <Globe2 className="h-4 w-4" />,
-                }))}
-                onChange={setViewMode}
-              />
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+                <RsfModeToggle
+                  value={viewMode}
+                  options={RSF_DEMO_VIEW_MODE_OPTIONS.map((option) => ({
+                    ...option,
+                    icon:
+                      option.value === "map" ? <MapIcon className="h-4 w-4" /> :
+                      option.value === "vision" ? <Navigation className="h-4 w-4" /> :
+                      <Globe2 className="h-4 w-4" />,
+                  }))}
+                  onChange={setViewMode}
+                />
+                <div className="grid min-w-[280px] flex-1 gap-2 sm:grid-cols-3">
+                  {demoMetrics.slice(0, 3).map((metric) => (
+                    <div key={metric.label} className="rounded-2xl border border-[#182536] bg-[#091018] px-3 py-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">{metric.label}</div>
+                      <div className="mt-2 text-sm font-semibold text-[#E8EDF4]">
+                        {metric.value}
+                        {metric.unit ? <span className="ml-1 text-xs text-[#7A9BB8]">{metric.unit}</span> : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>Flight surface</div>
+                <div className="mt-1 text-sm text-[#7A9BB8]">Public demo uses the same runway, traffic, terrain, and mode model the app is moving toward.</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <div className={flightDeckPillClass}>{running ? "Playback live" : "Playback paused"}</div>
+                <div className={flightDeckPillClass}>{routeProgress?.nextWaypoint || "Next waypoint --"}</div>
+              </div>
             </div>
 
             {viewMode === "map" && flightFrame?.ownship ? (
@@ -2705,7 +2797,7 @@ export default function SyntheticVisionPage() {
           </div>
 
           <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-            <div className="rounded-[28px] border border-[#1E2D42] bg-[#0C121B]/96 p-5 text-[#E8EDF4] backdrop-blur">
+            <div className={`${flightDeckGlassClass} p-5 text-[#E8EDF4]`}>
               <div className="pb-3">
                 <div className="text-2xl font-semibold">Flight progress</div>
                 <div className="mt-1 text-sm text-[#7A9BB8]">
@@ -2785,7 +2877,7 @@ export default function SyntheticVisionPage() {
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-[#1E2D42] bg-[#0C121B]/96 p-5 text-[#E8EDF4] backdrop-blur">
+            <div className={`${flightDeckGlassClass} p-5 text-[#E8EDF4]`}>
               <div className="pb-3">
                 <div className="text-2xl font-semibold">Tactical overlays</div>
                 <div className="mt-1 text-sm text-[#7A9BB8]">
@@ -2929,7 +3021,7 @@ export default function SyntheticVisionPage() {
               </AlertDescription>
             </Alert>
 
-            <div className="rounded-[24px] border border-[#1E2D42] bg-[#0C121B]/96 p-5 text-sm text-[#7A9BB8]">
+            <div className={`${flightDeckGlassClass} p-5 text-sm text-[#7A9BB8]`}>
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Data sources</div>
               <div className="mt-3 space-y-2">
                 <div className="flex items-start gap-2">
@@ -2947,7 +3039,7 @@ export default function SyntheticVisionPage() {
               </div>
             </div>
 
-            <div className="rounded-[24px] border border-[#1E2D42] bg-[#0C121B]/96 p-5 text-sm text-[#7A9BB8]">
+            <div className={`${flightDeckGlassClass} p-5 text-sm text-[#7A9BB8]`}>
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Route assist</div>
               <div className="mt-3 space-y-2">
                 <div className="flex items-center justify-between gap-3">

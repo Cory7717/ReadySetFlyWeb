@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import maplibregl, { type GeoJSONSource, type LngLatBoundsLike, type Map as MapLibreMap } from "maplibre-gl";
+import maplibregl, { type LngLatBoundsLike, type Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { apiUrl } from "@/lib/api";
 import type {
@@ -16,6 +16,8 @@ import {
   RSF_TERRAIN_RISK_STYLES,
   RSF_TERRAIN_SURFACE_STYLES,
 } from "@/map/rsfMapSpec";
+import { buildLineStringCollection, setGeoJsonSourceData } from "@/map/maplibre/geojson";
+import { clearMarkers, replaceMarkerSet } from "@/map/maplibre/markers";
 import { addOrReplaceRasterLayer, createRasterBaseStyle, removeRasterLayer } from "@/map/maplibre/rasterLayers";
 
 const MAP_SOURCE_ID = "rsf-planner-route";
@@ -63,22 +65,7 @@ const terrainLineWidthExpression = [
 ] as any;
 
 function buildRouteGeoJson(points: PlannerPoint[]) {
-  return {
-    type: "FeatureCollection" as const,
-    features:
-      points.length > 1
-        ? [
-            {
-              type: "Feature" as const,
-              geometry: {
-                type: "LineString" as const,
-                coordinates: points.map((point) => [point.lon, point.lat]),
-              },
-              properties: {},
-            },
-          ]
-        : [],
-  };
+  return buildLineStringCollection(points.map((point) => [point.lon, point.lat]));
 }
 
 function buildTerrainGeoJson(segments: PlannerTerrainSegment[]) {
@@ -378,9 +365,9 @@ export default function MapLibrePlannerMap({
 
     mapRef.current = map;
     return () => {
-      airportMarkersRef.current.forEach((marker) => marker.remove());
-      terrainMarkersRef.current.forEach((marker) => marker.remove());
-      healthMarkersRef.current.forEach((marker) => marker.remove());
+      clearMarkers(airportMarkersRef.current);
+      clearMarkers(terrainMarkersRef.current);
+      clearMarkers(healthMarkersRef.current);
       map.remove();
       mapRef.current = null;
     };
@@ -465,8 +452,7 @@ export default function MapLibrePlannerMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-    const source = map.getSource(MAP_SOURCE_ID) as GeoJSONSource | undefined;
-    source?.setData(routeGeoJson as any);
+    setGeoJsonSourceData(map, MAP_SOURCE_ID, routeGeoJson);
     const routeLayerVisible = terrainSegments.length > 0 ? "none" : "visible";
     if (map.getLayer(ROUTE_LAYER_ID)) map.setLayoutProperty(ROUTE_LAYER_ID, "visibility", routeLayerVisible);
   }, [routeGeoJson, terrainSegments.length]);
@@ -474,8 +460,7 @@ export default function MapLibrePlannerMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-    const source = map.getSource(TERRAIN_SOURCE_ID) as GeoJSONSource | undefined;
-    source?.setData(terrainGeoJson as any);
+    setGeoJsonSourceData(map, TERRAIN_SOURCE_ID, terrainGeoJson);
     const terrainVisible = terrainSegments.length > 0 ? "visible" : "none";
     if (map.getLayer(TERRAIN_SURFACE_LAYER_ID)) map.setLayoutProperty(TERRAIN_SURFACE_LAYER_ID, "visibility", terrainVisible);
     if (map.getLayer(TERRAIN_LINE_LAYER_ID)) map.setLayoutProperty(TERRAIN_LINE_LAYER_ID, "visibility", terrainVisible);
@@ -502,54 +487,62 @@ export default function MapLibrePlannerMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    airportMarkersRef.current.forEach((marker) => marker.remove());
-    airportMarkersRef.current = points.map((point) => {
-      const marker = new maplibregl.Marker({
-        element: buildAirportMarkerElement(point, airportLabelMode),
-        anchor: "bottom",
-      })
-        .setLngLat([point.lon, point.lat])
-        .addTo(map);
-      return marker;
+    airportMarkersRef.current = replaceMarkerSet({
+      map,
+      current: airportMarkersRef.current,
+      items: points,
+      createMarker: (point) =>
+        new maplibregl.Marker({
+          element: buildAirportMarkerElement(point, airportLabelMode),
+          anchor: "bottom",
+        })
+          .setLngLat([point.lon, point.lat])
+          .addTo(map),
     });
   }, [airportLabelMode, points]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    terrainMarkersRef.current.forEach((marker) => marker.remove());
-    terrainMarkersRef.current = terrainHotSpots.map((hotSpot) =>
-      new maplibregl.Marker({
-        element: buildTerrainHotSpotElement(hotSpot),
-        anchor: "center",
-      })
-        .setLngLat([hotSpot.lon, hotSpot.lat])
-        .setPopup(
-          new maplibregl.Popup({ offset: 12 }).setHTML(
-            `<div style="font-size:12px;line-height:1.35"><strong>Terrain hot spot ${hotSpot.rank}</strong><br/>${hotSpot.progressLabel}</div>`,
-          ),
-        )
-        .addTo(map),
-    );
+    terrainMarkersRef.current = replaceMarkerSet({
+      map,
+      current: terrainMarkersRef.current,
+      items: terrainHotSpots,
+      createMarker: (hotSpot) =>
+        new maplibregl.Marker({
+          element: buildTerrainHotSpotElement(hotSpot),
+          anchor: "center",
+        })
+          .setLngLat([hotSpot.lon, hotSpot.lat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 12 }).setHTML(
+              `<div style="font-size:12px;line-height:1.35"><strong>Terrain hot spot ${hotSpot.rank}</strong><br/>${hotSpot.progressLabel}</div>`,
+            ),
+          )
+          .addTo(map),
+    });
   }, [terrainHotSpots]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    healthMarkersRef.current.forEach((marker) => marker.remove());
-    healthMarkersRef.current = legHealthMarkers.map((marker) =>
-      new maplibregl.Marker({
-        element: buildLegHealthElement(marker),
-        anchor: "center",
-      })
-        .setLngLat([marker.lon, marker.lat])
-        .setPopup(
-          new maplibregl.Popup({ offset: 12 }).setHTML(
-            `<div style="font-size:12px;line-height:1.35"><strong>${marker.label}</strong><br/>${marker.detail}</div>`,
-          ),
-        )
-        .addTo(map),
-    );
+    healthMarkersRef.current = replaceMarkerSet({
+      map,
+      current: healthMarkersRef.current,
+      items: legHealthMarkers,
+      createMarker: (marker) =>
+        new maplibregl.Marker({
+          element: buildLegHealthElement(marker),
+          anchor: "center",
+        })
+          .setLngLat([marker.lon, marker.lat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 12 }).setHTML(
+              `<div style="font-size:12px;line-height:1.35"><strong>${marker.label}</strong><br/>${marker.detail}</div>`,
+            ),
+          )
+          .addTo(map),
+    });
   }, [legHealthMarkers]);
 
   const engineLabel = useMemo(() => "MapLibre preview", []);

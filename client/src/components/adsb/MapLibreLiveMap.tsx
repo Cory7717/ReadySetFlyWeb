@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import maplibregl, { type GeoJSONSource, type LngLatBoundsLike, type Map as MapLibreMap } from "maplibre-gl";
-import type { FeatureCollection } from "geojson";
+import maplibregl, { type LngLatBoundsLike, type Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Live2DMapSurfaceProps } from "@/components/adsb/Live2DMapSurface";
 import {
@@ -9,6 +8,13 @@ import {
   RSF_TERRAIN_RISK_STYLES,
   RSF_TERRAIN_SURFACE_STYLES,
 } from "@/map/rsfMapSpec";
+import {
+  buildLineStringCollection,
+  emptyFeatureCollection,
+  normalizeFeatureCollection,
+  setGeoJsonSourceData,
+} from "@/map/maplibre/geojson";
+import { clearMarkers, replaceMarkerSet, replaceSingleMarker } from "@/map/maplibre/markers";
 import { addOrReplaceRasterLayer, createRasterBaseStyle, removeRasterLayer } from "@/map/maplibre/rasterLayers";
 
 export type MapLibreLiveMapProps = Omit<Live2DMapSurfaceProps, "children">;
@@ -59,25 +65,6 @@ const terrainSurfaceWidthExpression = [
   RSF_TERRAIN_SURFACE_STYLES.comfortable.weight,
 ] as any;
 
-function buildLineCollection(coordinates: Array<[number, number]>, properties: Record<string, unknown> = {}) {
-  return {
-    type: "FeatureCollection" as const,
-    features:
-      coordinates.length > 1
-        ? [
-            {
-              type: "Feature" as const,
-              geometry: {
-                type: "LineString" as const,
-                coordinates,
-              },
-              properties,
-            },
-          ]
-        : [],
-  };
-}
-
 function buildTerrainCollection(segments: MapLibreLiveMapProps["terrainCueSegments"]) {
   return {
     type: "FeatureCollection" as const,
@@ -95,13 +82,6 @@ function buildTerrainCollection(segments: MapLibreLiveMapProps["terrainCueSegmen
       },
     })),
   };
-}
-
-function normalizeFeatureCollection(input: FeatureCollection | null | undefined) {
-  if (!input || input.type !== "FeatureCollection") {
-    return { type: "FeatureCollection", features: [] } as FeatureCollection;
-  }
-  return input;
 }
 
 function buildCirclePolygon(lat: number, lon: number, radiusNm: number, steps = 64) {
@@ -315,22 +295,22 @@ export default function MapLibreLiveMap({
   const baseCenter = useMemo<[number, number]>(() => [mapCenter[1], mapCenter[0]], [mapCenter]);
 
   const routeGeoJson = useMemo(
-    () => buildLineCollection(routePoints.map((point) => [point.lon, point.lat])),
+    () => buildLineStringCollection(routePoints.map((point) => [point.lon, point.lat])),
     [routePoints],
   );
-  const trailGeoJson = useMemo(() => buildLineCollection(trail.map(([lat, lon]) => [lon, lat])), [trail]);
+  const trailGeoJson = useMemo(() => buildLineStringCollection(trail.map(([lat, lon]) => [lon, lat])), [trail]);
   const offRouteGeoJson = useMemo(() => {
     if (!ownship || !routeProgress || routeProgress.offRouteNm < 0.2) {
-      return buildLineCollection([]);
+      return buildLineStringCollection([]);
     }
-    return buildLineCollection([
+    return buildLineStringCollection([
       [ownship.lon, ownship.lat],
       [routeProgress.nearestPoint.lon, routeProgress.nearestPoint.lat],
     ]);
   }, [ownship, routeProgress]);
   const terrainGeoJson = useMemo(() => buildTerrainCollection(terrainCueSegments), [terrainCueSegments]);
   const rangeRingGeoJson = useMemo(() => {
-    if (!ownship) return { type: "FeatureCollection", features: [] } as const;
+    if (!ownship) return emptyFeatureCollection();
     return buildCirclePolygon(ownship.lat, ownship.lon, rangeNm);
   }, [ownship, rangeNm]);
 
@@ -496,11 +476,11 @@ export default function MapLibreLiveMap({
     mapRef.current = map;
     return () => {
       ownshipMarkerRef.current?.remove();
-      routeMarkersRef.current.forEach((marker) => marker.remove());
-      hotspotMarkersRef.current.forEach((marker) => marker.remove());
-      trafficMarkersRef.current.forEach((marker) => marker.remove());
-      obstacleMarkersRef.current.forEach((marker) => marker.remove());
-      diversionMarkersRef.current.forEach((marker) => marker.remove());
+      clearMarkers(routeMarkersRef.current);
+      clearMarkers(hotspotMarkersRef.current);
+      clearMarkers(trafficMarkersRef.current);
+      clearMarkers(obstacleMarkersRef.current);
+      clearMarkers(diversionMarkersRef.current);
       map.remove();
       mapRef.current = null;
     };
@@ -592,13 +572,13 @@ export default function MapLibreLiveMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-    (map.getSource(ROUTE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(routeGeoJson as any);
-    (map.getSource(TRAIL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(trailGeoJson as any);
-    (map.getSource(OFFROUTE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(offRouteGeoJson as any);
-    (map.getSource(TERRAIN_SOURCE_ID) as GeoJSONSource | undefined)?.setData(terrainGeoJson as any);
-    (map.getSource(RANGE_RING_SOURCE_ID) as GeoJSONSource | undefined)?.setData(rangeRingGeoJson as any);
-    (map.getSource(TFR_SOURCE_ID) as GeoJSONSource | undefined)?.setData(normalizeFeatureCollection(tfrData) as any);
-    (map.getSource(SUA_SOURCE_ID) as GeoJSONSource | undefined)?.setData(normalizeFeatureCollection(suaData) as any);
+    setGeoJsonSourceData(map, ROUTE_SOURCE_ID, routeGeoJson);
+    setGeoJsonSourceData(map, TRAIL_SOURCE_ID, trailGeoJson);
+    setGeoJsonSourceData(map, OFFROUTE_SOURCE_ID, offRouteGeoJson);
+    setGeoJsonSourceData(map, TERRAIN_SOURCE_ID, terrainGeoJson);
+    setGeoJsonSourceData(map, RANGE_RING_SOURCE_ID, rangeRingGeoJson);
+    setGeoJsonSourceData(map, TFR_SOURCE_ID, normalizeFeatureCollection(tfrData));
+    setGeoJsonSourceData(map, SUA_SOURCE_ID, normalizeFeatureCollection(suaData));
 
     if (map.getLayer(ROUTE_LAYER_ID)) {
       map.setLayoutProperty(ROUTE_LAYER_ID, "visibility", terrainCueSegments.length > 0 ? "none" : "visible");
@@ -639,47 +619,57 @@ export default function MapLibreLiveMap({
       ownshipMarkerRef.current = null;
       return;
     }
-    ownshipMarkerRef.current?.remove();
-    ownshipMarkerRef.current = new maplibregl.Marker({
-      element: buildOwnshipElement(ownship.headingDeg),
-      anchor: "center",
-    })
-      .setLngLat([ownship.lon, ownship.lat])
-      .addTo(map);
+    ownshipMarkerRef.current = replaceSingleMarker({
+      map,
+      current: ownshipMarkerRef.current,
+      createMarker: () =>
+        new maplibregl.Marker({
+          element: buildOwnshipElement(ownship.headingDeg),
+          anchor: "center",
+        })
+          .setLngLat([ownship.lon, ownship.lat])
+          .addTo(map),
+    });
   }, [ownship]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    routeMarkersRef.current.forEach((marker) => marker.remove());
-    routeMarkersRef.current = routePoints.map((point, index) =>
-      new maplibregl.Marker({
-        element: buildAirportPointElement(String(index + 1), false),
-        anchor: "center",
-      })
-        .setLngLat([point.lon, point.lat])
-        .setPopup(new maplibregl.Popup({ offset: 10 }).setText(point.label))
-        .addTo(map),
-    );
+    routeMarkersRef.current = replaceMarkerSet({
+      map,
+      current: routeMarkersRef.current,
+      items: routePoints,
+      createMarker: (point, index) =>
+        new maplibregl.Marker({
+          element: buildAirportPointElement(String(index + 1), false),
+          anchor: "center",
+        })
+          .setLngLat([point.lon, point.lat])
+          .setPopup(new maplibregl.Popup({ offset: 10 }).setText(point.label))
+          .addTo(map),
+    });
   }, [routePoints]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    hotspotMarkersRef.current.forEach((marker) => marker.remove());
-    hotspotMarkersRef.current = terrainHotSpotMarkers.map((hotSpot) =>
-      new maplibregl.Marker({
-        element: buildTerrainHotSpotElement(hotSpot),
-        anchor: "center",
-      })
-        .setLngLat([hotSpot.lon, hotSpot.lat])
-        .setPopup(
-          new maplibregl.Popup({ offset: 12 }).setHTML(
-            `<div style="font-size:12px;line-height:1.35"><strong>Terrain hot spot ${hotSpot.rank}</strong><br/>${hotSpot.progressLabel}<br/>Clearance ${hotSpot.clearanceFt != null ? Math.round(hotSpot.clearanceFt).toLocaleString() : "--"} ft</div>`,
-          ),
-        )
-        .addTo(map),
-    );
+    hotspotMarkersRef.current = replaceMarkerSet({
+      map,
+      current: hotspotMarkersRef.current,
+      items: terrainHotSpotMarkers,
+      createMarker: (hotSpot) =>
+        new maplibregl.Marker({
+          element: buildTerrainHotSpotElement(hotSpot),
+          anchor: "center",
+        })
+          .setLngLat([hotSpot.lon, hotSpot.lat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 12 }).setHTML(
+              `<div style="font-size:12px;line-height:1.35"><strong>Terrain hot spot ${hotSpot.rank}</strong><br/>${hotSpot.progressLabel}<br/>Clearance ${hotSpot.clearanceFt != null ? Math.round(hotSpot.clearanceFt).toLocaleString() : "--"} ft</div>`,
+            ),
+          )
+          .addTo(map),
+    });
   }, [terrainHotSpotMarkers]);
 
   useEffect(() => {

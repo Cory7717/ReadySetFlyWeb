@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useRef } from "react";
-import maplibregl, { type GeoJSONSource, type LngLatBoundsLike, type Map as MapLibreMap } from "maplibre-gl";
+import maplibregl, { type LngLatBoundsLike, type Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { RSF_COCKPIT_MUTED_TEXT_CLASS } from "@/map/rsfMapSpec";
 import type { Demo2DMapSurfaceProps } from "@/components/demo/demoMapTypes";
 import { createRasterBaseStyle } from "@/map/maplibre/rasterLayers";
+import {
+  buildLineStringCollection,
+  removeGeoJsonLayer,
+  setGeoJsonSourceData,
+  upsertGeoJsonLineLayer,
+} from "@/map/maplibre/geojson";
+import { clearMarkers, replaceMarkerSet, replaceSingleMarker } from "@/map/maplibre/markers";
 
 const ROUTE_SOURCE_ID = "rsf-demo-route";
 const ROUTE_LAYER_ID = "rsf-demo-route-layer";
@@ -13,25 +20,6 @@ const RUNWAY_BAR_SOURCE_ID = "rsf-demo-runway-bar";
 const RUNWAY_BAR_LAYER_ID = "rsf-demo-runway-bar-layer";
 const SELECTED_TRAFFIC_LINE_SOURCE_ID = "rsf-demo-selected-traffic-line";
 const SELECTED_TRAFFIC_LINE_LAYER_ID = "rsf-demo-selected-traffic-line-layer";
-
-function buildLineCollection(coordinates: Array<[number, number]>) {
-  return {
-    type: "FeatureCollection" as const,
-    features:
-      coordinates.length > 1
-        ? [
-            {
-              type: "Feature" as const,
-              geometry: {
-                type: "LineString" as const,
-                coordinates,
-              },
-              properties: {},
-            },
-          ]
-        : [],
-  };
-}
 
 function buildOwnshipElement(headingDeg: number) {
   const wrapper = document.createElement("div");
@@ -119,29 +107,6 @@ function buildDiversionElement(icao: string, active: boolean) {
   return el;
 }
 
-function addOrReplaceGeoJsonLine(map: MapLibreMap, sourceId: string, layerId: string, data: ReturnType<typeof buildLineCollection>, color: string, width: number, opacity: number, dasharray?: number[]) {
-  if (map.getLayer(layerId)) map.removeLayer(layerId);
-  if (map.getSource(sourceId)) map.removeSource(sourceId);
-  map.addSource(sourceId, { type: "geojson", data: data as any });
-  map.addLayer({
-    id: layerId,
-    type: "line",
-    source: sourceId,
-    layout: { "line-cap": "round", "line-join": "round" },
-    paint: {
-      "line-color": color,
-      "line-width": width,
-      "line-opacity": opacity,
-      ...(dasharray ? { "line-dasharray": dasharray } : {}),
-    },
-  });
-}
-
-function removeLine(map: MapLibreMap, sourceId: string, layerId: string) {
-  if (map.getLayer(layerId)) map.removeLayer(layerId);
-  if (map.getSource(sourceId)) map.removeSource(sourceId);
-}
-
 export default function MapLibreDemoMap({
   routePoints,
   ownship,
@@ -165,26 +130,26 @@ export default function MapLibreDemoMap({
   const diversionMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   const routeGeoJson = useMemo(
-    () => buildLineCollection(routePoints.map((point) => [point.longitude, point.latitude] as [number, number])),
+    () => buildLineStringCollection(routePoints.map((point) => [point.longitude, point.latitude] as [number, number])),
     [routePoints],
   );
   const runwayCenterGeoJson = useMemo(
     () =>
-      buildLineCollection(
+      buildLineStringCollection(
         runwayOverlay?.centerline.map((point) => [point.longitude, point.latitude] as [number, number]) ?? [],
       ),
     [runwayOverlay],
   );
   const runwayBarGeoJson = useMemo(
     () =>
-      buildLineCollection(
+      buildLineStringCollection(
         runwayOverlay?.runwayBar.map((point) => [point.longitude, point.latitude] as [number, number]) ?? [],
       ),
     [runwayOverlay],
   );
   const selectedTrafficLineGeoJson = useMemo(() => {
-    if (!selectedTrafficTarget) return buildLineCollection([]);
-    return buildLineCollection([
+    if (!selectedTrafficTarget) return buildLineStringCollection([]);
+    return buildLineStringCollection([
       [ownship.lon, ownship.lat],
       [selectedTrafficTarget.lon, selectedTrafficTarget.lat],
     ]);
@@ -210,18 +175,27 @@ export default function MapLibreDemoMap({
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), "top-right");
     map.on("load", () => {
-      addOrReplaceGeoJsonLine(map, ROUTE_SOURCE_ID, ROUTE_LAYER_ID, routeGeoJson, "#C8922A", 4, 0.82);
-      addOrReplaceGeoJsonLine(map, RUNWAY_CENTER_SOURCE_ID, RUNWAY_CENTER_LAYER_ID, runwayCenterGeoJson, "#C8922A", 2.6, 0.88);
-      addOrReplaceGeoJsonLine(map, RUNWAY_BAR_SOURCE_ID, RUNWAY_BAR_LAYER_ID, runwayBarGeoJson, "#F5A623", 5, 0.92);
-      addOrReplaceGeoJsonLine(map, SELECTED_TRAFFIC_LINE_SOURCE_ID, SELECTED_TRAFFIC_LINE_LAYER_ID, selectedTrafficLineGeoJson, "#F5A623", 2, 0.8, [2, 1]);
+      upsertGeoJsonLineLayer({ map, sourceId: ROUTE_SOURCE_ID, layerId: ROUTE_LAYER_ID, data: routeGeoJson, color: "#C8922A", width: 4, opacity: 0.82 });
+      upsertGeoJsonLineLayer({ map, sourceId: RUNWAY_CENTER_SOURCE_ID, layerId: RUNWAY_CENTER_LAYER_ID, data: runwayCenterGeoJson, color: "#C8922A", width: 2.6, opacity: 0.88 });
+      upsertGeoJsonLineLayer({ map, sourceId: RUNWAY_BAR_SOURCE_ID, layerId: RUNWAY_BAR_LAYER_ID, data: runwayBarGeoJson, color: "#F5A623", width: 5, opacity: 0.92 });
+      upsertGeoJsonLineLayer({
+        map,
+        sourceId: SELECTED_TRAFFIC_LINE_SOURCE_ID,
+        layerId: SELECTED_TRAFFIC_LINE_LAYER_ID,
+        data: selectedTrafficLineGeoJson,
+        color: "#F5A623",
+        width: 2,
+        opacity: 0.8,
+        dasharray: [2, 1],
+      });
     });
 
     mapRef.current = map;
     return () => {
       ownshipMarkerRef.current?.remove();
-      waypointMarkersRef.current.forEach((marker) => marker.remove());
-      trafficMarkersRef.current.forEach((marker) => marker.remove());
-      diversionMarkersRef.current.forEach((marker) => marker.remove());
+      clearMarkers(waypointMarkersRef.current);
+      clearMarkers(trafficMarkersRef.current);
+      clearMarkers(diversionMarkersRef.current);
       map.remove();
       mapRef.current = null;
     };
@@ -240,27 +214,34 @@ export default function MapLibreDemoMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    ownshipMarkerRef.current?.remove();
-    ownshipMarkerRef.current = new maplibregl.Marker({
-      element: buildOwnshipElement(ownship.heading),
-      anchor: "center",
-    })
-      .setLngLat([ownship.lon, ownship.lat])
-      .addTo(map);
+    ownshipMarkerRef.current = replaceSingleMarker({
+      map,
+      current: ownshipMarkerRef.current,
+      createMarker: () =>
+        new maplibregl.Marker({
+          element: buildOwnshipElement(ownship.heading),
+          anchor: "center",
+        })
+          .setLngLat([ownship.lon, ownship.lat])
+          .addTo(map),
+    });
   }, [ownship.heading, ownship.lat, ownship.lon]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    waypointMarkersRef.current.forEach((marker) => marker.remove());
-    waypointMarkersRef.current = routePoints.map((point) =>
-      new maplibregl.Marker({
-        element: buildWaypointElement(point.icao, point.kind === "origin" || point.kind === "destination", nextWaypoint === point.icao),
-        anchor: "bottom",
-      })
-        .setLngLat([point.longitude, point.latitude])
-        .addTo(map),
-    );
+    waypointMarkersRef.current = replaceMarkerSet({
+      map,
+      current: waypointMarkersRef.current,
+      items: routePoints,
+      createMarker: (point) =>
+        new maplibregl.Marker({
+          element: buildWaypointElement(point.icao, point.kind === "origin" || point.kind === "destination", nextWaypoint === point.icao),
+          anchor: "bottom",
+        })
+          .setLngLat([point.longitude, point.latitude])
+          .addTo(map),
+    });
   }, [nextWaypoint, routePoints]);
 
   useEffect(() => {
@@ -304,18 +285,36 @@ export default function MapLibreDemoMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-    addOrReplaceGeoJsonLine(map, ROUTE_SOURCE_ID, ROUTE_LAYER_ID, routeGeoJson, "#C8922A", 4, 0.82);
+    setGeoJsonSourceData(map, ROUTE_SOURCE_ID, routeGeoJson);
     if (runwayOverlay) {
-      addOrReplaceGeoJsonLine(map, RUNWAY_CENTER_SOURCE_ID, RUNWAY_CENTER_LAYER_ID, runwayCenterGeoJson, "#C8922A", 2.6, 0.88);
-      addOrReplaceGeoJsonLine(map, RUNWAY_BAR_SOURCE_ID, RUNWAY_BAR_LAYER_ID, runwayBarGeoJson, "#F5A623", 5, 0.92);
+      if (map.getSource(RUNWAY_CENTER_SOURCE_ID) && map.getSource(RUNWAY_BAR_SOURCE_ID)) {
+        setGeoJsonSourceData(map, RUNWAY_CENTER_SOURCE_ID, runwayCenterGeoJson);
+        setGeoJsonSourceData(map, RUNWAY_BAR_SOURCE_ID, runwayBarGeoJson);
+      } else {
+        upsertGeoJsonLineLayer({ map, sourceId: RUNWAY_CENTER_SOURCE_ID, layerId: RUNWAY_CENTER_LAYER_ID, data: runwayCenterGeoJson, color: "#C8922A", width: 2.6, opacity: 0.88 });
+        upsertGeoJsonLineLayer({ map, sourceId: RUNWAY_BAR_SOURCE_ID, layerId: RUNWAY_BAR_LAYER_ID, data: runwayBarGeoJson, color: "#F5A623", width: 5, opacity: 0.92 });
+      }
     } else {
-      removeLine(map, RUNWAY_CENTER_SOURCE_ID, RUNWAY_CENTER_LAYER_ID);
-      removeLine(map, RUNWAY_BAR_SOURCE_ID, RUNWAY_BAR_LAYER_ID);
+      removeGeoJsonLayer(map, RUNWAY_CENTER_SOURCE_ID, RUNWAY_CENTER_LAYER_ID);
+      removeGeoJsonLayer(map, RUNWAY_BAR_SOURCE_ID, RUNWAY_BAR_LAYER_ID);
     }
     if (selectedTrafficTarget) {
-      addOrReplaceGeoJsonLine(map, SELECTED_TRAFFIC_LINE_SOURCE_ID, SELECTED_TRAFFIC_LINE_LAYER_ID, selectedTrafficLineGeoJson, "#F5A623", 2, 0.8, [2, 1]);
+      if (map.getSource(SELECTED_TRAFFIC_LINE_SOURCE_ID)) {
+        setGeoJsonSourceData(map, SELECTED_TRAFFIC_LINE_SOURCE_ID, selectedTrafficLineGeoJson);
+      } else {
+        upsertGeoJsonLineLayer({
+          map,
+          sourceId: SELECTED_TRAFFIC_LINE_SOURCE_ID,
+          layerId: SELECTED_TRAFFIC_LINE_LAYER_ID,
+          data: selectedTrafficLineGeoJson,
+          color: "#F5A623",
+          width: 2,
+          opacity: 0.8,
+          dasharray: [2, 1],
+        });
+      }
     } else {
-      removeLine(map, SELECTED_TRAFFIC_LINE_SOURCE_ID, SELECTED_TRAFFIC_LINE_LAYER_ID);
+      removeGeoJsonLayer(map, SELECTED_TRAFFIC_LINE_SOURCE_ID, SELECTED_TRAFFIC_LINE_LAYER_ID);
     }
   }, [routeGeoJson, runwayBarGeoJson, runwayCenterGeoJson, runwayOverlay, selectedTrafficLineGeoJson, selectedTrafficTarget]);
 

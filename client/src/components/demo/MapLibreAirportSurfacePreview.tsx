@@ -33,6 +33,11 @@ const RUNWAY_CENTER_SOURCE_ID = "rsf-surface-runway-center";
 const RUNWAY_CENTER_LAYER_ID = "rsf-surface-runway-center-layer";
 const RUNWAY_BAR_SOURCE_ID = "rsf-surface-runway-bar";
 const RUNWAY_BAR_LAYER_ID = "rsf-surface-runway-bar-layer";
+const OSM_TILE_URLS = [
+  "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+] as const;
 
 function buildOwnshipElement(headingDeg: number) {
   const wrapper = document.createElement("div");
@@ -96,7 +101,7 @@ export default function MapLibreAirportSurfacePreview({
       style: createRasterBaseStyle({
         sourceId: "osmSurface",
         layerId: "rsf-surface-osm",
-        tiles: ["https://{a,b,c}.tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tiles: [...OSM_TILE_URLS],
         attribution: "&copy; OpenStreetMap contributors",
       }),
     });

@@ -5,7 +5,6 @@ import {
   Clock3,
   FileText,
   Gauge,
-  Globe2,
   Map as MapIcon,
   Navigation,
   Pause,
@@ -24,7 +23,6 @@ import type {
   DemoTerrainState,
   DemoTrafficTarget,
 } from "@/components/demo/demoMapTypes";
-import CesiumGlobe from "@/components/flight-planner/CesiumGlobe";
 import { RsfModeToggle } from "@/components/map/RsfModeToggle";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -589,7 +587,7 @@ function FlightDemoMapSurface({
         .join(" ")
     : "";
   const rangeRings = [11, 21, 31];
-  const mapTitle = flightPhase.startsWith("surface") ? "Surface chart" : "Chart follow";
+  const mapTitle = "Overhead";
 
   return (
     <div className="relative h-[420px] overflow-hidden rounded-[24px] border border-slate-800 bg-[#0A0E14]">
@@ -1765,7 +1763,7 @@ export default function SyntheticVisionPage() {
   const [arrivalInput, setArrivalInput] = useState(DEFAULT_ARRIVAL);
   const [departureSuggestions, setDepartureSuggestions] = useState<AirportSearchResult[]>([]);
   const [arrivalSuggestions, setArrivalSuggestions] = useState<AirportSearchResult[]>([]);
-  const [viewMode, setViewMode] = useState<ViewMode>("map");
+  const [viewMode, setViewMode] = useState<ViewMode>("overhead");
   const [speed, setSpeed] = useState<DemoSpeed>("4x");
   const [running, setRunning] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -2302,43 +2300,6 @@ export default function SyntheticVisionPage() {
     }
     return null;
   }, [arrivalRunway, departureRunway, flightPhase]);
-  const globeRunwayOverlays = useMemo(() => {
-    const overlays: Array<{
-      overlay: RunwayOverlay;
-      label: string;
-      tone: "departure" | "arrival";
-    }> = [];
-
-    if (departureAirport && departureRunway) {
-      overlays.push({
-        overlay: buildDepartureRunwayOverlay({
-          airport: {
-            latitude: departureAirport.latitude,
-            longitude: departureAirport.longitude,
-          },
-          runway: departureRunway,
-        }),
-        label: `DEP ${departureRunway.runwayId}`,
-        tone: "departure",
-      });
-    }
-
-    if (arrivalAirport && arrivalRunway) {
-      overlays.push({
-        overlay: buildArrivalRunwayOverlay({
-          airport: {
-            latitude: arrivalAirport.latitude,
-            longitude: arrivalAirport.longitude,
-          },
-          runway: arrivalRunway,
-        }),
-        label: `APP ${arrivalRunway.runwayId}`,
-        tone: "arrival",
-      });
-    }
-
-    return overlays;
-  }, [arrivalAirport, arrivalRunway, departureAirport, departureRunway]);
   const airportSurfacePreview = useMemo<DemoSurfacePreview | null>(() => {
     const departureSurface = flightPhase === "surface-departure" || flightPhase === "departure";
     const airport = departureSurface ? departureAirport : arrivalAirport;
@@ -2902,19 +2863,21 @@ export default function SyntheticVisionPage() {
                   <div className={flightDeckPillClass}>{totalRouteNm ? `${totalRouteNm.toFixed(1)} NM` : "Route pending"}</div>
                 </div>
               </div>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-                <RsfModeToggle
-                  value={viewMode}
-                  options={RSF_DEMO_VIEW_MODE_OPTIONS.map((option) => ({
-                    ...option,
-                    icon:
-                      option.value === "map" ? <MapIcon className="h-4 w-4" /> :
-                      option.value === "vision" ? <Navigation className="h-4 w-4" /> :
-                      <Globe2 className="h-4 w-4" />,
-                  }))}
-                  onChange={setViewMode}
-                />
-                <div className="grid min-w-[280px] flex-1 gap-2 sm:grid-cols-3">
+              <div className="mt-4 space-y-4">
+                <div className="flex justify-center">
+                  <RsfModeToggle
+                    value={viewMode}
+                    options={RSF_DEMO_VIEW_MODE_OPTIONS.map((option) => ({
+                      ...option,
+                      icon:
+                        option.value === "overhead" ? <MapIcon className="h-4 w-4" /> :
+                        option.value === "vision" ? <Navigation className="h-4 w-4" /> :
+                        <RouteIcon className="h-4 w-4" />,
+                    }))}
+                    onChange={setViewMode}
+                  />
+                </div>
+                <div className="grid min-w-[280px] gap-2 sm:grid-cols-3">
                   {demoMetrics.slice(0, 3).map((metric) => (
                     <div key={metric.label} className="rounded-2xl border border-[#182536] bg-[#091018] px-3 py-3">
                       <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">{metric.label}</div>
@@ -2939,7 +2902,7 @@ export default function SyntheticVisionPage() {
               </div>
             </div>
 
-            {viewMode === "map" && flightFrame?.ownship ? (
+            {viewMode === "overhead" && flightFrame?.ownship ? (
               <Demo2DMapSurface
                 routePoints={routePoints}
                 ownship={flightFrame.ownship}
@@ -2990,52 +2953,16 @@ export default function SyntheticVisionPage() {
               />
             ) : null}
 
-            {viewMode === "globe" && flightFrame?.ownship ? (
-              <CesiumGlobe
-                points={routePoints.map((point) => ({
-                  icao: point.icao,
-                  lat: point.latitude,
-                  lon: point.longitude,
-                  label: point.name || point.icao,
-                }))}
-                heightClassName="h-[640px]"
-                plannedAltitudeFt={DEMO_ALTITUDE_FT}
-                runwayOverlays={globeRunwayOverlays}
-                trafficTargets={trafficTargets.map((target) => ({
-                  id: target.id,
-                  lat: target.lat,
-                  lon: target.lon,
-                  altitudeFt: flightFrame.ownship.altitudeFt + target.altitudeDeltaFt,
-                  relativeAltitudeFt: target.altitudeDeltaFt,
-                  threatLevel: target.threatLevel,
-                  label: target.callsign,
-                }))}
-                diversionAirports={diversionCandidates.map((airport) => ({
-                  icao: airport.icao,
-                  lat: airport.lat,
-                  lon: airport.lon,
-                  maxRunwayFt: airport.maxRunwayFt,
-                  immediateReady: airport.immediateReady,
-                }))}
-                ownship={{
-                  lat: flightFrame.ownship.lat,
-                  lon: flightFrame.ownship.lon,
-                  altitudeFt: flightFrame.ownship.altitudeFt,
-                  headingDeg: flightFrame.ownship.heading,
-                }}
-                rangeRingNm={25}
-                cameraMode="follow-ownship"
-                cameraRangeNm={flightPhase.startsWith("surface") ? 8 : flightPhase === "arrival" ? 24 : 42}
+            {viewMode === "surface" ? (
+              <AirportSurfacePreview
+                preview={airportSurfacePreview}
+                liveDiagram={activeAirportDiagram}
+                diagramLoading={activeAirportDiagramLoading}
               />
             ) : null}
 
             <FlightDemoHudStrip metrics={demoMetrics} />
             <FlightPhaseSequence activePhase={flightPhase} />
-            <AirportSurfacePreview
-              preview={airportSurfacePreview}
-              liveDiagram={activeAirportDiagram}
-              diagramLoading={activeAirportDiagramLoading}
-            />
           </div>
 
           <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">

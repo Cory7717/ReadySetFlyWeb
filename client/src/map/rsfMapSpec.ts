@@ -1,7 +1,7 @@
 export type RsfPlannerMapStyle = "standard" | "sectional" | "radar" | "winds" | "clouds" | "globe";
 export type RsfLeafletMapStyle = Exclude<RsfPlannerMapStyle, "globe">;
 export type RsfLiveMapStyle = Exclude<RsfPlannerMapStyle, "winds">;
-export type RsfDemoViewMode = "map" | "vision" | "globe";
+export type RsfDemoViewMode = "overhead" | "vision" | "surface";
 export type RsfCockpitAccent = "map" | "vision" | "globe" | "winds";
 
 export const RSF_SECTIONAL_TILE_URL =
@@ -45,9 +45,9 @@ export const RSF_LIVE_MAP_STYLE_OPTIONS: Array<{ value: RsfLiveMapStyle; label: 
 ];
 
 export const RSF_DEMO_VIEW_MODE_OPTIONS: Array<{ value: RsfDemoViewMode; label: string; accent: RsfCockpitAccent }> = [
-  { value: "map", label: "Map", accent: "map" },
+  { value: "overhead", label: "Overhead", accent: "map" },
   { value: "vision", label: "Vision", accent: "vision" },
-  { value: "globe", label: "Globe", accent: "globe" },
+  { value: "surface", label: "Surface", accent: "map" },
 ];
 
 export function getRsfCockpitToggleClass(active: boolean, accent: RsfCockpitAccent) {

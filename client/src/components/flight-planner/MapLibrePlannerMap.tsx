@@ -33,6 +33,11 @@ const RADAR_WMS_SOURCE_ID = "rsf-planner-radar-wms";
 const RADAR_WMS_LAYER_ID = "rsf-planner-radar-wms-layer";
 const CLOUD_SOURCE_ID = "rsf-planner-clouds";
 const CLOUD_LAYER_ID = "rsf-planner-clouds-layer";
+const OSM_TILE_URLS = [
+  "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+] as const;
 
 const terrainRiskExpression = [
   "match",
@@ -281,7 +286,7 @@ export default function MapLibrePlannerMap({
       style: createRasterBaseStyle({
         sourceId: "osm",
         layerId: "rsf-base-osm",
-        tiles: ["https://{a,b,c}.tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tiles: [...OSM_TILE_URLS],
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       }),
     });

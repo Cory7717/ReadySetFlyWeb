@@ -20,6 +20,11 @@ const RUNWAY_BAR_SOURCE_ID = "rsf-demo-runway-bar";
 const RUNWAY_BAR_LAYER_ID = "rsf-demo-runway-bar-layer";
 const SELECTED_TRAFFIC_LINE_SOURCE_ID = "rsf-demo-selected-traffic-line";
 const SELECTED_TRAFFIC_LINE_LAYER_ID = "rsf-demo-selected-traffic-line-layer";
+const OSM_TILE_URLS = [
+  "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+] as const;
 
 function buildOwnshipElement(headingDeg: number) {
   const wrapper = document.createElement("div");
@@ -155,7 +160,7 @@ export default function MapLibreDemoMap({
     ]);
   }, [ownship.lat, ownship.lon, selectedTrafficTarget]);
 
-  const mapTitle = flightPhase.startsWith("surface") ? "Surface chart" : "Chart follow";
+  const mapTitle = "Overhead";
   const mapStatusLabel =
     flightPhase === "surface-departure"
       ? "Taxi out"
@@ -178,7 +183,7 @@ export default function MapLibreDemoMap({
       style: createRasterBaseStyle({
         sourceId: "osmBase",
         layerId: "rsf-demo-osm-base",
-        tiles: ["https://{a,b,c}.tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tiles: [...OSM_TILE_URLS],
         attribution: "&copy; OpenStreetMap contributors",
       }),
     });

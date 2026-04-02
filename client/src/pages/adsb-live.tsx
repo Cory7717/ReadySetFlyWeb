@@ -16,6 +16,7 @@ import {
   RefreshCcw,
   ShieldAlert,
 } from "lucide-react";
+import Live2DMapSurface from "@/components/adsb/Live2DMapSurface";
 import { LeafletAviationBaseLayers } from "@/map/leaflet/LeafletAviationBaseLayers";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -834,6 +835,7 @@ export default function AdsbLive() {
   const [alertAudioEnabled, setAlertAudioEnabled] = useState(true);
   const [selectedPlanId, setSelectedPlanId] = useState("none");
   const [mapFocusTarget, setMapFocusTarget] = useState<{ lat: number; lon: number; label: string; nonce: number } | null>(null);
+  const [selectedTrafficId, setSelectedTrafficId] = useState<string | null>(null);
   const [selectedDiversionIcao, setSelectedDiversionIcao] = useState<string | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const radarTimerRef = useRef<number | null>(null);
@@ -1315,6 +1317,10 @@ export default function AdsbLive() {
       return true;
     });
   }, [trafficFilterMode, trafficTargets]);
+  const selectedTrafficTarget = useMemo(
+    () => filteredTrafficTargets.find((target) => target.id === selectedTrafficId) ?? null,
+    [filteredTrafficTargets, selectedTrafficId],
+  );
   const immediateTrafficCount = trafficTargets.filter((target) => target.threatLevel === "immediate").length;
   const topImmediateTraffic = trafficTargets.find((target) => target.threatLevel === "immediate") ?? null;
   const trafficAlertKey = topImmediateTraffic
@@ -2354,6 +2360,37 @@ export default function AdsbLive() {
                     }
                   />
                 ) : (
+                <Live2DMapSurface
+                  mapStyle={mapStyle}
+                  mapCenter={mapCenter}
+                  focusTarget={mapFocusTarget}
+                  followOwnship={followOwnship}
+                  onFollowOwnshipChange={setFollowOwnship}
+                  ownship={ownship}
+                  trail={trail}
+                  routePoints={routePoints}
+                  routeProgress={routeProgress}
+                  terrainCueSegments={terrainCueSegments}
+                  terrainHotSpotMarkers={terrainHotSpotMarkers}
+                  filteredTrafficTargets={filteredTrafficTargets}
+                  selectedTrafficTarget={selectedTrafficTarget}
+                  onSelectTrafficTarget={(target) => setSelectedTrafficId(target?.id ?? null)}
+                  showTfrOverlay={showTfrOverlay}
+                  tfrData={tfrQuery.data}
+                  showSuaOverlay={showSuaOverlay}
+                  suaData={suaQuery.data}
+                  showObstacleOverlay={showObstacleOverlay}
+                  nearbyObstacles={nearbyObstacles}
+                  showDiversionOverlay={showDiversionOverlay}
+                  diversionMapMarkers={diversionMapMarkers}
+                  selectedDiversion={selectedDiversion}
+                  onSelectDiversion={(airport) => setSelectedDiversionIcao(airport?.icao ?? null)}
+                  rangeNm={Number(rangeNm)}
+                  radarTileUrl={radarTileUrl}
+                  radarFallbackActive={radarFallbackActive || !radarTileUrl}
+                  cloudTileUrl={cloudTileUrl}
+                  showTerrainShading={showTerrainShading}
+                >
                 <MapContainer center={mapCenter} zoom={8} scrollWheelZoom className="h-full w-full">
                   <LeafletAviationBaseLayers
                     mapStyle={mapStyle}
@@ -2607,6 +2644,7 @@ export default function AdsbLive() {
                     </Fragment>
                   ))}
                 </MapContainer>
+                </Live2DMapSurface>
                 )}
               </div>
 

@@ -1,0 +1,374 @@
+import { useEffect, useMemo, useRef } from "react";
+import maplibregl, { type GeoJSONSource, type LngLatBoundsLike, type Map as MapLibreMap } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { RSF_COCKPIT_MUTED_TEXT_CLASS } from "@/map/rsfMapSpec";
+import type { Demo2DMapSurfaceProps } from "@/components/demo/demoMapTypes";
+import { createRasterBaseStyle } from "@/map/maplibre/rasterLayers";
+
+const ROUTE_SOURCE_ID = "rsf-demo-route";
+const ROUTE_LAYER_ID = "rsf-demo-route-layer";
+const RUNWAY_CENTER_SOURCE_ID = "rsf-demo-runway-center";
+const RUNWAY_CENTER_LAYER_ID = "rsf-demo-runway-center-layer";
+const RUNWAY_BAR_SOURCE_ID = "rsf-demo-runway-bar";
+const RUNWAY_BAR_LAYER_ID = "rsf-demo-runway-bar-layer";
+const SELECTED_TRAFFIC_LINE_SOURCE_ID = "rsf-demo-selected-traffic-line";
+const SELECTED_TRAFFIC_LINE_LAYER_ID = "rsf-demo-selected-traffic-line-layer";
+
+function buildLineCollection(coordinates: Array<[number, number]>) {
+  return {
+    type: "FeatureCollection" as const,
+    features:
+      coordinates.length > 1
+        ? [
+            {
+              type: "Feature" as const,
+              geometry: {
+                type: "LineString" as const,
+                coordinates,
+              },
+              properties: {},
+            },
+          ]
+        : [],
+  };
+}
+
+function buildOwnshipElement(headingDeg: number) {
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = `
+    <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;">
+      <svg width="28" height="28" viewBox="0 0 24 24" style="transform: rotate(${headingDeg}deg); transform-origin: 50% 50%;">
+        <path d="M12 1 L16 20 L12 17 L8 20 Z" fill="#E8EDF4" stroke="#0A0E14" stroke-width="1.1" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  `;
+  return wrapper.firstElementChild as HTMLElement;
+}
+
+function buildWaypointElement(label: string, primary: boolean, next: boolean) {
+  const el = document.createElement("div");
+  el.style.display = "flex";
+  el.style.flexDirection = "column";
+  el.style.alignItems = "center";
+  el.style.gap = "4px";
+
+  const dot = document.createElement("div");
+  dot.style.width = primary ? "18px" : "14px";
+  dot.style.height = primary ? "18px" : "14px";
+  dot.style.borderRadius = "9999px";
+  dot.style.background = next ? "#00D4A0" : primary ? "#E8EDF4" : "#4A9FD4";
+  dot.style.border = `2px solid ${primary ? "#C8922A" : "rgba(10,14,20,0.85)"}`;
+  el.appendChild(dot);
+
+  const text = document.createElement("div");
+  text.style.padding = "3px 7px";
+  text.style.borderRadius = "9999px";
+  text.style.background = "rgba(9,16,24,0.82)";
+  text.style.border = "1px solid rgba(30,45,66,0.85)";
+  text.style.color = next ? "#00D4A0" : "#E8EDF4";
+  text.style.fontSize = "10px";
+  text.style.fontWeight = "700";
+  text.style.whiteSpace = "nowrap";
+  text.textContent = label;
+  el.appendChild(text);
+  return el;
+}
+
+function buildTrafficElement(target: Demo2DMapSurfaceProps["trafficTargets"][number], selected: boolean) {
+  const tone =
+    target.threatLevel === "immediate"
+      ? "#E8453C"
+      : target.threatLevel === "advisory"
+        ? "#F5A623"
+        : "#E8EDF4";
+  const size = target.threatLevel === "immediate" ? 28 : 24;
+  const wrapper = document.createElement("div");
+  wrapper.style.width = `${size}px`;
+  wrapper.style.height = `${size}px`;
+  wrapper.style.display = "flex";
+  wrapper.style.alignItems = "center";
+  wrapper.style.justifyContent = "center";
+  wrapper.style.borderRadius = "9999px";
+  if (selected || target.threatLevel === "immediate") {
+    wrapper.style.boxShadow =
+      target.threatLevel === "immediate" ? "0 0 0 4px rgba(245,166,35,0.2)" : "0 0 0 3px rgba(245,166,35,0.18)";
+  }
+  wrapper.innerHTML = `
+    <svg width="${size}" height="${size}" viewBox="0 0 24 24">
+      <rect x="7" y="7" width="10" height="10" transform="rotate(45 12 12)" fill="${tone}" stroke="rgba(10,14,20,0.88)" stroke-width="1"/>
+    </svg>
+  `;
+  return wrapper;
+}
+
+function buildDiversionElement(icao: string, active: boolean) {
+  const el = document.createElement("div");
+  el.style.display = "flex";
+  el.style.alignItems = "center";
+  el.style.justifyContent = "center";
+  el.style.minWidth = "24px";
+  el.style.height = "24px";
+  el.style.padding = "0 7px";
+  el.style.borderRadius = "9999px";
+  el.style.background = active ? "#4A9FD4" : "#0A0E14";
+  el.style.border = "2px solid #4A9FD4";
+  el.style.color = "#E8EDF4";
+  el.style.fontSize = "10px";
+  el.style.fontWeight = "700";
+  el.textContent = icao;
+  return el;
+}
+
+function addOrReplaceGeoJsonLine(map: MapLibreMap, sourceId: string, layerId: string, data: ReturnType<typeof buildLineCollection>, color: string, width: number, opacity: number, dasharray?: number[]) {
+  if (map.getLayer(layerId)) map.removeLayer(layerId);
+  if (map.getSource(sourceId)) map.removeSource(sourceId);
+  map.addSource(sourceId, { type: "geojson", data: data as any });
+  map.addLayer({
+    id: layerId,
+    type: "line",
+    source: sourceId,
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": color,
+      "line-width": width,
+      "line-opacity": opacity,
+      ...(dasharray ? { "line-dasharray": dasharray } : {}),
+    },
+  });
+}
+
+function removeLine(map: MapLibreMap, sourceId: string, layerId: string) {
+  if (map.getLayer(layerId)) map.removeLayer(layerId);
+  if (map.getSource(sourceId)) map.removeSource(sourceId);
+}
+
+export default function MapLibreDemoMap({
+  routePoints,
+  ownship,
+  nextWaypoint,
+  remainingRouteNm,
+  flightPhase,
+  trafficTargets,
+  selectedTrafficTarget,
+  diversionCandidates,
+  selectedDiversion,
+  terrainState,
+  runwayCue,
+  runwayOverlay,
+  runwayOverlayLabel,
+}: Demo2DMapSurfaceProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const ownshipMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const waypointMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const trafficMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const diversionMarkersRef = useRef<maplibregl.Marker[]>([]);
+
+  const routeGeoJson = useMemo(
+    () => buildLineCollection(routePoints.map((point) => [point.longitude, point.latitude] as [number, number])),
+    [routePoints],
+  );
+  const runwayCenterGeoJson = useMemo(
+    () =>
+      buildLineCollection(
+        runwayOverlay?.centerline.map((point) => [point.longitude, point.latitude] as [number, number]) ?? [],
+      ),
+    [runwayOverlay],
+  );
+  const runwayBarGeoJson = useMemo(
+    () =>
+      buildLineCollection(
+        runwayOverlay?.runwayBar.map((point) => [point.longitude, point.latitude] as [number, number]) ?? [],
+      ),
+    [runwayOverlay],
+  );
+  const selectedTrafficLineGeoJson = useMemo(() => {
+    if (!selectedTrafficTarget) return buildLineCollection([]);
+    return buildLineCollection([
+      [ownship.lon, ownship.lat],
+      [selectedTrafficTarget.lon, selectedTrafficTarget.lat],
+    ]);
+  }, [ownship.lat, ownship.lon, selectedTrafficTarget]);
+
+  const mapTitle = flightPhase.startsWith("surface") ? "Surface chart" : "Chart follow";
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      center: [ownship.lon, ownship.lat],
+      zoom: 7.4,
+      attributionControl: {},
+      style: createRasterBaseStyle({
+        sourceId: "osmDark",
+        layerId: "rsf-demo-osm-dark",
+        tiles: ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
+        attribution: "&copy; OpenStreetMap &copy; CARTO",
+      }),
+    });
+
+    map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), "top-right");
+    map.on("load", () => {
+      addOrReplaceGeoJsonLine(map, ROUTE_SOURCE_ID, ROUTE_LAYER_ID, routeGeoJson, "#C8922A", 4, 0.82);
+      addOrReplaceGeoJsonLine(map, RUNWAY_CENTER_SOURCE_ID, RUNWAY_CENTER_LAYER_ID, runwayCenterGeoJson, "#C8922A", 2.6, 0.88);
+      addOrReplaceGeoJsonLine(map, RUNWAY_BAR_SOURCE_ID, RUNWAY_BAR_LAYER_ID, runwayBarGeoJson, "#F5A623", 5, 0.92);
+      addOrReplaceGeoJsonLine(map, SELECTED_TRAFFIC_LINE_SOURCE_ID, SELECTED_TRAFFIC_LINE_LAYER_ID, selectedTrafficLineGeoJson, "#F5A623", 2, 0.8, [2, 1]);
+    });
+
+    mapRef.current = map;
+    return () => {
+      ownshipMarkerRef.current?.remove();
+      waypointMarkersRef.current.forEach((marker) => marker.remove());
+      trafficMarkersRef.current.forEach((marker) => marker.remove());
+      diversionMarkersRef.current.forEach((marker) => marker.remove());
+      map.remove();
+      mapRef.current = null;
+    };
+  }, [ownship.lat, ownship.lon, routeGeoJson, runwayBarGeoJson, runwayCenterGeoJson, selectedTrafficLineGeoJson]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const bounds = new maplibregl.LngLatBounds([ownship.lon, ownship.lat], [ownship.lon, ownship.lat]);
+    routePoints.forEach((point) => bounds.extend([point.longitude, point.latitude]));
+    trafficTargets.forEach((target) => bounds.extend([target.lon, target.lat]));
+    diversionCandidates.slice(0, 4).forEach((airport) => bounds.extend([airport.lon, airport.lat]));
+    map.fitBounds(bounds as LngLatBoundsLike, { padding: 72, duration: 0, maxZoom: 10.5 });
+  }, [diversionCandidates, ownship.lat, ownship.lon, routePoints, trafficTargets]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    ownshipMarkerRef.current?.remove();
+    ownshipMarkerRef.current = new maplibregl.Marker({
+      element: buildOwnshipElement(ownship.heading),
+      anchor: "center",
+    })
+      .setLngLat([ownship.lon, ownship.lat])
+      .addTo(map);
+  }, [ownship.heading, ownship.lat, ownship.lon]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    waypointMarkersRef.current.forEach((marker) => marker.remove());
+    waypointMarkersRef.current = routePoints.map((point) =>
+      new maplibregl.Marker({
+        element: buildWaypointElement(point.icao, point.kind === "origin" || point.kind === "destination", nextWaypoint === point.icao),
+        anchor: "bottom",
+      })
+        .setLngLat([point.longitude, point.latitude])
+        .addTo(map),
+    );
+  }, [nextWaypoint, routePoints]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    trafficMarkersRef.current.forEach((marker) => marker.remove());
+    trafficMarkersRef.current = trafficTargets.map((target) =>
+      new maplibregl.Marker({
+        element: buildTrafficElement(target, selectedTrafficTarget?.id === target.id),
+        anchor: "center",
+      })
+        .setLngLat([target.lon, target.lat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 12 }).setHTML(
+            `<div style="font-size:12px;line-height:1.35"><strong>${target.callsign}</strong><br/>${target.clock} · ${target.distanceNm.toFixed(1)} NM<br/>${target.closureText}</div>`,
+          ),
+        )
+        .addTo(map),
+    );
+  }, [selectedTrafficTarget?.id, trafficTargets]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    diversionMarkersRef.current.forEach((marker) => marker.remove());
+    diversionMarkersRef.current = diversionCandidates.slice(0, 5).map((airport) =>
+      new maplibregl.Marker({
+        element: buildDiversionElement(airport.icao, selectedDiversion?.icao === airport.icao),
+        anchor: "center",
+      })
+        .setLngLat([airport.lon, airport.lat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 12 }).setHTML(
+            `<div style="font-size:12px;line-height:1.35"><strong>${airport.icao}${airport.name ? ` · ${airport.name}` : ""}</strong><br/>${airport.distanceNm.toFixed(1)} NM · ${airport.flightCategory || "WX --"}</div>`,
+          ),
+        )
+        .addTo(map),
+    );
+  }, [diversionCandidates, selectedDiversion?.icao]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    addOrReplaceGeoJsonLine(map, ROUTE_SOURCE_ID, ROUTE_LAYER_ID, routeGeoJson, "#C8922A", 4, 0.82);
+    if (runwayOverlay) {
+      addOrReplaceGeoJsonLine(map, RUNWAY_CENTER_SOURCE_ID, RUNWAY_CENTER_LAYER_ID, runwayCenterGeoJson, "#C8922A", 2.6, 0.88);
+      addOrReplaceGeoJsonLine(map, RUNWAY_BAR_SOURCE_ID, RUNWAY_BAR_LAYER_ID, runwayBarGeoJson, "#F5A623", 5, 0.92);
+    } else {
+      removeLine(map, RUNWAY_CENTER_SOURCE_ID, RUNWAY_CENTER_LAYER_ID);
+      removeLine(map, RUNWAY_BAR_SOURCE_ID, RUNWAY_BAR_LAYER_ID);
+    }
+    if (selectedTrafficTarget) {
+      addOrReplaceGeoJsonLine(map, SELECTED_TRAFFIC_LINE_SOURCE_ID, SELECTED_TRAFFIC_LINE_LAYER_ID, selectedTrafficLineGeoJson, "#F5A623", 2, 0.8, [2, 1]);
+    } else {
+      removeLine(map, SELECTED_TRAFFIC_LINE_SOURCE_ID, SELECTED_TRAFFIC_LINE_LAYER_ID);
+    }
+  }, [routeGeoJson, runwayBarGeoJson, runwayCenterGeoJson, runwayOverlay, selectedTrafficLineGeoJson, selectedTrafficTarget]);
+
+  return (
+    <div className="relative h-[420px] overflow-hidden rounded-[24px] border border-slate-800 bg-[#0A0E14]">
+      <div ref={containerRef} className="h-full w-full" />
+      <div className="pointer-events-none absolute inset-x-4 top-4 flex items-center justify-between">
+        <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
+          {mapTitle}
+        </div>
+        <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
+          {runwayOverlayLabel || (runwayCue ? `Final ${runwayCue.runwayId}` : "Track up")}
+        </div>
+      </div>
+      <div className="pointer-events-none absolute inset-x-4 bottom-4 grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/90 px-4 py-3">
+          <div className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>Terrain</div>
+          <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
+            {terrainState ? `${terrainState.terrainClearanceFt.toLocaleString()} ft clr` : "Preview layer"}
+          </div>
+          <div className={`mt-1 text-xs ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>{terrainState?.guidance ?? "Tactical terrain overlay preview."}</div>
+        </div>
+        <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/90 px-4 py-3">
+          <div className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>Traffic</div>
+          <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
+            {selectedTrafficTarget
+              ? `${selectedTrafficTarget.callsign} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM`
+              : "No traffic target"}
+          </div>
+          <div className={`mt-1 text-xs ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>
+            {selectedTrafficTarget
+              ? `${selectedTrafficTarget.clock} - ${selectedTrafficTarget.altitudeDeltaFt > 0 ? "+" : ""}${Math.round(selectedTrafficTarget.altitudeDeltaFt)} ft - ${selectedTrafficTarget.closureText}`
+              : "Traffic preview idle"}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/90 px-4 py-3">
+          <div className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>Diversion</div>
+          <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
+            {selectedDiversion ? `${selectedDiversion.icao} ${selectedDiversion.distanceNm.toFixed(1)} NM` : "Scanning nearby"}
+          </div>
+          <div className={`mt-1 text-xs ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>
+            {selectedDiversion
+              ? `${selectedDiversion.maxRunwayFt?.toLocaleString() || "--"} ft - ${selectedDiversion.flightCategory || "WX --"}`
+              : "Nearby-airport lookup"}
+          </div>
+        </div>
+      </div>
+      <div className="pointer-events-none absolute left-4 top-14 rounded-full border border-[#1E2D42] bg-[#091018]/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#7A9BB8]">
+        MapLibre preview
+      </div>
+      <div className="pointer-events-none absolute right-4 top-14 rounded-full border border-[#1E2D42] bg-[#091018]/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#7A9BB8]">
+        {Math.round(remainingRouteNm)} NM remain
+      </div>
+    </div>
+  );
+}

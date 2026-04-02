@@ -16,6 +16,7 @@ import {
   RSF_TERRAIN_RISK_STYLES,
   RSF_TERRAIN_SURFACE_STYLES,
 } from "@/map/rsfMapSpec";
+import { addOrReplaceRasterLayer, createRasterBaseStyle, removeRasterLayer } from "@/map/maplibre/rasterLayers";
 
 const MAP_SOURCE_ID = "rsf-planner-route";
 const TERRAIN_SOURCE_ID = "rsf-planner-terrain";
@@ -175,55 +176,6 @@ function buildLegHealthElement(marker: PlannerLegHealthMarker) {
   return el;
 }
 
-function addOrReplaceRasterLayer({
-  map,
-  sourceId,
-  layerId,
-  tiles,
-  attribution,
-  opacity,
-  maxzoom,
-  minzoom,
-  beforeId,
-}: {
-  map: MapLibreMap;
-  sourceId: string;
-  layerId: string;
-  tiles: string[];
-  attribution: string;
-  opacity: number;
-  maxzoom?: number;
-  minzoom?: number;
-  beforeId?: string;
-}) {
-  if (map.getLayer(layerId)) map.removeLayer(layerId);
-  if (map.getSource(sourceId)) map.removeSource(sourceId);
-  map.addSource(sourceId, {
-    type: "raster",
-    tiles,
-    tileSize: 256,
-    attribution,
-    maxzoom,
-    minzoom,
-  });
-  map.addLayer(
-    {
-      id: layerId,
-      type: "raster",
-      source: sourceId,
-      paint: {
-        "raster-opacity": opacity,
-      },
-    },
-    beforeId,
-  );
-}
-
-function removeRasterLayer(map: MapLibreMap, sourceId: string, layerId: string) {
-  if (map.getLayer(layerId)) map.removeLayer(layerId);
-  if (map.getSource(sourceId)) map.removeSource(sourceId);
-}
-
 export default function MapLibrePlannerMap({
   points,
   heightClassName = "h-[380px]",
@@ -339,24 +291,12 @@ export default function MapLibrePlannerMap({
       center,
       zoom: initialZoom,
       attributionControl: {},
-      style: {
-        version: 8,
-        sources: {
-          osm: {
-            type: "raster",
-            tiles: ["https://{a,b,c}.tile.openstreetmap.org/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-          },
-        },
-        layers: [
-          {
-            id: "rsf-base-osm",
-            type: "raster",
-            source: "osm",
-          },
-        ],
-      },
+      style: createRasterBaseStyle({
+        sourceId: "osm",
+        layerId: "rsf-base-osm",
+        tiles: ["https://{a,b,c}.tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }),
     });
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), "top-right");

@@ -17,6 +17,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import Demo2DMapSurface from "@/components/demo/Demo2DMapSurface";
+import type {
+  DemoDiversion,
+  DemoFlightPhase,
+  DemoTerrainState,
+  DemoTrafficTarget,
+} from "@/components/demo/demoMapTypes";
 import CesiumGlobe from "@/components/flight-planner/CesiumGlobe";
 import { RsfModeToggle } from "@/components/map/RsfModeToggle";
 import { Input } from "@/components/ui/input";
@@ -90,62 +97,8 @@ type NearbyAirportResponse = {
   airports: DemoDiversion[];
 };
 
-type DemoDiversion = {
-  icao: string;
-  name?: string | null;
-  city?: string | null;
-  state?: string | null;
-  lat: number;
-  lon: number;
-  distanceNm: number;
-  bearingDeg: number;
-  maxRunwayFt: number | null;
-  towered: boolean;
-  score: number;
-  immediateReady: boolean;
-  immediateReasons: string[];
-  flightCategory: string | null;
-  runwayAdvisory: {
-    runway: string;
-    headwindKt: number;
-    crosswindKt: number;
-  } | null;
-  frequencySummary: Array<{
-    type: string | null;
-    description: string | null;
-    frequencyMhz: number | null;
-  }>;
-};
-
-type DemoTrafficTarget = {
-  id: string;
-  callsign: string;
-  lat: number;
-  lon: number;
-  distanceNm: number;
-  bearingDeg: number;
-  altitudeDeltaFt: number;
-  threatLevel: "monitor" | "advisory" | "immediate";
-  closureText: string;
-  sector: string;
-  clock: string;
-  threatScore: number;
-};
-
-type DemoTerrainState = {
-  terrainAheadFt: number;
-  obstacleAheadFt: number;
-  terrainClearanceFt: number;
-  obstacleClearanceFt: number;
-  risk: "nominal" | "caution" | "warning";
-  obstacleRisk: "nominal" | "caution" | "warning";
-  safeAltitudeFt: number;
-  guidance: string;
-};
-
 type ViewMode = RsfDemoViewMode;
 type DemoSpeed = "1x" | "2x" | "4x" | "8x";
-type DemoFlightPhase = "surface-departure" | "departure" | "enroute" | "arrival" | "surface-arrival";
 
 type AirportFrequencyResponse = {
   icao: string;
@@ -2655,7 +2608,7 @@ export default function SyntheticVisionPage() {
             </div>
 
             {viewMode === "map" && flightFrame?.ownship ? (
-              <FlightDemoMapSurface
+              <Demo2DMapSurface
                 routePoints={routePoints}
                 ownship={flightFrame.ownship}
                 nextWaypoint={routeProgress?.nextWaypoint || null}
@@ -2669,7 +2622,23 @@ export default function SyntheticVisionPage() {
                 runwayCue={arrivalRunwayCue}
                 runwayOverlay={activeMapRunwayOverlay}
                 runwayOverlayLabel={activeMapRunwayOverlayLabel}
-              />
+              >
+                <FlightDemoMapSurface
+                  routePoints={routePoints}
+                  ownship={flightFrame.ownship}
+                  nextWaypoint={routeProgress?.nextWaypoint || null}
+                  remainingRouteNm={routeProgress?.remainingRouteNm || totalRouteNm}
+                  flightPhase={flightPhase}
+                  trafficTargets={trafficTargets}
+                  selectedTrafficTarget={selectedTrafficTarget}
+                  diversionCandidates={diversionCandidates}
+                  selectedDiversion={selectedDiversion}
+                  terrainState={terrainState}
+                  runwayCue={arrivalRunwayCue}
+                  runwayOverlay={activeMapRunwayOverlay}
+                  runwayOverlayLabel={activeMapRunwayOverlayLabel}
+                />
+              </Demo2DMapSurface>
             ) : null}
 
             {viewMode === "vision" && flightFrame?.ownship ? (

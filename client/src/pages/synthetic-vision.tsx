@@ -158,7 +158,12 @@ type DemoSurfacePreview = {
   atisFreq: string;
   ownship: { x: number; y: number; headingDeg: number };
   route: Array<{ x: number; y: number }>;
+  completedRoute: Array<{ x: number; y: number }>;
+  upcomingRoute: Array<{ x: number; y: number }>;
   secondaryRoute: Array<{ x: number; y: number }>;
+  activeTaxiway: string;
+  upcomingTaxiways: string[];
+  progressCall: string;
 };
 
 const DEFAULT_DEPARTURE = "KDAL";
@@ -277,6 +282,22 @@ function normalizeRunwayIdent(value: string | null | undefined) {
     .toUpperCase()
     .replace(/^RWY\s*/i, "")
     .trim();
+}
+
+function rotateDiagramPoint(
+  point: { x: number; y: number },
+  center: { x: number; y: number },
+  angleDeg: number,
+) {
+  const radians = (angleDeg * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  return {
+    x: center.x + dx * cos - dy * sin,
+    y: center.y + dx * sin + dy * cos,
+  };
 }
 
 function resolveDemoRunwaySelection(briefing: RunwayBriefingResponse | null | undefined): DemoRunwaySelection | null {
@@ -829,9 +850,9 @@ function FlightDemoTape({
   side: "left" | "right";
   formatValue: (value: number) => string;
 }) {
-  const tickCount = 13;
+  const tickCount = label === "IAS" ? 17 : 15;
   const centerIndex = Math.floor(tickCount / 2);
-  const tickSpacingPx = label === "IAS" ? 20 : 18;
+  const tickSpacingPx = label === "IAS" ? 17 : 16;
   const ticks = Array.from({ length: tickCount }, (_, index) => {
     const tickValue = Math.round(value / step) * step + (index - centerIndex) * step;
     return {
@@ -842,32 +863,32 @@ function FlightDemoTape({
 
   return (
     <div
-      className={`absolute top-1/2 z-20 hidden h-72 w-[98px] -translate-y-1/2 rounded-[24px] border border-[#1E2D42] bg-[#081019]/90 backdrop-blur md:block ${side === "left" ? "left-5" : "right-5"}`}
+      className={`absolute top-1/2 z-20 hidden h-[306px] w-[112px] -translate-y-1/2 rounded-[28px] border border-[#1E2D42] bg-[#081019]/92 shadow-[0_18px_44px_rgba(0,0,0,0.28)] backdrop-blur md:block lg:w-[118px] ${side === "left" ? "left-5 lg:left-6" : "right-5 lg:right-6"}`}
     >
-      <div className="absolute inset-x-0 top-3 text-center text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">
+      <div className="absolute inset-x-0 top-3.5 text-center text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">
         {label}
       </div>
-      <div className="absolute inset-x-3.5 top-1/2 h-12 -translate-y-1/2 rounded-xl border border-[#C8922A]/50 bg-[#0D151F]/96 shadow-[0_0_16px_rgba(200,146,42,0.12)]" />
+      <div className="absolute inset-x-3 top-1/2 h-14 -translate-y-1/2 rounded-[16px] border border-[#C8922A]/55 bg-[#0D151F]/96 shadow-[0_0_18px_rgba(200,146,42,0.15)]" />
       <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center">
-        <div className="font-mono text-3xl leading-none text-[#F5A623]">{formatValue(value)}</div>
-        <div className="text-[10px] uppercase tracking-[0.18em] text-[#7A9BB8]">{unit}</div>
+        <div className="font-mono text-[34px] leading-none text-[#F5A623]">{formatValue(value)}</div>
+        <div className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-[#7A9BB8]">{unit}</div>
       </div>
-      <div className="absolute inset-x-0 bottom-5 top-11 overflow-hidden">
+      <div className="absolute inset-x-0 bottom-5 top-12 overflow-hidden">
         {ticks.map((tick) => (
           <div
             key={`${label}-${tick.value}`}
-            className="absolute inset-x-0 flex items-center text-xs text-[#D6A85A]"
+            className="absolute inset-x-0 flex items-center text-[12px] text-[#D6A85A]"
             style={{ top: `calc(50% + ${tick.offsetPx}px)` }}
           >
             {side === "left" ? (
               <>
-                <span className="ml-3 font-mono">{formatValue(tick.value)}</span>
-                <div className="ml-auto mr-4 h-px w-5 bg-[#F5A623]/70" />
+                <span className="ml-3.5 font-mono">{formatValue(tick.value)}</span>
+                <div className="ml-auto mr-4.5 h-px w-6 bg-[#F5A623]/72" />
               </>
             ) : (
               <>
-                <div className="ml-4 h-px w-5 bg-[#F5A623]/70" />
-                <span className="ml-auto mr-3 font-mono">{formatValue(tick.value)}</span>
+                <div className="ml-4.5 h-px w-6 bg-[#F5A623]/72" />
+                <span className="ml-auto mr-3.5 font-mono">{formatValue(tick.value)}</span>
               </>
             )}
           </div>
@@ -905,86 +926,127 @@ function FlightDemoHudStrip({
 function FlightDemoAirportDiagram({ preview }: { preview: DemoSurfacePreview }) {
   const reciprocalRunwayId = getOppositeRunwayIdent(preview.runwayId);
   const rotation = preview.runwayHeadingDeg;
+  const ownshipWorld = rotateDiagramPoint(
+    { x: preview.ownship.x + 20, y: preview.ownship.y + 1 },
+    { x: 70, y: 50 },
+    rotation,
+  );
+  const followAnchor = preview.mode === "departure" ? { x: 70, y: 75 } : { x: 70, y: 29 };
+  const followZoom = preview.mode === "departure" ? 1.68 : 1.52;
+  const sceneTranslateX = followAnchor.x - ownshipWorld.x * followZoom;
+  const sceneTranslateY = followAnchor.y - ownshipWorld.y * followZoom;
 
   return (
     <div className="relative overflow-hidden rounded-[20px] border border-[#1E2D42] bg-[linear-gradient(180deg,#07101A_0%,#0A131D_100%)] p-4">
       <div className="absolute left-4 top-4 rounded-full border border-[#1E2D42] bg-[#091018]/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7A9BB8]">
-        Surface schematic
+        Surface follow
       </div>
-      <svg viewBox="0 0 140 100" className="h-[300px] w-full">
+      <div className="absolute right-4 top-4 rounded-full border border-[#20344D] bg-[#0C1521]/92 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#4A9FD4]">
+        Upcoming: {preview.upcomingTaxiways.join(" / ") || "Runway entry"}
+      </div>
+      <svg viewBox="0 0 140 100" className="h-[340px] w-full">
         <defs>
           <filter id="rsf-taxi-glow">
             <feGaussianBlur stdDeviation="1.2" />
           </filter>
+          <clipPath id="rsf-taxi-follow-window">
+            <rect x="8" y="10" width="124" height="80" rx="12" />
+          </clipPath>
         </defs>
         <rect x="8" y="10" width="124" height="80" rx="12" fill="#0B1119" stroke="rgba(30,45,66,0.9)" strokeWidth="0.8" />
-        <g transform={`rotate(${rotation} 70 50)`}>
-          <rect x="58" y="12" width="24" height="76" rx="4" fill="#19212C" stroke="rgba(232,237,244,0.18)" strokeWidth="0.7" />
-          <rect x="60" y="16" width="20" height="5" rx="1.8" fill="#E8EDF4" opacity="0.9" />
-          <rect x="60" y="79" width="20" height="5" rx="1.8" fill="#E8EDF4" opacity="0.9" />
-          <line x1="70" y1="17" x2="70" y2="83" stroke="rgba(232,237,244,0.74)" strokeWidth="1" strokeDasharray="3 3" />
-          <text x="70" y="29" textAnchor="middle" fill="#F5A623" fontSize="5.2" letterSpacing="0.25">{preview.runwayId}</text>
-          {reciprocalRunwayId ? (
-            <text x="70" y="74" textAnchor="middle" fill="#F5A623" fontSize="5.2" letterSpacing="0.25">{reciprocalRunwayId}</text>
-          ) : null}
-          <path d="M25 71 L54 71 L54 63 L24 63 Q20 63 20 67 Q20 71 25 71 Z" fill="#162536" stroke="#4A9FD4" strokeWidth="1" />
-          <path d="M84 31 L114 31 Q120 31 120 25 L120 19 Q120 15 116 15 L87 15 Z" fill="#162536" stroke="#4A9FD4" strokeWidth="1" />
-          <path d="M83 50 L110 50 L116 56 L116 66 L104 66 L83 66 Z" fill="#162536" stroke="#4A9FD4" strokeWidth="1" opacity="0.8" />
-          <path d="M54 67 L60 67" fill="none" stroke="#4A9FD4" strokeWidth="1.1" />
-          <path d="M80 23 L86 23" fill="none" stroke="#4A9FD4" strokeWidth="1.1" />
-          <path d="M80 58 L84 58" fill="none" stroke="#4A9FD4" strokeWidth="1.1" />
-          <line x1="56" y1="59.5" x2="84" y2="59.5" stroke={preview.holdShortActive ? "#E8453C" : "#F5A623"} strokeWidth="1.5" />
-          <line x1="56" y1="61.9" x2="84" y2="61.9" stroke="rgba(245,166,35,0.7)" strokeWidth="1.1" />
-          <path
-            d={`M ${preview.secondaryRoute.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
-            fill="none"
-            stroke="rgba(74,159,212,0.38)"
-            strokeWidth="1.1"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeDasharray="2.4 2"
-          />
-          <path
-            d={`M ${preview.route.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
-            fill="none"
-            stroke="rgba(200,146,42,0.55)"
-            strokeWidth="4.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            filter="url(#rsf-taxi-glow)"
-          />
-          <path
-            d={`M ${preview.route.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
-            fill="none"
-            stroke="#C8922A"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <circle cx={preview.ownship.x + 20} cy={preview.ownship.y + 1} r="3.3" fill="#E8EDF4" stroke="#0A0E14" strokeWidth="0.8" />
-          <path
-            d={`M ${preview.ownship.x + 20} ${preview.ownship.y - 4.2} L ${preview.ownship.x + 22.8} ${preview.ownship.y + 3.3} L ${preview.ownship.x + 20} ${preview.ownship.y + 1.4} L ${preview.ownship.x + 17.2} ${preview.ownship.y + 3.3} Z`}
-            fill="#E8EDF4"
-            stroke="#0A0E14"
-            strokeWidth="0.45"
-            transform={`rotate(${preview.ownship.headingDeg} ${preview.ownship.x + 20} ${preview.ownship.y + 1})`}
-          />
-          {preview.runwayOccupied ? (
-            <g>
-              <rect x="64.5" y="39" width="11" height="6" rx="1.6" fill="rgba(232,69,60,0.2)" stroke="#E8453C" strokeWidth="0.7" />
-              <text x="70" y="43.1" textAnchor="middle" fill="#E8EDF4" fontSize="3.2" letterSpacing="0.1">OCC</text>
+        <g clipPath="url(#rsf-taxi-follow-window)">
+          <g transform={`translate(${sceneTranslateX.toFixed(2)} ${sceneTranslateY.toFixed(2)}) scale(${followZoom.toFixed(3)})`}>
+            <g transform={`rotate(${rotation} 70 50)`}>
+              <rect x="58" y="12" width="24" height="76" rx="4" fill="#19212C" stroke="rgba(232,237,244,0.18)" strokeWidth="0.7" />
+              <rect x="60" y="16" width="20" height="5" rx="1.8" fill="#E8EDF4" opacity="0.9" />
+              <rect x="60" y="79" width="20" height="5" rx="1.8" fill="#E8EDF4" opacity="0.9" />
+              <line x1="70" y1="17" x2="70" y2="83" stroke="rgba(232,237,244,0.74)" strokeWidth="1" strokeDasharray="3 3" />
+              <text x="70" y="29" textAnchor="middle" fill="#F5A623" fontSize="5.2" letterSpacing="0.25">{preview.runwayId}</text>
+              {reciprocalRunwayId ? (
+                <text x="70" y="74" textAnchor="middle" fill="#F5A623" fontSize="5.2" letterSpacing="0.25">{reciprocalRunwayId}</text>
+              ) : null}
+              <path d="M25 71 L54 71 L54 63 L24 63 Q20 63 20 67 Q20 71 25 71 Z" fill="#162536" stroke="#4A9FD4" strokeWidth="1" />
+              <path d="M84 31 L114 31 Q120 31 120 25 L120 19 Q120 15 116 15 L87 15 Z" fill="#162536" stroke="#4A9FD4" strokeWidth="1" />
+              <path d="M83 50 L110 50 L116 56 L116 66 L104 66 L83 66 Z" fill="#162536" stroke="#4A9FD4" strokeWidth="1" opacity="0.8" />
+              <path d="M54 67 L60 67" fill="none" stroke="#4A9FD4" strokeWidth="1.1" />
+              <path d="M80 23 L86 23" fill="none" stroke="#4A9FD4" strokeWidth="1.1" />
+              <path d="M80 58 L84 58" fill="none" stroke="#4A9FD4" strokeWidth="1.1" />
+              <line x1="56" y1="59.5" x2="84" y2="59.5" stroke={preview.holdShortActive ? "#E8453C" : "#F5A623"} strokeWidth="1.5" />
+              <line x1="56" y1="61.9" x2="84" y2="61.9" stroke="rgba(245,166,35,0.7)" strokeWidth="1.1" />
+              <path
+                d={`M ${preview.secondaryRoute.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+                fill="none"
+                stroke="rgba(74,159,212,0.34)"
+                strokeWidth="1.1"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray="2.4 2"
+              />
+              <path
+                d={`M ${preview.route.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+                fill="none"
+                stroke="rgba(74,159,212,0.18)"
+                strokeWidth="4.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d={`M ${preview.completedRoute.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+                fill="none"
+                stroke="rgba(74,159,212,0.56)"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray="3.2 2.2"
+              />
+              <path
+                d={`M ${preview.upcomingRoute.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+                fill="none"
+                stroke="rgba(200,146,42,0.55)"
+                strokeWidth="5.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                filter="url(#rsf-taxi-glow)"
+              />
+              <path
+                d={`M ${preview.upcomingRoute.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+                fill="none"
+                stroke="#C8922A"
+                strokeWidth="2.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle cx={preview.ownship.x + 20} cy={preview.ownship.y + 1} r="3.3" fill="#E8EDF4" stroke="#0A0E14" strokeWidth="0.8" />
+              <path
+                d={`M ${preview.ownship.x + 20} ${preview.ownship.y - 4.2} L ${preview.ownship.x + 22.8} ${preview.ownship.y + 3.3} L ${preview.ownship.x + 20} ${preview.ownship.y + 1.4} L ${preview.ownship.x + 17.2} ${preview.ownship.y + 3.3} Z`}
+                fill="#E8EDF4"
+                stroke="#0A0E14"
+                strokeWidth="0.45"
+                transform={`rotate(${preview.ownship.headingDeg} ${preview.ownship.x + 20} ${preview.ownship.y + 1})`}
+              />
+              {preview.runwayOccupied ? (
+                <g>
+                  <rect x="64.5" y="39" width="11" height="6" rx="1.6" fill="rgba(232,69,60,0.2)" stroke="#E8453C" strokeWidth="0.7" />
+                  <text x="70" y="43.1" textAnchor="middle" fill="#E8EDF4" fontSize="3.2" letterSpacing="0.1">OCC</text>
+                </g>
+              ) : null}
+              <text x="28" y="59" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.2">RAMP</text>
+              <text x="45" y="57" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.22">A</text>
+              <text x="88" y="28" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.22">B</text>
+              <text x="92" y="55" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.22">C</text>
             </g>
-          ) : null}
-          <text x="28" y="59" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.2">RAMP</text>
-          <text x="45" y="57" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.22">A</text>
-          <text x="88" y="28" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.22">B</text>
-          <text x="92" y="55" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.22">C</text>
+          </g>
         </g>
         <g transform="translate(118 18)">
           <circle cx="0" cy="0" r="10" fill="#0A0E14" stroke="#1E2D42" strokeWidth="0.8" />
           <path d="M0 -6 L0 6 M-6 0 L6 0" stroke="rgba(232,237,244,0.18)" strokeWidth="0.6" />
           <path d="M0 -7 L2.4 -1.5 L0 -3 L-2.4 -1.5 Z" fill="#E8EDF4" />
           <text x="0" y="-10.8" textAnchor="middle" fill="#7A9BB8" fontSize="3.1" letterSpacing="0.18">N</text>
+        </g>
+        <g transform="translate(18 85)">
+          <rect width="56" height="8" rx="4" fill="rgba(9,16,24,0.86)" stroke="rgba(30,45,66,0.9)" strokeWidth="0.5" />
+          <rect width={Math.max(8, Math.min(56, 56 * preview.progressPct))} height="8" rx="4" fill="rgba(200,146,42,0.78)" />
+          <text x="60" y="5.8" fill="#7A9BB8" fontSize="3.2" letterSpacing="0.16">{preview.progressCall}</text>
         </g>
       </svg>
     </div>
@@ -1003,8 +1065,8 @@ function AirportSurfacePreview({
   const [surfaceView, setSurfaceView] = useState<"schematic" | "live">("schematic");
 
   useEffect(() => {
-    setSurfaceView(liveDiagram ? "live" : "schematic");
-  }, [liveDiagram?.url, preview?.airportIcao, preview?.runwayId]);
+    setSurfaceView("schematic");
+  }, [preview?.airportIcao, preview?.runwayId]);
 
   if (!preview) {
     return (
@@ -1032,7 +1094,7 @@ function AirportSurfacePreview({
               Runway data live
             </div>
             <div className="rounded-full border border-[#1E2D42] bg-[#091018] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7A9BB8]">
-              Surface schematic
+              Taxi-follow synthetic view
             </div>
           </div>
         </div>
@@ -1050,7 +1112,7 @@ function AirportSurfacePreview({
           disabled={!liveDiagram}
         >
           <FileText className="mr-2 h-4 w-4" />
-          FAA diagram
+          FAA reference
         </Button>
         <Button
           type="button"
@@ -1059,7 +1121,7 @@ function AirportSurfacePreview({
           className={surfaceView === "schematic" ? "border-[#C8922A] bg-[#1A2332] text-[#E8EDF4]" : "border-[#1E2D42] bg-[#111820] text-[#7A9BB8]"}
           onClick={() => setSurfaceView("schematic")}
         >
-          Surface schematic
+          Surface follow
         </Button>
         {!liveDiagram && !diagramLoading ? (
           <Button asChild type="button" size="sm" variant="outline" className="border-[#1E2D42] bg-[#111820] text-[#7A9BB8]">
@@ -1088,6 +1150,16 @@ function AirportSurfacePreview({
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Surface guidance</div>
             <div className="mt-2 text-sm font-semibold text-[#E8EDF4]">{preview.routeCall}</div>
             <div className="mt-1 text-xs text-[#7A9BB8]">{preview.support}</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <div className="rounded-full border border-[#20344D] bg-[#0A1623] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#4A9FD4]">
+                Active: {preview.activeTaxiway}
+              </div>
+              {preview.upcomingTaxiways.map((segment) => (
+                <div key={segment} className="rounded-full border border-[#1E2D42] bg-[#0A0E14] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7A9BB8]">
+                  Next: {segment}
+                </div>
+              ))}
+            </div>
           </div>
           <div className="rounded-[20px] border border-[#1E2D42] bg-[#091018] px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Runway and comms</div>
@@ -1130,7 +1202,7 @@ function AirportSurfacePreview({
           <div className="rounded-[20px] border border-[#1E2D42] bg-[#091018] px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Tracking</div>
             <div className="mt-2 text-sm font-semibold text-[#E8EDF4]">
-              Demo ownship follows the airport-surface ribbon as the flight transitions {preview.mode === "departure" ? "outbound" : "inbound"}.
+              Ownship remains camera-followed on the synthetic airport surface while the upcoming taxiway sequence stays visible ahead of the aircraft.
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
               <div className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${preview.holdShortActive ? "border-[#E8453C]/60 bg-[#2A1212] text-[#E8453C]" : "border-[#1E2D42] bg-[#0A0E14] text-[#7A9BB8]"}`}>
@@ -1141,6 +1213,7 @@ function AirportSurfacePreview({
               </div>
             </div>
             <div className="mt-2 text-xs text-[#7A9BB8]">{preview.clearanceLabel}</div>
+            <div className="mt-2 text-xs text-[#4A9FD4]">{preview.progressCall}</div>
           </div>
         </div>
       </div>
@@ -1380,7 +1453,7 @@ function FlightDemoVisionSurface({
     : null;
 
   return (
-    <div className="relative h-[420px] overflow-hidden rounded-[24px] border border-slate-800 bg-[#060A10]">
+    <div className="relative h-[456px] overflow-hidden rounded-[24px] border border-slate-800 bg-[#060A10]">
       <div
         className="absolute inset-[-16%]"
         style={{ transform: `translateY(${sceneOffsetPx}px) rotate(${bankDeg}deg)` }}
@@ -1505,7 +1578,7 @@ function FlightDemoVisionSurface({
         side="right"
         formatValue={(value) => Math.max(0, Math.round(value / 10) * 10).toString()}
       />
-      <div className="absolute left-3 top-3 z-20 max-w-[152px] rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 backdrop-blur md:left-[124px] md:top-4 md:max-w-[220px] md:px-4 md:py-3">
+      <div className="absolute left-3 top-3 z-20 max-w-[164px] rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 backdrop-blur md:left-[148px] md:top-4 md:max-w-[236px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Vision guidance</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {nextWaypoint ? `Track ${nextWaypoint}` : "Route tunnel active"}
@@ -1514,7 +1587,7 @@ function FlightDemoVisionSurface({
             {phaseLabel} - {nextWaypointDistanceNm != null ? `${nextWaypointDistanceNm.toFixed(1)} NM to next fix` : "Monitoring current leg"}
           </div>
       </div>
-      <div className="absolute right-3 top-3 z-20 flex max-w-[150px] flex-col gap-2 md:right-[124px] md:top-4 md:max-w-[220px]">
+      <div className="absolute right-3 top-3 z-20 flex max-w-[164px] flex-col gap-2 md:right-[148px] md:top-4 md:max-w-[236px]">
           {runwayCue ? (
             <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 text-right backdrop-blur md:px-4 md:py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Approach</div>
@@ -1535,7 +1608,7 @@ function FlightDemoVisionSurface({
           </div>
       </div>
       {terrainState ? (
-        <div className="absolute bottom-[98px] left-3 right-[34%] z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 backdrop-blur md:bottom-[124px] md:left-[124px] md:right-auto md:w-[220px] md:px-4 md:py-3">
+        <div className="absolute bottom-[112px] left-3 right-[36%] z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 backdrop-blur md:bottom-[136px] md:left-[148px] md:right-auto md:w-[244px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Terrain guidance</div>
           <div
             className={`mt-1 text-sm font-semibold ${
@@ -1571,7 +1644,7 @@ function FlightDemoVisionSurface({
         </div>
       ) : null}
       {selectedTrafficTarget ? (
-        <div className="absolute bottom-[98px] left-[34%] right-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 text-right backdrop-blur md:bottom-[124px] md:left-auto md:right-[124px] md:w-[220px] md:px-4 md:py-3">
+        <div className="absolute bottom-[112px] left-[36%] right-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 text-right backdrop-blur md:bottom-[136px] md:left-auto md:right-[148px] md:w-[244px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Traffic</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {selectedTrafficTarget.callsign} - {selectedTrafficTarget.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}
@@ -1581,7 +1654,7 @@ function FlightDemoVisionSurface({
           </div>
         </div>
       ) : null}
-      <div className="absolute bottom-4 left-1/2 z-20 w-[min(92%,480px)] -translate-x-1/2">
+      <div className="absolute bottom-5 left-1/2 z-20 w-[min(92%,520px)] -translate-x-1/2">
         <div className="grid gap-3 rounded-[24px] border border-[#1E2D42] bg-[#091018]/92 px-4 py-3 sm:grid-cols-3">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Cross track</div>
@@ -1601,7 +1674,7 @@ function FlightDemoVisionSurface({
         </div>
       </div>
       {selectedDiversion ? (
-        <div className="absolute left-1/2 top-[17%] z-20 w-[min(68%,220px)] -translate-x-1/2 rounded-full border border-[#1E2D42] bg-[#091018]/72 px-4 py-2 text-center backdrop-blur md:top-[7.5%] md:min-w-[196px] md:w-auto">
+        <div className="absolute left-1/2 top-[16%] z-20 w-[min(68%,220px)] -translate-x-1/2 rounded-full border border-[#1E2D42] bg-[#091018]/72 px-4 py-2 text-center backdrop-blur md:top-[8%] md:min-w-[220px] md:w-auto">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Best diversion</div>
           <div className="mt-0.5 text-sm font-semibold text-[#E8EDF4]">
             {selectedDiversion.icao} - {selectedDiversion.distanceNm.toFixed(1)} NM - {selectedDiversion.flightCategory || "WX --"}
@@ -2223,6 +2296,9 @@ export default function SyntheticVisionPage() {
           { x: 60, y: 22 },
           { x: 50, y: 22 },
         ];
+    const routeLabels = departureSurface
+      ? ["Ramp lead", "Taxiway Alpha", "Taxiway Bravo", `Hold short ${runway.runwayId}`]
+      : [`Exit ${runway.runwayId}`, "Taxiway Alpha", "Ramp inbound", "Stand lead-in"];
     const ownship = route.reduce<DemoSurfacePreview["ownship"]>(
       (current, point, index) => {
         if (index === route.length - 1) return current;
@@ -2240,8 +2316,22 @@ export default function SyntheticVisionPage() {
       },
       { x: route[0].x, y: route[0].y, headingDeg: departureSurface ? 45 : 225 },
     );
+    const activeSegmentIndex = clamp(Math.floor(taxiProgress * (route.length - 1)), 0, route.length - 2);
+    const completedRoute = [...route.slice(0, activeSegmentIndex + 1), { x: ownship.x, y: ownship.y }];
+    const upcomingRoute = [{ x: ownship.x, y: ownship.y }, ...route.slice(activeSegmentIndex + 1)];
     const holdShortActive = departureSurface && taxiProgress >= 0.72 && taxiProgress < 0.92;
     const runwayOccupied = departureSurface ? taxiProgress > 0.93 : taxiProgress < 0.18;
+    const activeTaxiway = routeLabels[activeSegmentIndex] || (departureSurface ? "Taxiway Alpha" : "Taxiway exit");
+    const upcomingTaxiways = routeLabels.slice(activeSegmentIndex + 1, activeSegmentIndex + 3);
+    const progressCall = departureSurface
+      ? holdShortActive
+        ? `Approaching hold short for runway ${runway.runwayId}`
+        : runwayOccupied
+          ? `Rolling onto runway ${runway.runwayId}`
+          : `Taxi flow ${Math.round(taxiProgress * 100)}% complete`
+      : runwayOccupied
+        ? `Runway occupancy decay in progress`
+        : `Taxi-in flow ${Math.round(taxiProgress * 100)}% complete`;
     return {
       airportIcao: airport.icao,
       runwayId: runway.runwayId,
@@ -2272,7 +2362,12 @@ export default function SyntheticVisionPage() {
       atisFreq: formatFrequency(atisFrequency?.frequencyMhz),
       ownship,
       route,
+      completedRoute,
+      upcomingRoute,
       secondaryRoute,
+      activeTaxiway,
+      upcomingTaxiways,
+      progressCall,
     };
   }, [arrivalAirport, arrivalFrequencies, arrivalRunway, departureAirport, departureFrequencies, departureRunway, flightPhase, progressPct]);
   const departureAirportDiagram = useMemo(

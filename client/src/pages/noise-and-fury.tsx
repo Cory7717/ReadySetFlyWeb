@@ -135,17 +135,26 @@ const teamProfiles = [
   {
     role: "Creator / Writer",
     name: "Cory Armer",
-    bio: "Creator and writer of Noise & Fury. Developed the scripts and series bible with a prestige-drama approach rooted in emotional truth, period texture, and respect for the people at the center of the story.",
+    paragraphs: [
+      "Cory Armer is the creator and writer of Noise & Fury, a prestige anthology series exploring the rise, impact, and legacy of iconic rock bands. The project is currently in early development and has already generated strong interest from established industry professionals, with active outreach underway for showrunners and executive producers. Built around emotionally driven storytelling and cultural authenticity, Noise & Fury is designed to deliver a cinematic, character-first experience for modern streaming audiences.",
+      "Cory brings a distinct, non-traditional path into the entertainment industry. With over 15 years of experience leading large-scale, branded hospitality operations, he has built a career grounded in execution, leadership, and performance. Managing high-volume environments and delivering consistent results within structured systems has shaped a disciplined, solutions-oriented approach that now carries into his creative work.",
+      "He is also the founder of Ready Set Fly (RSF), an aviation platform built to modernize how pilots plan, train, and access aircraft. The platform reflects his ability to identify gaps in traditional industries and build scalable, real-world solutions, with early traction validating both the concept and execution.",
+      "As a creator, Cory represents a rare combination of operational discipline, entrepreneurial vision, and creative ambition. His focus is on developing projects that are both culturally resonant and commercially viable, with Noise & Fury serving as the foundation for a broader slate of film and television development.",
+    ],
   },
   {
     role: "Producer / Co-Creator & Writer",
     name: "Cesar Rameriz",
-    bio: "Producer, co-creator, and writer helping shape the series concept, long-form dramatic world, and season architecture. His body of work includes Road to Juarez.",
+    paragraphs: [
+      "Producer, co-creator, and writer helping shape the series concept, long-form dramatic world, and season architecture. His body of work includes Road to Juarez.",
+    ],
   },
   {
     role: "Producer",
     name: "Scott Rosenfelt",
-    bio: "Attached producer whose credits include Home Alone and Russkies. Brings proven market credibility and experienced guidance as the project moves toward packaging and buyer-facing conversations.",
+    paragraphs: [
+      "Attached producer whose credits include Home Alone and Russkies. Brings proven market credibility and experienced guidance as the project moves toward packaging and buyer-facing conversations.",
+    ],
   },
 ];
 
@@ -408,7 +417,11 @@ export default function NoiseAndFuryPage() {
                     <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">{profile.role}</div>
                     <div className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-white">{profile.name}</div>
                   </div>
-                  <div className="text-sm leading-7 text-[#E6D9CC]">{profile.bio}</div>
+                  <div className="space-y-4 text-sm leading-7 text-[#E6D9CC]">
+                    {profile.paragraphs.map((paragraph) => (
+                      <p key={paragraph}>{paragraph}</p>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>

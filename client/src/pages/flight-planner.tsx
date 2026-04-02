@@ -40,6 +40,11 @@ import { getAnonFlightPlanFileCount, recordAnonFlightPlanFile } from "@/utils/an
 import { buildLegs, sumDistance, distanceNm, type AirportPoint } from "@/lib/flightPlanner";
 import { cn } from "@/lib/utils";
 import { parseFlightCategory as getFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
+import {
+  RSF_PLANNER_MAP_STYLE_OPTIONS,
+  getRsfCockpitToggleClass,
+  type RsfPlannerMapStyle,
+} from "@/map/rsfMapSpec";
 import type { FlightPlan } from "@shared/schema";
 import {
   analyzeFiledRoute,
@@ -718,18 +723,6 @@ const SCRATCH_PAD_INK_KEY = "rsf.scratchPadInk";
 const SCRATCH_PAD_INK_LAYOUT_KEY = "rsf.scratchPadInkLayout";
 const FLIGHT_PLANNER_TABS = ["route", "weather", "navlog", "analysis", "file"] as const;
 type FlightPlannerTab = typeof FLIGHT_PLANNER_TABS[number];
-
-const MAP_STYLE_OPTIONS: Array<{
-  value: "standard" | "sectional" | "radar" | "winds" | "clouds" | "globe";
-  label: string;
-}> = [
-  { value: "standard", label: "Standard" },
-  { value: "sectional", label: "Sectional" },
-  { value: "radar", label: "Radar" },
-  { value: "clouds", label: "Clouds" },
-  { value: "globe", label: "3D Globe" },
-  { value: "winds", label: "Winds" },
-];
 
 const filingStatusLabel = (status?: string | null) => {
   switch ((status || "draft").toLowerCase()) {
@@ -1573,7 +1566,7 @@ export default function FlightPlanner() {
   const [plannedAltitude, setPlannedAltitude] = useState("");
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
-  const [mapStyle, setMapStyle] = useState<"standard" | "sectional" | "radar" | "winds" | "clouds" | "globe">("sectional");
+  const [mapStyle, setMapStyle] = useState<RsfPlannerMapStyle>("sectional");
   const [mapRenderVersion, setMapRenderVersion] = useState(0);
   const [airportLabelMode, setAirportLabelMode] = useState<"icao" | "full" | "markers">("icao");
   const [showAtcStrip, setShowAtcStrip] = useState(true);
@@ -8432,16 +8425,14 @@ export default function FlightPlanner() {
             <div className="mt-4 space-y-2">
               <div className="text-xs text-muted-foreground">Map style</div>
               <div className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-slate-700 bg-slate-900/70 p-1">
-                {MAP_STYLE_OPTIONS.map((option) => (
+                {RSF_PLANNER_MAP_STYLE_OPTIONS.map((option) => (
                   <button
                     key={option.value}
                     type="button"
                     onClick={() => setMapStyle(option.value)}
                     className={cn(
                       "h-8 rounded-lg px-3 text-xs font-medium transition-colors",
-                      mapStyle === option.value
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "text-slate-300 hover:bg-slate-800"
+                      getRsfCockpitToggleClass(mapStyle === option.value, option.accent)
                     )}
                   >
                     {option.label}

@@ -3,6 +3,13 @@ import { MapContainer, Marker, Polyline, TileLayer, Tooltip, WMSTileLayer, useMa
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { apiUrl } from "@/lib/api";
+import {
+  RSF_ROUTE_HALO_LINE_STYLE,
+  RSF_SECTIONAL_TILE_URL,
+  RSF_TERRAIN_RISK_STYLES,
+  RSF_TERRAIN_SURFACE_STYLES,
+  type RsfLeafletMapStyle,
+} from "@/map/rsfMapSpec";
 
 export type PlannerPoint = {
   icao: string;
@@ -40,7 +47,7 @@ export type PlannerLegHealthMarker = {
 type PlannerMapProps = {
   points: PlannerPoint[];
   heightClassName?: string;
-  mapStyle?: "standard" | "sectional" | "radar" | "winds" | "clouds";
+  mapStyle?: RsfLeafletMapStyle;
   plannedAltitudeFt?: number;
   windsAltitudeFt?: number;
   airportLabelMode?: "icao" | "full" | "markers";
@@ -76,17 +83,8 @@ const defaultIcon = L.icon({
   iconAnchor: [12, 41],
 });
 
-const terrainRiskStyles = {
-  comfortable: { color: "#16a34a", weight: 5, opacity: 0.9 },
-  caution: { color: "#f59e0b", weight: 5, opacity: 0.92 },
-  warning: { color: "#dc2626", weight: 5, opacity: 0.96 },
-} as const;
-
-const terrainSurfaceStyles = {
-  comfortable: { color: "#16a34a", weight: 16, opacity: 0.14, lineCap: "round" as const },
-  caution: { color: "#f59e0b", weight: 18, opacity: 0.18, lineCap: "round" as const },
-  warning: { color: "#dc2626", weight: 20, opacity: 0.22, lineCap: "round" as const },
-} as const;
+const terrainRiskStyles = RSF_TERRAIN_RISK_STYLES;
+const terrainSurfaceStyles = RSF_TERRAIN_SURFACE_STYLES;
 
 const buildTerrainHotSpotIcon = (risk: PlannerTerrainHotSpot["risk"], rank: number) => {
   const tone = risk === "warning" ? "#dc2626" : risk === "caution" ? "#f59e0b" : "#16a34a";
@@ -117,7 +115,7 @@ const buildLegHealthIcon = (status: PlannerLegHealthMarker["status"]) => {
   });
 };
 
-function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "standard" | "sectional" | "radar" | "winds" | "clouds" }) {
+function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: RsfLeafletMapStyle }) {
   const map = useMap();
 
   useEffect(() => {
@@ -142,7 +140,7 @@ function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "st
   return null;
 }
 
-function MapStyleController({ mapStyle }: { mapStyle: "standard" | "sectional" | "radar" | "winds" | "clouds" }) {
+function MapStyleController({ mapStyle }: { mapStyle: RsfLeafletMapStyle }) {
   const map = useMap();
 
   useEffect(() => {
@@ -563,7 +561,7 @@ export default function PlannerMap({
         {mapStyle === "sectional" && (
           <TileLayer
             attribution='Federal Aviation Administration, Aeronautical Information Services'
-            url="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
+            url={RSF_SECTIONAL_TILE_URL}
             minZoom={4}
             maxZoom={12}
             maxNativeZoom={12}
@@ -671,7 +669,7 @@ export default function PlannerMap({
           : points.length > 1 && (
               <Polyline
                 positions={points.map((p) => [p.lat, p.lon])}
-                pathOptions={{ color: "#0ea5e9", weight: 4 }}
+                pathOptions={RSF_ROUTE_HALO_LINE_STYLE}
               />
             )}
         {points.map((point) => (

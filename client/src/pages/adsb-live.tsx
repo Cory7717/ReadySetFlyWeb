@@ -28,6 +28,14 @@ import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import {
+  RSF_LIVE_MAP_STYLE_OPTIONS,
+  RSF_ROUTE_LINE_STYLE,
+  RSF_SECTIONAL_TILE_URL,
+  RSF_TERRAIN_RISK_STYLES,
+  RSF_TERRAIN_SURFACE_STYLES,
+  type RsfLiveMapStyle,
+} from "@/map/rsfMapSpec";
 import { buildArrivalRunwayOverlay, buildDepartureRunwayOverlay } from "@shared/flight-scene";
 
 type LiveOwnship = {
@@ -272,7 +280,7 @@ type RunwaySelection = {
   surface: string | null;
 };
 
-type MapStyle = "standard" | "sectional" | "radar" | "clouds" | "globe";
+type MapStyle = RsfLiveMapStyle;
 type TrafficFilterMode = "all" | "conflict" | "same-altitude" | "above" | "below";
 type PositionSourceMode = "device" | "bridge";
 
@@ -281,21 +289,11 @@ const RECEIVER_BRIDGE_URL_KEY = "rsf.receiverBridgeUrl";
 const POSITION_SOURCE_KEY = "rsf.positionSource";
 const DEFAULT_RECEIVER_BRIDGE_URL = "http://127.0.0.1:3005/rsf-live.json";
 
-const FAA_SECTIONAL_TILE_URL =
-  "https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}";
 const ICAO_TOKEN_REGEX = /^[A-Z0-9]{3,5}$/;
 
-const routeLineStyle = { color: "#2563eb", weight: 3, opacity: 0.78 };
-const terrainRiskStyles = {
-  comfortable: { color: "#16a34a", weight: 5, opacity: 0.9 },
-  caution: { color: "#f59e0b", weight: 5, opacity: 0.92 },
-  warning: { color: "#dc2626", weight: 5, opacity: 0.96 },
-} as const;
-const terrainSurfaceStyles = {
-  comfortable: { color: "#16a34a", weight: 16, opacity: 0.14, lineCap: "round" as const },
-  caution: { color: "#f59e0b", weight: 18, opacity: 0.18, lineCap: "round" as const },
-  warning: { color: "#dc2626", weight: 20, opacity: 0.22, lineCap: "round" as const },
-} as const;
+const routeLineStyle = RSF_ROUTE_LINE_STYLE;
+const terrainRiskStyles = RSF_TERRAIN_RISK_STYLES;
+const terrainSurfaceStyles = RSF_TERRAIN_SURFACE_STYLES;
 
 type RoutePoint = {
   icao: string;
@@ -2171,11 +2169,11 @@ export default function AdsbLive() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="standard">Standard</SelectItem>
-                      <SelectItem value="sectional">Sectional</SelectItem>
-                      <SelectItem value="radar">Radar</SelectItem>
-                      <SelectItem value="clouds">Clouds</SelectItem>
-                      <SelectItem value="globe">3D Globe</SelectItem>
+                      {RSF_LIVE_MAP_STYLE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Select value={rangeNm} onValueChange={setRangeNm}>
@@ -2365,7 +2363,7 @@ export default function AdsbLive() {
                   {mapStyle === "sectional" && (
                     <TileLayer
                       attribution="Federal Aviation Administration, Aeronautical Information Services"
-                      url={FAA_SECTIONAL_TILE_URL}
+                      url={RSF_SECTIONAL_TILE_URL}
                       minZoom={4}
                       maxZoom={12}
                       maxNativeZoom={12}

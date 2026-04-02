@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import { apiUrl } from "@/lib/api";
 import { clearTfmsOverlay, setTfmsOverlay } from "@/map/layers/tfmsOverlayLayer";
+import { RSF_TERRAIN_RISK_STYLES } from "@/map/rsfMapSpec";
 import type { RunwayOverlay } from "@shared/flight-scene";
 import type { FeatureCollection } from "geojson";
 
@@ -17,18 +18,18 @@ const buildPositions = (points: PlannerPoint[]) =>
 
 const terrainRiskVisuals = {
   comfortable: {
-    corridor: Cesium.Color.fromCssColorString("#22c55e").withAlpha(0.16),
-    line: Cesium.Color.fromCssColorString("#4ade80"),
+    corridor: Cesium.Color.fromCssColorString(RSF_TERRAIN_RISK_STYLES.comfortable.color).withAlpha(0.16),
+    line: Cesium.Color.fromCssColorString(RSF_TERRAIN_RISK_STYLES.comfortable.color),
     width: 10,
   },
   caution: {
-    corridor: Cesium.Color.fromCssColorString("#f59e0b").withAlpha(0.2),
-    line: Cesium.Color.fromCssColorString("#fbbf24"),
+    corridor: Cesium.Color.fromCssColorString(RSF_TERRAIN_RISK_STYLES.caution.color).withAlpha(0.2),
+    line: Cesium.Color.fromCssColorString(RSF_TERRAIN_RISK_STYLES.caution.color),
     width: 12,
   },
   warning: {
-    corridor: Cesium.Color.fromCssColorString("#ef4444").withAlpha(0.24),
-    line: Cesium.Color.fromCssColorString("#f87171"),
+    corridor: Cesium.Color.fromCssColorString(RSF_TERRAIN_RISK_STYLES.warning.color).withAlpha(0.24),
+    line: Cesium.Color.fromCssColorString(RSF_TERRAIN_RISK_STYLES.warning.color),
     width: 14,
   },
 } as const;

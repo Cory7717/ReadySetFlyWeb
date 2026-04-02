@@ -23,6 +23,14 @@ import { Progress } from "@/components/ui/progress";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import {
+  RSF_COCKPIT_MUTED_TEXT_CLASS,
+  RSF_COCKPIT_PANEL_CLASS,
+  RSF_COCKPIT_SHELL_CLASS,
+  RSF_DEMO_VIEW_MODE_OPTIONS,
+  getRsfCockpitToggleClass,
+  type RsfDemoViewMode,
+} from "@/map/rsfMapSpec";
+import {
   buildArrivalRunwayCue,
   buildArrivalRunwayOverlay,
   buildDepartureRunwayCue,
@@ -135,7 +143,7 @@ type DemoTerrainState = {
   guidance: string;
 };
 
-type ViewMode = "map" | "vision" | "globe";
+type ViewMode = RsfDemoViewMode;
 type DemoSpeed = "1x" | "2x" | "4x" | "8x";
 type DemoFlightPhase = "surface-departure" | "departure" | "enroute" | "arrival" | "surface-arrival";
 
@@ -2494,30 +2502,30 @@ export default function SyntheticVisionPage() {
       <section className="border-b border-[#1E2D42] bg-[radial-gradient(circle_at_top_left,#16345E_0%,#0A1428_32%,#060A10_78%)] py-12">
         <div className="container mx-auto px-4 space-y-6">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="border-[#1E2D42] bg-[#111820] text-[#E8EDF4] hover:bg-[#111820]">Web Demo</Badge>
-            <Badge className="border-[#1E2D42] bg-[#111820] text-[#7A9BB8] hover:bg-[#111820]">Map-first FlightDeck preview</Badge>
+            <Badge className={`${RSF_COCKPIT_SHELL_CLASS} hover:bg-[#111820]`}>Web Demo</Badge>
+            <Badge className={`${RSF_COCKPIT_SHELL_CLASS} ${RSF_COCKPIT_MUTED_TEXT_CLASS} hover:bg-[#111820]`}>Map-first FlightDeck preview</Badge>
           </div>
           <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-4">
               <h1 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
                 Flight demo for the new mobile cockpit.
               </h1>
-              <p className="max-w-3xl text-base leading-7 text-[#7A9BB8]">
+              <p className={`max-w-3xl text-base leading-7 ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>
                 Enter a departure and arrival airport, then preview a browser simulation of the new Ready Set Fly
                 in-flight experience. The map follows the aircraft, the route uses live airport geometry, and playback
                 runs up to 8x speed.
               </p>
               <div className="flex flex-wrap gap-3">
-                <Button asChild variant="outline" className="border-[#1E2D42] bg-[#111820] text-[#E8EDF4] hover:bg-[#1A2332]">
+                <Button asChild variant="outline" className={`${RSF_COCKPIT_SHELL_CLASS} hover:bg-[#1A2332]`}>
                   <Link href="/flight-planner">Open planner</Link>
                 </Button>
-                <Button asChild variant="outline" className="border-[#1E2D42] bg-[#111820] text-[#E8EDF4] hover:bg-[#1A2332]">
+                <Button asChild variant="outline" className={`${RSF_COCKPIT_SHELL_CLASS} hover:bg-[#1A2332]`}>
                   <Link href="/ifr-tools">IFR tools</Link>
                 </Button>
               </div>
             </div>
 
-            <Card className="border-[#1E2D42] bg-[#111820]/95 text-[#E8EDF4] shadow-none">
+            <Card className={`${RSF_COCKPIT_SHELL_CLASS} shadow-none`}>
               <CardHeader>
                 <CardTitle>Build demo route</CardTitle>
                 <CardDescription className="text-[#7A9BB8]">
@@ -2563,15 +2571,15 @@ export default function SyntheticVisionPage() {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-[#1E2D42] bg-[#0A0E14] px-4 py-3">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Demo profile</div>
+                  <div className={`rounded-2xl px-4 py-3 ${RSF_COCKPIT_PANEL_CLASS}`}>
+                    <div className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>Demo profile</div>
                     <div className="mt-2 flex items-center gap-2 text-sm text-[#E8EDF4]">
                       <Gauge className="h-4 w-4 text-[#4A9FD4]" />
                       {DEMO_CRUISE_KTS} KTAS at {DEMO_ALTITUDE_FT.toLocaleString()} ft
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-[#1E2D42] bg-[#0A0E14] px-4 py-3">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Playback</div>
+                  <div className={`rounded-2xl px-4 py-3 ${RSF_COCKPIT_PANEL_CLASS}`}>
+                    <div className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>Playback</div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {(["1x", "2x", "4x", "8x"] as DemoSpeed[]).map((value) => (
                         <Button
@@ -2627,40 +2635,27 @@ export default function SyntheticVisionPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">FlightDeck demo</div>
+                <div className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>FlightDeck demo</div>
                 <div className="mt-1 flex items-center gap-2 text-2xl font-semibold">
                   <RouteIcon className="h-5 w-5 text-[#C8922A]" />
                   {routeLabel || `${departureInput} ${arrivalInput}`}
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={viewMode === "map" ? "border-[#4A9FD4] bg-[#1A2332] text-[#E8EDF4]" : "border-[#1E2D42] bg-[#111820] text-[#7A9BB8]"}
-                  onClick={() => setViewMode("map")}
-                >
-                  <MapIcon className="mr-2 h-4 w-4" />
-                  Map
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={viewMode === "vision" ? "border-[#C8922A] bg-[#1A2332] text-[#E8EDF4]" : "border-[#1E2D42] bg-[#111820] text-[#7A9BB8]"}
-                  onClick={() => setViewMode("vision")}
-                >
-                  <Navigation className="mr-2 h-4 w-4" />
-                  Vision
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={viewMode === "globe" ? "border-[#34d399] bg-[#1A2332] text-[#E8EDF4]" : "border-[#1E2D42] bg-[#111820] text-[#7A9BB8]"}
-                  onClick={() => setViewMode("globe")}
-                >
-                  <Globe2 className="mr-2 h-4 w-4" />
-                  Globe
-                </Button>
+                {RSF_DEMO_VIEW_MODE_OPTIONS.map((option) => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant="outline"
+                    className={getRsfCockpitToggleClass(viewMode === option.value, option.accent)}
+                    onClick={() => setViewMode(option.value)}
+                  >
+                    {option.value === "map" ? <MapIcon className="mr-2 h-4 w-4" /> : null}
+                    {option.value === "vision" ? <Navigation className="mr-2 h-4 w-4" /> : null}
+                    {option.value === "globe" ? <Globe2 className="mr-2 h-4 w-4" /> : null}
+                    {option.label}
+                  </Button>
+                ))}
               </div>
             </div>
 

@@ -24,14 +24,70 @@ const highlightStats = [
 ];
 
 const episodeRun = [
-  "We Die Young - Formation. Joy. The cost implied.",
-  "Man in the Box - Columbia Records. Facelift. The machine starts.",
-  "Rooster - Dirt. Jerry and Cornell. First overdose.",
-  "Would? - Andrew Wood. Grief without language.",
-  "Angry Chair - The Metallica tour. Last outward resistance.",
-  "Nutshell - Jar of Flies. MTV Unplugged. The world watching.",
-  "Sea of Sorrow - Demri. The permanent withdrawal.",
-  "Rain When I Die - April 2002. Legacy without erasure.",
+  {
+    title: '"We Die Young"',
+    theme: "Birth of the Band · Reckless Youth · Early Promise",
+    summary:
+      "Seattle, 1988. Before the spotlight, Layne realizes in a broken rehearsal room that when he sings, the room changes. We meet Demri in full color, Jerry arrives from the edge of the scene, and the first rehearsal reveals a chemistry nobody can manufacture.",
+    turningPoint:
+      'Layne tells Jerry, "If I can’t feel it, I can’t sing," revealing the emotional cost that will define the next fourteen years.',
+  },
+  {
+    title: '"Man in the Box"',
+    theme: "Trapped by Choices · The Machine Begins",
+    summary:
+      "Alice in Chains steps into Columbia and then into the Facelift sessions at London Bridge as total outsiders. The band locks in, Jerden pushes confession over performance, MTV starts to notice, and the first wave of fame begins to distort what the public sees versus what is actually happening.",
+    turningPoint:
+      "Layne performs through his first serious withdrawal, and the gap between the crowd’s version of him and the truth widens for the first time.",
+  },
+  {
+    title: '"Rooster"',
+    theme: "The Band's War — External and Internal",
+    summary:
+      "Success makes everything louder, not easier. Jerry’s time with Chris Cornell and his father’s Vietnam trauma shape 'Rooster' while the band records Dirt, still sharp and funny until the momentum breaks with Layne’s overdose.",
+    turningPoint:
+      "Layne is revived, touring is disrupted, and the band faces the first real choice between protecting the music and protecting the person making it.",
+  },
+  {
+    title: '"Would?"',
+    theme: "Grief and Survivor's Guilt",
+    summary:
+      "Andrew Wood’s death changes the Seattle scene before the world even knows the scene exists. Jerry responds by writing 'Would?' while Demri’s health begins to decline and Layne absorbs the grief instead of speaking it.",
+    turningPoint:
+      'The recording of "Would?" becomes the first moment where the art and the life are completely indistinguishable.',
+  },
+  {
+    title: '"Angry Chair"',
+    theme: "The Last Outward Resistance",
+    summary:
+      "The Metallica tour pushes the band into international pressure, public tension, and mounting damage. Layne confronts ugliness in the crowd, Mike Starr spirals, and the machinery around the band starts demanding control at exactly the moment everything inside it is becoming unstable.",
+    turningPoint:
+      "Alice in Chains withdraws from the Metallica tour, the machine finally stops, and Layne’s resistance turns inward from that point on.",
+  },
+  {
+    title: '"Nutshell"',
+    theme: "The Accidental Masterpiece · The Season's Emotional Center",
+    summary:
+      "Jar of Flies is born out of burnout and isolation, almost by accident, and becomes a masterpiece. Then MTV Unplugged places Layne in front of the world as he is visibly fading, making public honesty feel unbearable to witness.",
+    turningPoint:
+      '"Nutshell" live becomes the season’s emotional center, the most honest public moment any of them will ever have.',
+  },
+  {
+    title: '"Sea of Sorrow"',
+    theme: "The Permanent Withdrawal · The Last Tether Snaps",
+    summary:
+      "After Unplugged, the world thinks Layne returned. He knows he cannot. Isolation becomes total, Jerry starts adapting toward survival, Demri’s health collapses, and once she dies, Layne does not explode so much as disappear.",
+    turningPoint:
+      'Layne calls his mother and says, "I’m so tired," the last real outward reach before the drowning is complete.',
+  },
+  {
+    title: '"Rain When I Die"',
+    theme: "Endings and Continuation · Legacy Without Erasure",
+    summary:
+      "April 2002. Layne is found, Seattle mourns, and Jerry and Sean are left with the grief of having seen the end coming and still being shattered by it. The final movement of the season is not replacement, but the decision to keep creating without erasing what was lost.",
+    turningPoint:
+      "Jerry steps back to the microphone and chooses continuation as an act of honor rather than escape.",
+  },
 ];
 
 const characterCards = [
@@ -160,7 +216,7 @@ export default function NoiseAndFuryPage() {
         <img
           src={HERO_IMAGE_PATH}
           alt="Noise and Fury amplifiers"
-          className="absolute inset-0 h-full w-full object-cover object-top"
+          className="absolute inset-0 h-full w-full object-cover object-[center_12%]"
         />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,6,7,0.18)_0%,rgba(6,6,7,0.48)_34%,rgba(6,6,7,0.78)_70%,rgba(6,6,7,0.96)_100%)]" />
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,6,5,0.78)_0%,rgba(8,6,5,0.28)_42%,rgba(8,6,5,0.14)_62%,rgba(8,6,5,0.82)_100%)]" />
@@ -179,7 +235,7 @@ export default function NoiseAndFuryPage() {
               <div className="max-w-4xl space-y-6">
                 <div className="space-y-4">
                   <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[#E0BF84]">
-                    Investor Overview
+                    Season One: Alice in Chains
                   </div>
                   <h1 className="max-w-4xl font-display text-5xl font-semibold tracking-[-0.06em] text-white sm:text-6xl lg:text-8xl">
                     Noise &amp; Fury
@@ -308,11 +364,22 @@ export default function NoiseAndFuryPage() {
 
             <div className="divide-y divide-[#8E6B3B]/12 overflow-hidden rounded-[28px] border border-[#8E6B3B]/14 bg-[linear-gradient(180deg,rgba(15,13,12,0.96)_0%,rgba(9,10,11,0.98)_100%)]">
               {episodeRun.map((episode, index) => (
-                <div key={episode} className="grid gap-4 px-5 py-5 md:grid-cols-[74px_1fr] md:px-7">
+                <div key={episode.title} className="grid gap-5 px-5 py-6 md:grid-cols-[84px_1fr] md:px-7">
                   <div className="text-sm font-semibold uppercase tracking-[0.2em] text-[#B89258]">
                     EP {String(index + 1).padStart(2, "0")}
                   </div>
-                  <div className="text-sm leading-7 text-[#E8DCCD] sm:text-base">{episode}</div>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="text-lg font-semibold text-white sm:text-xl">{episode.title}</div>
+                      <div className="mt-1 text-xs font-semibold uppercase tracking-[0.22em] text-[#B89258]">
+                        {episode.theme}
+                      </div>
+                    </div>
+                    <div className="text-sm leading-7 text-[#E8DCCD] sm:text-base">{episode.summary}</div>
+                    <div className="border-l border-[#D3A869]/38 pl-4 text-sm leading-7 text-[#F0E4D7]">
+                      <span className="font-semibold text-white">Turning point:</span> {episode.turningPoint}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

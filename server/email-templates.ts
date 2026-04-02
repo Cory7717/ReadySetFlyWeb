@@ -302,10 +302,22 @@ export async function sendContactFormEmail(data: {
   message: string;
   recipientEmail?: string;
   ccEmail?: string | string[];
+  brandName?: string;
+  headerTitle?: string;
+  headerSubtitle?: string;
+  headerColor?: string;
+  messageAccentColor?: string;
+  footerText?: string;
 }) {
   const { getUncachableResendClient } = await import('./resendClient');
   const { client: resend, fromEmail } = await getUncachableResendClient();
   const supportEmail = data.recipientEmail || process.env.SUPPORT_EMAIL || "support@readysetfly.us";
+  const brandName = data.brandName || "Ready Set Fly";
+  const headerTitle = data.headerTitle || "Ready Set Fly Contact Form";
+  const headerSubtitle = data.headerSubtitle || "New Message Received";
+  const headerColor = data.headerColor || "#1e40af";
+  const messageAccentColor = data.messageAccentColor || "#1e40af";
+  const footerText = data.footerText || "Ready Set Fly - Connecting Pilots with Aircraft";
   
   const htmlBody = `
 <!DOCTYPE html>
@@ -315,18 +327,18 @@ export async function sendContactFormEmail(data: {
   <style>
     body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: #1e40af; color: white; padding: 20px; text-align: center; }
+    .header { background: ${headerColor}; color: white; padding: 20px; text-align: center; }
     .content { padding: 20px; background: #f9fafb; }
     .info-box { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin: 10px 0; }
-    .message-box { background: #f3f4f6; border-left: 4px solid #1e40af; padding: 15px; margin: 15px 0; }
+    .message-box { background: #f3f4f6; border-left: 4px solid ${messageAccentColor}; padding: 15px; margin: 15px 0; }
     .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>Ready Set Fly Contact Form</h1>
-      <p>New Message Received</p>
+      <h1>${headerTitle}</h1>
+      <p>${headerSubtitle}</p>
     </div>
     
     <div class="content">
@@ -348,7 +360,7 @@ export async function sendContactFormEmail(data: {
     </div>
     
     <div class="footer">
-      <p>Ready Set Fly - Connecting Pilots with Aircraft</p>
+      <p>${footerText}</p>
     </div>
   </div>
 </body>
@@ -356,8 +368,8 @@ export async function sendContactFormEmail(data: {
   `.trim();
   
   const textBody = `
-READY SET FLY CONTACT FORM
-New Message Received
+${brandName.toUpperCase()} CONTACT FORM
+${headerSubtitle}
 
 CONTACT INFORMATION
 -------------------
@@ -372,7 +384,7 @@ ${data.message}
 ---
 Reply to this message by responding to ${data.email}
 
-Ready Set Fly - Connecting Pilots with Aircraft
+${footerText}
   `.trim();
   
   try {

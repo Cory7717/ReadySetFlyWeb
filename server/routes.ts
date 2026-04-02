@@ -7205,6 +7205,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subject: `[Noise & Fury Investor] ${data.subject}`,
         recipientEmail: "coryarmer@gmail.com",
         ccEmail: "ceo@marcmovies.com",
+        brandName: "Noise & Fury",
+        headerTitle: "Noise & Fury Investor Inquiry",
+        headerSubtitle: "New investor message received",
+        headerColor: "#3a2515",
+        messageAccentColor: "#b89258",
+        footerText: "Noise & Fury - Investor Relations",
       })
         .then(async () => {
           await storage.updateContactSubmissionEmailStatus(submission.id, true);

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Circle, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, WMSTileLayer, useMap } from "react-leaflet";
+import { Circle, MapContainer, Marker, Polyline, Popup, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { FeatureCollection } from "geojson";
@@ -16,6 +16,7 @@ import {
   RefreshCcw,
   ShieldAlert,
 } from "lucide-react";
+import { LeafletAviationBaseLayers } from "@/map/leaflet/LeafletAviationBaseLayers";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,6 @@ import { trackEvent } from "@/lib/analytics";
 import {
   RSF_LIVE_MAP_STYLE_OPTIONS,
   RSF_ROUTE_LINE_STYLE,
-  RSF_SECTIONAL_TILE_URL,
   RSF_TERRAIN_RISK_STYLES,
   RSF_TERRAIN_SURFACE_STYLES,
   type RsfLiveMapStyle,
@@ -2355,56 +2355,16 @@ export default function AdsbLive() {
                   />
                 ) : (
                 <MapContainer center={mapCenter} zoom={8} scrollWheelZoom className="h-full w-full">
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  <LeafletAviationBaseLayers
+                    mapStyle={mapStyle}
+                    radarTileUrl={mapStyle === "radar" ? radarTileUrl : ""}
+                    radarFallbackActive={mapStyle === "radar" && (radarFallbackActive || !radarTileUrl)}
+                    onRadarTileError={() => {
+                      setRadarFallbackActive(true);
+                    }}
+                    cloudTileUrl={mapStyle === "clouds" ? cloudTileUrl : ""}
                   />
                   <FocusMapTarget target={mapFocusTarget} />
-                  {mapStyle === "sectional" && (
-                    <TileLayer
-                      attribution="Federal Aviation Administration, Aeronautical Information Services"
-                      url={RSF_SECTIONAL_TILE_URL}
-                      minZoom={4}
-                      maxZoom={12}
-                      maxNativeZoom={12}
-                      opacity={0.85}
-                    />
-                  )}
-                  {mapStyle === "radar" && radarTileUrl && !radarFallbackActive && (
-                    <TileLayer
-                      attribution="RainViewer"
-                      url={radarTileUrl}
-                      opacity={0.8}
-                      zIndex={600}
-                      crossOrigin="anonymous"
-                      eventHandlers={{
-                        tileerror: () => {
-                          setRadarFallbackActive(true);
-                        },
-                      }}
-                    />
-                  )}
-                  {mapStyle === "radar" && (radarFallbackActive || !radarTileUrl) && (
-                    <WMSTileLayer
-                      attribution="IEM NEXRAD Base Reflectivity"
-                      url="https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi"
-                      layers="nexrad-n0r-900913"
-                      format="image/png"
-                      transparent
-                      opacity={0.75}
-                      zIndex={600}
-                    />
-                  )}
-                  {mapStyle === "clouds" && cloudTileUrl && (
-                    <TileLayer
-                      attribution="NASA GIBS"
-                      url={cloudTileUrl}
-                      opacity={0.68}
-                      maxNativeZoom={9}
-                      zIndex={600}
-                      crossOrigin="anonymous"
-                    />
-                  )}
                   {ownship && (
                     <>
                       <RecenterOwnship ownship={ownship} followOwnship={followOwnship} />

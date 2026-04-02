@@ -5,8 +5,7 @@ import { clearTfmsOverlay, setTfmsOverlay } from "@/map/layers/tfmsOverlayLayer"
 import { RSF_TERRAIN_RISK_STYLES } from "@/map/rsfMapSpec";
 import type { RunwayOverlay } from "@shared/flight-scene";
 import type { FeatureCollection } from "geojson";
-
-import type { PlannerPoint, PlannerTerrainHotSpot, PlannerTerrainSegment } from "@/components/flight-planner/PlannerMap";
+import type { PlannerPoint, PlannerTerrainHotSpot, PlannerTerrainSegment } from "@/components/flight-planner/plannerMapTypes";
 
 const OSM_URL = "https://a.tile.openstreetmap.org/";
 const GIBS_BASE = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best";

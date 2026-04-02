@@ -1,60 +1,22 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, Marker, Polyline, TileLayer, Tooltip, WMSTileLayer, useMap } from "react-leaflet";
+import { MapContainer, Marker, Polyline, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { apiUrl } from "@/lib/api";
+import { LeafletAviationBaseLayers } from "@/map/leaflet/LeafletAviationBaseLayers";
 import {
   RSF_ROUTE_HALO_LINE_STYLE,
-  RSF_SECTIONAL_TILE_URL,
   RSF_TERRAIN_RISK_STYLES,
   RSF_TERRAIN_SURFACE_STYLES,
   type RsfLeafletMapStyle,
 } from "@/map/rsfMapSpec";
-
-export type PlannerPoint = {
-  icao: string;
-  lat: number;
-  lon: number;
-  label?: string | null;
-};
-
-export type PlannerTerrainSegment = {
-  positions: [[number, number], [number, number]];
-  maxElevationFt: number | null;
-  clearanceFt: number | null;
-  risk: "comfortable" | "caution" | "warning";
-};
-
-export type PlannerTerrainHotSpot = {
-  rank: number;
-  risk: "comfortable" | "caution" | "warning";
-  progressLabel: string;
-  maxElevationFt: number | null;
-  clearanceFt: number | null;
-  lat: number;
-  lon: number;
-};
-
-export type PlannerLegHealthMarker = {
-  key: string;
-  status: "comfortable" | "caution" | "warning";
-  label: string;
-  detail: string;
-  lat: number;
-  lon: number;
-};
-
-type PlannerMapProps = {
-  points: PlannerPoint[];
-  heightClassName?: string;
-  mapStyle?: RsfLeafletMapStyle;
-  plannedAltitudeFt?: number;
-  windsAltitudeFt?: number;
-  airportLabelMode?: "icao" | "full" | "markers";
-  terrainSegments?: PlannerTerrainSegment[];
-  terrainHotSpots?: PlannerTerrainHotSpot[];
-  legHealthMarkers?: PlannerLegHealthMarker[];
-};
+import type {
+  Planner2DMapProps,
+  PlannerLegHealthMarker,
+  PlannerPoint,
+  PlannerTerrainHotSpot,
+  PlannerTerrainSegment,
+} from "@/components/flight-planner/plannerMapTypes";
 
 type WindsAloftPoint = {
   stationId: string;
@@ -362,7 +324,7 @@ export default function PlannerMap({
   terrainSegments = [],
   terrainHotSpots = [],
   legHealthMarkers = [],
-}: PlannerMapProps) {
+}: Planner2DMapProps) {
   const center: [number, number] = points.length
     ? [points[0].lat, points[0].lon]
     : [39.5, -98.35];
@@ -554,59 +516,18 @@ export default function PlannerMap({
           className="h-full w-full rounded-xl"
           ref={mapRef}
         >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        <LeafletAviationBaseLayers
+          mapStyle={mapStyle}
+          radarTileUrl={showRadar ? radarTileUrl : ""}
+          radarFallbackActive={showRadar && (radarFallbackActive || (!radarTileUrl && radarError))}
+          onRadarTileError={() => {
+            setRadarError(true);
+            setRadarFallbackActive(true);
+            setRadarFrames([]);
+            setRadarFrameIndex(0);
+          }}
+          cloudTileUrl={showCloudsConus ? cloudTileUrl : ""}
         />
-        {mapStyle === "sectional" && (
-          <TileLayer
-            attribution='Federal Aviation Administration, Aeronautical Information Services'
-            url={RSF_SECTIONAL_TILE_URL}
-            minZoom={4}
-            maxZoom={12}
-            maxNativeZoom={12}
-            opacity={0.85}
-          />
-        )}
-        {showRadar && radarTileUrl && !radarFallbackActive && (
-          <TileLayer
-            attribution="RainViewer"
-            url={radarTileUrl}
-            opacity={0.8}
-            zIndex={600}
-            crossOrigin="anonymous"
-            eventHandlers={{
-              tileerror: () => {
-                setRadarError(true);
-                setRadarFallbackActive(true);
-                setRadarFrames([]);
-                setRadarFrameIndex(0);
-              },
-            }}
-          />
-        )}
-        {showCloudsConus && cloudTileUrl && (
-          <TileLayer
-            key="clouds-global"
-            attribution="NASA GIBS"
-            url={cloudTileUrl}
-            opacity={0.7}
-            maxNativeZoom={9}
-            zIndex={600}
-            crossOrigin="anonymous"
-          />
-        )}
-        {showRadar && (radarFallbackActive || (!radarTileUrl && radarError)) && (
-          <WMSTileLayer
-            attribution="IEM NEXRAD Base Reflectivity"
-            url="https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi"
-            layers="nexrad-n0r-900913"
-            format="image/png"
-            transparent
-            opacity={0.75}
-            zIndex={600}
-          />
-        )}
         {showWinds && (
           <WindsAloftController
             enabled={showWinds}

@@ -42,7 +42,6 @@ import { cn } from "@/lib/utils";
 import { parseFlightCategory as getFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import {
   RSF_PLANNER_MAP_STYLE_OPTIONS,
-  getRsfCockpitToggleClass,
   type RsfPlannerMapStyle,
 } from "@/map/rsfMapSpec";
 import type { FlightPlan } from "@shared/schema";
@@ -60,7 +59,9 @@ import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
 import { OpenInAppBanner } from "@/components/OpenInAppBanner";
 import { PageShell } from "@/components/layout/PageShell";
-import PlannerMap, { type PlannerLegHealthMarker, type PlannerPoint } from "@/components/flight-planner/PlannerMap";
+import { RsfModeToggle } from "@/components/map/RsfModeToggle";
+import Planner2DMapSurface from "@/components/flight-planner/Planner2DMapSurface";
+import type { PlannerLegHealthMarker, PlannerPoint } from "@/components/flight-planner/plannerMapTypes";
 import { PressDemoBanner, PressDemoSpotlight, type PressDemoStep, usePressDemo } from "@/components/press/PressDemo";
 import NotamTranslator from "@/components/ai/NotamTranslator";
 import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
@@ -8321,7 +8322,7 @@ export default function FlightPlanner() {
                   />
                 </Suspense>
               ) : (
-                <PlannerMap
+                <Planner2DMapSurface
                   key={`map-${mapStyle}-${mapRenderVersion}`}
                   points={routePoints.map((p) => ({
                     icao: p.icao,
@@ -8424,21 +8425,11 @@ export default function FlightPlanner() {
             )}
             <div className="mt-4 space-y-2">
               <div className="text-xs text-muted-foreground">Map style</div>
-              <div className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-slate-700 bg-slate-900/70 p-1">
-                {RSF_PLANNER_MAP_STYLE_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setMapStyle(option.value)}
-                    className={cn(
-                      "h-8 rounded-lg px-3 text-xs font-medium transition-colors",
-                      getRsfCockpitToggleClass(mapStyle === option.value, option.accent)
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
+              <RsfModeToggle
+                value={mapStyle}
+                options={RSF_PLANNER_MAP_STYLE_OPTIONS}
+                onChange={setMapStyle}
+              />
               {mapStyle === "winds" && (
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-muted-foreground">Winds altitude</span>

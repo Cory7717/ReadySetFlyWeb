@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import CesiumGlobe from "@/components/flight-planner/CesiumGlobe";
+import { RsfModeToggle } from "@/components/map/RsfModeToggle";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { apiUrl } from "@/lib/api";
@@ -27,7 +28,6 @@ import {
   RSF_COCKPIT_PANEL_CLASS,
   RSF_COCKPIT_SHELL_CLASS,
   RSF_DEMO_VIEW_MODE_OPTIONS,
-  getRsfCockpitToggleClass,
   type RsfDemoViewMode,
 } from "@/map/rsfMapSpec";
 import {
@@ -2641,22 +2641,17 @@ export default function SyntheticVisionPage() {
                   {routeLabel || `${departureInput} ${arrivalInput}`}
                 </div>
               </div>
-              <div className="flex gap-2">
-                {RSF_DEMO_VIEW_MODE_OPTIONS.map((option) => (
-                  <Button
-                    key={option.value}
-                    type="button"
-                    variant="outline"
-                    className={getRsfCockpitToggleClass(viewMode === option.value, option.accent)}
-                    onClick={() => setViewMode(option.value)}
-                  >
-                    {option.value === "map" ? <MapIcon className="mr-2 h-4 w-4" /> : null}
-                    {option.value === "vision" ? <Navigation className="mr-2 h-4 w-4" /> : null}
-                    {option.value === "globe" ? <Globe2 className="mr-2 h-4 w-4" /> : null}
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
+              <RsfModeToggle
+                value={viewMode}
+                options={RSF_DEMO_VIEW_MODE_OPTIONS.map((option) => ({
+                  ...option,
+                  icon:
+                    option.value === "map" ? <MapIcon className="h-4 w-4" /> :
+                    option.value === "vision" ? <Navigation className="h-4 w-4" /> :
+                    <Globe2 className="h-4 w-4" />,
+                }))}
+                onChange={setViewMode}
+              />
             </div>
 
             {viewMode === "map" && flightFrame?.ownship ? (

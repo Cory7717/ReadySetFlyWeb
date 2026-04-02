@@ -241,7 +241,7 @@ export default function NoiseAndFuryPage() {
                     Noise &amp; Fury
                   </h1>
                   <p className="max-w-3xl text-lg leading-8 text-[#F0E1D2] sm:text-xl">
-                    Season One: Alice in Chains. A prestige music drama designed to make investors feel the era, the
+                    Season One: Alice in Chains. A prestige music drama designed to make the audience feel the era, the
                     cultural pull, and the emotional cost in one hit.
                   </p>
                 </div>

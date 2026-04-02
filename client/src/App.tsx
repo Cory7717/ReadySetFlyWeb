@@ -80,6 +80,7 @@ import CfiStudentTerms from "@/pages/cfi/student-terms";
 import FlyingClubsPage from "@/pages/flying-clubs";
 import FlyingClubDetailPage from "@/pages/flying-club-detail";
 import InvestorDeck, { INVESTOR_DECK_SHARE_PATH } from "@/pages/investor-deck";
+import NoiseAndFuryPage from "@/pages/noise-and-fury";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -228,6 +229,7 @@ function Router() {
       <Route path="/tools/eb6" component={() => <RedirectTo to="/tools/e6b" />} />
       <Route path="/investor-deck" component={InvestorDeck} />
       <Route path={INVESTOR_DECK_SHARE_PATH} component={InvestorDeck} />
+      <Route path="/noiseandfury" component={NoiseAndFuryPage} />
       <Route path="/404" component={NotFound} />
       
       {/* Protected routes - require authentication */}

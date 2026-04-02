@@ -675,66 +675,77 @@ export default function MapLibreLiveMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    trafficMarkersRef.current.forEach((marker) => marker.remove());
-    trafficMarkersRef.current = filteredTrafficTargets.map((target) => {
-      const marker = new maplibregl.Marker({
-        element: buildTrafficElement(target, selectedTrafficTarget?.id === target.id),
-        anchor: "center",
-      })
-        .setLngLat([target.lon, target.lat])
-        .setPopup(
-          new maplibregl.Popup({ offset: 12 }).setHTML(
-            `<div style="font-size:12px;line-height:1.35"><strong>${target.callsign || target.tail || target.id}</strong><br/>Distance ${target.distanceNm ? target.distanceNm.toFixed(1) : "--"} NM<br/>Relative ${formatSignedAltitude(target.relativeAltitudeFt)}</div>`,
-          ),
-        )
-        .addTo(map);
-      marker.getElement().addEventListener("click", () => onSelectTrafficTarget(target));
-      return marker;
+    trafficMarkersRef.current = replaceMarkerSet({
+      map,
+      current: trafficMarkersRef.current,
+      items: filteredTrafficTargets,
+      createMarker: (target) => {
+        const marker = new maplibregl.Marker({
+          element: buildTrafficElement(target, selectedTrafficTarget?.id === target.id),
+          anchor: "center",
+        })
+          .setLngLat([target.lon, target.lat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 12 }).setHTML(
+              `<div style="font-size:12px;line-height:1.35"><strong>${target.callsign || target.tail || target.id}</strong><br/>Distance ${target.distanceNm ? target.distanceNm.toFixed(1) : "--"} NM<br/>Relative ${formatSignedAltitude(target.relativeAltitudeFt)}</div>`,
+            ),
+          )
+          .addTo(map);
+        marker.getElement().addEventListener("click", () => onSelectTrafficTarget(target));
+        return marker;
+      },
     });
   }, [filteredTrafficTargets, onSelectTrafficTarget, selectedTrafficTarget?.id]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    obstacleMarkersRef.current.forEach((marker) => marker.remove());
     obstacleMarkersRef.current = showObstacleOverlay
-      ? nearbyObstacles.map((obstacle) =>
-          new maplibregl.Marker({
-            element: buildObstacleElement(obstacle),
-            anchor: "center",
-          })
-            .setLngLat([obstacle.lon, obstacle.lat])
-            .setPopup(
-              new maplibregl.Popup({ offset: 12 }).setHTML(
-                `<div style="font-size:12px;line-height:1.35"><strong>${obstacle.kind || "Obstacle"}</strong><br/>AMSL ${obstacle.amslFt != null ? Math.round(obstacle.amslFt).toLocaleString() : "--"} ft</div>`,
-              ),
-            )
-            .addTo(map),
-        )
-      : [];
+      ? replaceMarkerSet({
+          map,
+          current: obstacleMarkersRef.current,
+          items: nearbyObstacles,
+          createMarker: (obstacle) =>
+            new maplibregl.Marker({
+              element: buildObstacleElement(obstacle),
+              anchor: "center",
+            })
+              .setLngLat([obstacle.lon, obstacle.lat])
+              .setPopup(
+                new maplibregl.Popup({ offset: 12 }).setHTML(
+                  `<div style="font-size:12px;line-height:1.35"><strong>${obstacle.kind || "Obstacle"}</strong><br/>AMSL ${obstacle.amslFt != null ? Math.round(obstacle.amslFt).toLocaleString() : "--"} ft</div>`,
+                ),
+              )
+              .addTo(map),
+        })
+      : (clearMarkers(obstacleMarkersRef.current), []);
   }, [nearbyObstacles, showObstacleOverlay]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    diversionMarkersRef.current.forEach((marker) => marker.remove());
     diversionMarkersRef.current = showDiversionOverlay
-      ? diversionMapMarkers.map((airport, index) => {
-          const marker = new maplibregl.Marker({
-            element: buildDiversionElement(index + 1, selectedDiversion?.icao === airport.icao),
-            anchor: "center",
-          })
-            .setLngLat([airport.lon, airport.lat])
-            .setPopup(
-              new maplibregl.Popup({ offset: 12 }).setHTML(
-                `<div style="font-size:12px;line-height:1.35"><strong>${airport.icao}${airport.name ? ` · ${airport.name}` : ""}</strong><br/>Distance ${airport.distanceNm.toFixed(1)} NM<br/>Bearing ${Math.round(airport.bearingDeg)}°</div>`,
-              ),
-            )
-            .addTo(map);
-          marker.getElement().addEventListener("click", () => onSelectDiversion(airport));
-          return marker;
+      ? replaceMarkerSet({
+          map,
+          current: diversionMarkersRef.current,
+          items: diversionMapMarkers,
+          createMarker: (airport, index) => {
+            const marker = new maplibregl.Marker({
+              element: buildDiversionElement(index + 1, selectedDiversion?.icao === airport.icao),
+              anchor: "center",
+            })
+              .setLngLat([airport.lon, airport.lat])
+              .setPopup(
+                new maplibregl.Popup({ offset: 12 }).setHTML(
+                  `<div style="font-size:12px;line-height:1.35"><strong>${airport.icao}${airport.name ? ` · ${airport.name}` : ""}</strong><br/>Distance ${airport.distanceNm.toFixed(1)} NM<br/>Bearing ${Math.round(airport.bearingDeg)}°</div>`,
+                ),
+              )
+              .addTo(map);
+            marker.getElement().addEventListener("click", () => onSelectDiversion(airport));
+            return marker;
+          },
         })
-      : [];
+      : (clearMarkers(diversionMarkersRef.current), []);
   }, [diversionMapMarkers, onSelectDiversion, selectedDiversion?.icao, showDiversionOverlay]);
 
   useEffect(() => {

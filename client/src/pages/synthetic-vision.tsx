@@ -384,6 +384,199 @@ function snapSurfacePoints(
   });
 }
 
+function getSurfaceLineFeatures(features: SurfaceGeometryFeature[]) {
+  return features.filter(
+    (feature) =>
+      feature.geometry.type === "LineString" &&
+      ["taxiway", "taxilane", "runway", "holding_position"].includes(feature.properties.aeroway),
+  );
+}
+
+function getSurfaceFeatureLabel(feature: SurfaceGeometryFeature) {
+  const ref = feature.properties.ref?.trim();
+  const name = feature.properties.name?.trim();
+  if (ref) return ref;
+  if (name) return name;
+  if (feature.properties.aeroway === "holding_position") return "Hold short";
+  return feature.properties.aeroway.replace(/_/g, " ");
+}
+
+function deriveTaxiRouteFromSurfaceGeometry(
+  baseRoute: Array<{ lat: number; lon: number }>,
+  features: SurfaceGeometryFeature[],
+  taxiProgress: number,
+) {
+  const lineFeatures = getSurfaceLineFeatures(features);
+  if (baseRoute.length < 2 || !lineFeatures.length) return null;
+
+  const nodeIndexByKey = new Map<string, number>();
+  const nodes: Array<{ lat: number; lon: number }> = [];
+  const adjacency = new Map<number, Array<{ to: number; cost: number }>>();
+
+  const ensureNode = (lat: number, lon: number) => {
+    const key = `${lat.toFixed(6)}:${lon.toFixed(6)}`;
+    const existing = nodeIndexByKey.get(key);
+    if (existing != null) return existing;
+    const index = nodes.length;
+    nodes.push({ lat, lon });
+    nodeIndexByKey.set(key, index);
+    adjacency.set(index, []);
+    return index;
+  };
+
+  lineFeatures.forEach((feature) => {
+    if (feature.geometry.type !== "LineString") return;
+    for (let i = 0; i < feature.geometry.coordinates.length - 1; i += 1) {
+      const [startLon, startLat] = feature.geometry.coordinates[i];
+      const [endLon, endLat] = feature.geometry.coordinates[i + 1];
+      const startIndex = ensureNode(startLat, startLon);
+      const endIndex = ensureNode(endLat, endLon);
+      const cost = greatCircleNm(
+        { latitude: startLat, longitude: startLon },
+        { latitude: endLat, longitude: endLon },
+      );
+      adjacency.get(startIndex)?.push({ to: endIndex, cost });
+      adjacency.get(endIndex)?.push({ to: startIndex, cost });
+    }
+  });
+
+  if (nodes.length < 2) return null;
+
+  const nearestNodeIndex = (point: { lat: number; lon: number }) => {
+    let winner = -1;
+    let winnerDistance = Number.POSITIVE_INFINITY;
+    nodes.forEach((node, index) => {
+      const distance = greatCircleNm(
+        { latitude: point.lat, longitude: point.lon },
+        { latitude: node.lat, longitude: node.lon },
+      );
+      if (distance < winnerDistance) {
+        winnerDistance = distance;
+        winner = index;
+      }
+    });
+    return { index: winner, distanceNm: winnerDistance };
+  };
+
+  const startMatch = nearestNodeIndex(baseRoute[0]);
+  const endMatch = nearestNodeIndex(baseRoute[baseRoute.length - 1]);
+  if (startMatch.index < 0 || endMatch.index < 0 || startMatch.distanceNm > 0.35 || endMatch.distanceNm > 0.35) {
+    return null;
+  }
+
+  const distances = new Array<number>(nodes.length).fill(Number.POSITIVE_INFINITY);
+  const previous = new Array<number>(nodes.length).fill(-1);
+  const visited = new Set<number>();
+  distances[startMatch.index] = 0;
+
+  while (visited.size < nodes.length) {
+    let current = -1;
+    let currentDistance = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < distances.length; i += 1) {
+      if (!visited.has(i) && distances[i] < currentDistance) {
+        current = i;
+        currentDistance = distances[i];
+      }
+    }
+    if (current === -1 || current === endMatch.index) break;
+    visited.add(current);
+    adjacency.get(current)?.forEach(({ to, cost }) => {
+      const nextDistance = currentDistance + cost;
+      if (nextDistance < distances[to]) {
+        distances[to] = nextDistance;
+        previous[to] = current;
+      }
+    });
+  }
+
+  if (!Number.isFinite(distances[endMatch.index])) return null;
+
+  const nodePath: number[] = [];
+  let cursor = endMatch.index;
+  while (cursor !== -1) {
+    nodePath.push(cursor);
+    cursor = previous[cursor];
+  }
+  nodePath.reverse();
+  const route = nodePath.map((index) => nodes[index]);
+  if (route.length < 2) return null;
+
+  const legDistances = route.slice(1).map((point, index) =>
+    greatCircleNm(
+      { latitude: route[index].lat, longitude: route[index].lon },
+      { latitude: point.lat, longitude: point.lon },
+    ),
+  );
+  const totalDistance = legDistances.reduce((sum, value) => sum + value, 0);
+  if (!Number.isFinite(totalDistance) || totalDistance <= 0) return null;
+
+  const targetDistance = totalDistance * clamp(taxiProgress, 0, 1);
+  let traversed = 0;
+  let activeSegmentIndex = 0;
+  let ownship = { ...route[0], headingDeg: 0 };
+
+  for (let i = 0; i < legDistances.length; i += 1) {
+    const legDistance = legDistances[i];
+    const nextTraversed = traversed + legDistance;
+    if (targetDistance <= nextTraversed || i === legDistances.length - 1) {
+      const start = route[i];
+      const end = route[i + 1];
+      const localT = legDistance > 0 ? clamp((targetDistance - traversed) / legDistance, 0, 1) : 0;
+      ownship = {
+        lat: start.lat + (end.lat - start.lat) * localT,
+        lon: start.lon + (end.lon - start.lon) * localT,
+        headingDeg: bearingBetweenPoints(
+          { latitude: start.lat, longitude: start.lon },
+          { latitude: end.lat, longitude: end.lon },
+        ),
+      };
+      activeSegmentIndex = i;
+      break;
+    }
+    traversed = nextTraversed;
+  }
+
+  const completedRoute = [...route.slice(0, activeSegmentIndex + 1), { lat: ownship.lat, lon: ownship.lon }];
+  const upcomingRoute = [{ lat: ownship.lat, lon: ownship.lon }, ...route.slice(activeSegmentIndex + 1)];
+
+  const pointDistanceToFeature = (point: { lat: number; lon: number }, feature: SurfaceGeometryFeature) => {
+    if (feature.geometry.type !== "LineString") return Number.POSITIVE_INFINITY;
+    return feature.geometry.coordinates.reduce((best, [lon, lat]) => {
+      const distance = greatCircleNm(
+        { latitude: point.lat, longitude: point.lon },
+        { latitude: lat, longitude: lon },
+      );
+      return Math.min(best, distance);
+    }, Number.POSITIVE_INFINITY);
+  };
+
+  const nearestFeatureLabel = (point: { lat: number; lon: number }) => {
+    let match: SurfaceGeometryFeature | null = null;
+    let matchDistance = Number.POSITIVE_INFINITY;
+    lineFeatures.forEach((feature) => {
+      const distance = pointDistanceToFeature(point, feature);
+      if (distance < matchDistance) {
+        match = feature;
+        matchDistance = distance;
+      }
+    });
+    return match ? getSurfaceFeatureLabel(match) : null;
+  };
+
+  return {
+    route,
+    completedRoute,
+    upcomingRoute,
+    ownship,
+    activeTaxiway: nearestFeatureLabel(ownship),
+    upcomingTaxiways: upcomingRoute
+      .slice(1, 5)
+      .map((point) => nearestFeatureLabel(point))
+      .filter((label, index, array): label is string => Boolean(label) && array.indexOf(label) === index)
+      .slice(0, 3),
+  };
+}
+
 function rotateDiagramPoint(
   point: { x: number; y: number },
   center: { x: number; y: number },
@@ -1621,11 +1814,11 @@ function FlightDemoVisionSurface({
   const showTunnel = isEnroute || isDeparture;
   const showRunwayGuidance = Boolean(runwayCue) && (isDeparture || isArrival || isTaxiIn);
   const trafficCardClass = showRunwayGuidance
-    ? "absolute bottom-[102px] right-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 text-right backdrop-blur md:bottom-[124px] md:right-3 md:w-[156px] md:px-3 md:py-2.5"
-    : "absolute bottom-[102px] right-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 text-right backdrop-blur md:bottom-[124px] md:right-[24px] md:w-[176px] md:px-3 md:py-2.5";
+    ? "absolute top-[43%] right-2 z-20 w-[144px] -translate-y-1/2 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 text-right backdrop-blur md:right-3 md:w-[156px]"
+    : "absolute top-[45%] right-3 z-20 w-[164px] -translate-y-1/2 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 text-right backdrop-blur md:right-[22px] md:w-[176px]";
   const terrainCardClass = showRunwayGuidance
-    ? "absolute bottom-[102px] left-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 backdrop-blur md:bottom-[124px] md:left-3 md:w-[156px] md:px-3 md:py-2.5"
-    : "absolute bottom-[102px] left-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 backdrop-blur md:bottom-[124px] md:left-[24px] md:w-[176px] md:px-3 md:py-2.5";
+    ? "absolute top-[43%] left-2 z-20 w-[144px] -translate-y-1/2 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 backdrop-blur md:left-3 md:w-[156px]"
+    : "absolute top-[45%] left-3 z-20 w-[164px] -translate-y-1/2 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 backdrop-blur md:left-[22px] md:w-[176px]";
   const runwayRibbonWidth = isArrival ? 26 : 18;
   const runwayRibbonBottom = isArrival ? 6 : 11;
   const runwayRibbonTop = isArrival ? 41 : 57;
@@ -2572,11 +2765,17 @@ export default function SyntheticVisionPage() {
     const baseGeoCompletedRoute = completedRoute.map(toGeoPoint);
     const baseGeoUpcomingRoute = upcomingRoute.map(toGeoPoint);
     const surfaceFeatures = Array.isArray(surfaceGeometry?.features) ? surfaceGeometry.features : [];
-    const geoRoute = snapSurfacePoints(baseGeoRoute, surfaceFeatures);
-    const geoCompletedRoute = snapSurfacePoints(baseGeoCompletedRoute, surfaceFeatures);
-    const geoUpcomingRoute = snapSurfacePoints(baseGeoUpcomingRoute, surfaceFeatures);
-    const ownshipCandidate = geoCompletedRoute[geoCompletedRoute.length - 1] ?? toGeoPoint(ownship);
-    const geoOwnship = { ...ownshipCandidate, headingDeg: ownship.headingDeg };
+    const derivedSurfaceRoute = deriveTaxiRouteFromSurfaceGeometry(baseGeoRoute, surfaceFeatures, taxiProgress);
+    const geoRoute = derivedSurfaceRoute?.route ?? snapSurfacePoints(baseGeoRoute, surfaceFeatures);
+    const geoCompletedRoute = derivedSurfaceRoute?.completedRoute ?? snapSurfacePoints(baseGeoCompletedRoute, surfaceFeatures);
+    const geoUpcomingRoute = derivedSurfaceRoute?.upcomingRoute ?? snapSurfacePoints(baseGeoUpcomingRoute, surfaceFeatures);
+    const ownshipCandidate = derivedSurfaceRoute
+      ? derivedSurfaceRoute.ownship
+      : {
+          ...(geoCompletedRoute[geoCompletedRoute.length - 1] ?? toGeoPoint(ownship)),
+          headingDeg: ownship.headingDeg,
+        };
+    const geoOwnship = { ...ownshipCandidate };
     const geoRunwayCenterline =
       runwayOverlay?.centerline.map((point) => ({ lat: point.latitude, lon: point.longitude })) ??
       [
@@ -2646,8 +2845,13 @@ export default function SyntheticVisionPage() {
       geoRunwayCenterline,
       geoRunwayBar,
       surfaceFeatures,
-      activeTaxiway,
-      upcomingTaxiways,
+      activeTaxiway:
+        derivedSurfaceRoute?.activeTaxiway ||
+        activeTaxiway,
+      upcomingTaxiways:
+        derivedSurfaceRoute?.upcomingTaxiways.length
+          ? derivedSurfaceRoute.upcomingTaxiways
+          : upcomingTaxiways,
       progressCall,
     };
   }, [

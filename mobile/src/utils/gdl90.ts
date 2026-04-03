@@ -22,6 +22,16 @@ export type OwnshipReport = {
   updatedAt: number;
 };
 
+export type AttitudeReport = {
+  pitchDeg?: number;
+  rollDeg?: number;
+  headingDeg?: number;
+  headingReference?: 'true' | 'magnetic';
+  indicatedAirspeedKts?: number;
+  trueAirspeedKts?: number;
+  updatedAt: number;
+};
+
 export type HeartbeatReport = {
   statusByte1: number;
   statusByte2: number;
@@ -33,6 +43,7 @@ export type ReceiverHealth = {
   staleMs: number;
   lastFrameAt: number | null;
   lastOwnshipAt: number | null;
+  lastAttitudeAt: number | null;
   lastTrafficAt: number | null;
   lastHeartbeatAt: number | null;
   lastHeartbeat: HeartbeatReport | null;
@@ -76,6 +87,47 @@ function decodeGroundSpeedKt(payload: Uint8Array, offset: number) {
 function decodeHeadingDeg(byte: number | undefined) {
   if (byte == null || byte === 0) return undefined;
   return Math.round((byte * 360) / 256);
+}
+
+function decodeSignedTenths(payload: Uint8Array, offset: number) {
+  if (payload.length < offset + 2) return undefined;
+  const raw = (payload[offset] << 8) | payload[offset + 1];
+  if (raw === 0x7fff || raw === 0xffff) return undefined;
+  const signed = raw & 0x8000 ? raw - 0x10000 : raw;
+  return signed / 10;
+}
+
+function decodeUnsigned(payload: Uint8Array, offset: number) {
+  if (payload.length < offset + 2) return undefined;
+  const raw = (payload[offset] << 8) | payload[offset + 1];
+  return raw === 0xffff ? undefined : raw;
+}
+
+function parseAhrs(frame: Uint8Array): AttitudeReport | null {
+  if (frame[0] !== 0x65 || frame[1] !== 0x01 || frame.length < 12) return null;
+  const rollDeg = decodeSignedTenths(frame, 2);
+  const pitchDeg = decodeSignedTenths(frame, 4);
+  const headingRaw = decodeUnsigned(frame, 6);
+  const indicatedAirspeedKts = decodeUnsigned(frame, 8);
+  const trueAirspeedKts = decodeUnsigned(frame, 10);
+  let headingDeg: number | undefined;
+  let headingReference: 'true' | 'magnetic' | undefined;
+  if (typeof headingRaw === 'number') {
+    headingReference = (headingRaw & 0x8000) !== 0 ? 'magnetic' : 'true';
+    const headingTenths = headingRaw & 0x7fff;
+    if (headingTenths >= 0 && headingTenths <= 3600) {
+      headingDeg = headingTenths / 10;
+    }
+  }
+  return {
+    pitchDeg,
+    rollDeg,
+    headingDeg,
+    headingReference,
+    indicatedAirspeedKts,
+    trueAirspeedKts,
+    updatedAt: Date.now(),
+  };
 }
 
 function parseCallsign(bytes: Uint8Array, start: number, length: number) {
@@ -165,12 +217,14 @@ export function createGdl90Listener(
   port: number,
   onTraffic: (target: TrafficTarget) => void,
   onOwnship?: (ownship: OwnshipReport) => void,
+  onAttitude?: (attitude: AttitudeReport) => void,
   onError?: (err: unknown) => void,
   onHealth?: (health: ReceiverHealth) => void,
 ): Gdl90Listener {
   const socket = dgram.createSocket({ type: 'udp4', reusePort: true });
   let lastFrameAt: number | null = null;
   let lastOwnshipAt: number | null = null;
+  let lastAttitudeAt: number | null = null;
   let lastTrafficAt: number | null = null;
   let lastHeartbeatAt: number | null = null;
   let lastHeartbeat: HeartbeatReport | null = null;
@@ -198,6 +252,7 @@ export function createGdl90Listener(
       staleMs: RECEIVER_STALE_MS,
       lastFrameAt,
       lastOwnshipAt,
+      lastAttitudeAt,
       lastTrafficAt,
       lastHeartbeatAt,
       lastHeartbeat,
@@ -217,6 +272,11 @@ export function createGdl90Listener(
       if (ownship && onOwnship) {
         lastOwnshipAt = ownship.updatedAt;
         onOwnship(ownship);
+      }
+      const attitude = parseAhrs(frame);
+      if (attitude && onAttitude) {
+        lastAttitudeAt = attitude.updatedAt;
+        onAttitude(attitude);
       }
       const traffic = parseTraffic(frame);
       if (traffic) {

@@ -1,6 +1,6 @@
 ﻿import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
+import MapView, { Marker, Polygon, Polyline, UrlTile } from 'react-native-maps';
 import { colors, spacing } from '../../styles/theme';
 
 type FlightDeckViewProps = {
@@ -146,6 +146,184 @@ function FlightDeckSurfaceSchematic({ preview, styles }: { preview: any; styles:
   );
 }
 
+function FlightDeckSurfaceMap({ preview, styles }: { preview: any; styles: any }) {
+  if (!preview?.surfaceRegion) return <FlightDeckSurfaceSchematic preview={preview} styles={styles} />;
+
+  const surfacePolygons = Array.isArray(preview.surfaceFeatures)
+    ? preview.surfaceFeatures.filter((feature: any) => feature?.geometry?.type === 'Polygon')
+    : [];
+  const surfaceLines = Array.isArray(preview.surfaceFeatures)
+    ? preview.surfaceFeatures.filter((feature: any) => feature?.geometry?.type === 'LineString')
+    : [];
+
+  return (
+    <View style={styles.flightDeckSurfaceCard}>
+      <Text style={styles.flightDeckPanelTitle}>Airport Surface</Text>
+      <Text style={styles.flightDeckPanelText}>{preview.headline}</Text>
+      <View style={styles.flightDeckSurfaceDiagram}>
+        <MapView
+          style={styles.flightDeckSurfaceMap}
+          region={preview.surfaceRegion}
+          scrollEnabled={false}
+          zoomEnabled={false}
+          rotateEnabled={false}
+          pitchEnabled={false}
+          toolbarEnabled={false}
+          showsCompass={false}
+          showsBuildings={false}
+          showsIndoors={false}
+          mapType="standard"
+        >
+          {surfacePolygons.map((feature: any, index: number) => (
+            <Polygon
+              key={`surface-polygon-${index}`}
+              coordinates={(feature.geometry.coordinates?.[0] || []).map(([lon, lat]: [number, number]) => ({
+                latitude: lat,
+                longitude: lon,
+              }))}
+              strokeColor={
+                feature.properties?.aeroway === 'runway'
+                  ? 'rgba(232,237,244,0.72)'
+                  : feature.properties?.aeroway === 'apron'
+                    ? 'rgba(160,170,186,0.5)'
+                    : 'rgba(104,122,150,0.45)'
+              }
+              fillColor={
+                feature.properties?.aeroway === 'runway'
+                  ? 'rgba(232,237,244,0.14)'
+                  : feature.properties?.aeroway === 'apron'
+                    ? 'rgba(110,122,142,0.14)'
+                    : 'rgba(77,107,143,0.1)'
+              }
+              strokeWidth={1.5}
+            />
+          ))}
+          {surfaceLines.map((feature: any, index: number) => (
+            <Polyline
+              key={`surface-line-${index}`}
+              coordinates={(feature.geometry.coordinates || []).map(([lon, lat]: [number, number]) => ({
+                latitude: lat,
+                longitude: lon,
+              }))}
+              strokeColor={
+                feature.properties?.aeroway === 'runway'
+                  ? 'rgba(232,237,244,0.8)'
+                  : feature.properties?.aeroway === 'holding_position'
+                    ? colors.flightWarning
+                    : 'rgba(90,160,255,0.7)'
+              }
+              strokeWidth={feature.properties?.aeroway === 'holding_position' ? 4 : feature.properties?.aeroway === 'runway' ? 3 : 2}
+            />
+          ))}
+          {preview.geoRunwayCenterline?.length > 1 ? (
+            <Polyline
+              coordinates={preview.geoRunwayCenterline.map((point: any) => ({
+                latitude: point.lat,
+                longitude: point.lon,
+              }))}
+              strokeColor="rgba(232,237,244,0.95)"
+              strokeWidth={2}
+            />
+          ) : null}
+          {preview.geoRunwayBar?.length > 1 ? (
+            <Polyline
+              coordinates={preview.geoRunwayBar.map((point: any) => ({
+                latitude: point.lat,
+                longitude: point.lon,
+              }))}
+              strokeColor={colors.flightAccent}
+              strokeWidth={4}
+            />
+          ) : null}
+          {preview.geoCompletedRoute?.length > 1 ? (
+            <Polyline
+              coordinates={preview.geoCompletedRoute.map((point: any) => ({
+                latitude: point.lat,
+                longitude: point.lon,
+              }))}
+              strokeColor="rgba(0,212,160,0.95)"
+              strokeWidth={4}
+            />
+          ) : null}
+          {preview.geoUpcomingRoute?.length > 1 ? (
+            <Polyline
+              coordinates={preview.geoUpcomingRoute.map((point: any) => ({
+                latitude: point.lat,
+                longitude: point.lon,
+              }))}
+              strokeColor={colors.flightAccent}
+              strokeWidth={4}
+              lineDashPattern={[10, 8]}
+            />
+          ) : null}
+          {preview.geoOwnship?.lat && preview.geoOwnship?.lon ? (
+            <Marker
+              coordinate={{ latitude: preview.geoOwnship.lat, longitude: preview.geoOwnship.lon }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              flat
+              rotation={preview.geoOwnship.headingDeg || 0}
+            >
+              <View style={styles.flightDeckSurfaceOwnshipMap}>
+                <Ionicons name="navigate" size={16} color={colors.flightBackground} />
+              </View>
+            </Marker>
+          ) : null}
+        </MapView>
+      </View>
+      <View style={styles.flightDeckSurfaceStatusRow}>
+        <View style={styles.flightDeckSurfaceStatusCard}>
+          <Text style={styles.flightDeckContextCardEyebrow}>Surface Guidance</Text>
+          <Text style={styles.flightDeckContextCardTitle}>{preview.progressCall}</Text>
+          <Text style={styles.flightDeckContextCardText}>
+            {preview.routeCall}
+            {preview.activeTaxiway ? ` Active ${preview.activeTaxiway}.` : ''}
+          </Text>
+        </View>
+        <View style={styles.flightDeckSurfaceStatusCard}>
+          <Text style={styles.flightDeckContextCardEyebrow}>Taxi Sequence</Text>
+          <Text style={styles.flightDeckContextCardTitle}>
+            {preview.upcomingTaxiways?.length ? preview.upcomingTaxiways.join(' -> ') : 'Ground path staged'}
+          </Text>
+          <Text style={styles.flightDeckContextCardText}>{preview.support}</Text>
+        </View>
+      </View>
+      <View style={styles.flightDeckControlRow}>
+        <View
+          style={[
+            styles.flightDeckChip,
+            preview.holdShortActive ? styles.flightDeckChipWarning : styles.flightDeckChipActive,
+          ]}
+        >
+          <Text
+            style={[
+              styles.flightDeckChipText,
+              preview.holdShortActive ? styles.flightDeckChipTextWarning : styles.flightDeckChipTextActive,
+            ]}
+          >
+            {preview.holdShortActive ? 'Hold short' : preview.activeTaxiway || 'Taxi active'}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.flightDeckChip,
+            preview.runwayOccupied ? styles.flightDeckChipWarning : null,
+          ]}
+        >
+          <Text
+            style={[
+              styles.flightDeckChipText,
+              preview.runwayOccupied ? styles.flightDeckChipTextWarning : null,
+            ]}
+          >
+            {preview.runwayOccupied ? 'Runway occupied' : 'Runway clear'}
+          </Text>
+        </View>
+      </View>
+      <Text style={styles.flightDeckPanelText}>{preview.clearanceLabel}</Text>
+    </View>
+  );
+}
+
 export default function FlightDeckView({ state = {}, actions = {}, styles = {} }: FlightDeckViewProps) {
   const {
     insets,
@@ -193,6 +371,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
     mapStyle,
     routePoints = [],
     activeOwnship,
+    activeAttitude,
     ownshipSourceSummary,
     headingSourceSummary,
     attitudeSourceSummary,
@@ -265,6 +444,13 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
     formatAltitudeDelta,
   } = state;
 
+  const visionRollDeg = Math.max(-45, Math.min(45, activeAttitude?.rollDeg ?? 0));
+  const visionPitchDeg = Math.max(-20, Math.min(20, activeAttitude?.pitchDeg ?? 0));
+  const visionPitchTranslateY = visionPitchDeg * 5.5;
+  const visionActualBankOffset = visionRollDeg * 1.12;
+  const visionCommandBankOffset = Math.max(-45, Math.min(45, flightDeckCommandBankDeg || 0)) * 1.12;
+  const visionPitchMarks = [-20, -15, -10, -5, 5, 10, 15, 20];
+
   const {
     pulseFlightDeckChrome = () => {},
     toggleFlightDeckView = () => {},
@@ -332,28 +518,241 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
       <View style={styles.flightDeckMapShell}>
         {flightDeckView === 'vision' ? (
           <View style={styles.flightDeckVisionShell}>
-            <View style={styles.flightDeckVisionSky} />
             <View
-              style={[
-                styles.flightDeckVisionGround,
-                terrainRisk === 'warning'
-                  ? styles.flightDeckVisionGroundWarning
-                  : terrainRisk === 'caution'
-                    ? styles.flightDeckVisionGroundCaution
-                    : null,
-              ]}
-            />
-            <View
-              style={[
-                styles.flightDeckVisionHorizon,
-                terrainRisk === 'warning'
-                  ? styles.flightDeckVisionHorizonWarning
-                  : terrainRisk === 'caution'
-                    ? styles.flightDeckVisionHorizonCaution
-                    : null,
-              ]}
-            />
+              style={{
+                position: 'absolute',
+                inset: 0,
+                transform: [
+                  { translateY: visionPitchTranslateY },
+                  { rotate: `${visionRollDeg}deg` },
+                ],
+              }}
+            >
+              <View style={styles.flightDeckVisionSky} />
+              <View
+                style={[
+                  styles.flightDeckVisionGround,
+                  terrainRisk === 'warning'
+                    ? styles.flightDeckVisionGroundWarning
+                    : terrainRisk === 'caution'
+                      ? styles.flightDeckVisionGroundCaution
+                      : null,
+                ]}
+              />
+              <View
+                style={[
+                  styles.flightDeckVisionHorizon,
+                  terrainRisk === 'warning'
+                    ? styles.flightDeckVisionHorizonWarning
+                    : terrainRisk === 'caution'
+                      ? styles.flightDeckVisionHorizonCaution
+                      : null,
+                ]}
+              />
+              {visionPitchMarks.map((value) => {
+                const major = Math.abs(value) % 10 === 0;
+                return (
+                  <View
+                    key={`vision-ladder-${value}`}
+                    style={[
+                      styles.flightDeckVisionPitchMark,
+                      { top: `${50 - value * 2.15}%` },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.flightDeckVisionPitchMarkLabel,
+                        styles.flightDeckVisionPitchMarkLabelLeft,
+                      ]}
+                    >
+                      {Math.abs(value)}
+                    </Text>
+                    <View
+                      style={[
+                        styles.flightDeckVisionPitchMarkWing,
+                        styles.flightDeckVisionPitchMarkWingLeft,
+                        major
+                          ? styles.flightDeckVisionPitchMarkWingMajor
+                          : styles.flightDeckVisionPitchMarkWingMinor,
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.flightDeckVisionPitchMarkWing,
+                        styles.flightDeckVisionPitchMarkWingRight,
+                        major
+                          ? styles.flightDeckVisionPitchMarkWingMajor
+                          : styles.flightDeckVisionPitchMarkWingMinor,
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.flightDeckVisionPitchMarkLabel,
+                        styles.flightDeckVisionPitchMarkLabelRight,
+                      ]}
+                    >
+                      {Math.abs(value)}
+                    </Text>
+                  </View>
+                );
+              })}
+              {visionRouteGuidance ? (
+                <View
+                  style={[
+                    styles.flightDeckVisionCenterline,
+                    { left: `${visionRouteGuidance.centerlineLeftPct}%` },
+                  ]}
+                />
+              ) : null}
+              {visionRouteGuidance?.gates.map((gate: any) => (
+                <View
+                  key={gate.key}
+                  style={[
+                    styles.flightDeckVisionRouteGate,
+                    {
+                      left: `${gate.leftPct}%`,
+                      top: `${gate.topPct}%`,
+                      width: `${gate.widthPct}%`,
+                      height: `${gate.heightPct}%`,
+                    },
+                    routeProgress?.offRouteNm && routeProgress.offRouteNm > 1.5
+                      ? styles.flightDeckVisionRouteGateCaution
+                      : null,
+                  ]}
+                />
+              ))}
+              {visionRouteGuidance?.tunnelBands.map((band: any) => (
+                <View
+                  key={band.key}
+                  style={[
+                    styles.flightDeckVisionTunnelBand,
+                    {
+                      left: `${band.leftPct}%`,
+                      top: `${band.topPct}%`,
+                      width: `${band.widthPct}%`,
+                      height: `${band.heightPct}%`,
+                    },
+                    visionRouteGuidance.corridorSeverity === 'warning'
+                      ? styles.flightDeckVisionTunnelBandWarning
+                      : visionRouteGuidance.corridorSeverity === 'caution'
+                        ? styles.flightDeckVisionTunnelBandCaution
+                        : null,
+                  ]}
+                />
+              ))}
+              {destinationRunwayCue ? (
+                <>
+                  <View
+                    style={[
+                      styles.flightDeckVisionRunwayCenterline,
+                      {
+                        left: `${destinationRunwayCue.centerlineLeftPct}%`,
+                        top: `${destinationRunwayCue.centerlineTopPct}%`,
+                        height: `${destinationRunwayCue.centerlineHeightPct}%`,
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.flightDeckVisionRunwayEdge,
+                      {
+                        left: `${destinationRunwayCue.leftPct}%`,
+                        top: `${destinationRunwayCue.topPct}%`,
+                        height: `${destinationRunwayCue.heightPct}%`,
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.flightDeckVisionRunwayEdge,
+                      {
+                        left: `${destinationRunwayCue.leftPct + destinationRunwayCue.widthPct}%`,
+                        top: `${destinationRunwayCue.topPct}%`,
+                        height: `${destinationRunwayCue.heightPct}%`,
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.flightDeckVisionRunwayBox,
+                      {
+                        left: `${destinationRunwayCue.leftPct}%`,
+                        top: `${destinationRunwayCue.topPct}%`,
+                        width: `${destinationRunwayCue.widthPct}%`,
+                        height: `${destinationRunwayCue.heightPct}%`,
+                      },
+                    ]}
+                  />
+                  {[0.22, 0.4, 0.58, 0.76].map((offset, index) => (
+                    <View
+                      key={`runway-dash-${index}`}
+                      style={[
+                        styles.flightDeckVisionRunwayDash,
+                        {
+                          left: `${destinationRunwayCue.centerlineLeftPct}%`,
+                          top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * offset}%`,
+                        },
+                      ]}
+                    />
+                  ))}
+                  {[0.28, 0.72].map((offset, index) => (
+                    <View
+                      key={`runway-stripe-left-${index}`}
+                      style={[
+                        styles.flightDeckVisionRunwayThresholdStripe,
+                        {
+                          left: `${destinationRunwayCue.leftPct + destinationRunwayCue.widthPct * offset}%`,
+                          top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * 0.18}%`,
+                        },
+                      ]}
+                    />
+                  ))}
+                  {[0.28, 0.72].map((offset, index) => (
+                    <View
+                      key={`runway-stripe-right-${index}`}
+                      style={[
+                        styles.flightDeckVisionRunwayThresholdStripe,
+                        {
+                          left: `${destinationRunwayCue.leftPct + destinationRunwayCue.widthPct * offset}%`,
+                          top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * 0.82}%`,
+                        },
+                      ]}
+                    />
+                  ))}
+                  <View
+                    style={[
+                      styles.flightDeckVisionRunwayThreshold,
+                      {
+                        left: `${destinationRunwayCue.leftPct}%`,
+                        top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * 0.5}%`,
+                        width: `${destinationRunwayCue.widthPct}%`,
+                      },
+                    ]}
+                  />
+                </>
+              ) : null}
+              <View style={styles.flightDeckVisionTerrainBand}>
+                {visionTerrainColumns.map((column: any) => (
+                  <View
+                    key={column.key}
+                    style={[
+                      styles.flightDeckVisionTerrainColumn,
+                      {
+                        left: `${column.leftPct}%`,
+                        height: `${column.heightPct}%`,
+                      },
+                      column.risk === 'warning'
+                        ? styles.flightDeckVisionTerrainColumnWarning
+                        : column.risk === 'caution'
+                          ? styles.flightDeckVisionTerrainColumnCaution
+                          : styles.flightDeckVisionTerrainColumnNominal,
+                    ]}
+                  />
+                ))}
+              </View>
+            </View>
             <View style={styles.flightDeckVisionBankArc}>
+              <View style={styles.flightDeckVisionBankReference} />
               {flightDeckBankTicks.map((tick: any) => (
                 <View
                   key={`vision-bank-${tick.value}`}
@@ -366,108 +765,16 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               ))}
               <View
                 style={[
-                  styles.flightDeckVisionBankPointer,
-                  { transform: [{ translateX: flightDeckCommandBankDeg * 1.12 }] },
+                  styles.flightDeckVisionBankPointerActual,
+                  { transform: [{ translateX: visionActualBankOffset }] },
                 ]}
               />
-            </View>
-            {visionRouteGuidance ? (
               <View
                 style={[
-                  styles.flightDeckVisionCenterline,
-                  { left: `${visionRouteGuidance.centerlineLeftPct}%` },
+                  styles.flightDeckVisionBankPointerCommand,
+                  { transform: [{ translateX: visionCommandBankOffset }] },
                 ]}
               />
-            ) : null}
-            {visionRouteGuidance?.gates.map((gate: any) => (
-              <View
-                key={gate.key}
-                style={[
-                  styles.flightDeckVisionRouteGate,
-                  {
-                    left: `${gate.leftPct}%`,
-                    top: `${gate.topPct}%`,
-                    width: `${gate.widthPct}%`,
-                    height: `${gate.heightPct}%`,
-                  },
-                  routeProgress?.offRouteNm && routeProgress.offRouteNm > 1.5
-                    ? styles.flightDeckVisionRouteGateCaution
-                    : null,
-                ]}
-              />
-            ))}
-            {visionRouteGuidance?.tunnelBands.map((band: any) => (
-              <View
-                key={band.key}
-                style={[
-                  styles.flightDeckVisionTunnelBand,
-                  {
-                    left: `${band.leftPct}%`,
-                    top: `${band.topPct}%`,
-                    width: `${band.widthPct}%`,
-                    height: `${band.heightPct}%`,
-                  },
-                  visionRouteGuidance.corridorSeverity === 'warning'
-                    ? styles.flightDeckVisionTunnelBandWarning
-                    : visionRouteGuidance.corridorSeverity === 'caution'
-                      ? styles.flightDeckVisionTunnelBandCaution
-                      : null,
-                ]}
-              />
-            ))}
-            {destinationRunwayCue ? (
-              <>
-                <View
-                  style={[
-                    styles.flightDeckVisionRunwayCenterline,
-                    {
-                      left: `${destinationRunwayCue.centerlineLeftPct}%`,
-                      top: `${destinationRunwayCue.centerlineTopPct}%`,
-                      height: `${destinationRunwayCue.centerlineHeightPct}%`,
-                    },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.flightDeckVisionRunwayBox,
-                    {
-                      left: `${destinationRunwayCue.leftPct}%`,
-                      top: `${destinationRunwayCue.topPct}%`,
-                      width: `${destinationRunwayCue.widthPct}%`,
-                      height: `${destinationRunwayCue.heightPct}%`,
-                    },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.flightDeckVisionRunwayThreshold,
-                    {
-                      left: `${destinationRunwayCue.leftPct}%`,
-                      top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * 0.5}%`,
-                      width: `${destinationRunwayCue.widthPct}%`,
-                    },
-                  ]}
-                />
-              </>
-            ) : null}
-            <View style={styles.flightDeckVisionTerrainBand}>
-              {visionTerrainColumns.map((column: any) => (
-                <View
-                  key={column.key}
-                  style={[
-                    styles.flightDeckVisionTerrainColumn,
-                    {
-                      left: `${column.leftPct}%`,
-                      height: `${column.heightPct}%`,
-                    },
-                    column.risk === 'warning'
-                      ? styles.flightDeckVisionTerrainColumnWarning
-                      : column.risk === 'caution'
-                        ? styles.flightDeckVisionTerrainColumnCaution
-                        : styles.flightDeckVisionTerrainColumnNominal,
-                  ]}
-                />
-              ))}
             </View>
             <View style={styles.flightDeckVisionFlightPathMarker}>
               <View style={styles.flightDeckVisionFlightPathInner} />
@@ -534,6 +841,11 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               </Text>
               <Text style={styles.flightDeckVisionBannerSupport}>{visionDirectorCue.turnCommand}</Text>
               <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionDirectorCue.verticalCommand}</Text>
+              {activeAttitude && (typeof activeAttitude.pitchDeg === 'number' || typeof activeAttitude.rollDeg === 'number') ? (
+                <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                  Att {typeof activeAttitude.pitchDeg === 'number' ? `${activeAttitude.pitchDeg.toFixed(1)}° pitch` : '--'} / {typeof activeAttitude.rollDeg === 'number' ? `${activeAttitude.rollDeg.toFixed(1)}° bank` : '--'}
+                </Text>
+              ) : null}
               <Text style={styles.flightDeckVisionBannerSupportMuted}>
                 {attitudeSourceSummary?.pilotGrade ? attitudeSourceSummary.detail : visionReadinessSummary?.detail}
               </Text>
@@ -541,17 +853,6 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 <Text style={styles.flightDeckVisionBannerAlert}>{terrainEscapeGuidance}</Text>
               ) : null}
             </View>
-            {[-10, -5, 0, 5, 10].map((value) => (
-              <View
-                key={`vision-ladder-${value}`}
-                style={[
-                  styles.flightDeckVisionPitchLine,
-                  { top: `${50 - value * 2.2}%`, width: value === 0 ? 170 : 120 },
-                ]}
-              >
-                <Text style={styles.flightDeckVisionPitchLabel}>{value > 0 ? `+${value}` : `${value}`}</Text>
-              </View>
-            ))}
             <View style={styles.flightDeckVisionGuidanceChip}>
               <Text style={styles.flightDeckVisionGuidanceText}>{visionGuidance}</Text>
             </View>
@@ -928,6 +1229,126 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                   {routeExecutionSummary?.nextExecutionTransition?.label ? ` Â· Next ${routeExecutionSummary.nextExecutionTransition.label}` : ''}
                 </Text>
               ) : null}
+              {routeExecutionSummary?.activeProcedureContext?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Navigation context {routeExecutionSummary.activeProcedureContext.label}
+                  {routeExecutionSummary?.nextProcedureContext?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureContext.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureHandoff?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Handoff model {routeExecutionSummary.activeProcedureHandoff.label}
+                  {routeExecutionSummary?.nextProcedureHandoff?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureHandoff.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureEntryRole?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Procedure role {routeExecutionSummary.activeProcedureEntryRole.label}
+                  {routeExecutionSummary?.nextProcedureEntryRole?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureEntryRole.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureEntryDescriptor?.positionLabel ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Procedure entry {routeExecutionSummary.activeProcedureEntryDescriptor.positionLabel}
+                  {routeExecutionSummary?.nextProcedureEntryDescriptor?.positionLabel ? ` Â· Next ${routeExecutionSummary.nextProcedureEntryDescriptor.positionLabel}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureEntryTransitionBehavior?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Entry transition {routeExecutionSummary.activeProcedureEntryTransitionBehavior.label}
+                  {routeExecutionSummary?.nextProcedureEntryTransitionBehavior?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureEntryTransitionBehavior.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureTransitionTable?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Transition table {routeExecutionSummary.activeProcedureTransitionTable.label}
+                  {routeExecutionSummary?.nextProcedureTransitionTable?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureTransitionTable.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureSegmentTemplate?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Segment template {routeExecutionSummary.activeProcedureSegmentTemplate.label}
+                  {routeExecutionSummary?.nextProcedureSegmentTemplate?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureSegmentTemplate.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureSegmentClass?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Segment class {routeExecutionSummary.activeProcedureSegmentClass.label}
+                  {routeExecutionSummary?.nextProcedureSegmentClass?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureSegmentClass.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureLegAdapter?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Leg adapter {routeExecutionSummary.activeProcedureLegAdapter.label}
+                  {routeExecutionSummary?.nextProcedureLegAdapter?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureLegAdapter.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureLegFamily?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Leg family {routeExecutionSummary.activeProcedureLegFamily.label}
+                  {routeExecutionSummary?.nextProcedureLegFamily?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureLegFamily.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureLegParserTarget?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Parser target {routeExecutionSummary.activeProcedureLegParserTarget.label}
+                  {routeExecutionSummary?.nextProcedureLegParserTarget?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureLegParserTarget.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureLegIngestionContract?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Ingestion contract {routeExecutionSummary.activeProcedureLegIngestionContract.label}
+                  {routeExecutionSummary?.nextProcedureLegIngestionContract?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureLegIngestionContract.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeParsedLegPayload?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Parsed payload {routeExecutionSummary.activeParsedLegPayload.label} Â· {routeExecutionSummary.activeParsedLegPayload.source}
+                  {routeExecutionSummary?.nextParsedLegPayload?.label ? ` Â· Next ${routeExecutionSummary.nextParsedLegPayload.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureRoleCueProfile?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Role cues {routeExecutionSummary.activeProcedureRoleCueProfile.label}
+                  {routeExecutionSummary?.nextProcedureRoleCueProfile?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureRoleCueProfile.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureRoleExecutionPolicy?.sequencingModel ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Role sequencing {routeExecutionSummary.activeProcedureRoleExecutionPolicy.sequencingModel}
+                  {routeExecutionSummary?.nextProcedureRoleExecutionPolicy?.sequencingModel ? ` Â· Next ${routeExecutionSummary.nextProcedureRoleExecutionPolicy.sequencingModel}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureChain?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Procedure chain {routeExecutionSummary.activeProcedureChain.label}
+                  {routeExecutionSummary?.nextProcedureChain?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureChain.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureChainBehavior?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Chain behavior {routeExecutionSummary.activeProcedureChainBehavior.label}
+                  {routeExecutionSummary?.nextProcedureChainBehavior?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureChainBehavior.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureTemplate?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Procedure template {routeExecutionSummary.activeProcedureTemplate.label}
+                  {routeExecutionSummary?.nextProcedureTemplate?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureTemplate.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureExecutionProfile?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Execution profile {routeExecutionSummary.activeProcedureExecutionProfile.label}
+                  {routeExecutionSummary?.nextProcedureExecutionProfile?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureExecutionProfile.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureCueStack?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Cue stack {routeExecutionSummary.activeProcedureCueStack.label}
+                  {routeExecutionSummary?.nextProcedureCueStack?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureCueStack.label}` : ''}
+                </Text>
+              ) : null}
               {nextExecutionPlanEntry?.status === 'armed' ? (
                 <Text style={styles.flightDeckSubtitle}>
                   Execution plan {nextExecutionPlanEntry.legLabel} Â· {nextExecutionPlanEntry.actionCue}
@@ -939,8 +1360,15 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               {routeExecutionSummary?.transitionCall ? (
                 <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.transitionCall}</Text>
               ) : null}
+              {routeExecutionSummary?.nextActionCall ? (
+                <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.nextActionCall}</Text>
+              ) : null}
               {routeExecutionSummary?.nextLegArmed ? (
-                <Text style={styles.flightDeckSubtitle}>Next leg is armed for sequencing.</Text>
+                <Text style={styles.flightDeckSubtitle}>
+                  {routeExecutionSummary?.manualAdvanceRequired
+                    ? routeExecutionSummary?.activeProcedureCueStack?.nextLegManagedLabel || 'Next leg is staged. Manual advance remains required.'
+                    : routeExecutionSummary?.activeProcedureCueStack?.nextLegAutoLabel || 'Next leg is armed for sequencing.'}
+                </Text>
               ) : null}
               {routeExecutionSummary?.turnAnticipationState && routeExecutionSummary.turnAnticipationState !== 'idle' ? (
                 <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.turnAnticipationCall}</Text>
@@ -1426,6 +1854,26 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               <Text style={styles.flightDeckPanelText}>
                 Receiver {receiverStatusSummary?.code || '--'} - {receiverStatusSummary?.detail || 'No receiver health summary.'}
               </Text>
+              <Text style={styles.flightDeckPanelText}>
+                Nav data {routeExecutionSummary?.navDataSourceSummary?.code || '--'} - {routeExecutionSummary?.navDataSourceSummary?.detail || 'No route-structure or nav-data source active.'}
+              </Text>
+              {typeof routeExecutionSummary?.navDataCoveragePct === 'number' ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Coverage {routeExecutionSummary.navDataCoveragePct}% - {routeExecutionSummary.navDataStructuredLegCount || 0} structured legs
+                  {typeof routeExecutionSummary?.navDataBriefingLegCount === 'number' && routeExecutionSummary.navDataBriefingLegCount > 0
+                    ? ` - ${routeExecutionSummary.navDataBriefingLegCount} briefing-backed legs`
+                    : ''}
+                  {typeof routeExecutionSummary?.navDataProviderLegCount === 'number' && routeExecutionSummary.navDataProviderLegCount > 0
+                    ? ` - ${routeExecutionSummary.navDataProviderLegCount} provider legs`
+                    : ''}
+                  {typeof routeExecutionSummary?.navDataAirwaySegmentCount === 'number' && routeExecutionSummary.navDataAirwaySegmentCount > 0
+                    ? ` - ${routeExecutionSummary.navDataAirwaySegmentCount} airway segments tracked`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.navDataWarnings?.length ? (
+                <Text style={styles.flightDeckPanelText}>Nav note {routeExecutionSummary.navDataWarnings[0]}</Text>
+              ) : null}
               {receiverHealth?.warnings?.length ? (
                 <Text style={styles.flightDeckPanelText}>Receiver note {receiverHealth.warnings[0]}</Text>
               ) : null}
@@ -1479,7 +1927,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
 
           {flightDeckPanel === 'surface' && (
             <>
-              <FlightDeckSurfaceSchematic preview={flightDeckSurfacePreview} styles={styles} />
+              <FlightDeckSurfaceMap preview={flightDeckSurfacePreview} styles={styles} />
               <View style={styles.flightDeckPanel}>
                 <Text style={styles.flightDeckPanelTitle}>Runway Ops</Text>
                 {flightDeckRunwayOpsSummary ? (
@@ -1543,6 +1991,247 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                   {routeExecutionSummary?.nextExecutionTransition?.label ? ` - Next ${routeExecutionSummary.nextExecutionTransition.label}` : ''}
                 </Text>
               ) : null}
+              {routeExecutionSummary?.activeProcedureContext?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Navigation context {routeExecutionSummary.activeProcedureContext.label}
+                  {routeExecutionSummary?.nextProcedureContext?.label ? ` - Next ${routeExecutionSummary.nextProcedureContext.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureHandoff?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Handoff model {routeExecutionSummary.activeProcedureHandoff.label}
+                  {routeExecutionSummary?.nextProcedureHandoff?.label ? ` - Next ${routeExecutionSummary.nextProcedureHandoff.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureEntryRole?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Procedure role {routeExecutionSummary.activeProcedureEntryRole.label}
+                  {routeExecutionSummary?.activeProcedureEntryRole?.cue ? ` - ${routeExecutionSummary.activeProcedureEntryRole.cue}` : ''}
+                  {routeExecutionSummary?.nextProcedureEntryRole?.label ? ` - Next ${routeExecutionSummary.nextProcedureEntryRole.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureEntryDescriptor?.positionLabel ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Procedure entry {routeExecutionSummary.activeProcedureEntryDescriptor.positionLabel}
+                  {routeExecutionSummary?.activeProcedureEntryDescriptor?.cueProfile?.label
+                    ? ` - ${routeExecutionSummary.activeProcedureEntryDescriptor.cueProfile.label}`
+                    : ''}
+                  {routeExecutionSummary?.nextProcedureEntryDescriptor?.positionLabel
+                    ? ` - Next ${routeExecutionSummary.nextProcedureEntryDescriptor.positionLabel}`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureEntryTransitionBehavior?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Entry transition {routeExecutionSummary.activeProcedureEntryTransitionBehavior.label}
+                  {routeExecutionSummary?.activeProcedureEntryTransitionBehavior?.sequencingCue
+                    ? ` - ${routeExecutionSummary.activeProcedureEntryTransitionBehavior.sequencingCue}`
+                    : ''}
+                  {routeExecutionSummary?.nextProcedureEntryTransitionBehavior?.label
+                    ? ` - Next ${routeExecutionSummary.nextProcedureEntryTransitionBehavior.label}`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureTransitionTable?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Transition table {routeExecutionSummary.activeProcedureTransitionTable.label}
+                  {routeExecutionSummary?.activeProcedureTransitionTable?.handoffPathLabel
+                    ? ` - ${routeExecutionSummary.activeProcedureTransitionTable.handoffPathLabel}`
+                    : ''}
+                  {routeExecutionSummary?.nextProcedureTransitionTable?.label
+                    ? ` - Next ${routeExecutionSummary.nextProcedureTransitionTable.label}`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureSegmentTemplate?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Segment template {routeExecutionSummary.activeProcedureSegmentTemplate.label}
+                  {routeExecutionSummary?.activeProcedureSegmentTemplate?.phaseLabel
+                    ? ` - ${routeExecutionSummary.activeProcedureSegmentTemplate.phaseLabel}`
+                    : ''}
+                  {routeExecutionSummary?.activeProcedureSegmentTemplate?.segmentCue
+                    ? ` - ${routeExecutionSummary.activeProcedureSegmentTemplate.segmentCue}`
+                    : ''}
+                  {routeExecutionSummary?.nextProcedureSegmentTemplate?.label
+                    ? ` - Next ${routeExecutionSummary.nextProcedureSegmentTemplate.label}`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureSegmentClass?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Segment class {routeExecutionSummary.activeProcedureSegmentClass.label}
+                  {routeExecutionSummary?.activeProcedureSegmentClass?.lateralMode
+                    ? ` - ${routeExecutionSummary.activeProcedureSegmentClass.lateralMode}`
+                    : ''}
+                  {typeof routeExecutionSummary?.activeProcedureSegmentClass?.terminalArea === 'boolean'
+                    ? ` - ${routeExecutionSummary.activeProcedureSegmentClass.terminalArea ? 'terminal' : 'enroute'}`
+                    : ''}
+                  {typeof routeExecutionSummary?.activeProcedureSegmentClass?.procedureReady === 'boolean'
+                    ? ` - ${routeExecutionSummary.activeProcedureSegmentClass.procedureReady ? 'procedure-ready' : 'route-only'}`
+                    : ''}
+                  {routeExecutionSummary?.nextProcedureSegmentClass?.label
+                    ? ` - Next ${routeExecutionSummary.nextProcedureSegmentClass.label}`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureLegAdapter?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Leg adapter {routeExecutionSummary.activeProcedureLegAdapter.label}
+                  {routeExecutionSummary?.activeProcedureLegAdapter?.kind
+                    ? ` - ${routeExecutionSummary.activeProcedureLegAdapter.kind}`
+                    : ''}
+                  {typeof routeExecutionSummary?.activeProcedureLegAdapter?.navDataReady === 'boolean'
+                    ? ` - ${routeExecutionSummary.activeProcedureLegAdapter.navDataReady ? 'nav-data ready' : 'synthetic'}`
+                    : ''}
+                  {routeExecutionSummary?.activeProcedureLegAdapter?.adapterCue
+                    ? ` - ${routeExecutionSummary.activeProcedureLegAdapter.adapterCue}`
+                    : ''}
+                  {routeExecutionSummary?.nextProcedureLegAdapter?.label
+                    ? ` - Next ${routeExecutionSummary.nextProcedureLegAdapter.label}`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureLegFamily?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Leg family {routeExecutionSummary.activeProcedureLegFamily.label}
+                  {routeExecutionSummary?.activeProcedureLegFamily?.kind
+                    ? ` - ${routeExecutionSummary.activeProcedureLegFamily.kind}`
+                    : ''}
+                  {typeof routeExecutionSummary?.activeProcedureLegFamily?.parserReady === 'boolean'
+                    ? ` - ${routeExecutionSummary.activeProcedureLegFamily.parserReady ? 'parser-ready' : 'synthetic-only'}`
+                    : ''}
+                  {routeExecutionSummary?.activeProcedureLegFamily?.familyCue
+                    ? ` - ${routeExecutionSummary.activeProcedureLegFamily.familyCue}`
+                    : ''}
+                  {routeExecutionSummary?.nextProcedureLegFamily?.label
+                    ? ` - Next ${routeExecutionSummary.nextProcedureLegFamily.label}`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureLegParserTarget?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Parser target {routeExecutionSummary.activeProcedureLegParserTarget.label}
+                  {routeExecutionSummary?.activeProcedureLegParserTarget?.kind
+                    ? ` - ${routeExecutionSummary.activeProcedureLegParserTarget.kind}`
+                    : ''}
+                  {routeExecutionSummary?.activeProcedureLegParserTarget?.source
+                    ? ` - ${routeExecutionSummary.activeProcedureLegParserTarget.source}`
+                    : ''}
+                  {routeExecutionSummary?.activeProcedureLegParserTarget?.requiredFields?.length
+                    ? ` - fields ${routeExecutionSummary.activeProcedureLegParserTarget.requiredFields.join(', ')}`
+                    : ''}
+                  {routeExecutionSummary?.activeProcedureLegParserTarget?.parserCue
+                    ? ` - ${routeExecutionSummary.activeProcedureLegParserTarget.parserCue}`
+                    : ''}
+                  {routeExecutionSummary?.nextProcedureLegParserTarget?.label
+                    ? ` - Next ${routeExecutionSummary.nextProcedureLegParserTarget.label}`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureLegIngestionContract?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Ingestion contract {routeExecutionSummary.activeProcedureLegIngestionContract.label}
+                  {routeExecutionSummary?.activeProcedureLegIngestionContract?.payloadShape
+                    ? ` - ${routeExecutionSummary.activeProcedureLegIngestionContract.payloadShape}`
+                    : ''}
+                  {routeExecutionSummary?.activeProcedureLegIngestionContract?.source
+                    ? ` - ${routeExecutionSummary.activeProcedureLegIngestionContract.source}`
+                    : ''}
+                  {routeExecutionSummary?.activeProcedureLegIngestionContract?.requiredFields?.length
+                    ? ` - req ${routeExecutionSummary.activeProcedureLegIngestionContract.requiredFields.join(', ')}`
+                    : ''}
+                  {routeExecutionSummary?.activeProcedureLegIngestionContract?.optionalFields?.length
+                    ? ` - opt ${routeExecutionSummary.activeProcedureLegIngestionContract.optionalFields.join(', ')}`
+                    : ''}
+                  {routeExecutionSummary?.nextProcedureLegIngestionContract?.label
+                    ? ` - Next ${routeExecutionSummary.nextProcedureLegIngestionContract.label}`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeParsedLegPayload?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Parsed payload {routeExecutionSummary.activeParsedLegPayload.label}
+                  {routeExecutionSummary.activeParsedLegPayload.kind === 'runway-release-payload'
+                    ? ` - ${routeExecutionSummary.activeParsedLegPayload.airportIdent} ${routeExecutionSummary.activeParsedLegPayload.runwayIdent} @ ${typeof routeExecutionSummary.activeParsedLegPayload.releaseHeading === 'number' ? Math.round(routeExecutionSummary.activeParsedLegPayload.releaseHeading) : '--'}°`
+                    : routeExecutionSummary.activeParsedLegPayload.kind === 'course-to-fix-payload'
+                      ? ` - ${routeExecutionSummary.activeParsedLegPayload.fromFix} -> ${routeExecutionSummary.activeParsedLegPayload.toFix} @ ${typeof routeExecutionSummary.activeParsedLegPayload.courseDeg === 'number' ? Math.round(routeExecutionSummary.activeParsedLegPayload.courseDeg) : '--'}°`
+                      : routeExecutionSummary.activeParsedLegPayload.kind === 'terminal-feed-payload'
+                        ? ` - ${routeExecutionSummary.activeParsedLegPayload.transitionFix} -> ${routeExecutionSummary.activeParsedLegPayload.handoffFix} for ${routeExecutionSummary.activeParsedLegPayload.arrivalIdent}`
+                        : routeExecutionSummary.activeParsedLegPayload.kind === 'final-capture-payload'
+                          ? ` - ${routeExecutionSummary.activeParsedLegPayload.runwayIdent} @ ${typeof routeExecutionSummary.activeParsedLegPayload.finalCourseDeg === 'number' ? Math.round(routeExecutionSummary.activeParsedLegPayload.finalCourseDeg) : '--'}°`
+                          : routeExecutionSummary.activeParsedLegPayload.kind === 'direct-resume-payload'
+                            ? ` - ${routeExecutionSummary.activeParsedLegPayload.originFix} -> ${routeExecutionSummary.activeParsedLegPayload.targetFix}`
+                            : ''}
+                  {routeExecutionSummary?.nextParsedLegPayload?.label
+                    ? ` - Next ${routeExecutionSummary.nextParsedLegPayload.label}`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureRoleCueProfile?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Role cues {routeExecutionSummary.activeProcedureRoleCueProfile.label}
+                  {routeExecutionSummary?.activeProcedureRoleCueProfile?.sequencingSummary
+                    ? ` - ${routeExecutionSummary.activeProcedureRoleCueProfile.sequencingSummary}`
+                    : ''}
+                  {routeExecutionSummary?.nextProcedureRoleCueProfile?.label ? ` - Next ${routeExecutionSummary.nextProcedureRoleCueProfile.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureRoleExecutionPolicy?.sequencingModel ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Role sequencing {routeExecutionSummary.activeProcedureRoleExecutionPolicy.sequencingModel}
+                  {routeExecutionSummary?.activeProcedureRoleExecutionPolicy?.manualReason
+                    ? ` - ${routeExecutionSummary.activeProcedureRoleExecutionPolicy.manualReason}`
+                    : ''}
+                  {routeExecutionSummary?.nextProcedureRoleExecutionPolicy?.sequencingModel
+                    ? ` - Next ${routeExecutionSummary.nextProcedureRoleExecutionPolicy.sequencingModel}`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureChain?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Procedure chain {routeExecutionSummary.activeProcedureChain.label}
+                  {routeExecutionSummary?.nextProcedureChain?.label ? ` - Next ${routeExecutionSummary.nextProcedureChain.label}` : ''}
+                  {typeof routeExecutionSummary?.activeProcedureChain?.entryCount === 'number'
+                    ? ` - ${routeExecutionSummary.activeProcedureChain.entryCount} leg block`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureChainBehavior?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Chain behavior {routeExecutionSummary.activeProcedureChainBehavior.label}
+                  {routeExecutionSummary?.nextProcedureChainBehavior?.label ? ` - Next ${routeExecutionSummary.nextProcedureChainBehavior.label}` : ''}
+                  {routeExecutionSummary?.activeProcedureChainBehavior?.sequencingModel
+                    ? ` - ${routeExecutionSummary.activeProcedureChainBehavior.sequencingModel} sequencing`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureTemplate?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Procedure template {routeExecutionSummary.activeProcedureTemplate.label}
+                  {routeExecutionSummary?.nextProcedureTemplate?.label ? ` - Next ${routeExecutionSummary.nextProcedureTemplate.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureExecutionProfile?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Execution profile {routeExecutionSummary.activeProcedureExecutionProfile.label}
+                  {routeExecutionSummary?.nextProcedureExecutionProfile?.label ? ` - Next ${routeExecutionSummary.nextProcedureExecutionProfile.label}` : ''}
+                  {typeof routeExecutionSummary?.activeProcedureExecutionProfile?.armAtProgressPct === 'number'
+                    ? ` - arm ${routeExecutionSummary.activeProcedureExecutionProfile.armAtProgressPct}%`
+                    : ''}
+                  {typeof routeExecutionSummary?.activeProcedureExecutionProfile?.openAtProgressPct === 'number'
+                    ? ` / open ${routeExecutionSummary.activeProcedureExecutionProfile.openAtProgressPct}%`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeProcedureCueStack?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Cue stack {routeExecutionSummary.activeProcedureCueStack.label}
+                  {routeExecutionSummary?.nextProcedureCueStack?.label ? ` - Next ${routeExecutionSummary.nextProcedureCueStack.label}` : ''}
+                  {routeExecutionSummary?.activeProcedureCueStack?.sequencingSummary
+                    ? ` - ${routeExecutionSummary.activeProcedureCueStack.sequencingSummary}`
+                    : ''}
+                </Text>
+              ) : null}
               {nextExecutionPlanEntry ? (
                 <Text style={styles.flightDeckPanelText}>
                   Execution plan next {nextExecutionPlanEntry.legLabel} - {nextExecutionPlanEntry.actionCue}.
@@ -1557,8 +2246,15 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               {routeExecutionSummary?.transitionCall ? (
                 <Text style={styles.flightDeckPanelText}>Transition state {routeExecutionSummary.transitionCall}.</Text>
               ) : null}
+              {routeExecutionSummary?.nextActionCall ? (
+                <Text style={styles.flightDeckPanelText}>Next action {routeExecutionSummary.nextActionCall}.</Text>
+              ) : null}
               {routeExecutionSummary?.nextLegArmed ? (
-                <Text style={styles.flightDeckPanelText}>Next leg is armed and will capture automatically when sequencing criteria are met.</Text>
+                <Text style={styles.flightDeckPanelText}>
+                  {routeExecutionSummary?.manualAdvanceRequired
+                    ? routeExecutionSummary?.activeProcedureCueStack?.nextLegManagedLabel || 'Next leg is staged inside a managed procedure block. Use manual advance when ready.'
+                    : routeExecutionSummary?.activeProcedureCueStack?.nextLegAutoLabel || 'Next leg is armed and will capture automatically when sequencing criteria are met.'}
+                </Text>
               ) : null}
               {routeExecutionSummary?.turnAnticipationState && routeExecutionSummary.turnAnticipationState !== 'idle' ? (
                 <Text style={styles.flightDeckPanelText}>
@@ -1603,7 +2299,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                       !routeExecutionSummary?.canSequenceNext && styles.flightDeckChipTextDisabled,
                     ]}
                   >
-                    Next leg
+                    {routeExecutionSummary?.nextLegControlLabel || 'Next leg'}
                   </Text>
                 </TouchableOpacity>
               </View>

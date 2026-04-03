@@ -14,8 +14,9 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import MapView, { Callout, Marker, Polyline, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
+import { DeviceMotion } from 'expo-sensors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createGdl90Listener, OwnshipReport, ReceiverHealth, TrafficTarget } from '../utils/gdl90';
+import { AttitudeReport, createGdl90Listener, OwnshipReport, ReceiverHealth, TrafficTarget } from '../utils/gdl90';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import {
@@ -33,11 +34,22 @@ import {
   bearingBetweenPoints,
   buildMobileRouteLegs,
   buildMobileRouteExecutionPlan,
+  buildMobileRouteProcedureChains,
   clamp,
   computeMobileRouteProgress,
   getMobileRouteLegBehavior,
+  getMobileRouteProcedureChainBehavior,
+  getMobileRouteProcedureCueStack,
+  getMobileRouteProcedureContext,
+  getMobileRouteProcedureEntryDescriptor,
+  getMobileRouteProcedureEntryRole,
+  getMobileRouteProcedureExecutionProfile,
+  getMobileRouteProcedureEntryTransitionBehavior,
+  getMobileRouteProcedureRoleExecutionPolicy,
+  getMobileRouteProcedureRoleCueProfile,
+  getMobileRouteProcedureTransitionTable,
+  getMobileRouteProcedureTemplate,
   getMobileRouteExecutionSegment,
-  getMobileRouteTransitionRule,
   getDistanceNmFromLatLon,
   greatCircleNm,
   interpolateRouteOwnship,
@@ -45,7 +57,8 @@ import {
   offsetLatLonByNm,
   rankTrafficTargets,
 } from '../lib/flightMath';
-import type { MobileRouteLeg, MobileRouteProgressSummary } from '../lib/flightMath';
+import type { MobileRouteLeg, MobileRouteNavDataLegPayload, MobileRouteProgressSummary } from '../lib/flightMath';
+import { analyzeFiledRoute, isFiledRouteAnchorKind } from '@shared/flight-plan-route';
 import FlightDeckView from '../components/flight-deck/FlightDeckView';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
@@ -168,6 +181,18 @@ type NearbyDiversionResponse = {
   airports: NearbyDiversionAirport[];
 };
 
+type RouteSearchResponse = {
+  provider?: string | null;
+  environment?: string | null;
+  route?: string | null;
+  atcRecentIFRRoutes?: string[];
+  codedDepartureRoutes?: string[];
+  faaPreferredRoutes?: string[];
+  warnings?: string[];
+  available?: boolean;
+  message?: string | null;
+};
+
 type RunwayBriefingResponse = {
   icao?: string | null;
   runwayInUse?: string | null;
@@ -204,6 +229,38 @@ type FlightDeckSurfacePoint = {
   y: number;
 };
 
+type SurfaceGeometryFeature = {
+  type: 'Feature';
+  geometry:
+    | { type: 'LineString'; coordinates: [number, number][] }
+    | { type: 'Polygon'; coordinates: [number, number][][] };
+  properties: {
+    aeroway: string;
+    name: string | null;
+    ref: string | null;
+    surface: string | null;
+  };
+};
+
+type AirportSurfaceGeometryResponse = {
+  icao: string;
+  source: string;
+  fetchedAt: string;
+  bounds: {
+    minLat: number;
+    maxLat: number;
+    minLon: number;
+    maxLon: number;
+  };
+  features: SurfaceGeometryFeature[];
+};
+
+type FlightDeckSurfaceGeoPoint = {
+  lat: number;
+  lon: number;
+  headingDeg?: number;
+};
+
 type FlightDeckSurfacePreview = {
   airportIcao: string;
   runwayId: string;
@@ -223,6 +280,22 @@ type FlightDeckSurfacePreview = {
   ownship: { x: number; y: number; headingDeg: number };
   route: FlightDeckSurfacePoint[];
   secondaryRoute: FlightDeckSurfacePoint[];
+  geoOwnship: FlightDeckSurfaceGeoPoint;
+  geoRoute: FlightDeckSurfaceGeoPoint[];
+  geoCompletedRoute: FlightDeckSurfaceGeoPoint[];
+  geoUpcomingRoute: FlightDeckSurfaceGeoPoint[];
+  geoRunwayCenterline: FlightDeckSurfaceGeoPoint[];
+  geoRunwayBar: FlightDeckSurfaceGeoPoint[];
+  surfaceFeatures: SurfaceGeometryFeature[];
+  activeTaxiway: string;
+  upcomingTaxiways: string[];
+  progressCall: string;
+  surfaceRegion: {
+    latitude: number;
+    longitude: number;
+    latitudeDelta: number;
+    longitudeDelta: number;
+  };
 };
 
 type FlightDeckRunwayOpsSummary = {
@@ -300,6 +373,24 @@ type OwnshipData = {
   source?: 'simulation' | 'receiver' | 'device';
 };
 
+type ReceiverAttitudeData = {
+  pitchDeg?: number;
+  rollDeg?: number;
+  headingDeg?: number;
+  headingReference?: 'true' | 'magnetic';
+  indicatedAirspeedKts?: number;
+  trueAirspeedKts?: number;
+  updatedAt?: number;
+  source?: 'receiver';
+};
+
+type DeviceAttitudeData = {
+  pitchDeg?: number;
+  rollDeg?: number;
+  updatedAt?: number;
+  source?: 'device-motion';
+};
+
 type WindsAloftPoint = {
   stationId: string;
   icao?: string;
@@ -338,6 +429,8 @@ type RouteExecutionOverride = {
 
 const RECEIVER_OWNSHIP_STALE_MS = 15000;
 const DEVICE_OWNSHIP_STALE_MS = 15000;
+const RECEIVER_ATTITUDE_STALE_MS = 5000;
+const DEVICE_ATTITUDE_STALE_MS = 2500;
 
 function formatOwnshipAge(ms: number | null | undefined) {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '--';
@@ -418,6 +511,337 @@ function pickAirportFrequency(
       return loweredKeywords.some((keyword) => type.includes(keyword) || description.includes(keyword));
     }) || null
   );
+}
+
+function localSurfacePointToGeo({
+  point,
+  airport,
+  runwayHeadingDeg,
+  nmPerUnit,
+}: {
+  point: { x: number; y: number };
+  airport: { latitude: number; longitude: number };
+  runwayHeadingDeg: number;
+  nmPerUnit: number;
+}) {
+  const eastUnits = point.x - 70;
+  const northUnits = 50 - point.y;
+  const distanceNm = Math.hypot(eastUnits, northUnits) * nmPerUnit;
+  if (!Number.isFinite(distanceNm) || distanceNm <= 0.0001) {
+    return { lat: airport.latitude, lon: airport.longitude };
+  }
+
+  const localBearingDeg = ((Math.atan2(eastUnits, northUnits) * 180) / Math.PI + 360) % 360;
+  return offsetLatLonByNm(
+    airport.latitude,
+    airport.longitude,
+    Math.cos(((runwayHeadingDeg + localBearingDeg) * Math.PI) / 180) * distanceNm,
+    Math.sin(((runwayHeadingDeg + localBearingDeg) * Math.PI) / 180) * distanceNm,
+  );
+}
+
+function flattenSurfaceLineCoordinates(features: SurfaceGeometryFeature[]) {
+  return features.flatMap((feature) => {
+    if (feature.geometry.type !== 'LineString') return [] as Array<{ lat: number; lon: number }>;
+    if (!['taxiway', 'taxilane', 'runway', 'holding_position'].includes(feature.properties.aeroway)) {
+      return [] as Array<{ lat: number; lon: number }>;
+    }
+    return feature.geometry.coordinates.map(([lon, lat]) => ({ lat, lon }));
+  });
+}
+
+function snapSurfacePoints(
+  points: Array<{ lat: number; lon: number }>,
+  features: SurfaceGeometryFeature[],
+  thresholdNm = 0.09,
+) {
+  const candidates = flattenSurfaceLineCoordinates(features);
+  if (!candidates.length) return points;
+
+  return points.map((point) => {
+    let nearest = point;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    candidates.forEach((candidate) => {
+      const distance = greatCircleNm(
+        { latitude: point.lat, longitude: point.lon },
+        { latitude: candidate.lat, longitude: candidate.lon },
+      );
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = candidate;
+      }
+    });
+    return nearestDistance <= thresholdNm ? nearest : point;
+  });
+}
+
+function getSurfaceLineFeatures(features: SurfaceGeometryFeature[]) {
+  return features.filter(
+    (feature) =>
+      feature.geometry.type === 'LineString' &&
+      ['taxiway', 'taxilane', 'runway', 'holding_position'].includes(feature.properties.aeroway),
+  );
+}
+
+function getSurfaceFeatureLabel(feature: SurfaceGeometryFeature) {
+  const ref = feature.properties.ref?.trim();
+  const name = feature.properties.name?.trim();
+  if (ref) return ref;
+  if (name) return name;
+  if (feature.properties.aeroway === 'holding_position') return 'Hold short';
+  return feature.properties.aeroway.replace(/_/g, ' ');
+}
+
+function deriveGeoProgressAlongRoute(
+  route: Array<{ lat: number; lon: number }>,
+  progress: number,
+) {
+  if (route.length < 2) {
+    const point = route[0] || { lat: 0, lon: 0 };
+    return {
+      route,
+      completedRoute: route,
+      upcomingRoute: route,
+      ownship: { ...point, headingDeg: 0 },
+    };
+  }
+
+  const legDistances = route.slice(1).map((point, index) =>
+    greatCircleNm(
+      { latitude: route[index].lat, longitude: route[index].lon },
+      { latitude: point.lat, longitude: point.lon },
+    ),
+  );
+  const totalDistance = legDistances.reduce((sum, value) => sum + value, 0);
+  const targetDistance = totalDistance * clamp(progress, 0, 1);
+  let traversed = 0;
+  let activeSegmentIndex = 0;
+  let ownship = {
+    lat: route[0].lat,
+    lon: route[0].lon,
+    headingDeg: bearingBetweenPoints(
+      { latitude: route[0].lat, longitude: route[0].lon },
+      { latitude: route[1].lat, longitude: route[1].lon },
+    ),
+  };
+
+  for (let i = 0; i < legDistances.length; i += 1) {
+    const legDistance = legDistances[i];
+    const nextTraversed = traversed + legDistance;
+    if (targetDistance <= nextTraversed || i === legDistances.length - 1) {
+      const start = route[i];
+      const end = route[i + 1];
+      const localT = legDistance > 0 ? clamp((targetDistance - traversed) / legDistance, 0, 1) : 0;
+      ownship = {
+        lat: start.lat + (end.lat - start.lat) * localT,
+        lon: start.lon + (end.lon - start.lon) * localT,
+        headingDeg: bearingBetweenPoints(
+          { latitude: start.lat, longitude: start.lon },
+          { latitude: end.lat, longitude: end.lon },
+        ),
+      };
+      activeSegmentIndex = i;
+      break;
+    }
+    traversed = nextTraversed;
+  }
+
+  return {
+    route,
+    completedRoute: [...route.slice(0, activeSegmentIndex + 1), { lat: ownship.lat, lon: ownship.lon }],
+    upcomingRoute: [{ lat: ownship.lat, lon: ownship.lon }, ...route.slice(activeSegmentIndex + 1)],
+    ownship,
+  };
+}
+
+function deriveTaxiRouteFromSurfaceGeometry(
+  baseRoute: Array<{ lat: number; lon: number }>,
+  features: SurfaceGeometryFeature[],
+  taxiProgress: number,
+) {
+  const lineFeatures = getSurfaceLineFeatures(features);
+  if (baseRoute.length < 2 || !lineFeatures.length) return null;
+
+  const nodeIndexByKey = new Map<string, number>();
+  const nodes: Array<{ lat: number; lon: number }> = [];
+  const adjacency = new Map<number, Array<{ to: number; cost: number }>>();
+
+  const ensureNode = (lat: number, lon: number) => {
+    const key = `${lat.toFixed(6)}:${lon.toFixed(6)}`;
+    const existing = nodeIndexByKey.get(key);
+    if (existing != null) return existing;
+    const index = nodes.length;
+    nodes.push({ lat, lon });
+    nodeIndexByKey.set(key, index);
+    adjacency.set(index, []);
+    return index;
+  };
+
+  lineFeatures.forEach((feature) => {
+    if (feature.geometry.type !== 'LineString') return;
+    for (let i = 0; i < feature.geometry.coordinates.length - 1; i += 1) {
+      const [startLon, startLat] = feature.geometry.coordinates[i];
+      const [endLon, endLat] = feature.geometry.coordinates[i + 1];
+      const startIndex = ensureNode(startLat, startLon);
+      const endIndex = ensureNode(endLat, endLon);
+      const cost = greatCircleNm(
+        { latitude: startLat, longitude: startLon },
+        { latitude: endLat, longitude: endLon },
+      );
+      adjacency.get(startIndex)?.push({ to: endIndex, cost });
+      adjacency.get(endIndex)?.push({ to: startIndex, cost });
+    }
+  });
+
+  if (nodes.length < 2) return null;
+
+  const nearestNodeIndex = (point: { lat: number; lon: number }) => {
+    let winner = -1;
+    let winnerDistance = Number.POSITIVE_INFINITY;
+    nodes.forEach((node, index) => {
+      const distance = greatCircleNm(
+        { latitude: point.lat, longitude: point.lon },
+        { latitude: node.lat, longitude: node.lon },
+      );
+      if (distance < winnerDistance) {
+        winnerDistance = distance;
+        winner = index;
+      }
+    });
+    return { index: winner, distanceNm: winnerDistance };
+  };
+
+  const startMatch = nearestNodeIndex(baseRoute[0]);
+  const endMatch = nearestNodeIndex(baseRoute[baseRoute.length - 1]);
+  if (startMatch.index < 0 || endMatch.index < 0 || startMatch.distanceNm > 0.35 || endMatch.distanceNm > 0.35) {
+    return null;
+  }
+
+  const distances = new Array<number>(nodes.length).fill(Number.POSITIVE_INFINITY);
+  const previous = new Array<number>(nodes.length).fill(-1);
+  const visited = new Set<number>();
+  distances[startMatch.index] = 0;
+
+  while (visited.size < nodes.length) {
+    let current = -1;
+    let currentDistance = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < distances.length; i += 1) {
+      if (!visited.has(i) && distances[i] < currentDistance) {
+        current = i;
+        currentDistance = distances[i];
+      }
+    }
+    if (current === -1 || current === endMatch.index) break;
+    visited.add(current);
+    adjacency.get(current)?.forEach(({ to, cost }) => {
+      const nextDistance = currentDistance + cost;
+      if (nextDistance < distances[to]) {
+        distances[to] = nextDistance;
+        previous[to] = current;
+      }
+    });
+  }
+
+  if (!Number.isFinite(distances[endMatch.index])) return null;
+
+  const nodePath: number[] = [];
+  let cursor = endMatch.index;
+  while (cursor !== -1) {
+    nodePath.push(cursor);
+    cursor = previous[cursor];
+  }
+  nodePath.reverse();
+  const route = nodePath.map((index) => nodes[index]);
+  if (route.length < 2) return null;
+
+  const progressState = deriveGeoProgressAlongRoute(route, taxiProgress);
+
+  const pointDistanceToFeature = (point: { lat: number; lon: number }, feature: SurfaceGeometryFeature) => {
+    if (feature.geometry.type !== 'LineString') return Number.POSITIVE_INFINITY;
+    return feature.geometry.coordinates.reduce((best, [lon, lat]) => {
+      const distance = greatCircleNm(
+        { latitude: point.lat, longitude: point.lon },
+        { latitude: lat, longitude: lon },
+      );
+      return Math.min(best, distance);
+    }, Number.POSITIVE_INFINITY);
+  };
+
+  const nearestFeatureLabel = (point: { lat: number; lon: number }) => {
+    let match: SurfaceGeometryFeature | null = null;
+    let matchDistance = Number.POSITIVE_INFINITY;
+    lineFeatures.forEach((feature) => {
+      const distance = pointDistanceToFeature(point, feature);
+      if (distance < matchDistance) {
+        match = feature;
+        matchDistance = distance;
+      }
+    });
+    return match ? getSurfaceFeatureLabel(match) : null;
+  };
+
+  return {
+    ...progressState,
+    activeTaxiway: nearestFeatureLabel(progressState.ownship),
+    upcomingTaxiways: progressState.upcomingRoute
+      .slice(1, 5)
+      .map((point) => nearestFeatureLabel(point))
+      .filter((label, index, array): label is string => Boolean(label) && array.indexOf(label) === index)
+      .slice(0, 3),
+  };
+}
+
+function buildSurfaceRegion({
+  ownship,
+  route,
+  runwayCenterline,
+  bounds,
+}: {
+  ownship: { lat: number; lon: number };
+  route: Array<{ lat: number; lon: number }>;
+  runwayCenterline: Array<{ lat: number; lon: number }>;
+  bounds?: AirportSurfaceGeometryResponse['bounds'] | null;
+}) {
+  const points = [
+    ownship,
+    ...route,
+    ...runwayCenterline,
+    ...(bounds
+      ? [
+          { lat: bounds.minLat, lon: bounds.minLon },
+          { lat: bounds.maxLat, lon: bounds.maxLon },
+        ]
+      : []),
+  ].filter(
+    (point) =>
+      typeof point?.lat === 'number' &&
+      Number.isFinite(point.lat) &&
+      typeof point?.lon === 'number' &&
+      Number.isFinite(point.lon),
+  );
+
+  if (!points.length) {
+    return {
+      latitude: 39.5,
+      longitude: -98.35,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    };
+  }
+
+  const latitudes = points.map((point) => point.lat);
+  const longitudes = points.map((point) => point.lon);
+  const minLat = Math.min(...latitudes);
+  const maxLat = Math.max(...latitudes);
+  const minLon = Math.min(...longitudes);
+  const maxLon = Math.max(...longitudes);
+
+  return {
+    latitude: (minLat + maxLat) / 2,
+    longitude: (minLon + maxLon) / 2,
+    latitudeDelta: Math.max((maxLat - minLat) * 1.6, 0.006),
+    longitudeDelta: Math.max((maxLon - minLon) * 1.8, 0.006),
+  };
 }
 
 function formatFrequency(frequencyMhz: number | null | undefined) {
@@ -677,6 +1101,61 @@ function isWithinHawaii(lat: number, lon: number) {
   return lat >= 18 && lat <= 23 && lon >= -161 && lon <= -154;
 }
 
+function buildStructuredCourseFixNavDataLegs(
+  legs: MobileRouteLeg[],
+  routeAnchorTokens: string[],
+  plannedAltitudeFt: number | undefined,
+): Record<number, MobileRouteNavDataLegPayload | undefined> {
+  if (routeAnchorTokens.length !== legs.length + 1) {
+    return {};
+  }
+  return legs.reduce<Record<number, MobileRouteNavDataLegPayload | undefined>>((acc, leg, index) => {
+    if (leg.legType === 'direct-to') return acc;
+    const fromFix = routeAnchorTokens[index];
+    const toFix = routeAnchorTokens[index + 1];
+    acc[leg.index] = {
+      kind: 'course-fix-nav-data',
+      sourceKind: 'route-structure',
+      label: `${fromFix} to ${toFix}`,
+      fromFix,
+      toFix,
+      courseDeg: leg.courseDeg,
+      distanceNm: leg.nm,
+      altitudeConstraintFt: plannedAltitudeFt ?? null,
+      sourceCycle: 'route-structure',
+    };
+    return acc;
+  }, {});
+}
+
+function buildProviderCourseFixNavDataLegs(
+  legs: MobileRouteLeg[],
+  routeAnchorTokens: string[],
+  plannedAltitudeFt: number | undefined,
+  sourceCycle: string | null,
+): Record<number, MobileRouteNavDataLegPayload | undefined> {
+  if (routeAnchorTokens.length !== legs.length + 1) {
+    return {};
+  }
+  return legs.reduce<Record<number, MobileRouteNavDataLegPayload | undefined>>((acc, leg, index) => {
+    if (leg.legType === 'direct-to') return acc;
+    const fromFix = routeAnchorTokens[index];
+    const toFix = routeAnchorTokens[index + 1];
+    acc[leg.index] = {
+      kind: 'course-fix-nav-data',
+      sourceKind: 'nav-data',
+      label: `${fromFix} to ${toFix}`,
+      fromFix,
+      toFix,
+      courseDeg: leg.courseDeg,
+      distanceNm: leg.nm,
+      altitudeConstraintFt: plannedAltitudeFt ?? null,
+      sourceCycle,
+    };
+    return acc;
+  }, {});
+}
+
 export default function FlightPlannerScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -716,6 +1195,8 @@ export default function FlightPlannerScreen() {
   const [trafficPort, setTrafficPort] = useState('4000');
   const [trafficTargets, setTrafficTargets] = useState<TrafficTarget[]>([]);
   const [receiverOwnship, setReceiverOwnship] = useState<OwnshipData | null>(null);
+  const [receiverAttitude, setReceiverAttitude] = useState<ReceiverAttitudeData | null>(null);
+  const [deviceAttitude, setDeviceAttitude] = useState<DeviceAttitudeData | null>(null);
   const [receiverHealth, setReceiverHealth] = useState<ReceiverHealth | null>(null);
   const [trafficFilter, setTrafficFilter] = useState<'all' | 'conflict' | 'above' | 'below'>('all');
   const [trafficStatus, setTrafficStatus] = useState<'idle' | 'listening' | 'error'>('idle');
@@ -784,6 +1265,7 @@ export default function FlightPlannerScreen() {
   const [suggestedStops, setSuggestedStops] = useState<string[]>([]);
   const [suggestionMeta, setSuggestionMeta] = useState<{ routeDistanceNm: number; maxLegNm: number } | null>(null);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [providerRouteSearch, setProviderRouteSearch] = useState<RouteSearchResponse | null>(null);
   const [diversionCandidates, setDiversionCandidates] = useState<NearbyDiversionAirport[]>([]);
   const [diversionLoading, setDiversionLoading] = useState(false);
   const [diversionError, setDiversionError] = useState<string | null>(null);
@@ -794,6 +1276,10 @@ export default function FlightPlannerScreen() {
   const [departureBriefingLoading, setDepartureBriefingLoading] = useState(false);
   const [destinationBriefing, setDestinationBriefing] = useState<RunwayBriefingResponse | null>(null);
   const [destinationBriefingLoading, setDestinationBriefingLoading] = useState(false);
+  const [departureSurfaceGeometry, setDepartureSurfaceGeometry] = useState<AirportSurfaceGeometryResponse | null>(null);
+  const [departureSurfaceGeometryLoading, setDepartureSurfaceGeometryLoading] = useState(false);
+  const [destinationSurfaceGeometry, setDestinationSurfaceGeometry] = useState<AirportSurfaceGeometryResponse | null>(null);
+  const [destinationSurfaceGeometryLoading, setDestinationSurfaceGeometryLoading] = useState(false);
   const [departureFrequencies, setDepartureFrequencies] = useState<AirportFrequencyResponse | null>(null);
   const [departureFrequenciesLoading, setDepartureFrequenciesLoading] = useState(false);
   const [destinationFrequencies, setDestinationFrequencies] = useState<AirportFrequencyResponse | null>(null);
@@ -804,6 +1290,8 @@ export default function FlightPlannerScreen() {
   const [obstacleScanLoading, setObstacleScanLoading] = useState(false);
   const [trafficTrendMap, setTrafficTrendMap] = useState<Record<string, TrafficTrend>>({});
   const trafficSnapshotRef = useRef<Record<string, { distanceNm: number; bearingDelta: number; at: number }>>({});
+  const plannedAltitudeFt = parseFloat(plannedAltitude);
+  const plannedAltitudeValue = Number.isFinite(plannedAltitudeFt) ? plannedAltitudeFt : undefined;
 
   const [checklist, setChecklist] = useState({
     weather: false,
@@ -833,12 +1321,22 @@ export default function FlightPlannerScreen() {
   );
   const receiverOwnshipAgeMs = receiverOwnship?.updatedAt ? ownshipClockMs - receiverOwnship.updatedAt : null;
   const receiverOwnshipFresh = receiverOwnshipAgeMs != null && receiverOwnshipAgeMs <= RECEIVER_OWNSHIP_STALE_MS;
+  const receiverAttitudeAgeMs = receiverAttitude?.updatedAt ? ownshipClockMs - receiverAttitude.updatedAt : null;
+  const receiverAttitudeFresh = receiverAttitudeAgeMs != null && receiverAttitudeAgeMs <= RECEIVER_ATTITUDE_STALE_MS;
+  const deviceAttitudeAgeMs = deviceAttitude?.updatedAt ? ownshipClockMs - deviceAttitude.updatedAt : null;
+  const deviceAttitudeFresh = deviceAttitudeAgeMs != null && deviceAttitudeAgeMs <= DEVICE_ATTITUDE_STALE_MS;
   const gpsOwnshipAgeMs = gpsData?.updatedAt ? ownshipClockMs - gpsData.updatedAt : null;
   const gpsOwnshipFresh = gpsOwnshipAgeMs != null && gpsOwnshipAgeMs <= DEVICE_OWNSHIP_STALE_MS;
   const activeOwnship = simulationEnabled && simulatedGpsData
     ? simulatedGpsData
     : receiverOwnshipFresh
-      ? receiverOwnship
+      ? {
+          ...receiverOwnship,
+          heading:
+            receiverAttitudeFresh && typeof receiverAttitude?.headingDeg === 'number'
+              ? receiverAttitude.headingDeg
+              : receiverOwnship?.heading,
+        }
       : gpsOwnshipFresh
         ? gpsData
         : null;
@@ -917,6 +1415,13 @@ export default function FlightPlannerScreen() {
         detail: 'Playback heading is driving lateral cues.',
       };
     }
+    if (receiverAttitudeFresh && typeof receiverAttitude?.headingDeg === 'number') {
+      return {
+        code: receiverAttitude.headingReference === 'magnetic' ? 'AHRS-M' : 'AHRS-T',
+        label: receiverAttitude.headingReference === 'magnetic' ? 'AHRS magnetic heading' : 'AHRS true heading',
+        detail: 'Receiver AHRS heading is driving track-up and vision cues.',
+      };
+    }
     if (receiverOwnshipFresh && typeof receiverOwnship?.heading === 'number') {
       return {
         code: 'RXR',
@@ -938,7 +1443,7 @@ export default function FlightPlannerScreen() {
       label: 'Heading unavailable',
       detail: 'No reliable heading source is currently active.',
     };
-  }, [gpsData?.heading, gpsData?.speedKts, gpsOwnshipFresh, receiverOwnship?.heading, receiverOwnshipFresh, simulatedGpsData, simulationEnabled]);
+  }, [gpsData?.heading, gpsData?.speedKts, gpsOwnshipFresh, receiverAttitude?.headingDeg, receiverAttitude?.headingReference, receiverAttitudeFresh, receiverOwnship?.heading, receiverOwnshipFresh, simulatedGpsData, simulationEnabled]);
   const attitudeSourceSummary = useMemo(() => {
     if (simulationEnabled && simulatedGpsData) {
       return {
@@ -948,13 +1453,37 @@ export default function FlightPlannerScreen() {
         pilotGrade: true,
       };
     }
+    if (receiverAttitudeFresh && (typeof receiverAttitude?.pitchDeg === 'number' || typeof receiverAttitude?.rollDeg === 'number')) {
+      return {
+        code: 'AHRS',
+        label: 'Receiver AHRS',
+        detail: `Receiver AHRS is driving synthetic vision attitude.${typeof receiverAttitude.pitchDeg === 'number' && typeof receiverAttitude.rollDeg === 'number' ? ` Pitch ${receiverAttitude.pitchDeg.toFixed(1)}°, roll ${receiverAttitude.rollDeg.toFixed(1)}°.` : ''}`,
+        pilotGrade: true,
+      };
+    }
+    if (deviceAttitudeFresh && (typeof deviceAttitude?.pitchDeg === 'number' || typeof deviceAttitude?.rollDeg === 'number')) {
+      return {
+        code: 'DMOT',
+        label: 'Device motion assist',
+        detail: `Device motion is assisting vision attitude.${typeof deviceAttitude.pitchDeg === 'number' && typeof deviceAttitude.rollDeg === 'number' ? ` Pitch ${deviceAttitude.pitchDeg.toFixed(1)}°, roll ${deviceAttitude.rollDeg.toFixed(1)}°.` : ''}`,
+        pilotGrade: false,
+      };
+    }
+    if (receiverOwnshipFresh || receiverHealth?.status === 'healthy') {
+      return {
+        code: 'WAIT',
+        label: 'AHRS awaiting data',
+        detail: 'Receiver ownship is live, but no fresh AHRS attitude message is available yet.',
+        pilotGrade: false,
+      };
+    }
     return {
       code: 'PEND',
       label: 'AHRS pending',
       detail: 'No external AHRS is connected yet. Vision remains guidance-only.',
       pilotGrade: false,
     };
-  }, [simulatedGpsData, simulationEnabled]);
+  }, [deviceAttitude?.pitchDeg, deviceAttitude?.rollDeg, deviceAttitudeFresh, receiverAttitude?.pitchDeg, receiverAttitude?.rollDeg, receiverAttitudeFresh, receiverHealth?.status, receiverOwnshipFresh, simulatedGpsData, simulationEnabled]);
   const visionReadinessSummary = useMemo(() => {
     if (attitudeSourceSummary.pilotGrade) {
       return {
@@ -963,12 +1492,26 @@ export default function FlightPlannerScreen() {
         detail: 'Attitude-backed synthetic vision is active.',
       };
     }
+    if (deviceAttitudeFresh) {
+      return {
+        code: 'ASSIST',
+        label: 'Vision assist',
+        detail: 'Device motion is driving attitude assist. External AHRS is still preferred for pilot-grade vision.',
+      };
+    }
+    if (receiverOwnshipFresh && !receiverAttitudeFresh) {
+      return {
+        code: 'ARM',
+        label: 'AHRS standby',
+        detail: 'Receiver ownship is live. Waiting for AHRS attitude frames to enable full synthetic vision.',
+      };
+    }
     return {
       code: 'GUIDE',
       label: 'Guidance mode',
       detail: 'Runway and terrain cues are advisory until AHRS is connected.',
     };
-  }, [attitudeSourceSummary.pilotGrade]);
+  }, [attitudeSourceSummary.pilotGrade, deviceAttitudeFresh, receiverAttitudeFresh, receiverOwnshipFresh]);
   const receiverStatusSummary = useMemo(() => {
     const status = receiverHealth?.status || 'idle';
     if (status === 'healthy') {
@@ -996,6 +1539,22 @@ export default function FlightPlannerScreen() {
   }, [receiverHealth?.status, trafficEnabled]);
   const activeVerticalSpeedFpm = simulationEnabled ? simulatedVerticalSpeedFpm : verticalSpeedFpm;
   const activeTrafficTargets = simulationEnabled ? simulatedTrafficTargets : trafficTargets;
+  const activeAttitude = simulationEnabled && simulatedGpsData
+    ? {
+        pitchDeg: 0,
+        rollDeg: 0,
+        headingDeg: simulatedGpsData.heading,
+        headingReference: 'true' as const,
+        indicatedAirspeedKts: simulatedGpsData.speedKts,
+        trueAirspeedKts: simulatedGpsData.speedKts,
+        updatedAt: simulatedGpsData.updatedAt,
+        source: 'simulation' as const,
+      }
+    : receiverAttitudeFresh
+      ? receiverAttitude
+      : deviceAttitudeFresh
+        ? deviceAttitude
+      : null;
   const flightDeckSessionState = simulationEnabled
     ? 'SIM'
     : activeOwnship
@@ -1045,22 +1604,34 @@ export default function FlightPlannerScreen() {
     );
     const speedCaptureNm = Math.max(0.45, Math.min(2.4, (activeOwnship.speedKts ?? 90) / 120));
     const sequencingCaptureNm = Math.max(activeLegBehavior.sequencingCaptureNm, speedCaptureNm * 0.75);
+    const armingProgressPct = clamp(
+      activeProcedureExecutionProfilePreview.armAtProgressPct + activeProcedureRoleExecutionPolicyPreview.armBiasPct,
+      30,
+      96,
+    );
+    const openProgressPct = clamp(
+      activeProcedureExecutionProfilePreview.openAtProgressPct + activeProcedureRoleExecutionPolicyPreview.openBiasPct,
+      40,
+      99,
+    );
     const gateArmed =
-      routeProgress.legProgressPct >= activeLegTransitionRule.armAtLegProgressPct ||
+      routeProgress.legProgressPct >= armingProgressPct ||
       routeProgress.remainingLegNm <= sequencingCaptureNm * 1.35;
     const gateOpenByProgress =
-      routeProgress.legProgressPct >= activeLegTransitionRule.openAtLegProgressPct ||
+      routeProgress.legProgressPct >= openProgressPct ||
       routeProgress.remainingLegNm <= sequencingCaptureNm * 0.85 ||
       distanceToLegEndNm <= sequencingCaptureNm;
     const lateralReady =
-      !activeLegTransitionRule.requiresLateralCapture || Boolean(visionRouteGuidance?.lateralCaptured);
+      !activeProcedureExecutionProfilePreview.requiresLateralCapture ||
+      Boolean(visionRouteGuidance?.lateralCaptured);
     const gateOpen = gateArmed && gateOpenByProgress && lateralReady;
-    const shouldAdvance = gateOpen && activeExecutionSegmentPreview.sequencingModel === 'auto';
+    const effectiveSequencingModel = activeProcedureRoleExecutionPolicyPreview.sequencingModel;
+    const shouldAdvance = gateOpen && effectiveSequencingModel === 'auto';
 
     if (shouldAdvance) {
       setActiveLegIndex((prev) => Math.min(prev + 1, activeRoutePoints.length - 2));
     }
-  }, [activeExecutionSegmentPreview.sequencingModel, activeLegBehavior.sequencingCaptureNm, activeLegIndex, activeLegTransitionRule.armAtLegProgressPct, activeLegTransitionRule.openAtLegProgressPct, activeLegTransitionRule.requiresLateralCapture, activeOwnship, activeRoutePoints, routeProgress, sequencingSuspended, visionRouteGuidance?.lateralCaptured]);
+  }, [activeLegBehavior.sequencingCaptureNm, activeLegIndex, activeOwnship, activeProcedureExecutionProfilePreview.armAtProgressPct, activeProcedureExecutionProfilePreview.openAtProgressPct, activeProcedureExecutionProfilePreview.requiresLateralCapture, activeProcedureRoleExecutionPolicyPreview.armBiasPct, activeProcedureRoleExecutionPolicyPreview.openBiasPct, activeProcedureRoleExecutionPolicyPreview.sequencingModel, activeRoutePoints, routeProgress, sequencingSuspended, visionRouteGuidance?.lateralCaptured]);
   const flightDeckPhaseSummary = useMemo(() => {
     if (!activeOwnship) {
       return {
@@ -1729,7 +2300,13 @@ export default function FlightPlannerScreen() {
     const modeLabel =
       routeExecutionOverride?.mode === 'direct-to-diversion'
         ? 'Direct'
-        : activeLegBehavior.guidanceMode === 'departure'
+        : activeProcedureCueStackPreview.modeLabel === 'Departure'
+          ? 'Departure'
+          : activeProcedureCueStackPreview.modeLabel === 'Arrival'
+            ? 'Arrival'
+            : activeProcedureCueStackPreview.modeLabel === 'Final'
+              ? 'Final'
+              : activeLegBehavior.guidanceMode === 'departure'
           ? 'Departure'
           : activeLegBehavior.guidanceMode === 'terminal'
             ? 'Terminal'
@@ -1746,9 +2323,9 @@ export default function FlightPlannerScreen() {
       modeLabel: activeExecutionSegmentPreview.label || modeLabel,
       heading: visionDirectorCue.turnCommand,
       vertical: visionDirectorCue.verticalCommand,
-      recommendation: visionManeuverRecommendation,
+      recommendation: activeProcedureCueStackPreview.sequencingSummary || visionManeuverRecommendation,
     };
-  }, [activeExecutionSegmentPreview.label, activeLegBehavior.guidanceMode, routeExecutionOverride?.mode, visionDirectorCue.mode, visionDirectorCue.turnCommand, visionDirectorCue.verticalCommand, visionManeuverRecommendation]);
+  }, [activeExecutionSegmentPreview.label, activeLegBehavior.guidanceMode, activeProcedureCueStackPreview.modeLabel, activeProcedureCueStackPreview.sequencingSummary, routeExecutionOverride?.mode, visionDirectorCue.mode, visionDirectorCue.turnCommand, visionDirectorCue.verticalCommand, visionManeuverRecommendation]);
   const routeExecutionSummary = useMemo(() => {
     if (!routeProgress) {
       return {
@@ -1767,9 +2344,23 @@ export default function FlightPlannerScreen() {
         destinationLegLabel: 'Destination pending',
         destinationLegType: null,
         nextLegArmed: false,
+        nextAction: 'auto-advance' as const,
+        nextActionCall: 'Next leg will auto-sequence when armed.',
+        nextLegControlLabel: 'Force next',
+        manualAdvanceRequired: false,
         nextLegDesiredTrackDeg: null,
         nextLegTurnDeltaDeg: null,
         nextLegTurnDirection: 'straight' as const,
+        navDataSourceSummary: {
+          code: 'CHAIN',
+          detail: 'Route-chain geometry only. No structured route semantics are active.',
+        },
+        navDataWarnings: [] as string[],
+        navDataCoveragePct: 0,
+        navDataStructuredLegCount: 0,
+        navDataBriefingLegCount: 0,
+        navDataProviderLegCount: 0,
+        navDataAirwaySegmentCount: 0,
         turnAnticipationState: 'idle' as const,
         turnAnticipationCall: 'No turn armed',
         lateralExecutionState: 'intercept' as const,
@@ -1784,8 +2375,54 @@ export default function FlightPlannerScreen() {
           kind: 'course-capture' as const,
           label: 'Course capture',
         },
+        activeProcedureContext: {
+          kind: 'enroute-structure' as const,
+          label: 'Enroute structure',
+        },
+        activeProcedureHandoff: {
+          kind: 'auto-course-handoff' as const,
+          label: 'Auto course handoff',
+        },
+        activeProcedureChain: null,
+        activeProcedureChainBehavior: null,
+        activeProcedureTemplate: null,
+        activeProcedureExecutionProfile: null,
+        activeProcedureCueStack: null,
+        activeProcedureEntryRole: null,
+        activeProcedureEntryDescriptor: null,
+        activeProcedureEntryTransitionBehavior: null,
+        activeProcedureTransitionTable: null,
+        activeProcedureSegmentTemplate: null,
+        activeProcedureSegmentClass: null,
+        activeProcedureLegAdapter: null,
+        activeProcedureLegFamily: null,
+        activeProcedureLegParserTarget: null,
+        activeProcedureLegIngestionContract: null,
+        activeParsedLegPayload: null,
+        activeProcedureRoleCueProfile: null,
+        activeProcedureRoleExecutionPolicy: null,
         nextExecutionSegment: null,
         nextExecutionTransition: null,
+        nextProcedureContext: null,
+        nextProcedureHandoff: null,
+        nextProcedureChain: null,
+        nextProcedureChainBehavior: null,
+        nextProcedureTemplate: null,
+        nextProcedureExecutionProfile: null,
+        nextProcedureCueStack: null,
+        nextProcedureEntryRole: null,
+        nextProcedureEntryDescriptor: null,
+        nextProcedureEntryTransitionBehavior: null,
+        nextProcedureTransitionTable: null,
+        nextProcedureSegmentTemplate: null,
+        nextProcedureSegmentClass: null,
+        nextProcedureLegAdapter: null,
+        nextProcedureLegFamily: null,
+        nextProcedureLegParserTarget: null,
+        nextProcedureLegIngestionContract: null,
+        nextParsedLegPayload: null,
+        nextProcedureRoleCueProfile: null,
+        nextProcedureRoleExecutionPolicy: null,
         transitionState: 'standby' as const,
         transitionCall: 'Standby',
         sequencingLabel: 'Standby',
@@ -1808,10 +2445,147 @@ export default function FlightPlannerScreen() {
         : routeProgress.sequencingState === 'terminal'
           ? `Destination leg ${routeProgress.destinationLegLabel || routeProgress.destinationWaypoint || '--'} is active.`
           : `${routeProgress.remainingLegNm.toFixed(1)} NM remaining on ${routeProgress.activeLegLabel || routeProgress.nextWaypoint || 'active leg'}.`;
+    const activeProcedureChain =
+      activeProcedureChains.find(
+        (chain) =>
+          routeProgress.legIndex >= chain.startLegIndex && routeProgress.legIndex <= chain.endLegIndex,
+      ) || null;
+    const nextProcedureChain =
+      activeProcedureChains.find((chain) => chain.startLegIndex > routeProgress.legIndex) || null;
+    const activeProcedureChainBehavior =
+      activeProcedureChain ? getMobileRouteProcedureChainBehavior(activeProcedureChain.kind) : null;
+    const nextProcedureChainBehavior =
+      nextProcedureChain ? getMobileRouteProcedureChainBehavior(nextProcedureChain.kind) : null;
+    const activeProcedureTemplate = getMobileRouteProcedureTemplate(
+      activeProcedureChain?.kind || 'enroute-structure',
+    );
+    const activeProcedureCueStack = getMobileRouteProcedureCueStack(
+      activeProcedureChain?.kind || 'enroute-structure',
+    );
+    const nextProcedureTemplate = nextProcedureChain
+      ? getMobileRouteProcedureTemplate(nextProcedureChain.kind)
+      : null;
+    const activeProcedureExecutionProfile = getMobileRouteProcedureExecutionProfile(
+      activeProcedureChain?.kind || 'enroute-structure',
+    );
+    const nextProcedureExecutionProfile = nextProcedureChain
+      ? getMobileRouteProcedureExecutionProfile(nextProcedureChain.kind)
+      : null;
+    const nextProcedureCueStack = nextProcedureChain
+      ? getMobileRouteProcedureCueStack(nextProcedureChain.kind)
+      : null;
+    const activeProcedureEntryDescriptor = getMobileRouteProcedureEntryDescriptor(
+      activeExecutionPlan[routeProgress.legIndex] || {
+        fromFix: activeRouteLegs[routeProgress.legIndex]?.from || 'PT',
+        toFix: activeRouteLegs[routeProgress.legIndex]?.to || 'PT',
+        distanceNm: activeRouteLegs[routeProgress.legIndex]?.nm || 0,
+        courseDeg: activeRouteLegs[routeProgress.legIndex]?.courseDeg ?? null,
+        procedure: { kind: activeProcedureChain?.kind || 'enroute-structure', label: activeProcedureChain?.label || 'Enroute structure' },
+      },
+      {
+        entryIndexInChain: activeProcedureChain
+          ? routeProgress.legIndex - activeProcedureChain.startLegIndex
+          : 0,
+        entryCount: activeProcedureChain?.entryCount ?? 1,
+      },
+    );
+    const activeProcedureEntryRole = activeProcedureEntryDescriptor.role;
+    const nextProcedureEntryDescriptor =
+      nextProcedureChain && routeProgress.legIndex + 1 >= nextProcedureChain.startLegIndex
+        ? getMobileRouteProcedureEntryDescriptor(activeExecutionPlan[routeProgress.legIndex + 1] || {
+            fromFix: activeRouteLegs[routeProgress.legIndex + 1]?.from || 'PT',
+            toFix: activeRouteLegs[routeProgress.legIndex + 1]?.to || 'PT',
+            distanceNm: activeRouteLegs[routeProgress.legIndex + 1]?.nm || 0,
+            courseDeg: activeRouteLegs[routeProgress.legIndex + 1]?.courseDeg ?? null,
+            procedure: { kind: nextProcedureChain.kind, label: nextProcedureChain.label },
+          }, {
+            entryIndexInChain: routeProgress.legIndex + 1 - nextProcedureChain.startLegIndex,
+            entryCount: nextProcedureChain.entryCount,
+          })
+        : routeProgress.legIndex + 1 < activeRouteLegs.length
+          ? getMobileRouteProcedureEntryDescriptor(
+              {
+                fromFix: activeRouteLegs[routeProgress.legIndex + 1]?.from || 'PT',
+                toFix: activeRouteLegs[routeProgress.legIndex + 1]?.to || 'PT',
+                distanceNm: activeRouteLegs[routeProgress.legIndex + 1]?.nm || 0,
+                courseDeg: activeRouteLegs[routeProgress.legIndex + 1]?.courseDeg ?? null,
+                procedure: {
+                  kind:
+                    activeRouteLegs[routeProgress.legIndex + 1]?.legType === 'departure'
+                      ? 'departure-procedure'
+                      : activeRouteLegs[routeProgress.legIndex + 1]?.legType === 'arrival'
+                        ? 'arrival-procedure'
+                        : activeRouteLegs[routeProgress.legIndex + 1]?.legType === 'direct-to'
+                          ? 'direct-navigation'
+                          : 'enroute-structure',
+                  label:
+                    activeRouteLegs[routeProgress.legIndex + 1]?.legType === 'departure'
+                      ? 'Departure procedure'
+                      : activeRouteLegs[routeProgress.legIndex + 1]?.legType === 'arrival'
+                        ? 'Arrival procedure'
+                        : activeRouteLegs[routeProgress.legIndex + 1]?.legType === 'direct-to'
+                          ? 'Direct navigation'
+                          : 'Enroute structure',
+                },
+              },
+              {
+                entryIndexInChain: 0,
+                entryCount: 1,
+              },
+            )
+          : null;
+    const nextProcedureEntryRole = nextProcedureEntryDescriptor?.role || null;
+    const activeProcedureRoleCueProfile = getMobileRouteProcedureRoleCueProfile(
+      activeProcedureEntryRole.kind,
+    );
+    const activeProcedureRoleExecutionPolicy = getMobileRouteProcedureRoleExecutionPolicy(
+      activeProcedureEntryRole.kind,
+    );
+    const activeProcedureEntryTransitionBehavior = getMobileRouteProcedureEntryTransitionBehavior(
+      activeProcedureEntryDescriptor,
+    );
+    const activeProcedureTransitionTable = getMobileRouteProcedureTransitionTable(
+      activeProcedureChain?.kind || 'enroute-structure',
+      activeProcedureEntryDescriptor,
+      nextProcedureEntryDescriptor || null,
+    );
+    const nextProcedureRoleCueProfile = nextProcedureEntryRole
+      ? getMobileRouteProcedureRoleCueProfile(nextProcedureEntryRole.kind)
+      : null;
+    const nextProcedureRoleExecutionPolicy = nextProcedureEntryRole
+      ? getMobileRouteProcedureRoleExecutionPolicy(nextProcedureEntryRole.kind)
+      : null;
+    const nextProcedureEntryTransitionBehavior = nextProcedureEntryDescriptor
+      ? getMobileRouteProcedureEntryTransitionBehavior(nextProcedureEntryDescriptor)
+      : null;
+    const nextProcedureTransitionTable = nextProcedureEntryDescriptor
+      ? getMobileRouteProcedureTransitionTable(
+          nextProcedureChain?.kind ||
+            (activeRouteLegs[routeProgress.legIndex + 1]?.legType === 'departure'
+              ? 'departure-procedure'
+              : activeRouteLegs[routeProgress.legIndex + 1]?.legType === 'arrival'
+                ? 'arrival-procedure'
+                : activeRouteLegs[routeProgress.legIndex + 1]?.legType === 'direct-to'
+                  ? 'direct-navigation'
+                  : 'enroute-structure'),
+          nextProcedureEntryDescriptor,
+          null,
+        )
+      : null;
+    const armingProgressPct = clamp(
+      activeProcedureExecutionProfile.armAtProgressPct + activeProcedureRoleExecutionPolicy.armBiasPct,
+      30,
+      96,
+    );
+    const openProgressPct = clamp(
+      activeProcedureExecutionProfile.openAtProgressPct + activeProcedureRoleExecutionPolicy.openBiasPct,
+      40,
+      99,
+    );
     const nextLegArmed =
       !sequencingSuspended &&
       routeProgress.sequencingState === 'on-leg' &&
-      routeProgress.legProgressPct >= 70 &&
+      routeProgress.legProgressPct >= armingProgressPct &&
       routeProgress.legsRemaining > 0;
     const nextLegStart = activeRoutePoints[routeProgress.legIndex + 1] || null;
     const nextLegEnd = activeRoutePoints[routeProgress.legIndex + 2] || null;
@@ -1841,6 +2615,11 @@ export default function FlightPlannerScreen() {
         : turnAnticipationState === 'monitor'
           ? 'Next leg armed'
           : 'No turn armed';
+    const manualAdvanceRequired = activeProcedureEntryTransitionBehavior.nextAction === 'pilot-advance';
+    const nextActionCall = manualAdvanceRequired
+      ? activeProcedureEntryTransitionBehavior.handoffCue
+      : `${activeProcedureEntryTransitionBehavior.handoffCue} Automatic advance remains enabled when the gate opens.`;
+    const nextLegControlLabel = manualAdvanceRequired ? 'Advance leg' : 'Force next';
     const lateralExecutionState =
       sequencingSuspended
         ? 'hold'
@@ -1856,24 +2635,24 @@ export default function FlightPlannerScreen() {
         ? 'hold'
         : routeProgress.sequencingState === 'reintercept'
           ? 'blocked'
-          : routeProgress.legProgressPct >= activeLegTransitionRule.openAtLegProgressPct &&
-              (!activeLegTransitionRule.requiresLateralCapture || visionRouteGuidance?.lateralCaptured)
-            ? activeExecutionSegment.sequencingModel === 'managed'
+          : routeProgress.legProgressPct >= openProgressPct &&
+              (!activeProcedureExecutionProfile.requiresLateralCapture || visionRouteGuidance?.lateralCaptured)
+            ? activeProcedureRoleExecutionPolicy.sequencingModel === 'managed'
               ? 'manual-open'
               : 'open'
-            : routeProgress.legProgressPct >= activeLegTransitionRule.armAtLegProgressPct
+            : routeProgress.legProgressPct >= armingProgressPct
               ? 'armed'
               : 'blocked';
     const sequenceGateCall =
       sequenceGateState === 'hold'
-        ? 'Sequencing hold'
+        ? activeProcedureRoleCueProfile.transitionCalls.hold
         : sequenceGateState === 'manual-open'
-          ? `${activeLegTransitionRule.label} open - manual advance required`
+          ? `${activeProcedureRoleCueProfile.gateSubject} open - manual advance required`
         : sequenceGateState === 'open'
-          ? `${activeLegTransitionRule.label} open`
+          ? `${activeProcedureRoleCueProfile.gateSubject} open`
           : sequenceGateState === 'armed'
-            ? `${activeLegTransitionRule.label} armed`
-            : `${activeLegTransitionRule.label} blocked`;
+            ? `${activeProcedureRoleCueProfile.gateSubject} armed`
+            : `${activeProcedureRoleCueProfile.gateSubject} blocked`;
     const transitionState =
       sequencingSuspended
         ? 'sequencing-hold'
@@ -1904,32 +2683,19 @@ export default function FlightPlannerScreen() {
                       : 'enroute-intercept';
     const transitionCall =
       transitionState === 'sequencing-hold'
-        ? 'Sequencing hold'
-        : transitionState === 'direct-established'
-          ? 'Direct-to established'
-          : transitionState === 'direct-intercept'
-            ? 'Direct-to intercept'
-            : transitionState === 'departure-armed'
-              ? 'Departure leg armed'
-              : transitionState === 'departure-rollout'
-                ? 'Runway departure active'
-                : transitionState === 'departure-established'
-                  ? 'Departure transition established'
-                  : transitionState === 'departure-transition'
-                    ? 'Departure transition'
-                    : transitionState === 'arrival-armed'
-                      ? 'Arrival leg armed'
-                      : transitionState === 'arrival-transition'
-                        ? 'Arrival transition'
-                        : transitionState === 'final-established'
-                          ? 'Final established'
-                          : transitionState === 'final-intercept'
-                            ? 'Final intercept'
-                            : transitionState === 'enroute-established'
-                              ? 'Enroute established'
-                              : transitionState === 'enroute-capture'
-                              ? 'Enroute capture'
-                                : 'Enroute intercept';
+        ? activeProcedureRoleCueProfile.transitionCalls.hold
+        : transitionState === 'departure-armed' || transitionState === 'arrival-armed'
+          ? activeProcedureRoleCueProfile.transitionCalls.armed || activeProcedureRoleCueProfile.transitionCalls.intercept
+          : transitionState === 'departure-rollout'
+            ? activeProcedureRoleCueProfile.transitionCalls.rollout || activeProcedureRoleCueProfile.transitionCalls.intercept
+            : transitionState === 'departure-established' ||
+                transitionState === 'direct-established' ||
+                transitionState === 'final-established' ||
+                transitionState === 'enroute-established'
+              ? activeProcedureRoleCueProfile.transitionCalls.established
+              : transitionState === 'enroute-capture'
+                ? activeProcedureRoleCueProfile.transitionCalls.capture || activeProcedureRoleCueProfile.transitionCalls.intercept
+                : activeProcedureRoleCueProfile.transitionCalls.intercept;
     const activeExecutionSegment = getMobileRouteExecutionSegment(activeLegBehavior.profile, {
       sequenceGateState,
     });
@@ -1946,20 +2712,54 @@ export default function FlightPlannerScreen() {
       sequencingSuspended,
       activeLegIndex: routeProgress.legIndex,
       canSequencePrev: routeProgress.legIndex > 0,
-      canSequenceNext: routeProgress.legIndex < Math.max(0, activeRouteLegs.length - 1),
+      canSequenceNext:
+        routeProgress.legIndex < Math.max(0, activeRouteLegs.length - 1) &&
+        (!manualAdvanceRequired || nextLegArmed || sequenceGateState === 'manual-open' || sequencingSuspended),
       activeLegLabel: routeProgress.activeLegLabel || routeProgress.nextWaypoint || 'Active leg',
       activeLegType: activeRouteLegs[routeProgress.legIndex]?.legType || 'enroute',
       activeLegProfile: activeLegBehavior.profile,
       activeLegGuidanceMode: activeLegBehavior.guidanceMode,
-      activeLegAnnunciation: activeLegBehavior.annunciation,
+      activeLegAnnunciation: `${activeProcedureEntryRole.cue} · ${activeLegBehavior.annunciation}`,
       nextLegLabel: routeProgress.nextLegLabel || routeProgress.nextWaypoint || 'Next leg pending',
       nextLegType: activeRouteLegs[routeProgress.legIndex + 1]?.legType || null,
       destinationLegLabel: routeProgress.destinationLegLabel || routeProgress.destinationWaypoint || 'Destination leg pending',
       destinationLegType: activeRouteLegs[activeRouteLegs.length - 1]?.legType || null,
       nextLegArmed,
+      nextAction: activeProcedureEntryTransitionBehavior.nextAction,
+      nextActionCall,
+      nextLegControlLabel,
+      manualAdvanceRequired,
       nextLegDesiredTrackDeg,
       nextLegTurnDeltaDeg,
       nextLegTurnDirection,
+        navDataSourceSummary: {
+          code:
+          plannerNavDataSnapshot.source === 'nav-data'
+            ? 'NAV'
+            : plannerNavDataSnapshot.source === 'hybrid'
+              ? 'HYBRID'
+              : plannerNavDataSnapshot.source === 'briefing-data'
+                ? 'BRIEF'
+                : plannerNavDataSnapshot.source === 'route-structure'
+            ? 'STRUCT'
+            : 'CHAIN',
+        detail:
+          plannerNavDataSnapshot.source === 'nav-data'
+            ? `Provider-backed route guidance is active on ${plannerNavDataSnapshot.navDataLegCount}/${plannerNavDataSnapshot.totalLegCount || activeRouteLegs.length || 0} legs${plannerNavDataSnapshot.providerRouteAvailable ? '.' : ', with fallback structure on remaining legs.'}`
+            : plannerNavDataSnapshot.source === 'hybrid'
+              ? `Hybrid route intelligence active: ${plannerNavDataSnapshot.navDataLegCount} provider legs, ${plannerNavDataSnapshot.structuredLegCount} structured legs, and ${plannerNavDataSnapshot.briefingLegCount} briefing-backed legs.`
+              : plannerNavDataSnapshot.source === 'briefing-data'
+                ? `Briefing-backed departure, arrival feed, and final data is active on ${plannerNavDataSnapshot.briefingLegCount}/${plannerNavDataSnapshot.totalLegCount || activeRouteLegs.length || 0} legs.`
+                : plannerNavDataSnapshot.source === 'route-structure'
+                  ? `Structured route semantics active on ${plannerNavDataSnapshot.structuredLegCount}/${plannerNavDataSnapshot.totalLegCount || activeRouteLegs.length || 0} legs.`
+                  : 'Route-chain geometry only. No structured route semantics are active.',
+      },
+      navDataWarnings: [...plannerNavDataSnapshot.warnings, ...plannerNavDataSnapshot.providerWarnings],
+      navDataCoveragePct: plannerNavDataSnapshot.coveragePct,
+      navDataStructuredLegCount: plannerNavDataSnapshot.structuredLegCount,
+      navDataBriefingLegCount: plannerNavDataSnapshot.briefingLegCount,
+      navDataProviderLegCount: plannerNavDataSnapshot.navDataLegCount,
+      navDataAirwaySegmentCount: plannerNavDataSnapshot.airwaySegments.length,
       turnAnticipationState,
       turnAnticipationCall,
       lateralExecutionState,
@@ -1972,15 +2772,63 @@ export default function FlightPlannerScreen() {
           kind: 'course-capture' as const,
           label: 'Course capture',
         },
+      activeProcedureContext:
+        activeExecutionPlan[routeProgress.legIndex]?.procedure || {
+          kind: 'enroute-structure' as const,
+          label: 'Enroute structure',
+        },
+      activeProcedureHandoff:
+        activeExecutionPlan[routeProgress.legIndex]?.handoff || {
+          kind: 'auto-course-handoff' as const,
+          label: 'Auto course handoff',
+        },
+      activeProcedureChain,
+      activeProcedureChainBehavior,
+      activeProcedureTemplate,
+      activeProcedureExecutionProfile,
+      activeProcedureCueStack,
+      activeProcedureEntryRole,
+      activeProcedureEntryDescriptor,
+      activeProcedureEntryTransitionBehavior,
+      activeProcedureTransitionTable,
+      activeProcedureSegmentTemplate: activeProcedureEntryDescriptor.segmentTemplate,
+      activeProcedureSegmentClass: activeProcedureEntryDescriptor.segmentClass,
+      activeProcedureLegAdapter: activeProcedureEntryDescriptor.procedureLegAdapter,
+      activeProcedureLegFamily: activeProcedureEntryDescriptor.procedureLegFamily,
+      activeProcedureLegParserTarget: activeProcedureEntryDescriptor.procedureLegParserTarget,
+      activeProcedureLegIngestionContract: activeProcedureEntryDescriptor.procedureLegIngestionContract,
+      activeParsedLegPayload: activeProcedureEntryDescriptor.parsedLegPayload,
+      activeProcedureRoleCueProfile,
+      activeProcedureRoleExecutionPolicy,
       nextExecutionSegment,
       nextExecutionSegmentEntry,
       nextExecutionTransition: nextExecutionSegmentEntry?.transition || null,
+      nextProcedureContext: nextExecutionSegmentEntry?.procedure || null,
+      nextProcedureHandoff: nextExecutionSegmentEntry?.handoff || null,
+      nextProcedureChain,
+      nextProcedureChainBehavior,
+      nextProcedureTemplate,
+      nextProcedureExecutionProfile,
+      nextProcedureCueStack,
+      nextProcedureEntryRole,
+      nextProcedureEntryDescriptor,
+      nextProcedureEntryTransitionBehavior,
+      nextProcedureTransitionTable,
+      nextProcedureSegmentTemplate: nextProcedureEntryDescriptor?.segmentTemplate || null,
+      nextProcedureSegmentClass: nextProcedureEntryDescriptor?.segmentClass || null,
+      nextProcedureLegAdapter: nextProcedureEntryDescriptor?.procedureLegAdapter || null,
+      nextProcedureLegFamily: nextProcedureEntryDescriptor?.procedureLegFamily || null,
+      nextProcedureLegParserTarget: nextProcedureEntryDescriptor?.procedureLegParserTarget || null,
+      nextProcedureLegIngestionContract: nextProcedureEntryDescriptor?.procedureLegIngestionContract || null,
+      nextParsedLegPayload: nextProcedureEntryDescriptor?.parsedLegPayload || null,
+      nextProcedureRoleCueProfile,
+      nextProcedureRoleExecutionPolicy,
       transitionState,
       transitionCall,
       sequencingLabel,
-      sequencingDetail,
+      sequencingDetail: `${sequencingDetail} ${activeProcedureRoleCueProfile.sequencingSummary}. ${activeProcedureCueStack.sequencingSummary}. ${activeProcedureEntryTransitionBehavior.sequencingCue} Handoff ${activeExecutionPlan[routeProgress.legIndex]?.handoff?.label || 'Auto course handoff'}. ${activeProcedureEntryTransitionBehavior.handoffCue} ${activeProcedureTransitionTable.handoffPathLabel}. ${activeProcedureChainBehavior?.label || 'Enroute auto block'}. ${activeProcedureTemplate.label}. Arm at ${armingProgressPct.toFixed(0)}%${activeProcedureRoleExecutionPolicy.manualReason ? ` ${activeProcedureRoleExecutionPolicy.manualReason}` : ''}`,
     };
-  }, [activeExecutionPlan, activeLegBehavior.annunciation, activeLegBehavior.guidanceMode, activeLegBehavior.profile, activeLegTransitionRule.armAtLegProgressPct, activeLegTransitionRule.label, activeLegTransitionRule.openAtLegProgressPct, activeLegTransitionRule.requiresLateralCapture, activeRoutePoints, routeExecutionOverride?.mode, routeProgress, sequencingSuspended, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
+  }, [activeExecutionPlan, activeLegBehavior.annunciation, activeLegBehavior.guidanceMode, activeLegBehavior.profile, activeProcedureChains, activeRouteLegs, activeRoutePoints, plannerNavDataSnapshot.airwaySegments.length, plannerNavDataSnapshot.briefingLegCount, plannerNavDataSnapshot.coveragePct, plannerNavDataSnapshot.coveredLegCount, plannerNavDataSnapshot.navDataLegCount, plannerNavDataSnapshot.providerRouteAvailable, plannerNavDataSnapshot.providerWarnings, plannerNavDataSnapshot.source, plannerNavDataSnapshot.structuredLegCount, plannerNavDataSnapshot.totalLegCount, plannerNavDataSnapshot.warnings, routeExecutionOverride?.mode, routeProgress, sequencingSuspended, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
   const activeExecutionPlanView = useMemo(
     () =>
       annotateMobileRouteExecutionPlan(activeExecutionPlan, {
@@ -1988,9 +2836,11 @@ export default function FlightPlannerScreen() {
         nextLegArmed: routeExecutionSummary.nextLegArmed,
         sequencingSuspended: routeExecutionSummary.sequencingSuspended,
         sequenceGateState: routeExecutionSummary.sequenceGateState,
+        procedureChains: activeProcedureChains,
       }),
     [
       activeExecutionPlan,
+      activeProcedureChains,
       routeExecutionSummary.nextLegArmed,
       routeExecutionSummary.sequenceGateState,
       routeExecutionSummary.sequencingSuspended,
@@ -2016,9 +2866,11 @@ export default function FlightPlannerScreen() {
           routeProgress && routeExecutionOverride?.mode !== 'direct-to-diversion'
             ? routeExecutionSummary.sequenceGateState
             : 'blocked',
+        procedureChains: plannerProcedureChains,
       }),
     [
       plannerExecutionPlan,
+      plannerProcedureChains,
       routeExecutionOverride?.mode,
       routeExecutionSummary.nextLegArmed,
       routeExecutionSummary.sequenceGateState,
@@ -2172,7 +3024,7 @@ export default function FlightPlannerScreen() {
   };
   const sequenceNextLeg = () => {
     setActiveLegIndex((prev) => Math.min(Math.max(0, activeRoutePoints.length - 2), prev + 1));
-    setSequencingSuspended(true);
+    setSequencingSuspended(routeExecutionSummary?.nextAction === 'pilot-advance' ? false : true);
     openFlightDeckPanel('status');
   };
 
@@ -2605,6 +3457,33 @@ export default function FlightPlannerScreen() {
     let cancelled = false;
     const departureIcao = departure.trim().toUpperCase();
     if (!ICAO_REGEX.test(departureIcao)) {
+      setDepartureSurfaceGeometry(null);
+      setDepartureSurfaceGeometryLoading(false);
+      return;
+    }
+    setDepartureSurfaceGeometryLoading(true);
+    api
+      .get<AirportSurfaceGeometryResponse>(`/api/airports/${departureIcao}/surface-geometry`)
+      .then((res) => {
+        if (cancelled) return;
+        setDepartureSurfaceGeometry(res.data || null);
+        setDepartureSurfaceGeometryLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDepartureSurfaceGeometry(null);
+        setDepartureSurfaceGeometryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [departure]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const departureIcao = departure.trim().toUpperCase();
+    if (!ICAO_REGEX.test(departureIcao)) {
       setDepartureFrequencies(null);
       setDepartureFrequenciesLoading(false);
       return;
@@ -2648,6 +3527,33 @@ export default function FlightPlannerScreen() {
         if (cancelled) return;
         setDestinationBriefing(null);
         setDestinationBriefingLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [destination]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const destinationIcao = destination.trim().toUpperCase();
+    if (!ICAO_REGEX.test(destinationIcao)) {
+      setDestinationSurfaceGeometry(null);
+      setDestinationSurfaceGeometryLoading(false);
+      return;
+    }
+    setDestinationSurfaceGeometryLoading(true);
+    api
+      .get<AirportSurfaceGeometryResponse>(`/api/airports/${destinationIcao}/surface-geometry`)
+      .then((res) => {
+        if (cancelled) return;
+        setDestinationSurfaceGeometry(res.data || null);
+        setDestinationSurfaceGeometryLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDestinationSurfaceGeometry(null);
+        setDestinationSurfaceGeometryLoading(false);
       });
 
     return () => {
@@ -2819,6 +3725,34 @@ export default function FlightPlannerScreen() {
   }, [gpsEnabled]);
 
   useEffect(() => {
+    if (!isFlightDeck || simulationEnabled) {
+      setDeviceAttitude(null);
+      return;
+    }
+
+    DeviceMotion.setUpdateInterval(200);
+    const subscription = DeviceMotion.addListener((motion) => {
+      const beta = motion.rotation?.beta;
+      const gamma = motion.rotation?.gamma;
+      const pitchDeg = typeof beta === 'number' ? clamp((beta * 180) / Math.PI, -35, 35) : undefined;
+      const rollDeg = typeof gamma === 'number' ? clamp((gamma * 180) / Math.PI, -60, 60) : undefined;
+      if (typeof pitchDeg !== 'number' && typeof rollDeg !== 'number') {
+        return;
+      }
+      setDeviceAttitude({
+        pitchDeg,
+        rollDeg,
+        updatedAt: Date.now(),
+        source: 'device-motion',
+      });
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isFlightDeck, simulationEnabled]);
+
+  useEffect(() => {
     if (!isAuthenticated) return;
     api.get('/api/aircraft/profiles')
       .then((res) => setProfiles(res.data || []))
@@ -2908,6 +3842,39 @@ export default function FlightPlannerScreen() {
       .finally(() => setSuggestionLoading(false));
   }, [departure, destination, cruiseKtas, fuelBurnGph, usableFuel, reserveMinutes, fuelOnBoard]);
 
+  useEffect(() => {
+    const dep = departure.trim().toUpperCase();
+    const dest = destination.trim().toUpperCase();
+    if (!ICAO_REGEX.test(dep) || !ICAO_REGEX.test(dest)) {
+      setProviderRouteSearch(null);
+      return;
+    }
+
+    let active = true;
+    const timer = setTimeout(() => {
+      api.get<RouteSearchResponse>('/api/flight-plans/route-search', {
+        params: {
+          departure: dep,
+          destination: dest,
+          altitudeFt: plannedAltitudeValue,
+        },
+      })
+        .then((res) => {
+          if (!active) return;
+          setProviderRouteSearch(res.data || null);
+        })
+        .catch(() => {
+          if (!active) return;
+          setProviderRouteSearch(null);
+        });
+    }, 450);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [departure, destination, plannedAltitudeValue]);
+
   const effectiveProfile = useMemo(
     () => profiles.find((p) => p.id === selectedProfileId) || null,
     [profiles, selectedProfileId]
@@ -2935,6 +3902,128 @@ export default function FlightPlannerScreen() {
     if (routeExecutionOverride?.mode !== 'direct-to-diversion') return routePoints;
     return [routeExecutionOverride.origin, routeExecutionOverride.target];
   }, [routeExecutionOverride, routePoints]);
+  const plannedRouteStructureText = useMemo(() => {
+    const dep = departure.trim().toUpperCase();
+    const dest = destination.trim().toUpperCase();
+    const stopList = plannedStops
+      .split(/[\s,]+/)
+      .map((code) => code.trim().toUpperCase())
+      .filter(Boolean);
+    const wpList = waypoints
+      .split(/[\s,]+/)
+      .map((code) => code.trim().toUpperCase())
+      .filter(Boolean);
+    return [dep, ...stopList, ...wpList, dest].filter(Boolean).join(' ');
+  }, [departure, destination, plannedStops, waypoints]);
+  const plannedRouteAnalysis = useMemo(() => analyzeFiledRoute(plannedRouteStructureText), [plannedRouteStructureText]);
+  const providerRouteAnalysis = useMemo(
+    () => analyzeFiledRoute(providerRouteSearch?.route || ''),
+    [providerRouteSearch?.route]
+  );
+  const plannedRouteAnchorTokens = useMemo(
+    () =>
+      plannedRouteAnalysis.tokens
+        .filter((token) => isFiledRouteAnchorKind(token.kind))
+        .map((token) => token.token),
+    [plannedRouteAnalysis]
+  );
+  const providerRouteAnchorTokens = useMemo(
+    () =>
+      providerRouteAnalysis.tokens
+        .filter((token) => isFiledRouteAnchorKind(token.kind))
+        .map((token) => token.token),
+    [providerRouteAnalysis]
+  );
+  const plannerNavDataSnapshot = useMemo(() => {
+    const navDataLegsByIndex = buildStructuredCourseFixNavDataLegs(
+      routeSummary?.legs || [],
+      plannedRouteAnchorTokens,
+      plannedAltitudeValue,
+    );
+    const providerNavDataLegsByIndex = buildProviderCourseFixNavDataLegs(
+      routeSummary?.legs || [],
+      providerRouteAnchorTokens,
+      plannedAltitudeValue,
+      providerRouteSearch?.environment || providerRouteSearch?.provider || null,
+    );
+    Object.entries(providerNavDataLegsByIndex).forEach(([legIndex, payload]) => {
+      if (payload) {
+        navDataLegsByIndex[Number(legIndex)] = payload;
+      }
+    });
+    const plannerLegs = routeSummary?.legs || [];
+    const departureLeg = plannerLegs[0];
+    const arrivalFeedLeg = plannerLegs.length > 1 ? plannerLegs[plannerLegs.length - 2] : null;
+    const finalLeg = plannerLegs[plannerLegs.length - 1];
+    if (departureLeg && departureRunway) {
+      navDataLegsByIndex[departureLeg.index] = {
+        kind: 'runway-release-nav-data',
+        sourceKind: 'briefing-data',
+        label: `${departure.trim().toUpperCase() || departureLeg.from} ${departureRunway.runwayId}`,
+        airportIdent: departure.trim().toUpperCase() || departureLeg.from,
+        runwayIdent: departureRunway.runwayId,
+        releaseHeading: departureRunway.headingDeg,
+        initialAltitudeFt: plannedAltitudeValue ?? null,
+        sourceCycle: null,
+      };
+    }
+    if (arrivalFeedLeg && destinationRunway) {
+      navDataLegsByIndex[arrivalFeedLeg.index] = {
+        kind: 'terminal-feed-nav-data',
+        sourceKind: 'briefing-data',
+        label: `${destination.trim().toUpperCase() || arrivalFeedLeg.to} ${destinationRunway.runwayId} arrival feed`,
+        arrivalIdent: `${destination.trim().toUpperCase() || arrivalFeedLeg.to} ${destinationRunway.runwayId}`,
+        transitionFix: arrivalFeedLeg.from,
+        handoffFix: arrivalFeedLeg.to,
+        altitudeConstraintFt: plannedAltitudeValue ?? null,
+        sourceCycle: null,
+      };
+    }
+    if (finalLeg && destinationRunway) {
+      navDataLegsByIndex[finalLeg.index] = {
+        kind: 'final-capture-nav-data',
+        sourceKind: 'briefing-data',
+        label: `${destinationRunway.runwayId} final`,
+        runwayIdent: destinationRunway.runwayId,
+        finalCourseDeg: destinationRunway.headingDeg,
+        thresholdFix: destination.trim().toUpperCase() || finalLeg.to,
+        glideslopeAngleDeg: 3,
+        sourceCycle: null,
+      };
+    }
+    const payloads = Object.values(navDataLegsByIndex).filter(Boolean);
+    const structuredLegCount = payloads.filter((payload) => payload?.sourceKind === 'route-structure').length;
+    const briefingLegCount = payloads.filter((payload) => payload?.sourceKind === 'briefing-data').length;
+    const navDataLegCount = payloads.filter((payload) => payload?.sourceKind === 'nav-data').length;
+    const totalLegCount = routeSummary?.legs?.length || 0;
+    const coveredLegCount = payloads.length;
+    const coveragePct = totalLegCount > 0 ? Math.round((coveredLegCount / totalLegCount) * 100) : 0;
+    return {
+      source:
+        navDataLegCount > 0
+          ? ('nav-data' as const)
+          : briefingLegCount > 0 && structuredLegCount > 0
+            ? ('hybrid' as const)
+            : briefingLegCount > 0
+              ? ('briefing-data' as const)
+              : structuredLegCount > 0
+                ? ('route-structure' as const)
+                : ('route-chain' as const),
+      navDataLegsByIndex,
+      structuredLegCount,
+      briefingLegCount,
+      navDataLegCount,
+      totalLegCount,
+      coveredLegCount,
+      coveragePct,
+      warnings: plannedRouteAnalysis.warnings,
+      providerWarnings: Array.isArray(providerRouteSearch?.warnings) ? providerRouteSearch.warnings : [],
+      airwaySegments: plannedRouteAnalysis.airwaySegments,
+      providerRoute: providerRouteSearch?.route || null,
+      providerRouteAvailable: Boolean(providerRouteSearch?.available && providerRouteSearch?.route),
+      tokenCounts: plannedRouteAnalysis.counts,
+    };
+  }, [departure, departureRunway, destination, destinationRunway, plannedRouteAnalysis, plannedRouteAnchorTokens, plannedAltitudeValue, providerRouteAnchorTokens, providerRouteSearch?.available, providerRouteSearch?.environment, providerRouteSearch?.provider, providerRouteSearch?.route, providerRouteSearch?.warnings, routeSummary?.legs]);
   const activeRouteLegs = useMemo(
     () =>
       buildMobileRouteLegs(activeRoutePoints, {
@@ -2942,13 +4031,28 @@ export default function FlightPlannerScreen() {
       }),
     [activeRoutePoints, routeExecutionOverride?.mode]
   );
+  const activeNavDataLegsByIndex = useMemo(
+    () =>
+      routeExecutionOverride?.mode === 'direct-to-diversion'
+        ? {}
+        : plannerNavDataSnapshot.navDataLegsByIndex,
+    [plannerNavDataSnapshot.navDataLegsByIndex, routeExecutionOverride?.mode]
+  );
   const activeExecutionPlan = useMemo(
-    () => buildMobileRouteExecutionPlan(activeRouteLegs),
-    [activeRouteLegs]
+    () => buildMobileRouteExecutionPlan(activeRouteLegs, { navDataLegsByIndex: activeNavDataLegsByIndex }),
+    [activeNavDataLegsByIndex, activeRouteLegs]
+  );
+  const activeProcedureChains = useMemo(
+    () => buildMobileRouteProcedureChains(activeExecutionPlan),
+    [activeExecutionPlan]
   );
   const plannerExecutionPlan = useMemo(
-    () => buildMobileRouteExecutionPlan(routeSummary?.legs || []),
-    [routeSummary?.legs]
+    () => buildMobileRouteExecutionPlan(routeSummary?.legs || [], { navDataLegsByIndex: plannerNavDataSnapshot.navDataLegsByIndex }),
+    [plannerNavDataSnapshot.navDataLegsByIndex, routeSummary?.legs]
+  );
+  const plannerProcedureChains = useMemo(
+    () => buildMobileRouteProcedureChains(plannerExecutionPlan),
+    [plannerExecutionPlan]
   );
   const activeLegDefinition = useMemo(
     () => activeRouteLegs[Math.min(activeLegIndex, Math.max(0, activeRouteLegs.length - 1))] || null,
@@ -2962,12 +4066,26 @@ export default function FlightPlannerScreen() {
       }),
     [activeLegDefinition, routeProgress?.legProgressPct, routeProgress?.remainingRouteNm]
   );
-  const activeLegTransitionRule = useMemo(
-    () => getMobileRouteTransitionRule(activeLegBehavior.profile),
-    [activeLegBehavior.profile]
-  );
   const activeExecutionSegmentPreview = useMemo(
     () => getMobileRouteExecutionSegment(activeLegBehavior.profile, { sequenceGateState: 'blocked' }),
+    [activeLegBehavior.profile]
+  );
+  const activeProcedureExecutionProfilePreview = useMemo(
+    () => getMobileRouteProcedureExecutionProfile(getMobileRouteProcedureContext(activeLegBehavior.profile).kind),
+    [activeLegBehavior.profile]
+  );
+  const activeProcedureCueStackPreview = useMemo(
+    () => getMobileRouteProcedureCueStack(getMobileRouteProcedureContext(activeLegBehavior.profile).kind),
+    [activeLegBehavior.profile]
+  );
+  const activeProcedureRoleExecutionPolicyPreview = useMemo(
+    () =>
+      getMobileRouteProcedureRoleExecutionPolicy(
+        getMobileRouteProcedureEntryRole(getMobileRouteProcedureContext(activeLegBehavior.profile).kind, {
+          entryIndexInChain: 0,
+          entryCount: 1,
+        }).kind,
+      ),
     [activeLegBehavior.profile]
   );
 
@@ -3246,8 +4364,6 @@ export default function FlightPlannerScreen() {
   const fuelRequired = eteHours * burn;
   const totalFuel = fuelRequired + (burn * (reserve / 60));
   const eteMinutes = eteHours ? Math.round(eteHours * 60) : 0;
-  const plannedAltitudeFt = parseFloat(plannedAltitude);
-  const plannedAltitudeValue = Number.isFinite(plannedAltitudeFt) ? plannedAltitudeFt : undefined;
   const windsAltitudeFt = windsAltitudeChoice === 'planned'
     ? plannedAltitudeValue
     : Number(windsAltitudeChoice);
@@ -3457,6 +4573,9 @@ export default function FlightPlannerScreen() {
     const departureSurface = flightPhase === 'departure';
     const airport = departureSurface ? activeRoutePoints[0] : activeRoutePoints[activeRoutePoints.length - 1];
     const runway = departureSurface ? departureRunway : destinationRunway;
+    const runwayOverlay = departureSurface ? departureRunwayOverlay : destinationRunwayOverlay;
+    const surfaceGeometry = departureSurface ? departureSurfaceGeometry : destinationSurfaceGeometry;
+    const surfaceGeometryLoading = departureSurface ? departureSurfaceGeometryLoading : destinationSurfaceGeometryLoading;
     const frequencies = departureSurface ? departureFrequencies : destinationFrequencies;
     const progressPct = routeProgress?.progressPct ?? 0;
     if (!airport || !runway || !routeProgress || (flightPhase !== 'departure' && flightPhase !== 'arrival')) return null;
@@ -3494,6 +4613,56 @@ export default function FlightPlannerScreen() {
           { x: 60, y: 22 },
           { x: 50, y: 22 },
         ];
+    const nmPerUnit = runway.lengthFt ? Math.max(0.002, Math.min(0.01, runway.lengthFt / 6076 / 92)) : 0.0048;
+    const baseGeoRoute = snapSurfacePoints(
+      route.map((point) =>
+        localSurfacePointToGeo({
+          point,
+          airport: { latitude: airport.latitude, longitude: airport.longitude },
+          runwayHeadingDeg: runway.headingDeg,
+          nmPerUnit,
+        }),
+      ),
+      Array.isArray(surfaceGeometry?.features) ? surfaceGeometry.features : [],
+    );
+    const derivedTaxiRoute = deriveTaxiRouteFromSurfaceGeometry(
+      baseGeoRoute,
+      Array.isArray(surfaceGeometry?.features) ? surfaceGeometry.features : [],
+      taxiProgress,
+    );
+    const fallbackGeoProgress = deriveGeoProgressAlongRoute(baseGeoRoute, taxiProgress);
+    const geoRoute = derivedTaxiRoute?.route || baseGeoRoute;
+    const geoCompletedRoute = derivedTaxiRoute?.completedRoute || fallbackGeoProgress.completedRoute;
+    const geoUpcomingRoute = derivedTaxiRoute?.upcomingRoute || fallbackGeoProgress.upcomingRoute;
+    const geoOwnship = derivedTaxiRoute?.ownship || fallbackGeoProgress.ownship;
+    const holdShortActive = departureSurface && taxiProgress >= 0.72 && taxiProgress < 0.92;
+    const runwayOccupied = departureSurface ? taxiProgress > 0.93 : taxiProgress < 0.18;
+    const activeTaxiway = derivedTaxiRoute?.activeTaxiway || (holdShortActive ? 'Hold short' : 'Alpha');
+    const upcomingTaxiways =
+      derivedTaxiRoute?.upcomingTaxiways?.length
+        ? derivedTaxiRoute.upcomingTaxiways
+        : departureSurface
+          ? ['Alpha', runway.runwayId]
+          : ['Alpha', 'Ramp'];
+    const geoRunwayCenterline =
+      runwayOverlay?.centerline?.map((point) => ({ lat: point.latitude, lon: point.longitude })) || [];
+    const geoRunwayBar =
+      runwayOverlay?.runwayBar?.map((point) => ({ lat: point.latitude, lon: point.longitude })) || [];
+    const progressCall = departureSurface
+      ? holdShortActive
+        ? `Hold short runway ${runway.runwayId}`
+        : runwayOccupied
+          ? `Line up runway ${runway.runwayId}`
+          : `Taxi via ${activeTaxiway}`
+      : runwayOccupied
+        ? `Exit runway ${runway.runwayId}`
+        : `Taxi in via ${activeTaxiway}`;
+    const surfaceRegion = buildSurfaceRegion({
+      ownship: { lat: geoOwnship.lat, lon: geoOwnship.lon },
+      route: geoUpcomingRoute,
+      runwayCenterline: geoRunwayCenterline,
+      bounds: surfaceGeometry?.bounds || null,
+    });
     const ownship = route.reduce<FlightDeckSurfacePreview['ownship']>(
       (current, _point, index) => {
         if (index === route.length - 1) return current;
@@ -3511,8 +4680,6 @@ export default function FlightPlannerScreen() {
       },
       { x: route[0].x, y: route[0].y, headingDeg: departureSurface ? 45 : 225 },
     );
-    const holdShortActive = departureSurface && taxiProgress >= 0.72 && taxiProgress < 0.92;
-    const runwayOccupied = departureSurface ? taxiProgress > 0.93 : taxiProgress < 0.18;
     return {
       airportIcao: airport.icao,
       runwayId: runway.runwayId,
@@ -3527,8 +4694,12 @@ export default function FlightPlannerScreen() {
           ? 'Taxi-in surface guidance active after landing rollout.'
           : 'Arrival rollout transitions into taxi-in guidance.',
       support: departureSurface
-        ? `Previewing taxi-out flow, hold-short state, and runway ${runway.runwayId} entry.`
-        : `Previewing runway ${runway.runwayId} exit, occupancy state, and taxi-in from the landing surface.`,
+        ? surfaceGeometryLoading
+          ? `Loading airport surface geometry for runway ${runway.runwayId} taxi-out guidance.`
+          : `Airport geometry tracks taxi-out flow, hold-short state, and runway ${runway.runwayId} entry.`
+        : surfaceGeometryLoading
+          ? `Loading airport surface geometry for runway ${runway.runwayId} rollout and taxi-in guidance.`
+          : `Airport geometry tracks runway ${runway.runwayId} exit, occupancy state, and taxi-in from the landing surface.`,
       routeCall: departureSurface
         ? `Taxi via Alpha to runway ${runway.runwayId}. Hold short until cleared.`
         : `Exit runway ${runway.runwayId}, then taxi via Alpha to parking.`,
@@ -3550,8 +4721,34 @@ export default function FlightPlannerScreen() {
       ownship,
       route,
       secondaryRoute,
+      geoOwnship,
+      geoRoute,
+      geoCompletedRoute,
+      geoUpcomingRoute,
+      geoRunwayCenterline,
+      geoRunwayBar,
+      surfaceFeatures: Array.isArray(surfaceGeometry?.features) ? surfaceGeometry.features : [],
+      activeTaxiway,
+      upcomingTaxiways,
+      progressCall,
+      surfaceRegion,
     };
-  }, [activeRoutePoints, departureFrequencies, departureRunway, destinationFrequencies, destinationRunway, flightDeckPhaseSummary.stage, flightPhase, routeProgress]);
+  }, [
+    activeRoutePoints,
+    departureFrequencies,
+    departureRunway,
+    departureRunwayOverlay,
+    departureSurfaceGeometry,
+    destinationFrequencies,
+    destinationRunway,
+    destinationRunwayOverlay,
+    destinationSurfaceGeometry,
+    destinationSurfaceGeometryLoading,
+    flightDeckPhaseSummary.stage,
+    flightPhase,
+    routeProgress,
+    departureSurfaceGeometryLoading,
+  ]);
   const flightDeckRunwayOpsSummary = useMemo<FlightDeckRunwayOpsSummary | null>(() => {
     const departureSurface = flightPhase === 'departure';
     const airport = departureSurface ? activeRoutePoints[0] : activeRoutePoints[activeRoutePoints.length - 1];
@@ -3698,6 +4895,7 @@ export default function FlightPlannerScreen() {
     mapStyle,
     routePoints: activeRoutePoints,
     activeOwnship,
+    activeAttitude,
     ownshipSourceSummary,
     headingSourceSummary,
     attitudeSourceSummary,
@@ -4121,6 +5319,7 @@ export default function FlightPlannerScreen() {
                 setTrafficStatus('idle');
                 setTrafficTargets([]);
                 setReceiverOwnship(null);
+                setReceiverAttitude(null);
                 setReceiverHealth(null);
                 return;
               }
@@ -4148,6 +5347,18 @@ export default function FlightPlannerScreen() {
                     speedKts: ownship.speedKts,
                     heading: ownship.headingDeg,
                     updatedAt: ownship.updatedAt,
+                    source: 'receiver',
+                  });
+                },
+                (attitude: AttitudeReport) => {
+                  setReceiverAttitude({
+                    pitchDeg: attitude.pitchDeg,
+                    rollDeg: attitude.rollDeg,
+                    headingDeg: attitude.headingDeg,
+                    headingReference: attitude.headingReference,
+                    indicatedAirspeedKts: attitude.indicatedAirspeedKts,
+                    trueAirspeedKts: attitude.trueAirspeedKts,
+                    updatedAt: attitude.updatedAt,
                     source: 'receiver',
                   });
                 },
@@ -4975,6 +6186,13 @@ export default function FlightPlannerScreen() {
           <Text style={styles.sectionTitle}>Route Legs</Text>
           {routeSummary.legs.map((leg, index) => {
             const planEntry = plannerExecutionPlanView[index];
+            const procedureChain =
+              plannerProcedureChains.find(
+                (chain) => index >= chain.startLegIndex && index <= chain.endLegIndex,
+              ) || null;
+            const procedureChainBehavior = procedureChain
+              ? getMobileRouteProcedureChainBehavior(procedureChain.kind)
+              : null;
             const isActive = planEntry?.status === 'active' || planEntry?.status === 'managed-open';
             const isCompleted = planEntry?.status === 'completed';
             const legActionCue =
@@ -5011,6 +6229,47 @@ export default function FlightPlannerScreen() {
                   <Text style={styles.legSubtext}>{legActionCue}</Text>
                   <Text style={styles.legSubtext}>
                     Segment {planEntry?.segment?.label || 'Standby'} · {planEntry?.segment?.sequencingModel || 'auto'} · {planEntry?.transition?.label || 'Course capture'}
+                  </Text>
+                  <Text style={styles.legSubtext}>
+                    Navigation context {planEntry?.procedure?.label || 'Enroute structure'}
+                  </Text>
+                  <Text style={styles.legSubtext}>
+                    Handoff {planEntry?.handoff?.label || 'Auto course handoff'}
+                  </Text>
+                  <Text style={styles.legSubtext}>
+                    Procedure role {planEntry?.procedureEntryDescriptor?.role?.label || planEntry?.procedureRole?.label || 'Enroute structure'} · {planEntry?.procedureEntryDescriptor?.role?.cue || planEntry?.procedureRole?.cue || 'Managed structure leg'}
+                  </Text>
+                  <Text style={styles.legSubtext}>
+                    {planEntry?.procedureEntryDescriptor?.positionLabel || 'Entry 1/1'} · {planEntry?.procedureEntryDescriptor?.cueProfile?.label || 'Enroute structure cues'}
+                  </Text>
+                  <Text style={styles.legSubtext}>
+                    Segment template {planEntry?.procedureEntryDescriptor?.segmentTemplate?.label || 'Enroute structure segment'} · {planEntry?.procedureEntryDescriptor?.segmentTemplate?.phaseLabel || 'Enroute'}
+                  </Text>
+                  <Text style={styles.legSubtext}>
+                    Segment class {planEntry?.procedureEntryDescriptor?.segmentClass?.label || 'Enroute structure class'} · {planEntry?.procedureEntryDescriptor?.segmentClass?.lateralMode || 'course-capture'}
+                  </Text>
+                  <Text style={styles.legSubtext}>
+                    Leg adapter {planEntry?.procedureEntryDescriptor?.procedureLegAdapter?.label || 'Course procedure leg'} · {planEntry?.procedureEntryDescriptor?.procedureLegAdapter?.kind || 'course-leg'}
+                  </Text>
+                  <Text style={styles.legSubtext}>
+                    Leg family {planEntry?.procedureEntryDescriptor?.procedureLegFamily?.label || 'Course-to-fix leg family'} · {planEntry?.procedureEntryDescriptor?.procedureLegFamily?.kind || 'course-to-fix-family'}
+                  </Text>
+                  <Text style={styles.legSubtext}>
+                    Parser target {planEntry?.procedureEntryDescriptor?.procedureLegParserTarget?.label || 'Course-to-fix parser target'} · {planEntry?.procedureEntryDescriptor?.procedureLegParserTarget?.source || 'nav-data'}
+                  </Text>
+                  <Text style={styles.legSubtext}>
+                    Ingestion {planEntry?.procedureEntryDescriptor?.procedureLegIngestionContract?.label || 'Course-to-fix ingestion contract'} · {planEntry?.procedureEntryDescriptor?.procedureLegIngestionContract?.payloadShape || 'course-to-fix'}
+                  </Text>
+                  {planEntry?.procedureEntryDescriptor?.parsedLegPayload ? (
+                    <Text style={styles.legSubtext}>
+                      Parsed payload {planEntry.procedureEntryDescriptor.parsedLegPayload.label} · {planEntry.procedureEntryDescriptor.parsedLegPayload.kind} · {planEntry.procedureEntryDescriptor.parsedLegPayload.source}
+                    </Text>
+                  ) : null}
+                  <Text style={styles.legSubtext}>
+                    Procedure chain {procedureChain?.label || 'Enroute structure'} · {procedureChain?.entryCount || 1} leg block
+                  </Text>
+                  <Text style={styles.legSubtext}>
+                    Chain behavior {procedureChainBehavior?.label || 'Enroute auto block'} · {procedureChainBehavior?.sequencingModel || 'auto'} sequencing
                   </Text>
                 </View>
                 <Text
@@ -5189,6 +6448,20 @@ const styles = StyleSheet.create({
     right: spacing.xl,
     height: 28,
   },
+  flightDeckVisionBankReference: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: -1,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderTopWidth: 10,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: 'rgba(232,237,244,0.9)',
+    marginLeft: -7,
+  },
   flightDeckVisionBankTick: {
     position: 'absolute',
     top: 10,
@@ -5203,19 +6476,31 @@ const styles = StyleSheet.create({
     height: 12,
     backgroundColor: colors.flightAccent,
   },
-  flightDeckVisionBankPointer: {
+  flightDeckVisionBankPointerActual: {
     position: 'absolute',
     alignSelf: 'center',
-    top: 0,
+    top: 2,
     width: 0,
     height: 0,
-    borderLeftWidth: 8,
-    borderRightWidth: 8,
-    borderBottomWidth: 12,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderBottomWidth: 10,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderBottomColor: colors.flightAccent,
-    marginLeft: -8,
+    borderBottomColor: 'rgba(232,237,244,0.9)',
+    marginLeft: -7,
+  },
+  flightDeckVisionBankPointerCommand: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: 16,
+    width: 10,
+    height: 10,
+    marginLeft: -5,
+    borderRadius: 999,
+    backgroundColor: colors.flightAccent,
+    borderWidth: 2,
+    borderColor: '#07111E',
   },
   flightDeckVisionCenterline: {
     position: 'absolute',
@@ -5260,11 +6545,36 @@ const styles = StyleSheet.create({
     borderColor: colors.flightText,
     backgroundColor: 'rgba(232,237,244,0.08)',
   },
+  flightDeckVisionRunwayEdge: {
+    position: 'absolute',
+    width: 2,
+    marginLeft: -1,
+    borderRadius: 999,
+    backgroundColor: 'rgba(232,237,244,0.72)',
+  },
+  flightDeckVisionRunwayDash: {
+    position: 'absolute',
+    width: 8,
+    height: 14,
+    marginLeft: -4,
+    marginTop: -7,
+    borderRadius: 3,
+    backgroundColor: 'rgba(232,237,244,0.84)',
+  },
   flightDeckVisionRunwayThreshold: {
     position: 'absolute',
     height: 3,
     marginTop: -1.5,
     backgroundColor: colors.flightAccent,
+  },
+  flightDeckVisionRunwayThresholdStripe: {
+    position: 'absolute',
+    width: 8,
+    height: 18,
+    marginLeft: -4,
+    marginTop: -9,
+    borderRadius: 2,
+    backgroundColor: 'rgba(232,237,244,0.7)',
   },
   flightDeckVisionFlightPathMarker: {
     position: 'absolute',
@@ -5418,20 +6728,44 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontWeight: '700',
   },
-  flightDeckVisionPitchLine: {
+  flightDeckVisionPitchMark: {
     position: 'absolute',
     alignSelf: 'center',
-    borderTopWidth: 1.5,
-    borderTopColor: 'rgba(232,237,244,0.75)',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  flightDeckVisionPitchLabel: {
+  flightDeckVisionPitchMarkWing: {
     position: 'absolute',
-    top: -10,
-    right: -28,
+    top: 0,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: 'rgba(232,237,244,0.78)',
+  },
+  flightDeckVisionPitchMarkWingLeft: {
+    right: 22,
+  },
+  flightDeckVisionPitchMarkWingRight: {
+    left: 22,
+  },
+  flightDeckVisionPitchMarkWingMajor: {
+    width: 62,
+  },
+  flightDeckVisionPitchMarkWingMinor: {
+    width: 42,
+    opacity: 0.88,
+  },
+  flightDeckVisionPitchMarkLabel: {
+    position: 'absolute',
+    top: -9,
     color: colors.flightTextMuted,
     fontSize: 11,
     fontWeight: '600',
+  },
+  flightDeckVisionPitchMarkLabelLeft: {
+    left: -112,
+  },
+  flightDeckVisionPitchMarkLabelRight: {
+    right: -112,
   },
   flightDeckVisionGuidanceChip: {
     position: 'absolute',
@@ -5930,10 +7264,16 @@ const styles = StyleSheet.create({
   flightDeckSurfaceDiagram: {
     marginTop: spacing.sm,
     borderRadius: radius.xl,
-    padding: spacing.sm,
+    padding: spacing.xs,
     backgroundColor: 'rgba(7,16,26,0.96)',
     borderWidth: 1,
     borderColor: colors.flightBorder,
+  },
+  flightDeckSurfaceMap: {
+    width: '100%',
+    height: 220,
+    borderRadius: radius.lg,
+    backgroundColor: '#0B1119',
   },
   flightDeckSurfaceDiagramFrame: {
     position: 'relative',
@@ -6015,6 +7355,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: colors.flightBackground,
+  },
+  flightDeckSurfaceOwnshipMap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.flightAccent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.flightBackground,
+    ...shadow.flightGlass,
   },
   flightDeckSurfaceOccupiedBadge: {
     position: 'absolute',

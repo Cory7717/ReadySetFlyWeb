@@ -280,11 +280,12 @@ function FlightDeckSurfaceMap({ preview, styles }: { preview: any; styles: any }
           </Text>
         </View>
         <View style={styles.flightDeckSurfaceStatusCard}>
-          <Text style={styles.flightDeckContextCardEyebrow}>Taxi Sequence</Text>
-          <Text style={styles.flightDeckContextCardTitle}>
-            {preview.upcomingTaxiways?.length ? preview.upcomingTaxiways.join(' -> ') : 'Ground path staged'}
+          <Text style={styles.flightDeckContextCardEyebrow}>{preview.cameraModeLabel || 'Taxi Sequence'}</Text>
+          <Text style={styles.flightDeckContextCardTitle}>{preview.nextActionCall}</Text>
+          <Text style={styles.flightDeckContextCardText}>
+            {preview.upcomingTaxiways?.length ? `Upcoming ${preview.upcomingTaxiways.join(' -> ')}.` : preview.support}
+            {typeof preview.nextTurnDistanceNm === 'number' ? ` Turn in ${preview.nextTurnDistanceNm.toFixed(2)} NM.` : ''}
           </Text>
-          <Text style={styles.flightDeckContextCardText}>{preview.support}</Text>
         </View>
       </View>
       <View style={styles.flightDeckControlRow}>
@@ -355,6 +356,42 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
       turnCommand: 'Track centered',
       verticalCommand: 'Hold altitude',
     },
+    flightDeckVerticalPathSummary = {
+      modeLabel: 'Vertical pending',
+      guidanceMode: 'hold',
+      targetAltitudeFt: null,
+      verticalErrorFt: null,
+      requiredVsiFpm: null,
+      topOfDescentNm: null,
+      distanceToTodNm: null,
+      advisoryCall: 'Vertical path pending',
+      support: 'Awaiting route and ownship.',
+      recommendation: 'Set a planned altitude.',
+      cueLabel: 'ALT',
+      manualBugActive: false,
+    },
+    flightDeckVerticalConstraintSummary = {
+      modeLabel: 'Heuristic path',
+      sourceLabel: 'Heuristic',
+      targetAltitudeFt: null,
+      requiredVsiFpm: null,
+      support: 'No structured vertical constraint is active yet.',
+      recommendation: 'Continue using the advisory path model.',
+      call: 'Vertical path pending',
+      activeConstraintLabel: 'Advisory path',
+      nextConstraintLabel: null,
+      nextConstraintArmed: false,
+      activeConstraintDistanceNm: null,
+      constraintGateState: 'monitor',
+      constraintGateCall: 'Vertical path monitor',
+    },
+    flightDeckVerticalAlertSummary = {
+      severity: null,
+      title: null,
+      detail: null,
+      deviationLabel: 'VNAV pending',
+      todLabel: 'TOD pending',
+    },
     visionVerticalCueLabel,
     visionGuidance,
     terrainEscapeGuidance,
@@ -391,6 +428,10 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
     selectedDiversionIcao,
     diversionCandidates = [],
     visibleTrafficTargets = [],
+    mapDisplayTrafficTargets = [],
+    mapTrafficPresentation = [],
+    mapRouteDisplay = { completed: [], activeLeg: [], upcoming: [] },
+    mapVerticalGuidancePresentation = null,
     selectedDiversion,
     selectedDiversionRunwaySummary,
     departureBriefing,
@@ -410,8 +451,25 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
       modeLabel: 'Track',
       heading: 'Track centered',
       vertical: 'Hold altitude',
+      verticalSupport: 'Awaiting vertical path',
+      verticalConstraintCall: 'Path monitor active',
       recommendation: 'Monitor route',
     },
+    mapOverlayProfile = {
+      label: 'Enroute priority',
+      activeLegWidth: 5,
+      completedLegWidth: 2.5,
+      upcomingLegWidth: 3,
+      upcomingLegOpacity: 0.42,
+      runwayEmphasisWidth: 10,
+      showTrafficVectors: true,
+      showMonitorAltitudeTags: true,
+      maxWindMarkers: 12,
+      radarOpacity: 0.75,
+      cloudOpacity: 0.75,
+    },
+    mapRunwayFocusSummary = { emphasize: false, label: 'Route corridor' },
+    tacticalMapRegion,
     flightDeckTargetAltitudeFt,
     flightDeckVisibleAlert,
     flightDeckLowerStackBottom,
@@ -450,6 +508,21 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
   const visionActualBankOffset = visionRollDeg * 1.12;
   const visionCommandBankOffset = Math.max(-45, Math.min(45, flightDeckCommandBankDeg || 0)) * 1.12;
   const visionPitchMarks = [-20, -15, -10, -5, 5, 10, 15, 20];
+  const visionVerticalDeviationValue =
+    flightDeckVerticalConstraintSummary.targetAltitudeFt != null
+      ? flightDeckVerticalConstraintSummary.targetAltitudeFt - (activeOwnship?.altitudeFt ?? flightDeckVerticalPathSummary.targetAltitudeFt ?? 0)
+      : flightDeckVerticalPathSummary.verticalErrorFt ?? 0;
+  const visionVerticalDeviationOffset = Math.max(-30, Math.min(30, (visionVerticalDeviationValue / 600) * 26));
+  const visionVerticalStateLabel =
+    flightDeckVerticalConstraintSummary.targetAltitudeFt != null
+      ? flightDeckVerticalConstraintSummary.nextConstraintArmed
+        ? 'VPTH'
+        : 'VNAV'
+      : visionVerticalCueLabel === 'DES'
+        ? 'DES'
+        : visionVerticalCueLabel === 'CLB'
+          ? 'CLB'
+          : 'ALT';
 
   const {
     pulseFlightDeckChrome = () => {},
@@ -811,13 +884,27 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
             />
             <View style={[styles.flightDeckVisionCaptureTag, styles.flightDeckVisionCaptureTagTop]}>
               <Text style={styles.flightDeckVisionCaptureTagText}>
-                {visionVerticalCueLabel === 'CLB' ? 'CLB' : 'ALT'}
+                {visionVerticalStateLabel === 'CLB' ? 'CLB' : visionVerticalStateLabel === 'VPTH' ? 'VPTH' : visionVerticalStateLabel === 'VNAV' ? 'VNAV' : 'ALT'}
               </Text>
             </View>
             <View style={[styles.flightDeckVisionCaptureTag, styles.flightDeckVisionCaptureTagBottom]}>
               <Text style={styles.flightDeckVisionCaptureTagText}>
-                {visionVerticalCueLabel === 'DES' ? 'DES' : 'ALT'}
+                {visionVerticalStateLabel === 'DES' ? 'DES' : visionVerticalStateLabel === 'VPTH' ? 'ARM' : visionVerticalStateLabel === 'VNAV' ? 'PATH' : 'ALT'}
               </Text>
+            </View>
+            <View style={styles.flightDeckVisionVerticalScale}>
+              <View style={styles.flightDeckVisionVerticalScaleCenter} />
+              <View
+                style={[
+                  styles.flightDeckVisionVerticalBug,
+                  { transform: [{ translateY: visionVerticalDeviationOffset }] },
+                  flightDeckVerticalConstraintSummary.targetAltitudeFt != null
+                    ? flightDeckVerticalConstraintSummary.nextConstraintArmed
+                      ? styles.flightDeckVisionVerticalBugArmed
+                      : styles.flightDeckVisionVerticalBugActive
+                    : null,
+                ]}
+              />
             </View>
             <View style={styles.flightDeckVisionReadoutLeft}>
               <Text style={styles.flightDeckVisionLabel}>ALT</Text>
@@ -841,6 +928,46 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               </Text>
               <Text style={styles.flightDeckVisionBannerSupport}>{visionDirectorCue.turnCommand}</Text>
               <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionDirectorCue.verticalCommand}</Text>
+              <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                {flightDeckVerticalPathSummary.modeLabel} - {flightDeckVerticalPathSummary.support}
+              </Text>
+              <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                {flightDeckVerticalAlertSummary.deviationLabel} - {flightDeckVerticalAlertSummary.todLabel}
+              </Text>
+              {flightDeckVerticalConstraintSummary.targetAltitudeFt != null ? (
+                <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                  {flightDeckVerticalConstraintSummary.modeLabel} - {flightDeckVerticalConstraintSummary.activeConstraintLabel}
+                  {typeof flightDeckVerticalConstraintSummary.activeConstraintDistanceNm === 'number'
+                    ? ` - ${flightDeckVerticalConstraintSummary.activeConstraintDistanceNm.toFixed(1)} NM`
+                    : ''}
+                  {' - '}
+                  {flightDeckVerticalConstraintSummary.sourceLabel}
+                </Text>
+              ) : null}
+              {flightDeckVerticalConstraintSummary.nextConstraintLabel ? (
+                <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                  {flightDeckVerticalConstraintSummary.nextConstraintArmed ? 'Next constraint armed' : 'Next constraint staged'} - {flightDeckVerticalConstraintSummary.nextConstraintLabel}
+                </Text>
+              ) : null}
+              <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                {flightDeckVerticalConstraintSummary.constraintGateCall}
+              </Text>
+              {flightDeckVerticalPathSummary.requiredVsiFpm != null ? (
+                <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                  VNAV {Math.abs(flightDeckVerticalPathSummary.requiredVsiFpm)} fpm
+                  {flightDeckVerticalPathSummary.targetAltitudeFt != null
+                    ? ` - tgt ${Math.round(flightDeckVerticalPathSummary.targetAltitudeFt)} ft`
+                    : ''}
+                </Text>
+              ) : null}
+              {flightDeckVerticalConstraintSummary.requiredVsiFpm != null ? (
+                <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                  PROC VNAV {Math.abs(flightDeckVerticalConstraintSummary.requiredVsiFpm)} fpm
+                  {flightDeckVerticalConstraintSummary.targetAltitudeFt != null
+                    ? ` - tgt ${Math.round(flightDeckVerticalConstraintSummary.targetAltitudeFt)} ft`
+                    : ''}
+                </Text>
+              ) : null}
               {activeAttitude && (typeof activeAttitude.pitchDeg === 'number' || typeof activeAttitude.rollDeg === 'number') ? (
                 <Text style={styles.flightDeckVisionBannerSupportMuted}>
                   Att {typeof activeAttitude.pitchDeg === 'number' ? `${activeAttitude.pitchDeg.toFixed(1)}° pitch` : '--'} / {typeof activeAttitude.rollDeg === 'number' ? `${activeAttitude.rollDeg.toFixed(1)}° bank` : '--'}
@@ -979,10 +1106,10 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
             showsCompass={false}
             toolbarEnabled={false}
             initialRegion={{
-              latitude: routePoints[0]?.latitude || activeOwnship?.lat || 39.5,
-              longitude: routePoints[0]?.longitude || activeOwnship?.lon || -98.35,
-              latitudeDelta: 3,
-              longitudeDelta: 3,
+              latitude: tacticalMapRegion?.latitude || routePoints[0]?.latitude || activeOwnship?.lat || 39.5,
+              longitude: tacticalMapRegion?.longitude || routePoints[0]?.longitude || activeOwnship?.lon || -98.35,
+              latitudeDelta: tacticalMapRegion?.latitudeDelta || 3,
+              longitudeDelta: tacticalMapRegion?.longitudeDelta || 3,
             }}
             onPress={() => pulseFlightDeckChrome()}
             onPanDrag={() => pulseFlightDeckChrome()}
@@ -1014,7 +1141,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 maximumZ={11}
                 minimumZ={4}
                 tileSize={256}
-                opacity={0.75}
+                opacity={mapOverlayProfile.radarOpacity}
                 zIndex={600}
               />
             )}
@@ -1024,7 +1151,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 maximumZ={9}
                 minimumZ={2}
                 tileSize={256}
-                opacity={0.75}
+                opacity={mapOverlayProfile.cloudOpacity}
                 zIndex={600}
               />
             )}
@@ -1035,13 +1162,13 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 maximumZ={8}
                 minimumZ={3}
                 tileSize={256}
-                opacity={0.75}
+                opacity={mapOverlayProfile.cloudOpacity}
                 zIndex={600}
               />
             )}
             {mapStyle === 'winds' && (
               <>
-                {visibleWindsPoints.map((point: any, index: number) => {
+                {visibleWindsPoints.slice(0, mapOverlayProfile.maxWindMarkers).map((point: any, index: number) => {
                   if (point.windDir === null || point.windSpeed === null) return null;
                   const size = Math.min(24, Math.max(14, Math.round(point.windSpeed / 3) + 10));
                   const rotation = (point.windDir + 180) % 360;
@@ -1059,13 +1186,36 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 })}
               </>
             )}
-            <Polyline
-              coordinates={routePoints.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
-              strokeColor={colors.flightAccent}
-              strokeWidth={4}
-            />
+            {mapRouteDisplay.upcoming?.length > 1 ? (
+              <Polyline
+                coordinates={mapRouteDisplay.upcoming.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
+                strokeColor={`rgba(200,146,42,${mapOverlayProfile.upcomingLegOpacity})`}
+                strokeWidth={mapOverlayProfile.upcomingLegWidth}
+              />
+            ) : null}
+            {mapRouteDisplay.completed?.length > 1 ? (
+              <Polyline
+                coordinates={mapRouteDisplay.completed.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
+                strokeColor="rgba(0,212,160,0.88)"
+                strokeWidth={mapOverlayProfile.completedLegWidth}
+              />
+            ) : null}
+            {mapRouteDisplay.activeLeg?.length > 1 ? (
+              <Polyline
+                coordinates={mapRouteDisplay.activeLeg.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
+                strokeColor={colors.flightAccent}
+                strokeWidth={mapOverlayProfile.activeLegWidth}
+              />
+            ) : null}
             {activeRunwayOverlay ? (
               <>
+                {mapRunwayFocusSummary.emphasize ? (
+                  <Polyline
+                    coordinates={activeRunwayOverlay.centerline}
+                    strokeColor="rgba(200,146,42,0.18)"
+                    strokeWidth={mapOverlayProfile.runwayEmphasisWidth}
+                  />
+                ) : null}
                 <Polyline
                   coordinates={activeRunwayOverlay.centerline}
                   strokeColor="rgba(232, 237, 244, 0.86)"
@@ -1078,6 +1228,26 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                   strokeWidth={4}
                 />
               </>
+            ) : null}
+            {mapVerticalGuidancePresentation?.coordinate ? (
+              <Marker
+                coordinate={mapVerticalGuidancePresentation.coordinate}
+                anchor={{ x: 0.5, y: 0.5 }}
+                title={mapVerticalGuidancePresentation.detail}
+                description={`${mapVerticalGuidancePresentation.label} ${mapVerticalGuidancePresentation.subtitle}`}
+              >
+                <View
+                  style={[
+                    styles.flightDeckVerticalMarker,
+                    mapVerticalGuidancePresentation.kind === 'constraint'
+                      ? styles.flightDeckVerticalMarkerConstraint
+                      : styles.flightDeckVerticalMarkerTod,
+                  ]}
+                >
+                  <Text style={styles.flightDeckVerticalMarkerLabel}>{mapVerticalGuidancePresentation.label}</Text>
+                  <Text style={styles.flightDeckVerticalMarkerValue}>{mapVerticalGuidancePresentation.subtitle}</Text>
+                </View>
+              </Marker>
             ) : null}
             {activeOwnship && selectedTrafficTarget ? (
               <Polyline
@@ -1119,45 +1289,67 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 </Marker>
               );
             })}
-            {visibleTrafficTargets.map((target: any) => (
-              <Marker
-                key={`flight-traffic-${target.id}`}
-                coordinate={{ latitude: target.lat, longitude: target.lon }}
-                onPress={() => {
-                  pulseFlightDeckChrome();
-                  setSelectedTrafficId(target.id);
-                }}
-                description={`${target.distanceNm.toFixed(1)} NM${target.altitudeFt ? ` - ${target.altitudeFt} ft` : ''}`}
-              >
-                <View style={styles.flightTrafficMarkerWrap}>
-                  {selectedTrafficTarget?.id === target.id || target.threatLevel === 'immediate' ? (
+            {mapDisplayTrafficTargets.map((target: any) => {
+              const trafficPresentation = mapTrafficPresentation.find((item: any) => item.id === target.id);
+              return [
+                trafficPresentation?.vector?.length > 1 && mapOverlayProfile.showTrafficVectors ? (
+                  <Polyline
+                    key={`flight-traffic-vector-${target.id}`}
+                    coordinates={trafficPresentation.vector}
+                    strokeColor={
+                      target.threatLevel === 'immediate'
+                        ? colors.flightWarning
+                        : target.threatLevel === 'advisory'
+                          ? colors.flightCaution
+                          : 'rgba(232,237,244,0.5)'
+                    }
+                    strokeWidth={2}
+                  />
+                ) : null,
+                <Marker
+                  key={`flight-traffic-${target.id}`}
+                  coordinate={{ latitude: target.lat, longitude: target.lon }}
+                  onPress={() => {
+                    pulseFlightDeckChrome();
+                    setSelectedTrafficId(target.id);
+                  }}
+                  description={`${target.distanceNm.toFixed(1)} NM${target.altitudeFt ? ` - ${target.altitudeFt} ft` : ''}`}
+                >
+                  <View style={styles.flightTrafficMarkerWrap}>
+                    {selectedTrafficTarget?.id === target.id || target.threatLevel === 'immediate' ? (
+                      <View
+                        style={[
+                          styles.flightTrafficAttentionRing,
+                          target.threatLevel === 'immediate' && styles.flightTrafficAttentionRingImmediate,
+                        ]}
+                      />
+                    ) : null}
+                    {target.threatLevel !== 'monitor' || selectedTrafficTarget?.id === target.id || mapOverlayProfile.showMonitorAltitudeTags ? (
+                      <View style={styles.flightTrafficAltitudeTag}>
+                        <Text style={styles.flightTrafficAltitudeTagText}>{trafficPresentation?.altitudeLabel || '--'}</Text>
+                      </View>
+                    ) : null}
                     <View
                       style={[
-                        styles.flightTrafficAttentionRing,
-                        target.threatLevel === 'immediate' && styles.flightTrafficAttentionRingImmediate,
+                        styles.flightTrafficMarker,
+                        target.threatLevel === 'immediate'
+                          ? styles.flightTrafficMarkerImmediate
+                          : target.threatLevel === 'advisory'
+                            ? styles.flightTrafficMarkerAdvisory
+                            : styles.flightTrafficMarkerMonitor,
+                        selectedTrafficTarget?.id === target.id && styles.flightTrafficMarkerSelected,
                       ]}
-                    />
-                  ) : null}
-                  <View
-                    style={[
-                      styles.flightTrafficMarker,
-                      target.threatLevel === 'immediate'
-                        ? styles.flightTrafficMarkerImmediate
-                        : target.threatLevel === 'advisory'
-                          ? styles.flightTrafficMarkerAdvisory
-                          : styles.flightTrafficMarkerMonitor,
-                      selectedTrafficTarget?.id === target.id && styles.flightTrafficMarkerSelected,
-                    ]}
-                  >
-                    <Ionicons
-                      name="diamond"
-                      size={14}
-                      color={target.threatLevel === 'monitor' ? colors.flightText : colors.flightBackground}
-                    />
+                    >
+                      <Ionicons
+                        name="diamond"
+                        size={14}
+                        color={target.threatLevel === 'monitor' ? colors.flightText : colors.flightBackground}
+                      />
+                    </View>
                   </View>
-                </View>
-              </Marker>
-            ))}
+                </Marker>,
+              ];
+            })}
             {activeOwnship ? (
               <Marker
                 coordinate={{ latitude: activeOwnship.lat, longitude: activeOwnship.lon }}
@@ -1257,6 +1449,11 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 <Text style={styles.flightDeckSubtitle}>
                   Entry transition {routeExecutionSummary.activeProcedureEntryTransitionBehavior.label}
                   {routeExecutionSummary?.nextProcedureEntryTransitionBehavior?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureEntryTransitionBehavior.label}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.verticalConstraintCall ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Vertical constraint {routeExecutionSummary.verticalConstraintCall}
                 </Text>
               ) : null}
               {routeExecutionSummary?.activeProcedureTransitionTable?.label ? (
@@ -1547,7 +1744,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
             {flightDeckView === 'map' && !flightDeckTrafficCardVisible && !flightDeckDiversionCardVisible ? (
               <View style={styles.flightDeckMapActionCard}>
                 <View style={styles.flightDeckMapActionHeader}>
-                  <Text style={styles.flightDeckMapActionLabel}>Director</Text>
+                  <Text style={styles.flightDeckMapActionLabel}>{mapTacticalSummary.focusLabel || 'Director'}</Text>
                   <Text style={styles.flightDeckMapActionMode}>{mapTacticalSummary.modeLabel}</Text>
                 </View>
                 <Text style={styles.flightDeckMapActionText}>{mapTacticalSummary.heading}</Text>
@@ -1555,6 +1752,24 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                   {mapTacticalSummary.vertical}
                   {flightDeckTargetAltitudeFt ? ` - bug ${flightDeckTargetAltitudeFt} ft` : ''}
                 </Text>
+                <Text style={styles.flightDeckMapActionSubtext}>
+                  {mapTacticalSummary.verticalSupport}
+                  {flightDeckVerticalPathSummary.distanceToTodNm != null && flightDeckVerticalPathSummary.distanceToTodNm > 0
+                    ? ` - TOD ${flightDeckVerticalPathSummary.distanceToTodNm.toFixed(1)} NM`
+                    : ''}
+                </Text>
+                <Text style={styles.flightDeckMapActionSubtext}>{mapTacticalSummary.verticalConstraintCall}</Text>
+                <Text style={styles.flightDeckMapActionSubtext}>{flightDeckVerticalConstraintSummary.constraintGateCall}</Text>
+                {flightDeckVerticalConstraintSummary.targetAltitudeFt != null ? (
+                  <Text style={styles.flightDeckMapActionSubtext}>
+                    {flightDeckVerticalConstraintSummary.modeLabel} - {flightDeckVerticalConstraintSummary.support}
+                  </Text>
+                ) : null}
+                <Text style={styles.flightDeckMapActionSubtext}>
+                  {mapTacticalSummary.support}
+                  {mapTacticalSummary.rangeLabel ? ` - ${mapTacticalSummary.rangeLabel}` : ''}
+                </Text>
+                <Text style={styles.flightDeckMapActionSubtext}>{mapOverlayProfile.label}</Text>
                 <Text style={styles.flightDeckMapActionRecommendation}>{mapTacticalSummary.recommendation}</Text>
               </View>
             ) : null}
@@ -1719,6 +1934,50 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               <View style={styles.flightDeckHudExpandedMetric}>
                 <Text style={styles.flightDeckHudExpandedLabel}>Vision</Text>
                 <Text style={styles.flightDeckHudExpandedValue}>{visionReadinessSummary?.code || '--'}</Text>
+              </View>
+            </View>
+            <View style={styles.flightDeckHudExpandedRow}>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>VNAV</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>{flightDeckVerticalPathSummary.modeLabel}</Text>
+              </View>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Target</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>
+                  {flightDeckVerticalConstraintSummary.targetAltitudeFt != null
+                    ? `${Math.round(flightDeckVerticalConstraintSummary.targetAltitudeFt)} ft`
+                    : flightDeckVerticalPathSummary.targetAltitudeFt != null
+                      ? `${Math.round(flightDeckVerticalPathSummary.targetAltitudeFt)} ft`
+                      : '--'}
+                </Text>
+              </View>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Deviation</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>{flightDeckVerticalAlertSummary.deviationLabel}</Text>
+              </View>
+            </View>
+            <View style={styles.flightDeckHudExpandedRow}>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>TOD</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>{flightDeckVerticalAlertSummary.todLabel}</Text>
+              </View>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Req VS</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>
+                  {flightDeckVerticalConstraintSummary.requiredVsiFpm != null
+                    ? `${Math.abs(flightDeckVerticalConstraintSummary.requiredVsiFpm)}`
+                    : flightDeckVerticalPathSummary.requiredVsiFpm != null
+                      ? `${Math.abs(flightDeckVerticalPathSummary.requiredVsiFpm)}`
+                      : '--'}
+                </Text>
+              </View>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Source</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>
+                  {flightDeckVerticalConstraintSummary.targetAltitudeFt != null
+                    ? flightDeckVerticalConstraintSummary.sourceLabel
+                    : 'HEUR'}
+                </Text>
               </View>
             </View>
           </View>
@@ -2154,7 +2413,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                   {routeExecutionSummary.activeParsedLegPayload.kind === 'runway-release-payload'
                     ? ` - ${routeExecutionSummary.activeParsedLegPayload.airportIdent} ${routeExecutionSummary.activeParsedLegPayload.runwayIdent} @ ${typeof routeExecutionSummary.activeParsedLegPayload.releaseHeading === 'number' ? Math.round(routeExecutionSummary.activeParsedLegPayload.releaseHeading) : '--'}°`
                     : routeExecutionSummary.activeParsedLegPayload.kind === 'course-to-fix-payload'
-                      ? ` - ${routeExecutionSummary.activeParsedLegPayload.fromFix} -> ${routeExecutionSummary.activeParsedLegPayload.toFix} @ ${typeof routeExecutionSummary.activeParsedLegPayload.courseDeg === 'number' ? Math.round(routeExecutionSummary.activeParsedLegPayload.courseDeg) : '--'}°`
+                      ? ` - ${routeExecutionSummary.activeParsedLegPayload.fromFix} -> ${routeExecutionSummary.activeParsedLegPayload.toFix} @ ${typeof routeExecutionSummary.activeParsedLegPayload.courseDeg === 'number' ? Math.round(routeExecutionSummary.activeParsedLegPayload.courseDeg) : '--'}°${typeof routeExecutionSummary.activeParsedLegPayload.altitudeConstraintFt === 'number' ? ` / ${Math.round(routeExecutionSummary.activeParsedLegPayload.altitudeConstraintFt)} ft` : ''}`
                       : routeExecutionSummary.activeParsedLegPayload.kind === 'terminal-feed-payload'
                         ? ` - ${routeExecutionSummary.activeParsedLegPayload.transitionFix} -> ${routeExecutionSummary.activeParsedLegPayload.handoffFix} for ${routeExecutionSummary.activeParsedLegPayload.arrivalIdent}`
                         : routeExecutionSummary.activeParsedLegPayload.kind === 'final-capture-payload'
@@ -2325,7 +2584,42 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 Mode {mapTacticalSummary.modeLabel} / {visionDirectorCue.turnCommand}
               </Text>
               <Text style={styles.flightDeckPanelText}>{visionDirectorCue.verticalCommand}</Text>
+              <Text style={styles.flightDeckPanelText}>
+                {flightDeckVerticalPathSummary.modeLabel} - {flightDeckVerticalPathSummary.support}
+              </Text>
+              <Text style={styles.flightDeckPanelText}>{routeExecutionSummary?.verticalConstraintCall || mapTacticalSummary.verticalConstraintCall}</Text>
+              <Text style={styles.flightDeckPanelText}>{flightDeckVerticalConstraintSummary.constraintGateCall}</Text>
+              {flightDeckVerticalConstraintSummary.targetAltitudeFt != null ? (
+                <Text style={styles.flightDeckPanelText}>
+                  {flightDeckVerticalConstraintSummary.modeLabel} - {flightDeckVerticalConstraintSummary.support}
+                  {typeof flightDeckVerticalConstraintSummary.activeConstraintDistanceNm === 'number'
+                    ? ` - ${flightDeckVerticalConstraintSummary.activeConstraintDistanceNm.toFixed(1)} NM`
+                    : ''}
+                  {' - '}
+                  {flightDeckVerticalConstraintSummary.sourceLabel}
+                </Text>
+              ) : null}
+              {flightDeckVerticalPathSummary.requiredVsiFpm != null ? (
+                <Text style={styles.flightDeckPanelText}>
+                  VNAV {Math.abs(flightDeckVerticalPathSummary.requiredVsiFpm)} fpm
+                  {flightDeckVerticalPathSummary.targetAltitudeFt != null
+                    ? ` to ${Math.round(flightDeckVerticalPathSummary.targetAltitudeFt)} ft`
+                    : ''}
+                </Text>
+              ) : null}
+              {flightDeckVerticalConstraintSummary.requiredVsiFpm != null ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Procedure VNAV {Math.abs(flightDeckVerticalConstraintSummary.requiredVsiFpm)} fpm
+                  {flightDeckVerticalConstraintSummary.targetAltitudeFt != null
+                    ? ` to ${Math.round(flightDeckVerticalConstraintSummary.targetAltitudeFt)} ft`
+                    : ''}
+                </Text>
+              ) : null}
               <Text style={styles.flightDeckPanelText}>{mapTacticalSummary.recommendation}</Text>
+              <Text style={styles.flightDeckPanelText}>{flightDeckVerticalPathSummary.recommendation}</Text>
+              {flightDeckVerticalConstraintSummary.targetAltitudeFt != null ? (
+                <Text style={styles.flightDeckPanelText}>{flightDeckVerticalConstraintSummary.recommendation}</Text>
+              ) : null}
             </View>
           )}
 

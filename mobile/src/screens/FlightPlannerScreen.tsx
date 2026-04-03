@@ -290,6 +290,9 @@ type FlightDeckSurfacePreview = {
   activeTaxiway: string;
   upcomingTaxiways: string[];
   progressCall: string;
+  nextActionCall: string;
+  cameraModeLabel: string;
+  nextTurnDistanceNm: number | null;
   surfaceRegion: {
     latitude: number;
     longitude: number;
@@ -795,23 +798,25 @@ function buildSurfaceRegion({
   ownship,
   route,
   runwayCenterline,
-  bounds,
+  runwayBar,
+  mode,
+  holdShortActive,
+  runwayOccupied,
 }: {
   ownship: { lat: number; lon: number };
   route: Array<{ lat: number; lon: number }>;
   runwayCenterline: Array<{ lat: number; lon: number }>;
-  bounds?: AirportSurfaceGeometryResponse['bounds'] | null;
+  runwayBar?: Array<{ lat: number; lon: number }>;
+  mode: 'departure' | 'arrival';
+  holdShortActive: boolean;
+  runwayOccupied: boolean;
 }) {
+  const forwardRoute = route.slice(0, mode === 'departure' ? 5 : 4);
   const points = [
     ownship,
-    ...route,
-    ...runwayCenterline,
-    ...(bounds
-      ? [
-          { lat: bounds.minLat, lon: bounds.minLon },
-          { lat: bounds.maxLat, lon: bounds.maxLon },
-        ]
-      : []),
+    ...forwardRoute,
+    ...(holdShortActive || runwayOccupied ? runwayCenterline : runwayCenterline.slice(0, 2)),
+    ...(holdShortActive || runwayOccupied ? runwayBar || [] : []),
   ].filter(
     (point) =>
       typeof point?.lat === 'number' &&
@@ -839,9 +844,211 @@ function buildSurfaceRegion({
   return {
     latitude: (minLat + maxLat) / 2,
     longitude: (minLon + maxLon) / 2,
-    latitudeDelta: Math.max((maxLat - minLat) * 1.6, 0.006),
-    longitudeDelta: Math.max((maxLon - minLon) * 1.8, 0.006),
+    latitudeDelta: Math.max((maxLat - minLat) * 1.7, mode === 'departure' ? 0.0035 : 0.0045),
+    longitudeDelta: Math.max((maxLon - minLon) * 2.0, mode === 'departure' ? 0.0045 : 0.0055),
   };
+}
+
+function deriveSurfaceNextAction({
+  ownship,
+  upcomingRoute,
+  activeTaxiway,
+  upcomingTaxiways,
+  holdShortActive,
+  runwayOccupied,
+  runwayId,
+}: {
+  ownship: { lat: number; lon: number; headingDeg: number };
+  upcomingRoute: Array<{ lat: number; lon: number }>;
+  activeTaxiway: string;
+  upcomingTaxiways: string[];
+  holdShortActive: boolean;
+  runwayOccupied: boolean;
+  runwayId: string;
+}) {
+  if (holdShortActive) {
+    return {
+      nextActionCall: `Hold short runway ${runwayId}. Await tower release.`,
+      cameraModeLabel: 'Hold short focus',
+      nextTurnDistanceNm: null,
+    };
+  }
+  if (runwayOccupied) {
+    return {
+      nextActionCall: `Runway ${runwayId} occupied. Continue only when cleared.`,
+      cameraModeLabel: 'Runway focus',
+      nextTurnDistanceNm: null,
+    };
+  }
+
+  if (upcomingRoute.length >= 3) {
+    const legA = bearingBetweenPoints(
+      { latitude: upcomingRoute[0].lat, longitude: upcomingRoute[0].lon },
+      { latitude: upcomingRoute[1].lat, longitude: upcomingRoute[1].lon },
+    );
+    const legB = bearingBetweenPoints(
+      { latitude: upcomingRoute[1].lat, longitude: upcomingRoute[1].lon },
+      { latitude: upcomingRoute[2].lat, longitude: upcomingRoute[2].lon },
+    );
+    const delta = normalizeHeadingDelta(legB - legA);
+    const turnDistanceNm = greatCircleNm(
+      { latitude: ownship.lat, longitude: ownship.lon },
+      { latitude: upcomingRoute[1].lat, longitude: upcomingRoute[1].lon },
+    );
+    if (Math.abs(delta) >= 20) {
+      return {
+        nextActionCall: `Next ${delta > 0 ? 'right' : 'left'} turn in ${turnDistanceNm.toFixed(2)} NM${upcomingTaxiways[0] ? ` toward ${upcomingTaxiways[0]}` : ''}.`,
+        cameraModeLabel: 'Turn-ahead focus',
+        nextTurnDistanceNm: turnDistanceNm,
+      };
+    }
+  }
+
+  return {
+    nextActionCall: activeTaxiway
+      ? `Continue on ${activeTaxiway}${upcomingTaxiways[0] ? ` toward ${upcomingTaxiways[0]}` : ''}.`
+      : 'Continue taxi along the active ground path.',
+    cameraModeLabel: 'Ownship follow',
+    nextTurnDistanceNm: null,
+  };
+}
+
+function buildTacticalMapRegion({
+  phaseStage,
+  ownship,
+  routePoints,
+  routeProgress,
+  activeRunwayOverlay,
+  selectedTrafficTarget,
+  selectedDiversionPoint,
+}: {
+  phaseStage?: FlightDeckPhaseStage | null;
+  ownship: OwnshipData | null;
+  routePoints: Array<{ latitude: number; longitude: number }>;
+  routeProgress: MobileRouteProgressSummary | null;
+  activeRunwayOverlay: RunwayOverlay | null;
+  selectedTrafficTarget?: RankedTrafficTarget | null;
+  selectedDiversionPoint?: { latitude: number; longitude: number } | null;
+}) {
+  if (!ownship && !routePoints.length) return null;
+
+  const ownshipPoint = ownship
+    ? [{ latitude: ownship.lat, longitude: ownship.lon }]
+    : [];
+  const activeLegIndex = routeProgress?.legIndex ?? 0;
+  const routeWindow =
+    phaseStage === 'taxi-out' || phaseStage === 'taxi-in'
+      ? routePoints.slice(activeLegIndex, activeLegIndex + 2)
+      : phaseStage === 'departure' || phaseStage === 'arrival' || phaseStage === 'final'
+        ? routePoints.slice(activeLegIndex, activeLegIndex + 4)
+        : routePoints.slice(activeLegIndex, activeLegIndex + 5);
+  const runwayPoints = [
+    ...(activeRunwayOverlay?.centerline || []),
+    ...(activeRunwayOverlay?.runwayBar || []),
+  ];
+  const trafficPoint =
+    selectedTrafficTarget && (selectedTrafficTarget.threatLevel === 'immediate' || selectedTrafficTarget.threatLevel === 'advisory')
+      ? [{ latitude: selectedTrafficTarget.lat, longitude: selectedTrafficTarget.lon }]
+      : [];
+  const diversionPoint = selectedDiversionPoint ? [selectedDiversionPoint] : [];
+
+  const focusPoints = [
+    ...ownshipPoint,
+    ...routeWindow,
+    ...(phaseStage === 'taxi-out' || phaseStage === 'taxi-in' || phaseStage === 'departure' || phaseStage === 'arrival' || phaseStage === 'final'
+      ? runwayPoints
+      : []),
+    ...(phaseStage === 'cruise' || phaseStage === 'descent' || phaseStage === 'arrival' ? diversionPoint : []),
+    ...(phaseStage !== 'taxi-out' && phaseStage !== 'taxi-in' ? trafficPoint : []),
+  ].filter(
+    (point) =>
+      typeof point?.latitude === 'number' &&
+      Number.isFinite(point.latitude) &&
+      typeof point?.longitude === 'number' &&
+      Number.isFinite(point.longitude),
+  );
+
+  if (!focusPoints.length) return null;
+
+  const latitudes = focusPoints.map((point) => point.latitude);
+  const longitudes = focusPoints.map((point) => point.longitude);
+  const minLat = Math.min(...latitudes);
+  const maxLat = Math.max(...latitudes);
+  const minLon = Math.min(...longitudes);
+  const maxLon = Math.max(...longitudes);
+  const latitude = (minLat + maxLat) / 2;
+  const longitude = (minLon + maxLon) / 2;
+
+  const minLatDelta =
+    phaseStage === 'taxi-out' || phaseStage === 'taxi-in'
+      ? 0.010
+      : phaseStage === 'departure' || phaseStage === 'arrival' || phaseStage === 'final'
+        ? 0.07
+        : phaseStage === 'climb' || phaseStage === 'descent'
+          ? 0.16
+          : 0.28;
+  const minLonDelta =
+    phaseStage === 'taxi-out' || phaseStage === 'taxi-in'
+      ? 0.014
+      : phaseStage === 'departure' || phaseStage === 'arrival' || phaseStage === 'final'
+        ? 0.1
+        : phaseStage === 'climb' || phaseStage === 'descent'
+          ? 0.22
+          : 0.38;
+
+  return {
+    latitude,
+    longitude,
+    latitudeDelta: Math.max((maxLat - minLat) * 1.85, minLatDelta),
+    longitudeDelta: Math.max((maxLon - minLon) * 2.05, minLonDelta),
+  };
+}
+
+function formatTacticalRangeNm(region: { latitudeDelta: number; longitudeDelta: number } | null) {
+  if (!region) return '--';
+  const approxRange = Math.max(region.latitudeDelta * 60, region.longitudeDelta * 35);
+  return `${Math.round(approxRange)} NM`;
+}
+
+function offsetGeoPoint(point: { lat: number; lon: number }, bearingDeg: number, distanceNm: number) {
+  const bearingRad = (bearingDeg * Math.PI) / 180;
+  const northNm = Math.cos(bearingRad) * distanceNm;
+  const eastNm = Math.sin(bearingRad) * distanceNm;
+  return offsetLatLonByNm(point.lat, point.lon, northNm, eastNm);
+}
+
+function projectPointAlongRoute(
+  routePoints: Array<{ latitude: number; longitude: number }>,
+  startPoint: { latitude: number; longitude: number },
+  activeLegIndex: number,
+  distanceNm: number,
+) {
+  const clampedDistanceNm = Math.max(0, distanceNm);
+  const path = [
+    startPoint,
+    ...routePoints
+      .slice(Math.max(activeLegIndex + 1, 0))
+      .map((point) => ({ latitude: point.latitude, longitude: point.longitude })),
+  ];
+  if (path.length < 2 || clampedDistanceNm <= 0.01) return startPoint;
+
+  let remainingNm = clampedDistanceNm;
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const start = path[index];
+    const end = path[index + 1];
+    const legDistanceNm = greatCircleNm(start, end);
+    if (!Number.isFinite(legDistanceNm) || legDistanceNm <= 0.01) continue;
+    if (remainingNm <= legDistanceNm) {
+      const ratio = clamp(remainingNm / legDistanceNm, 0, 1);
+      return {
+        latitude: start.latitude + (end.latitude - start.latitude) * ratio,
+        longitude: start.longitude + (end.longitude - start.longitude) * ratio,
+      };
+    }
+    remainingNm -= legDistanceNm;
+  }
+
+  return path[path.length - 1];
 }
 
 function formatFrequency(frequencyMhz: number | null | undefined) {
@@ -1229,6 +1436,8 @@ export default function FlightPlannerScreen() {
   const mapRef = useRef<MapView | null>(null);
   const flightDeckChromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flightDeckAutoPanelRef = useRef<string | null>(null);
+  const flightDeckMapFocusSignatureRef = useRef<string | null>(null);
+  const flightDeckMapHeadingRef = useRef<number | null>(null);
   const lastDiversionFetchRef = useRef<PositionFetchSnapshot | null>(null);
   const lastObstacleFetchRef = useRef<PositionFetchSnapshot | null>(null);
   const [aircraftPerformanceState, dispatchAircraftPerformance] = useReducer(
@@ -1799,11 +2008,283 @@ export default function FlightPlannerScreen() {
     () => visibleTrafficTargets.find((target) => target.id === selectedTrafficId) || topTrafficTarget || null,
     [selectedTrafficId, topTrafficTarget, visibleTrafficTargets]
   );
+  const tacticalMapRegion = useMemo(
+    () =>
+      buildTacticalMapRegion({
+        phaseStage: flightDeckPhaseSummary?.stage || null,
+        ownship: activeOwnship,
+        routePoints: activeRoutePoints,
+        routeProgress,
+        activeRunwayOverlay,
+        selectedTrafficTarget,
+        selectedDiversionPoint,
+      }),
+    [
+      activeOwnship,
+      activeRoutePoints,
+      activeRunwayOverlay,
+      flightDeckPhaseSummary?.stage,
+      routeProgress,
+      selectedDiversionPoint,
+      selectedTrafficTarget,
+    ],
+  );
+  const tacticalMapRangeLabel = useMemo(() => formatTacticalRangeNm(tacticalMapRegion), [tacticalMapRegion]);
   const trafficPanelTargets = useMemo(() => {
     if (!selectedTrafficTarget) return visibleTrafficTargets.slice(0, 5);
     const rest = visibleTrafficTargets.filter((target) => target.id !== selectedTrafficTarget.id);
     return [selectedTrafficTarget, ...rest].slice(0, 5);
   }, [selectedTrafficTarget, visibleTrafficTargets]);
+  const mapDisplayTrafficTargets = useMemo(() => {
+    const phase = flightDeckPhaseSummary.stage;
+    const selectedId = selectedTrafficTarget?.id;
+    const requiredIds = new Set(
+      visibleTrafficTargets
+        .filter((target) => target.id === selectedId || target.threatLevel === 'immediate')
+        .map((target) => target.id),
+    );
+
+    const filtered = visibleTrafficTargets.filter((target) => {
+      if (requiredIds.has(target.id)) return true;
+      if (phase === 'taxi-out' || phase === 'taxi-in') {
+        return target.threatLevel !== 'monitor' && target.distanceNm <= 3;
+      }
+      if (phase === 'departure' || phase === 'final') {
+        return target.threatLevel !== 'monitor' || target.distanceNm <= 8;
+      }
+      if (phase === 'arrival' || phase === 'descent') {
+        return target.threatLevel !== 'monitor' || target.distanceNm <= 12;
+      }
+      if (phase === 'climb') {
+        return target.threatLevel !== 'monitor' || target.distanceNm <= 10;
+      }
+      return target.threatLevel !== 'monitor' || target.distanceNm <= 18;
+    });
+
+    const prioritized = [...filtered].sort((a, b) => {
+      const aSelected = a.id === selectedId ? -1 : 0;
+      const bSelected = b.id === selectedId ? -1 : 0;
+      if (aSelected !== bSelected) return aSelected - bSelected;
+      const threatRank = (target: any) =>
+        target.threatLevel === 'immediate' ? 0 : target.threatLevel === 'advisory' ? 1 : 2;
+      const threatDelta = threatRank(a) - threatRank(b);
+      if (threatDelta !== 0) return threatDelta;
+      return a.distanceNm - b.distanceNm;
+    });
+
+    const limit =
+      phase === 'taxi-out' || phase === 'taxi-in'
+        ? 3
+        : phase === 'departure' || phase === 'arrival' || phase === 'final'
+          ? 5
+          : 6;
+    return prioritized.slice(0, limit);
+  }, [flightDeckPhaseSummary.stage, selectedTrafficTarget?.id, visibleTrafficTargets]);
+  const mapRouteDisplay = useMemo(() => {
+    if (!activeRoutePoints.length) {
+      return { completed: [], activeLeg: [], upcoming: [] };
+    }
+    const legIndex = Math.min(routeProgress?.legIndex ?? 0, Math.max(0, activeRoutePoints.length - 1));
+    const ownshipPoint = activeOwnship
+      ? { latitude: activeOwnship.lat, longitude: activeOwnship.lon }
+      : null;
+    const legStart = activeRoutePoints[legIndex] || activeRoutePoints[0];
+    const legEnd = activeRoutePoints[legIndex + 1] || null;
+    const completed =
+      ownshipPoint
+        ? [...activeRoutePoints.slice(0, Math.max(legIndex, 1)), ownshipPoint]
+        : activeRoutePoints.slice(0, Math.max(legIndex + 1, 1));
+    const activeLeg =
+      ownshipPoint && legEnd
+        ? [ownshipPoint, legEnd]
+        : legEnd
+          ? [legStart, legEnd]
+          : [];
+    const upcoming = legEnd ? activeRoutePoints.slice(legIndex + 1) : [];
+    return { completed, activeLeg, upcoming };
+  }, [activeOwnship, activeRoutePoints, routeProgress?.legIndex]);
+  const mapTrafficPresentation = useMemo(() => {
+    if (!activeOwnship) return [];
+    return mapDisplayTrafficTargets.map((target) => {
+      const trend = trafficTrendMap[target.id] || null;
+      const bearingDeg = bearingBetweenPoints(
+        { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
+        { latitude: target.lat, longitude: target.lon },
+      );
+      const closureRate = trend?.distanceRateNmPerMin ?? 0;
+      const bearingRate = trend?.bearingRateDegPerMin ?? 0;
+      const vectorLengthNm = Math.max(0.08, Math.min(0.32, Math.abs(closureRate) * 0.18 + Math.abs(bearingRate) * 0.004));
+      const vectorBearingDeg =
+        closureRate <= -0.05
+          ? (bearingDeg + 180 + bearingRate * 0.35 + 360) % 360
+          : (bearingDeg + bearingRate * 0.35 + 360) % 360;
+      const vectorEnd = offsetGeoPoint({ lat: target.lat, lon: target.lon }, vectorBearingDeg, vectorLengthNm);
+      return {
+        id: target.id,
+        altitudeLabel:
+          typeof target.altitudeDeltaFt === 'number'
+            ? `${target.altitudeDeltaFt >= 0 ? '+' : ''}${Math.round(target.altitudeDeltaFt)}`
+            : '--',
+        closureText: trend?.closureText || 'Monitor',
+        vector: [
+          { latitude: target.lat, longitude: target.lon },
+          { latitude: vectorEnd.lat, longitude: vectorEnd.lon },
+        ],
+      };
+    });
+  }, [activeOwnship, mapDisplayTrafficTargets, trafficTrendMap]);
+  const mapRunwayFocusSummary = useMemo(() => {
+    const stage = flightDeckPhaseSummary.stage;
+    const emphasize =
+      Boolean(activeRunwayOverlay) &&
+      (stage === 'departure' || stage === 'arrival' || stage === 'final' || stage === 'taxi-out' || stage === 'taxi-in');
+    return {
+      emphasize,
+      label:
+        stage === 'final'
+          ? 'Final corridor'
+          : stage === 'arrival'
+            ? 'Arrival corridor'
+            : stage === 'departure'
+              ? 'Departure corridor'
+              : stage === 'taxi-out' || stage === 'taxi-in'
+                ? 'Runway vicinity'
+                : 'Route corridor',
+    };
+  }, [activeRunwayOverlay, flightDeckPhaseSummary.stage]);
+  const mapOverlayProfile = useMemo(() => {
+    const stage = flightDeckPhaseSummary.stage;
+    const terminal = ['taxi-out', 'departure', 'arrival', 'final', 'taxi-in'].includes(stage);
+    return {
+      label:
+        stage === 'taxi-out' || stage === 'taxi-in'
+          ? 'Ground priority'
+          : stage === 'departure'
+            ? 'Departure priority'
+            : stage === 'arrival' || stage === 'final'
+              ? 'Arrival priority'
+              : 'Enroute priority',
+      activeLegWidth:
+        stage === 'taxi-out' || stage === 'taxi-in'
+          ? 4
+          : stage === 'departure' || stage === 'final'
+            ? 6
+            : 5,
+      completedLegWidth: terminal ? 3 : 2.5,
+      upcomingLegWidth: terminal ? 2.5 : 3,
+      upcomingLegOpacity:
+        stage === 'final'
+          ? 0.18
+          : stage === 'arrival'
+            ? 0.24
+            : stage === 'departure'
+              ? 0.3
+              : 0.42,
+      runwayEmphasisWidth:
+        stage === 'final'
+          ? 16
+          : stage === 'arrival'
+            ? 14
+            : stage === 'departure'
+              ? 12
+              : 10,
+      showTrafficVectors: stage !== 'taxi-out' && stage !== 'taxi-in',
+      showMonitorAltitudeTags: !terminal,
+      maxWindMarkers:
+        stage === 'taxi-out' || stage === 'taxi-in'
+          ? 0
+          : terminal
+            ? 6
+            : 12,
+      radarOpacity:
+        stage === 'taxi-out' || stage === 'taxi-in'
+          ? 0.38
+          : terminal
+            ? 0.52
+            : 0.75,
+      cloudOpacity:
+        stage === 'taxi-out' || stage === 'taxi-in'
+          ? 0.35
+          : terminal
+            ? 0.5
+            : 0.75,
+    };
+  }, [flightDeckPhaseSummary.stage]);
+  const mapVerticalGuidancePresentation = useMemo(() => {
+    if (!activeOwnship || activeRoutePoints.length < 2) return null;
+
+    const ownshipPoint = { latitude: activeOwnship.lat, longitude: activeOwnship.lon };
+    const activeLegIndex = Math.min(routeProgress?.legIndex ?? 0, Math.max(0, activeRoutePoints.length - 2));
+    const remainingRouteNm =
+      typeof routeProgress?.remainingRouteNm === 'number' && Number.isFinite(routeProgress.remainingRouteNm)
+        ? routeProgress.remainingRouteNm
+        : null;
+    const activeConstraintDistanceNm =
+      typeof flightDeckVerticalConstraintSummary.activeConstraintDistanceNm === 'number' &&
+      Number.isFinite(flightDeckVerticalConstraintSummary.activeConstraintDistanceNm)
+        ? flightDeckVerticalConstraintSummary.activeConstraintDistanceNm
+        : null;
+    const todDistanceNm =
+      typeof flightDeckVerticalPathSummary.distanceToTodNm === 'number' &&
+      Number.isFinite(flightDeckVerticalPathSummary.distanceToTodNm) &&
+      flightDeckVerticalPathSummary.distanceToTodNm > 0
+        ? flightDeckVerticalPathSummary.distanceToTodNm
+        : null;
+
+    let kind: 'constraint' | 'tod' | null = null;
+    let anchorDistanceNm: number | null = null;
+    let label = '';
+    let subtitle = '';
+    let detail = '';
+
+    if (
+      flightDeckVerticalConstraintSummary.targetAltitudeFt != null &&
+      activeConstraintDistanceNm != null &&
+      activeConstraintDistanceNm > 0.15
+    ) {
+      kind = 'constraint';
+      anchorDistanceNm = activeConstraintDistanceNm;
+      label = flightDeckVerticalConstraintSummary.modeLabel === 'Leg constraint' ? 'ALT' : 'PROC';
+      subtitle = `${Math.round(flightDeckVerticalConstraintSummary.targetAltitudeFt)} FT`;
+      detail = flightDeckVerticalConstraintSummary.activeConstraintLabel;
+    } else if (todDistanceNm != null && todDistanceNm > 0.35) {
+      kind = 'tod';
+      anchorDistanceNm = todDistanceNm;
+      label = 'TOD';
+      subtitle = `${todDistanceNm.toFixed(1)} NM`;
+      detail = flightDeckVerticalPathSummary.modeLabel;
+    }
+
+    if (!kind || anchorDistanceNm == null) return null;
+
+    const boundedDistanceNm =
+      remainingRouteNm != null ? Math.min(anchorDistanceNm, Math.max(remainingRouteNm, 0.2)) : anchorDistanceNm;
+    const coordinate = projectPointAlongRoute(activeRoutePoints, ownshipPoint, activeLegIndex, boundedDistanceNm);
+
+    return {
+      kind,
+      label,
+      subtitle,
+      detail,
+      distanceNm: anchorDistanceNm,
+      coordinate,
+    };
+  }, [
+    activeOwnship,
+    activeRoutePoints,
+    flightDeckVerticalConstraintSummary.activeConstraintDistanceNm,
+    flightDeckVerticalConstraintSummary.activeConstraintLabel,
+    flightDeckVerticalConstraintSummary.modeLabel,
+    flightDeckVerticalConstraintSummary.targetAltitudeFt,
+    flightDeckVerticalPathSummary.distanceToTodNm,
+    flightDeckVerticalPathSummary.modeLabel,
+    routeProgress?.legIndex,
+    routeProgress?.remainingRouteNm,
+  ]);
+  const destinationElevationFtEstimate = useMemo(
+    () => terrainProfile?.samples?.[terrainProfile.samples.length - 1]?.elevationFt ?? 0,
+    [terrainProfile?.samples],
+  );
   const selectedTrafficTrend = useMemo(
     () => (selectedTrafficTarget ? trafficTrendMap[selectedTrafficTarget.id] || null : null),
     [selectedTrafficTarget, trafficTrendMap]
@@ -1999,8 +2480,18 @@ export default function FlightPlannerScreen() {
         detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft`,
       };
     }
+    if (flightDeckVerticalAlertSummary.severity && flightDeckVerticalAlertSummary.title && flightDeckVerticalAlertSummary.detail) {
+      return {
+        severity: flightDeckVerticalAlertSummary.severity,
+        title: flightDeckVerticalAlertSummary.title,
+        detail: flightDeckVerticalAlertSummary.detail,
+      };
+    }
     return null;
   }, [
+    flightDeckVerticalAlertSummary.detail,
+    flightDeckVerticalAlertSummary.severity,
+    flightDeckVerticalAlertSummary.title,
     obstacleAlertThresholds.closingFast,
     obstacleClearanceFt,
     obstacleRisk,
@@ -2036,10 +2527,20 @@ export default function FlightPlannerScreen() {
     if (flightDeckAdvisoriesMuted) {
       return null;
     }
+    if (flightDeckVerticalAlertSummary.severity && flightDeckVerticalAlertSummary.title && flightDeckVerticalAlertSummary.detail) {
+      return {
+        severity: flightDeckVerticalAlertSummary.severity,
+        title: flightDeckVerticalAlertSummary.title,
+        detail: flightDeckVerticalAlertSummary.detail,
+      };
+    }
     return activeFlightAlert;
   }, [
     activeFlightAlert,
     flightDeckAdvisoriesMuted,
+    flightDeckVerticalAlertSummary.detail,
+    flightDeckVerticalAlertSummary.severity,
+    flightDeckVerticalAlertSummary.title,
     obstacleAlertThresholds.closingFast,
     obstacleClearanceFt,
     obstacleRisk,
@@ -2255,6 +2756,194 @@ export default function FlightPlannerScreen() {
       mode: 'traffic' as const,
     };
   }, [selectedTrafficTarget, trafficResolutionBias, visionTrafficCue?.sector]);
+  const flightDeckVerticalPathSummary = useMemo(() => {
+    const roundedCruiseAltitudeFt = Math.max(1000, Math.round((plannedAltitudeValue ?? simulationAltitudeFt) / 100) * 100);
+    const manualBugActive = flightDeckTargetAltitudeFt != null;
+    const manualBugTargetFt = manualBugActive ? flightDeckTargetAltitudeFt : null;
+
+    if (!activeOwnship) {
+      return {
+        modeLabel: 'Vertical pending',
+        guidanceMode: 'hold' as const,
+        targetAltitudeFt: manualBugTargetFt,
+        verticalErrorFt: null as number | null,
+        requiredVsiFpm: null as number | null,
+        topOfDescentNm: null as number | null,
+        distanceToTodNm: null as number | null,
+        advisoryCall: manualBugTargetFt ? `Altitude bug ${manualBugTargetFt} ft` : 'Vertical path pending',
+        support: 'Connect ownship and activate a route for advisory vertical guidance.',
+        recommendation: 'Use the planned altitude field or connect a live source.',
+        cueLabel: 'ALT',
+        manualBugActive,
+      };
+    }
+
+    const stage = flightDeckPhaseSummary.stage;
+    const currentAltitudeFt = activeOwnship.altitudeFt ?? simulationAltitudeFt;
+    const groundspeedKts = Math.max(activeOwnship.speedKts ?? simulationCruiseKts, 60);
+    const remainingRouteNm = routeProgress?.remainingRouteNm ?? null;
+    const remainingLegNm = routeProgress?.remainingLegNm ?? null;
+    const destinationFieldTargetFt = Math.max(1000, Math.round((destinationElevationFtEstimate + 50) / 50) * 50);
+    const terminalTargetFt = Math.max(1500, Math.round((destinationElevationFtEstimate + 1500) / 100) * 100);
+    const topOfDescentNm =
+      roundedCruiseAltitudeFt > terminalTargetFt
+        ? Math.max((roundedCruiseAltitudeFt - terminalTargetFt) / 318, 0)
+        : 0;
+    const distanceToTodNm =
+      typeof remainingRouteNm === 'number' && Number.isFinite(remainingRouteNm)
+        ? remainingRouteNm - topOfDescentNm
+        : null;
+    const threeDegreeVsiFpm = Math.round(((groundspeedKts * 318) / 60) / 25) * 25;
+
+    const computeRequiredVsi = (targetAltitudeFt: number, distanceNm: number | null) => {
+      if (typeof distanceNm !== 'number' || !Number.isFinite(distanceNm) || distanceNm <= 0.2) return null;
+      const minutesToTarget = Math.max((distanceNm / groundspeedKts) * 60, 0.5);
+      return Math.round(((targetAltitudeFt - currentAltitudeFt) / minutesToTarget) / 25) * 25;
+    };
+
+    let targetAltitudeFt = manualBugTargetFt;
+    let verticalErrorFt: number | null = manualBugActive && manualBugTargetFt != null ? manualBugTargetFt - currentAltitudeFt : null;
+    let requiredVsiFpm: number | null = manualBugActive && manualBugTargetFt != null ? computeRequiredVsi(manualBugTargetFt, remainingLegNm ?? remainingRouteNm) : null;
+    let modeLabel = manualBugActive ? 'Manual altitude' : 'Vertical advisory';
+    let guidanceMode: 'hold' | 'climb' | 'descent' | 'path' = 'hold';
+    let advisoryCall = manualBugTargetFt ? `Climb to ${manualBugTargetFt} ft` : 'Hold altitude';
+    let support = 'Vertical path monitor';
+    let recommendation = 'Maintain the current altitude target.';
+    let cueLabel = 'ALT';
+
+    if (stage === 'preflight' || stage === 'taxi-out' || stage === 'taxi-in') {
+      modeLabel = stage === 'preflight' ? 'Vertical pending' : 'Ground vertical';
+      guidanceMode = 'hold';
+      advisoryCall = manualBugTargetFt ? `Altitude bug ${manualBugTargetFt} ft` : 'Ground phase - hold altitude';
+      support =
+        stage === 'preflight'
+          ? 'Awaiting an active route and ownship source.'
+          : 'Vertical path is suppressed during ground operations.';
+      recommendation = stage === 'preflight' ? 'Set a planned altitude before departure.' : 'Use surface and runway guidance as the primary scan.';
+    } else if (stage === 'departure' || stage === 'climb') {
+      const climbTargetFt = manualBugTargetFt ?? roundedCruiseAltitudeFt;
+      const climbErrorFt = climbTargetFt - currentAltitudeFt;
+      const climbVsiFpm = computeRequiredVsi(climbTargetFt, remainingLegNm ?? Math.min(remainingRouteNm ?? 12, 12));
+      targetAltitudeFt = climbTargetFt;
+      verticalErrorFt = climbErrorFt;
+      requiredVsiFpm = climbVsiFpm;
+      guidanceMode = 'climb';
+      cueLabel = 'CLB';
+      modeLabel = stage === 'departure' ? 'Departure climb' : 'Climb advisory';
+      advisoryCall =
+        Math.abs(climbErrorFt) < 150
+          ? `Cruise altitude captured ${climbTargetFt} ft`
+          : `Climb to ${climbTargetFt} ft`;
+      support =
+        typeof remainingRouteNm === 'number' && Number.isFinite(remainingRouteNm)
+          ? `${remainingRouteNm.toFixed(1)} NM route remaining`
+          : 'Climb corridor active';
+      recommendation =
+        climbVsiFpm && climbErrorFt > 0
+          ? `Advisory climb ${Math.abs(climbVsiFpm)} fpm toward cruise.`
+          : 'Stay on the departure corridor and monitor terrain.';
+    } else if (stage === 'cruise') {
+      targetAltitudeFt = manualBugTargetFt ?? roundedCruiseAltitudeFt;
+      verticalErrorFt = targetAltitudeFt - currentAltitudeFt;
+      requiredVsiFpm = null;
+      guidanceMode = 'hold';
+      cueLabel = 'ALT';
+      if (distanceToTodNm != null && distanceToTodNm <= 0) {
+        modeLabel = 'Descent plan';
+        guidanceMode = 'descent';
+        cueLabel = 'DES';
+        targetAltitudeFt = manualBugTargetFt ?? terminalTargetFt;
+        verticalErrorFt = targetAltitudeFt - currentAltitudeFt;
+        requiredVsiFpm = computeRequiredVsi(targetAltitudeFt, remainingRouteNm);
+        advisoryCall = `Descend toward ${targetAltitudeFt} ft`;
+        support = `TOD passed ${Math.abs(distanceToTodNm).toFixed(1)} NM ago`;
+        recommendation =
+          requiredVsiFpm != null
+            ? `Need ${Math.abs(requiredVsiFpm)} fpm to recover the terminal gate.`
+            : 'Begin descent and monitor terrain clearance.';
+      } else if (distanceToTodNm != null && distanceToTodNm <= 15) {
+        modeLabel = 'TOD monitor';
+        advisoryCall = `TOD in ${distanceToTodNm.toFixed(1)} NM`;
+        support = `Prepare descent to ${terminalTargetFt} ft terminal gate`;
+        recommendation = `Plan ${Math.abs(threeDegreeVsiFpm)} fpm on profile at ${Math.round(groundspeedKts)} kt.`;
+      } else {
+        modeLabel = 'Cruise hold';
+        advisoryCall = `Hold ${targetAltitudeFt} ft`;
+        support =
+          distanceToTodNm != null
+            ? `TOD in ${distanceToTodNm.toFixed(1)} NM`
+            : 'Cruise altitude established';
+        recommendation = 'Maintain cruise and monitor weather, traffic, and TOD.';
+      }
+    } else {
+      const useFinalPath = stage === 'arrival' || stage === 'final' || stage === 'descent';
+      const pathTargetFtBase =
+        typeof remainingRouteNm === 'number' && Number.isFinite(remainingRouteNm)
+          ? destinationFieldTargetFt + Math.max(remainingRouteNm, 0) * 318 + 50
+          : terminalTargetFt;
+      const advisoryTargetFt =
+        stage === 'descent'
+          ? Math.max(terminalTargetFt, Math.round(pathTargetFtBase / 100) * 100)
+          : Math.round(pathTargetFtBase / 50) * 50;
+      targetAltitudeFt = manualBugTargetFt ?? advisoryTargetFt;
+      verticalErrorFt = targetAltitudeFt - currentAltitudeFt;
+      requiredVsiFpm =
+        stage === 'final'
+          ? threeDegreeVsiFpm
+          : computeRequiredVsi(targetAltitudeFt, remainingRouteNm);
+      guidanceMode = useFinalPath ? 'path' : 'descent';
+      cueLabel = 'DES';
+      modeLabel =
+        stage === 'final'
+          ? 'Final path'
+          : stage === 'arrival'
+            ? 'Arrival descent'
+            : 'Terminal descent';
+      advisoryCall =
+        Math.abs(verticalErrorFt) < 150
+          ? stage === 'final'
+            ? 'On final vertical path'
+            : 'On terminal descent path'
+          : verticalErrorFt < 0
+            ? `Descend toward ${targetAltitudeFt} ft`
+            : `Recover to ${targetAltitudeFt} ft`;
+      support =
+        typeof remainingRouteNm === 'number' && Number.isFinite(remainingRouteNm)
+          ? `${remainingRouteNm.toFixed(1)} NM remaining - ${destinationRunway?.runwayId || 'RWY'} corridor active`
+          : 'Terminal descent active';
+      recommendation =
+        requiredVsiFpm != null
+          ? `Vertical path ${verticalErrorFt < 0 ? 'high' : verticalErrorFt > 0 ? 'low' : 'on path'} - ${Math.abs(requiredVsiFpm)} fpm guidance.`
+          : 'Monitor final-path alignment and runway capture.';
+    }
+
+    return {
+      modeLabel,
+      guidanceMode,
+      targetAltitudeFt,
+      verticalErrorFt,
+      requiredVsiFpm,
+      topOfDescentNm,
+      distanceToTodNm,
+      advisoryCall,
+      support,
+      recommendation,
+      cueLabel,
+      manualBugActive,
+    };
+  }, [
+    activeOwnship,
+    activeVerticalSpeedFpm,
+    destinationElevationFtEstimate,
+    destinationRunway?.runwayId,
+    flightDeckPhaseSummary.stage,
+    flightDeckTargetAltitudeFt,
+    plannedAltitudeValue,
+    routeProgress?.remainingLegNm,
+    routeProgress?.remainingRouteNm,
+    simulationAltitudeFt,
+    simulationCruiseKts,
+  ]);
   const visionDirectorCue = useMemo(() => {
     if (trafficConflictGuidance) {
       return {
@@ -2268,8 +2957,13 @@ export default function FlightPlannerScreen() {
     const targetAltitude =
       terrainRisk === 'warning' || obstacleRisk === 'warning'
         ? Math.max(terrainEscapeTargetFt ?? 0, flightDeckTargetAltitudeFt ?? 0, currentAltitude)
-        : flightDeckTargetAltitudeFt ?? simulationAltitudeFt;
-    const altitudeErrorFt = targetAltitude - currentAltitude;
+        : flightDeckTargetAltitudeFt ?? flightDeckVerticalPathSummary.targetAltitudeFt ?? simulationAltitudeFt;
+    const altitudeErrorFt =
+      terrainRisk === 'warning' || obstacleRisk === 'warning'
+        ? targetAltitude - currentAltitude
+        : flightDeckTargetAltitudeFt != null
+          ? flightDeckTargetAltitudeFt - currentAltitude
+          : flightDeckVerticalPathSummary.verticalErrorFt ?? targetAltitude - currentAltitude;
     const lateralCaptured = Boolean(visionRouteGuidance?.lateralCaptured);
     const verticalCaptured = Math.abs(altitudeErrorFt) < 150;
     const mode =
@@ -2291,11 +2985,17 @@ export default function FlightPlannerScreen() {
         : headingDelta > 0 ? `Turn right ${Math.round(Math.abs(headingDelta))}Â°`
         : `Turn left ${Math.round(Math.abs(headingDelta))}Â°`,
       verticalCommand:
-        Math.abs(altitudeErrorFt) < 150 ? 'Hold altitude'
-        : altitudeErrorFt > 0 ? `Climb to ${Math.round(targetAltitude)} ft`
-        : `Descend to ${Math.round(targetAltitude)} ft`,
+        terrainRisk === 'warning' || obstacleRisk === 'warning'
+          ? Math.abs(altitudeErrorFt) < 150 ? 'Hold altitude'
+          : altitudeErrorFt > 0 ? `Climb to ${Math.round(targetAltitude)} ft`
+          : `Descend to ${Math.round(targetAltitude)} ft`
+          : flightDeckTargetAltitudeFt == null
+            ? flightDeckVerticalPathSummary.advisoryCall
+            : Math.abs(altitudeErrorFt) < 150 ? 'Hold altitude'
+            : altitudeErrorFt > 0 ? `Climb to ${Math.round(targetAltitude)} ft`
+            : `Descend to ${Math.round(targetAltitude)} ft`,
     };
-  }, [activeOwnship?.altitudeFt, flightDeckTargetAltitudeFt, obstacleRisk, simulationAltitudeFt, terrainEscapeTargetFt, terrainRisk, trafficConflictGuidance, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
+  }, [activeOwnship?.altitudeFt, flightDeckTargetAltitudeFt, flightDeckVerticalPathSummary.advisoryCall, flightDeckVerticalPathSummary.targetAltitudeFt, flightDeckVerticalPathSummary.verticalErrorFt, obstacleRisk, simulationAltitudeFt, terrainEscapeTargetFt, terrainRisk, trafficConflictGuidance, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
   const mapTacticalSummary = useMemo(() => {
     const modeLabel =
       routeExecutionOverride?.mode === 'direct-to-diversion'
@@ -2319,13 +3019,64 @@ export default function FlightPlannerScreen() {
           : visionDirectorCue.mode === 'capture'
             ? 'Capture'
             : 'Track';
+    const focusLabel =
+      flightDeckPhaseSummary.stage === 'taxi-out' || flightDeckPhaseSummary.stage === 'taxi-in'
+        ? 'Ground corridor'
+        : flightDeckPhaseSummary.stage === 'departure'
+          ? 'Departure corridor'
+          : flightDeckPhaseSummary.stage === 'climb'
+            ? 'Climb scan'
+            : flightDeckPhaseSummary.stage === 'cruise'
+              ? 'Enroute scan'
+              : flightDeckPhaseSummary.stage === 'descent'
+                ? 'Arrival setup'
+                : flightDeckPhaseSummary.stage === 'arrival'
+                  ? 'Terminal corridor'
+                  : flightDeckPhaseSummary.stage === 'final'
+                    ? 'Final map'
+                    : 'Route scan';
+    const support =
+      selectedTrafficTarget?.threatLevel === 'immediate'
+        ? `Traffic priority ${selectedTrafficTarget.callsign || 'target'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM`
+        : selectedDiversion
+          ? `Diversion staged ${selectedDiversion.icao} ${selectedDiversion.distanceNm.toFixed(1)} NM`
+          : routeProgress
+            ? `${routeProgress.remainingLegNm.toFixed(1)} NM leg / ${routeProgress.remainingRouteNm.toFixed(1)} NM route`
+            : flightDeckPhaseSummary.detail;
     return {
       modeLabel: activeExecutionSegmentPreview.label || modeLabel,
       heading: visionDirectorCue.turnCommand,
       vertical: visionDirectorCue.verticalCommand,
-      recommendation: activeProcedureCueStackPreview.sequencingSummary || visionManeuverRecommendation,
+      verticalSupport: flightDeckVerticalPathSummary.support,
+      verticalConstraintCall: routeExecutionSummary.verticalConstraintCall,
+      recommendation:
+        selectedTrafficTarget?.threatLevel === 'immediate' || selectedDiversion
+          ? activeProcedureCueStackPreview.sequencingSummary || visionManeuverRecommendation
+          : flightDeckVerticalPathSummary.recommendation || activeProcedureCueStackPreview.sequencingSummary || visionManeuverRecommendation,
+      focusLabel,
+      rangeLabel: tacticalMapRangeLabel,
+      support,
     };
-  }, [activeExecutionSegmentPreview.label, activeLegBehavior.guidanceMode, activeProcedureCueStackPreview.modeLabel, activeProcedureCueStackPreview.sequencingSummary, routeExecutionOverride?.mode, visionDirectorCue.mode, visionDirectorCue.turnCommand, visionDirectorCue.verticalCommand, visionManeuverRecommendation]);
+  }, [
+    activeExecutionSegmentPreview.label,
+    activeLegBehavior.guidanceMode,
+    activeProcedureCueStackPreview.modeLabel,
+    activeProcedureCueStackPreview.sequencingSummary,
+    flightDeckVerticalPathSummary.support,
+    flightDeckVerticalPathSummary.recommendation,
+    flightDeckPhaseSummary.detail,
+    flightDeckPhaseSummary.stage,
+    routeExecutionSummary.verticalConstraintCall,
+    routeExecutionOverride?.mode,
+    routeProgress,
+    selectedDiversion,
+    selectedTrafficTarget,
+    tacticalMapRangeLabel,
+    visionDirectorCue.mode,
+    visionDirectorCue.turnCommand,
+    visionDirectorCue.verticalCommand,
+    visionManeuverRecommendation,
+  ]);
   const routeExecutionSummary = useMemo(() => {
     if (!routeProgress) {
       return {
@@ -2361,6 +3112,12 @@ export default function FlightPlannerScreen() {
         navDataBriefingLegCount: 0,
         navDataProviderLegCount: 0,
         navDataAirwaySegmentCount: 0,
+        verticalConstraintState: 'path-monitor' as const,
+        verticalConstraintCall: 'No structured vertical constraint active.',
+        activeVerticalConstraintLabel: null,
+        nextVerticalConstraintLabel: null,
+        nextVerticalConstraintArmed: false,
+        verticalConstraintSource: 'route-chain' as const,
         turnAnticipationState: 'idle' as const,
         turnAnticipationCall: 'No turn armed',
         lateralExecutionState: 'intercept' as const,
@@ -2615,6 +3372,53 @@ export default function FlightPlannerScreen() {
         : turnAnticipationState === 'monitor'
           ? 'Next leg armed'
           : 'No turn armed';
+    const activeVerticalConstraintPayload =
+      activeProcedureEntryDescriptor.parsedLegPayload?.kind === 'runway-release-payload' ||
+      activeProcedureEntryDescriptor.parsedLegPayload?.kind === 'terminal-feed-payload' ||
+      activeProcedureEntryDescriptor.parsedLegPayload?.kind === 'final-capture-payload'
+        ? activeProcedureEntryDescriptor.parsedLegPayload
+        : null;
+    const nextVerticalConstraintPayload =
+      nextProcedureEntryDescriptor?.parsedLegPayload?.kind === 'runway-release-payload' ||
+      nextProcedureEntryDescriptor?.parsedLegPayload?.kind === 'terminal-feed-payload' ||
+      nextProcedureEntryDescriptor?.parsedLegPayload?.kind === 'final-capture-payload'
+        ? nextProcedureEntryDescriptor.parsedLegPayload
+        : null;
+    const formatVerticalConstraintLabel = (payload: typeof activeVerticalConstraintPayload | typeof nextVerticalConstraintPayload) => {
+      if (!payload) return null;
+      if (payload.kind === 'runway-release-payload') return `${payload.airportIdent} RWY ${payload.runwayIdent}`;
+      if (payload.kind === 'terminal-feed-payload') return `${payload.arrivalIdent} ${payload.transitionFix} -> ${payload.handoffFix}`;
+      return `RWY ${payload.runwayIdent} final`;
+    };
+    const activeVerticalConstraintLabel = formatVerticalConstraintLabel(activeVerticalConstraintPayload);
+    const nextVerticalConstraintLabel = formatVerticalConstraintLabel(nextVerticalConstraintPayload);
+    const nextVerticalConstraintArmed =
+      Boolean(nextVerticalConstraintPayload) &&
+      (nextLegArmed || sequenceGateState === 'armed' || sequenceGateState === 'manual-open' || sequenceGateState === 'open');
+    const verticalConstraintState =
+      sequencingSuspended
+        ? ('constraint-hold' as const)
+        : activeVerticalConstraintPayload
+          ? nextVerticalConstraintArmed
+            ? ('constraint-handoff-armed' as const)
+            : ('constraint-active' as const)
+          : nextVerticalConstraintPayload
+            ? nextVerticalConstraintArmed
+              ? ('next-constraint-armed' as const)
+              : ('next-constraint-staged' as const)
+            : ('path-monitor' as const);
+    const verticalConstraintCall =
+      verticalConstraintState === 'constraint-hold'
+        ? `Vertical constraint hold ${activeVerticalConstraintLabel || 'active path'}`
+        : verticalConstraintState === 'constraint-handoff-armed'
+          ? `${activeVerticalConstraintLabel || 'Active constraint'} - next armed ${nextVerticalConstraintLabel || 'constraint'}`
+          : verticalConstraintState === 'constraint-active'
+            ? `Constraint active ${activeVerticalConstraintLabel || 'current path'}`
+            : verticalConstraintState === 'next-constraint-armed'
+              ? `Next constraint armed ${nextVerticalConstraintLabel || 'upcoming path'}`
+              : verticalConstraintState === 'next-constraint-staged'
+                ? `Next constraint staged ${nextVerticalConstraintLabel || 'upcoming path'}`
+                : 'Path monitor active';
     const manualAdvanceRequired = activeProcedureEntryTransitionBehavior.nextAction === 'pilot-advance';
     const nextActionCall = manualAdvanceRequired
       ? activeProcedureEntryTransitionBehavior.handoffCue
@@ -2760,6 +3564,15 @@ export default function FlightPlannerScreen() {
       navDataBriefingLegCount: plannerNavDataSnapshot.briefingLegCount,
       navDataProviderLegCount: plannerNavDataSnapshot.navDataLegCount,
       navDataAirwaySegmentCount: plannerNavDataSnapshot.airwaySegments.length,
+      verticalConstraintState,
+      verticalConstraintCall,
+      activeVerticalConstraintLabel,
+      nextVerticalConstraintLabel,
+      nextVerticalConstraintArmed,
+      verticalConstraintSource:
+        activeVerticalConstraintPayload?.source ||
+        nextVerticalConstraintPayload?.source ||
+        plannerNavDataSnapshot.source,
       turnAnticipationState,
       turnAnticipationCall,
       lateralExecutionState,
@@ -2847,6 +3660,319 @@ export default function FlightPlannerScreen() {
       routeProgress?.legIndex,
     ]
   );
+  const flightDeckVerticalConstraintSummary = useMemo(() => {
+    const activePayload = routeExecutionSummary.activeParsedLegPayload;
+    const nextPayload = routeExecutionSummary.nextParsedLegPayload;
+    const stage = flightDeckPhaseSummary.stage;
+    const currentAltitudeFt = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
+    const groundspeedKts = Math.max(activeOwnship?.speedKts ?? simulationCruiseKts, 60);
+    const remainingRouteNm =
+      typeof routeProgress?.remainingRouteNm === 'number' && Number.isFinite(routeProgress.remainingRouteNm)
+        ? routeProgress.remainingRouteNm
+        : null;
+    const computeRequiredVsi = (targetAltitudeFt: number, distanceNm: number | null) => {
+      if (typeof distanceNm !== 'number' || !Number.isFinite(distanceNm) || distanceNm <= 0.2) return null;
+      const minutes = Math.max((distanceNm / groundspeedKts) * 60, 0.5);
+      return Math.round(((targetAltitudeFt - currentAltitudeFt) / minutes) / 25) * 25;
+    };
+
+    const courseConstraintFt =
+      activePayload?.kind === 'course-to-fix-payload'
+        ? null
+        : nextPayload?.kind === 'course-to-fix-payload'
+          ? null
+          : null;
+    void courseConstraintFt;
+
+    let modeLabel = 'Heuristic path';
+    let sourceLabel = 'Heuristic';
+    let targetAltitudeFt: number | null = null;
+    let requiredVsiFpm: number | null = null;
+    let support = 'No structured vertical constraint is active yet.';
+    let recommendation = 'Continue using the advisory path model.';
+    let call = flightDeckVerticalPathSummary.advisoryCall;
+    let activeConstraintLabel = 'Advisory path';
+    let nextConstraintLabel: string | null = null;
+    let nextConstraintArmed = false;
+    let activeConstraintDistanceNm = remainingRouteNm;
+    let constraintGateState: 'monitor' | 'staged' | 'armed' | 'open' | 'hold' | 'active' = 'monitor';
+    let constraintGateCall = 'Vertical path monitor';
+
+    const terminalPayload =
+      activePayload?.kind === 'terminal-feed-payload'
+        ? activePayload
+        : nextPayload?.kind === 'terminal-feed-payload'
+          ? nextPayload
+          : null;
+    const finalPayload =
+      activePayload?.kind === 'final-capture-payload'
+        ? activePayload
+        : nextPayload?.kind === 'final-capture-payload'
+          ? nextPayload
+          : null;
+    const runwayReleasePayload =
+      activePayload?.kind === 'runway-release-payload'
+        ? activePayload
+        : nextPayload?.kind === 'runway-release-payload'
+          ? nextPayload
+          : null;
+    const courseConstraintPayload =
+      activePayload?.kind === 'course-to-fix-payload' && typeof activePayload.altitudeConstraintFt === 'number'
+        ? activePayload
+        : nextPayload?.kind === 'course-to-fix-payload' && typeof nextPayload.altitudeConstraintFt === 'number'
+          ? nextPayload
+          : null;
+    const nextConstraintPayload =
+      nextPayload?.kind === 'course-to-fix-payload' && typeof nextPayload.altitudeConstraintFt === 'number'
+        ? nextPayload
+        :
+      nextPayload?.kind === 'terminal-feed-payload' ||
+      nextPayload?.kind === 'final-capture-payload' ||
+      nextPayload?.kind === 'runway-release-payload'
+        ? nextPayload
+        : null;
+
+    if (nextConstraintPayload) {
+      nextConstraintArmed =
+        Boolean(routeExecutionSummary.nextLegArmed) ||
+        routeExecutionSummary.sequenceGateState === 'armed' ||
+        routeExecutionSummary.sequenceGateState === 'manual-open' ||
+        routeExecutionSummary.sequenceGateState === 'open';
+      nextConstraintLabel =
+        nextConstraintPayload.kind === 'runway-release-payload'
+          ? `${nextConstraintPayload.airportIdent} RWY ${nextConstraintPayload.runwayIdent}`
+          : nextConstraintPayload.kind === 'course-to-fix-payload'
+            ? `${nextConstraintPayload.fromFix} -> ${nextConstraintPayload.toFix}`
+          : nextConstraintPayload.kind === 'terminal-feed-payload'
+            ? `${nextConstraintPayload.arrivalIdent} ${nextConstraintPayload.transitionFix}`
+            : `RWY ${nextConstraintPayload.runwayIdent} final`;
+    }
+
+    if ((stage === 'departure' || stage === 'climb') && runwayReleasePayload?.initialAltitudeFt) {
+      targetAltitudeFt = runwayReleasePayload.initialAltitudeFt;
+      requiredVsiFpm = computeRequiredVsi(targetAltitudeFt, routeProgress?.remainingLegNm ?? remainingRouteNm);
+      modeLabel = 'Procedure climb';
+      sourceLabel = runwayReleasePayload.source;
+      activeConstraintLabel = `${runwayReleasePayload.airportIdent} RWY ${runwayReleasePayload.runwayIdent}`;
+      support = `${runwayReleasePayload.airportIdent} RWY ${runwayReleasePayload.runwayIdent} release altitude`;
+      recommendation =
+        requiredVsiFpm != null
+          ? `Procedure climb target ${targetAltitudeFt} ft - ${Math.abs(requiredVsiFpm)} fpm advisory.`
+          : `Procedure climb target ${targetAltitudeFt} ft.`;
+      call = `Climb to ${targetAltitudeFt} ft`;
+    } else if (courseConstraintPayload?.altitudeConstraintFt) {
+      targetAltitudeFt = courseConstraintPayload.altitudeConstraintFt;
+      activeConstraintDistanceNm =
+        courseConstraintPayload === activePayload
+          ? routeProgress?.remainingLegNm ?? remainingRouteNm
+          : remainingRouteNm;
+      requiredVsiFpm = computeRequiredVsi(targetAltitudeFt, activeConstraintDistanceNm);
+      modeLabel = 'Leg constraint';
+      sourceLabel = courseConstraintPayload.source;
+      activeConstraintLabel = `${courseConstraintPayload.fromFix} -> ${courseConstraintPayload.toFix}`;
+      support = `Meet ${targetAltitudeFt} ft by ${courseConstraintPayload.toFix}`;
+      recommendation =
+        requiredVsiFpm != null
+          ? `Leg altitude constraint active - ${Math.abs(requiredVsiFpm)} fpm required by ${courseConstraintPayload.toFix}.`
+          : `Leg altitude constraint active for ${courseConstraintPayload.toFix}.`;
+      call =
+        Math.abs(targetAltitudeFt - currentAltitudeFt) < 150
+          ? `Leg constraint met ${targetAltitudeFt} ft`
+          : targetAltitudeFt < currentAltitudeFt
+            ? `Descend to ${targetAltitudeFt} ft by ${courseConstraintPayload.toFix}`
+            : `Climb to ${targetAltitudeFt} ft by ${courseConstraintPayload.toFix}`;
+    } else if ((stage === 'descent' || stage === 'arrival') && terminalPayload?.altitudeConstraintFt) {
+      targetAltitudeFt = terminalPayload.altitudeConstraintFt;
+      requiredVsiFpm = computeRequiredVsi(targetAltitudeFt, remainingRouteNm);
+      modeLabel = 'Terminal constraint';
+      sourceLabel = terminalPayload.source;
+      activeConstraintLabel = `${terminalPayload.arrivalIdent} ${terminalPayload.transitionFix} -> ${terminalPayload.handoffFix}`;
+      support = `${terminalPayload.arrivalIdent} via ${terminalPayload.transitionFix} -> ${terminalPayload.handoffFix}`;
+      recommendation =
+        requiredVsiFpm != null
+          ? `Meet ${targetAltitudeFt} ft at terminal feed - ${Math.abs(requiredVsiFpm)} fpm required.`
+          : `Meet ${targetAltitudeFt} ft at terminal feed.`;
+      call =
+        Math.abs(targetAltitudeFt - currentAltitudeFt) < 150
+          ? `Terminal constraint met ${targetAltitudeFt} ft`
+          : targetAltitudeFt < currentAltitudeFt
+            ? `Descend to ${targetAltitudeFt} ft`
+            : `Recover to ${targetAltitudeFt} ft`;
+    } else if (stage === 'final' && finalPayload) {
+      const glideAngleDeg = finalPayload.glideslopeAngleDeg ?? 3;
+      const feetPerNm = Math.tan((glideAngleDeg * Math.PI) / 180) * 6076;
+      targetAltitudeFt =
+        typeof remainingRouteNm === 'number'
+          ? Math.round((destinationElevationFtEstimate + remainingRouteNm * feetPerNm + 50) / 50) * 50
+          : null;
+      requiredVsiFpm = targetAltitudeFt != null ? computeRequiredVsi(targetAltitudeFt, remainingRouteNm) : null;
+      modeLabel = 'Final constraint';
+      sourceLabel = finalPayload.source;
+      activeConstraintLabel = `RWY ${finalPayload.runwayIdent} ${finalPayload.thresholdFix}`;
+      support = `RWY ${finalPayload.runwayIdent} final ${glideAngleDeg.toFixed(1)}° via ${finalPayload.thresholdFix}`;
+      recommendation =
+        requiredVsiFpm != null
+          ? `Fly the final path at ${Math.abs(requiredVsiFpm)} fpm.`
+          : `Track the final glidepath to runway ${finalPayload.runwayIdent}.`;
+      call =
+        targetAltitudeFt != null
+          ? Math.abs(targetAltitudeFt - currentAltitudeFt) < 120
+            ? 'On final glidepath'
+            : targetAltitudeFt < currentAltitudeFt
+              ? `Descend on final to ${targetAltitudeFt} ft`
+              : `Recover to final path ${targetAltitudeFt} ft`
+          : `Track RWY ${finalPayload.runwayIdent} final path`;
+    }
+
+    if (nextConstraintLabel) {
+      if (routeExecutionSummary.sequencingSuspended || routeExecutionSummary.sequenceGateState === 'hold') {
+        constraintGateState = 'hold';
+        constraintGateCall = `Vertical hold - ${nextConstraintLabel}`;
+      } else if (
+        routeExecutionSummary.sequenceGateState === 'open' ||
+        routeExecutionSummary.sequenceGateState === 'manual-open'
+      ) {
+        constraintGateState = 'open';
+        constraintGateCall = `Vertical handoff open - ${nextConstraintLabel}`;
+      } else if (nextConstraintArmed) {
+        constraintGateState = 'armed';
+        constraintGateCall = `Vertical handoff armed - ${nextConstraintLabel}`;
+      } else {
+        constraintGateState = 'staged';
+        constraintGateCall = `Vertical handoff staged - ${nextConstraintLabel}`;
+      }
+    } else if (targetAltitudeFt != null) {
+      constraintGateState = 'active';
+      constraintGateCall = `${modeLabel} active`;
+    }
+
+    return {
+      modeLabel,
+      sourceLabel,
+      targetAltitudeFt,
+      requiredVsiFpm,
+      support,
+      recommendation,
+      call,
+      activeConstraintLabel,
+      nextConstraintLabel,
+      nextConstraintArmed,
+      activeConstraintDistanceNm,
+      constraintGateState,
+      constraintGateCall,
+    };
+  }, [
+    activeOwnship?.altitudeFt,
+    activeOwnship?.speedKts,
+    destinationElevationFtEstimate,
+    flightDeckPhaseSummary.stage,
+    flightDeckVerticalPathSummary.advisoryCall,
+    routeExecutionSummary.nextLegArmed,
+    routeExecutionSummary.sequencingSuspended,
+    routeExecutionSummary.sequenceGateState,
+    routeExecutionSummary.activeParsedLegPayload,
+    routeExecutionSummary.nextParsedLegPayload,
+    routeProgress?.remainingLegNm,
+    routeProgress?.remainingRouteNm,
+    simulationAltitudeFt,
+    simulationCruiseKts,
+  ]);
+  const flightDeckVerticalAlertSummary = useMemo(() => {
+    const activeTargetAltitudeFt =
+      flightDeckVerticalConstraintSummary.targetAltitudeFt ?? flightDeckVerticalPathSummary.targetAltitudeFt;
+    const activeVerticalErrorFt =
+      flightDeckVerticalConstraintSummary.targetAltitudeFt != null
+        ? activeTargetAltitudeFt != null
+          ? activeTargetAltitudeFt - (activeOwnship?.altitudeFt ?? simulationAltitudeFt)
+          : null
+        : flightDeckVerticalPathSummary.verticalErrorFt;
+    const distanceToTodNm = flightDeckVerticalPathSummary.distanceToTodNm;
+    const stage = flightDeckPhaseSummary.stage;
+    const deviationAbsFt =
+      typeof activeVerticalErrorFt === 'number' && Number.isFinite(activeVerticalErrorFt)
+        ? Math.abs(activeVerticalErrorFt)
+        : null;
+    const deviationLabel =
+      deviationAbsFt == null
+        ? 'VNAV pending'
+        : deviationAbsFt < 120
+          ? 'On path'
+          : `${activeVerticalErrorFt != null && activeVerticalErrorFt < 0 ? 'High' : 'Low'} ${Math.round(deviationAbsFt)} ft`;
+    const todLabel =
+      typeof distanceToTodNm === 'number' && Number.isFinite(distanceToTodNm)
+        ? distanceToTodNm > 0
+          ? `TOD ${distanceToTodNm.toFixed(1)} NM`
+          : `TOD passed ${Math.abs(distanceToTodNm).toFixed(1)} NM`
+        : 'TOD pending';
+
+    if (
+      stage === 'cruise' &&
+      typeof distanceToTodNm === 'number' &&
+      Number.isFinite(distanceToTodNm) &&
+      distanceToTodNm > 0 &&
+      distanceToTodNm <= 4
+    ) {
+      return {
+        severity: 'caution' as const,
+        title: 'Top of descent approaching',
+        detail: `${todLabel}. ${flightDeckVerticalPathSummary.recommendation}`,
+        deviationLabel,
+        todLabel,
+      };
+    }
+
+    if (
+      (stage === 'descent' || stage === 'arrival' || stage === 'final') &&
+      deviationAbsFt != null &&
+      activeTargetAltitudeFt != null
+    ) {
+      const thresholdFt = stage === 'final' ? 250 : 450;
+      if (deviationAbsFt >= thresholdFt) {
+        return {
+          severity: stage === 'final' && deviationAbsFt >= 600 ? ('warning' as const) : ('caution' as const),
+          title: stage === 'final' ? 'Vertical path deviation' : 'Descent path deviation',
+          detail: `${deviationLabel}. Target ${Math.round(activeTargetAltitudeFt)} ft. ${flightDeckVerticalConstraintSummary.targetAltitudeFt != null ? flightDeckVerticalConstraintSummary.recommendation : flightDeckVerticalPathSummary.recommendation}`,
+          deviationLabel,
+          todLabel,
+        };
+      }
+    }
+
+    if (
+      stage === 'cruise' &&
+      typeof distanceToTodNm === 'number' &&
+      Number.isFinite(distanceToTodNm) &&
+      distanceToTodNm < -2 &&
+      deviationAbsFt != null &&
+      deviationAbsFt >= 500
+    ) {
+      return {
+        severity: 'caution' as const,
+        title: 'Descent path late',
+        detail: `${todLabel}. ${deviationLabel}. ${flightDeckVerticalPathSummary.recommendation}`,
+        deviationLabel,
+        todLabel,
+      };
+    }
+
+    return {
+      severity: null,
+      title: null,
+      detail: null,
+      deviationLabel,
+      todLabel,
+    };
+  }, [
+    activeOwnship?.altitudeFt,
+    flightDeckPhaseSummary.stage,
+    flightDeckVerticalConstraintSummary.recommendation,
+    flightDeckVerticalConstraintSummary.targetAltitudeFt,
+    flightDeckVerticalPathSummary.distanceToTodNm,
+    flightDeckVerticalPathSummary.recommendation,
+    flightDeckVerticalPathSummary.targetAltitudeFt,
+    flightDeckVerticalPathSummary.verticalErrorFt,
+    simulationAltitudeFt,
+  ]);
   const plannerExecutionPlanView = useMemo(
     () =>
       annotateMobileRouteExecutionPlan(plannerExecutionPlan, {
@@ -2879,10 +4005,11 @@ export default function FlightPlannerScreen() {
     ]
   );
   const visionVerticalCueLabel = useMemo(() => {
+    if (flightDeckTargetAltitudeFt == null && flightDeckVerticalPathSummary.cueLabel) return flightDeckVerticalPathSummary.cueLabel;
     if (visionDirectorCue.verticalCommand.startsWith('Climb')) return 'CLB';
     if (visionDirectorCue.verticalCommand.startsWith('Descend')) return 'DES';
     return 'ALT';
-  }, [visionDirectorCue.verticalCommand]);
+  }, [flightDeckTargetAltitudeFt, flightDeckVerticalPathSummary.cueLabel, visionDirectorCue.verticalCommand]);
   const flightDeckCommandBankDeg = useMemo(
     () => clamp(visionDirectorCue.lateralOffsetPct * 1.8, -30, 30),
     [visionDirectorCue.lateralOffsetPct]
@@ -2947,6 +4074,68 @@ export default function FlightPlannerScreen() {
       450,
     );
   };
+  useEffect(() => {
+    if (!isFlightDeck || flightDeckView !== 'map' || !tacticalMapRegion) return;
+
+    const signature = [
+      flightDeckPhaseSummary.stage,
+      routeProgress?.legIndex ?? -1,
+      selectedTrafficTarget?.id || 'none',
+      selectedDiversion?.icao || 'none',
+    ].join(':');
+
+    const stageChanged = flightDeckMapFocusSignatureRef.current !== signature;
+    const ownshipOutsideWindow =
+      !!activeOwnship &&
+      !!mapRegion &&
+      (Math.abs(activeOwnship.lat - mapRegion.latitude) > mapRegion.latitudeDelta * 0.28 ||
+        Math.abs(activeOwnship.lon - mapRegion.longitude) > mapRegion.longitudeDelta * 0.28);
+
+    if (!stageChanged && !ownshipOutsideWindow) return;
+
+    flightDeckMapFocusSignatureRef.current = signature;
+    if (activeOwnship?.heading != null) {
+      flightDeckMapHeadingRef.current = activeOwnship.heading;
+      mapRef.current?.animateCamera(
+        {
+          center: {
+            latitude: tacticalMapRegion.latitude,
+            longitude: tacticalMapRegion.longitude,
+          },
+          heading: activeOwnship.heading,
+          pitch: 0,
+        },
+        { duration: 450 },
+      );
+      return;
+    }
+    mapRef.current?.animateToRegion(tacticalMapRegion, 450);
+  }, [
+    activeOwnship,
+    flightDeckPhaseSummary.stage,
+    flightDeckView,
+    isFlightDeck,
+    mapRegion,
+    routeProgress?.legIndex,
+    selectedDiversion?.icao,
+    selectedTrafficTarget?.id,
+    tacticalMapRegion,
+  ]);
+  useEffect(() => {
+    if (!isFlightDeck || flightDeckView !== 'map' || activeOwnship?.heading == null) return;
+    const previousHeading = flightDeckMapHeadingRef.current;
+    if (previousHeading != null && Math.abs(normalizeHeadingDelta(activeOwnship.heading - previousHeading)) < 8) {
+      return;
+    }
+    flightDeckMapHeadingRef.current = activeOwnship.heading;
+    mapRef.current?.animateCamera(
+      {
+        heading: activeOwnship.heading,
+        pitch: 0,
+      },
+      { duration: 260 },
+    );
+  }, [activeOwnship?.heading, flightDeckView, isFlightDeck]);
   const focusTrafficTarget = (target: RankedTrafficTarget) => {
     setSelectedTrafficId(target.id);
     openFlightDeckPanel('traffic');
@@ -3272,6 +4461,43 @@ export default function FlightPlannerScreen() {
               tone: 'accent',
               active: flightDeckPanel === 'diversions' && flightDeckDrawerOpen,
               onPress: () => toggleFlightDeckPanel('diversions'),
+            },
+            {
+              key: 'vnav',
+              label: 'VNAV',
+              value:
+                flightDeckVerticalConstraintSummary.targetAltitudeFt != null
+                  ? `${Math.round(flightDeckVerticalConstraintSummary.targetAltitudeFt)} ft`
+                  : flightDeckVerticalPathSummary.distanceToTodNm != null && flightDeckVerticalPathSummary.distanceToTodNm > 0
+                  ? `TOD ${flightDeckVerticalPathSummary.distanceToTodNm.toFixed(1)} NM`
+                  : flightDeckVerticalPathSummary.targetAltitudeFt != null
+                    ? `${Math.round(flightDeckVerticalPathSummary.targetAltitudeFt)} ft`
+                    : flightDeckVerticalPathSummary.modeLabel,
+              tone:
+                flightDeckVerticalConstraintSummary.targetAltitudeFt != null ||
+                flightDeckVerticalPathSummary.guidanceMode === 'descent' ||
+                flightDeckVerticalPathSummary.guidanceMode === 'path'
+                  ? 'caution'
+                  : 'default',
+              active:
+                (flightDeckVerticalConstraintSummary.targetAltitudeFt != null &&
+                  flightDeckTargetAltitudeFt === flightDeckVerticalConstraintSummary.targetAltitudeFt) ||
+                (flightDeckVerticalConstraintSummary.targetAltitudeFt == null &&
+                  flightDeckVerticalPathSummary.targetAltitudeFt != null &&
+                  flightDeckTargetAltitudeFt === flightDeckVerticalPathSummary.targetAltitudeFt),
+              onPress: () => {
+                pulseFlightDeckChrome(true);
+                const nextTargetAltitudeFt =
+                  flightDeckVerticalConstraintSummary.targetAltitudeFt ?? flightDeckVerticalPathSummary.targetAltitudeFt;
+                if (nextTargetAltitudeFt != null) {
+                  setFlightDeckTargetAltitudeFt((current) =>
+                    current === nextTargetAltitudeFt ? null : nextTargetAltitudeFt
+                  );
+                } else {
+                  openFlightDeckPanel('status');
+                }
+                setFlightDeckHudExpanded(true);
+              },
             },
             {
               key: 'vision',
@@ -4657,11 +5883,23 @@ export default function FlightPlannerScreen() {
       : runwayOccupied
         ? `Exit runway ${runway.runwayId}`
         : `Taxi in via ${activeTaxiway}`;
+    const surfaceAction = deriveSurfaceNextAction({
+      ownship: geoOwnship,
+      upcomingRoute: geoUpcomingRoute,
+      activeTaxiway,
+      upcomingTaxiways,
+      holdShortActive,
+      runwayOccupied,
+      runwayId: runway.runwayId,
+    });
     const surfaceRegion = buildSurfaceRegion({
       ownship: { lat: geoOwnship.lat, lon: geoOwnship.lon },
       route: geoUpcomingRoute,
       runwayCenterline: geoRunwayCenterline,
-      bounds: surfaceGeometry?.bounds || null,
+      runwayBar: geoRunwayBar,
+      mode: departureSurface ? 'departure' : 'arrival',
+      holdShortActive,
+      runwayOccupied,
     });
     const ownship = route.reduce<FlightDeckSurfacePreview['ownship']>(
       (current, _point, index) => {
@@ -4731,6 +5969,9 @@ export default function FlightPlannerScreen() {
       activeTaxiway,
       upcomingTaxiways,
       progressCall,
+      nextActionCall: surfaceAction.nextActionCall,
+      cameraModeLabel: surfaceAction.cameraModeLabel,
+      nextTurnDistanceNm: surfaceAction.nextTurnDistanceNm,
       surfaceRegion,
     };
   }, [
@@ -4879,6 +6120,9 @@ export default function FlightPlannerScreen() {
     visionRouteGuidance,
     visionTerrainColumns,
     visionDirectorCue,
+    flightDeckVerticalPathSummary,
+    flightDeckVerticalConstraintSummary,
+    flightDeckVerticalAlertSummary,
     visionVerticalCueLabel,
     visionGuidance,
     terrainEscapeGuidance,
@@ -4915,6 +6159,10 @@ export default function FlightPlannerScreen() {
     selectedDiversionIcao,
     diversionCandidates,
     visibleTrafficTargets,
+    mapDisplayTrafficTargets,
+    mapTrafficPresentation,
+    mapRouteDisplay,
+    mapVerticalGuidancePresentation,
     selectedDiversion,
     selectedDiversionRunwaySummary,
     departureBriefing,
@@ -4932,6 +6180,9 @@ export default function FlightPlannerScreen() {
     selectedDiversionBestComm,
     selectedTrafficTrend,
     mapTacticalSummary,
+    mapOverlayProfile,
+    mapRunwayFocusSummary,
+    tacticalMapRegion,
     flightDeckTargetAltitudeFt,
     flightDeckVisibleAlert,
     flightDeckLowerStackBottom,
@@ -6661,6 +7912,38 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.8,
   },
+  flightDeckVisionVerticalScale: {
+    position: 'absolute',
+    right: '16%',
+    top: '31%',
+    bottom: '24%',
+    width: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flightDeckVisionVerticalScaleCenter: {
+    position: 'absolute',
+    width: 2,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(232, 237, 244, 0.2)',
+  },
+  flightDeckVisionVerticalBug: {
+    width: 14,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: colors.flightAccent,
+    shadowColor: colors.flightAccent,
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  flightDeckVisionVerticalBugActive: {
+    backgroundColor: colors.flightAccent,
+  },
+  flightDeckVisionVerticalBugArmed: {
+    backgroundColor: colors.flightCaution,
+  },
   flightDeckVisionReadoutLeft: {
     position: 'absolute',
     top: spacing.lg,
@@ -7424,6 +8707,52 @@ const styles = StyleSheet.create({
   flightTrafficMarkerWrap: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  flightTrafficAltitudeTag: {
+    position: 'absolute',
+    bottom: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: 'rgba(10,14,20,0.88)',
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+  },
+  flightTrafficAltitudeTagText: {
+    color: colors.flightText,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  flightDeckVerticalMarker: {
+    minWidth: 62,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.sm,
+  },
+  flightDeckVerticalMarkerConstraint: {
+    backgroundColor: 'rgba(17,22,30,0.92)',
+    borderColor: colors.flightAccent,
+  },
+  flightDeckVerticalMarkerTod: {
+    backgroundColor: 'rgba(10,14,20,0.92)',
+    borderColor: colors.flightAdvisory,
+  },
+  flightDeckVerticalMarkerLabel: {
+    color: colors.flightText,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  flightDeckVerticalMarkerValue: {
+    color: colors.flightText,
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
   },
   flightTrafficAttentionRing: {
     position: 'absolute',

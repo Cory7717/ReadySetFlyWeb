@@ -371,6 +371,7 @@ export type MobileRouteProcedureParsedLegPayload =
       toFix: string;
       courseDeg: number | null;
       distanceNm: number | null;
+      altitudeConstraintFt: number | null;
     }
   | {
       kind: 'terminal-feed-payload';
@@ -1785,6 +1786,7 @@ export function getMobileRouteProcedureParsedLegPayload(
           toFix: entry.navDataPayload.toFix,
           courseDeg: entry.navDataPayload.courseDeg,
           distanceNm: entry.navDataPayload.distanceNm,
+          altitudeConstraintFt: entry.navDataPayload.altitudeConstraintFt,
         };
       }
       return {
@@ -1795,6 +1797,7 @@ export function getMobileRouteProcedureParsedLegPayload(
         toFix: entry.toFix,
         courseDeg: entry.courseDeg,
         distanceNm: entry.distanceNm,
+        altitudeConstraintFt: null,
       };
     case 'terminal-feed-target':
       if (entry.navDataPayload?.kind === 'terminal-feed-nav-data') {

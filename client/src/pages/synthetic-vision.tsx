@@ -734,11 +734,12 @@ function projectMapPoint(
   point: DemoRoutePoint,
   rangeAheadNm: number,
   rangeSideNm: number,
+  ownshipAnchorYPct = 78,
 ) {
   const { forwardNm, rightNm } = projectPointRelativeToOwnship(ownship, point);
   return {
     x: 50 + (rightNm / rangeSideNm) * 34,
-    y: 78 - (forwardNm / rangeAheadNm) * 64,
+    y: ownshipAnchorYPct - (forwardNm / rangeAheadNm) * 64,
     forwardNm,
   };
 }
@@ -772,11 +773,37 @@ function FlightDemoMapSurface({
   runwayOverlay: RunwayOverlay | null;
   runwayOverlayLabel: string | null;
 }) {
-  const rangeAheadNm = clamp(Math.max(remainingRouteNm * 0.42, 18), 18, 64);
-  const rangeSideNm = Math.max(14, rangeAheadNm * 0.72);
+  const ownshipAnchorYPct =
+    flightPhase === "surface-departure"
+      ? 70
+      : flightPhase === "departure"
+        ? 74
+        : flightPhase === "arrival"
+          ? 72
+          : flightPhase === "surface-arrival"
+            ? 68
+            : 78;
+  const rangeAheadNm =
+    flightPhase === "surface-departure"
+      ? 3.4
+      : flightPhase === "departure"
+        ? 12
+        : flightPhase === "arrival"
+          ? 16
+          : flightPhase === "surface-arrival"
+            ? 3.2
+            : clamp(Math.max(remainingRouteNm * 0.42, 18), 18, 64);
+  const rangeSideNm =
+    flightPhase === "surface-departure" || flightPhase === "surface-arrival"
+      ? 2.5
+      : flightPhase === "departure"
+        ? 8.5
+        : flightPhase === "arrival"
+          ? 11.5
+          : Math.max(14, rangeAheadNm * 0.72);
   const projected = routePoints.map((point) => ({
     point,
-    ...projectMapPoint(ownship, point, rangeAheadNm, rangeSideNm),
+    ...projectMapPoint(ownship, point, rangeAheadNm, rangeSideNm, ownshipAnchorYPct),
   }));
   const projectedTraffic = trafficTargets.map((target) => ({
     target,
@@ -789,6 +816,7 @@ function FlightDemoMapSurface({
       },
       rangeAheadNm,
       rangeSideNm,
+      ownshipAnchorYPct,
     ),
   }));
   const projectedDiversions = diversionCandidates.map((airport) => ({
@@ -802,6 +830,7 @@ function FlightDemoMapSurface({
       },
       rangeAheadNm,
       rangeSideNm,
+      ownshipAnchorYPct,
     ),
   }));
   const polylinePoints = projected
@@ -819,6 +848,7 @@ function FlightDemoMapSurface({
             },
             rangeAheadNm,
             rangeSideNm,
+            ownshipAnchorYPct,
           ),
         )
         .map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
@@ -836,12 +866,18 @@ function FlightDemoMapSurface({
             },
             rangeAheadNm,
             rangeSideNm,
+            ownshipAnchorYPct,
           ),
         )
         .map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
         .join(" ")
     : "";
-  const rangeRings = [11, 21, 31];
+  const rangeRings =
+    flightPhase === "surface-departure" || flightPhase === "surface-arrival"
+      ? [8, 15, 22]
+      : flightPhase === "departure" || flightPhase === "arrival"
+        ? [10, 18, 27]
+        : [11, 21, 31];
   const mapTitle = "Overhead";
 
   return (
@@ -929,7 +965,7 @@ function FlightDemoMapSurface({
           <circle
             key={`range-ring-${radius}`}
             cx="50"
-            cy="78"
+            cy={ownshipAnchorYPct}
             r={radius}
             fill="none"
             stroke="rgba(74,159,212,0.12)"
@@ -937,13 +973,13 @@ function FlightDemoMapSurface({
           />
         ))}
         <path
-          d="M50 78 L42 14 L58 14 Z"
+          d={`M50 ${ownshipAnchorYPct} L42 14 L58 14 Z`}
           fill="rgba(74,159,212,0.06)"
           stroke="rgba(74,159,212,0.12)"
           strokeWidth="0.35"
         />
-        <line x1="50" y1="10" x2="50" y2="78" stroke="rgba(232,237,244,0.08)" strokeWidth="0.35" />
-        <line x1="18" y1="78" x2="82" y2="78" stroke="rgba(232,237,244,0.05)" strokeWidth="0.35" />
+        <line x1="50" y1="10" x2="50" y2={ownshipAnchorYPct} stroke="rgba(232,237,244,0.08)" strokeWidth="0.35" />
+        <line x1="18" y1={ownshipAnchorYPct} x2="82" y2={ownshipAnchorYPct} stroke="rgba(232,237,244,0.05)" strokeWidth="0.35" />
         <polyline
           points={polylinePoints}
           fill="none"
@@ -1018,9 +1054,9 @@ function FlightDemoMapSurface({
         {selectedTrafficTarget ? (
           <line
             x1="50"
-            y1="78"
+            y1={ownshipAnchorYPct}
             x2={projectedTraffic.find((item) => item.target.id === selectedTrafficTarget.id)?.x ?? 50}
-            y2={projectedTraffic.find((item) => item.target.id === selectedTrafficTarget.id)?.y ?? 78}
+            y2={projectedTraffic.find((item) => item.target.id === selectedTrafficTarget.id)?.y ?? ownshipAnchorYPct}
             stroke={selectedTrafficTarget.threatLevel === "immediate" ? "#E8453C" : "#F5A623"}
             strokeWidth="0.55"
             strokeDasharray="2.8 1.4"
@@ -1076,7 +1112,7 @@ function FlightDemoMapSurface({
             ) : null}
           </g>
         ))}
-        <g transform="translate(50 78)">
+        <g transform={`translate(50 ${ownshipAnchorYPct})`}>
           <path d="M0 -4.2 L2.9 3.2 L0 1.4 L-2.9 3.2 Z" fill="#E8EDF4" stroke="#0A0E14" strokeWidth="0.45" />
           <circle cx="0" cy="0" r="5.8" fill="none" stroke="rgba(74,159,212,0.22)" strokeWidth="0.55" />
         </g>
@@ -1263,12 +1299,15 @@ function FlightDemoInsetRadar({
   routePoints,
   nextWaypoint,
   trafficTargets,
+  flightPhase,
 }: {
   ownship: { lat: number; lon: number; heading: number };
   routePoints: DemoRoutePoint[];
   nextWaypoint: string | null;
   trafficTargets: DemoTrafficTarget[];
+  flightPhase: DemoFlightPhase;
 }) {
+  if (flightPhase !== "enroute") return null;
   const rangeNm = 12;
   const projectedPoints = routePoints
     .map((point) => {
@@ -1296,12 +1335,12 @@ function FlightDemoInsetRadar({
     .filter((point) => point.x >= 8 && point.x <= 92 && point.y >= 8 && point.y <= 92);
 
   return (
-    <div className="absolute bottom-[92px] left-5 z-20 hidden w-[152px] rounded-[22px] border border-[#1E2D42] bg-[#07111C]/86 p-3 shadow-[0_12px_30px_rgba(0,0,0,0.22)] backdrop-blur md:block">
+    <div className="absolute bottom-[116px] left-6 z-20 hidden w-[118px] rounded-[20px] border border-[#1E2D42] bg-[#07111C]/88 p-2.5 shadow-[0_12px_30px_rgba(0,0,0,0.22)] backdrop-blur lg:block">
       <div className="flex items-center justify-between">
         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Inset nav</div>
         <div className="text-[10px] font-mono text-[#4A9FD4]">12 NM</div>
       </div>
-      <svg viewBox="0 0 100 100" className="mt-2 h-[112px] w-full">
+      <svg viewBox="0 0 100 100" className="mt-2 h-[90px] w-full">
         <circle cx="50" cy="50" r="38" fill="#091018" stroke="#1E2D42" strokeWidth="1.2" />
         <circle cx="50" cy="50" r="24" fill="none" stroke="rgba(74,159,212,0.32)" strokeWidth="1" strokeDasharray="2.5 3.2" />
         <path d="M50 12 L50 88 M12 50 L88 50" stroke="rgba(232,237,244,0.14)" strokeWidth="0.8" />
@@ -1937,12 +1976,21 @@ function FlightDemoVisionSurface({
     : null;
   const showTunnel = isEnroute || isDeparture;
   const showRunwayGuidance = Boolean(runwayCue) && (isDeparture || isArrival || isTaxiIn);
+  const annunciationLabel = isTaxiOut
+    ? "Taxi / hold short"
+    : isDeparture
+      ? "Runway / climb"
+      : isArrival
+        ? "Final / runway"
+        : isTaxiIn
+          ? "Rollout / taxi-in"
+          : "Enroute nav";
   const trafficCardClass = showRunwayGuidance
-    ? "absolute top-[41%] right-[124px] z-20 w-[132px] -translate-y-1/2 rounded-2xl border border-[#1E2D42] bg-[#091018]/80 px-3 py-2.5 text-right backdrop-blur md:right-[136px] md:w-[146px]"
-    : "absolute top-[45%] right-[126px] z-20 w-[156px] -translate-y-1/2 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 text-right backdrop-blur md:right-[138px] md:w-[170px]";
+    ? "absolute top-[188px] right-[184px] z-20 w-[120px] rounded-2xl border border-[#1E2D42] bg-[#091018]/84 px-3 py-2.5 text-right backdrop-blur"
+    : "absolute top-[188px] right-[184px] z-20 w-[136px] rounded-2xl border border-[#1E2D42] bg-[#091018]/80 px-3 py-2.5 text-right backdrop-blur";
   const terrainCardClass = showRunwayGuidance
-    ? "absolute top-[41%] left-[124px] z-20 w-[132px] -translate-y-1/2 rounded-2xl border border-[#1E2D42] bg-[#091018]/80 px-3 py-2.5 backdrop-blur md:left-[136px] md:w-[146px]"
-    : "absolute top-[45%] left-[126px] z-20 w-[156px] -translate-y-1/2 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 backdrop-blur md:left-[138px] md:w-[170px]";
+    ? "absolute top-[188px] left-[184px] z-20 w-[120px] rounded-2xl border border-[#1E2D42] bg-[#091018]/84 px-3 py-2.5 backdrop-blur"
+    : "absolute top-[188px] left-[184px] z-20 w-[136px] rounded-2xl border border-[#1E2D42] bg-[#091018]/80 px-3 py-2.5 backdrop-blur";
   const runwayRibbonWidth = isArrival ? 26 : 18;
   const runwayRibbonBottom = isArrival ? 6 : 11;
   const runwayRibbonTop = isArrival ? 41 : 57;
@@ -2035,14 +2083,27 @@ function FlightDemoVisionSurface({
             bottom: `${runwayRibbonBottom}%`,
           }}
         >
+          <div className="absolute inset-y-0 left-[12%] w-[2px] bg-white/30" />
+          <div className="absolute inset-y-0 right-[12%] w-[2px] bg-white/30" />
           <div className="absolute inset-x-[44%] top-0 bottom-0 bg-white/60" />
           <div className="absolute inset-x-[46%] top-0 bottom-0 bg-[#0A0E14]" />
+          <div className="absolute inset-x-0 top-[8%] flex justify-center gap-[5%]">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={`threshold-${index}`} className="h-[8px] w-[7%] bg-white/92" />
+            ))}
+          </div>
           {[12, 28, 44, 60, 76].map((pct) => (
             <div
               key={`runway-centerline-${pct}`}
               className="absolute left-1/2 h-[10%] w-[10%] -translate-x-1/2 bg-white/90"
               style={{ top: `${pct}%` }}
             />
+          ))}
+          {[18, 34, 50, 66, 82].map((pct) => (
+            <div key={`edge-light-left-${pct}`} className="absolute left-[8%] h-[2px] w-[6%] bg-[#C8922A]/75" style={{ top: `${pct}%` }} />
+          ))}
+          {[18, 34, 50, 66, 82].map((pct) => (
+            <div key={`edge-light-right-${pct}`} className="absolute right-[8%] h-[2px] w-[6%] bg-[#C8922A]/75" style={{ top: `${pct}%` }} />
           ))}
         </div>
       ) : null}
@@ -2105,7 +2166,7 @@ function FlightDemoVisionSurface({
         side="right"
         formatValue={(value) => Math.max(0, Math.round(value / 10) * 10).toString()}
       />
-      <div className="absolute left-3 top-14 z-20 max-w-[164px] rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 backdrop-blur md:left-[148px] md:top-[66px] md:max-w-[236px] md:px-4 md:py-3">
+      <div className="absolute left-3 top-14 z-20 max-w-[164px] rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 backdrop-blur md:left-[184px] md:top-[66px] md:max-w-[224px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Vision guidance</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {nextWaypoint ? `${phaseCall}${isEnroute ? ` to ${nextWaypoint}` : ""}` : phaseCall}
@@ -2114,7 +2175,7 @@ function FlightDemoVisionSurface({
             {phaseLabel} - {nextWaypointDistanceNm != null ? `${nextWaypointDistanceNm.toFixed(1)} NM to next fix` : phaseSupport}
           </div>
       </div>
-      <div className="absolute right-3 top-14 z-20 flex max-w-[148px] flex-col gap-2 md:right-[148px] md:top-[66px] md:max-w-[208px]">
+      <div className="absolute right-3 top-14 z-20 flex max-w-[148px] flex-col gap-2 md:right-[184px] md:top-[66px] md:max-w-[192px]">
           {runwayCue ? (
             <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 text-right backdrop-blur md:px-4 md:py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">{isDeparture ? "Departure" : "Runway"}</div>
@@ -2188,7 +2249,11 @@ function FlightDemoVisionSurface({
         routePoints={routePoints}
         nextWaypoint={nextWaypoint}
         trafficTargets={trafficTargets}
+        flightPhase={flightPhase}
       />
+      <div className="absolute left-1/2 top-[98px] z-20 -translate-x-1/2 rounded-full border border-[#1E2D42] bg-[#091018]/78 px-4 py-1.5 text-center backdrop-blur">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">{annunciationLabel}</div>
+      </div>
       <div className="absolute bottom-5 left-1/2 z-20 w-[min(92%,520px)] -translate-x-1/2">
         <div className="grid gap-3 rounded-[24px] border border-[#1E2D42] bg-[#091018]/92 px-4 py-3 sm:grid-cols-3">
           <div>

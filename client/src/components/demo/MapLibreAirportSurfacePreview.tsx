@@ -52,9 +52,9 @@ const SURFACE_OUTLINE_LAYER_ID = "rsf-surface-outline-layer";
 const SURFACE_LINE_SOURCE_ID = "rsf-surface-line";
 const SURFACE_LINE_LAYER_ID = "rsf-surface-line-layer";
 const OSM_TILE_URLS = [
-  "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
-  "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
-  "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
+  "https://b.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
+  "https://c.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
 ] as const;
 
 function buildOwnshipElement(headingDeg: number) {
@@ -146,7 +146,7 @@ export default function MapLibreAirportSurfacePreview({
         sourceId: "osmSurface",
         layerId: "rsf-surface-osm",
         tiles: [...OSM_TILE_URLS],
-        attribution: "&copy; OpenStreetMap contributors",
+        attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
       }),
     });
 

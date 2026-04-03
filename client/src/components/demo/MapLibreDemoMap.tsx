@@ -21,9 +21,9 @@ const RUNWAY_BAR_LAYER_ID = "rsf-demo-runway-bar-layer";
 const SELECTED_TRAFFIC_LINE_SOURCE_ID = "rsf-demo-selected-traffic-line";
 const SELECTED_TRAFFIC_LINE_LAYER_ID = "rsf-demo-selected-traffic-line-layer";
 const OSM_TILE_URLS = [
-  "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
-  "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
-  "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+  "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+  "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
 ] as const;
 
 function buildOwnshipElement(headingDeg: number) {
@@ -184,7 +184,7 @@ export default function MapLibreDemoMap({
         sourceId: "osmBase",
         layerId: "rsf-demo-osm-base",
         tiles: [...OSM_TILE_URLS],
-        attribution: "&copy; OpenStreetMap contributors",
+        attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
       }),
     });
 

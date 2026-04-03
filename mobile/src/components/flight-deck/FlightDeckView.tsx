@@ -1,4 +1,4 @@
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+﻿import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import { colors, spacing } from '../../styles/theme';
@@ -8,6 +8,15 @@ type FlightDeckViewProps = {
   actions: any;
   styles: any;
 };
+
+function formatSourceAge(ms: number | null | undefined) {
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '--';
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds}s`;
+}
 
 function FlightDeckSurfaceSchematic({ preview, styles }: { preview: any; styles: any }) {
   if (!preview) return null;
@@ -149,7 +158,10 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
     cruiseKtas,
     routeHeadline,
     flightDeckSessionState,
+    flightDeckPhaseSummary,
     routeProgress,
+    routeExecutionSummary,
+    activeExecutionPlanView = [],
     flightDeckView,
     flightDeckChromeVisible,
     flightDeckDrawerOpen,
@@ -181,6 +193,16 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
     mapStyle,
     routePoints = [],
     activeOwnship,
+    ownshipSourceSummary,
+    headingSourceSummary,
+    attitudeSourceSummary,
+    visionReadinessSummary,
+    receiverStatusSummary,
+    receiverHealth,
+    receiverOwnshipAgeMs,
+    receiverOwnshipFresh,
+    gpsOwnshipAgeMs,
+    gpsOwnshipFresh,
     showCloudsGlobal,
     gibsDate,
     cloudTileUrl,
@@ -261,9 +283,49 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
     setTrafficFilter = () => {},
     focusDiversionAirport = () => {},
     engageDirectToDiversion = () => {},
+    resumePlannedRoute = () => {},
+    toggleSequencingSuspend = () => {},
+    sequencePreviousLeg = () => {},
+    sequenceNextLeg = () => {},
     focusTrafficTarget = () => {},
     setAlternate = () => {},
   } = actions;
+
+  const activeExecutionPlanEntry =
+    typeof routeExecutionSummary?.activeLegIndex === 'number'
+      ? activeExecutionPlanView[routeExecutionSummary.activeLegIndex] || null
+      : null;
+  const nextExecutionPlanEntry =
+    typeof routeExecutionSummary?.activeLegIndex === 'number'
+      ? activeExecutionPlanView[routeExecutionSummary.activeLegIndex + 1] || null
+      : null;
+
+  const ownshipStatusLabel =
+    ownshipSourceSummary?.code === 'SIM'
+      ? 'SIM LIVE'
+      : ownshipSourceSummary?.code === 'RXR'
+        ? 'RXR LIVE'
+        : ownshipSourceSummary?.code === 'GPS'
+          ? 'GPS LIVE'
+          : ownshipSourceSummary?.code === 'STALE'
+            ? 'STALE'
+            : 'PREFLT';
+  const ownshipStatusTone =
+    ownshipSourceSummary?.code === 'SIM'
+      ? 'accent'
+      : ownshipSourceSummary?.code === 'RXR'
+        ? 'active'
+        : ownshipSourceSummary?.code === 'GPS'
+          ? 'default'
+          : ownshipSourceSummary?.code === 'STALE'
+            ? 'warning'
+            : 'default';
+  const ownshipFreshnessText =
+    ownshipSourceSummary?.code === 'RXR'
+      ? `Receiver ${formatSourceAge(receiverOwnshipAgeMs)}`
+      : ownshipSourceSummary?.code === 'GPS'
+        ? `GPS ${formatSourceAge(gpsOwnshipAgeMs)}`
+        : ownshipSourceSummary?.freshness || 'Awaiting source';
 
   return (
     <View style={styles.flightDeckContainer}>
@@ -467,8 +529,14 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               <Text style={styles.flightDeckVisionBannerText}>
                 {visionRouteGuidance?.lateralCue || visionGuidance}
               </Text>
+              <Text style={styles.flightDeckVisionBannerSupport}>
+                Heading {headingSourceSummary?.code || '--'} - {headingSourceSummary?.label || 'Unavailable'}
+              </Text>
               <Text style={styles.flightDeckVisionBannerSupport}>{visionDirectorCue.turnCommand}</Text>
               <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionDirectorCue.verticalCommand}</Text>
+              <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                {attitudeSourceSummary?.pilotGrade ? attitudeSourceSummary.detail : visionReadinessSummary?.detail}
+              </Text>
               {terrainEscapeGuidance ? (
                 <Text style={styles.flightDeckVisionBannerAlert}>{terrainEscapeGuidance}</Text>
               ) : null}
@@ -824,18 +892,110 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               <Text style={styles.flightDeckTitle}>{routeHeadline}</Text>
               <Text style={styles.flightDeckSubtitle}>
                 {routeProgress
-                  ? `Next ${routeProgress.nextWaypoint || '--'} - ${routeProgress.remainingRouteNm.toFixed(1)} NM remaining`
+                  ? `Leg ${routeProgress.activeLegLabel || routeProgress.nextWaypoint || '--'} - ${routeProgress.remainingLegNm.toFixed(1)} NM leg / ${routeProgress.remainingRouteNm.toFixed(1)} NM route`
                   : flightDeckView === 'vision'
                     ? 'Synthetic vision guidance active.'
                     : 'Map-first tactical cockpit.'}
               </Text>
+              {routeProgress ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Next {routeExecutionSummary?.nextLegLabel || routeProgress.nextLegLabel || routeProgress.nextWaypoint || '--'} - Dest {routeProgress.destinationWaypoint || '--'} - {routeExecutionSummary?.sequencingLabel || 'Sequencing'}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.mode === 'direct-to' ? (
+                <Text style={styles.flightDeckSubtitle}>Execution mode Direct-To diversion override is active. Planned route remains staged in planner.</Text>
+              ) : null}
+              {routeExecutionSummary?.sequencingSuspended ? (
+                <Text style={styles.flightDeckSubtitle}>Leg sequencing is suspended. The active leg will stay locked until you resume sequencing.</Text>
+              ) : null}
+              {routeExecutionSummary?.sequencingDetail ? (
+                <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.sequencingDetail}</Text>
+              ) : null}
+              {routeExecutionSummary?.activeLegAnnunciation ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  {routeExecutionSummary.activeLegAnnunciation} Â· {routeExecutionSummary.activeLegGuidanceMode || 'track'} guidance Â· {routeExecutionSummary.activeLegProfile || 'enroute'} Â· {routeExecutionSummary.lateralExecutionState || 'intercept'}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeExecutionSegment?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Segment {routeExecutionSummary.activeExecutionSegment.label}
+                  {routeExecutionSummary?.nextExecutionSegment?.label ? ` Â· Next ${routeExecutionSummary.nextExecutionSegment.label}` : ''}{activeExecutionPlanEntry?.actionCue ? ` Â· ${activeExecutionPlanEntry.actionCue}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeExecutionTransition?.label ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Transition model {routeExecutionSummary.activeExecutionTransition.label}
+                  {routeExecutionSummary?.nextExecutionTransition?.label ? ` Â· Next ${routeExecutionSummary.nextExecutionTransition.label}` : ''}
+                </Text>
+              ) : null}
+              {nextExecutionPlanEntry?.status === 'armed' ? (
+                <Text style={styles.flightDeckSubtitle}>
+                  Execution plan {nextExecutionPlanEntry.legLabel} Â· {nextExecutionPlanEntry.actionCue}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.sequenceGateCall ? (
+                <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.sequenceGateCall}</Text>
+              ) : null}
+              {routeExecutionSummary?.transitionCall ? (
+                <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.transitionCall}</Text>
+              ) : null}
+              {routeExecutionSummary?.nextLegArmed ? (
+                <Text style={styles.flightDeckSubtitle}>Next leg is armed for sequencing.</Text>
+              ) : null}
+              {routeExecutionSummary?.turnAnticipationState && routeExecutionSummary.turnAnticipationState !== 'idle' ? (
+                <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.turnAnticipationCall}</Text>
+              ) : null}
+              <Text style={styles.flightDeckSubtitle}>
+                Phase {flightDeckPhaseSummary?.label || 'Preflight'} - {flightDeckPhaseSummary?.detail || 'Awaiting active route and ownship.'}
+              </Text>
+              <Text style={styles.flightDeckSubtitle}>
+                {ownshipSourceSummary?.label || 'No ownship'} - {ownshipSourceSummary?.detail || 'Tracking source unavailable.'}
+              </Text>
+              <Text style={styles.flightDeckSubtitle}>
+                Heading {headingSourceSummary?.code || '--'} - {headingSourceSummary?.detail || 'No heading source'} - Vision {visionReadinessSummary?.code || '--'}
+              </Text>
+              <Text style={styles.flightDeckSubtitle}>
+                Receiver {receiverStatusSummary?.code || '--'} - {receiverStatusSummary?.detail || 'No receiver health summary'}
+              </Text>
+              <View style={styles.flightDeckHeaderMetaRow}>
+                <View
+                  style={[
+                    styles.flightDeckHeaderMetaChip,
+                    ownshipStatusTone === 'active'
+                      ? styles.flightDeckHeaderMetaChipActive
+                      : ownshipStatusTone === 'accent'
+                        ? styles.flightDeckHeaderMetaChipAccent
+                        : ownshipStatusTone === 'warning'
+                          ? styles.flightDeckHeaderMetaChipWarning
+                          : null,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.flightDeckHeaderMetaChipText,
+                      ownshipStatusTone === 'active'
+                        ? styles.flightDeckHeaderMetaChipTextActive
+                        : ownshipStatusTone === 'accent'
+                          ? styles.flightDeckHeaderMetaChipTextAccent
+                          : ownshipStatusTone === 'warning'
+                            ? styles.flightDeckHeaderMetaChipTextWarning
+                            : null,
+                    ]}
+                  >
+                    {ownshipStatusLabel}
+                  </Text>
+                </View>
+                <Text style={styles.flightDeckHeaderMetaText}>{ownshipFreshnessText}</Text>
+              </View>
             </View>
             <View style={styles.flightDeckHeaderActions}>
               <TouchableOpacity
                 style={[styles.flightDeckExitButton, flightDeckView === 'vision' && styles.flightDeckExitButtonActive]}
                 onPress={toggleFlightDeckView}
               >
-                <Text style={styles.flightDeckExitText}>{flightDeckView === 'vision' ? 'Map' : 'Vision'}</Text>
+                <Text style={styles.flightDeckExitText}>
+                  {flightDeckView === 'vision' ? 'Map' : attitudeSourceSummary?.pilotGrade ? 'Vision' : 'Vision Assist'}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.flightDeckExitButton}
@@ -872,6 +1032,14 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               >
                 <Text style={styles.flightDeckAlertTitle}>{flightDeckVisibleAlert.title}</Text>
                 <Text style={styles.flightDeckAlertText}>{flightDeckVisibleAlert.detail}</Text>
+              </View>
+            ) : null}
+            {flightDeckView === 'vision' && !attitudeSourceSummary?.pilotGrade ? (
+              <View style={[styles.flightDeckAlertStrip, styles.flightDeckAlertStripCaution]}>
+                <Text style={styles.flightDeckAlertTitle}>Vision assist</Text>
+                <Text style={styles.flightDeckAlertText}>
+                  {visionReadinessSummary?.detail || 'Connect an AHRS source for full synthetic vision attitude.'}
+                </Text>
               </View>
             ) : null}
 
@@ -1049,11 +1217,27 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
           <View style={[styles.flightDeckHudExpandedCard, { bottom: Math.max(insets.bottom + 106, 118) }]}>
             <View style={styles.flightDeckHudExpandedRow}>
               <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Leg</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>{routeProgress?.activeLegLabel || '--'}</Text>
+              </View>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Leg Rem</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>
+                  {routeProgress ? `${routeProgress.remainingLegNm.toFixed(1)} NM` : '--'}
+                </Text>
+              </View>
+              <View style={styles.flightDeckHudExpandedMetric}>
                 <Text style={styles.flightDeckHudExpandedLabel}>Next</Text>
                 <Text style={styles.flightDeckHudExpandedValue}>{routeProgress?.nextWaypoint || '--'}</Text>
               </View>
+            </View>
+            <View style={styles.flightDeckHudExpandedRow}>
               <View style={styles.flightDeckHudExpandedMetric}>
-                <Text style={styles.flightDeckHudExpandedLabel}>Remain</Text>
+                <Text style={styles.flightDeckHudExpandedLabel}>Dest</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>{routeProgress?.destinationWaypoint || '--'}</Text>
+              </View>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Route Rem</Text>
                 <Text style={styles.flightDeckHudExpandedValue}>
                   {routeProgress ? `${routeProgress.remainingRouteNm.toFixed(1)} NM` : '--'}
                 </Text>
@@ -1079,6 +1263,36 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 <Text style={styles.flightDeckHudExpandedValue}>{routeRiskLabel}</Text>
               </View>
             </View>
+            <View style={styles.flightDeckHudExpandedRow}>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Source</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>{ownshipSourceSummary?.code || '--'}</Text>
+              </View>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Freshness</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>{ownshipFreshnessText}</Text>
+              </View>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Fallback</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>
+                  {receiverOwnshipFresh === false && gpsOwnshipFresh ? 'GPS armed' : receiverOwnshipFresh ? 'Receiver primary' : gpsOwnshipFresh ? 'GPS primary' : 'No fallback'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.flightDeckHudExpandedRow}>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Heading</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>{headingSourceSummary?.code || '--'}</Text>
+              </View>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Attitude</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>{attitudeSourceSummary?.code || '--'}</Text>
+              </View>
+              <View style={styles.flightDeckHudExpandedMetric}>
+                <Text style={styles.flightDeckHudExpandedLabel}>Vision</Text>
+                <Text style={styles.flightDeckHudExpandedValue}>{visionReadinessSummary?.code || '--'}</Text>
+              </View>
+            </View>
           </View>
         ) : null}
 
@@ -1087,6 +1301,33 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
           activeOpacity={0.92}
           onPress={toggleFlightDeckHud}
         >
+          <View
+            style={[
+              styles.flightDeckHudSourceChip,
+              ownshipStatusTone === 'active'
+                ? styles.flightDeckHudSourceChipActive
+                : ownshipStatusTone === 'accent'
+                  ? styles.flightDeckHudSourceChipAccent
+                  : ownshipStatusTone === 'warning'
+                    ? styles.flightDeckHudSourceChipWarning
+                    : null,
+            ]}
+          >
+            <Text
+              style={[
+                styles.flightDeckHudSourceChipText,
+                ownshipStatusTone === 'active'
+                  ? styles.flightDeckHudSourceChipTextActive
+                  : ownshipStatusTone === 'accent'
+                    ? styles.flightDeckHudSourceChipTextAccent
+                    : ownshipStatusTone === 'warning'
+                      ? styles.flightDeckHudSourceChipTextWarning
+                      : null,
+              ]}
+            >
+              {ownshipStatusLabel}
+            </Text>
+          </View>
           <View style={styles.flightDeckHudCell}>
             <Text style={styles.flightDeckHudLabel}>IAS</Text>
             <Text style={styles.flightDeckHudValue}>{activeOwnship?.speedKts ? `${activeOwnship.speedKts.toFixed(0)}` : '--'}</Text>
@@ -1164,10 +1405,35 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                   <Text style={styles.flightDeckPanelTitle}>Flight Controls</Text>
                   <Text style={styles.flightDeckPanelText}>Receiver, GPS fallback, and sim controls.</Text>
                 </View>
-                <Text style={styles.flightDeckBadge}>
-                  {simulationEnabled ? 'SIM' : gpsEnabled || trafficEnabled ? 'LIVE' : 'PREFLIGHT'}
-                </Text>
+                <Text style={styles.flightDeckBadge}>{flightDeckSessionState || 'PREFLIGHT'}</Text>
               </View>
+              <Text style={styles.flightDeckPanelText}>
+                Source {ownshipSourceSummary?.code || '--'} - {ownshipSourceSummary?.detail || 'Tracking source unavailable.'}
+              </Text>
+              <Text style={styles.flightDeckPanelText}>Freshness {ownshipFreshnessText}</Text>
+              <Text style={styles.flightDeckPanelText}>
+                Heading {headingSourceSummary?.code || '--'} - {headingSourceSummary?.detail || 'No heading source.'}
+              </Text>
+              <Text style={styles.flightDeckPanelText}>
+                Attitude {attitudeSourceSummary?.code || '--'} - {attitudeSourceSummary?.detail || 'Attitude source unavailable.'}
+              </Text>
+              <Text style={styles.flightDeckPanelText}>
+                Vision {visionReadinessSummary?.code || '--'} - {visionReadinessSummary?.detail || 'Vision readiness unavailable.'}
+              </Text>
+              <Text style={styles.flightDeckPanelText}>
+                Phase {flightDeckPhaseSummary?.label || 'Preflight'} - {flightDeckPhaseSummary?.detail || 'Phase logic pending.'}
+              </Text>
+              <Text style={styles.flightDeckPanelText}>
+                Receiver {receiverStatusSummary?.code || '--'} - {receiverStatusSummary?.detail || 'No receiver health summary.'}
+              </Text>
+              {receiverHealth?.warnings?.length ? (
+                <Text style={styles.flightDeckPanelText}>Receiver note {receiverHealth.warnings[0]}</Text>
+              ) : null}
+              {receiverOwnshipFresh === false ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Receiver ownship is stale.{gpsOwnshipFresh ? ' GPS fallback is active.' : ' No live fallback is active.'}
+                </Text>
+              ) : null}
               <View style={styles.flightDeckControlRow}>
                 <TouchableOpacity style={[styles.flightDeckChip, trafficEnabled && styles.flightDeckChipActive]} onPress={() => setTrafficEnabled((prev: boolean) => !prev)}>
                   <Text style={[styles.flightDeckChipText, trafficEnabled && styles.flightDeckChipTextActive]}>Traffic</Text>
@@ -1204,7 +1470,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                   onPress={toggleFlightDeckView}
                 >
                   <Text style={[styles.flightDeckChipText, flightDeckView === 'vision' && styles.flightDeckChipTextActive]}>
-                    {flightDeckView === 'vision' ? 'Return to map' : 'Open vision'}
+                    {flightDeckView === 'vision' ? 'Return to map' : attitudeSourceSummary?.pilotGrade ? 'Open vision' : 'Open vision assist'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1252,11 +1518,107 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
             <View style={styles.flightDeckPanel}>
               <Text style={styles.flightDeckPanelTitle}>Route Progress</Text>
               <Text style={styles.flightDeckPanelText}>
-                Corridor {visionRouteGuidance?.corridorSeverity || 'nominal'} / Cross-track {routeProgress.crossTrackNm.toFixed(1)} NM
+                Active leg {routeExecutionSummary?.activeLegLabel || routeProgress.activeLegLabel || '--'} ({routeExecutionSummary?.activeLegType || 'enroute'} / {routeExecutionSummary?.activeLegProfile || 'enroute'}) / {routeProgress.remainingLegNm.toFixed(1)} NM remaining on leg / {routeProgress.legProgressPct.toFixed(0)}% complete
               </Text>
               <Text style={styles.flightDeckPanelText}>
-                Remaining {routeProgress.remainingRouteNm.toFixed(1)} NM - Next {routeProgress.nextWaypoint || '--'} - Off route {routeProgress.offRouteNm.toFixed(1)} NM
+                Next {routeExecutionSummary?.nextLegLabel || routeProgress.nextLegLabel || routeProgress.nextWaypoint || '--'}{routeExecutionSummary?.nextLegType ? ` (${routeExecutionSummary.nextLegType})` : ''} - Destination {routeExecutionSummary?.destinationLegLabel || routeProgress.destinationWaypoint || '--'}{routeExecutionSummary?.destinationLegType ? ` (${routeExecutionSummary.destinationLegType})` : ''} - {routeProgress.legsRemaining} legs after active leg
               </Text>
+              <Text style={styles.flightDeckPanelText}>
+                Corridor {visionRouteGuidance?.corridorSeverity || 'nominal'} - Cross-track {routeProgress.crossTrackNm.toFixed(1)} NM - Off route {routeProgress.offRouteNm.toFixed(1)} NM - {routeExecutionSummary?.sequencingDetail || 'Sequencing nominal'}
+              </Text>
+              <Text style={styles.flightDeckPanelText}>
+                Lateral state {routeExecutionSummary?.lateralExecutionState || 'intercept'} - {routeExecutionSummary?.activeLegGuidanceMode || 'track'} guidance active.
+              </Text>
+              {routeExecutionSummary?.activeExecutionSegment?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Segment {routeExecutionSummary.activeExecutionSegment.label}
+                  {routeExecutionSummary?.nextExecutionSegment?.label ? ` - Next ${routeExecutionSummary.nextExecutionSegment.label}` : ''}
+                  {routeExecutionSummary?.activeExecutionSegment?.sequencingModel ? ` - ${routeExecutionSummary.activeExecutionSegment.sequencingModel} sequencing` : ''}
+                  {activeExecutionPlanEntry?.actionCue ? ` - ${activeExecutionPlanEntry.actionCue}` : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.activeExecutionTransition?.label ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Transition model {routeExecutionSummary.activeExecutionTransition.label}
+                  {routeExecutionSummary?.nextExecutionTransition?.label ? ` - Next ${routeExecutionSummary.nextExecutionTransition.label}` : ''}
+                </Text>
+              ) : null}
+              {nextExecutionPlanEntry ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Execution plan next {nextExecutionPlanEntry.legLabel} - {nextExecutionPlanEntry.actionCue}.
+                </Text>
+              ) : null}
+              <Text style={styles.flightDeckPanelText}>
+                Sequence gate {routeExecutionSummary?.sequenceGateState || 'blocked'} - {routeExecutionSummary?.sequenceGateCall || 'Standby gate'}.
+              </Text>
+              {routeExecutionSummary?.sequenceGateState === 'manual-open' ? (
+                <Text style={styles.flightDeckPanelText}>This segment is managed. Use Next leg when ready to sequence.</Text>
+              ) : null}
+              {routeExecutionSummary?.transitionCall ? (
+                <Text style={styles.flightDeckPanelText}>Transition state {routeExecutionSummary.transitionCall}.</Text>
+              ) : null}
+              {routeExecutionSummary?.nextLegArmed ? (
+                <Text style={styles.flightDeckPanelText}>Next leg is armed and will capture automatically when sequencing criteria are met.</Text>
+              ) : null}
+              {routeExecutionSummary?.turnAnticipationState && routeExecutionSummary.turnAnticipationState !== 'idle' ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Turn anticipation {routeExecutionSummary.turnAnticipationCall}
+                  {typeof routeExecutionSummary.nextLegDesiredTrackDeg === 'number'
+                    ? ` Â· next course ${Math.round(routeExecutionSummary.nextLegDesiredTrackDeg)}Â°`
+                    : ''}
+                </Text>
+              ) : null}
+              {routeExecutionSummary?.mode === 'direct-to' ? (
+                <Text style={styles.flightDeckPanelText}>Direct-to override is active. Resume the planned route when ready.</Text>
+              ) : null}
+              <View style={styles.flightDeckControlRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.flightDeckChip,
+                    !routeExecutionSummary?.canSequencePrev && styles.flightDeckChipDisabled,
+                  ]}
+                  onPress={sequencePreviousLeg}
+                  disabled={!routeExecutionSummary?.canSequencePrev}
+                >
+                  <Text
+                    style={[
+                      styles.flightDeckChipText,
+                      !routeExecutionSummary?.canSequencePrev && styles.flightDeckChipTextDisabled,
+                    ]}
+                  >
+                    Previous leg
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.flightDeckChip,
+                    !routeExecutionSummary?.canSequenceNext && styles.flightDeckChipDisabled,
+                  ]}
+                  onPress={sequenceNextLeg}
+                  disabled={!routeExecutionSummary?.canSequenceNext}
+                >
+                  <Text
+                    style={[
+                      styles.flightDeckChipText,
+                      !routeExecutionSummary?.canSequenceNext && styles.flightDeckChipTextDisabled,
+                    ]}
+                  >
+                    Next leg
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.flightDeckControlRow}>
+                <TouchableOpacity style={styles.flightDeckChip} onPress={toggleSequencingSuspend}>
+                  <Text style={styles.flightDeckChipText}>
+                    {routeExecutionSummary?.sequencingSuspended ? 'Resume sequencing' : 'Suspend sequencing'}
+                  </Text>
+                </TouchableOpacity>
+                {routeExecutionSummary?.mode === 'direct-to' ? (
+                  <TouchableOpacity style={styles.flightDeckChip} onPress={resumePlannedRoute}>
+                    <Text style={styles.flightDeckChipText}>Resume planned route</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
           ) : null}
 
@@ -1306,6 +1668,16 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 </Text>
               ) : null}
               <View style={styles.flightDeckControlRow}>
+                <TouchableOpacity style={styles.flightDeckChip} onPress={toggleSequencingSuspend}>
+                  <Text style={styles.flightDeckChipText}>
+                    {routeExecutionSummary?.sequencingSuspended ? 'Resume sequencing' : 'Suspend sequencing'}
+                  </Text>
+                </TouchableOpacity>
+                {routeExecutionSummary?.mode === 'direct-to' ? (
+                  <TouchableOpacity style={styles.flightDeckChip} onPress={resumePlannedRoute}>
+                    <Text style={styles.flightDeckChipText}>Resume planned route</Text>
+                  </TouchableOpacity>
+                ) : null}
                 {selectedTrafficTarget ? (
                   <TouchableOpacity style={styles.flightDeckChip} onPress={() => focusTrafficTarget(selectedTrafficTarget)}>
                     <Text style={styles.flightDeckChipText}>Focus traffic</Text>
@@ -1518,3 +1890,4 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
     </View>
   );
 }
+

@@ -1,4 +1,4 @@
-import {
+﻿import {
   ActivityIndicator,
   Alert,
   ScrollView,
@@ -15,7 +15,7 @@ import MapView, { Callout, Marker, Polyline, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createGdl90Listener, TrafficTarget } from '../utils/gdl90';
+import { createGdl90Listener, OwnshipReport, ReceiverHealth, TrafficTarget } from '../utils/gdl90';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import {
@@ -29,9 +29,15 @@ import {
   type VisionRunwayCue,
 } from '@shared/flight-scene';
 import {
+  annotateMobileRouteExecutionPlan,
   bearingBetweenPoints,
+  buildMobileRouteLegs,
+  buildMobileRouteExecutionPlan,
   clamp,
   computeMobileRouteProgress,
+  getMobileRouteLegBehavior,
+  getMobileRouteExecutionSegment,
+  getMobileRouteTransitionRule,
   getDistanceNmFromLatLon,
   greatCircleNm,
   interpolateRouteOwnship,
@@ -39,7 +45,7 @@ import {
   offsetLatLonByNm,
   rankTrafficTargets,
 } from '../lib/flightMath';
-import type { MobileRouteProgressSummary } from '../lib/flightMath';
+import type { MobileRouteLeg, MobileRouteProgressSummary } from '../lib/flightMath';
 import FlightDeckView from '../components/flight-deck/FlightDeckView';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
@@ -119,10 +125,10 @@ function aircraftPerformanceReducer(
       return {
         ...state,
         selectedProfileId: action.value.id,
-        cruiseKtas: String(action.value.cruiseKtasEffective || ''),
-        fuelBurnGph: String(action.value.fuelBurnGphEffective || ''),
-        usableFuel: String(action.value.usableFuelGalEffective || ''),
-        maxGrossWeight: String(action.value.maxGrossWeightLbEffective || ''),
+        cruiseKtas: String(action.value.cruiseKtasEffective || '),
+        fuelBurnGph: String(action.value.fuelBurnGphEffective || '),
+        usableFuel: String(action.value.usableFuelGalEffective || '),
+        maxGrossWeight: String(action.value.maxGrossWeightLbEffective || '),
       };
     case 'set_field':
       return { ...state, [action.field]: action.value };
@@ -290,6 +296,8 @@ type OwnshipData = {
   altitudeFt?: number;
   speedKts?: number;
   heading?: number;
+  updatedAt?: number;
+  source?: 'simulation' | 'receiver' | 'device';
 };
 
 type WindsAloftPoint = {
@@ -311,6 +319,34 @@ type WindsAloftMeta = {
 type FlightDeckPanel = 'status' | 'surface' | 'layers' | 'traffic' | 'diversions';
 type FlightDeckView = 'map' | 'vision';
 type FlightDeckActionTone = 'default' | 'accent' | 'caution' | 'warning';
+type FlightDeckPhaseStage =
+  | 'preflight'
+  | 'taxi-out'
+  | 'departure'
+  | 'climb'
+  | 'cruise'
+  | 'descent'
+  | 'arrival'
+  | 'final'
+  | 'taxi-in';
+type RouteExecutionOverride = {
+  mode: 'direct-to-diversion';
+  origin: AirportMeta;
+  target: AirportMeta;
+  activatedAt: number;
+};
+
+const RECEIVER_OWNSHIP_STALE_MS = 15000;
+const DEVICE_OWNSHIP_STALE_MS = 15000;
+
+function formatOwnshipAge(ms: number | null | undefined) {
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '--';
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds}s`;
+}
 
 function buildSimulatedTrafficTargets(
   ownship: OwnshipData | null,
@@ -357,7 +393,7 @@ function pickBestDiversionFrequency(
   const entries = airport?.frequencySummary || [];
   type FrequencyEntry = NonNullable<NearbyDiversionAirport['frequencySummary']>[number];
   const rank = (value: FrequencyEntry) => {
-    const type = String(value?.type || '').toLowerCase();
+    const type = String(value?.type || ').toLowerCase();
     if (type.includes('tower')) return 1;
     if (type.includes('ctaf')) return 2;
     if (type.includes('unicom')) return 3;
@@ -377,8 +413,8 @@ function pickAirportFrequency(
   const loweredKeywords = keywords.map((keyword) => keyword.toLowerCase());
   return (
     entries.find((entry) => {
-      const type = String(entry?.type || '').toLowerCase();
-      const description = String(entry?.description || '').toLowerCase();
+      const type = String(entry?.type || ').toLowerCase();
+      const description = String(entry?.description || ').toLowerCase();
       return loweredKeywords.some((keyword) => type.includes(keyword) || description.includes(keyword));
     }) || null
   );
@@ -392,16 +428,16 @@ function formatFrequency(frequencyMhz: number | null | undefined) {
 
 function formatAltitudeDelta(altitudeDeltaFt: number | null | undefined) {
   if (typeof altitudeDeltaFt !== 'number' || !Number.isFinite(altitudeDeltaFt)) return 'alt unknown';
-  return `${altitudeDeltaFt >= 0 ? '+' : ''}${Math.round(altitudeDeltaFt)} ft`;
+  return `${altitudeDeltaFt >= 0 ? '+' : '}${Math.round(altitudeDeltaFt)} ft`;
 }
 
 function parseFlightCategory(metar: any): 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'UNKNOWN' {
-  const declared = String(metar?.fltCat || metar?.flightCategory || '').toUpperCase();
+  const declared = String(metar?.fltCat || metar?.flightCategory || ').toUpperCase();
   if (declared === 'VFR' || declared === 'MVFR' || declared === 'IFR' || declared === 'LIFR') {
     return declared as 'VFR' | 'MVFR' | 'IFR' | 'LIFR';
   }
   if (!metar?.rawOb) return 'UNKNOWN';
-  const raw = metar.rawOb || '';
+  const raw = metar.rawOb || ';
   const visMatch = raw.match(/\s(\d{1,2})SM/);
   const visibility = visMatch ? parseInt(visMatch[1], 10) : 10;
   const ceilingMatch = raw.match(/(BKN|OVC)(\d{3})/);
@@ -414,7 +450,7 @@ function parseFlightCategory(metar: any): 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'UNK
 }
 
 function hasThunder(taf: any) {
-  const raw = taf?.rawTAF || '';
+  const raw = taf?.rawTAF || ';
   return raw.includes('TS');
 }
 
@@ -537,7 +573,7 @@ function buildBboxFromRegion(region: { latitude: number; longitude: number; lati
 }
 
 function formatCloudTimeLabel(value?: string) {
-  if (!value) return '';
+  if (!value) return ';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toUTCString().replace('GMT', 'UTC');
@@ -563,9 +599,9 @@ function toRad(deg: number) {
 }
 
 function normalizeRunwayIdent(value?: string | null) {
-  return String(value || '')
+  return String(value || ')
     .toUpperCase()
-    .replace(/^RWY\s*/i, '')
+    .replace(/^RWY\s*/i, ')
     .trim();
 }
 
@@ -649,20 +685,23 @@ export default function FlightPlannerScreen() {
   const isFlightDeck = route.name === 'FlightDeck' || route.params?.mode === 'flight';
   const [departure, setDeparture] = useState('KJFK');
   const [destination, setDestination] = useState('KBOS');
-  const [waypoints, setWaypoints] = useState('');
-  const [plannedStops, setPlannedStops] = useState('');
-  const [alternate, setAlternate] = useState('');
-  const [tailNumber, setTailNumber] = useState('');
-  const [fuelOnBoard, setFuelOnBoard] = useState('');
-  const [notes, setNotes] = useState('');
-  const [plannedAltitude, setPlannedAltitude] = useState('');
-  const [plannedDepartureAt, setPlannedDepartureAt] = useState('');
-  const [plannedArrivalAt, setPlannedArrivalAt] = useState('');
+  const [waypoints, setWaypoints] = useState(');
+  const [plannedStops, setPlannedStops] = useState(');
+  const [alternate, setAlternate] = useState(');
+  const [tailNumber, setTailNumber] = useState(');
+  const [fuelOnBoard, setFuelOnBoard] = useState(');
+  const [notes, setNotes] = useState(');
+  const [plannedAltitude, setPlannedAltitude] = useState(');
+  const [plannedDepartureAt, setPlannedDepartureAt] = useState(');
+  const [plannedArrivalAt, setPlannedArrivalAt] = useState(');
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [suggestedMode, setSuggestedMode] = useState<'direct' | 'midpoint'>('direct');
   const [loading, setLoading] = useState(false);
-  const [routeSummary, setRouteSummary] = useState<{ totalNm: number; legs: { from: string; to: string; nm: number }[] } | null>(null);
+  const [routeSummary, setRouteSummary] = useState<{ totalNm: number; legs: MobileRouteLeg[] } | null>(null);
   const [routePoints, setRoutePoints] = useState<AirportMeta[]>([]);
+  const [activeLegIndex, setActiveLegIndex] = useState(0);
+  const [sequencingSuspended, setSequencingSuspended] = useState(false);
+  const [routeExecutionOverride, setRouteExecutionOverride] = useState<RouteExecutionOverride | null>(null);
   const [mapStyle, setMapStyle] = useState<'standard' | 'sectional' | 'terrain' | 'radar' | 'winds' | 'clouds'>('standard');
   const [windsAltitudeChoice, setWindsAltitudeChoice] = useState<'planned' | string>('planned');
   const [windsAloftPoints, setWindsAloftPoints] = useState<WindsAloftPoint[]>([]);
@@ -676,6 +715,8 @@ export default function FlightPlannerScreen() {
   const [trafficEnabled, setTrafficEnabled] = useState(false);
   const [trafficPort, setTrafficPort] = useState('4000');
   const [trafficTargets, setTrafficTargets] = useState<TrafficTarget[]>([]);
+  const [receiverOwnship, setReceiverOwnship] = useState<OwnshipData | null>(null);
+  const [receiverHealth, setReceiverHealth] = useState<ReceiverHealth | null>(null);
   const [trafficFilter, setTrafficFilter] = useState<'all' | 'conflict' | 'above' | 'below'>('all');
   const [trafficStatus, setTrafficStatus] = useState<'idle' | 'listening' | 'error'>('idle');
   const [trafficError, setTrafficError] = useState<string | null>(null);
@@ -683,7 +724,7 @@ export default function FlightPlannerScreen() {
   const [gpsEnabled, setGpsEnabled] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<'idle' | 'listening' | 'error'>('idle');
   const [gpsError, setGpsError] = useState<string | null>(null);
-  const [gpsData, setGpsData] = useState<{ lat: number; lon: number; altitudeFt?: number; speedKts?: number; heading?: number } | null>(null);
+  const [gpsData, setGpsData] = useState<OwnshipData | null>(null);
   const [verticalSpeedFpm, setVerticalSpeedFpm] = useState<number | null>(null);
   const [simulationEnabled, setSimulationEnabled] = useState(false);
   const [simulationRunning, setSimulationRunning] = useState(false);
@@ -701,6 +742,7 @@ export default function FlightPlannerScreen() {
   const [selectedTrafficId, setSelectedTrafficId] = useState<string | null>(null);
   const [simulationConflictEnabled, setSimulationConflictEnabled] = useState(false);
   const [simulatedGpsData, setSimulatedGpsData] = useState<OwnshipData | null>(null);
+  const [ownshipClockMs, setOwnshipClockMs] = useState(() => Date.now());
   const [simulatedVerticalSpeedFpm, setSimulatedVerticalSpeedFpm] = useState<number | null>(null);
   const locationSubRef = useState<{ remove?: () => void }>(() => ({}))[0];
   const mapRef = useRef<MapView | null>(null);
@@ -713,11 +755,11 @@ export default function FlightPlannerScreen() {
     initialAircraftPerformanceState,
   );
 
-  const [aircraftQuery, setAircraftQuery] = useState('');
+  const [aircraftQuery, setAircraftQuery] = useState(');
   const [aircraftResults, setAircraftResults] = useState<AircraftType[]>([]);
   const [profiles, setProfiles] = useState<AircraftProfile[]>([]);
-  const [departureTimeZone, setDepartureTimeZone] = useState('');
-  const [destinationTimeZone, setDestinationTimeZone] = useState('');
+  const [departureTimeZone, setDepartureTimeZone] = useState(');
+  const [destinationTimeZone, setDestinationTimeZone] = useState(');
   const [reserveMinutes, setReserveMinutes] = useState('45');
   const [headwind, setHeadwind] = useState('0');
 
@@ -789,10 +831,178 @@ export default function FlightPlannerScreen() {
     () => buildSimulatedTrafficTargets(simulatedGpsData, { injectConflict: simulationConflictEnabled }),
     [simulatedGpsData, simulationConflictEnabled]
   );
-  const activeOwnship = simulationEnabled && simulatedGpsData ? simulatedGpsData : gpsData;
+  const receiverOwnshipAgeMs = receiverOwnship?.updatedAt ? ownshipClockMs - receiverOwnship.updatedAt : null;
+  const receiverOwnshipFresh = receiverOwnshipAgeMs != null && receiverOwnshipAgeMs <= RECEIVER_OWNSHIP_STALE_MS;
+  const gpsOwnshipAgeMs = gpsData?.updatedAt ? ownshipClockMs - gpsData.updatedAt : null;
+  const gpsOwnshipFresh = gpsOwnshipAgeMs != null && gpsOwnshipAgeMs <= DEVICE_OWNSHIP_STALE_MS;
+  const activeOwnship = simulationEnabled && simulatedGpsData
+    ? simulatedGpsData
+    : receiverOwnshipFresh
+      ? receiverOwnship
+      : gpsOwnshipFresh
+        ? gpsData
+        : null;
+  const ownshipSourceSummary = useMemo(() => {
+    if (simulationEnabled && simulatedGpsData) {
+      return {
+        code: 'SIM',
+        label: 'Simulation',
+        detail: `Playback active at ${simulationSpeed}.`,
+        freshness: 'Live',
+      };
+    }
+    if (receiverOwnship && receiverOwnshipFresh) {
+      return {
+        code: 'RXR',
+        label: 'Receiver ownship',
+        detail:
+          receiverHealth?.status === 'healthy'
+            ? 'GDL-90 receiver ownship is primary.'
+            : 'Receiver ownship is primary.',
+        freshness: `Updated ${formatOwnshipAge(receiverOwnshipAgeMs)} ago`,
+      };
+    }
+    if (receiverOwnship && !receiverOwnshipFresh) {
+      return {
+        code: gpsData ? 'GPS' : 'STALE',
+        label: gpsData ? 'Device GPS primary' : 'Receiver stale',
+        detail: gpsData
+          ? 'Receiver ownship stale. Falling back to device GPS.'
+          : 'Receiver ownship is stale and no GPS fallback is active.',
+        freshness: gpsData && gpsOwnshipFresh
+          ? `Receiver stale ${formatOwnshipAge(receiverOwnshipAgeMs)} - GPS updated ${formatOwnshipAge(gpsOwnshipAgeMs)} ago`
+          : `Receiver stale ${formatOwnshipAge(receiverOwnshipAgeMs)}`,
+      };
+    }
+    if (gpsData && gpsOwnshipFresh) {
+      return {
+        code: 'GPS',
+        label: 'Device GPS',
+        detail: 'Device location is primary ownship source.',
+        freshness: `Updated ${formatOwnshipAge(gpsOwnshipAgeMs)} ago`,
+      };
+    }
+    if (gpsData && !gpsOwnshipFresh) {
+      return {
+        code: 'STALE',
+        label: 'Device GPS stale',
+        detail: 'Device ownship is stale and not used for active guidance.',
+        freshness: `Stale ${formatOwnshipAge(gpsOwnshipAgeMs)}`,
+      };
+    }
+    return {
+      code: 'PREFLT',
+      label: 'No ownship',
+      detail: 'Enable receiver traffic, device GPS, or sim to start live tracking.',
+      freshness: 'Awaiting source',
+    };
+  }, [
+    gpsData,
+    gpsOwnshipAgeMs,
+    gpsOwnshipFresh,
+    ownshipClockMs,
+    receiverHealth?.status,
+    receiverOwnship,
+    receiverOwnshipAgeMs,
+    receiverOwnshipFresh,
+    simulationEnabled,
+    simulatedGpsData,
+    simulationSpeed,
+  ]);
+  const headingSourceSummary = useMemo(() => {
+    if (simulationEnabled && simulatedGpsData) {
+      return {
+        code: 'SIM',
+        label: 'Simulated heading',
+        detail: 'Playback heading is driving lateral cues.',
+      };
+    }
+    if (receiverOwnshipFresh && typeof receiverOwnship?.heading === 'number') {
+      return {
+        code: 'RXR',
+        label: 'Receiver heading',
+        detail: 'Receiver heading is driving track-up and vision cues.',
+      };
+    }
+    if (gpsOwnshipFresh && typeof gpsData?.heading === 'number') {
+      return {
+        code: (gpsData.speedKts ?? 0) >= 25 ? 'GPS' : 'GPS-LIM',
+        label: (gpsData.speedKts ?? 0) >= 25 ? 'GPS track heading' : 'GPS heading limited',
+        detail: (gpsData.speedKts ?? 0) >= 25
+          ? 'Device GPS track is driving heading cues.'
+          : 'Device GPS heading is available but low-speed accuracy is limited.',
+      };
+    }
+    return {
+      code: 'NONE',
+      label: 'Heading unavailable',
+      detail: 'No reliable heading source is currently active.',
+    };
+  }, [gpsData?.heading, gpsData?.speedKts, gpsOwnshipFresh, receiverOwnship?.heading, receiverOwnshipFresh, simulatedGpsData, simulationEnabled]);
+  const attitudeSourceSummary = useMemo(() => {
+    if (simulationEnabled && simulatedGpsData) {
+      return {
+        code: 'SIM',
+        label: 'Simulated attitude',
+        detail: 'Vision attitude cues are driven by simulation playback.',
+        pilotGrade: true,
+      };
+    }
+    return {
+      code: 'PEND',
+      label: 'AHRS pending',
+      detail: 'No external AHRS is connected yet. Vision remains guidance-only.',
+      pilotGrade: false,
+    };
+  }, [simulatedGpsData, simulationEnabled]);
+  const visionReadinessSummary = useMemo(() => {
+    if (attitudeSourceSummary.pilotGrade) {
+      return {
+        code: 'FULL',
+        label: 'Vision ready',
+        detail: 'Attitude-backed synthetic vision is active.',
+      };
+    }
+    return {
+      code: 'GUIDE',
+      label: 'Guidance mode',
+      detail: 'Runway and terrain cues are advisory until AHRS is connected.',
+    };
+  }, [attitudeSourceSummary.pilotGrade]);
+  const receiverStatusSummary = useMemo(() => {
+    const status = receiverHealth?.status || 'idle';
+    if (status === 'healthy') {
+      return {
+        code: 'HEALTHY',
+        detail: 'Heartbeat and ownship are current.',
+      };
+    }
+    if (status === 'traffic-only') {
+      return {
+        code: 'TRFC',
+        detail: 'Traffic is live, but ownship is not current.',
+      };
+    }
+    if (status === 'stale') {
+      return {
+        code: 'STALE',
+        detail: 'Receiver frames have gone stale.',
+      };
+    }
+    return {
+      code: 'IDLE',
+      detail: trafficEnabled ? 'Waiting for first receiver frames.' : 'Receiver listener is off.',
+    };
+  }, [receiverHealth?.status, trafficEnabled]);
   const activeVerticalSpeedFpm = simulationEnabled ? simulatedVerticalSpeedFpm : verticalSpeedFpm;
   const activeTrafficTargets = simulationEnabled ? simulatedTrafficTargets : trafficTargets;
-  const flightDeckSessionState = simulationEnabled ? 'SIM' : gpsEnabled || trafficEnabled ? 'LIVE' : 'PREFLIGHT';
+  const flightDeckSessionState = simulationEnabled
+    ? 'SIM'
+    : activeOwnship
+      ? 'LIVE'
+      : gpsEnabled || trafficEnabled || Boolean(receiverOwnship) || Boolean(gpsData)
+        ? 'MONITOR'
+        : 'PREFLIGHT';
   const flightDeckLayerLabel =
     mapStyle === 'standard'
       ? 'Map'
@@ -807,15 +1017,146 @@ export default function FlightPlannerScreen() {
               : 'Clouds';
   const flightDeckActiveSession = simulationEnabled || gpsEnabled || trafficEnabled || Boolean(activeOwnship);
   const routeProgress = useMemo(
+    () => computeMobileRouteProgress(activeRoutePoints, activeOwnship, { activeLegIndex }),
+    [activeLegIndex, activeOwnship, activeRoutePoints]
+  );
+  const plannedRouteRejoinProgress = useMemo(
     () => computeMobileRouteProgress(routePoints, activeOwnship),
     [activeOwnship, routePoints]
   );
+  useEffect(() => {
+    setActiveLegIndex(0);
+    setSequencingSuspended(false);
+  }, [routePoints, routeExecutionOverride?.mode, routeExecutionOverride?.target.icao]);
+  useEffect(() => {
+    if (!activeOwnship || !routeProgress || activeRoutePoints.length < 2) return;
+    const currentLegIndex = Math.min(activeLegIndex, activeRoutePoints.length - 2);
+    if (currentLegIndex !== routeProgress.legIndex) return;
+    if (currentLegIndex >= activeRoutePoints.length - 2) return;
+    if (routeProgress.sequencingState === 'reintercept') return;
+    if (sequencingSuspended) return;
+
+    const activeLegEnd = activeRoutePoints[currentLegIndex + 1];
+    if (!activeLegEnd) return;
+
+    const distanceToLegEndNm = getDistanceNmFromLatLon(
+      { lat: activeOwnship.lat, lon: activeOwnship.lon },
+      { lat: activeLegEnd.latitude, lon: activeLegEnd.longitude },
+    );
+    const speedCaptureNm = Math.max(0.45, Math.min(2.4, (activeOwnship.speedKts ?? 90) / 120));
+    const sequencingCaptureNm = Math.max(activeLegBehavior.sequencingCaptureNm, speedCaptureNm * 0.75);
+    const gateArmed =
+      routeProgress.legProgressPct >= activeLegTransitionRule.armAtLegProgressPct ||
+      routeProgress.remainingLegNm <= sequencingCaptureNm * 1.35;
+    const gateOpenByProgress =
+      routeProgress.legProgressPct >= activeLegTransitionRule.openAtLegProgressPct ||
+      routeProgress.remainingLegNm <= sequencingCaptureNm * 0.85 ||
+      distanceToLegEndNm <= sequencingCaptureNm;
+    const lateralReady =
+      !activeLegTransitionRule.requiresLateralCapture || Boolean(visionRouteGuidance?.lateralCaptured);
+    const gateOpen = gateArmed && gateOpenByProgress && lateralReady;
+    const shouldAdvance = gateOpen && activeExecutionSegmentPreview.sequencingModel === 'auto';
+
+    if (shouldAdvance) {
+      setActiveLegIndex((prev) => Math.min(prev + 1, activeRoutePoints.length - 2));
+    }
+  }, [activeExecutionSegmentPreview.sequencingModel, activeLegBehavior.sequencingCaptureNm, activeLegIndex, activeLegTransitionRule.armAtLegProgressPct, activeLegTransitionRule.openAtLegProgressPct, activeLegTransitionRule.requiresLateralCapture, activeOwnship, activeRoutePoints, routeProgress, sequencingSuspended, visionRouteGuidance?.lateralCaptured]);
+  const flightDeckPhaseSummary = useMemo(() => {
+    if (!activeOwnship) {
+      return {
+        stage: 'preflight' as FlightDeckPhaseStage,
+        label: 'Preflight',
+        detail: 'Build a route and connect a live source to start active guidance.',
+      };
+    }
+    const speedKts = activeOwnship.speedKts ?? 0;
+    const altitudeFt = activeOwnship.altitudeFt ?? 0;
+    const progressPct = routeProgress?.progressPct ?? 0;
+    const remainingRouteNm = routeProgress?.remainingRouteNm ?? Number.POSITIVE_INFINITY;
+    const targetCruiseAltitudeFt = Number(plannedAltitude) || simulationAltitudeFt;
+    const cruiseCaptureFloorFt = Math.max(targetCruiseAltitudeFt * 0.88, targetCruiseAltitudeFt - 1500);
+
+    if (progressPct >= 95 && speedKts < 45) {
+      return {
+        stage: 'taxi-in' as FlightDeckPhaseStage,
+        label: 'Taxi in',
+        detail: 'Arrival rollout complete. Surface guidance should favor ramp and parking flow.',
+      };
+    }
+    if (remainingRouteNm <= 12) {
+      return {
+        stage: 'final' as FlightDeckPhaseStage,
+        label: 'Final',
+        detail: 'Runway environment should be primary with final-alignment and rollout cues.',
+      };
+    }
+    if (progressPct > 78 || remainingRouteNm < 35) {
+      return {
+        stage: 'arrival' as FlightDeckPhaseStage,
+        label: 'Arrival',
+        detail: 'Arrival corridor is active. Tighten runway, terrain, and diversion awareness.',
+      };
+    }
+    if (progressPct > 58 && altitudeFt < cruiseCaptureFloorFt) {
+      return {
+        stage: 'descent' as FlightDeckPhaseStage,
+        label: 'Descent',
+        detail: 'Manage descent path, terrain clearance, and arrival setup.',
+      };
+    }
+    if (altitudeFt >= cruiseCaptureFloorFt && progressPct >= 25 && progressPct <= 72) {
+      return {
+        stage: 'cruise' as FlightDeckPhaseStage,
+        label: 'Cruise',
+        detail: 'Enroute tactical scan is primary. Traffic, weather, and route execution should dominate.',
+      };
+    }
+    if (progressPct < 25 && altitudeFt < cruiseCaptureFloorFt && speedKts >= 85) {
+      return {
+        stage: 'climb' as FlightDeckPhaseStage,
+        label: 'Climb',
+        detail: 'Initial climb is active. Terrain, obstacle, and departure corridor cues should stay elevated.',
+      };
+    }
+    if (progressPct < 10 && speedKts >= 45) {
+      return {
+        stage: 'departure' as FlightDeckPhaseStage,
+        label: 'Departure',
+        detail: 'Runway departure and initial corridor capture should be primary.',
+      };
+    }
+    if (progressPct < 6 && speedKts < 45) {
+      return {
+        stage: 'taxi-out' as FlightDeckPhaseStage,
+        label: 'Taxi out',
+        detail: 'Surface movement and hold-short guidance should be primary.',
+      };
+    }
+    return {
+      stage: 'climb' as FlightDeckPhaseStage,
+      label: 'Climb',
+      detail: 'Flight is transitioning from terminal to enroute guidance.',
+    };
+  }, [activeOwnship, plannedAltitude, routeProgress, simulationAltitudeFt]);
   const flightPhase = useMemo<'ground' | 'departure' | 'enroute' | 'arrival'>(() => {
-    if (!routeProgress) return activeOwnship ? 'departure' : 'ground';
-    if (routeProgress.progressPct < 18) return 'departure';
-    if (routeProgress.progressPct > 78 || routeProgress.remainingRouteNm < 35) return 'arrival';
-    return 'enroute';
-  }, [activeOwnship, routeProgress]);
+    switch (flightDeckPhaseSummary.stage) {
+      case 'preflight':
+        return 'ground';
+      case 'taxi-out':
+      case 'departure':
+      case 'climb':
+        return 'departure';
+      case 'cruise':
+      case 'descent':
+        return 'enroute';
+      case 'arrival':
+      case 'final':
+      case 'taxi-in':
+        return 'arrival';
+      default:
+        return 'ground';
+    }
+  }, [flightDeckPhaseSummary.stage]);
   const rankedTrafficTargets = useMemo(
     () => rankTrafficTargets(activeTrafficTargets, activeOwnship),
     [activeOwnship, activeTrafficTargets]
@@ -856,7 +1197,7 @@ export default function FlightPlannerScreen() {
   }, [activeOwnship, selectedDiversion]);
   const diversionPanelAirports = useMemo(() => {
     const wxRank = (airport: NearbyDiversionAirport) => {
-      switch ((airport.flightCategory || '').toUpperCase()) {
+      switch ((airport.flightCategory || ').toUpperCase()) {
         case 'VFR':
           return 0;
         case 'MVFR':
@@ -899,7 +1240,7 @@ export default function FlightPlannerScreen() {
   const selectedDiversionRunwaySummary = useMemo(() => {
     if (selectedDiversionBriefingLoading) return 'Loading runway briefing';
     if (selectedDiversionBriefing?.advisory) {
-      return `Runway ${selectedDiversionBriefing.advisory.runway || '--'} · HW ${selectedDiversionBriefing.advisory.headwind ?? '--'} kt · XW ${selectedDiversionBriefing.advisory.crosswind ?? '--'} kt`;
+      return `Runway ${selectedDiversionBriefing.advisory.runway || '--'} Â· HW ${selectedDiversionBriefing.advisory.headwind ?? '--'} kt Â· XW ${selectedDiversionBriefing.advisory.crosswind ?? '--'} kt`;
     }
     if (selectedDiversionBriefing?.runwayInUse) {
       return `Runway in use ${selectedDiversionBriefing.runwayInUse}`;
@@ -914,6 +1255,13 @@ export default function FlightPlannerScreen() {
     () => resolveDestinationRunway(destinationBriefing),
     [destinationBriefing]
   );
+  useEffect(() => {
+    if (!simulationEnabled && !receiverOwnship && !gpsData && !simulatedGpsData) return;
+    const timer = setInterval(() => {
+      setOwnshipClockMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [gpsData, receiverOwnship, simulatedGpsData, simulationEnabled]);
   useEffect(() => {
     if (!activeOwnship || !rankedTrafficTargets.length) {
       setTrafficTrendMap({});
@@ -966,16 +1314,16 @@ export default function FlightPlannerScreen() {
   }, [activeOwnship, rankedTrafficTargets]);
   const terrainPathParam = useMemo(
     () =>
-      routePoints.length >= 2
-        ? routePoints.map((point) => `${point.latitude},${point.longitude}`).join(';')
-        : '',
-    [routePoints]
+      activeRoutePoints.length >= 2
+        ? activeRoutePoints.map((point) => `${point.latitude},${point.longitude}`).join(';')
+        : ',
+    [activeRoutePoints]
   );
   const nextWaypointMeta = useMemo(() => {
     if (!routeProgress?.nextWaypoint) return null;
     const normalized = routeProgress.nextWaypoint.toUpperCase();
-    return routePoints.find((point) => point.icao.toUpperCase() === normalized) || routePoints[1] || null;
-  }, [routePoints, routeProgress?.nextWaypoint]);
+    return activeRoutePoints.find((point) => point.icao.toUpperCase() === normalized) || activeRoutePoints[1] || null;
+  }, [activeRoutePoints, routeProgress?.nextWaypoint]);
   const terrainTrendFt = useMemo(() => {
     const samples = terrainProfile?.samples ?? [];
     if (samples.length < 3) return 0;
@@ -1042,7 +1390,7 @@ export default function FlightPlannerScreen() {
       return {
         severity: 'warning' as const,
         title: 'Immediate traffic',
-        detail: `${selectedTrafficTarget.callsign || 'Traffic'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM · ${formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}`,
+        detail: `${selectedTrafficTarget.callsign || 'Traffic'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM Â· ${formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}`,
       };
     }
     if (
@@ -1056,21 +1404,21 @@ export default function FlightPlannerScreen() {
       return {
         severity: 'caution' as const,
         title: 'Diversion caution',
-        detail: `${selectedDiversion.icao} ${selectedDiversion.flightCategory || 'WX'}${selectedDiversionBriefing?.advisory?.crosswind ? ` · XW ${selectedDiversionBriefing.advisory.crosswind} kt` : ''}`,
+        detail: `${selectedDiversion.icao} ${selectedDiversion.flightCategory || 'WX'}${selectedDiversionBriefing?.advisory?.crosswind ? ` Â· XW ${selectedDiversionBriefing.advisory.crosswind} kt` : '}`,
       };
     }
     if (terrainRisk === 'warning') {
       return {
         severity: 'warning' as const,
         title: 'Terrain warning',
-        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft${terrainAlertThresholds.closingFast ? ' - terrain rising quickly' : ''}`,
+        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft${terrainAlertThresholds.closingFast ? ' - terrain rising quickly' : '}`,
       };
     }
     if (obstacleRisk === 'warning') {
       return {
         severity: 'warning' as const,
         title: 'Obstacle warning',
-        detail: `Nearby obstacle clearance ${Math.round(obstacleClearanceFt || 0)} ft${obstacleAlertThresholds.closingFast ? ' - closure increasing' : ''}`,
+        detail: `Nearby obstacle clearance ${Math.round(obstacleClearanceFt || 0)} ft${obstacleAlertThresholds.closingFast ? ' - closure increasing' : '}`,
       };
     }
     if (terrainRisk === 'caution') {
@@ -1097,21 +1445,21 @@ export default function FlightPlannerScreen() {
       return {
         severity: 'warning' as const,
         title: 'Immediate traffic',
-        detail: `${selectedTrafficTarget.callsign || 'Traffic'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM · ${formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}`,
+        detail: `${selectedTrafficTarget.callsign || 'Traffic'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM Â· ${formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}`,
       };
     }
     if (terrainRisk === 'warning') {
       return {
         severity: 'warning' as const,
         title: 'Terrain warning',
-        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft${terrainAlertThresholds.closingFast ? ' - terrain rising quickly' : ''}`,
+        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft${terrainAlertThresholds.closingFast ? ' - terrain rising quickly' : '}`,
       };
     }
     if (obstacleRisk === 'warning') {
       return {
         severity: 'warning' as const,
         title: 'Obstacle warning',
-        detail: `Nearby obstacle clearance ${Math.round(obstacleClearanceFt || 0)} ft${obstacleAlertThresholds.closingFast ? ' - closure increasing' : ''}`,
+        detail: `Nearby obstacle clearance ${Math.round(obstacleClearanceFt || 0)} ft${obstacleAlertThresholds.closingFast ? ' - closure increasing' : '}`,
       };
     }
     if (flightDeckAdvisoriesMuted) {
@@ -1142,11 +1490,16 @@ export default function FlightPlannerScreen() {
     if (selectedDiversion) {
       return `Nearest escape ${selectedDiversion.icao}`;
     }
+    if (routeProgress?.activeLegLabel) {
+      return routeProgress.sequencingState === 'reintercept'
+        ? `Rejoin ${routeProgress.activeLegLabel}`
+        : `${activeLegBehavior.annunciation}`;
+    }
     if (routeProgress?.nextWaypoint) {
       return `Track to ${routeProgress.nextWaypoint}`;
     }
     return 'Hold current route';
-  }, [routeProgress?.nextWaypoint, selectedDiversion, selectedTrafficTarget, terrainRisk]);
+  }, [activeLegBehavior.annunciation, routeProgress?.activeLegLabel, routeProgress?.nextWaypoint, routeProgress?.sequencingState, selectedDiversion, selectedTrafficTarget, terrainRisk]);
   const visionTerrainColumns = useMemo(() => {
     const samples = terrainProfile?.samples ?? [];
     const ownshipAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
@@ -1364,8 +1717,8 @@ export default function FlightPlannerScreen() {
       mode,
       turnCommand:
         Math.abs(headingDelta) < 6 ? 'Track centered'
-        : headingDelta > 0 ? `Turn right ${Math.round(Math.abs(headingDelta))}°`
-        : `Turn left ${Math.round(Math.abs(headingDelta))}°`,
+        : headingDelta > 0 ? `Turn right ${Math.round(Math.abs(headingDelta))}Â°`
+        : `Turn left ${Math.round(Math.abs(headingDelta))}Â°`,
       verticalCommand:
         Math.abs(altitudeErrorFt) < 150 ? 'Hold altitude'
         : altitudeErrorFt > 0 ? `Climb to ${Math.round(targetAltitude)} ft`
@@ -1374,7 +1727,13 @@ export default function FlightPlannerScreen() {
   }, [activeOwnship?.altitudeFt, flightDeckTargetAltitudeFt, obstacleRisk, simulationAltitudeFt, terrainEscapeTargetFt, terrainRisk, trafficConflictGuidance, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
   const mapTacticalSummary = useMemo(() => {
     const modeLabel =
-      visionDirectorCue.mode === 'traffic'
+      routeExecutionOverride?.mode === 'direct-to-diversion'
+        ? 'Direct'
+        : activeLegBehavior.guidanceMode === 'departure'
+          ? 'Departure'
+          : activeLegBehavior.guidanceMode === 'terminal'
+            ? 'Terminal'
+            : visionDirectorCue.mode === 'traffic'
         ? 'Traffic'
         : visionDirectorCue.mode === 'escape'
         ? 'Escape'
@@ -1384,12 +1743,289 @@ export default function FlightPlannerScreen() {
             ? 'Capture'
             : 'Track';
     return {
-      modeLabel,
+      modeLabel: activeExecutionSegmentPreview.label || modeLabel,
       heading: visionDirectorCue.turnCommand,
       vertical: visionDirectorCue.verticalCommand,
       recommendation: visionManeuverRecommendation,
     };
-  }, [visionDirectorCue.mode, visionDirectorCue.turnCommand, visionDirectorCue.verticalCommand, visionManeuverRecommendation]);
+  }, [activeExecutionSegmentPreview.label, activeLegBehavior.guidanceMode, routeExecutionOverride?.mode, visionDirectorCue.mode, visionDirectorCue.turnCommand, visionDirectorCue.verticalCommand, visionManeuverRecommendation]);
+  const routeExecutionSummary = useMemo(() => {
+    if (!routeProgress) {
+      return {
+        mode: 'planned' as const,
+        sequencingSuspended: false,
+        activeLegIndex: 0,
+        canSequencePrev: false,
+        canSequenceNext: false,
+        activeLegLabel: 'No active leg',
+        activeLegType: 'enroute' as const,
+        activeLegProfile: 'enroute' as const,
+        activeLegGuidanceMode: 'track' as const,
+        activeLegAnnunciation: 'Build route',
+        nextLegLabel: 'Build route',
+        nextLegType: null,
+        destinationLegLabel: 'Destination pending',
+        destinationLegType: null,
+        nextLegArmed: false,
+        nextLegDesiredTrackDeg: null,
+        nextLegTurnDeltaDeg: null,
+        nextLegTurnDirection: 'straight' as const,
+        turnAnticipationState: 'idle' as const,
+        turnAnticipationCall: 'No turn armed',
+        lateralExecutionState: 'intercept' as const,
+        sequenceGateState: 'blocked' as const,
+        sequenceGateCall: 'Standby gate',
+        activeExecutionSegment: {
+          kind: 'enroute-track' as const,
+          label: 'Standby segment',
+          sequencingModel: 'auto' as const,
+        },
+        activeExecutionTransition: {
+          kind: 'course-capture' as const,
+          label: 'Course capture',
+        },
+        nextExecutionSegment: null,
+        nextExecutionTransition: null,
+        transitionState: 'standby' as const,
+        transitionCall: 'Standby',
+        sequencingLabel: 'Standby',
+        sequencingDetail: 'Build a route and establish live ownship to begin leg sequencing.',
+      };
+    }
+    const sequencingLabel =
+      sequencingSuspended
+        ? 'Suspend'
+        : routeProgress.sequencingState === 'reintercept'
+        ? 'Reintercept'
+        : routeProgress.sequencingState === 'terminal'
+          ? 'Terminal leg'
+          : 'Sequencing';
+    const sequencingDetail =
+      sequencingSuspended
+        ? `Sequencing suspended on ${routeProgress.activeLegLabel || routeProgress.nextWaypoint || 'active leg'}.`
+        : routeProgress.sequencingState === 'reintercept'
+        ? `Hold ${routeProgress.activeLegLabel || routeProgress.nextWaypoint || 'active leg'} until course capture is restored.`
+        : routeProgress.sequencingState === 'terminal'
+          ? `Destination leg ${routeProgress.destinationLegLabel || routeProgress.destinationWaypoint || '--'} is active.`
+          : `${routeProgress.remainingLegNm.toFixed(1)} NM remaining on ${routeProgress.activeLegLabel || routeProgress.nextWaypoint || 'active leg'}.`;
+    const nextLegArmed =
+      !sequencingSuspended &&
+      routeProgress.sequencingState === 'on-leg' &&
+      routeProgress.legProgressPct >= 70 &&
+      routeProgress.legsRemaining > 0;
+    const nextLegStart = activeRoutePoints[routeProgress.legIndex + 1] || null;
+    const nextLegEnd = activeRoutePoints[routeProgress.legIndex + 2] || null;
+    const nextLegDesiredTrackDeg =
+      nextLegStart && nextLegEnd ? bearingBetweenPoints(nextLegStart, nextLegEnd) : null;
+    const nextLegTurnDeltaDeg =
+      typeof nextLegDesiredTrackDeg === 'number' && typeof routeProgress.desiredTrackDeg === 'number'
+        ? normalizeHeadingDelta(nextLegDesiredTrackDeg - routeProgress.desiredTrackDeg)
+        : null;
+    const nextLegTurnDirection =
+      typeof nextLegTurnDeltaDeg === 'number' && Math.abs(nextLegTurnDeltaDeg) >= 8
+        ? nextLegTurnDeltaDeg > 0
+          ? 'right'
+          : 'left'
+        : 'straight';
+    const turnAnticipationState =
+      nextLegArmed &&
+      typeof nextLegTurnDeltaDeg === 'number' &&
+      Math.abs(nextLegTurnDeltaDeg) >= 15
+        ? 'armed'
+        : nextLegArmed
+          ? 'monitor'
+          : 'idle';
+    const turnAnticipationCall =
+      turnAnticipationState === 'armed'
+        ? `${nextLegTurnDirection === 'right' ? 'Right' : 'Left'} turn ahead ${Math.round(Math.abs(nextLegTurnDeltaDeg ?? 0))}Â°`
+        : turnAnticipationState === 'monitor'
+          ? 'Next leg armed'
+          : 'No turn armed';
+    const lateralExecutionState =
+      sequencingSuspended
+        ? 'hold'
+        : routeProgress.sequencingState === 'reintercept'
+          ? 'reintercept'
+          : visionRouteGuidance?.lateralCaptured
+            ? 'established'
+            : routeProgress.offRouteNm <= 0.45 && Math.abs(visionRouteGuidance?.headingDelta ?? 0) <= 10
+            ? 'capture'
+              : 'intercept';
+    const sequenceGateState =
+      sequencingSuspended
+        ? 'hold'
+        : routeProgress.sequencingState === 'reintercept'
+          ? 'blocked'
+          : routeProgress.legProgressPct >= activeLegTransitionRule.openAtLegProgressPct &&
+              (!activeLegTransitionRule.requiresLateralCapture || visionRouteGuidance?.lateralCaptured)
+            ? activeExecutionSegment.sequencingModel === 'managed'
+              ? 'manual-open'
+              : 'open'
+            : routeProgress.legProgressPct >= activeLegTransitionRule.armAtLegProgressPct
+              ? 'armed'
+              : 'blocked';
+    const sequenceGateCall =
+      sequenceGateState === 'hold'
+        ? 'Sequencing hold'
+        : sequenceGateState === 'manual-open'
+          ? `${activeLegTransitionRule.label} open - manual advance required`
+        : sequenceGateState === 'open'
+          ? `${activeLegTransitionRule.label} open`
+          : sequenceGateState === 'armed'
+            ? `${activeLegTransitionRule.label} armed`
+            : `${activeLegTransitionRule.label} blocked`;
+    const transitionState =
+      sequencingSuspended
+        ? 'sequencing-hold'
+        : activeLegBehavior.profile === 'direct-to'
+          ? lateralExecutionState === 'established'
+            ? 'direct-established'
+            : 'direct-intercept'
+          : activeLegBehavior.profile === 'initial-departure'
+            ? nextLegArmed
+              ? 'departure-armed'
+              : 'departure-rollout'
+            : activeLegBehavior.profile === 'departure-transition'
+              ? lateralExecutionState === 'established'
+                ? 'departure-established'
+                : 'departure-transition'
+              : activeLegBehavior.profile === 'arrival-transition'
+                ? nextLegArmed
+                  ? 'arrival-armed'
+                  : 'arrival-transition'
+                : activeLegBehavior.profile === 'final'
+                  ? lateralExecutionState === 'established'
+                    ? 'final-established'
+                    : 'final-intercept'
+                  : lateralExecutionState === 'established'
+                    ? 'enroute-established'
+                    : lateralExecutionState === 'capture'
+                      ? 'enroute-capture'
+                      : 'enroute-intercept';
+    const transitionCall =
+      transitionState === 'sequencing-hold'
+        ? 'Sequencing hold'
+        : transitionState === 'direct-established'
+          ? 'Direct-to established'
+          : transitionState === 'direct-intercept'
+            ? 'Direct-to intercept'
+            : transitionState === 'departure-armed'
+              ? 'Departure leg armed'
+              : transitionState === 'departure-rollout'
+                ? 'Runway departure active'
+                : transitionState === 'departure-established'
+                  ? 'Departure transition established'
+                  : transitionState === 'departure-transition'
+                    ? 'Departure transition'
+                    : transitionState === 'arrival-armed'
+                      ? 'Arrival leg armed'
+                      : transitionState === 'arrival-transition'
+                        ? 'Arrival transition'
+                        : transitionState === 'final-established'
+                          ? 'Final established'
+                          : transitionState === 'final-intercept'
+                            ? 'Final intercept'
+                            : transitionState === 'enroute-established'
+                              ? 'Enroute established'
+                              : transitionState === 'enroute-capture'
+                              ? 'Enroute capture'
+                                : 'Enroute intercept';
+    const activeExecutionSegment = getMobileRouteExecutionSegment(activeLegBehavior.profile, {
+      sequenceGateState,
+    });
+    const nextExecutionSegmentEntry = activeExecutionPlan[routeProgress.legIndex + 1] || null;
+    const nextExecutionSegment =
+      nextExecutionSegmentEntry != null
+        ? {
+            ...nextExecutionSegmentEntry.segment,
+            sequencingModel: nextExecutionSegmentEntry.segment.sequencingModel,
+          }
+        : null;
+    return {
+      mode: routeExecutionOverride?.mode === 'direct-to-diversion' ? ('direct-to' as const) : ('planned' as const),
+      sequencingSuspended,
+      activeLegIndex: routeProgress.legIndex,
+      canSequencePrev: routeProgress.legIndex > 0,
+      canSequenceNext: routeProgress.legIndex < Math.max(0, activeRouteLegs.length - 1),
+      activeLegLabel: routeProgress.activeLegLabel || routeProgress.nextWaypoint || 'Active leg',
+      activeLegType: activeRouteLegs[routeProgress.legIndex]?.legType || 'enroute',
+      activeLegProfile: activeLegBehavior.profile,
+      activeLegGuidanceMode: activeLegBehavior.guidanceMode,
+      activeLegAnnunciation: activeLegBehavior.annunciation,
+      nextLegLabel: routeProgress.nextLegLabel || routeProgress.nextWaypoint || 'Next leg pending',
+      nextLegType: activeRouteLegs[routeProgress.legIndex + 1]?.legType || null,
+      destinationLegLabel: routeProgress.destinationLegLabel || routeProgress.destinationWaypoint || 'Destination leg pending',
+      destinationLegType: activeRouteLegs[activeRouteLegs.length - 1]?.legType || null,
+      nextLegArmed,
+      nextLegDesiredTrackDeg,
+      nextLegTurnDeltaDeg,
+      nextLegTurnDirection,
+      turnAnticipationState,
+      turnAnticipationCall,
+      lateralExecutionState,
+      sequenceGateState,
+      sequenceGateCall,
+      activeExecutionSegment,
+      activeExecutionSegmentEntry: activeExecutionPlan[routeProgress.legIndex] || null,
+      activeExecutionTransition:
+        activeExecutionPlan[routeProgress.legIndex]?.transition || {
+          kind: 'course-capture' as const,
+          label: 'Course capture',
+        },
+      nextExecutionSegment,
+      nextExecutionSegmentEntry,
+      nextExecutionTransition: nextExecutionSegmentEntry?.transition || null,
+      transitionState,
+      transitionCall,
+      sequencingLabel,
+      sequencingDetail,
+    };
+  }, [activeExecutionPlan, activeLegBehavior.annunciation, activeLegBehavior.guidanceMode, activeLegBehavior.profile, activeLegTransitionRule.armAtLegProgressPct, activeLegTransitionRule.label, activeLegTransitionRule.openAtLegProgressPct, activeLegTransitionRule.requiresLateralCapture, activeRoutePoints, routeExecutionOverride?.mode, routeProgress, sequencingSuspended, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
+  const activeExecutionPlanView = useMemo(
+    () =>
+      annotateMobileRouteExecutionPlan(activeExecutionPlan, {
+        activeLegIndex: routeProgress?.legIndex ?? -1,
+        nextLegArmed: routeExecutionSummary.nextLegArmed,
+        sequencingSuspended: routeExecutionSummary.sequencingSuspended,
+        sequenceGateState: routeExecutionSummary.sequenceGateState,
+      }),
+    [
+      activeExecutionPlan,
+      routeExecutionSummary.nextLegArmed,
+      routeExecutionSummary.sequenceGateState,
+      routeExecutionSummary.sequencingSuspended,
+      routeProgress?.legIndex,
+    ]
+  );
+  const plannerExecutionPlanView = useMemo(
+    () =>
+      annotateMobileRouteExecutionPlan(plannerExecutionPlan, {
+        activeLegIndex:
+          routeProgress && routeExecutionOverride?.mode !== 'direct-to-diversion'
+            ? routeProgress.legIndex
+            : -1,
+        nextLegArmed:
+          routeProgress && routeExecutionOverride?.mode !== 'direct-to-diversion'
+            ? routeExecutionSummary.nextLegArmed
+            : false,
+        sequencingSuspended:
+          routeProgress && routeExecutionOverride?.mode !== 'direct-to-diversion'
+            ? routeExecutionSummary.sequencingSuspended
+            : false,
+        sequenceGateState:
+          routeProgress && routeExecutionOverride?.mode !== 'direct-to-diversion'
+            ? routeExecutionSummary.sequenceGateState
+            : 'blocked',
+      }),
+    [
+      plannerExecutionPlan,
+      routeExecutionOverride?.mode,
+      routeExecutionSummary.nextLegArmed,
+      routeExecutionSummary.sequenceGateState,
+      routeExecutionSummary.sequencingSuspended,
+      routeProgress,
+    ]
+  );
   const visionVerticalCueLabel = useMemo(() => {
     if (visionDirectorCue.verticalCommand.startsWith('Climb')) return 'CLB';
     if (visionDirectorCue.verticalCommand.startsWith('Descend')) return 'DES';
@@ -1432,7 +2068,13 @@ export default function FlightPlannerScreen() {
   };
   const toggleFlightDeckView = () => {
     pulseFlightDeckChrome();
-    setFlightDeckView((current) => (current === 'map' ? 'vision' : 'map'));
+    setFlightDeckView((current) => {
+      const next = current === 'map' ? 'vision' : 'map';
+      if (next === 'vision' && !attitudeSourceSummary.pilotGrade) {
+        setFlightDeckPanel('status');
+      }
+      return next;
+    });
   };
   const toggleFlightDeckHud = () => {
     pulseFlightDeckChrome(true);
@@ -1477,34 +2119,71 @@ export default function FlightPlannerScreen() {
     setSelectedDiversionIcao(airport.icao);
     openFlightDeckPanel('status');
     setFlightDeckView('map');
-    setDestination(airport.icao);
-    setSuggestedMode('direct');
-    setWaypoints('');
-    setPlannedStops('');
+    if (typeof airport.lat === 'number' && typeof airport.lon === 'number') {
+      const origin =
+        activeOwnship
+          ? {
+              icao: 'DCT',
+              name: 'Direct-To',
+              latitude: activeOwnship.lat,
+              longitude: activeOwnship.lon,
+            }
+          : routePoints[Math.min(activeLegIndex, Math.max(0, routePoints.length - 1))] || routePoints[0] || {
+              icao: departure.trim().toUpperCase() || 'ORIG',
+              name: 'Origin',
+              latitude: airport.lat,
+              longitude: airport.lon,
+            };
+      setRouteExecutionOverride({
+        mode: 'direct-to-diversion',
+        origin,
+        target: {
+          icao: airport.icao,
+          name: airport.name || airport.icao,
+          latitude: airport.lat,
+          longitude: airport.lon,
+        },
+        activatedAt: Date.now(),
+      });
+      setActiveLegIndex(0);
+      setSequencingSuspended(false);
+    }
     if (simulationEnabled) {
       setSimulationRunning(false);
-      if (typeof airport.lat === 'number' && typeof airport.lon === 'number') {
-        setSimulatedGpsData({
-          lat: airport.lat,
-          lon: airport.lon,
-          altitudeFt: Math.max(1500, (activeOwnship?.altitudeFt || simulationAltitudeFt) - 800),
-          speedKts: Math.max(90, activeOwnship?.speedKts || simulationCruiseKts),
-          heading: activeOwnship?.heading || airport.bearingDeg,
-        });
-        setSimulatedVerticalSpeedFpm(-350);
-      }
+      setSimulatedVerticalSpeedFpm(-350);
     }
     focusDiversionAirport(airport);
+  };
+  const resumePlannedRoute = () => {
+    setRouteExecutionOverride(null);
+    setActiveLegIndex(Math.min(plannedRouteRejoinProgress?.legIndex ?? 0, Math.max(0, routePoints.length - 2)));
+    setSequencingSuspended(false);
+    openFlightDeckPanel('status');
+    setFlightDeckView('map');
+  };
+  const toggleSequencingSuspend = () => {
+    setSequencingSuspended((prev) => !prev);
+    openFlightDeckPanel('status');
+  };
+  const sequencePreviousLeg = () => {
+    setActiveLegIndex((prev) => Math.max(0, prev - 1));
+    setSequencingSuspended(true);
+    openFlightDeckPanel('status');
+  };
+  const sequenceNextLeg = () => {
+    setActiveLegIndex((prev) => Math.min(Math.max(0, activeRoutePoints.length - 2), prev + 1));
+    setSequencingSuspended(true);
+    openFlightDeckPanel('status');
   };
 
   useEffect(() => {
     const routeParams = route.params || {};
-    const nextDeparture = typeof routeParams.departure === 'string' ? routeParams.departure.trim().toUpperCase() : '';
-    const nextDestination = typeof routeParams.destination === 'string' ? routeParams.destination.trim().toUpperCase() : '';
-    const nextWaypoints = typeof routeParams.waypoints === 'string' ? routeParams.waypoints.trim().toUpperCase() : '';
-    const nextPlannedStops = typeof routeParams.plannedStops === 'string' ? routeParams.plannedStops.trim().toUpperCase() : '';
-    const nextPlannedAltitude = typeof routeParams.plannedAltitude === 'string' ? routeParams.plannedAltitude.trim() : '';
-    const nextCruiseKtas = typeof routeParams.cruiseKtas === 'string' ? routeParams.cruiseKtas.trim() : '';
+    const nextDeparture = typeof routeParams.departure === 'string' ? routeParams.departure.trim().toUpperCase() : ';
+    const nextDestination = typeof routeParams.destination === 'string' ? routeParams.destination.trim().toUpperCase() : ';
+    const nextWaypoints = typeof routeParams.waypoints === 'string' ? routeParams.waypoints.trim().toUpperCase() : ';
+    const nextPlannedStops = typeof routeParams.plannedStops === 'string' ? routeParams.plannedStops.trim().toUpperCase() : ';
+    const nextPlannedAltitude = typeof routeParams.plannedAltitude === 'string' ? routeParams.plannedAltitude.trim() : ';
+    const nextCruiseKtas = typeof routeParams.cruiseKtas === 'string' ? routeParams.cruiseKtas.trim() : ';
 
     if (nextDeparture) setDeparture(nextDeparture);
     if (nextDestination) setDestination(nextDestination);
@@ -1744,9 +2423,13 @@ export default function FlightPlannerScreen() {
             },
             {
               key: 'vision',
-              label: flightDeckView === 'vision' ? 'Map' : 'Vision',
-              value: flightDeckView === 'vision' ? 'Return map' : 'Synthetic view',
-              tone: 'accent',
+              label: flightDeckView === 'vision' ? 'Map' : attitudeSourceSummary.pilotGrade ? 'Vision' : 'Vision assist',
+              value: flightDeckView === 'vision'
+                ? 'Return map'
+                : attitudeSourceSummary.pilotGrade
+                  ? 'Synthetic view'
+                  : 'Guidance only',
+              tone: attitudeSourceSummary.pilotGrade ? 'accent' : 'caution',
               active: flightDeckView === 'vision',
               onPress: toggleFlightDeckView,
             },
@@ -1838,7 +2521,7 @@ export default function FlightPlannerScreen() {
     const initial = interpolateRouteOwnship(routePoints, 0, simulationCruiseKts, simulationAltitudeFt);
     setSimulationProgress(0);
     setSimulationRunning(true);
-    setSimulatedGpsData(initial?.ownship || null);
+    setSimulatedGpsData(initial?.ownship ? { ...initial.ownship, updatedAt: Date.now(), source: 'simulation' } : null);
     setSimulatedVerticalSpeedFpm(initial?.verticalSpeedFpm ?? null);
   }, [simulationEnabled, routePoints, simulationCruiseKts, simulationAltitudeFt]);
 
@@ -1853,7 +2536,7 @@ export default function FlightPlannerScreen() {
         const nmPerSecond = (simulationCruiseKts * simulationMultiplier) / 3600;
         const next = Math.min(1, current + nmPerSecond / totalRouteNm);
         const frame = interpolateRouteOwnship(routePoints, next, simulationCruiseKts, simulationAltitudeFt);
-        setSimulatedGpsData(frame?.ownship || null);
+        setSimulatedGpsData(frame?.ownship ? { ...frame.ownship, updatedAt: Date.now(), source: 'simulation' } : null);
         setSimulatedVerticalSpeedFpm(frame?.verticalSpeedFpm ?? null);
         if (next >= 1) {
           setSimulationRunning(false);
@@ -2108,6 +2791,8 @@ export default function FlightPlannerScreen() {
             altitudeFt,
             speedKts,
             heading,
+            updatedAt: Date.now(),
+            source: 'device',
           });
           if (altitudeFt) {
             const now = Date.now();
@@ -2190,7 +2875,7 @@ export default function FlightPlannerScreen() {
     const burn = parseFloat(fuelBurnGph) || 8;
     const fuel = parseFloat(usableFuel) || 40;
     const reserve = parseFloat(reserveMinutes) || 45;
-    const fuelBoard = parseFloat(fuelOnBoard || '');
+    const fuelBoard = parseFloat(fuelOnBoard || ');
     setSuggestionLoading(true);
     api.get('/api/airports/route-suggestions', {
       params: {
@@ -2240,6 +2925,51 @@ export default function FlightPlannerScreen() {
     }
     return 'Build your next route';
   }, [departure, destination]);
+  const flightDeckRouteHeadline = useMemo(() => {
+    if (routeExecutionOverride?.mode === 'direct-to-diversion') {
+      return `Direct ${routeExecutionOverride.target.icao}`;
+    }
+    return routeHeadline;
+  }, [routeExecutionOverride, routeHeadline]);
+  const activeRoutePoints = useMemo(() => {
+    if (routeExecutionOverride?.mode !== 'direct-to-diversion') return routePoints;
+    return [routeExecutionOverride.origin, routeExecutionOverride.target];
+  }, [routeExecutionOverride, routePoints]);
+  const activeRouteLegs = useMemo(
+    () =>
+      buildMobileRouteLegs(activeRoutePoints, {
+        mode: routeExecutionOverride?.mode === 'direct-to-diversion' ? 'direct-to' : 'planned',
+      }),
+    [activeRoutePoints, routeExecutionOverride?.mode]
+  );
+  const activeExecutionPlan = useMemo(
+    () => buildMobileRouteExecutionPlan(activeRouteLegs),
+    [activeRouteLegs]
+  );
+  const plannerExecutionPlan = useMemo(
+    () => buildMobileRouteExecutionPlan(routeSummary?.legs || []),
+    [routeSummary?.legs]
+  );
+  const activeLegDefinition = useMemo(
+    () => activeRouteLegs[Math.min(activeLegIndex, Math.max(0, activeRouteLegs.length - 1))] || null,
+    [activeLegIndex, activeRouteLegs]
+  );
+  const activeLegBehavior = useMemo(
+    () =>
+      getMobileRouteLegBehavior(activeLegDefinition, {
+        legProgressPct: routeProgress?.legProgressPct,
+        remainingRouteNm: routeProgress?.remainingRouteNm,
+      }),
+    [activeLegDefinition, routeProgress?.legProgressPct, routeProgress?.remainingRouteNm]
+  );
+  const activeLegTransitionRule = useMemo(
+    () => getMobileRouteTransitionRule(activeLegBehavior.profile),
+    [activeLegBehavior.profile]
+  );
+  const activeExecutionSegmentPreview = useMemo(
+    () => getMobileRouteExecutionSegment(activeLegBehavior.profile, { sequenceGateState: 'blocked' }),
+    [activeLegBehavior.profile]
+  );
 
   useEffect(() => {
     if (effectiveProfile) {
@@ -2370,19 +3100,12 @@ export default function FlightPlannerScreen() {
         };
         routedAirports = [start, mid, end];
       }
-      const legs = routedAirports.slice(0, -1).map((airport, idx) => {
-        const next = routedAirports[idx + 1];
-        return {
-          from: airport.icao,
-          to: next.icao,
-          nm: greatCircleNm(airport, next),
-        };
-      });
+      const legs = buildMobileRouteLegs(routedAirports);
       const totalNm = legs.reduce((sum, leg) => sum + leg.nm, 0);
       setRouteSummary({ totalNm, legs });
       setRoutePoints(routedAirports);
-      setDepartureTimeZone(airports[0]?.timezone || '');
-      setDestinationTimeZone(airports[airports.length - 1]?.timezone || '');
+      setDepartureTimeZone(airports[0]?.timezone || ');
+      setDestinationTimeZone(airports[airports.length - 1]?.timezone || ');
     } catch (error: any) {
       if (!silent) {
         Alert.alert('Route error', error?.response?.data?.error || 'Unable to build route.');
@@ -2544,7 +3267,7 @@ export default function FlightPlannerScreen() {
   );
   const cloudTileUrl = cloudFrames.length > 0
     ? `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${cloudSource === 'goes-west' ? 'GOES-West_ABI_GeoColor' : 'GOES-East_ABI_GeoColor'}/default/${encodeURIComponent(cloudFrames[cloudFrameIndex])}/GoogleMapsCompatible_Level4/{z}/{y}/{x}.jpg`
-    : '';
+    : ';
   const cloudTimeLabel = formatCloudTimeLabel(cloudFrames[cloudFrameIndex]);
   const resolvedDepartureTimeZone = normalizeTimeZone(departureTimeZone || deviceTimeZone);
   const resolvedDestinationTimeZone = normalizeTimeZone(destinationTimeZone || deviceTimeZone);
@@ -2563,7 +3286,7 @@ export default function FlightPlannerScreen() {
       return `Planned departure is ${days.toFixed(1)} days out. Long-range forecasts are limited; recheck weather 24 hours and day-of.`;
     }
     if (days > 3) {
-      return `Planned departure is about ${Math.round(days)} days out. TAFs cover ~24–30 hours; recheck the night before and day-of.`;
+      return `Planned departure is about ${Math.round(days)} days out. TAFs cover ~24â€“30 hours; recheck the night before and day-of.`;
     }
     return `Planned departure is about ${Math.round(hoursToDeparture)} hours out. Recheck weather within 24 hours of departure.`;
   }, [hoursToDeparture]);
@@ -2614,7 +3337,7 @@ export default function FlightPlannerScreen() {
     return 'VFR/MVFR trend';
   }, [allWeather.length, hasIfrWeather]);
   const enrouteFindings = enrouteWeather.map((item) => ({
-    icao: item.icao?.toUpperCase() || '',
+    icao: item.icao?.toUpperCase() || ',
     category: parseFlightCategory(item.metar),
     thunder: hasThunder(item.taf),
   }));
@@ -2648,13 +3371,14 @@ export default function FlightPlannerScreen() {
   }, [enrouteIfr, enrouteTs]);
 
   useEffect(() => {
-    if (!mapRef.current || routePoints.length < 2) return;
-    const coords = routePoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude }));
+    const coordsSource = isFlightDeck ? activeRoutePoints : routePoints;
+    if (!mapRef.current || coordsSource.length < 2) return;
+    const coords = coordsSource.map((point) => ({ latitude: point.latitude, longitude: point.longitude }));
     mapRef.current.fitToCoordinates(coords, {
       edgePadding: { top: 60, bottom: 60, left: 60, right: 60 },
       animated: true,
     });
-  }, [routePoints]);
+  }, [activeRoutePoints, isFlightDeck, routePoints]);
 
   useEffect(() => {
     if (!isFlightDeck || mapStyle !== 'standard') return;
@@ -2680,7 +3404,7 @@ export default function FlightPlannerScreen() {
     );
   }, [activeOwnship?.heading, activeOwnship?.lat, activeOwnship?.lon, activeOwnship?.speedKts, flightDeckView, isFlightDeck, simulationCruiseKts]);
   const destinationRunwayCue = useMemo<DestinationRunwayCue | null>(() => {
-    const destinationPoint = routePoints[routePoints.length - 1];
+    const destinationPoint = activeRoutePoints[activeRoutePoints.length - 1];
     if (!activeOwnship || !destinationPoint || !destinationRunway) return null;
     if (flightPhase !== 'arrival' && flightPhase !== 'surface-arrival') return null;
     const destinationElevationFt = terrainProfile?.samples?.[terrainProfile.samples.length - 1]?.elevationFt ?? 0;
@@ -2701,9 +3425,9 @@ export default function FlightPlannerScreen() {
       activeRangeNm: 18,
       maxDistanceNm: 30,
     });
-  }, [activeOwnship, destinationRunway, flightPhase, routePoints, simulationAltitudeFt, terrainProfile?.samples]);
+  }, [activeOwnship, activeRoutePoints, destinationRunway, flightPhase, simulationAltitudeFt, terrainProfile?.samples]);
   const destinationRunwayOverlay = useMemo<DestinationRunwayOverlay | null>(() => {
-    const destinationPoint = routePoints[routePoints.length - 1];
+    const destinationPoint = activeRoutePoints[activeRoutePoints.length - 1];
     if (!destinationPoint || !destinationRunway || !destinationRunwayCue) return null;
     return buildArrivalRunwayOverlay({
       airport: {
@@ -2713,9 +3437,9 @@ export default function FlightPlannerScreen() {
       runway: destinationRunway,
       approachLengthNm: flightPhase === 'arrival' ? 8 : 5,
     });
-  }, [destinationRunway, destinationRunwayCue, flightPhase, routePoints]);
+  }, [activeRoutePoints, destinationRunway, destinationRunwayCue, flightPhase]);
   const departureRunwayOverlay = useMemo<DestinationRunwayOverlay | null>(() => {
-    const departurePoint = routePoints[0];
+    const departurePoint = activeRoutePoints[0];
     if (!departurePoint || !departureRunway || flightPhase !== 'departure') return null;
     return buildDepartureRunwayOverlay({
       airport: {
@@ -2724,14 +3448,14 @@ export default function FlightPlannerScreen() {
       },
       runway: departureRunway,
     });
-  }, [departureRunway, flightPhase, routePoints]);
+  }, [activeRoutePoints, departureRunway, flightPhase]);
   const activeRunwayOverlay = flightPhase === 'arrival' ? destinationRunwayOverlay : departureRunwayOverlay;
   const activeRunwayOverlayLabel = flightPhase === 'arrival'
     ? destinationRunway ? `Final ${destinationRunway.runwayId}` : null
     : departureRunway ? `Dep ${departureRunway.runwayId}` : null;
   const flightDeckSurfacePreview = useMemo<FlightDeckSurfacePreview | null>(() => {
     const departureSurface = flightPhase === 'departure';
-    const airport = departureSurface ? routePoints[0] : routePoints[routePoints.length - 1];
+    const airport = departureSurface ? activeRoutePoints[0] : activeRoutePoints[activeRoutePoints.length - 1];
     const runway = departureSurface ? departureRunway : destinationRunway;
     const frequencies = departureSurface ? departureFrequencies : destinationFrequencies;
     const progressPct = routeProgress?.progressPct ?? 0;
@@ -2796,8 +3520,12 @@ export default function FlightPlannerScreen() {
       mode: departureSurface ? 'departure' : 'arrival',
       progressPct: taxiProgress,
       headline: departureSurface
-        ? 'Departure surface tracking to runway hold-short.'
-        : 'Arrival rollout transitions into taxi-in guidance.',
+        ? flightDeckPhaseSummary.stage === 'taxi-out'
+          ? 'Taxi-out surface tracking to runway hold-short.'
+          : 'Departure surface tracking to runway hold-short.'
+        : flightDeckPhaseSummary.stage === 'taxi-in'
+          ? 'Taxi-in surface guidance active after landing rollout.'
+          : 'Arrival rollout transitions into taxi-in guidance.',
       support: departureSurface
         ? `Previewing taxi-out flow, hold-short state, and runway ${runway.runwayId} entry.`
         : `Previewing runway ${runway.runwayId} exit, occupancy state, and taxi-in from the landing surface.`,
@@ -2823,10 +3551,10 @@ export default function FlightPlannerScreen() {
       route,
       secondaryRoute,
     };
-  }, [departureFrequencies, departureRunway, destinationFrequencies, destinationRunway, flightPhase, routePoints, routeProgress]);
+  }, [activeRoutePoints, departureFrequencies, departureRunway, destinationFrequencies, destinationRunway, flightDeckPhaseSummary.stage, flightPhase, routeProgress]);
   const flightDeckRunwayOpsSummary = useMemo<FlightDeckRunwayOpsSummary | null>(() => {
     const departureSurface = flightPhase === 'departure';
-    const airport = departureSurface ? routePoints[0] : routePoints[routePoints.length - 1];
+    const airport = departureSurface ? activeRoutePoints[0] : activeRoutePoints[activeRoutePoints.length - 1];
     const runway = departureSurface ? departureRunway : destinationRunway;
     const briefing = departureSurface ? departureBriefing : destinationBriefing;
     const frequencies = departureSurface ? departureFrequencies : destinationFrequencies;
@@ -2840,8 +3568,16 @@ export default function FlightPlannerScreen() {
       runwayHeadingDeg: runway.headingDeg,
       runwayMeta: `${runway.lengthFt ? `${runway.lengthFt.toLocaleString()} ft` : 'Length N/A'} - ${runway.surface || 'Surface N/A'}`,
       phaseCall: departureSurface
-        ? `Departure runway ${runway.runwayId} staged for taxi-out and lineup.`
-        : `Arrival runway ${runway.runwayId} staged for final, rollout, and taxi-in.`,
+        ? flightDeckPhaseSummary.stage === 'taxi-out'
+          ? `Taxi-out and hold-short guidance staged for runway ${runway.runwayId}.`
+          : flightDeckPhaseSummary.stage === 'climb'
+            ? `Departure runway ${runway.runwayId} remains active during climb-out.`
+            : `Departure runway ${runway.runwayId} staged for taxi-out and lineup.`
+        : flightDeckPhaseSummary.stage === 'final'
+          ? `Final runway ${runway.runwayId} staged for alignment and rollout.`
+          : flightDeckPhaseSummary.stage === 'taxi-in'
+            ? `Taxi-in guidance continues from runway ${runway.runwayId}.`
+            : `Arrival runway ${runway.runwayId} staged for final, rollout, and taxi-in.`,
       headwindKt: briefing?.advisory?.headwind ?? null,
       crosswindKt: briefing?.advisory?.crosswind ?? null,
       groundFreq: formatFrequency(groundFrequency?.frequencyMhz),
@@ -2849,12 +3585,12 @@ export default function FlightPlannerScreen() {
       atisFreq: formatFrequency(atisFrequency?.frequencyMhz),
       sourceLabel: briefing?.advisory || briefing?.runwayInUse ? 'briefing live' : 'runway staged',
     };
-  }, [departureBriefing, departureFrequencies, departureRunway, destinationBriefing, destinationFrequencies, destinationRunway, flightPhase, routePoints]);
+  }, [activeRoutePoints, departureBriefing, departureFrequencies, departureRunway, destinationBriefing, destinationFrequencies, destinationRunway, flightDeckPhaseSummary.stage, flightPhase]);
 
   useEffect(() => {
-    if (!routePoints.length && !hasPrimaryIcao) return;
+    if (!activeRoutePoints.length && !hasPrimaryIcao) return;
 
-    const bboxSource = buildBboxFromPoints(routePoints);
+    const bboxSource = buildBboxFromPoints(activeRoutePoints);
     const bbox = bboxSource
       ? `${bboxSource.south},${bboxSource.west},${bboxSource.north},${bboxSource.east}`
       : null;
@@ -2922,7 +3658,7 @@ export default function FlightPlannerScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routePoints, departure, windsAltitudeChoice, plannedAltitude]);
+  }, [activeRoutePoints, departure, windsAltitudeChoice, plannedAltitude]);
 
   const flightDeckState = {
     insets,
@@ -2933,9 +3669,12 @@ export default function FlightPlannerScreen() {
     plannedStops,
     plannedAltitude,
     cruiseKtas,
-    routeHeadline,
+    routeHeadline: flightDeckRouteHeadline,
     flightDeckSessionState,
+    flightDeckPhaseSummary,
     routeProgress,
+    routeExecutionSummary,
+    activeExecutionPlanView,
     flightDeckView,
     flightDeckChromeVisible,
     flightDeckDrawerOpen,
@@ -2957,8 +3696,18 @@ export default function FlightPlannerScreen() {
     visionManeuverRecommendation,
     mapRef,
     mapStyle,
-    routePoints,
+    routePoints: activeRoutePoints,
     activeOwnship,
+    ownshipSourceSummary,
+    headingSourceSummary,
+    attitudeSourceSummary,
+    visionReadinessSummary,
+    receiverStatusSummary,
+    receiverHealth,
+    receiverOwnshipAgeMs,
+    receiverOwnshipFresh,
+    gpsOwnshipAgeMs,
+    gpsOwnshipFresh,
     showCloudsGlobal,
     gibsDate,
     cloudTileUrl,
@@ -3035,6 +3784,10 @@ export default function FlightPlannerScreen() {
     setTrafficFilter,
     focusDiversionAirport,
     engageDirectToDiversion,
+    resumePlannedRoute,
+    toggleSequencingSuspend,
+    sequencePreviousLeg,
+    sequenceNextLeg,
     focusTrafficTarget,
     setAlternate,
   };
@@ -3080,10 +3833,8 @@ export default function FlightPlannerScreen() {
             </Text>
           </View>
           <View style={styles.heroMetricCard}>
-            <Text style={styles.heroMetricLabel}>Live status</Text>
-            <Text style={styles.heroMetricValue}>
-              {simulationEnabled ? 'Simulating' : gpsEnabled || trafficEnabled ? 'Cockpit on' : 'Preflight'}
-            </Text>
+            <Text style={styles.heroMetricLabel}>Ownship source</Text>
+            <Text style={styles.heroMetricValue}>{ownshipSourceSummary.code}</Text>
           </View>
         </View>
         <View style={styles.heroMetricRow}>
@@ -3137,7 +3888,7 @@ export default function FlightPlannerScreen() {
           <View style={styles.suggestionList}>
             {departureSuggestions.slice(0, 6).map((airport) => (
               <TouchableOpacity
-                key={`${airport.icao}-${airport.name || ''}`}
+                key={`${airport.icao}-${airport.name || '}`}
                 style={styles.suggestionItem}
                 onPress={() => {
                   setDeparture(airport.icao);
@@ -3145,7 +3896,7 @@ export default function FlightPlannerScreen() {
                 }}
               >
                 <Text style={styles.suggestionItemText}>
-                  {airport.icao} {airport.name ? `* ${airport.name}` : ''}
+                  {airport.icao} {airport.name ? `* ${airport.name}` : '}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -3159,7 +3910,7 @@ export default function FlightPlannerScreen() {
           <View style={styles.suggestionList}>
             {destinationSuggestions.slice(0, 6).map((airport) => (
               <TouchableOpacity
-                key={`${airport.icao}-${airport.name || ''}`}
+                key={`${airport.icao}-${airport.name || '}`}
                 style={styles.suggestionItem}
                 onPress={() => {
                   setDestination(airport.icao);
@@ -3167,7 +3918,7 @@ export default function FlightPlannerScreen() {
                 }}
               >
                 <Text style={styles.suggestionItemText}>
-                  {airport.icao} {airport.name ? `* ${airport.name}` : ''}
+                  {airport.icao} {airport.name ? `* ${airport.name}` : '}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -3353,7 +4104,7 @@ export default function FlightPlannerScreen() {
         )}
         <TouchableOpacity style={styles.helpLink} onPress={() => navigation.navigate('ReceiverHelp')}>
           <Ionicons name="help-circle-outline" size={16} color={colors.primary} />
-          <Text style={styles.helpLinkText}>How to connect your ADS‑B receiver</Text>
+          <Text style={styles.helpLinkText}>How to connect your ADSâ€‘B receiver</Text>
         </TouchableOpacity>
         <View style={styles.trafficRow}>
           <View style={{ flex: 1 }}>
@@ -3369,6 +4120,8 @@ export default function FlightPlannerScreen() {
                 trafficListenerRef.stop?.();
                 setTrafficStatus('idle');
                 setTrafficTargets([]);
+                setReceiverOwnship(null);
+                setReceiverHealth(null);
                 return;
               }
               setTrafficError(null);
@@ -3387,9 +4140,23 @@ export default function FlightPlannerScreen() {
                     return [...next, target];
                   });
                 },
+                (ownship: OwnshipReport) => {
+                  setReceiverOwnship({
+                    lat: ownship.lat,
+                    lon: ownship.lon,
+                    altitudeFt: ownship.altitudeFt,
+                    speedKts: ownship.speedKts,
+                    heading: ownship.headingDeg,
+                    updatedAt: ownship.updatedAt,
+                    source: 'receiver',
+                  });
+                },
                 (err) => {
                   setTrafficStatus('error');
                   setTrafficError(String(err));
+                },
+                (health) => {
+                  setReceiverHealth(health);
                 }
               );
               trafficListenerRef.stop = listener.stop;
@@ -3429,14 +4196,14 @@ export default function FlightPlannerScreen() {
           <View style={styles.alertCard}>
             <Text style={styles.alertTitle}>Immediate traffic</Text>
             <Text style={styles.alertText}>
-              {immediateTrafficCount} nearby target{immediateTrafficCount === 1 ? '' : 's'} in the conflict band.
+              {immediateTrafficCount} nearby target{immediateTrafficCount === 1 ? ' : 's'} in the conflict band.
             </Text>
           </View>
         )}
         <View style={styles.trafficRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Device GPS (fallback)</Text>
-            <Text style={styles.helperText}>Uses phone GPS for altitude and speed if ADS‑B not available.</Text>
+            <Text style={styles.helperText}>Uses phone GPS for altitude and speed if ADSâ€‘B not available.</Text>
           </View>
           <TouchableOpacity
             style={[styles.mapToggleButton, gpsEnabled && styles.mapToggleActive]}
@@ -3445,6 +4212,24 @@ export default function FlightPlannerScreen() {
           >
             <Text style={styles.mapToggleText}>{gpsEnabled ? 'On' : 'Off'}</Text>
           </TouchableOpacity>
+        </View>
+        <View style={styles.alertCard}>
+          <Text style={styles.alertTitle}>Ownship input priority</Text>
+          <Text style={styles.alertText}>
+            {ownshipSourceSummary.label} ({ownshipSourceSummary.code}) - {ownshipSourceSummary.detail}
+          </Text>
+          <Text style={styles.helperText}>{ownshipSourceSummary.freshness}</Text>
+          <Text style={styles.helperText}>Receiver: {receiverStatusSummary.code} - {receiverStatusSummary.detail}</Text>
+          <Text style={styles.helperText}>Heading: {headingSourceSummary.label} ({headingSourceSummary.code})</Text>
+          <Text style={styles.helperText}>Vision: {visionReadinessSummary.label} ({visionReadinessSummary.code})</Text>
+          {receiverHealth?.warnings?.length ? (
+            <Text style={styles.helperText}>{receiverHealth.warnings[0]}</Text>
+          ) : null}
+          {receiverOwnshipFresh === false ? (
+            <Text style={styles.helperText}>
+              Receiver ownship is stale.{gpsOwnshipFresh ? ' Device GPS is ready as fallback.' : ' No live fallback is active.'}
+            </Text>
+          ) : null}
         </View>
         {isSuperAdmin && (
           <View style={styles.simCard}>
@@ -3500,7 +4285,7 @@ export default function FlightPlannerScreen() {
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.helperText}>
-                  {Math.round(simulationProgress * 100)}% complete · {simulationSpeed} playback
+                  {Math.round(simulationProgress * 100)}% complete Â· {simulationSpeed} playback
                 </Text>
               </>
             ) : null}
@@ -3604,7 +4389,7 @@ export default function FlightPlannerScreen() {
                       <Callout>
                         <Text style={styles.calloutText}>
                           {point.icao || point.stationId}: {Math.round(point.windDir)} deg / {Math.round(point.windSpeed)} kt
-                          {point.tempC !== null ? `, ${point.tempC}C` : ''}
+                          {point.tempC !== null ? `, ${point.tempC}C` : '}
                         </Text>
                       </Callout>
                     </Marker>
@@ -3622,7 +4407,7 @@ export default function FlightPlannerScreen() {
                 key={target.id}
                 coordinate={{ latitude: target.lat, longitude: target.lon }}
                 title={target.callsign || 'Traffic'}
-                description={`${target.distanceNm.toFixed(1)} NM${target.altitudeFt ? ` • ${target.altitudeFt} ft` : ''}`}
+                description={`${target.distanceNm.toFixed(1)} NM${target.altitudeFt ? ` â€¢ ${target.altitudeFt} ft` : '}`}
                 pinColor={target.threatLevel === 'immediate' ? '#dc2626' : target.threatLevel === 'advisory' ? '#f97316' : '#eab308'}
               />
             ))}
@@ -3631,7 +4416,7 @@ export default function FlightPlannerScreen() {
                 coordinate={{ latitude: activeOwnship.lat, longitude: activeOwnship.lon }}
                 anchor={{ x: 0.5, y: 0.5 }}
                 title={simulationEnabled ? 'Simulated ownship' : 'Ownship'}
-                description={`${activeOwnship.speedKts ? `${Math.round(activeOwnship.speedKts)} kt` : 'Speed --'}${activeOwnship.altitudeFt ? ` · ${Math.round(activeOwnship.altitudeFt)} ft` : ''}`}
+                description={`${activeOwnship.speedKts ? `${Math.round(activeOwnship.speedKts)} kt` : 'Speed --'}${activeOwnship.altitudeFt ? ` Â· ${Math.round(activeOwnship.altitudeFt)} ft` : '}`}
               >
                 <View
                   style={[
@@ -3712,7 +4497,7 @@ export default function FlightPlannerScreen() {
           <View style={styles.instrumentRow}>
             <View style={styles.instrumentBox}>
               <Text style={styles.instrumentLabel}>Track</Text>
-              <Text style={styles.instrumentValue}>{activeOwnship?.heading ? `${activeOwnship.heading.toFixed(0)}°` : '-'}</Text>
+              <Text style={styles.instrumentValue}>{activeOwnship?.heading ? `${activeOwnship.heading.toFixed(0)}Â°` : '-'}</Text>
             </View>
             <View style={styles.instrumentBox}>
               <Text style={styles.instrumentLabel}>Vert Speed</Text>
@@ -3772,10 +4557,10 @@ export default function FlightPlannerScreen() {
                   </View>
                   <Text style={styles.diversionMeta}>
                     {target.distanceNm.toFixed(1)} NM
-                    {typeof target.altitudeFt === 'number' ? ` • ${Math.round(target.altitudeFt)} ft` : ''}
+                    {typeof target.altitudeFt === 'number' ? ` â€¢ ${Math.round(target.altitudeFt)} ft` : '}
                     {typeof target.altitudeDeltaFt === 'number'
-                      ? ` • ${target.altitudeDeltaFt >= 0 ? '+' : ''}${Math.round(target.altitudeDeltaFt)} ft`
-                      : ''}
+                      ? ` â€¢ ${target.altitudeDeltaFt >= 0 ? '+' : '}${Math.round(target.altitudeDeltaFt)} ft`
+                      : '}
                   </Text>
                   <Text style={styles.helperText}>Threat score {target.threatScore}</Text>
                 </View>
@@ -3804,11 +4589,11 @@ export default function FlightPlannerScreen() {
                   <View style={styles.diversionHeader}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.diversionTitle}>
-                        {airport.icao}{airport.name ? ` · ${airport.name}` : ''}
+                        {airport.icao}{airport.name ? ` Â· ${airport.name}` : '}
                       </Text>
                       <Text style={styles.diversionMeta}>
-                        {airport.distanceNm.toFixed(1)} NM · {Math.round(airport.bearingDeg)}°
-                        {airport.maxRunwayFt ? ` · ${airport.maxRunwayFt.toLocaleString()} ft` : ''}
+                        {airport.distanceNm.toFixed(1)} NM Â· {Math.round(airport.bearingDeg)}Â°
+                        {airport.maxRunwayFt ? ` Â· ${airport.maxRunwayFt.toLocaleString()} ft` : '}
                       </Text>
                     </View>
                     {airport.flightCategory ? (
@@ -3820,22 +4605,22 @@ export default function FlightPlannerScreen() {
                       <Text style={styles.helperText}>Loading runway briefing...</Text>
                     ) : selectedDiversionBriefing?.advisory ? (
                       <Text style={styles.helperText}>
-                        Runway {selectedDiversionBriefing.advisory.runway || '--'} ·
-                        HW {selectedDiversionBriefing.advisory.headwind ?? '--'} kt ·
+                        Runway {selectedDiversionBriefing.advisory.runway || '--'} Â·
+                        HW {selectedDiversionBriefing.advisory.headwind ?? '--'} kt Â·
                         XW {selectedDiversionBriefing.advisory.crosswind ?? '--'} kt
-                        {selectedDiversionBriefing.runwayInUse ? ` · In use ${selectedDiversionBriefing.runwayInUse}` : ''}
+                        {selectedDiversionBriefing.runwayInUse ? ` Â· In use ${selectedDiversionBriefing.runwayInUse}` : '}
                       </Text>
                     ) : selectedDiversionBriefing?.runwayInUse ? (
                       <Text style={styles.helperText}>Runway in use {selectedDiversionBriefing.runwayInUse}</Text>
                     ) : null
                   ) : null}
                   {airport.scoreReasons?.length ? (
-                    <Text style={styles.helperText}>{airport.scoreReasons.slice(0, 2).join(' · ')}</Text>
+                    <Text style={styles.helperText}>{airport.scoreReasons.slice(0, 2).join(' Â· ')}</Text>
                   ) : null}
                   {selectedDiversionIcao === airport.icao && selectedDiversionBestComm ? (
                     <Text style={styles.helperText}>
                       Best comm: {selectedDiversionBestComm.type || selectedDiversionBestComm.description || 'Frequency'}
-                      {selectedDiversionBestComm.frequencyMhz ? ` ${selectedDiversionBestComm.frequencyMhz.toFixed(3)}` : ''}
+                      {selectedDiversionBestComm.frequencyMhz ? ` ${selectedDiversionBestComm.frequencyMhz.toFixed(3)}` : '}
                     </Text>
                   ) : null}
                   <View style={styles.diversionActions}>
@@ -3847,8 +4632,8 @@ export default function FlightPlannerScreen() {
                       onPress={() => {
                         setDestination(airport.icao);
                         setSuggestedMode('direct');
-                        setWaypoints('');
-                        setPlannedStops('');
+                        setWaypoints(');
+                        setPlannedStops(');
                       }}
                     >
                       <Text style={styles.secondaryButtonText}>Use as destination</Text>
@@ -4188,12 +4973,58 @@ export default function FlightPlannerScreen() {
       {routeSummary?.legs?.length ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Route Legs</Text>
-          {routeSummary.legs.map((leg) => (
-            <View key={`${leg.from}-${leg.to}`} style={styles.legRow}>
-              <Text style={styles.legText}>{`${leg.from} -> ${leg.to}`}</Text>
-              <Text style={styles.legText}>{leg.nm.toFixed(1)} NM</Text>
-            </View>
-          ))}
+          {routeSummary.legs.map((leg, index) => {
+            const planEntry = plannerExecutionPlanView[index];
+            const isActive = planEntry?.status === 'active' || planEntry?.status === 'managed-open';
+            const isCompleted = planEntry?.status === 'completed';
+            const legActionCue =
+              isActive
+                ? `${planEntry?.actionCue || 'Active'} · ${leg.legType} leg${
+                    routeProgress?.legIndex === index
+                      ? ` · ${routeProgress.remainingLegNm.toFixed(1)} NM remaining`
+                      : ''
+                  }`
+                : isCompleted
+                  ? 'Completed'
+                  : planEntry?.status === 'armed'
+                    ? `${planEntry?.actionCue || 'Armed next'} · ${leg.legType} leg`
+                    : `${planEntry?.actionCue || 'Queued'} · ${leg.legType} leg`;
+            return (
+              <View
+                key={`${leg.from}-${leg.to}`}
+                style={[
+                  styles.legRow,
+                  isActive ? styles.legRowActive : null,
+                  isCompleted ? styles.legRowCompleted : null,
+                ]}
+              >
+                <View style={styles.legMeta}>
+                  <Text
+                    style={[
+                      styles.legText,
+                      isActive ? styles.legTextActive : null,
+                      isCompleted ? styles.legTextCompleted : null,
+                    ]}
+                  >
+                    {`${leg.from} -> ${leg.to}`}
+                  </Text>
+                  <Text style={styles.legSubtext}>{legActionCue}</Text>
+                  <Text style={styles.legSubtext}>
+                    Segment {planEntry?.segment?.label || 'Standby'} · {planEntry?.segment?.sequencingModel || 'auto'} · {planEntry?.transition?.label || 'Course capture'}
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.legText,
+                    isActive ? styles.legTextActive : null,
+                    isCompleted ? styles.legTextCompleted : null,
+                  ]}
+                >
+                  {leg.nm.toFixed(1)} NM
+                </Text>
+              </View>
+            );
+          })}
         </View>
       ) : null}
     </ScrollView>
@@ -4243,6 +5074,55 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     color: colors.flightTextMuted,
+  },
+  flightDeckHeaderMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  flightDeckHeaderMetaChip: {
+    minHeight: 24,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: colors.flightSurfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+  },
+  flightDeckHeaderMetaChipActive: {
+    backgroundColor: 'rgba(74,159,212,0.16)',
+    borderColor: 'rgba(74,159,212,0.46)',
+  },
+  flightDeckHeaderMetaChipAccent: {
+    backgroundColor: 'rgba(200,146,42,0.14)',
+    borderColor: 'rgba(200,146,42,0.42)',
+  },
+  flightDeckHeaderMetaChipWarning: {
+    backgroundColor: 'rgba(232,69,60,0.14)',
+    borderColor: 'rgba(232,69,60,0.42)',
+  },
+  flightDeckHeaderMetaChipText: {
+    color: colors.flightText,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
+  flightDeckHeaderMetaChipTextActive: {
+    color: colors.flightAccent,
+  },
+  flightDeckHeaderMetaChipTextAccent: {
+    color: colors.flightCaution,
+  },
+  flightDeckHeaderMetaChipTextWarning: {
+    color: colors.flightWarning,
+  },
+  flightDeckHeaderMetaText: {
+    flex: 1,
+    color: colors.flightTextMuted,
+    fontSize: 11,
+    lineHeight: 15,
   },
   flightDeckHeaderActions: {
     flexDirection: 'row',
@@ -4809,6 +5689,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.flightSurfaceElevated,
     borderColor: colors.flightAccent,
   },
+  flightDeckChipDisabled: {
+    opacity: 0.42,
+  },
   flightDeckChipText: {
     color: colors.flightTextMuted,
     fontSize: 12,
@@ -4816,6 +5699,9 @@ const styles = StyleSheet.create({
   },
   flightDeckChipTextActive: {
     color: colors.flightText,
+  },
+  flightDeckChipTextDisabled: {
+    color: colors.flightTextMuted,
   },
   flightDeckChipWarning: {
     backgroundColor: 'rgba(232,69,60,0.14)',
@@ -5310,6 +6196,47 @@ const styles = StyleSheet.create({
     height: 34,
     backgroundColor: colors.flightBorder,
   },
+  flightDeckHudSourceChip: {
+    position: 'absolute',
+    top: 8,
+    right: 12,
+    minHeight: 22,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: colors.flightSurfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+    zIndex: 2,
+  },
+  flightDeckHudSourceChipActive: {
+    backgroundColor: 'rgba(74,159,212,0.16)',
+    borderColor: 'rgba(74,159,212,0.46)',
+  },
+  flightDeckHudSourceChipAccent: {
+    backgroundColor: 'rgba(200,146,42,0.14)',
+    borderColor: 'rgba(200,146,42,0.42)',
+  },
+  flightDeckHudSourceChipWarning: {
+    backgroundColor: 'rgba(232,69,60,0.14)',
+    borderColor: 'rgba(232,69,60,0.42)',
+  },
+  flightDeckHudSourceChipText: {
+    color: colors.flightText,
+    fontSize: 9,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
+  flightDeckHudSourceChipTextActive: {
+    color: colors.flightAccent,
+  },
+  flightDeckHudSourceChipTextAccent: {
+    color: colors.flightCaution,
+  },
+  flightDeckHudSourceChipTextWarning: {
+    color: colors.flightWarning,
+  },
   flightDeckQuickRail: {
     flexDirection: 'row',
     gap: spacing.xs,
@@ -5712,6 +6639,17 @@ const styles = StyleSheet.create({
   autoCalcText: { fontSize: 12, color: colors.primary, fontWeight: '600' },
   legRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
   legText: { fontSize: 13, color: colors.textMuted },
+  legMeta: { flex: 1, paddingRight: 12 },
+  legSubtext: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  legRowActive: {
+    backgroundColor: 'rgba(79, 140, 255, 0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    marginHorizontal: -10,
+  },
+  legRowCompleted: { opacity: 0.66 },
+  legTextActive: { color: colors.text, fontWeight: '700' },
+  legTextCompleted: { color: colors.textMuted },
   suggestionBox: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.sm, marginBottom: spacing.sm, backgroundColor: colors.surfaceMuted },
   suggestionTitle: { fontSize: 13, fontWeight: '600', color: colors.text },
   suggestionText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
@@ -5866,3 +6804,5 @@ const styles = StyleSheet.create({
   },
   diversionActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
 });
+
+

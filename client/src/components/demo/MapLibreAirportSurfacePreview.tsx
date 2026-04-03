@@ -11,11 +11,24 @@ import {
 import { replaceSingleMarker } from "@/map/maplibre/markers";
 
 type SurfacePoint = { lat: number; lon: number };
+type SurfaceFeature = {
+  type: "Feature";
+  geometry:
+    | { type: "LineString"; coordinates: [number, number][] }
+    | { type: "Polygon"; coordinates: [number, number][][] };
+  properties: {
+    aeroway: string;
+    name: string | null;
+    ref: string | null;
+    surface: string | null;
+  };
+};
 
 type MapLibreAirportSurfacePreviewProps = {
   airportIcao: string;
   mode: "departure" | "arrival";
   ownship: { lat: number; lon: number; headingDeg: number };
+  surfaceFeatures?: SurfaceFeature[];
   route: SurfacePoint[];
   completedRoute: SurfacePoint[];
   upcomingRoute: SurfacePoint[];
@@ -33,6 +46,11 @@ const RUNWAY_CENTER_SOURCE_ID = "rsf-surface-runway-center";
 const RUNWAY_CENTER_LAYER_ID = "rsf-surface-runway-center-layer";
 const RUNWAY_BAR_SOURCE_ID = "rsf-surface-runway-bar";
 const RUNWAY_BAR_LAYER_ID = "rsf-surface-runway-bar-layer";
+const SURFACE_FILL_SOURCE_ID = "rsf-surface-fill";
+const SURFACE_FILL_LAYER_ID = "rsf-surface-fill-layer";
+const SURFACE_OUTLINE_LAYER_ID = "rsf-surface-outline-layer";
+const SURFACE_LINE_SOURCE_ID = "rsf-surface-line";
+const SURFACE_LINE_LAYER_ID = "rsf-surface-line-layer";
 const OSM_TILE_URLS = [
   "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
   "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -51,10 +69,28 @@ function buildOwnshipElement(headingDeg: number) {
   return wrapper.firstElementChild as HTMLElement;
 }
 
+function buildFeatureCollection(features: SurfaceFeature[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features,
+  };
+}
+
+function extendFeatureBounds(bounds: maplibregl.LngLatBounds, feature: SurfaceFeature) {
+  if (feature.geometry.type === "LineString") {
+    feature.geometry.coordinates.forEach(([lon, lat]) => bounds.extend([lon, lat]));
+    return;
+  }
+  feature.geometry.coordinates.forEach((ring) => {
+    ring.forEach(([lon, lat]) => bounds.extend([lon, lat]));
+  });
+}
+
 export default function MapLibreAirportSurfacePreview({
   airportIcao,
   mode,
   ownship,
+  surfaceFeatures = [],
   route,
   completedRoute,
   upcomingRoute,
@@ -84,6 +120,14 @@ export default function MapLibreAirportSurfacePreview({
   const runwayBarGeoJson = useMemo(
     () => buildLineStringCollection(runwayBar.map((point) => [point.lon, point.lat] as [number, number])),
     [runwayBar],
+  );
+  const surfaceFillGeoJson = useMemo(
+    () => buildFeatureCollection(surfaceFeatures.filter((feature) => feature.geometry.type === "Polygon")),
+    [surfaceFeatures],
+  );
+  const surfaceLineGeoJson = useMemo(
+    () => buildFeatureCollection(surfaceFeatures.filter((feature) => feature.geometry.type === "LineString")),
+    [surfaceFeatures],
   );
 
   useEffect(() => {
@@ -157,6 +201,98 @@ export default function MapLibreAirportSurfacePreview({
         width: 6,
         opacity: 0.95,
       });
+
+      if (!map.getSource(SURFACE_FILL_SOURCE_ID)) {
+        map.addSource(SURFACE_FILL_SOURCE_ID, {
+          type: "geojson",
+          data: surfaceFillGeoJson as GeoJSON.FeatureCollection,
+        });
+      }
+      if (!map.getLayer(SURFACE_FILL_LAYER_ID)) {
+        map.addLayer({
+          id: SURFACE_FILL_LAYER_ID,
+          type: "fill",
+          source: SURFACE_FILL_SOURCE_ID,
+          paint: {
+            "fill-color": [
+              "match",
+              ["get", "aeroway"],
+              "runway",
+              "#D9DDE2",
+              "apron",
+              "#2D3742",
+              "helipad",
+              "#A1A8AF",
+              "#23303C",
+            ],
+            "fill-opacity": [
+              "match",
+              ["get", "aeroway"],
+              "runway",
+              0.44,
+              "apron",
+              0.68,
+              "helipad",
+              0.42,
+              0.58,
+            ],
+          },
+        });
+      }
+      if (!map.getLayer(SURFACE_OUTLINE_LAYER_ID)) {
+        map.addLayer({
+          id: SURFACE_OUTLINE_LAYER_ID,
+          type: "line",
+          source: SURFACE_FILL_SOURCE_ID,
+          paint: {
+            "line-color": "#516273",
+            "line-width": 1.2,
+            "line-opacity": 0.8,
+          },
+        });
+      }
+      if (!map.getSource(SURFACE_LINE_SOURCE_ID)) {
+        map.addSource(SURFACE_LINE_SOURCE_ID, {
+          type: "geojson",
+          data: surfaceLineGeoJson as GeoJSON.FeatureCollection,
+        });
+      }
+      if (!map.getLayer(SURFACE_LINE_LAYER_ID)) {
+        map.addLayer({
+          id: SURFACE_LINE_LAYER_ID,
+          type: "line",
+          source: SURFACE_LINE_SOURCE_ID,
+          paint: {
+            "line-color": [
+              "match",
+              ["get", "aeroway"],
+              "taxiway",
+              "#6F7E8D",
+              "taxilane",
+              "#8091A3",
+              "holding_position",
+              "#D0A24A",
+              "runway",
+              "#D9DDE2",
+              "#516273",
+            ],
+            "line-width": [
+              "match",
+              ["get", "aeroway"],
+              "taxiway",
+              4,
+              "taxilane",
+              3,
+              "holding_position",
+              3.5,
+              "runway",
+              5,
+              2.2,
+            ],
+            "line-opacity": 0.9,
+          },
+        });
+      }
     });
 
     mapRef.current = map;
@@ -165,7 +301,7 @@ export default function MapLibreAirportSurfacePreview({
       map.remove();
       mapRef.current = null;
     };
-  }, [ownship.headingDeg, ownship.lat, ownship.lon, routeBaseGeoJson, routeDoneGeoJson, routeUpcomingGeoJson, runwayBarGeoJson, runwayCenterGeoJson]);
+  }, [ownship.headingDeg, ownship.lat, ownship.lon, routeBaseGeoJson, routeDoneGeoJson, routeUpcomingGeoJson, runwayBarGeoJson, runwayCenterGeoJson, surfaceFillGeoJson, surfaceLineGeoJson]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -202,7 +338,9 @@ export default function MapLibreAirportSurfacePreview({
     setGeoJsonSourceData(map, ROUTE_UPCOMING_SOURCE_ID, routeUpcomingGeoJson);
     setGeoJsonSourceData(map, RUNWAY_CENTER_SOURCE_ID, runwayCenterGeoJson);
     setGeoJsonSourceData(map, RUNWAY_BAR_SOURCE_ID, runwayBarGeoJson);
-  }, [routeBaseGeoJson, routeDoneGeoJson, routeUpcomingGeoJson, runwayBarGeoJson, runwayCenterGeoJson]);
+    setGeoJsonSourceData(map, SURFACE_FILL_SOURCE_ID, surfaceFillGeoJson as any);
+    setGeoJsonSourceData(map, SURFACE_LINE_SOURCE_ID, surfaceLineGeoJson as any);
+  }, [routeBaseGeoJson, routeDoneGeoJson, routeUpcomingGeoJson, runwayBarGeoJson, runwayCenterGeoJson, surfaceFillGeoJson, surfaceLineGeoJson]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -211,13 +349,14 @@ export default function MapLibreAirportSurfacePreview({
     route.forEach((point) => bounds.extend([point.lon, point.lat]));
     runwayCenterline.forEach((point) => bounds.extend([point.lon, point.lat]));
     runwayBar.forEach((point) => bounds.extend([point.lon, point.lat]));
+    surfaceFeatures.forEach((feature) => extendFeatureBounds(bounds, feature));
     map.fitBounds(bounds as LngLatBoundsLike, {
       padding: 68,
       duration: 0,
       maxZoom: mode === "departure" ? 17.6 : 17.3,
       bearing: ownship.headingDeg,
     });
-  }, [mode, ownship.headingDeg, ownship.lon, ownship.lat, route, runwayBar, runwayCenterline]);
+  }, [mode, ownship.headingDeg, ownship.lon, ownship.lat, route, runwayBar, runwayCenterline, surfaceFeatures]);
 
   useEffect(() => {
     return () => {
@@ -228,6 +367,9 @@ export default function MapLibreAirportSurfacePreview({
       removeGeoJsonLayer(map, ROUTE_UPCOMING_SOURCE_ID, ROUTE_UPCOMING_LAYER_ID);
       removeGeoJsonLayer(map, RUNWAY_CENTER_SOURCE_ID, RUNWAY_CENTER_LAYER_ID);
       removeGeoJsonLayer(map, RUNWAY_BAR_SOURCE_ID, RUNWAY_BAR_LAYER_ID);
+      removeGeoJsonLayer(map, SURFACE_FILL_SOURCE_ID, SURFACE_OUTLINE_LAYER_ID);
+      removeGeoJsonLayer(map, SURFACE_FILL_SOURCE_ID, SURFACE_FILL_LAYER_ID);
+      removeGeoJsonLayer(map, SURFACE_LINE_SOURCE_ID, SURFACE_LINE_LAYER_ID);
     };
   }, []);
 

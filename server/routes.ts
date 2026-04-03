@@ -2208,6 +2208,19 @@ type AirportFrequencyMeta = {
   frequencyMhz: number | null;
 };
 
+type AirportSurfaceGeometryFeature = {
+  type: "Feature";
+  geometry:
+    | { type: "LineString"; coordinates: [number, number][] }
+    | { type: "Polygon"; coordinates: [number, number][][] };
+  properties: {
+    aeroway: string;
+    name: string | null;
+    ref: string | null;
+    surface: string | null;
+  };
+};
+
 type NearbyAirportResult = AirportSearchResult & {
   distanceNm: number;
   bearingDeg: number;
@@ -2290,6 +2303,9 @@ const AIRPORT_FREQUENCIES_CACHE_URL = "https://ourairports.com/data/airport-freq
 const AIRPORT_FREQUENCIES_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let airportFrequencyCache: { data: Map<string, AirportFrequencyMeta[]>; expiresAt: number } | null = null;
 let airportFrequencyCachePromise: Promise<Map<string, AirportFrequencyMeta[]>> | null = null;
+const AIRPORT_SURFACE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const airportSurfaceGeometryCache = new Map<string, { data: any; expiresAt: number }>();
+const airportSurfaceGeometryInFlight = new Map<string, Promise<any>>();
 const NEARBY_AIRPORT_CACHE_TTL_MS = 45 * 1000;
 const NEARBY_AIRPORT_CACHE_MAX = 200;
 const nearbyAirportCache = new Map<string, { data: any; expiresAt: number }>();
@@ -3553,6 +3569,140 @@ async function loadAirportReferenceCache(): Promise<Map<string, AirportReference
     return await airportReferenceCachePromise;
   } finally {
     airportReferenceCachePromise = null;
+  }
+}
+
+function getAirportReferenceByIcao(referenceMap: Map<string, AirportReference>, icao: string) {
+  const candidates = buildIcaoCandidates(icao);
+  for (const candidate of candidates) {
+    const match = referenceMap.get(candidate);
+    if (match) return match;
+  }
+  return null;
+}
+
+function computeAirportSurfaceBounds(
+  airport: { lat: number; lon: number },
+  radiusNm = 1.6,
+) {
+  const latDelta = radiusNm / 60;
+  const lonDelta = radiusNm / (60 * Math.max(0.2, Math.cos((airport.lat * Math.PI) / 180)));
+  return {
+    minLat: airport.lat - latDelta,
+    maxLat: airport.lat + latDelta,
+    minLon: airport.lon - lonDelta,
+    maxLon: airport.lon + lonDelta,
+  };
+}
+
+function buildAirportSurfaceFeatureCollection(elements: any[]): AirportSurfaceGeometryFeature[] {
+  const nodeMap = new Map<number, { lat: number; lon: number }>();
+  const features: AirportSurfaceGeometryFeature[] = [];
+
+  elements.forEach((element) => {
+    if (element?.type === "node" && Number.isFinite(element.id) && Number.isFinite(element.lat) && Number.isFinite(element.lon)) {
+      nodeMap.set(element.id, { lat: element.lat, lon: element.lon });
+    }
+  });
+
+  elements.forEach((element) => {
+    if (element?.type !== "way" || !Array.isArray(element.nodes) || !element.nodes.length) return;
+    const aeroway = typeof element.tags?.aeroway === "string" ? element.tags.aeroway : "";
+    if (!aeroway) return;
+
+    const coordinates = element.nodes
+      .map((nodeId: number) => {
+        const node = nodeMap.get(nodeId);
+        return node ? ([node.lon, node.lat] as [number, number]) : null;
+      })
+      .filter(Boolean) as [number, number][];
+
+    if (coordinates.length < 2) return;
+
+    const isClosed =
+      coordinates.length >= 4 &&
+      coordinates[0][0] === coordinates[coordinates.length - 1][0] &&
+      coordinates[0][1] === coordinates[coordinates.length - 1][1];
+    const polygonAeroways = new Set(["apron", "runway", "helipad", "terminal"]);
+    const treatAsPolygon = isClosed && (polygonAeroways.has(aeroway) || element.tags?.area === "yes");
+
+    features.push({
+      type: "Feature",
+      geometry: treatAsPolygon
+        ? { type: "Polygon", coordinates: [coordinates] }
+        : { type: "LineString", coordinates },
+      properties: {
+        aeroway,
+        name: typeof element.tags?.name === "string" ? element.tags.name : null,
+        ref: typeof element.tags?.ref === "string" ? element.tags.ref : null,
+        surface: typeof element.tags?.surface === "string" ? element.tags.surface : null,
+      },
+    });
+  });
+
+  return features;
+}
+
+async function fetchAirportSurfaceGeometry(airport: AirportReference) {
+  const cacheKey = airport.icao.toUpperCase();
+  const now = Date.now();
+  const cached = airportSurfaceGeometryCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
+  const inFlight = airportSurfaceGeometryInFlight.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const buildPromise = (async () => {
+    const radiusMeters = 2600;
+    const query = `
+[out:json][timeout:25];
+(
+  way["aeroway"~"runway|taxiway|apron|taxilane|holding_position|helipad|terminal"](around:${radiusMeters},${airport.lat},${airport.lon});
+);
+(._;>;);
+out body;
+`.trim();
+
+    const response = await fetchWithTimeout(
+      "https://overpass-api.de/api/interpreter",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=UTF-8",
+          "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
+        },
+        body: query,
+      },
+      12000,
+    );
+
+    if (!response.ok) {
+      throw new Error(`Airport surface fetch failed: ${response.status}`);
+    }
+
+    const payload = await response.json().catch(() => null);
+    const features = buildAirportSurfaceFeatureCollection(Array.isArray(payload?.elements) ? payload.elements : []);
+    const data = {
+      icao: cacheKey,
+      source: "osm-overpass",
+      fetchedAt: new Date().toISOString(),
+      bounds: computeAirportSurfaceBounds(airport),
+      features,
+    };
+    airportSurfaceGeometryCache.set(cacheKey, {
+      data,
+      expiresAt: Date.now() + AIRPORT_SURFACE_CACHE_TTL_MS,
+    });
+    return data;
+  })();
+
+  airportSurfaceGeometryInFlight.set(cacheKey, buildPromise);
+  try {
+    return await buildPromise;
+  } finally {
+    airportSurfaceGeometryInFlight.delete(cacheKey);
   }
 }
 
@@ -16185,6 +16335,29 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Airport frequency lookup failed:", error);
       res.status(500).json({ error: "Failed to fetch airport frequency data" });
+    }
+  });
+
+  app.get("/api/airports/:icao/surface-geometry", async (req, res) => {
+    try {
+      const requestedIcao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+
+      const referenceMap = await loadAirportReferenceCache();
+      const airport = getAirportReferenceByIcao(referenceMap, requestedIcao);
+      if (!airport) {
+        return res.status(404).json({ error: "Airport not found" });
+      }
+
+      const data = await fetchAirportSurfaceGeometry(airport);
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({
+        error: "Failed to load airport surface geometry",
+        details: error?.message || String(error),
+      });
     }
   });
 

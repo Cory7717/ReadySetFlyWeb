@@ -166,9 +166,36 @@ type DemoSurfacePreview = {
   geoUpcomingRoute: Array<{ lat: number; lon: number }>;
   geoRunwayCenterline: Array<{ lat: number; lon: number }>;
   geoRunwayBar: Array<{ lat: number; lon: number }>;
+  surfaceFeatures: SurfaceGeometryFeature[];
   activeTaxiway: string;
   upcomingTaxiways: string[];
   progressCall: string;
+};
+
+type SurfaceGeometryFeature = {
+  type: "Feature";
+  geometry:
+    | { type: "LineString"; coordinates: [number, number][] }
+    | { type: "Polygon"; coordinates: [number, number][][] };
+  properties: {
+    aeroway: string;
+    name: string | null;
+    ref: string | null;
+    surface: string | null;
+  };
+};
+
+type AirportSurfaceGeometryResponse = {
+  icao: string;
+  source: string;
+  fetchedAt: string;
+  bounds: {
+    minLat: number;
+    maxLat: number;
+    minLon: number;
+    maxLon: number;
+  };
+  features: SurfaceGeometryFeature[];
 };
 
 const DEFAULT_DEPARTURE = "KDAL";
@@ -320,6 +347,41 @@ function localSurfacePointToGeo({
     (runwayHeadingDeg + localBearingDeg) % 360,
     distanceNm,
   );
+}
+
+function flattenSurfaceLineCoordinates(features: SurfaceGeometryFeature[]) {
+  return features.flatMap((feature) => {
+    if (feature.geometry.type !== "LineString") return [] as Array<{ lat: number; lon: number }>;
+    if (!["taxiway", "taxilane", "runway", "holding_position"].includes(feature.properties.aeroway)) {
+      return [] as Array<{ lat: number; lon: number }>;
+    }
+    return feature.geometry.coordinates.map(([lon, lat]) => ({ lat, lon }));
+  });
+}
+
+function snapSurfacePoints(
+  points: Array<{ lat: number; lon: number }>,
+  features: SurfaceGeometryFeature[],
+  thresholdNm = 0.09,
+) {
+  const candidates = flattenSurfaceLineCoordinates(features);
+  if (!candidates.length) return points;
+
+  return points.map((point) => {
+    let nearest = point;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    candidates.forEach((candidate) => {
+      const distance = greatCircleNm(
+        { latitude: point.lat, longitude: point.lon },
+        { latitude: candidate.lat, longitude: candidate.lon },
+      );
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = candidate;
+      }
+    });
+    return nearestDistance <= thresholdNm ? nearest : point;
+  });
 }
 
 function rotateDiagramPoint(
@@ -1207,6 +1269,7 @@ function AirportSurfacePreview({
                 airportIcao={preview.airportIcao}
                 mode={preview.mode}
                 ownship={preview.geoOwnship}
+                surfaceFeatures={preview.surfaceFeatures}
                 route={preview.geoRoute}
                 completedRoute={preview.geoCompletedRoute}
                 upcomingRoute={preview.geoUpcomingRoute}
@@ -1240,7 +1303,7 @@ function AirportSurfacePreview({
             <div className="mt-1 text-xs text-[#7A9BB8]">
               {liveDiagram
                 ? "FAA airport diagram is available alongside the RSF surface schematic. Runway advisory and airport frequencies remain API-backed."
-                : "Runway advisory and airport frequencies are API-backed. Surface follow now tracks the aircraft over a live airport-anchored map while FAA diagram access remains available as a reference view."}
+                : "Runway advisory and airport frequencies are API-backed. Surface follow now layers real airport aeroway geometry beneath the taxi flow while FAA diagram access remains available as a reference view."}
             </div>
             <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-[#7A9BB8]">
               <div>
@@ -1275,7 +1338,7 @@ function AirportSurfacePreview({
           <div className="rounded-[20px] border border-[#1E2D42] bg-[#091018] px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Tracking</div>
             <div className="mt-2 text-sm font-semibold text-[#E8EDF4]">
-              Ownship remains camera-followed on the synthetic airport surface while the upcoming taxiway sequence stays visible ahead of the aircraft.
+              Ownship remains camera-followed on the airport surface while the upcoming taxi sequence stays visible ahead of the aircraft.
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
               <div className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${preview.holdShortActive ? "border-[#E8453C]/60 bg-[#2A1212] text-[#E8453C]" : "border-[#1E2D42] bg-[#0A0E14] text-[#7A9BB8]"}`}>
@@ -1849,6 +1912,8 @@ export default function SyntheticVisionPage() {
   const [arrivalFrequencies, setArrivalFrequencies] = useState<AirportFrequencyResponse | null>(null);
   const [departurePlates, setDeparturePlates] = useState<PlateRecord[]>([]);
   const [arrivalPlates, setArrivalPlates] = useState<PlateRecord[]>([]);
+  const [departureSurfaceGeometry, setDepartureSurfaceGeometry] = useState<AirportSurfaceGeometryResponse | null>(null);
+  const [arrivalSurfaceGeometry, setArrivalSurfaceGeometry] = useState<AirportSurfaceGeometryResponse | null>(null);
   const [departureBriefingLoading, setDepartureBriefingLoading] = useState(false);
   const [arrivalBriefingLoading, setArrivalBriefingLoading] = useState(false);
   const [departureFrequenciesLoading, setDepartureFrequenciesLoading] = useState(false);
@@ -1900,6 +1965,29 @@ export default function SyntheticVisionPage() {
       })
       .finally(() => {
         if (!cancelled) setDepartureBriefingLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [departureInput]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const departure = normalizeAirportCode(departureInput);
+    if (!departure) {
+      setDepartureSurfaceGeometry(null);
+      return;
+    }
+    void fetch(apiUrl(`/api/airports/${encodeURIComponent(departure)}/surface-geometry`))
+      .then(async (response) => {
+        if (!response.ok) throw new Error("departure surface geometry unavailable");
+        return (await response.json()) as AirportSurfaceGeometryResponse;
+      })
+      .then((data) => {
+        if (!cancelled) setDepartureSurfaceGeometry(data);
+      })
+      .catch(() => {
+        if (!cancelled) setDepartureSurfaceGeometry(null);
       });
     return () => {
       cancelled = true;
@@ -1984,6 +2072,29 @@ export default function SyntheticVisionPage() {
       })
       .finally(() => {
         if (!cancelled) setArrivalBriefingLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [arrivalInput]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const arrival = normalizeAirportCode(arrivalInput);
+    if (!arrival) {
+      setArrivalSurfaceGeometry(null);
+      return;
+    }
+    void fetch(apiUrl(`/api/airports/${encodeURIComponent(arrival)}/surface-geometry`))
+      .then(async (response) => {
+        if (!response.ok) throw new Error("arrival surface geometry unavailable");
+        return (await response.json()) as AirportSurfaceGeometryResponse;
+      })
+      .then((data) => {
+        if (!cancelled) setArrivalSurfaceGeometry(data);
+      })
+      .catch(() => {
+        if (!cancelled) setArrivalSurfaceGeometry(null);
       });
     return () => {
       cancelled = true;
@@ -2374,6 +2485,7 @@ export default function SyntheticVisionPage() {
     const runway = departureSurface ? departureRunway : arrivalRunway;
     const frequencies = departureSurface ? departureFrequencies : arrivalFrequencies;
     const runwayOverlay = departureSurface ? departureRunwayOverlay : arrivalRunwayOverlay;
+    const surfaceGeometry = departureSurface ? departureSurfaceGeometry : arrivalSurfaceGeometry;
     if (!airport || !runway) return null;
     const groundFrequency = pickAirportFrequency(frequencies, ["ground", "gnd", "taxi"]);
     const towerFrequency = pickAirportFrequency(frequencies, ["tower", "twr"]);
@@ -2456,10 +2568,15 @@ export default function SyntheticVisionPage() {
         runwayHeadingDeg: runway.headingDeg,
         nmPerUnit: surfaceNmPerUnit,
       });
-    const geoRoute = route.map(toGeoPoint);
-    const geoCompletedRoute = completedRoute.map(toGeoPoint);
-    const geoUpcomingRoute = upcomingRoute.map(toGeoPoint);
-    const geoOwnship = toGeoPoint(ownship);
+    const baseGeoRoute = route.map(toGeoPoint);
+    const baseGeoCompletedRoute = completedRoute.map(toGeoPoint);
+    const baseGeoUpcomingRoute = upcomingRoute.map(toGeoPoint);
+    const surfaceFeatures = Array.isArray(surfaceGeometry?.features) ? surfaceGeometry.features : [];
+    const geoRoute = snapSurfacePoints(baseGeoRoute, surfaceFeatures);
+    const geoCompletedRoute = snapSurfacePoints(baseGeoCompletedRoute, surfaceFeatures);
+    const geoUpcomingRoute = snapSurfacePoints(baseGeoUpcomingRoute, surfaceFeatures);
+    const ownshipCandidate = geoCompletedRoute[geoCompletedRoute.length - 1] ?? toGeoPoint(ownship);
+    const geoOwnship = { ...ownshipCandidate, headingDeg: ownship.headingDeg };
     const geoRunwayCenterline =
       runwayOverlay?.centerline.map((point) => ({ lat: point.latitude, lon: point.longitude })) ??
       [
@@ -2522,12 +2639,13 @@ export default function SyntheticVisionPage() {
       completedRoute,
       upcomingRoute,
       secondaryRoute,
-      geoOwnship: { ...geoOwnship, headingDeg: ownship.headingDeg },
+      geoOwnship,
       geoRoute,
       geoCompletedRoute,
       geoUpcomingRoute,
       geoRunwayCenterline,
       geoRunwayBar,
+      surfaceFeatures,
       activeTaxiway,
       upcomingTaxiways,
       progressCall,
@@ -2541,8 +2659,10 @@ export default function SyntheticVisionPage() {
     departureFrequencies,
     departureRunway,
     departureRunwayOverlay,
+    departureSurfaceGeometry,
     flightPhase,
     progressPct,
+    arrivalSurfaceGeometry,
   ]);
   const departureAirportDiagram = useMemo(
     () => pickPreferredAirportDiagram(departurePlates),
@@ -3180,7 +3300,7 @@ export default function SyntheticVisionPage() {
                         Comms live
                       </div>
                       <div className="rounded-full border border-[#1E2D42] bg-[#091018] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7A9BB8]">
-                        Diagram demo
+                        Surface geometry live
                       </div>
                     </div>
                     <div className="mt-4">
@@ -3307,7 +3427,7 @@ export default function SyntheticVisionPage() {
                 </div>
                 <div className="flex items-start gap-2">
                   <div className="mt-1 h-2 w-2 rounded-full bg-[#C8922A]" />
-                  <div>Airport surface geometry is still a polished demo layer, not a live georeferenced airport diagram.</div>
+                  <div>Airport surface follow now uses live aeroway geometry, but taxi routing and runway perspective still need a deeper realism pass.</div>
                 </div>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useReducer } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -14,6 +14,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 type AircraftType = {
   id: string;
   make: string;
@@ -28,17 +30,192 @@ type AircraftType = {
   fuelArmIn?: number | null;
 };
 
-function toNumber(value: string) {
-  const cleaned = value.replace(/[^0-9.\-]/g, '');
-  const num = Number(cleaned);
+type WBStation = {
+  id: string;
+  label: string;
+  weightLb: string;
+  armIn: string;
+  locked: boolean;
+};
+
+type EnvelopePoint = {
+  id: string;
+  weightLb: string;
+  cgMinIn: string;
+  cgMaxIn: string;
+};
+
+type WBState = {
+  selectedType: AircraftType | null;
+  query: string;
+  showPicker: boolean;
+  stations: WBStation[];
+  fuelGallons: string;
+  fuelArmIn: string;
+  maxGrossOverride: string;
+  envelopePoints: EnvelopePoint[];
+};
+
+type WBAction =
+  | { type: 'set_query'; value: string }
+  | { type: 'set_show_picker'; value: boolean }
+  | { type: 'load_type'; payload: AircraftType }
+  | { type: 'set_station'; id: string; field: 'label' | 'weightLb' | 'armIn'; value: string }
+  | { type: 'add_station' }
+  | { type: 'remove_station'; id: string }
+  | { type: 'set_fuel'; field: 'fuelGallons' | 'fuelArmIn'; value: string }
+  | { type: 'set_max_gross'; value: string }
+  | { type: 'add_envelope_point' }
+  | { type: 'remove_envelope_point'; id: string }
+  | { type: 'set_envelope_point'; id: string; field: 'weightLb' | 'cgMinIn' | 'cgMaxIn'; value: string };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function toNumber(value: string): number {
+  const num = Number(value.replace(/[^0-9.\-]/g, ''));
   return Number.isFinite(num) ? num : 0;
 }
 
-function SummaryTile({ label, value }: { label: string; value: string }) {
+function makeId(): string {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+/**
+ * Linearly interpolates CG min/max limits at the given gross weight from a
+ * table of user-defined envelope points sorted by weight. Returns null when
+ * fewer than one valid point is available.
+ */
+function interpolateCgLimits(
+  envelopePoints: EnvelopePoint[],
+  totalWeightLb: number,
+): { cgMinIn: number; cgMaxIn: number } | null {
+  const valid = envelopePoints
+    .map(p => ({
+      weight: toNumber(p.weightLb),
+      cgMin: toNumber(p.cgMinIn),
+      cgMax: toNumber(p.cgMaxIn),
+    }))
+    .filter(p => p.weight > 0 && p.cgMax > p.cgMin)
+    .sort((a, b) => a.weight - b.weight);
+
+  if (valid.length === 0) return null;
+  if (valid.length === 1) return { cgMinIn: valid[0].cgMin, cgMaxIn: valid[0].cgMax };
+
+  if (totalWeightLb <= valid[0].weight) {
+    return { cgMinIn: valid[0].cgMin, cgMaxIn: valid[0].cgMax };
+  }
+  const last = valid[valid.length - 1];
+  if (totalWeightLb >= last.weight) {
+    return { cgMinIn: last.cgMin, cgMaxIn: last.cgMax };
+  }
+  for (let i = 0; i < valid.length - 1; i++) {
+    const lo = valid[i];
+    const hi = valid[i + 1];
+    if (totalWeightLb >= lo.weight && totalWeightLb <= hi.weight) {
+      const t = (totalWeightLb - lo.weight) / (hi.weight - lo.weight);
+      return {
+        cgMinIn: lo.cgMin + t * (hi.cgMin - lo.cgMin),
+        cgMaxIn: lo.cgMax + t * (hi.cgMax - lo.cgMax),
+      };
+    }
+  }
+  return null;
+}
+
+// ─── Reducer ──────────────────────────────────────────────────────────────────
+
+const DEFAULT_STATIONS: WBStation[] = [
+  { id: 'empty', label: 'Empty weight', weightLb: '0', armIn: '0', locked: true },
+  { id: 'front', label: 'Front seats', weightLb: '0', armIn: '0', locked: false },
+  { id: 'rear', label: 'Rear seats', weightLb: '0', armIn: '0', locked: false },
+  { id: 'baggage', label: 'Baggage', weightLb: '0', armIn: '0', locked: false },
+];
+
+const INITIAL_STATE: WBState = {
+  selectedType: null,
+  query: '',
+  showPicker: false,
+  stations: DEFAULT_STATIONS,
+  fuelGallons: '0',
+  fuelArmIn: '0',
+  maxGrossOverride: '',
+  envelopePoints: [],
+};
+
+function wbReducer(state: WBState, action: WBAction): WBState {
+  switch (action.type) {
+    case 'set_query':
+      return { ...state, query: action.value };
+    case 'set_show_picker':
+      return { ...state, showPicker: action.value };
+    case 'load_type': {
+      const t = action.payload;
+      const stations = state.stations.map(s => {
+        if (s.id === 'empty' && t.emptyArmIn != null) return { ...s, armIn: String(t.emptyArmIn) };
+        if (s.id === 'front' && t.frontArmIn != null) return { ...s, armIn: String(t.frontArmIn) };
+        if (s.id === 'rear' && t.rearArmIn != null) return { ...s, armIn: String(t.rearArmIn) };
+        if (s.id === 'baggage' && t.baggageArmIn != null) return { ...s, armIn: String(t.baggageArmIn) };
+        return s;
+      });
+      return {
+        ...state,
+        selectedType: t,
+        showPicker: false,
+        stations,
+        fuelArmIn: t.fuelArmIn != null ? String(t.fuelArmIn) : state.fuelArmIn,
+        maxGrossOverride: t.maxGrossWeightLb ? String(t.maxGrossWeightLb) : state.maxGrossOverride,
+      };
+    }
+    case 'set_station':
+      return {
+        ...state,
+        stations: state.stations.map(s =>
+          s.id === action.id ? { ...s, [action.field]: action.value } : s,
+        ),
+      };
+    case 'add_station':
+      return {
+        ...state,
+        stations: [
+          ...state.stations,
+          { id: makeId(), label: 'Station', weightLb: '0', armIn: '0', locked: false },
+        ],
+      };
+    case 'remove_station':
+      return { ...state, stations: state.stations.filter(s => s.id !== action.id || s.locked) };
+    case 'set_fuel':
+      return { ...state, [action.field]: action.value };
+    case 'set_max_gross':
+      return { ...state, maxGrossOverride: action.value };
+    case 'add_envelope_point':
+      return {
+        ...state,
+        envelopePoints: [
+          ...state.envelopePoints,
+          { id: makeId(), weightLb: '', cgMinIn: '', cgMaxIn: '' },
+        ],
+      };
+    case 'remove_envelope_point':
+      return { ...state, envelopePoints: state.envelopePoints.filter(p => p.id !== action.id) };
+    case 'set_envelope_point':
+      return {
+        ...state,
+        envelopePoints: state.envelopePoints.map(p =>
+          p.id === action.id ? { ...p, [action.field]: action.value } : p,
+        ),
+      };
+    default:
+      return state;
+  }
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function SummaryTile({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
     <View style={styles.summaryTile}>
-      <Text style={styles.summaryLabel}>{label}</Text>
-      <Text style={styles.summaryValue}>{value}</Text>
+      <Text style={styles.summaryTileLabel}>{label}</Text>
+      <Text style={[styles.summaryTileValue, danger && styles.summaryTileValueDanger]}>{value}</Text>
     </View>
   );
 }
@@ -46,38 +223,93 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
 function SectionCard({
   title,
   subtitle,
+  action,
   children,
 }: {
   title: string;
   subtitle?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <View style={styles.sectionCard}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+      <View style={styles.sectionHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+        </View>
+        {action}
+      </View>
       <View style={styles.sectionContent}>{children}</View>
     </View>
   );
 }
 
+function StationRow({
+  station,
+  dispatch,
+}: {
+  station: WBStation;
+  dispatch: React.Dispatch<WBAction>;
+}) {
+  const moment = toNumber(station.weightLb) * toNumber(station.armIn);
+  return (
+    <View style={styles.stationRow}>
+      <View style={styles.stationLabelRow}>
+        <TextInput
+          style={[styles.stationLabelInput, station.locked && styles.stationLabelInputLocked]}
+          value={station.label}
+          onChangeText={v => dispatch({ type: 'set_station', id: station.id, field: 'label', value: v })}
+          editable={!station.locked}
+          placeholderTextColor={colors.textSoft}
+        />
+        {!station.locked && (
+          <TouchableOpacity
+            style={styles.removeBtn}
+            onPress={() => dispatch({ type: 'remove_station', id: station.id })}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="remove-circle-outline" size={18} color={colors.textSoft} />
+          </TouchableOpacity>
+        )}
+      </View>
+      <View style={styles.stationFieldRow}>
+        <View style={styles.stationFieldCell}>
+          <Text style={styles.stationFieldLabel}>Weight (lb)</Text>
+          <TextInput
+            style={styles.stationFieldInput}
+            value={station.weightLb}
+            onChangeText={v => dispatch({ type: 'set_station', id: station.id, field: 'weightLb', value: v })}
+            keyboardType="numeric"
+            placeholder="0"
+            placeholderTextColor={colors.textSoft}
+          />
+        </View>
+        <View style={styles.stationFieldCell}>
+          <Text style={styles.stationFieldLabel}>Arm (in)</Text>
+          <TextInput
+            style={styles.stationFieldInput}
+            value={station.armIn}
+            onChangeText={v => dispatch({ type: 'set_station', id: station.id, field: 'armIn', value: v })}
+            keyboardType="numeric"
+            placeholder="0"
+            placeholderTextColor={colors.textSoft}
+          />
+        </View>
+        <View style={[styles.stationFieldCell, { alignItems: 'flex-end' }]}>
+          <Text style={styles.stationFieldLabel}>Moment</Text>
+          <Text style={styles.stationMoment}>{moment.toFixed(0)}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
 export default function WeightBalanceScreen() {
-  const [query, setQuery] = useState('');
-  const [showPicker, setShowPicker] = useState(false);
-  const [selectedType, setSelectedType] = useState<AircraftType | null>(null);
-  const [emptyWeight, setEmptyWeight] = useState('0');
-  const [emptyArm, setEmptyArm] = useState('0');
-  const [frontWeight, setFrontWeight] = useState('0');
-  const [frontArm, setFrontArm] = useState('0');
-  const [rearWeight, setRearWeight] = useState('0');
-  const [rearArm, setRearArm] = useState('0');
-  const [baggageWeight, setBaggageWeight] = useState('0');
-  const [baggageArm, setBaggageArm] = useState('0');
-  const [fuelGallons, setFuelGallons] = useState('0');
-  const [fuelArm, setFuelArm] = useState('0');
-  const [maxGrossOverride, setMaxGrossOverride] = useState('');
-  const [cgMin, setCgMin] = useState('');
-  const [cgMax, setCgMax] = useState('');
+  const [state, dispatch] = useReducer(wbReducer, INITIAL_STATE);
+  const { selectedType, query, showPicker, stations, fuelGallons, fuelArmIn, maxGrossOverride, envelopePoints } = state;
 
   const { data: aircraftTypes, isLoading } = useQuery<AircraftType[]>({
     queryKey: ['/api/aircraft/types'],
@@ -87,74 +319,63 @@ export default function WeightBalanceScreen() {
     },
   });
 
-  useEffect(() => {
-    if (!selectedType) return;
-    if (!maxGrossOverride) {
-      setMaxGrossOverride(String(selectedType.maxGrossWeightLb || ''));
-    }
-  }, [selectedType, maxGrossOverride]);
-
-  useEffect(() => {
-    if (!selectedType) return;
-    const maybeSet = (current: string, next: number | null | undefined, setter: (value: string) => void) => {
-      if (current !== '' && toNumber(current) !== 0) return;
-      if (typeof next !== 'number') return;
-      setter(String(next));
-    };
-    maybeSet(emptyArm, selectedType.emptyArmIn ?? undefined, setEmptyArm);
-    maybeSet(frontArm, selectedType.frontArmIn ?? undefined, setFrontArm);
-    maybeSet(rearArm, selectedType.rearArmIn ?? undefined, setRearArm);
-    maybeSet(baggageArm, selectedType.baggageArmIn ?? undefined, setBaggageArm);
-    maybeSet(fuelArm, selectedType.fuelArmIn ?? undefined, setFuelArm);
-  }, [selectedType, emptyArm, frontArm, rearArm, baggageArm, fuelArm]);
-
   const filteredTypes = useMemo(() => {
     if (!aircraftTypes) return [];
     const q = query.trim().toLowerCase();
     if (!q) return aircraftTypes;
-    return aircraftTypes.filter((type) => {
-      const label = `${type.make} ${type.model} ${type.icaoType || ''}`.toLowerCase();
-      return label.includes(q);
-    });
+    return aircraftTypes.filter(t =>
+      `${t.make} ${t.model} ${t.icaoType || ''}`.toLowerCase().includes(q),
+    );
   }, [aircraftTypes, query]);
 
-  const fuelWeight = toNumber(fuelGallons) * 6;
-  const maxGross = toNumber(maxGrossOverride);
-  const cgMinValue = toNumber(cgMin);
-  const cgMaxValue = toNumber(cgMax);
+  const fuelWeightLb = toNumber(fuelGallons) * 6.0;
+  const fuelMoment = fuelWeightLb * toNumber(fuelArmIn);
 
   const totals = useMemo(() => {
-    const rows = [
-      { weight: toNumber(emptyWeight), arm: toNumber(emptyArm) },
-      { weight: toNumber(frontWeight), arm: toNumber(frontArm) },
-      { weight: toNumber(rearWeight), arm: toNumber(rearArm) },
-      { weight: toNumber(baggageWeight), arm: toNumber(baggageArm) },
-      { weight: fuelWeight, arm: toNumber(fuelArm) },
-    ];
-    const totalWeight = rows.reduce((sum, row) => sum + row.weight, 0);
-    const totalMoment = rows.reduce((sum, row) => sum + row.weight * row.arm, 0);
+    const stationWeight = stations.reduce((s, r) => s + toNumber(r.weightLb), 0);
+    const stationMoment = stations.reduce((s, r) => s + toNumber(r.weightLb) * toNumber(r.armIn), 0);
+    const totalWeight = stationWeight + fuelWeightLb;
+    const totalMoment = stationMoment + fuelMoment;
     const cg = totalWeight > 0 ? totalMoment / totalWeight : 0;
     return { totalWeight, totalMoment, cg };
-  }, [emptyWeight, emptyArm, frontWeight, frontArm, rearWeight, rearArm, baggageWeight, baggageArm, fuelWeight, fuelArm]);
+  }, [stations, fuelWeightLb, fuelMoment]);
 
+  const maxGross = toNumber(maxGrossOverride);
   const isOverMax = maxGross > 0 && totals.totalWeight > maxGross;
-  const hasCgRange = cgMinValue > 0 && cgMaxValue > cgMinValue;
-  const cgStatus =
-    hasCgRange && totals.totalWeight > 0
-      ? totals.cg < cgMinValue
+
+  const cgLimits = useMemo(
+    () => interpolateCgLimits(envelopePoints, totals.totalWeight),
+    [envelopePoints, totals.totalWeight],
+  );
+
+  const cgStatus: 'within' | 'forward' | 'aft' | 'unknown' =
+    cgLimits && totals.totalWeight > 0
+      ? totals.cg < cgLimits.cgMinIn
         ? 'forward'
-        : totals.cg > cgMaxValue
+        : totals.cg > cgLimits.cgMaxIn
           ? 'aft'
           : 'within'
       : 'unknown';
-  const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
-  const cgMarkerPercent =
-    hasCgRange && cgRangeSpan > 0
-      ? Math.min(100, Math.max(0, ((totals.cg - cgMinValue) / cgRangeSpan) * 100))
+
+  const cgMarkerPct =
+    cgLimits && cgLimits.cgMaxIn > cgLimits.cgMinIn
+      ? Math.min(100, Math.max(0, ((totals.cg - cgLimits.cgMinIn) / (cgLimits.cgMaxIn - cgLimits.cgMinIn)) * 100))
       : 0;
+
+  const statusLabel =
+    isOverMax
+      ? 'Over gross'
+      : cgStatus === 'within'
+        ? 'In envelope'
+        : cgStatus === 'forward'
+          ? 'Fwd CG'
+          : cgStatus === 'aft'
+            ? 'Aft CG'
+            : 'Planning';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* ── Hero ── */}
       <View style={styles.heroPanel}>
         <View style={styles.heroTopRow}>
           <View style={styles.heroIconWrap}>
@@ -162,82 +383,92 @@ export default function WeightBalanceScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.heroEyebrow}>LOADING TOOL</Text>
-            <Text style={styles.heroTitle}>Build a quick weight and balance picture.</Text>
+            <Text style={styles.heroTitle}>Weight & Balance</Text>
             <Text style={styles.heroSubtitle}>
-              Start with an aircraft from the RSF library, add your loading stations, and estimate total weight, moment, and CG location for planning.
+              Dynamic stations with CG envelope interpolation across any gross weight.
             </Text>
           </View>
         </View>
-
         <View style={styles.summaryRow}>
-          <SummaryTile label="Total wt" value={`${totals.totalWeight.toFixed(1)} lb`} />
-          <SummaryTile label="CG" value={totals.totalWeight > 0 ? totals.cg.toFixed(1) : '--'} />
-          <SummaryTile label="Status" value={isOverMax ? 'Over gross' : 'Planning'} />
+          <SummaryTile label="Total wt" value={`${totals.totalWeight.toFixed(1)} lb`} danger={isOverMax} />
+          <SummaryTile
+            label="CG"
+            value={totals.totalWeight > 0 ? `${totals.cg.toFixed(2)} in` : '--'}
+          />
+          <SummaryTile
+            label="Status"
+            value={statusLabel}
+            danger={isOverMax || cgStatus === 'forward' || cgStatus === 'aft'}
+          />
         </View>
       </View>
 
+      {/* ── Aircraft baseline ── */}
       <SectionCard
         title="Aircraft baseline"
-        subtitle="Start from the RSF library to prefill max gross and station arm defaults where available."
+        subtitle="Start from the RSF library to prefill station arms and max gross."
       >
         {isLoading ? (
           <ActivityIndicator size="small" color={colors.primary} />
         ) : (
-          <>
-            <TouchableOpacity style={styles.selectButton} onPress={() => setShowPicker(true)} activeOpacity={0.92}>
-              <Text style={styles.selectButtonText}>
-                {selectedType ? `${selectedType.make} ${selectedType.model}` : 'Choose aircraft from library'}
-              </Text>
-              <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-            {selectedType ? (
-              <View style={styles.selectedTypeCard}>
-                <Text style={styles.selectedTypeTitle}>
-                  {selectedType.make} {selectedType.model} ({selectedType.icaoType || 'N/A'})
-                </Text>
-                <Text style={styles.selectedTypeMeta}>
-                  Max gross {selectedType.maxGrossWeightLb} lb · Usable fuel {selectedType.usableFuelGal} gal
-                </Text>
-              </View>
-            ) : null}
-          </>
+          <TouchableOpacity
+            style={styles.selectButton}
+            onPress={() => dispatch({ type: 'set_show_picker', value: true })}
+            activeOpacity={0.92}
+          >
+            <Text style={styles.selectButtonText}>
+              {selectedType ? `${selectedType.make} ${selectedType.model}` : 'Choose aircraft from library'}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
         )}
+        {selectedType ? (
+          <View style={styles.selectedTypeCard}>
+            <Text style={styles.selectedTypeTitle}>
+              {selectedType.make} {selectedType.model}{selectedType.icaoType ? ` (${selectedType.icaoType})` : ''}
+            </Text>
+            <Text style={styles.selectedTypeMeta}>
+              Max gross {selectedType.maxGrossWeightLb} lb · Usable fuel {selectedType.usableFuelGal} gal
+            </Text>
+          </View>
+        ) : null}
       </SectionCard>
 
-      <Modal visible={showPicker} animationType="slide" onRequestClose={() => setShowPicker(false)}>
+      {/* ── Aircraft picker modal ── */}
+      <Modal
+        visible={showPicker}
+        animationType="slide"
+        onRequestClose={() => dispatch({ type: 'set_show_picker', value: false })}
+      >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Select Aircraft</Text>
-            <TouchableOpacity onPress={() => setShowPicker(false)}>
+            <TouchableOpacity onPress={() => dispatch({ type: 'set_show_picker', value: false })}>
               <Ionicons name="close" size={22} color={colors.text} />
             </TouchableOpacity>
           </View>
           <TextInput
-            style={styles.input}
+            style={styles.searchInput}
             placeholder="Search make, model, ICAO"
             placeholderTextColor={colors.textSoft}
             value={query}
-            onChangeText={setQuery}
+            onChangeText={v => dispatch({ type: 'set_query', value: v })}
             autoCapitalize="characters"
           />
           <ScrollView style={styles.modalList}>
-            {filteredTypes.map((type) => {
-              const label = `${type.make} ${type.model}`;
-              const isSelected = selectedType?.id === type.id;
+            {filteredTypes.map(t => {
+              const isSelected = selectedType?.id === t.id;
               return (
                 <TouchableOpacity
-                  key={type.id}
+                  key={t.id}
                   style={[styles.listItem, isSelected && styles.listItemActive]}
-                  onPress={() => {
-                    setSelectedType(type);
-                    setShowPicker(false);
-                  }}
+                  onPress={() => dispatch({ type: 'load_type', payload: t })}
                   activeOpacity={0.92}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.listTitle}>{label}</Text>
+                    <Text style={styles.listTitle}>{t.make} {t.model}</Text>
                     <Text style={styles.listSubtitle}>
-                      {type.icaoType || 'No ICAO'} · Max gross {type.maxGrossWeightLb} lb
+                      {t.icaoType || 'No ICAO'} · Max gross {t.maxGrossWeightLb} lb
                     </Text>
                   </View>
                   {isSelected ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} /> : null}
@@ -248,106 +479,202 @@ export default function WeightBalanceScreen() {
         </View>
       </Modal>
 
+      {/* ── Weight stations ── */}
       <SectionCard
         title="Weight stations"
-        subtitle="Enter each station and use the library values as your starting arms when available."
+        subtitle="Weight and arm for each loading station. Moment is computed automatically."
+        action={
+          <TouchableOpacity style={styles.addBtn} onPress={() => dispatch({ type: 'add_station' })}>
+            <Ionicons name="add" size={15} color={colors.primary} />
+            <Text style={styles.addBtnText}>Add</Text>
+          </TouchableOpacity>
+        }
       >
-        <Text style={styles.inputLabel}>Empty weight (lb)</Text>
-        <TextInput style={styles.input} value={emptyWeight} onChangeText={setEmptyWeight} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
-        <Text style={styles.inputLabel}>Empty weight arm (in)</Text>
-        <TextInput style={styles.input} value={emptyArm} onChangeText={setEmptyArm} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
-
-        <View style={styles.divider} />
-
-        <Text style={styles.inputLabel}>Front seats total (lb)</Text>
-        <TextInput style={styles.input} value={frontWeight} onChangeText={setFrontWeight} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
-        <Text style={styles.inputLabel}>Front seats arm (in)</Text>
-        <TextInput style={styles.input} value={frontArm} onChangeText={setFrontArm} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
-
-        <View style={styles.divider} />
-
-        <Text style={styles.inputLabel}>Rear seats total (lb)</Text>
-        <TextInput style={styles.input} value={rearWeight} onChangeText={setRearWeight} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
-        <Text style={styles.inputLabel}>Rear seats arm (in)</Text>
-        <TextInput style={styles.input} value={rearArm} onChangeText={setRearArm} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
-
-        <View style={styles.divider} />
-
-        <Text style={styles.inputLabel}>Baggage (lb)</Text>
-        <TextInput style={styles.input} value={baggageWeight} onChangeText={setBaggageWeight} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
-        <Text style={styles.inputLabel}>Baggage arm (in)</Text>
-        <TextInput style={styles.input} value={baggageArm} onChangeText={setBaggageArm} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
-
-        <View style={styles.divider} />
-
-        <Text style={styles.inputLabel}>Fuel on board (gal)</Text>
-        <TextInput style={styles.input} value={fuelGallons} onChangeText={setFuelGallons} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
-        <Text style={styles.inputLabel}>Fuel arm (in)</Text>
-        <TextInput style={styles.input} value={fuelArm} onChangeText={setFuelArm} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
-        <Text style={styles.helperText}>Fuel weight uses 6.0 lb/gal.</Text>
+        {stations.map(station => (
+          <StationRow key={station.id} station={station} dispatch={dispatch} />
+        ))}
       </SectionCard>
 
-      <SectionCard
-        title="Limits and summary"
-        subtitle="Set max gross and CG range to visualize whether this loading estimate fits the plan."
-      >
-        <Text style={styles.inputLabel}>Max gross weight (lb)</Text>
-        <TextInput style={styles.input} value={maxGrossOverride} onChangeText={setMaxGrossOverride} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
-        <Text style={styles.inputLabel}>CG min (in)</Text>
-        <TextInput style={styles.input} value={cgMin} onChangeText={setCgMin} keyboardType="numeric" placeholder="Optional" placeholderTextColor={colors.textSoft} />
-        <Text style={styles.inputLabel}>CG max (in)</Text>
-        <TextInput style={styles.input} value={cgMax} onChangeText={setCgMax} keyboardType="numeric" placeholder="Optional" placeholderTextColor={colors.textSoft} />
+      {/* ── Fuel ── */}
+      <SectionCard title="Fuel" subtitle="Fuel weight computed at 6.0 lb/gal.">
+        <View style={styles.stationFieldRow}>
+          <View style={styles.stationFieldCell}>
+            <Text style={styles.stationFieldLabel}>Gallons</Text>
+            <TextInput
+              style={styles.stationFieldInput}
+              value={fuelGallons}
+              onChangeText={v => dispatch({ type: 'set_fuel', field: 'fuelGallons', value: v })}
+              keyboardType="numeric"
+              placeholder="0"
+              placeholderTextColor={colors.textSoft}
+            />
+          </View>
+          <View style={styles.stationFieldCell}>
+            <Text style={styles.stationFieldLabel}>Arm (in)</Text>
+            <TextInput
+              style={styles.stationFieldInput}
+              value={fuelArmIn}
+              onChangeText={v => dispatch({ type: 'set_fuel', field: 'fuelArmIn', value: v })}
+              keyboardType="numeric"
+              placeholder="0"
+              placeholderTextColor={colors.textSoft}
+            />
+          </View>
+          <View style={[styles.stationFieldCell, { alignItems: 'flex-end' }]}>
+            <Text style={styles.stationFieldLabel}>Weight (lb)</Text>
+            <Text style={styles.stationMoment}>{fuelWeightLb.toFixed(1)}</Text>
+          </View>
+        </View>
+      </SectionCard>
 
-        <View style={styles.metricRow}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Total weight</Text>
-            <Text style={styles.metricValue}>{totals.totalWeight.toFixed(1)} lb</Text>
-            <Text style={[styles.metricHint, isOverMax && styles.metricHintDanger]}>
-              {isOverMax ? 'Over max gross' : 'Within limits (est.)'}
+      {/* ── CG Envelope ── */}
+      <SectionCard
+        title="CG envelope"
+        subtitle="Define (weight, CG min, CG max) points. Limits interpolate linearly at any gross weight."
+        action={
+          <TouchableOpacity style={styles.addBtn} onPress={() => dispatch({ type: 'add_envelope_point' })}>
+            <Ionicons name="add" size={15} color={colors.primary} />
+            <Text style={styles.addBtnText}>Add point</Text>
+          </TouchableOpacity>
+        }
+      >
+        <Text style={styles.fieldLabel}>Max gross weight (lb)</Text>
+        <TextInput
+          style={styles.input}
+          value={maxGrossOverride}
+          onChangeText={v => dispatch({ type: 'set_max_gross', value: v })}
+          keyboardType="numeric"
+          placeholder="Enter max gross"
+          placeholderTextColor={colors.textSoft}
+        />
+
+        {envelopePoints.length > 0 ? (
+          <View style={styles.envelopeTable}>
+            <View style={styles.envelopeTableHeader}>
+              <Text style={[styles.envHeaderCell, { flex: 1.2 }]}>Wt (lb)</Text>
+              <Text style={[styles.envHeaderCell, { flex: 1 }]}>CG min</Text>
+              <Text style={[styles.envHeaderCell, { flex: 1 }]}>CG max</Text>
+              <View style={{ width: 32 }} />
+            </View>
+            {envelopePoints.map(p => (
+              <View key={p.id} style={styles.envelopeRow}>
+                <TextInput
+                  style={[styles.envCell, { flex: 1.2 }]}
+                  value={p.weightLb}
+                  onChangeText={v => dispatch({ type: 'set_envelope_point', id: p.id, field: 'weightLb', value: v })}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor={colors.textSoft}
+                />
+                <TextInput
+                  style={[styles.envCell, { flex: 1 }]}
+                  value={p.cgMinIn}
+                  onChangeText={v => dispatch({ type: 'set_envelope_point', id: p.id, field: 'cgMinIn', value: v })}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor={colors.textSoft}
+                />
+                <TextInput
+                  style={[styles.envCell, { flex: 1 }]}
+                  value={p.cgMaxIn}
+                  onChangeText={v => dispatch({ type: 'set_envelope_point', id: p.id, field: 'cgMaxIn', value: v })}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor={colors.textSoft}
+                />
+                <TouchableOpacity
+                  style={styles.envRemoveBtn}
+                  onPress={() => dispatch({ type: 'remove_envelope_point', id: p.id })}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                >
+                  <Ionicons name="remove-circle-outline" size={18} color={colors.textSoft} />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.envelopeHint}>
+            No envelope points yet. Add at least two rows (e.g. at empty weight and max gross) to enable interpolated CG limits.
+          </Text>
+        )}
+
+        {/* CG visualization */}
+        {cgLimits && totals.totalWeight > 0 ? (
+          <View style={styles.cgVisual}>
+            <View style={styles.cgBarTrack}>
+              <View style={styles.cgBarSafe} />
+              <View
+                style={[
+                  styles.cgBarMarker,
+                  cgStatus !== 'within' && styles.cgBarMarkerOutside,
+                  { left: `${cgMarkerPct}%` as any },
+                ]}
+              />
+            </View>
+            <View style={styles.cgBarLabels}>
+              <Text style={styles.cgBarEdge}>Fwd {cgLimits.cgMinIn.toFixed(1)}"</Text>
+              <Text
+                style={[
+                  styles.cgBarCenter,
+                  cgStatus === 'within' ? styles.cgTextWithin : styles.cgTextOutside,
+                ]}
+              >
+                {totals.cg.toFixed(2)}" CG
+              </Text>
+              <Text style={styles.cgBarEdge}>Aft {cgLimits.cgMaxIn.toFixed(1)}"</Text>
+            </View>
+            <Text style={[styles.cgStatusText, cgStatus !== 'within' && styles.cgStatusTextOutside]}>
+              {cgStatus === 'within' && 'Within CG envelope'}
+              {cgStatus === 'forward' && 'Forward of CG envelope'}
+              {cgStatus === 'aft' && 'Aft of CG envelope'}
             </Text>
           </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>CG</Text>
-            <Text style={styles.metricValue}>{totals.totalWeight > 0 ? totals.cg.toFixed(1) : '--'}</Text>
-            <Text style={styles.metricHint}>Moment / total weight</Text>
-          </View>
-        </View>
-
-        <Text style={styles.cgTitle}>CG envelope</Text>
-        <Text style={styles.sectionSubtitle}>
-          Enter CG min/max to visualize your loading location against a simple forward-to-aft bar.
-        </Text>
-        <View style={styles.cgBar}>
-          {hasCgRange ? <View style={styles.cgSafe} /> : null}
-          <View style={[styles.cgMarker, { left: `${cgMarkerPercent}%` }]} />
-        </View>
-        <View style={styles.cgLabels}>
-          <Text style={styles.cgLabel}>Forward</Text>
-          <Text style={styles.cgLabel}>
-            {hasCgRange ? `${cgMinValue.toFixed(1)} - ${cgMaxValue.toFixed(1)} in` : 'Enter CG limits'}
-          </Text>
-          <Text style={styles.cgLabel}>Aft</Text>
-        </View>
-        <Text style={styles.cgStatus}>
-          {cgStatus === 'within' && 'Within CG range'}
-          {cgStatus === 'forward' && 'Forward of CG range'}
-          {cgStatus === 'aft' && 'Aft of CG range'}
-          {cgStatus === 'unknown' && 'Add CG limits to evaluate range'}
-        </Text>
+        ) : null}
       </SectionCard>
 
+      {/* ── Computed totals ── */}
+      <SectionCard title="Computed totals">
+        <View style={styles.metricsRow}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>Total weight</Text>
+            <Text style={[styles.metricValue, isOverMax && styles.metricValueDanger]}>
+              {totals.totalWeight.toFixed(1)} lb
+            </Text>
+            {maxGross > 0 ? (
+              <Text style={[styles.metricHint, isOverMax && styles.metricHintDanger]}>
+                {isOverMax
+                  ? `${(totals.totalWeight - maxGross).toFixed(1)} lb over`
+                  : `${(maxGross - totals.totalWeight).toFixed(1)} lb margin`}
+              </Text>
+            ) : null}
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>CG location</Text>
+            <Text style={styles.metricValue}>
+              {totals.totalWeight > 0 ? `${totals.cg.toFixed(2)} in` : '--'}
+            </Text>
+            <Text style={styles.metricHint}>{totals.totalMoment.toFixed(0)} lb·in</Text>
+          </View>
+        </View>
+      </SectionCard>
+
+      {/* ── Disclaimer ── */}
       <SectionCard title="Disclaimer">
         <Text style={styles.noteText}>
-          This calculator is for training and planning only. Always verify with approved aircraft weight and balance data, POH/AFM, and current loading.
+          For training and planning use only. Always verify with approved aircraft W&B data, the POH/AFM, and actual loading before every flight.
         </Text>
       </SectionCard>
     </ScrollView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.sm, paddingBottom: 120 },
+
+  // Hero
   heroPanel: {
     marginBottom: spacing.md,
     padding: spacing.lg,
@@ -355,11 +682,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cockpit,
     ...shadow.floating,
   },
-  heroTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-  },
+  heroTopRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   heroIconWrap: {
     width: 68,
     height: 68,
@@ -381,19 +704,14 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     color: '#fff',
     marginTop: 10,
-    maxWidth: 320,
   },
   heroSubtitle: {
     ...typography.body,
     color: '#dbe4f0',
     marginTop: spacing.sm,
-    maxWidth: 340,
+    maxWidth: 320,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
+  summaryRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   summaryTile: {
     flex: 1,
     padding: spacing.sm,
@@ -402,19 +720,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
-  summaryLabel: {
+  summaryTileLabel: {
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.8,
     color: '#bfdbfe',
     textTransform: 'uppercase',
   },
-  summaryValue: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#fff',
-    marginTop: 6,
-  },
+  summaryTileValue: { fontSize: 13, fontWeight: '700', color: '#fff', marginTop: 6 },
+  summaryTileValueDanger: { color: '#fca5a5' },
+
+  // Section card
   sectionCard: {
     backgroundColor: colors.surface,
     padding: spacing.md,
@@ -424,33 +740,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     ...shadow.card,
   },
-  sectionTitle: {
-    ...typography.h2,
-  },
-  sectionSubtitle: {
-    ...typography.muted,
-    marginTop: 4,
-  },
-  sectionContent: {
-    marginTop: spacing.md,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.text,
-    marginTop: spacing.sm,
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    color: colors.text,
-    marginTop: spacing.xs,
-  },
+  sectionHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  sectionTitle: { ...typography.h2 },
+  sectionSubtitle: { ...typography.muted, marginTop: 4 },
+  sectionContent: { marginTop: spacing.md },
+
+  // Aircraft picker
   selectButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -470,20 +765,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  selectedTypeTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.text,
-  },
-  selectedTypeMeta: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 4,
-  },
+  selectedTypeTitle: { fontSize: 14, fontWeight: '800', color: colors.text },
+  selectedTypeMeta: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   modalContainer: { flex: 1, padding: spacing.md, backgroundColor: colors.background },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
   modalTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
-  modalList: { marginTop: spacing.sm },
+  searchInput: {
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  modalList: { marginTop: spacing.xs },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -494,15 +796,150 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     marginBottom: spacing.xs,
   },
-  listItemActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
+  listItemActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   listTitle: { fontSize: 14, fontWeight: '800', color: colors.text },
   listSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  helperText: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
-  metricRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+
+  // Station rows
+  stationRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingBottom: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  stationLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  stationLabelInput: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+    borderWidth: 0,
+    padding: 0,
+  },
+  stationLabelInputLocked: { color: colors.textMuted },
+  removeBtn: { padding: 4 },
+  stationFieldRow: { flexDirection: 'row', gap: spacing.sm },
+  stationFieldCell: { flex: 1 },
+  stationFieldLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    color: colors.textSoft,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  stationFieldInput: {
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 10,
+    color: colors.text,
+    fontSize: 14,
+  },
+  stationMoment: { fontSize: 14, fontWeight: '700', color: colors.text, marginTop: 10 },
+
+  // Add button (inline header action)
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  addBtnText: { fontSize: 12, fontWeight: '700', color: colors.primary },
+
+  // Input field (max gross)
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: spacing.sm,
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    color: colors.text,
+    marginTop: spacing.xs,
+  },
+
+  // Envelope table
+  envelopeTable: { marginTop: spacing.md },
+  envelopeTableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  envHeaderCell: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    color: colors.textSoft,
+    textTransform: 'uppercase',
+  },
+  envelopeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  envCell: {
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
+    color: colors.text,
+    fontSize: 13,
+  },
+  envRemoveBtn: { width: 32, alignItems: 'center' },
+  envelopeHint: { fontSize: 12, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 18 },
+
+  // CG bar visualization
+  cgVisual: { marginTop: spacing.lg },
+  cgBarTrack: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: colors.border,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  cgBarSafe: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '100%',
+    backgroundColor: 'rgba(0,212,160,0.25)',
+  },
+  cgBarMarker: {
+    position: 'absolute',
+    top: -4,
+    width: 3,
+    height: 18,
+    marginLeft: -1,
+    borderRadius: 2,
+    backgroundColor: colors.primary,
+  },
+  cgBarMarkerOutside: { backgroundColor: colors.danger },
+  cgBarLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
+  cgBarEdge: { fontSize: 11, color: colors.textMuted },
+  cgBarCenter: { fontSize: 12, fontWeight: '700' },
+  cgTextWithin: { color: '#00D4A0' },
+  cgTextOutside: { color: colors.danger },
+  cgStatusText: { fontSize: 12, color: '#00D4A0', marginTop: 4, textAlign: 'center' },
+  cgStatusTextOutside: { color: colors.danger },
+
+  // Metrics
+  metricsRow: { flexDirection: 'row', gap: spacing.sm },
   metricCard: {
     flex: 1,
     padding: spacing.sm,
@@ -511,23 +948,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  metricLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, color: colors.textSoft, textTransform: 'uppercase' },
+  metricLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: colors.textSoft,
+    textTransform: 'uppercase',
+  },
   metricValue: { fontSize: 18, fontWeight: '800', color: colors.text, marginTop: 6 },
+  metricValueDanger: { color: colors.danger },
   metricHint: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
   metricHintDanger: { color: colors.danger },
-  cgTitle: { fontSize: 14, fontWeight: '800', color: colors.text, marginTop: spacing.lg },
-  cgBar: {
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: colors.border,
-    marginTop: spacing.sm,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  cgSafe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%', backgroundColor: '#bbf7d0' },
-  cgMarker: { position: 'absolute', top: -4, width: 2, height: 18, backgroundColor: '#0f172a' },
-  cgLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xs },
-  cgLabel: { fontSize: 11, color: colors.textMuted },
-  cgStatus: { fontSize: 12, marginTop: spacing.xs, color: colors.text },
+
   noteText: { fontSize: 12, color: colors.textMuted, lineHeight: 18 },
 });

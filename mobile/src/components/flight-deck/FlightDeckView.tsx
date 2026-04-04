@@ -2,11 +2,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Polygon, Polyline, UrlTile } from 'react-native-maps';
 import { colors, spacing } from '../../styles/theme';
+import type { FlightDeckStateProps, FlightDeckActionsProps } from './FlightDeckViewTypes';
 
 type FlightDeckViewProps = {
-  state: any;
-  actions: any;
-  styles: any;
+  state: FlightDeckStateProps;
+  actions: FlightDeckActionsProps;
+  styles: Record<string, unknown>;
 };
 
 function formatSourceAge(ms: number | null | undefined) {

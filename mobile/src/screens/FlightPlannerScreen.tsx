@@ -138,10 +138,10 @@ function aircraftPerformanceReducer(
       return {
         ...state,
         selectedProfileId: action.value.id,
-        cruiseKtas: String(action.value.cruiseKtasEffective || '),
-        fuelBurnGph: String(action.value.fuelBurnGphEffective || '),
-        usableFuel: String(action.value.usableFuelGalEffective || '),
-        maxGrossWeight: String(action.value.maxGrossWeightLbEffective || '),
+        cruiseKtas: String(action.value.cruiseKtasEffective || ''),
+        fuelBurnGph: String(action.value.fuelBurnGphEffective || ''),
+        usableFuel: String(action.value.usableFuelGalEffective || ''),
+        maxGrossWeight: String(action.value.maxGrossWeightLbEffective || ''),
       };
     case 'set_field':
       return { ...state, [action.field]: action.value };
@@ -489,7 +489,7 @@ function pickBestDiversionFrequency(
   const entries = airport?.frequencySummary || [];
   type FrequencyEntry = NonNullable<NearbyDiversionAirport['frequencySummary']>[number];
   const rank = (value: FrequencyEntry) => {
-    const type = String(value?.type || ').toLowerCase();
+    const type = String(value?.type || '').toLowerCase();
     if (type.includes('tower')) return 1;
     if (type.includes('ctaf')) return 2;
     if (type.includes('unicom')) return 3;
@@ -509,8 +509,8 @@ function pickAirportFrequency(
   const loweredKeywords = keywords.map((keyword) => keyword.toLowerCase());
   return (
     entries.find((entry) => {
-      const type = String(entry?.type || ').toLowerCase();
-      const description = String(entry?.description || ').toLowerCase();
+      const type = String(entry?.type || '').toLowerCase();
+      const description = String(entry?.description || '').toLowerCase();
       return loweredKeywords.some((keyword) => type.includes(keyword) || description.includes(keyword));
     }) || null
   );
@@ -1059,11 +1059,11 @@ function formatFrequency(frequencyMhz: number | null | undefined) {
 
 function formatAltitudeDelta(altitudeDeltaFt: number | null | undefined) {
   if (typeof altitudeDeltaFt !== 'number' || !Number.isFinite(altitudeDeltaFt)) return 'alt unknown';
-  return `${altitudeDeltaFt >= 0 ? '+' : '}${Math.round(altitudeDeltaFt)} ft`;
+  return `${altitudeDeltaFt >= 0 ? '+' : '-'}${Math.round(altitudeDeltaFt)} ft`;
 }
 
 function parseFlightCategory(metar: any): 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'UNKNOWN' {
-  const declared = String(metar?.fltCat || metar?.flightCategory || ').toUpperCase();
+  const declared = String(metar?.fltCat || metar?.flightCategory || '').toUpperCase();
   if (declared === 'VFR' || declared === 'MVFR' || declared === 'IFR' || declared === 'LIFR') {
     return declared as 'VFR' | 'MVFR' | 'IFR' | 'LIFR';
   }
@@ -1230,7 +1230,7 @@ function toRad(deg: number) {
 }
 
 function normalizeRunwayIdent(value?: string | null) {
-  return String(value || ')
+  return String(value || '')
     .toUpperCase()
     .replace(/^RWY\s*/i, ')
     .trim();
@@ -1977,7 +1977,7 @@ export default function FlightPlannerScreen() {
   }, [activeOwnship, selectedDiversion]);
   const diversionPanelAirports = useMemo(() => {
     const wxRank = (airport: NearbyDiversionAirport) => {
-      switch ((airport.flightCategory || ').toUpperCase()) {
+      switch ((airport.flightCategory || '').toUpperCase()) {
         case 'VFR':
           return 0;
         case 'MVFR':
@@ -4533,6 +4533,11 @@ export default function FlightPlannerScreen() {
     }
   }, [trafficEnabled, gpsEnabled, simulationEnabled]);
 
+  // Snap to ~0.24 NM grid (~0.004 deg lat/lon) to avoid re-running the
+  // diversion fetch on every GPS tick when the aircraft is nearly stationary.
+  const diversionSnapLat = activeOwnship?.lat != null ? Math.round(activeOwnship.lat / 0.004) * 0.004 : null;
+  const diversionSnapLon = activeOwnship?.lon != null ? Math.round(activeOwnship.lon / 0.004) * 0.004 : null;
+
   useEffect(() => {
     let cancelled = false;
     if (!activeOwnship?.lat || !activeOwnship?.lon) {
@@ -4581,7 +4586,7 @@ export default function FlightPlannerScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeOwnship?.lat, activeOwnship?.lon]);
+  }, [diversionSnapLat, diversionSnapLon]);
 
   useEffect(() => {
     if (!simulationEnabled) {
@@ -4842,6 +4847,11 @@ export default function FlightPlannerScreen() {
     };
   }, [terrainPathParam]);
 
+  // Snap to ~0.12 NM grid (~0.002 deg lat/lon) to avoid re-running the
+  // obstacle scan on every GPS tick when the aircraft is nearly stationary.
+  const obstacleSnapLat = activeOwnship?.lat != null ? Math.round(activeOwnship.lat / 0.002) * 0.002 : null;
+  const obstacleSnapLon = activeOwnship?.lon != null ? Math.round(activeOwnship.lon / 0.002) * 0.002 : null;
+
   useEffect(() => {
     let cancelled = false;
     if (!activeOwnship?.lat || !activeOwnship?.lon) {
@@ -4884,7 +4894,7 @@ export default function FlightPlannerScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeOwnship?.lat, activeOwnship?.lon]);
+  }, [obstacleSnapLat, obstacleSnapLon]);
 
   useEffect(() => {
     let lastAlt: { alt: number; time: number } | null = null;
@@ -5035,7 +5045,7 @@ export default function FlightPlannerScreen() {
     const burn = parseFloat(fuelBurnGph) || 8;
     const fuel = parseFloat(usableFuel) || 40;
     const reserve = parseFloat(reserveMinutes) || 45;
-    const fuelBoard = parseFloat(fuelOnBoard || ');
+    const fuelBoard = parseFloat(fuelOnBoard || '');
     setSuggestionLoading(true);
     api.get('/api/airports/route-suggestions', {
       params: {
@@ -5448,8 +5458,8 @@ export default function FlightPlannerScreen() {
       const totalNm = legs.reduce((sum, leg) => sum + leg.nm, 0);
       setRouteSummary({ totalNm, legs });
       setRoutePoints(routedAirports);
-      setDepartureTimeZone(airports[0]?.timezone || ');
-      setDestinationTimeZone(airports[airports.length - 1]?.timezone || ');
+      setDepartureTimeZone(airports[0]?.timezone || '');
+      setDestinationTimeZone(airports[airports.length - 1]?.timezone || '');
     } catch (error: any) {
       if (!silent) {
         Alert.alert('Route error', error?.response?.data?.error || 'Unable to build route.');
@@ -5679,7 +5689,7 @@ export default function FlightPlannerScreen() {
     return 'VFR/MVFR trend';
   }, [allWeather.length, hasIfrWeather]);
   const enrouteFindings = enrouteWeather.map((item) => ({
-    icao: item.icao?.toUpperCase() || ',
+    icao: item.icao?.toUpperCase() || '',
     category: parseFlightCategory(item.metar),
     thunder: hasThunder(item.taf),
   }));
@@ -6337,7 +6347,7 @@ export default function FlightPlannerScreen() {
           <View style={styles.suggestionList}>
             {departureSuggestions.slice(0, 6).map((airport) => (
               <TouchableOpacity
-                key={`${airport.icao}-${airport.name || '}`}
+                key={`${airport.icao}-${airport.name || ''}`}
                 style={styles.suggestionItem}
                 onPress={() => {
                   setDeparture(airport.icao);
@@ -6359,7 +6369,7 @@ export default function FlightPlannerScreen() {
           <View style={styles.suggestionList}>
             {destinationSuggestions.slice(0, 6).map((airport) => (
               <TouchableOpacity
-                key={`${airport.icao}-${airport.name || '}`}
+                key={`${airport.icao}-${airport.name || ''}`}
                 style={styles.suggestionItem}
                 onPress={() => {
                   setDestination(airport.icao);
@@ -7021,7 +7031,7 @@ export default function FlightPlannerScreen() {
                     {target.distanceNm.toFixed(1)} NM
                     {typeof target.altitudeFt === 'number' ? ` â€¢ ${Math.round(target.altitudeFt)} ft` : '}
                     {typeof target.altitudeDeltaFt === 'number'
-                      ? ` â€¢ ${target.altitudeDeltaFt >= 0 ? '+' : '}${Math.round(target.altitudeDeltaFt)} ft`
+                      ? ` â€¢ ${target.altitudeDeltaFt >= 0 ? '+' : '-'}${Math.round(target.altitudeDeltaFt)} ft`
                       : '}
                   </Text>
                   <Text style={styles.helperText}>Threat score {target.threatScore}</Text>
@@ -7437,27 +7447,18 @@ export default function FlightPlannerScreen() {
           <Text style={styles.sectionTitle}>Route Legs</Text>
           {routeSummary.legs.map((leg, index) => {
             const planEntry = plannerExecutionPlanView[index];
+            const isActive = planEntry?.status === 'active' || planEntry?.status === 'managed-open';
+            const isCompleted = planEntry?.status === 'completed';
+            const isArmed = planEntry?.status === 'armed';
+            const isLiveLeg = isActive && routeProgress?.legIndex === index;
             const procedureChain =
               plannerProcedureChains.find(
                 (chain) => index >= chain.startLegIndex && index <= chain.endLegIndex,
               ) || null;
-            const procedureChainBehavior = procedureChain
-              ? getMobileRouteProcedureChainBehavior(procedureChain.kind)
-              : null;
-            const isActive = planEntry?.status === 'active' || planEntry?.status === 'managed-open';
-            const isCompleted = planEntry?.status === 'completed';
-            const legActionCue =
-              isActive
-                ? `${planEntry?.actionCue || 'Active'} · ${leg.legType} leg${
-                    routeProgress?.legIndex === index
-                      ? ` · ${routeProgress.remainingLegNm.toFixed(1)} NM remaining`
-                      : ''
-                  }`
-                : isCompleted
-                  ? 'Completed'
-                  : planEntry?.status === 'armed'
-                    ? `${planEntry?.actionCue || 'Armed next'} · ${leg.legType} leg`
-                    : `${planEntry?.actionCue || 'Queued'} · ${leg.legType} leg`;
+            const chainLabel =
+              procedureChain && procedureChain.label && procedureChain.label !== 'Enroute structure'
+                ? procedureChain.label
+                : null;
             return (
               <View
                 key={`${leg.from}-${leg.to}`}
@@ -7468,60 +7469,55 @@ export default function FlightPlannerScreen() {
                 ]}
               >
                 <View style={styles.legMeta}>
-                  <Text
-                    style={[
-                      styles.legText,
-                      isActive ? styles.legTextActive : null,
-                      isCompleted ? styles.legTextCompleted : null,
-                    ]}
-                  >
-                    {`${leg.from} -> ${leg.to}`}
-                  </Text>
-                  <Text style={styles.legSubtext}>{legActionCue}</Text>
-                  <Text style={styles.legSubtext}>
-                    Segment {planEntry?.segment?.label || 'Standby'} · {planEntry?.segment?.sequencingModel || 'auto'} · {planEntry?.transition?.label || 'Course capture'}
-                  </Text>
-                  <Text style={styles.legSubtext}>
-                    Navigation context {planEntry?.procedure?.label || 'Enroute structure'}
-                  </Text>
-                  <Text style={styles.legSubtext}>
-                    Handoff {planEntry?.handoff?.label || 'Auto course handoff'}
-                  </Text>
-                  <Text style={styles.legSubtext}>
-                    Procedure role {planEntry?.procedureEntryDescriptor?.role?.label || planEntry?.procedureRole?.label || 'Enroute structure'} · {planEntry?.procedureEntryDescriptor?.role?.cue || planEntry?.procedureRole?.cue || 'Managed structure leg'}
-                  </Text>
-                  <Text style={styles.legSubtext}>
-                    {planEntry?.procedureEntryDescriptor?.positionLabel || 'Entry 1/1'} · {planEntry?.procedureEntryDescriptor?.cueProfile?.label || 'Enroute structure cues'}
-                  </Text>
-                  <Text style={styles.legSubtext}>
-                    Segment template {planEntry?.procedureEntryDescriptor?.segmentTemplate?.label || 'Enroute structure segment'} · {planEntry?.procedureEntryDescriptor?.segmentTemplate?.phaseLabel || 'Enroute'}
-                  </Text>
-                  <Text style={styles.legSubtext}>
-                    Segment class {planEntry?.procedureEntryDescriptor?.segmentClass?.label || 'Enroute structure class'} · {planEntry?.procedureEntryDescriptor?.segmentClass?.lateralMode || 'course-capture'}
-                  </Text>
-                  <Text style={styles.legSubtext}>
-                    Leg adapter {planEntry?.procedureEntryDescriptor?.procedureLegAdapter?.label || 'Course procedure leg'} · {planEntry?.procedureEntryDescriptor?.procedureLegAdapter?.kind || 'course-leg'}
-                  </Text>
-                  <Text style={styles.legSubtext}>
-                    Leg family {planEntry?.procedureEntryDescriptor?.procedureLegFamily?.label || 'Course-to-fix leg family'} · {planEntry?.procedureEntryDescriptor?.procedureLegFamily?.kind || 'course-to-fix-family'}
-                  </Text>
-                  <Text style={styles.legSubtext}>
-                    Parser target {planEntry?.procedureEntryDescriptor?.procedureLegParserTarget?.label || 'Course-to-fix parser target'} · {planEntry?.procedureEntryDescriptor?.procedureLegParserTarget?.source || 'nav-data'}
-                  </Text>
-                  <Text style={styles.legSubtext}>
-                    Ingestion {planEntry?.procedureEntryDescriptor?.procedureLegIngestionContract?.label || 'Course-to-fix ingestion contract'} · {planEntry?.procedureEntryDescriptor?.procedureLegIngestionContract?.payloadShape || 'course-to-fix'}
-                  </Text>
-                  {planEntry?.procedureEntryDescriptor?.parsedLegPayload ? (
-                    <Text style={styles.legSubtext}>
-                      Parsed payload {planEntry.procedureEntryDescriptor.parsedLegPayload.label} · {planEntry.procedureEntryDescriptor.parsedLegPayload.kind} · {planEntry.procedureEntryDescriptor.parsedLegPayload.source}
+                  <View style={styles.legHeaderRow}>
+                    <Text
+                      style={[
+                        styles.legText,
+                        isActive ? styles.legTextActive : null,
+                        isCompleted ? styles.legTextCompleted : null,
+                      ]}
+                    >
+                      {leg.from} → {leg.to}
                     </Text>
+                    <View
+                      style={[
+                        styles.legBadge,
+                        isActive
+                          ? styles.legBadgeActive
+                          : isArmed
+                            ? styles.legBadgeArmed
+                            : isCompleted
+                              ? styles.legBadgeCompleted
+                              : styles.legBadgeQueued,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.legBadgeText,
+                          isActive
+                            ? styles.legBadgeTextActive
+                            : isArmed
+                              ? styles.legBadgeTextArmed
+                              : styles.legBadgeTextDefault,
+                        ]}
+                      >
+                        {isActive ? 'ACTIVE' : isArmed ? 'ARMED' : isCompleted ? 'DONE' : 'QUEUED'}
+                      </Text>
+                    </View>
+                  </View>
+                  {isLiveLeg && routeProgress ? (
+                    <Text style={styles.legSubtext}>
+                      {routeProgress.remainingLegNm.toFixed(1)} NM remaining
+                      {planEntry?.actionCue ? ` · ${planEntry.actionCue}` : ''}
+                    </Text>
+                  ) : planEntry?.actionCue ? (
+                    <Text style={styles.legSubtext}>{planEntry.actionCue} · {leg.legType}</Text>
+                  ) : (
+                    <Text style={styles.legSubtext}>{leg.legType} leg</Text>
+                  )}
+                  {chainLabel ? (
+                    <Text style={styles.legSubtext}>{chainLabel}</Text>
                   ) : null}
-                  <Text style={styles.legSubtext}>
-                    Procedure chain {procedureChain?.label || 'Enroute structure'} · {procedureChain?.entryCount || 1} leg block
-                  </Text>
-                  <Text style={styles.legSubtext}>
-                    Chain behavior {procedureChainBehavior?.label || 'Enroute auto block'} · {procedureChainBehavior?.sequencingModel || 'auto'} sequencing
-                  </Text>
                 </View>
                 <Text
                   style={[
@@ -9330,6 +9326,16 @@ const styles = StyleSheet.create({
   legRowCompleted: { opacity: 0.66 },
   legTextActive: { color: colors.text, fontWeight: '700' },
   legTextCompleted: { color: colors.textMuted },
+  legHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  legBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999 },
+  legBadgeActive: { backgroundColor: 'rgba(79,140,255,0.15)', borderWidth: 1, borderColor: 'rgba(79,140,255,0.4)' },
+  legBadgeArmed: { backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.35)' },
+  legBadgeCompleted: { backgroundColor: colors.surfaceMuted },
+  legBadgeQueued: { backgroundColor: colors.surfaceMuted },
+  legBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.6 },
+  legBadgeTextActive: { color: '#4f8cff' },
+  legBadgeTextArmed: { color: colors.warning },
+  legBadgeTextDefault: { color: colors.textMuted },
   suggestionBox: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.sm, marginBottom: spacing.sm, backgroundColor: colors.surfaceMuted },
   suggestionTitle: { fontSize: 13, fontWeight: '600', color: colors.text },
   suggestionText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },

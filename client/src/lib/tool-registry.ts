@@ -78,6 +78,14 @@ export const RSF_TOOLS: ToolRegistryItem[] = [
     keywords: ["aviation weather", "winds aloft", "icing", "turbulence", "hazards"],
   },
   {
+    id: "cabin-brief",
+    title: "Cabin Brief",
+    description: "Plain-English flight weather briefing for passengers and non-pilots.",
+    path: "/cabin-brief",
+    group: "plan",
+    keywords: ["cabin brief", "passenger briefing", "non-pilot", "plain english weather", "cabin weather"],
+  },
+  {
     id: "e6b",
     title: "E6B Advanced",
     description: "Digital E6B calculations for nav, fuel, and wind correction.",

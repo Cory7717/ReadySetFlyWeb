@@ -1102,13 +1102,13 @@ export default function Landing() {
         </div>
       )}
       {!weatherJumpDismissed && !hasUsedWeatherTool && (
-        <div className="hidden border-b border-sky-200 bg-gradient-to-r from-sky-50 to-cyan-50 md:block">
+        <div className="hidden border-b border-[#1c3147] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] md:block">
           <div className="container mx-auto px-4 py-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-700">Weather &amp; NOTAM Briefing</p>
-                <p className="text-sm font-semibold text-slate-900">Get current airport weather and NOTAMs</p>
-                <p className="text-xs text-slate-700">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A9BB8]">Weather &amp; NOTAM Briefing</p>
+                <p className="text-sm font-semibold text-[#F1F5FA]">Get current airport weather and NOTAMs</p>
+                <p className="text-xs text-[#9CB4CC]">
                   Check live METARs, TAFs, runway conditions, and airport briefing details from the landing page.
                 </p>
               </div>
@@ -1390,11 +1390,11 @@ export default function Landing() {
                     </div>
 
                     <div className="grid gap-3 lg:grid-cols-[240px_minmax(0,1fr)]">
-                      <div className="rounded-[1rem] border border-emerald-200 bg-emerald-50 p-4">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-700">Cheapest nearby</div>
+                      <div className="rounded-[1rem] border border-[#1a3d3a] bg-[#0d2220] p-4">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#4DA8A8]">Cheapest nearby</div>
                         {cheapestFuelAirport ? (
                           <div className="mt-2 space-y-1">
-                            <div className="text-xl font-semibold text-emerald-900">
+                            <div className="text-xl font-semibold text-[#4DA8A8]">
                               ${cheapestFuelAirport.matchingFuel.pricePPG?.toFixed(2)}
                             </div>
                             <div className="text-sm font-medium text-foreground">{cheapestFuelAirport.icao} - {cheapestFuelAirport.name}</div>
@@ -1816,24 +1816,24 @@ export default function Landing() {
       </div>
 
       {activeMobileTab === "find" && (
-        <div className="border-b border-sky-100 bg-sky-50/70 md:hidden">
+        <div className="border-b border-[#203249] bg-[#0a0e14] md:hidden">
           <div className="container mx-auto px-4 py-4">
-            <Card className="border-sky-200 bg-white/90 shadow-sm">
+            <Card className="border-[#5d4717] bg-[linear-gradient(135deg,rgba(200,146,42,0.10),rgba(13,22,34,0.98))] shadow-sm">
               <CardContent className="flex flex-col gap-3 p-4">
                 <div className="space-y-1">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sky-700">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#D9A441]">
                     Cabin Brief - For Passengers
                   </div>
-                  <div className="text-base font-semibold text-slate-900">
+                  <div className="text-base font-semibold text-[#F1F5FA]">
                     Traveling with someone who is not a pilot?
                   </div>
-                  <div className="text-sm text-slate-600">
+                  <div className="text-sm text-[#9CB4CC]">
                     Open a plain-English weather briefing built for passengers and nervous flyers.
                   </div>
                 </div>
                 <Button
                   asChild
-                  className="w-full bg-[#F0B429] text-slate-950 hover:bg-[#e4aa22]"
+                  className="w-full bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]"
                 >
                   <Link
                     href="/cabin-brief"
@@ -1849,14 +1849,14 @@ export default function Landing() {
       )}
 
       {!isAuthenticated && hasUsedTool && (
-        <div className="border-t border-primary/10 bg-primary/[0.03]">
+        <div className="border-t border-[#1c3147] bg-[#0a0e14]">
           <div className="container mx-auto px-4 py-5">
-            <div className="flex flex-col gap-4 rounded-xl border border-primary/20 bg-background/80 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4 rounded-xl border border-[#29415e] bg-[#0f1a28] p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-0.5">
-                <p className="text-sm font-semibold">
+                <p className="text-sm font-semibold text-[#F1F5FA]">
                   Save searches, log flights, and unlock every RSF tool.
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-[#7A9BB8]">
                   Free account — no credit card. Upgrade to Pro anytime with a 14-day trial.
                 </p>
               </div>
@@ -1893,221 +1893,87 @@ export default function Landing() {
         <div className="container mx-auto px-4">
           <div className={`grid gap-6 ${!hasProPlus ? "xl:grid-cols-[minmax(0,1.12fr)_320px]" : ""}`}>
             <section className={`rounded-[1.45rem] border border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] p-5 text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.78)] sm:p-6 ${activeMobileTab === "find" || activeMobileTab === "plan" || activeMobileTab === "log" ? "" : "hidden md:block"}`}>
-                <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-[#29415e] bg-[linear-gradient(135deg,rgba(17,28,42,0.95),rgba(25,47,74,0.9))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                    <div>
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#9FC6EA]">Quick Start</div>
-                    <div className="text-sm text-slate-200">Dispatch, planning, training, and records from one aviation console</div>
+              <div className="mb-6 space-y-2">
+                <span className="rsf-kicker border-[#29415e] bg-[#102236] text-[#9FC6EA]">Flight Operations</span>
+                <h2 className="text-2xl font-semibold text-[#F1F5FA] sm:text-3xl">Where do you want to go?</h2>
+                <p className="max-w-2xl text-sm text-[#7A9BB8]">Four paths into the RSF platform — pick the one that matches your next move.</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-4 rounded-[1.15rem] border border-[#29415e] bg-[#0d1622] p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] border border-[#3a5b7b] bg-[#0f1a28]">
+                      <ShoppingBag className="h-5 w-5 text-[#D9A441]" />
+                    </div>
+                    <div className="text-base font-semibold text-[#F1F5FA]">Marketplace</div>
                   </div>
-                  <Badge variant="secondary" className="border-0 bg-white/10 text-slate-100 shadow-none">Find • Plan • Fly</Badge>
-                </div>
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                  <div className="space-y-2">
-                    <span className="rsf-kicker border-[#29415e] bg-[#102236] text-[#9FC6EA]">Operations Grid</span>
-                    <h2 className="text-2xl sm:text-3xl font-semibold text-[#F1F5FA]">Open the workflow that matches the next leg of the day</h2>
-                    <p className="max-w-3xl text-sm text-[#7A9BB8] sm:text-base">
-                      From finding CFIs and rentals to route planning, NOTAM review, and digital records, the desktop surface should feel like a pilot briefing station instead of a generic tool catalog.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 xl:max-w-[360px] xl:justify-end">
-                    <Button asChild variant="outline" className="border-[#3a5b7b] bg-[#15304b] text-[#F4F8FC] hover:bg-[#1b3d60] hover:text-white">
-                      <Link
-                        href="/tool-hub"
-                        onClick={() => trackEvent("cta_click", { label: "quick_index_view_all_tools", target: "/tool-hub" })}
-                      >
-                        View all tools &amp; features
-                      </Link>
-                    </Button>
+                  <p className="text-sm leading-6 text-[#9CB4CC]">Browse aircraft rentals, listings, CFI directory, and aviation services.</p>
+                  <div className="mt-auto flex flex-wrap gap-2 pt-2">
                     <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
-                      <Link
-                        href={membershipPageHref}
-                        onClick={() => trackEvent("cta_click", { label: "quick_index_membership_cta", target: membershipPageHref })}
-                      >
-                        {membershipCtaLabel}
+                      <Link href="/marketplace" onClick={() => trackEvent("cta_click", { label: "path_card_marketplace", target: "/marketplace" })}>
+                        Browse Listings
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]">
+                      <Link href="/rentals" onClick={() => trackEvent("cta_click", { label: "path_card_rentals", target: "/rentals" })}>
+                        Find Rentals
                       </Link>
                     </Button>
                   </div>
                 </div>
-
-                <div className="mt-5 space-y-4">
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)]">
-                    <Card className={`border-[#4d6a84] bg-[linear-gradient(135deg,rgba(18,33,51,0.98),rgba(30,58,90,0.94))] text-[#E8EDF4] shadow-[0_24px_50px_-30px_rgba(0,0,0,0.72)] ${activeMobileTab === "find" ? "" : "hidden md:block"}`}>
-                      <CardContent className="flex min-h-[238px] flex-col justify-between p-6">
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="rsf-kicker border-[#45688a] bg-[#10233a] text-[#9FC6EA]">Primary Find Workflow</span>
-                            <Badge className="border border-[#6a5421] bg-[#221809] text-[#F5C86A] hover:bg-[#221809]">Most used</Badge>
-                          </div>
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-2 text-xl font-semibold text-[#F1F5FA]">
-                              <ShoppingBag className="h-5 w-5 text-[#D9A441]" />
-                              Marketplace
-                            </div>
-                            <p className="max-w-2xl text-sm leading-6 text-[#B5C8DA]">
-                              Start with instructors, rentals, schools, charter, jobs, and aviation services in one marketplace pass before you commit to the next leg.
-                            </p>
-                          </div>
-                          <div className="grid gap-3 sm:grid-cols-3">
-                            {[
-                              { label: "Discover", detail: "CFIs, rentals, schools, and services" },
-                              { label: "Compare", detail: "Review availability before opening planning tools" },
-                              { label: "Move fast", detail: "Jump straight into the next workflow from one place" },
-                            ].map((item) => (
-                              <div key={item.label} className="rounded-[0.95rem] border border-[#2f4f6b] bg-[#0f1d2d] p-3">
-                                <div className="text-[10px] uppercase tracking-[0.22em] text-[#7EA8CC]">{item.label}</div>
-                                <div className="mt-2 text-xs leading-5 text-[#C5D3E0]">{item.detail}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="mt-5 flex flex-wrap gap-3">
-                          <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
-                            <Link
-                              href="/marketplace"
-                              onClick={() => trackEvent("cta_click", { label: "quick_index_marketplace", target: "/marketplace" })}
-                            >
-                              Browse listings
-                            </Link>
-                          </Button>
-                          <Button asChild variant="outline" className="border-[#4c6c8a] bg-[#15304b] text-[#F4F8FC] hover:bg-[#1b3d60] hover:text-white">
-                            <Link
-                              href="/rentals"
-                              onClick={() => trackEvent("cta_click", { label: "quick_index_rentals", target: "/rentals" })}
-                            >
-                              Browse rentals
-                            </Link>
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className={`border-[#5b4c25] bg-[linear-gradient(180deg,rgba(20,28,39,0.98),rgba(28,37,48,0.96))] text-[#E8EDF4] ${activeMobileTab === "plan" ? "" : "hidden md:block"}`}>
-                      <CardContent className="flex min-h-[238px] flex-col justify-between p-6">
-                        <div className="space-y-4">
-                          <span className="rsf-kicker border-[#5b4c25] bg-[#1f1810] text-[#F0C46C]">Primary Plan Workflow</span>
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-2 text-xl font-semibold text-[#F1F5FA]">
-                              <Plane className="h-5 w-5 text-[#D9A441]" />
-                              Flight Planner
-                            </div>
-                            <p className="text-sm leading-6 text-[#B5C8DA]">
-                              Route, fuel, timing, alternates, and next-leg planning in one dispatch-style workflow built for real preflight use.
-                            </p>
-                          </div>
-                          <div className="rounded-[0.95rem] border border-[#3e5468] bg-[#101925] p-3">
-                            <div className="text-[10px] uppercase tracking-[0.22em] text-[#7EA8CC]">Plan sequence</div>
-                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-[#D7E1EC]">
-                              <span className="rounded-full border border-[#29415e] bg-[#0f1a28] px-2.5 py-1">Route build</span>
-                              <span className="rounded-full border border-[#29415e] bg-[#0f1a28] px-2.5 py-1">Fuel</span>
-                              <span className="rounded-full border border-[#29415e] bg-[#0f1a28] px-2.5 py-1">Alternates</span>
-                              <span className="rounded-full border border-[#29415e] bg-[#0f1a28] px-2.5 py-1">Briefing</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mt-5 flex flex-wrap gap-3">
-                          <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
-                            <Link
-                              href="/flight-planner"
-                              onClick={() => trackEvent("cta_click", { label: "quick_index_flight_planner", target: "/flight-planner" })}
-                            >
-                              Build route
-                            </Link>
-                          </Button>
-                          <Button asChild variant="outline" className="border-[#4c6c8a] bg-[#15304b] text-[#F4F8FC] hover:bg-[#1b3d60] hover:text-white">
-                            <Link
-                              href="/tfr-map"
-                              onClick={() => trackEvent("cta_click", { label: "quick_index_tfr_map", target: "/tfr-map" })}
-                            >
-                              Check airspace
-                            </Link>
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
+                <div className="flex flex-col gap-4 rounded-[1.15rem] border border-[#29415e] bg-[#0d1622] p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] border border-[#3a5b7b] bg-[#0f1a28]">
+                      <Calculator className="h-5 w-5 text-[#D9A441]" />
+                    </div>
+                    <div className="text-base font-semibold text-[#F1F5FA]">Pilot Tools</div>
                   </div>
-
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    <Card className={`border-[#35516e] bg-[linear-gradient(180deg,rgba(13,22,34,0.98),rgba(21,34,52,0.96))] text-[#E8EDF4] ${activeMobileTab === "find" ? "" : "hidden md:block"}`}>
-                      <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
-                        <div className="space-y-3">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#8FC7FF]">Connect</div>
-                          <div className="flex items-center gap-2 text-base font-semibold text-[#F1F5FA]">
-                            <Users className="h-5 w-5 text-[#8FC7FF]" />
-                            CFI Directory
-                          </div>
-                          <p className="text-sm text-[#7A9BB8]">Compare instructor profiles and connect with CFIs from one scheduling and discovery surface.</p>
-                        </div>
-                        <Button asChild size="sm" variant="outline" className="w-full border-[#3a5b7b] bg-[#15304b] text-[#F4F8FC] hover:bg-[#1b3d60] hover:text-white">
-                          <Link
-                            href="/cfi"
-                            onClick={() => trackEvent("cta_click", { label: "quick_index_cfi_directory", target: "/cfi" })}
-                          >
-                            Find a CFI
-                          </Link>
-                        </Button>
-                      </CardContent>
-                    </Card>
-
-                    <Card className={`border-[#29415e] bg-[linear-gradient(180deg,rgba(13,22,34,0.98),rgba(20,34,52,0.94))] text-[#E8EDF4] ${activeMobileTab === "find" ? "" : "hidden md:block"}`}>
-                      <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
-                        <div className="space-y-3">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#9FC6EA]">Manage</div>
-                          <div className="flex items-center gap-2 text-base font-semibold text-[#F1F5FA]">
-                            <Users className="h-5 w-5 text-[#D9A441]" />
-                            Flying Clubs
-                          </div>
-                          <p className="text-sm text-[#7A9BB8]">Run member operations, fleet visibility, and club scheduling from one dispatch-style panel.</p>
-                        </div>
-                        <Button asChild size="sm" variant="outline" className="w-full border-[#3a5b7b] bg-[#15304b] text-[#F4F8FC] hover:bg-[#1b3d60] hover:text-white">
-                          <Link
-                            href="/flying-clubs"
-                            onClick={() => trackEvent("cta_click", { label: "quick_index_flying_clubs", target: "/flying-clubs" })}
-                          >
-                            Explore clubs
-                          </Link>
-                        </Button>
-                      </CardContent>
-                    </Card>
-
-                    <Card className={`border-[#29415e] bg-[linear-gradient(180deg,rgba(13,22,34,0.98),rgba(16,31,48,0.94))] text-[#E8EDF4] ${activeMobileTab === "log" ? "" : "hidden md:block"}`}>
-                      <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
-                        <div className="space-y-3">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#9FC6EA]">Track</div>
-                          <div className="flex items-center gap-2 text-base font-semibold text-[#F1F5FA]">
-                            <FileText className="h-5 w-5 text-[#8FC7FF]" />
-                            Digital Logbook
-                          </div>
-                          <p className="text-sm text-[#7A9BB8]">Keep flights, endorsements, signoffs, and currency in one flight record.</p>
-                        </div>
-                        <Button asChild size="sm" variant="outline" className="w-full border-[#3a5b7b] bg-[#15304b] text-[#F4F8FC] hover:bg-[#1b3d60] hover:text-white">
-                          <Link
-                            href="/logbook"
-                            onClick={() => trackEvent("cta_click", { label: "quick_index_digital_logbook", target: "/logbook" })}
-                          >
-                            Open logbook
-                          </Link>
-                        </Button>
-                      </CardContent>
-                    </Card>
+                  <p className="text-sm leading-6 text-[#9CB4CC]">E6B, crosswind, density altitude, weight &amp; balance, and more.</p>
+                  <div className="mt-auto flex flex-wrap gap-2 pt-2">
+                    <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                      <Link href="/tool-hub" onClick={() => trackEvent("cta_click", { label: "path_card_tool_hub", target: "/tool-hub" })}>
+                        Open Tool Hub
+                      </Link>
+                    </Button>
                   </div>
                 </div>
-
-                <div className="hidden overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,hsl(221_52%_19%),hsl(221_34%_15%))] shadow-[var(--shadow-rsf-panel)]">
-                  <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">
-                    <span>RSF overview</span>
-                    <span className="text-slate-400">Muted video</span>
+                <div className="flex flex-col gap-4 rounded-[1.15rem] border border-[#29415e] bg-[#0d1622] p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] border border-[#3a5b7b] bg-[#0f1a28]">
+                      <Plane className="h-5 w-5 text-[#D9A441]" />
+                    </div>
+                    <div className="text-base font-semibold text-[#F1F5FA]">Plan &amp; Track</div>
                   </div>
-                  <video
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    preload="metadata"
-                    aria-label="Ready Set Fly overview video"
-                    className="h-full min-h-[240px] w-full object-cover"
-                  >
-                    <source src={rsfPromoVideo} type="video/mp4" />
-                  </video>
+                  <p className="text-sm leading-6 text-[#9CB4CC]">Flight planner, digital logbook, TFR map, and route builder.</p>
+                  <div className="mt-auto flex flex-wrap gap-2 pt-2">
+                    <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                      <Link href="/flight-planner" onClick={() => trackEvent("cta_click", { label: "path_card_flight_planner", target: "/flight-planner" })}>
+                        Flight Planner
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]">
+                      <Link href="/logbook" onClick={() => trackEvent("cta_click", { label: "path_card_logbook", target: "/logbook" })}>
+                        Logbook
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
+                <div className="flex flex-col gap-4 rounded-[1.15rem] border border-[#5d4717] bg-[linear-gradient(135deg,rgba(200,146,42,0.10),rgba(13,22,34,0.98))] p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] border border-[#5d4717] bg-[#1e1408]">
+                      <Users className="h-5 w-5 text-[#D9A441]" />
+                    </div>
+                    <div className="text-base font-semibold text-[#F1F5FA]">Cabin Brief</div>
+                  </div>
+                  <p className="text-sm leading-6 text-[#9CB4CC]">Not a pilot? Get a plain-English AI weather brief for your flight.</p>
+                  <div className="mt-auto flex flex-wrap gap-2 pt-2">
+                    <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                      <Link href="/cabin-brief" onClick={() => trackEvent("cta_click", { label: "path_card_cabin_brief", target: "/cabin-brief" })}>
+                        Get Cabin Brief
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </section>
 
             {!hasProPlus && (

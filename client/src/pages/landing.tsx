@@ -23,7 +23,10 @@ import { pixelEvent } from "@/lib/pixel";
 import { useAuth } from "@/hooks/useAuth";
 import { extractAtisIdentifier, extractRunwayInUse, parseFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import useEmblaCarousel from "embla-carousel-react";
 import av8mapsLogo from "@assets/Av8Maps.JPG";
+import rsfOpaqueLogo from "@assets/RSFOpaqueLogo_1761494760586.png";
 import rsfPromoVideo from "@assets/rsf-video-2026-02-28.mp4";
 
 interface WeatherData {
@@ -162,6 +165,10 @@ export default function Landing() {
   const [showAiNotamTranslator, setShowAiNotamTranslator] = useState(false);
   const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [introPhase, setIntroPhase] = useState(0);
+  const introTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
   const av8mapsTiles = useMemo(
     () => [
       {
@@ -675,6 +682,34 @@ export default function Landing() {
   useEffect(() => {
     trackEvent("starting_point_section_view");
   }, []);
+
+  const runIntroSequence = () => {
+    introTimersRef.current.forEach(clearTimeout);
+    introTimersRef.current = [];
+    setIntroPhase(0);
+    const schedule = (phase: number, ms: number) => {
+      const t = setTimeout(() => setIntroPhase(phase), ms);
+      introTimersRef.current.push(t);
+    };
+    schedule(1, 2500);
+    schedule(2, 3400);
+    schedule(3, 4000);
+    schedule(4, 4700);
+    schedule(5, 5500);
+  };
+
+  useEffect(() => {
+    runIntroSequence();
+    return () => introTimersRef.current.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    const onSelect = () => setActiveSlide(emblaApi.selectedScrollSnap());
+    emblaApi.on("select", onSelect);
+    return () => { emblaApi.off("select", onSelect); };
+  }, [emblaApi]);
   
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -1102,12 +1137,12 @@ export default function Landing() {
         </div>
       )}
       {!weatherJumpDismissed && !hasUsedWeatherTool && (
-        <div className="hidden border-b border-[#1c3147] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] md:block">
+        <div className="hidden border-b border-[#1c3147] bg-[linear-gradient(180deg,rgba(13,22,34,0.98),rgba(10,14,20,0.96))] md:block">
           <div className="container mx-auto px-4 py-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A9BB8]">Weather &amp; NOTAM Briefing</p>
-                <p className="text-sm font-semibold text-[#F1F5FA]">Get current airport weather and NOTAMs</p>
+                <p className="text-sm font-semibold text-[#E8EDF4]">Get current airport weather and NOTAMs</p>
                 <p className="text-xs text-[#9CB4CC]">
                   Check live METARs, TAFs, runway conditions, and airport briefing details from the landing page.
                 </p>
@@ -1115,6 +1150,7 @@ export default function Landing() {
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
+                  className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]"
                   onClick={() => {
                     trackEvent("landing_weather_jump_bar_click", { target: "airport-weather" });
                     setHasUsedWeatherTool(true);
@@ -1126,7 +1162,7 @@ export default function Landing() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-8 w-8"
+                  className="h-8 w-8 text-[#7A9BB8] hover:text-[#E8EDF4]"
                   aria-label="Dismiss weather briefing banner"
                   onClick={() => {
                     trackEvent("landing_weather_jump_bar_dismissed", { target: "airport-weather" });
@@ -1511,6 +1547,596 @@ export default function Landing() {
         </div>
       </div>
 
+      {/* ============================================================
+          DIRECTION 2 HERO — "The Collapse" animation
+      ============================================================ */}
+      <div className="relative border-b border-[#1c3147] bg-[linear-gradient(180deg,#081019_0%,#0a1420_42%,#0c1825_100%)]">
+        <div className="container mx-auto px-4 py-10 md:py-16">
+          <div className="grid gap-8 md:grid-cols-2 md:items-center">
+            {/* LEFT — animation panel */}
+            <div className="relative flex min-h-[400px] flex-col items-center justify-center md:min-h-[520px]">
+              {/* Skip intro button */}
+              <AnimatePresence>
+                {introPhase < 5 && (
+                  <motion.button
+                    type="button"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute right-0 top-0 z-20 text-xs text-[#7A9BB8] hover:text-[#E8EDF4] transition-colors"
+                    onClick={() => {
+                      introTimersRef.current.forEach(clearTimeout);
+                      setIntroPhase(5);
+                    }}
+                  >
+                    Skip intro
+                  </motion.button>
+                )}
+              </AnimatePresence>
+
+              {/* Phase 0-2: Scattered tiles */}
+              <AnimatePresence>
+                {introPhase <= 2 && (
+                  <motion.div
+                    key="tiles"
+                    className="relative flex items-center justify-center w-full h-64 md:h-80"
+                    exit={{ opacity: 0 }}
+                  >
+                    <p className="absolute top-0 left-1/2 -translate-x-1/2 text-sm text-[#7A9BB8] text-center mb-6 whitespace-nowrap">
+                      Sound familiar?
+                    </p>
+                    {[
+                      {
+                        label: "Weather App",
+                        body: "KAUS 041753Z 18012KT 10SM FEW045 28/14",
+                        bodyClass: "font-mono text-xs text-[#F5A623]",
+                        extra: <span className="inline-flex items-center gap-1 rounded-full bg-green-700/80 px-2 py-0.5 text-[10px] text-white">VFR</span>,
+                        initX: -120, initY: -80, initR: -8,
+                        delay: 0,
+                      },
+                      {
+                        label: "Logbook App",
+                        body: "N12345 · KAUS→KSAT · 1.4hrs",
+                        bodyClass: "font-mono text-xs text-[#E8EDF4]",
+                        extra: null,
+                        initX: 100, initY: -60, initR: 6,
+                        delay: 0.5,
+                      },
+                      {
+                        label: "Flight Plan App",
+                        body: "KAUS DCT KSAT DCT KDAL",
+                        bodyClass: "font-mono text-xs text-[#9CB4CC]",
+                        extra: null,
+                        initX: -90, initY: 80, initR: 4,
+                        delay: 1.0,
+                      },
+                      {
+                        label: "Marketplace App",
+                        body: "Cessna 172S · $185/hr · KAUS",
+                        bodyClass: "font-mono text-xs text-[#E8EDF4]",
+                        extra: null,
+                        initX: 110, initY: 90, initR: -5,
+                        delay: 1.5,
+                      },
+                    ].map((tile, i) => (
+                      <motion.div
+                        key={tile.label}
+                        className="absolute w-44 h-24 md:w-48 md:h-28 rounded-xl border border-[#29415e] bg-[#0d1622] p-3 shadow-lg"
+                        initial={{ x: tile.initX, y: tile.initY, rotate: tile.initR, scale: 1, opacity: 0 }}
+                        animate={
+                          introPhase === 0
+                            ? {
+                                x: [tile.initX, tile.initX, tile.initX],
+                                y: [tile.initY, tile.initY - 6, tile.initY],
+                                rotate: tile.initR,
+                                scale: 1,
+                                opacity: 1,
+                                transition: {
+                                  opacity: { duration: 0.4, delay: tile.delay },
+                                  y: {
+                                    duration: 3,
+                                    repeat: Infinity,
+                                    ease: "easeInOut",
+                                    delay: tile.delay,
+                                  },
+                                },
+                              }
+                            : introPhase === 1
+                            ? {
+                                x: 0, y: 0, rotate: 0, scale: 0.7, opacity: 1,
+                                transition: { duration: 0.8, ease: "easeInOut" },
+                              }
+                            : {
+                                x: 0, y: 0, rotate: 0, scale: 0, opacity: 0,
+                                transition: { duration: 0.4, ease: "easeIn" },
+                              }
+                        }
+                      >
+                        <div className="flex items-center gap-2 mb-1.5">
+                          {tile.extra}
+                          <span className="text-[10px] text-[#7A9BB8]">{tile.label}</span>
+                        </div>
+                        <div className={tile.bodyClass}>{tile.body}</div>
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Phase 2: pulse burst */}
+              <AnimatePresence>
+                {introPhase === 2 && (
+                  <motion.div
+                    key="pulse"
+                    className="absolute rounded-full bg-[#D9A441]"
+                    initial={{ scale: 0, opacity: 1, width: 64, height: 64 }}
+                    animate={{ scale: 1.5, opacity: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                    style={{ left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}
+                  />
+                )}
+              </AnimatePresence>
+
+              {/* Phase 3+: logo */}
+              <AnimatePresence>
+                {introPhase >= 3 && (
+                  <motion.div
+                    key="emerge"
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-5"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <motion.img
+                      src={rsfOpaqueLogo}
+                      alt="Ready Set Fly"
+                      className="h-14 mx-auto"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.6 }}
+                    />
+
+                    <AnimatePresence>
+                      {introPhase >= 4 && (
+                        <motion.p
+                          key="tagline"
+                          className="text-xl md:text-2xl font-semibold text-[#F1F5FA] text-center px-4"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.8 }}
+                        >
+                          Where pilots land before they fly.
+                        </motion.p>
+                      )}
+                    </AnimatePresence>
+
+                    <AnimatePresence>
+                      {introPhase >= 5 && (
+                        <motion.div
+                          key="ctas"
+                          className="flex flex-col gap-3 w-full max-w-xs"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.5 }}
+                        >
+                          <Button asChild className="w-full bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                            <Link
+                              href="/register"
+                              onClick={() => trackEvent("cta_click", { label: "hero_intro_get_started", target: "/register" })}
+                            >
+                              Get Started
+                            </Link>
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="w-full border-[#29415e] bg-transparent text-[#E8EDF4] hover:bg-[#102236]"
+                            onClick={() => {
+                              document.getElementById("rsf-feature-rail")?.scrollIntoView({ behavior: "smooth" });
+                            }}
+                          >
+                            See What&apos;s Inside
+                          </Button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Replay button */}
+                    <AnimatePresence>
+                      {introPhase >= 5 && (
+                        <motion.button
+                          key="replay"
+                          type="button"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: 0.5 }}
+                          className="text-xs text-[#6D88A6] hover:text-[#9CB4CC] transition-colors mt-1"
+                          onClick={runIntroSequence}
+                        >
+                          ↺ Replay
+                        </motion.button>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* RIGHT — Live Interface Preview (desktop only) */}
+            <div className="hidden md:block">
+              <div className="rounded-[1.4rem] border border-[#203249] bg-[#0d1622] p-5 shadow-[0_32px_80px_-36px_rgba(0,0,0,0.9)]">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div className="text-[10px] uppercase tracking-[0.24em] text-[#6D88A6]">Live Conditions Surface</div>
+                  <Badge className="border border-[#30465d] bg-[#0f1b29] text-[#7EC4FF] hover:bg-[#0f1b29]">
+                    {weatherLoading ? "Syncing" : "Live"}
+                  </Badge>
+                </div>
+
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Badge
+                    className={`${
+                      flightCategory.color === "green" ? "bg-green-700" :
+                      flightCategory.color === "blue" ? "bg-blue-700" :
+                      flightCategory.color === "red" ? "bg-red-700" : "bg-purple-700"
+                    } text-white border-0`}
+                  >
+                    {flightCategory.category}
+                  </Badge>
+                  {(runwayInUseDisplay || runwayHeadline !== "--") && (
+                    <Badge variant="outline" className="border-[#29415e] bg-[#102236] text-[#9FC6EA]">
+                      RWY {runwayHeadline}
+                    </Badge>
+                  )}
+                  {atisInfo && (
+                    <Badge variant="outline" className="border-[#35516e] bg-[#102236] text-[#8FC7FF]">
+                      ATIS {atisInfo}
+                    </Badge>
+                  )}
+                  {weatherHazards.slice(0, 2).map((h) => (
+                    <Badge
+                      key={h.id}
+                      variant="outline"
+                      className={
+                        h.tone === "red" ? "border-[#6d2c27] bg-[#2b1111] text-[#ff8c84]"
+                        : h.tone === "amber" ? "border-[#6d5520] bg-[#271d0b] text-[#ffd278]"
+                        : "border-[#35516e] bg-[#102236] text-[#8FC7FF]"
+                      }
+                    >
+                      {h.label}
+                    </Badge>
+                  ))}
+                </div>
+
+                <div className="rounded-[1rem] border border-[#203249] bg-[#0a111a] p-3 mb-3">
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-[#6D88A6] mb-2">METAR</div>
+                  <p className="font-mono text-xs leading-5 text-[#F5A623] line-clamp-3 break-all">
+                    {metarDisplay}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-[0.85rem] border border-[#1f3248] bg-[#0f1a28] p-2.5">
+                    <div className="text-[9px] uppercase tracking-[0.2em] text-[#6D88A6]">NOTAMs</div>
+                    <div className="mt-1 text-base font-mono text-[#E8EDF4]">{notams?.notams?.length ?? 0}</div>
+                  </div>
+                  <div className="rounded-[0.85rem] border border-[#1f3248] bg-[#0f1a28] p-2.5">
+                    <div className="text-[9px] uppercase tracking-[0.2em] text-[#6D88A6]">Hazards</div>
+                    <div className="mt-1 text-base font-mono text-[#E8EDF4]">{weatherHazards.length}</div>
+                  </div>
+                  <div className="rounded-[0.85rem] border border-[#1f3248] bg-[#0f1a28] p-2.5">
+                    <div className="text-[9px] uppercase tracking-[0.2em] text-[#6D88A6]">Station</div>
+                    <div className="mt-1 text-base font-mono text-[#E8EDF4]">{searchIcao}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================================
+          SECTION 2 — ICAO SEARCH BAR
+      ============================================================ */}
+      <div className="bg-[#0d1622] border-y border-[#203249] py-6 px-4">
+        <div className="max-w-2xl mx-auto">
+          <p className="text-sm text-[#7A9BB8] mb-2 text-center">Check conditions at your airport</p>
+          <div className="relative flex gap-2">
+            <div className="relative flex-1">
+              <Input
+                value={icaoInput}
+                onChange={(e) => setIcaoInput(e.target.value)}
+                onBlur={submitIcao}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); refreshAirportConditions(); }
+                }}
+                placeholder="ICAO or city, e.g. KAUS"
+                className="h-12 text-base bg-[#0A0E14] border-[#29415e] text-[#F1F5FA] font-mono placeholder:text-[#4a6480]"
+              />
+              {(loadingSuggestions || airportSuggestions.length > 0) && (
+                <div className="absolute z-20 mt-1 w-full rounded-md border border-[#29415e] bg-[#0d1622] shadow-lg">
+                  {loadingSuggestions ? (
+                    <div className="px-3 py-2 text-xs text-[#7A9BB8]">Searching airports...</div>
+                  ) : (
+                    <ul className="max-h-52 overflow-auto">
+                      {airportSuggestions.map((s) => (
+                        <li key={s.icao}>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => applySuggestion(s)}
+                            className="w-full px-3 py-2 text-left text-sm text-[#E8EDF4] hover:bg-[#15283d]"
+                          >
+                            <div className="font-semibold font-mono text-[#F1F5FA]">{s.icao}</div>
+                            <div className="text-xs text-[#7A9BB8]">
+                              {[s.name, s.city, s.state].filter(Boolean).join(" · ")}
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+            <Button
+              onClick={() => { refreshAirportConditions(); scrollToWeatherSection(); }}
+              disabled={!ICAO_REGEX.test(icaoInput.trim().toUpperCase())}
+              className="h-12 px-6 bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b] shrink-0"
+            >
+              Check Conditions
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================================
+          SECTION 3 — FEATURE RAIL (Embla carousel)
+      ============================================================ */}
+      <div id="rsf-feature-rail" className="relative border-b border-[#1c3147]">
+        <div className="overflow-hidden" ref={emblaRef}>
+          <div className="flex">
+            {[
+              {
+                kicker: "Always On",
+                headline: "Live conditions before you leave the ground.",
+                description: "METARs, TAFs, NOTAMs, and runway advisories — pulled live from FAA sources and translated into plain English by AI.",
+                cta: "Check Conditions",
+                ctaAction: () => scrollToWeatherSection(),
+                panel: (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge className={`${flightCategory.color === "green" ? "bg-green-700" : flightCategory.color === "blue" ? "bg-blue-700" : flightCategory.color === "red" ? "bg-red-700" : "bg-purple-700"} text-white border-0`}>
+                        {flightCategory.category}
+                      </Badge>
+                      {weatherHazards.slice(0, 3).map((h) => (
+                        <Badge key={h.id} variant="outline" className={h.tone === "red" ? "border-[#6d2c27] bg-[#2b1111] text-[#ff8c84]" : h.tone === "amber" ? "border-[#6d5520] bg-[#271d0b] text-[#ffd278]" : "border-[#35516e] bg-[#102236] text-[#8FC7FF]"}>
+                          {h.label}
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="rounded-xl border border-[#203249] bg-[#0a111a] p-3">
+                      <div className="text-[9px] uppercase tracking-[0.2em] text-[#6D88A6] mb-1.5">METAR</div>
+                      <p className="font-mono text-xs text-[#F5A623] break-all line-clamp-4">{metarDisplay}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-lg border border-[#1f3248] bg-[#0f1a28] p-2.5">
+                        <div className="text-[#6D88A6] mb-1">NOTAMs</div>
+                        <div className="font-mono text-[#E8EDF4]">{notams?.notams?.length ?? 0} active</div>
+                      </div>
+                      <div className="rounded-lg border border-[#1f3248] bg-[#0f1a28] p-2.5">
+                        <div className="text-[#6D88A6] mb-1">Runway</div>
+                        <div className="font-mono text-[#E8EDF4]">{runwayHeadline}</div>
+                      </div>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                kicker: "Route to Wheels Up",
+                headline: "Plan the whole flight, not just the route.",
+                description: "Departure to destination, fuel stops, alternates, TFR awareness, and a full preflight briefing in one workflow.",
+                cta: "Open Flight Planner",
+                ctaHref: "/flight-planner",
+                panel: (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-[#203249] bg-[#0a111a] p-3 space-y-2">
+                      <div className="text-[9px] uppercase tracking-[0.2em] text-[#6D88A6]">Route</div>
+                      <p className="font-mono text-sm text-[#9CB4CC]">KAUS DCT LLO DCT KSAT</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {[
+                        { label: "Fuel Stop", value: "KSAT" },
+                        { label: "Alternate", value: "KMSY" },
+                        { label: "Est. Time", value: "1h 12m" },
+                        { label: "TFRs", value: "0 active" },
+                      ].map((r) => (
+                        <div key={r.label} className="rounded-lg border border-[#1f3248] bg-[#0f1a28] p-2.5">
+                          <div className="text-[#6D88A6] mb-1">{r.label}</div>
+                          <div className="font-mono text-[#E8EDF4]">{r.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                kicker: "Find. Fly. Own.",
+                headline: "Rentals, listings, and CFIs in one place.",
+                description: "Browse aircraft rentals, find a CFI, list your aircraft, or connect with flying clubs — without opening another tab.",
+                cta: "Browse Marketplace",
+                ctaHref: "/marketplace",
+                panel: (
+                  <div className="space-y-3">
+                    {[
+                      { icao: "KAUS", model: "Cessna 172S", price: "$185/hr", detail: "VFR / IFR · Wet" },
+                      { icao: "KAUS", model: "Piper PA-28", price: "$145/hr", detail: "VFR · Dry" },
+                      { icao: "KSAT", model: "DA-40 Diamond", price: "$210/hr", detail: "G1000 · IFR" },
+                    ].map((ac) => (
+                      <div key={ac.model} className="rounded-xl border border-[#203249] bg-[#0a111a] p-3 flex items-center justify-between gap-3">
+                        <div>
+                          <div className="font-mono text-sm text-[#F1F5FA]">{ac.model}</div>
+                          <div className="text-xs text-[#7A9BB8]">{ac.icao} · {ac.detail}</div>
+                        </div>
+                        <div className="font-mono text-sm text-[#D9A441] shrink-0">{ac.price}</div>
+                      </div>
+                    ))}
+                  </div>
+                ),
+              },
+              {
+                kicker: "Every Flight Counts",
+                headline: "Your logbook lives here now.",
+                description: "Digital flight records, endorsements, currency tracking, and training progress — all in one pilot profile.",
+                cta: "Open Logbook",
+                ctaHref: "/logbook",
+                panel: (
+                  <div className="space-y-3">
+                    {[
+                      { date: "2026-04-04", route: "KAUS → KSAT", time: "1.4", remarks: "Night XC" },
+                      { date: "2026-04-01", route: "KSAT → KHOU", time: "0.9", remarks: "Currency" },
+                      { date: "2026-03-28", route: "KAUS → KAUS", time: "1.1", remarks: "Pattern work" },
+                    ].map((entry) => (
+                      <div key={entry.date} className="rounded-xl border border-[#203249] bg-[#0a111a] p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-mono text-xs text-[#9CB4CC]">{entry.date}</span>
+                          <span className="font-mono text-xs text-[#D9A441]">{entry.time} hrs</span>
+                        </div>
+                        <div className="mt-1 font-mono text-sm text-[#F1F5FA]">{entry.route}</div>
+                        <div className="text-xs text-[#7A9BB8]">{entry.remarks}</div>
+                      </div>
+                    ))}
+                  </div>
+                ),
+              },
+              {
+                kicker: "For Everyone on Board",
+                headline: "Your passengers deserve to know too.",
+                description: "Cabin Brief gives non-pilots a plain-English AI summary of the flight ahead — weather, turbulence, what to expect. One tap to share.",
+                cta: "Try Cabin Brief",
+                ctaHref: "/cabin-brief",
+                goldTint: true,
+                panel: (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-[#5b4520] bg-[#120e04] p-4 space-y-2">
+                      <div className="text-[9px] uppercase tracking-[0.2em] text-[#D9A441]">Cabin Brief · KAUS → KSAT</div>
+                      <p className="text-sm leading-6 text-[#E8C57A]">
+                        Expect a smooth 1hr 12min flight. Light winds at altitude, some bumps possible over the Hill Country. Skies will be clear with good visibility.
+                      </p>
+                      <div className="flex gap-2 pt-1">
+                        <span className="rounded-full border border-[#5b4520] bg-[#1e1408] px-2 py-0.5 text-[10px] text-[#D9A441]">VFR</span>
+                        <span className="rounded-full border border-[#5b4520] bg-[#1e1408] px-2 py-0.5 text-[10px] text-[#D9A441]">Light turbulence possible</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-[#7A9BB8] text-center">Share with passengers before departure</p>
+                  </div>
+                ),
+              },
+            ].map((slide, i) => (
+              <div key={i} className="flex-[0_0_100%] min-w-0">
+                <div className={`min-h-[480px] md:min-h-[440px] flex items-center border-b border-[#1c3147] bg-[linear-gradient(180deg,#0A0E14,#0d1622)] px-4 py-16 md:px-8 ${slide.goldTint ? "" : ""}`}>
+                  <div className="max-w-6xl mx-auto w-full grid gap-8 md:grid-cols-[3fr_2fr] md:items-center">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.24em] text-[#6D88A6] mb-3">{slide.kicker}</div>
+                      <h2 className="text-3xl md:text-4xl font-semibold text-[#F1F5FA] mb-4 leading-tight">{slide.headline}</h2>
+                      <p className="text-base text-[#9CB4CC] leading-7 max-w-lg mb-6">{slide.description}</p>
+                      {slide.ctaHref ? (
+                        <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                          <Link
+                            href={slide.ctaHref}
+                            onClick={() => trackEvent("cta_click", { label: `feature_rail_slide_${i}`, target: slide.ctaHref })}
+                          >
+                            {slide.cta}
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]"
+                          onClick={(slide as any).ctaAction}
+                        >
+                          {slide.cta}
+                        </Button>
+                      )}
+                    </div>
+                    <div className="hidden md:block">{slide.panel}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Nav arrows */}
+        <button
+          type="button"
+          onClick={() => emblaApi?.scrollPrev()}
+          className="absolute left-3 top-1/2 -translate-y-1/2 z-10 hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-[#29415e] bg-[#0d1622] text-[#7A9BB8] hover:text-[#D9A441] transition-colors"
+          aria-label="Previous slide"
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          onClick={() => emblaApi?.scrollNext()}
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-10 hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-[#29415e] bg-[#0d1622] text-[#7A9BB8] hover:text-[#D9A441] transition-colors"
+          aria-label="Next slide"
+        >
+          ›
+        </button>
+
+        {/* Dot indicators */}
+        <div className="flex items-center justify-center gap-2 py-4 bg-[#0A0E14]">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => emblaApi?.scrollTo(i)}
+              className={`rounded-full transition-all duration-300 ${
+                activeSlide === i ? "bg-[#D9A441] w-6 h-1.5" : "bg-[#29415e] w-1.5 h-1.5"
+              }`}
+              aria-label={`Go to slide ${i + 1}`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* ============================================================
+          SECTION 4 — SOCIAL PROOF
+      ============================================================ */}
+      <div className="py-12 bg-[#0A0E14] border-b border-[#1c3147]">
+        <div className="container mx-auto px-4 text-center">
+          <p className="text-2xl font-semibold text-[#F1F5FA]">Where pilots land before they fly.</p>
+          <p className="text-sm text-[#7A9BB8] mt-2 max-w-md mx-auto">
+            Join our growing family of aviators — from student pilots to ATP.
+          </p>
+          {cpaOffer ? (
+            <div className="mt-8 mx-auto max-w-md rounded-[1.2rem] border border-[#5d4717] bg-[linear-gradient(135deg,rgba(200,146,42,0.18),rgba(15,25,38,0.96))] p-5 text-left">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <Badge className="border border-[#74551d] bg-[#241a09] text-[#F5C86A] hover:bg-[#241a09]">CPA Exclusive</Badge>
+                <Badge className="border border-[#2d435a] bg-[#10233a] text-[#D6E4F4] hover:bg-[#10233a]">
+                  {cpaOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
+                </Badge>
+              </div>
+              <h3 className="text-lg font-semibold text-[#F5F0E4] mb-2">
+                {cpaOffer.durationDays / 30} months free for {cpaOffer.partnerName} members
+              </h3>
+              <p className="text-sm text-[#D0D8E2] mb-4">Unlock the partner offer directly inside the RSF operations stack.</p>
+              <Button asChild className="w-full bg-[#C8922A] text-[#081019] hover:bg-[#d7a445]">
+                <Link
+                  href={`/logbook/pro?offer=${encodeURIComponent(cpaOffer.slug)}`}
+                  onClick={() => trackEvent("cta_click", { label: "landing_social_proof_cpa", target: `/logbook/pro?offer=${cpaOffer.slug}` })}
+                >
+                  Claim CPA offer
+                </Link>
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* ============================================================
+          BELOW HERE: EXISTING SECTIONS — DO NOT RESTYLE
+          Old desktop hero placeholder (hidden) kept for reference
+      ============================================================ */}
       <div className="hidden border-b border-[#1c3147] bg-[radial-gradient(circle_at_top_left,rgba(74,159,212,0.18),transparent_26%),radial-gradient(circle_at_80%_16%,rgba(200,146,42,0.16),transparent_22%),linear-gradient(180deg,#081019_0%,#0a1420_42%,#0c1825_100%)] md:block">
         <div className="container mx-auto px-4 py-8 sm:py-10">
           <div className="mx-auto max-w-[1240px]">

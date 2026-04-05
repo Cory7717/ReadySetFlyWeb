@@ -1068,7 +1068,7 @@ function parseFlightCategory(metar: any): 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'UNK
     return declared as 'VFR' | 'MVFR' | 'IFR' | 'LIFR';
   }
   if (!metar?.rawOb) return 'UNKNOWN';
-  const raw = metar.rawOb || ';
+  const raw = metar.rawOb || '';
   const visMatch = raw.match(/\s(\d{1,2})SM/);
   const visibility = visMatch ? parseInt(visMatch[1], 10) : 10;
   const ceilingMatch = raw.match(/(BKN|OVC)(\d{3})/);

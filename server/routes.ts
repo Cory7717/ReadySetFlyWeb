@@ -19,7 +19,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, insertFlyingClubSquawkSchema, insertFlyingClubMaintenanceItemSchema, insertFlyingClubBlackoutSchema, insertMembershipPartnerOfferSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode, type MembershipPartnerOffer } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, insertFlyingClubSquawkSchema, insertFlyingClubMaintenanceItemSchema, insertFlyingClubBlackoutSchema, insertMembershipPartnerOfferSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, flightPlans, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode, type MembershipPartnerOffer } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -20885,22 +20885,140 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   });
 
   app.post("/api/leidos/webhooks/flight-service", async (req: any, res) => {
+    // Always return 200 to Leidos — non-200 responses may cause duplicate retries.
     try {
       if (!verifyLeidosWebhookAuthorization(req.headers.authorization)) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
+      // STEP 1 — Log the full raw payload for debugging during Leidos lab testing.
       console.info(JSON.stringify({
-        event: "leidos_flight_service_webhook",
+        event: "leidos_push_received",
         timestamp: new Date().toISOString(),
         userAgent: req.headers["user-agent"] || null,
         body: req.body ?? null,
       }));
 
-      res.status(202).json({ ok: true });
+      const payload = req.body ?? {};
+
+      // Determine notification type (FLIGHT_CHANGE or FLIGHT_ALERT).
+      const notificationType: string =
+        payload.notificationType ??
+        payload.type ??
+        payload.eventType ??
+        "";
+
+      // Defensive extraction — Leidos lab payload field names may vary.
+      const flightIdentifier: string | null =
+        payload.flightIdentifier ??
+        payload.planId ??
+        payload.flightPlanId ??
+        payload.id ??
+        null;
+
+      const changeType: string | null =
+        payload.changeType ??
+        payload.change ??
+        null;
+
+      const alertType: string | null =
+        payload.alertType ??
+        payload.alert ??
+        null;
+
+      const extractedMessage: string =
+        payload.alertMessage ??
+        payload.message ??
+        payload.description ??
+        payload.detail ??
+        notificationType ??
+        "Flight plan update received";
+
+      if (!flightIdentifier) {
+        console.info(JSON.stringify({
+          event: "leidos_push_no_flight_identifier",
+          timestamp: new Date().toISOString(),
+          body: payload,
+        }));
+        return res.status(200).json({ ok: true });
+      }
+
+      try {
+        // STEP 2 — Match to RSF flight plan.
+        // NOTE: storage.getFlightPlanByProviderPlanId does not exist yet — using direct db query.
+        const [matchedPlan] = await db
+          .select()
+          .from(flightPlans)
+          .where(eq(flightPlans.filingProviderPlanId, flightIdentifier))
+          .limit(1);
+
+        if (!matchedPlan) {
+          console.info(JSON.stringify({
+            event: "leidos_push_no_matching_plan",
+            timestamp: new Date().toISOString(),
+            flightIdentifier,
+          }));
+          return res.status(200).json({ ok: true });
+        }
+
+        const isAlert = notificationType.toUpperCase().includes("ALERT");
+        const inAppType = isAlert ? "flight_alert" : "flight_change";
+        const pushTitle = isAlert ? "Flight Alert" : "Flight Plan Update";
+        const notificationTitle = isAlert
+          ? `Flight Alert${alertType ? `: ${alertType}` : ""}`
+          : `Flight Plan Change${changeType ? `: ${changeType}` : ""}`;
+
+        // STEP 3 — Create in-app notification.
+        await storage.createUserNotification({
+          userId: matchedPlan.userId,
+          type: inAppType,
+          title: notificationTitle,
+          message: extractedMessage,
+          meta: {
+            flightPlanId: matchedPlan.id,
+            providerPlanId: flightIdentifier,
+            raw: payload,
+          },
+        });
+
+        // STEP 4 — Deliver Expo push notification.
+        const tokens = await storage.getPushTokensByUser(matchedPlan.userId);
+        if (tokens.length > 0) {
+          await fetch("https://exp.host/--/api/v2/push/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              tokens.map((token) => ({
+                to: token.token,
+                title: pushTitle,
+                body: extractedMessage.slice(0, 100),
+                data: {
+                  flightPlanId: matchedPlan.id,
+                  type: inAppType,
+                },
+              }))
+            ),
+          });
+        }
+      } catch (innerError) {
+        console.error(JSON.stringify({
+          event: "leidos_push_error",
+          timestamp: new Date().toISOString(),
+          flightIdentifier,
+          error: innerError instanceof Error ? innerError.message : String(innerError),
+        }));
+      }
+
+      // STEP 6 — Always return 200 to Leidos.
+      res.status(200).json({ ok: true });
     } catch (error) {
-      console.error("Failed to process Leidos Flight Service webhook:", error);
-      res.status(500).json({ error: "Failed to process Leidos Flight Service webhook" });
+      console.error(JSON.stringify({
+        event: "leidos_push_error",
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      // Return 200 even on unexpected errors to prevent Leidos retry storms.
+      res.status(200).json({ ok: true });
     }
   });
 

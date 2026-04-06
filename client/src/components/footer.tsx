@@ -61,41 +61,48 @@ export function Footer() {
   
   return (
     <>
-      <footer className="mt-auto border-t bg-muted/30">
+      <footer className="mt-auto border-t border-[#1c3147] bg-[#0A0E14]">
         <div className="container px-4 py-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-[#7A9BB8]">
               © {new Date().getFullYear()} Ready Set Fly. All rights reserved.
             </div>
-            
+
             <div className="flex flex-wrap items-center justify-center gap-4 text-sm">
               <button
                 onClick={() => setContactDialogOpen(true)}
-                className="text-muted-foreground hover:text-foreground transition-colors hover-elevate px-3 py-1 rounded-md"
+                className="text-[#7A9BB8] hover:text-[#D9A441] transition-colors hover-elevate px-3 py-1 rounded-md"
                 data-testid="button-contact-us"
               >
                 Contact Us
               </button>
-              <Separator orientation="vertical" className="h-4 hidden md:block" />
-              <Link 
-                href="/privacy-policy" 
-                className="text-muted-foreground hover:text-foreground transition-colors hover-elevate px-3 py-1 rounded-md"
+              <Separator orientation="vertical" className="h-4 hidden md:block bg-[#1c3147]" />
+              <Link
+                href="/cabin-brief"
+                className="text-[#7A9BB8] hover:text-[#D9A441] transition-colors hover-elevate px-3 py-1 rounded-md"
+              >
+                Cabin Brief
+              </Link>
+              <Separator orientation="vertical" className="h-4 hidden md:block bg-[#1c3147]" />
+              <Link
+                href="/privacy-policy"
+                className="text-[#7A9BB8] hover:text-[#D9A441] transition-colors hover-elevate px-3 py-1 rounded-md"
                 data-testid="link-privacy-policy"
               >
                 Privacy Policy
               </Link>
-              <Separator orientation="vertical" className="h-4 hidden md:block" />
-              <Link 
-                href="/terms-of-service" 
-                className="text-muted-foreground hover:text-foreground transition-colors hover-elevate px-3 py-1 rounded-md"
+              <Separator orientation="vertical" className="h-4 hidden md:block bg-[#1c3147]" />
+              <Link
+                href="/terms-of-service"
+                className="text-[#7A9BB8] hover:text-[#D9A441] transition-colors hover-elevate px-3 py-1 rounded-md"
                 data-testid="link-terms-of-service"
               >
                 Terms of Service
               </Link>
-              <Separator orientation="vertical" className="h-4 hidden md:block" />
-              <Link 
-                href="/delete-account" 
-                className="text-muted-foreground hover:text-foreground transition-colors hover-elevate px-3 py-1 rounded-md"
+              <Separator orientation="vertical" className="h-4 hidden md:block bg-[#1c3147]" />
+              <Link
+                href="/delete-account"
+                className="text-[#7A9BB8] hover:text-[#D9A441] transition-colors hover-elevate px-3 py-1 rounded-md"
                 data-testid="link-delete-account"
               >
                 Delete Account

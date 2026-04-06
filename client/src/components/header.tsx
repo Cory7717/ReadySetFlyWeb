@@ -57,6 +57,11 @@ const CORE_SEARCH_ITEMS: ToolSearchItem[] = [
     path: "/tool-hub",
     keywords: ["tool hub", "all tools", "pilot tools"],
   },
+  {
+    label: "Cabin Brief",
+    path: "/cabin-brief",
+    keywords: ["cabin brief", "passenger", "weather briefing", "non-pilot", "flight weather"],
+  },
 ];
 
 const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
@@ -85,6 +90,7 @@ export function Header() {
   const isCfi = location.startsWith("/cfi") || location.startsWith("/dashboard/cfi");
   const isMarketplace = location.startsWith("/marketplace");
   const isRentals = location.startsWith("/rentals");
+  const isCabinBrief = location.startsWith("/cabin-brief");
 
   const displayName = user?.firstName && user?.lastName
     ? `${user.firstName} ${user.lastName}`
@@ -166,7 +172,7 @@ export function Header() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-[80] w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 overflow-visible">
+    <header className="sticky top-0 z-[80] w-full border-b border-[#1c3147] bg-[rgba(10,14,20,0.96)] backdrop-blur-md overflow-visible">
       <div className="container mx-auto px-3 sm:px-4 lg:px-8 min-w-0">
         <div className="flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-2 sm:gap-4 py-2 sm:py-0 min-w-0">
           {/* Logo */}
@@ -177,12 +183,12 @@ export function Header() {
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 w-full order-3 sm:order-2 sm:flex-1">
             {/* Main Navigation Tabs - Compact on mobile */}
-            <nav className="flex w-full sm:flex-1 sm:min-w-0 max-w-full items-center justify-start gap-0 rounded-full bg-muted p-0.5 sm:p-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="navigation" aria-label="Main navigation">
+            <nav className="flex w-full sm:flex-1 sm:min-w-0 max-w-full items-center justify-start gap-0 rounded-full bg-[#0d1622] border border-[#203249] p-0.5 sm:p-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="navigation" aria-label="Main navigation">
               <Link href="/marketplace" data-testid="link-marketplace">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isMarketplace ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm text-[#E8EDF4] hover:text-[#efb85b] ${isMarketplace ? "bg-[#203249] shadow-sm text-[#D9A441]" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "marketplace", target: "/marketplace" })}
                 >
                   Marketplace
@@ -192,7 +198,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isRentals ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm text-[#E8EDF4] hover:text-[#efb85b] ${isRentals ? "bg-[#203249] shadow-sm text-[#D9A441]" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "rentals", target: "/rentals" })}
                 >
                   Rentals
@@ -202,7 +208,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isFaq ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm text-[#E8EDF4] hover:text-[#efb85b] ${isFaq ? "bg-[#203249] shadow-sm text-[#D9A441]" : ""}`}
                 >
                   FAQ
                 </Button>
@@ -211,7 +217,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isFlyingClubs ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm text-[#E8EDF4] hover:text-[#efb85b] ${isFlyingClubs ? "bg-[#203249] shadow-sm text-[#D9A441]" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "flying_clubs", target: "/flying-clubs" })}
                 >
                   Clubs
@@ -221,7 +227,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isCfi ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm text-[#E8EDF4] hover:text-[#efb85b] ${isCfi ? "bg-[#203249] shadow-sm text-[#D9A441]" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "cfi", target: "/cfi" })}
                 >
                   CFI
@@ -231,17 +237,27 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isPlanner ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm text-[#E8EDF4] hover:text-[#efb85b] ${isPlanner ? "bg-[#203249] shadow-sm text-[#D9A441]" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "plan_flight", target: "/flight-planner" })}
                 >
                   Plan Flight
+                </Button>
+              </Link>
+              <Link href="/cabin-brief" data-testid="link-cabin-brief">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm text-[#E8EDF4] hover:text-[#efb85b] ${isCabinBrief ? "bg-[#203249] shadow-sm text-[#D9A441]" : ""}`}
+                  onClick={() => trackEvent("nav_click", { label: "cabin_brief", target: "/cabin-brief" })}
+                >
+                  Cabin Brief
                 </Button>
               </Link>
               <Link href="/student" data-testid="link-training">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isTraining ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm text-[#E8EDF4] hover:text-[#efb85b] ${isTraining ? "bg-[#203249] shadow-sm text-[#D9A441]" : ""}`}
                 >
                   Training
                 </Button>
@@ -250,7 +266,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isTools ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm text-[#E8EDF4] hover:text-[#efb85b] ${isTools ? "bg-[#203249] shadow-sm text-[#D9A441]" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "tools", target: "/tool-hub" })}
                 >
                   Tools
@@ -267,7 +283,7 @@ export function Header() {
                 handleToolSubmit();
               }}
             >
-              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-[#4a6480]" />
               <input
                 type="search"
                 placeholder="Search RSF"
@@ -293,14 +309,14 @@ export function Header() {
                     setToolMenuOpen(false);
                   }
                 }}
-                className="h-9 w-full rounded-full border border-input bg-background pl-8 pr-3 text-xs sm:text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="h-9 w-full rounded-full border border-[#29415e] bg-[#0d1622] pl-8 pr-3 text-xs sm:text-sm text-[#F1F5FA] placeholder:text-[#4a6480] shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#29415e]"
                 aria-label="Search tools and features"
                 autoComplete="off"
               />
               {toolMenuOpen && toolQuery.trim().length > 0 && (
-                <div className="absolute left-0 right-0 top-full mt-1 rounded-lg border bg-background shadow-lg z-[100] overflow-hidden pointer-events-auto">
+                <div className="absolute left-0 right-0 top-full mt-1 rounded-lg border border-[#203249] bg-[#0d1622] shadow-lg z-[100] overflow-hidden pointer-events-auto">
                   {toolMatches.length === 0 ? (
-                    <div className="px-3 py-2 text-xs text-muted-foreground">No matches found.</div>
+                    <div className="px-3 py-2 text-xs text-[#7A9BB8]">No matches found.</div>
                   ) : (
                     toolMatches.map((item, index) => (
                       <button
@@ -310,10 +326,10 @@ export function Header() {
                           event.preventDefault();
                           handleToolSelect(item);
                         }}
-                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs sm:text-sm hover:bg-muted ${index === highlightIndex ? "bg-muted" : ""}`}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs sm:text-sm text-[#E8EDF4] hover:bg-[#162030] ${index === highlightIndex ? "bg-[#162030]" : ""}`}
                       >
                         <span className="font-medium">{item.label}</span>
-                        <span className="text-[0.65rem] sm:text-xs text-muted-foreground">{item.path}</span>
+                        <span className="text-[0.65rem] sm:text-xs text-[#7A9BB8]">{item.path}</span>
                       </button>
                     ))
                   )}

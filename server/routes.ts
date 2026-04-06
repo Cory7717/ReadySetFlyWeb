@@ -96,6 +96,18 @@ if (!process.env.PAYPAL_CLIENT_ID || !process.env.PAYPAL_CLIENT_SECRET) {
 
 const isProd = process.env.NODE_ENV === "production";
 
+const bannerImpressionCache = new Map<string, number>();
+
+// Clean up old entries every hour
+setInterval(() => {
+  const oneHourAgo = Date.now() - 60 * 60 * 1000;
+  bannerImpressionCache.forEach((timestamp, key) => {
+    if (timestamp < oneHourAgo) {
+      bannerImpressionCache.delete(key);
+    }
+  });
+}, 60 * 60 * 1000);
+
 const paypalClient = new Client({
   clientCredentialsAuthCredentials: {
     oAuthClientId: process.env.PAYPAL_CLIENT_ID,
@@ -4397,6 +4409,27 @@ const airportSearchRateLimiter = createSoftAuthRateLimiter({
   anonMax: Number(process.env.RATE_LIMIT_AIRPORT_SEARCH_ANON_MAX || 1200),
   authMax: Number(process.env.RATE_LIMIT_AIRPORT_SEARCH_AUTH_MAX || 4000),
   key: "airport_search",
+});
+
+const analyticsRateLimiter = createSoftAuthRateLimiter({
+  windowMs: 5 * 60 * 1000,
+  anonMax: 30,
+  authMax: 100,
+  key: 'analytics',
+});
+
+const bannerImpressionRateLimiter = createSoftAuthRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  anonMax: 10,
+  authMax: 30,
+  key: 'banner-impression',
+});
+
+const registrationRateLimiter = createSoftAuthRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  anonMax: 5,
+  authMax: 5,
+  key: 'registration',
 });
 
 // Verification middleware - checks if user is verified
@@ -11386,7 +11419,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }, ANALYTICS_FLUSH_INTERVAL_MS);
   }
 
-  app.post("/api/analytics/event", async (req: any, res) => {
+  app.post("/api/analytics/event", analyticsRateLimiter, async (req: any, res) => {
     try {
       const event = typeof req.body?.event === "string" ? req.body.event.trim() : "";
       if (!event) {
@@ -11421,7 +11454,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/analytics/session", async (req: any, res) => {
+  app.post("/api/analytics/session", analyticsRateLimiter, async (req: any, res) => {
     try {
       const page = normalizeAnalyticsPage(req.body?.page) || "/";
       let visitorId = typeof req.body?.visitorId === "string" ? req.body.visitorId.trim() : "";
@@ -13732,9 +13765,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/banner-ads/:id/impression", async (req, res) => {
+  app.post("/api/banner-ads/:id/impression", bannerImpressionRateLimiter, async (req, res) => {
     try {
-      await storage.incrementBannerImpressions(req.params.id);
+      const clientIp = req.ip || req.connection?.remoteAddress || 'unknown';
+      const bannerId = req.params.id;
+
+      const userAgent = req.headers['user-agent'] || '';
+      const isSuspiciousAgent =
+        !userAgent ||
+        /bot|crawler|spider|Go-http|python|curl/i.test(userAgent);
+
+      if (isSuspiciousAgent) {
+        return res.status(200).json({ ok: true });
+      }
+
+      const dedupKey = `${bannerId}:${clientIp}`;
+      const lastImpression = bannerImpressionCache.get(dedupKey);
+      const oneHourMs = 60 * 60 * 1000;
+
+      if (lastImpression && Date.now() - lastImpression < oneHourMs) {
+        return res.status(200).json({ ok: true, deduped: true });
+      }
+
+      bannerImpressionCache.set(dedupKey, Date.now());
+
+      await storage.incrementBannerImpressions(bannerId);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to track impression" });

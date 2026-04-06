@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { createSoftAuthRateLimiter } from './middleware/rateLimit';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import crypto from 'crypto';
@@ -10,6 +11,13 @@ import { maybeSyncLogbookProSubscription } from './paypal-subscription-sync';
 import { getEntitlementsForUser, resolveMembershipFromStoreSignals } from './membership';
 
 const router = Router();
+
+const registrationRateLimiter = createSoftAuthRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  anonMax: 5,
+  authMax: 5,
+  key: 'registration',
+});
 
 async function establishWebSession(
   req: any,
@@ -109,7 +117,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
    * POST /api/auth/web-register
    * Register a new user with email and password (WEB - creates session)
    */
-  router.post('/web-register', async (req: any, res: Response): Promise<void> => {
+  router.post('/web-register', registrationRateLimiter, async (req: any, res: Response): Promise<void> => {
     try {
       const result = registerSchema.safeParse(req.body);
       if (!result.success) {
@@ -266,7 +274,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
    * POST /api/auth/register
    * Register a new user with email and password
    */
-  router.post('/register', async (req: Request, res: Response): Promise<void> => {
+  router.post('/register', registrationRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
       const result = registerSchema.safeParse(req.body);
       if (!result.success) {

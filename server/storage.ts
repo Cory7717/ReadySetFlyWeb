@@ -993,7 +993,7 @@ export class DatabaseStorage implements IStorage {
         .from(users)
         .where(ilike(users.id, `${idQuery}%`))
         .orderBy(asc(users.firstName), asc(users.lastName))
-        .limit(25);
+        .limit(100);
     }
 
     const emailQuery = normalized.includes("@") ? trimmed : "";
@@ -1012,7 +1012,7 @@ export class DatabaseStorage implements IStorage {
           END`,
           asc(users.email),
         )
-        .limit(25);
+        .limit(100);
     }
 
     if (trimmed.length < 2) {
@@ -1064,7 +1064,7 @@ export class DatabaseStorage implements IStorage {
         asc(users.firstName),
         asc(users.lastName),
       )
-      .limit(25);
+      .limit(100);
   }
 
   async updateUserPassword(id: string, hashedPassword: string): Promise<User | undefined> {

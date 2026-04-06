@@ -1138,6 +1138,7 @@ export class DatabaseStorage implements IStorage {
           eq(crmActivities.assignedTo, id)
         )
       );
+      await db.delete(analyticsEvents).where(eq(analyticsEvents.userId, id));
       
       // 12. Finally, delete the user account
       const result = await db.delete(users).where(eq(users.id, id)).returning();

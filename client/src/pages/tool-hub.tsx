@@ -40,6 +40,38 @@ const iconMap: Record<string, ComponentType<{ className?: string }>> = {
   "gps-sims": Route,
 };
 
+type PathEntry = {
+  path: string;
+  label: string;
+  desc: string;
+  Icon: ComponentType<{ className?: string }>;
+};
+
+const MARKETPLACE_PATHS: PathEntry[] = [
+  { path: "/marketplace", label: "Marketplace", desc: "Aircraft listings, aviation services, and classifieds", Icon: Plane },
+  { path: "/rentals", label: "Rentals", desc: "Rent aircraft by the hour from local operators", Icon: Route },
+  { path: "/cfi", label: "CFI Directory", desc: "Find certified flight instructors near you", Icon: BookOpen },
+  { path: "/flying-clubs", label: "Flying Clubs", desc: "Club memberships, scheduling, and shared access", Icon: Signal },
+];
+
+const PILOT_TOOL_PATHS: PathEntry[] = [
+  { path: "/pilot-tools", label: "Pilot Tools", desc: "Full suite of aviation calculators and references", Icon: Calculator },
+  { path: "/weight-balance", label: "Weight & Balance", desc: "Load calculations and CG envelope checks", Icon: Calculator },
+  { path: "/e6b", label: "E6B Calculator", desc: "Flight computer for time, speed, distance, and fuel", Icon: Calculator },
+  { path: "/ifr-tools", label: "IFR Tools", desc: "Approach, hold, and instrument procedure references", Icon: Radio },
+];
+
+const PLAN_TRACK_PATHS: PathEntry[] = [
+  { path: "/flight-planner", label: "Flight Planner", desc: "End-to-end route planning with weather and NOTAMs", Icon: Plane },
+  { path: "/logbook", label: "Pilot Logbook", desc: "Digital logbook with currency tracking and history", Icon: FileText },
+  { path: "/tfr-map", label: "TFR Map", desc: "Live temporary flight restrictions across the US", Icon: AlertTriangle },
+  { path: "/aviation-weather", label: "Aviation Weather", desc: "METARs, TAFs, AIRMETs, and weather products", Icon: CloudSun },
+];
+
+const CABIN_BRIEF_PATHS: PathEntry[] = [
+  { path: "/cabin-brief", label: "Cabin Brief", desc: "Passenger-facing AI weather briefing for non-pilots", Icon: CloudSun },
+];
+
 function readStringArray(key: string): string[] {
   if (typeof window === "undefined") return [];
   try {
@@ -116,24 +148,25 @@ export default function ToolHub() {
   };
 
   return (
-    <div className="min-h-screen">
-      <section className="border-b border-white/10 bg-[linear-gradient(135deg,hsl(221_66%_19%),hsl(221_74%_34%))] py-10 text-slate-100 shadow-[inset_0_-1px_0_rgba(255,255,255,0.06)]">
+    <div className="min-h-screen bg-[#0A0E14]">
+      {/* Hero */}
+      <section className="border-b border-[#1c3147] bg-[linear-gradient(135deg,#0d1622,#0f2236)] py-10 text-[#E8EDF4] shadow-[inset_0_-1px_0_rgba(255,255,255,0.04)]">
         <div className="container mx-auto px-4 space-y-4">
-          <span className="rsf-kicker border-white/10 bg-white/10 text-slate-100">PILOT TOOL HUB</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold">Aviation tools for every phase of flight.</h1>
-          <p className="max-w-3xl text-slate-300">
+          <span className="rsf-kicker border-[#29415e] bg-[#0d1622] text-[#7A9BB8]">PILOT TOOL HUB</span>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold text-[#F1F5FA]">Aviation tools for every phase of flight.</h1>
+          <p className="max-w-3xl text-[#7A9BB8]">
             Start free with planning, weather, and calculators. Upgrade later when saved workflow, repeat-use speed, and cleaner records start to matter.
           </p>
-          <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200/90">
-            <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">FLIGHT PLANNING</span>
-            <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">WEATHER & WEATHER TOOLS</span>
-            <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">TRAINING & CALCULATORS</span>
+          <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#6D88A6]">
+            <span className="rounded-full border border-[#29415e] bg-[#0d1622] px-3 py-1">FLIGHT PLANNING</span>
+            <span className="rounded-full border border-[#29415e] bg-[#0d1622] px-3 py-1">WEATHER & WEATHER TOOLS</span>
+            <span className="rounded-full border border-[#29415e] bg-[#0d1622] px-3 py-1">TRAINING & CALCULATORS</span>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild onClick={() => trackEvent("tool_hub_click", { target: "/marketplace" })}>
               <Link href="/marketplace">Open Marketplace</Link>
             </Button>
-            <Button variant="outline" asChild className="border-slate-300/20 bg-white/5 text-slate-100 hover:bg-white/10">
+            <Button variant="outline" asChild className="border-[#29415e] bg-[#0d1622] text-[#E8EDF4] hover:bg-[#15304b]">
               <Link href="/rentals">Browse Rentals</Link>
             </Button>
           </div>
@@ -141,69 +174,70 @@ export default function ToolHub() {
       </section>
 
       <section className="container mx-auto px-4 py-8 sm:py-10 space-y-8">
-        <Card className="border-slate-200 bg-white text-slate-900 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Quick Open</CardTitle>
-            <CardDescription>Type a tool name and jump directly.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search tools (e.g., weight, notam, e6b, logbook)"
-                className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm"
-              />
-            </div>
-            {query.trim() ? (
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {quickMatches.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No matching tools found.</div>
-                ) : (
-                  quickMatches.map((tool) => (
-                    <Button
-                      key={tool.id}
-                      asChild
-                      variant="outline"
-                      className="justify-start"
-                      onClick={() => recordToolOpen(tool)}
-                    >
-                      <Link href={tool.path}>{tool.title}</Link>
-                    </Button>
-                  ))
-                )}
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
 
-        <Card className="border-primary/20 bg-primary/5 text-slate-900 shadow-sm">
-          <CardContent className="grid gap-4 p-6 lg:grid-cols-[1.2fr_0.8fr]">
+        {/* Quick Open */}
+        <div className="rounded-xl border border-[#203249] bg-[#0d1622] p-5 shadow-sm">
+          <div className="mb-3">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6D88A6]">Quick Open</div>
+            <p className="mt-1 text-xs text-[#7A9BB8]">Type a tool name and jump directly.</p>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#4a6480]" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search tools (e.g., weight, notam, e6b, logbook)"
+              className="h-10 w-full rounded-md border border-[#29415e] bg-[#0A0E14] pl-9 pr-3 text-sm text-[#F1F5FA] placeholder:text-[#4a6480] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#29415e]"
+            />
+          </div>
+          {query.trim() ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {quickMatches.length === 0 ? (
+                <div className="text-sm text-[#7A9BB8]">No matching tools found.</div>
+              ) : (
+                quickMatches.map((tool) => (
+                  <Button
+                    key={tool.id}
+                    asChild
+                    variant="outline"
+                    className="justify-start border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]"
+                    onClick={() => recordToolOpen(tool)}
+                  >
+                    <Link href={tool.path}>{tool.title}</Link>
+                  </Button>
+                ))
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Pro value panel */}
+        <div className="rounded-xl border border-[#203249] bg-[#0d1622] shadow-sm">
+          <div className="grid gap-4 p-6 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">Why RSF Pro Exists</div>
-              <h2 className="text-2xl font-semibold">Pilots do not pay for “advanced features.” They pay to stop redoing work.</h2>
-              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#D9A441]">Why RSF Pro Exists</div>
+              <h2 className="text-2xl font-semibold text-[#F1F5FA]">Pilots do not pay for "advanced features." They pay to stop redoing work.</h2>
+              <p className="max-w-3xl text-sm leading-6 text-[#7A9BB8]">
                 RSF Pro becomes useful when you want saved plans, saved aircraft assumptions, practice history, logbook continuity, and reminders that keep repeat flying easier.
               </p>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border bg-background px-4 py-3">
-                  <div className="text-sm font-semibold">Free</div>
-                  <div className="mt-1 text-xs text-muted-foreground">Explore tools, plan one-offs, browse marketplace value.</div>
+                <div className="rounded-xl border border-[#203249] bg-[#0f1a28] px-4 py-3">
+                  <div className="text-sm font-semibold text-[#F1F5FA]">Free</div>
+                  <div className="mt-1 text-xs text-[#7A9BB8]">Explore tools, plan one-offs, browse marketplace value.</div>
                 </div>
-                <div className="rounded-xl border bg-background px-4 py-3">
-                  <div className="text-sm font-semibold">Pro</div>
-                  <div className="mt-1 text-xs text-muted-foreground">Save repeat workflows, keep history, and reduce planning/admin friction.</div>
+                <div className="rounded-xl border border-[#203249] bg-[#0f1a28] px-4 py-3">
+                  <div className="text-sm font-semibold text-[#F1F5FA]">Pro</div>
+                  <div className="mt-1 text-xs text-[#7A9BB8]">Save repeat workflows, keep history, and reduce planning/admin friction.</div>
                 </div>
-                <div className="rounded-xl border bg-background px-4 py-3">
-                  <div className="text-sm font-semibold">Pro+</div>
-                  <div className="mt-1 text-xs text-muted-foreground">Layer on deeper planning context and power-user tools as they ship.</div>
+                <div className="rounded-xl border border-[#203249] bg-[#0f1a28] px-4 py-3">
+                  <div className="text-sm font-semibold text-[#F1F5FA]">Pro+</div>
+                  <div className="mt-1 text-xs text-[#7A9BB8]">Layer on deeper planning context and power-user tools as they ship.</div>
                 </div>
               </div>
             </div>
-            <div className="space-y-3 rounded-2xl border bg-background p-4">
-              <div className="text-sm font-semibold">Best next step</div>
-              <div className="text-sm text-muted-foreground">
+            <div className="space-y-3 rounded-2xl border border-[#203249] bg-[#0f1a28] p-4">
+              <div className="text-sm font-semibold text-[#F1F5FA]">Best next step</div>
+              <div className="text-sm text-[#7A9BB8]">
                 Use the free tools first. If you keep coming back to the same workflows, that is your upgrade moment.
               </div>
               <div className="flex flex-wrap gap-2">
@@ -215,133 +249,154 @@ export default function ToolHub() {
                 <Button
                   asChild
                   variant="outline"
+                  className="border-[#29415e] bg-[#0d1622] text-[#E8EDF4] hover:bg-[#15304b]"
                   onClick={() => trackEvent("subscription_cta_click", { source_page: "/tool-hub", target: "/logbook/pro", context: "tool_hub_value_panel" })}
                 >
                   <Link href={withSourceParam("/logbook/pro", "/tool-hub")}>See Pro plans</Link>
                 </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card className="border-slate-200 bg-white text-slate-900 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Pinned tools</CardTitle>
-              <CardDescription>Tools you want at the top every session.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              {pinnedTools.length === 0 ? (
-                <span className="text-sm text-muted-foreground">No pinned tools yet.</span>
-              ) : (
-                pinnedTools.map((tool) => (
-                  <Button key={tool.id} asChild variant="outline" size="sm" onClick={() => recordToolOpen(tool)}>
-                    <Link href={tool.path}>{tool.title}</Link>
-                  </Button>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200 bg-white text-slate-900 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Recent tools</CardTitle>
-              <CardDescription>Last tools opened from this hub.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              {recentTools.length === 0 ? (
-                <span className="text-sm text-muted-foreground">No recent tools yet.</span>
-              ) : (
-                recentTools.map((tool) => (
-                  <Button key={tool.id} asChild variant="outline" size="sm" onClick={() => recordToolOpen(tool)}>
-                    <Link href={tool.path}>{tool.title}</Link>
-                  </Button>
-                ))
-              )}
-            </CardContent>
-          </Card>
+          </div>
         </div>
 
-        {toolsByGroup.map(({ group, label, tools }) => (
-          <div key={group} id={`tools-${group}`} className="space-y-4">
-            <div className="space-y-1 border-l-4 border-primary pl-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">RSF Tool Group</div>
-              <h2 className="text-2xl font-semibold text-slate-900">{label.title}</h2>
-              <p className="max-w-3xl text-sm text-muted-foreground">{label.description}</p>
+        {/* Pinned + Recent */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border border-[#203249] bg-[#0d1622] p-4 shadow-sm">
+            <div className="mb-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6D88A6]">Pinned Tools</div>
+              <p className="mt-0.5 text-xs text-[#7A9BB8]">Tools you want at the top every session.</p>
             </div>
-
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {tools.map((tool) => {
-                const Icon = iconMap[tool.id] ?? Route;
-                const isComingSoon = tool.status === "coming_soon";
-                const isPreviewCard = Boolean(isComingSoon && canPreviewInternal);
-                const href = tool.path;
-                const pinActive = pinnedIds.includes(tool.id);
-                return (
-                  <Card
-                    key={tool.id}
-                    className={[
-                      "h-full border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),rgba(255,255,255,0.58))]",
-                      isComingSoon ? "opacity-75" : "",
-                    ].join(" ").trim()}
-                  >
-                    <CardHeader className="pb-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-2">
-                          <CardTitle className="flex items-center gap-2 text-slate-900">
-                            <Icon className="h-5 w-5 text-primary" />
-                            {tool.title}
-                          </CardTitle>
-                          <CardDescription>{tool.description}</CardDescription>
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          {tool.status ? (
-                            <Badge variant={tool.status === "coming_soon" ? "outline" : "default"}>
-                              {isPreviewCard ? "Internal Preview" : statusLabelMap[tool.status]}
-                            </Badge>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={() => togglePinned(tool.id)}
-                            className="rounded border border-slate-300 px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
-                          >
-                            {pinActive ? "Pinned" : "Pin"}
-                          </button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      {isComingSoon && !canPreviewInternal ? (
-                        <Button className="w-full" variant="outline" disabled>
-                          Coming soon
-                        </Button>
-                      ) : (
-                        <Button className="w-full" asChild onClick={() => recordToolOpen(tool)}>
-                          <Link href={href}>{isPreviewCard ? "Open Internal Preview" : "Open"}</Link>
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
+            <div className="flex flex-wrap gap-2">
+              {pinnedTools.length === 0 ? (
+                <span className="text-sm text-[#7A9BB8]">No pinned tools yet.</span>
+              ) : (
+                pinnedTools.map((tool) => (
+                  <Button key={tool.id} asChild variant="outline" size="sm"
+                    className="border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]"
+                    onClick={() => recordToolOpen(tool)}>
+                    <Link href={tool.path}>{tool.title}</Link>
+                  </Button>
+                ))
+              )}
             </div>
           </div>
-        ))}
 
-        <Card className="border-slate-200 bg-white text-slate-900 shadow-sm">
-          <CardContent className="pt-6">
+          <div className="rounded-xl border border-[#203249] bg-[#0d1622] p-4 shadow-sm">
+            <div className="mb-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6D88A6]">Recent Tools</div>
+              <p className="mt-0.5 text-xs text-[#7A9BB8]">Last tools opened from this hub.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {recentTools.length === 0 ? (
+                <span className="text-sm text-[#7A9BB8]">No recent tools yet.</span>
+              ) : (
+                recentTools.map((tool) => (
+                  <Button key={tool.id} asChild variant="outline" size="sm"
+                    className="border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]"
+                    onClick={() => recordToolOpen(tool)}>
+                    <Link href={tool.path}>{tool.title}</Link>
+                  </Button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Section 1 — MARKETPLACE */}
+        <div className="space-y-3">
+          <div className="border-l-2 border-[#D9A441] pl-4">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6D88A6]">Marketplace</div>
+            <p className="mt-0.5 text-xs text-[#7A9BB8]">Aircraft rentals, listings, CFI directory, and services</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {MARKETPLACE_PATHS.map(({ path, label, desc, Icon }) => (
+              <Link key={path} href={path} onClick={() => trackEvent("tool_hub_click", { target: path })}>
+                <div className="rounded-xl border border-[#29415e] bg-[#0f1a28] p-4 hover:bg-[#15304b] transition cursor-pointer h-full">
+                  <Icon className="h-5 w-5 text-[#D9A441] mb-2" />
+                  <div className="text-sm font-semibold text-[#F1F5FA]">{label}</div>
+                  <div className="mt-1 text-xs text-[#7A9BB8]">{desc}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Section 2 — PILOT TOOLS */}
+        <div className="space-y-3">
+          <div className="border-l-2 border-[#D9A441] pl-4">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6D88A6]">Pilot Tools</div>
+            <p className="mt-0.5 text-xs text-[#7A9BB8]">Calculators, trainers, and aviation references</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {PILOT_TOOL_PATHS.map(({ path, label, desc, Icon }) => (
+              <Link key={path} href={path} onClick={() => trackEvent("tool_hub_click", { target: path })}>
+                <div className="rounded-xl border border-[#29415e] bg-[#0f1a28] p-4 hover:bg-[#15304b] transition cursor-pointer h-full">
+                  <Icon className="h-5 w-5 text-[#D9A441] mb-2" />
+                  <div className="text-sm font-semibold text-[#F1F5FA]">{label}</div>
+                  <div className="mt-1 text-xs text-[#7A9BB8]">{desc}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Section 3 — PLAN & TRACK */}
+        <div className="space-y-3">
+          <div className="border-l-2 border-[#D9A441] pl-4">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6D88A6]">Plan & Track</div>
+            <p className="mt-0.5 text-xs text-[#7A9BB8]">Flight planning, logbook, airspace, and route tools</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {PLAN_TRACK_PATHS.map(({ path, label, desc, Icon }) => (
+              <Link key={path} href={path} onClick={() => trackEvent("tool_hub_click", { target: path })}>
+                <div className="rounded-xl border border-[#29415e] bg-[#0f1a28] p-4 hover:bg-[#15304b] transition cursor-pointer h-full">
+                  <Icon className="h-5 w-5 text-[#D9A441] mb-2" />
+                  <div className="text-sm font-semibold text-[#F1F5FA]">{label}</div>
+                  <div className="mt-1 text-xs text-[#7A9BB8]">{desc}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Section 4 — CABIN BRIEF (gold tint) */}
+        <div className="space-y-3">
+          <div className="border-l-2 border-[#D9A441] pl-4">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6D88A6]">Cabin Brief</div>
+            <p className="mt-0.5 text-xs text-[#7A9BB8]">Passenger-facing AI weather briefing for non-pilots</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {CABIN_BRIEF_PATHS.map(({ path, label, desc, Icon }) => (
+              <Link key={path} href={path} onClick={() => trackEvent("tool_hub_click", { target: path })}>
+                <div className="rounded-xl border border-[#5b4520] bg-[#1a1208] p-4 hover:bg-[#231a0c] transition cursor-pointer h-full">
+                  <Icon className="h-5 w-5 text-[#D9A441] mb-2" />
+                  <div className="text-sm font-semibold text-[#F5C86A]">{label}</div>
+                  <div className="mt-1 text-xs text-[#a88a4a]">{desc}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Bottom CTA */}
+        <div className="rounded-xl border border-[#203249] bg-[#0d1622] shadow-sm">
+          <div className="p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="text-sm font-semibold">Need access before tools?</div>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-sm font-semibold text-[#F1F5FA]">Need access before tools?</div>
+                <div className="text-xs text-[#7A9BB8]">
                   Start in Marketplace or Rentals, then return here for planning and training tools.
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button asChild variant="outline" onClick={() => trackEvent("tool_hub_click", { target: "/marketplace" })}>
+                <Button asChild variant="outline"
+                  className="border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]"
+                  onClick={() => trackEvent("tool_hub_click", { target: "/marketplace" })}>
                   <Link href="/marketplace">Marketplace</Link>
                 </Button>
-                <Button asChild variant="outline" onClick={() => trackEvent("tool_hub_click", { target: "/rentals" })}>
+                <Button asChild variant="outline"
+                  className="border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]"
+                  onClick={() => trackEvent("tool_hub_click", { target: "/rentals" })}>
                   <Link href="/rentals">Rentals</Link>
                 </Button>
                 {!isAuthenticated ? (
@@ -351,8 +406,9 @@ export default function ToolHub() {
                 ) : null}
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
       </section>
     </div>
   );

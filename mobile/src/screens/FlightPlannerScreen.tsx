@@ -6923,7 +6923,11 @@ export default function FlightPlannerScreen() {
             ))}
           </MapView>
         ) : (
-          <Text style={styles.helperText}>Enter airports and build a route to preview the map.</Text>
+          <View style={{ flex: 1, backgroundColor: '#0A0E14', alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: '#7A9BB8', fontSize: 13, fontFamily: 'monospace' }}>
+              Enter departure airport to load map
+            </Text>
+          </View>
         )}
         {mapStyle === 'sectional' && (
           <Text style={styles.helperText}>
@@ -7147,6 +7151,8 @@ export default function FlightPlannerScreen() {
                 onPress={() => {
                   dispatchAircraftPerformance({ type: 'load_from_type', value: item });
                   dispatchAircraftPerformance({ type: 'set_selected_profile_id', value: null });
+                  setAircraftQuery('');
+                  setAircraftResults([]);
                 }}
               >
                 <Text style={styles.listItemText}>{item.make} {item.model} ({item.icaoType || 'N/A'})</Text>
@@ -7167,6 +7173,8 @@ export default function FlightPlannerScreen() {
                 onPress={() => {
                     dispatchAircraftPerformance({ type: 'set_selected_profile_id', value: profile.id });
                     dispatchAircraftPerformance({ type: 'set_selected_type', value: null });
+                    setAircraftQuery('');
+                    setAircraftResults([]);
                 }}
               >
                   <Text style={styles.listItemText}>{profile.name}</Text>

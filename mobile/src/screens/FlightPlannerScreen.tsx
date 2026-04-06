@@ -1081,7 +1081,7 @@ function parseFlightCategory(metar: any): 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'UNK
 }
 
 function hasThunder(taf: any) {
-  const raw = taf?.rawTAF || ';
+  const raw = taf?.rawTAF || '';
   return raw.includes('TS');
 }
 
@@ -1204,7 +1204,7 @@ function buildBboxFromRegion(region: { latitude: number; longitude: number; lati
 }
 
 function formatCloudTimeLabel(value?: string) {
-  if (!value) return ';
+  if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toUTCString().replace('GMT', 'UTC');
@@ -1232,7 +1232,7 @@ function toRad(deg: number) {
 function normalizeRunwayIdent(value?: string | null) {
   return String(value || '')
     .toUpperCase()
-    .replace(/^RWY\s*/i, ')
+    .replace(/^RWY\s*/i, '')
     .trim();
 }
 
@@ -1371,15 +1371,15 @@ export default function FlightPlannerScreen() {
   const isFlightDeck = route.name === 'FlightDeck' || route.params?.mode === 'flight';
   const [departure, setDeparture] = useState('KJFK');
   const [destination, setDestination] = useState('KBOS');
-  const [waypoints, setWaypoints] = useState(');
-  const [plannedStops, setPlannedStops] = useState(');
-  const [alternate, setAlternate] = useState(');
-  const [tailNumber, setTailNumber] = useState(');
-  const [fuelOnBoard, setFuelOnBoard] = useState(');
-  const [notes, setNotes] = useState(');
-  const [plannedAltitude, setPlannedAltitude] = useState(');
-  const [plannedDepartureAt, setPlannedDepartureAt] = useState(');
-  const [plannedArrivalAt, setPlannedArrivalAt] = useState(');
+  const [waypoints, setWaypoints] = useState('');
+  const [plannedStops, setPlannedStops] = useState('');
+  const [alternate, setAlternate] = useState('');
+  const [tailNumber, setTailNumber] = useState('');
+  const [fuelOnBoard, setFuelOnBoard] = useState('');
+  const [notes, setNotes] = useState('');
+  const [plannedAltitude, setPlannedAltitude] = useState('');
+  const [plannedDepartureAt, setPlannedDepartureAt] = useState('');
+  const [plannedArrivalAt, setPlannedArrivalAt] = useState('');
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [suggestedMode, setSuggestedMode] = useState<'direct' | 'midpoint'>('direct');
   const [loading, setLoading] = useState(false);
@@ -1445,11 +1445,11 @@ export default function FlightPlannerScreen() {
     initialAircraftPerformanceState,
   );
 
-  const [aircraftQuery, setAircraftQuery] = useState(');
+  const [aircraftQuery, setAircraftQuery] = useState('');
   const [aircraftResults, setAircraftResults] = useState<AircraftType[]>([]);
   const [profiles, setProfiles] = useState<AircraftProfile[]>([]);
-  const [departureTimeZone, setDepartureTimeZone] = useState(');
-  const [destinationTimeZone, setDestinationTimeZone] = useState(');
+  const [departureTimeZone, setDepartureTimeZone] = useState('');
+  const [destinationTimeZone, setDestinationTimeZone] = useState('');
   const [reserveMinutes, setReserveMinutes] = useState('45');
   const [headwind, setHeadwind] = useState('0');
 
@@ -1536,17 +1536,17 @@ export default function FlightPlannerScreen() {
   const deviceAttitudeFresh = deviceAttitudeAgeMs != null && deviceAttitudeAgeMs <= DEVICE_ATTITUDE_STALE_MS;
   const gpsOwnshipAgeMs = gpsData?.updatedAt ? ownshipClockMs - gpsData.updatedAt : null;
   const gpsOwnshipFresh = gpsOwnshipAgeMs != null && gpsOwnshipAgeMs <= DEVICE_OWNSHIP_STALE_MS;
-  const activeOwnship = simulationEnabled && simulatedGpsData
+  const activeOwnship: OwnshipData | null = simulationEnabled && simulatedGpsData
     ? simulatedGpsData
-    : receiverOwnshipFresh
+    : receiverOwnshipFresh && receiverOwnship
       ? {
           ...receiverOwnship,
           heading:
             receiverAttitudeFresh && typeof receiverAttitude?.headingDeg === 'number'
               ? receiverAttitude.headingDeg
-              : receiverOwnship?.heading,
+              : receiverOwnship.heading,
         }
-      : gpsOwnshipFresh
+      : gpsOwnshipFresh && gpsData
         ? gpsData
         : null;
   const ownshipSourceSummary = useMemo(() => {
@@ -1784,14 +1784,97 @@ export default function FlightPlannerScreen() {
               ? 'Winds'
               : 'Clouds';
   const flightDeckActiveSession = simulationEnabled || gpsEnabled || trafficEnabled || Boolean(activeOwnship);
+  const activeRoutePoints = useMemo(() => {
+    if (routeExecutionOverride?.mode !== 'direct-to-diversion') return routePoints;
+    return [routeExecutionOverride.origin, routeExecutionOverride.target];
+  }, [routeExecutionOverride, routePoints]);
+  const plannedRouteStructureText = useMemo(() => {
+    const dep = departure.trim().toUpperCase();
+    const dest = destination.trim().toUpperCase();
+    const stopList = plannedStops
+      .split(/[\s,]+/)
+      .map((code) => code.trim().toUpperCase())
+      .filter(Boolean);
+    const wpList = waypoints
+      .split(/[\s,]+/)
+      .map((code) => code.trim().toUpperCase())
+      .filter(Boolean);
+    return [dep, ...stopList, ...wpList, dest].filter(Boolean).join(' ');
+  }, [departure, destination, plannedStops, waypoints]);
+  const plannedRouteAnalysis = useMemo(() => analyzeFiledRoute(plannedRouteStructureText), [plannedRouteStructureText]);
+  const providerRouteAnalysis = useMemo(
+    () => analyzeFiledRoute(providerRouteSearch?.route || ''),
+    [providerRouteSearch?.route]
+  );
+  const plannedRouteAnchorTokens = useMemo(
+    () =>
+      plannedRouteAnalysis.tokens
+        .filter((token) => isFiledRouteAnchorKind(token.kind))
+        .map((token) => token.token),
+    [plannedRouteAnalysis]
+  );
+  const providerRouteAnchorTokens = useMemo(
+    () =>
+      providerRouteAnalysis.tokens
+        .filter((token) => isFiledRouteAnchorKind(token.kind))
+        .map((token) => token.token),
+    [providerRouteAnalysis]
+  );
+  const activeRouteLegs = useMemo(
+    () =>
+      buildMobileRouteLegs(activeRoutePoints, {
+        mode: routeExecutionOverride?.mode === 'direct-to-diversion' ? 'direct-to' : 'planned',
+      }),
+    [activeRoutePoints, routeExecutionOverride?.mode]
+  );
+  const activeLegDefinition = useMemo(
+    () => activeRouteLegs[Math.min(activeLegIndex, Math.max(0, activeRouteLegs.length - 1))] || null,
+    [activeLegIndex, activeRouteLegs]
+  );
   const routeProgress = useMemo(
     () => computeMobileRouteProgress(activeRoutePoints, activeOwnship, { activeLegIndex }),
     [activeLegIndex, activeOwnship, activeRoutePoints]
+  );
+  const activeLegBehavior = useMemo(
+    () =>
+      getMobileRouteLegBehavior(activeLegDefinition, {
+        legProgressPct: routeProgress?.legProgressPct,
+        remainingRouteNm: routeProgress?.remainingRouteNm,
+      }),
+    [activeLegDefinition, routeProgress?.legProgressPct, routeProgress?.remainingRouteNm]
+  );
+  const activeExecutionSegmentPreview = useMemo(
+    () => getMobileRouteExecutionSegment(activeLegBehavior.profile, { sequenceGateState: 'blocked' }),
+    [activeLegBehavior.profile]
+  );
+  const activeProcedureExecutionProfilePreview = useMemo(
+    () => getMobileRouteProcedureExecutionProfile(getMobileRouteProcedureContext(activeLegBehavior.profile).kind),
+    [activeLegBehavior.profile]
+  );
+  const activeProcedureCueStackPreview = useMemo(
+    () => getMobileRouteProcedureCueStack(getMobileRouteProcedureContext(activeLegBehavior.profile).kind),
+    [activeLegBehavior.profile]
+  );
+  const activeProcedureRoleExecutionPolicyPreview = useMemo(
+    () =>
+      getMobileRouteProcedureRoleExecutionPolicy(
+        getMobileRouteProcedureEntryRole(getMobileRouteProcedureContext(activeLegBehavior.profile).kind, {
+          entryIndexInChain: 0,
+          entryCount: 1,
+        }).kind,
+      ),
+    [activeLegBehavior.profile]
   );
   const plannedRouteRejoinProgress = useMemo(
     () => computeMobileRouteProgress(routePoints, activeOwnship),
     [activeOwnship, routePoints]
   );
+  const lateralCapturedForSequencing = useMemo(() => {
+    if (!activeOwnship || !routeProgress) return false;
+    const desiredTrack = routeProgress.desiredTrackDeg ?? 0;
+    const headingDelta = normalizeHeadingDelta(desiredTrack - (activeOwnship.heading ?? desiredTrack));
+    return Math.abs(routeProgress.crossTrackNm) < 0.25 && Math.abs(headingDelta) < 5;
+  }, [activeOwnship, routeProgress]);
   useEffect(() => {
     setActiveLegIndex(0);
     setSequencingSuspended(false);
@@ -1832,7 +1915,7 @@ export default function FlightPlannerScreen() {
       distanceToLegEndNm <= sequencingCaptureNm;
     const lateralReady =
       !activeProcedureExecutionProfilePreview.requiresLateralCapture ||
-      Boolean(visionRouteGuidance?.lateralCaptured);
+      lateralCapturedForSequencing;
     const gateOpen = gateArmed && gateOpenByProgress && lateralReady;
     const effectiveSequencingModel = activeProcedureRoleExecutionPolicyPreview.sequencingModel;
     const shouldAdvance = gateOpen && effectiveSequencingModel === 'auto';
@@ -1840,7 +1923,7 @@ export default function FlightPlannerScreen() {
     if (shouldAdvance) {
       setActiveLegIndex((prev) => Math.min(prev + 1, activeRoutePoints.length - 2));
     }
-  }, [activeLegBehavior.sequencingCaptureNm, activeLegIndex, activeOwnship, activeProcedureExecutionProfilePreview.armAtProgressPct, activeProcedureExecutionProfilePreview.openAtProgressPct, activeProcedureExecutionProfilePreview.requiresLateralCapture, activeProcedureRoleExecutionPolicyPreview.armBiasPct, activeProcedureRoleExecutionPolicyPreview.openBiasPct, activeProcedureRoleExecutionPolicyPreview.sequencingModel, activeRoutePoints, routeProgress, sequencingSuspended, visionRouteGuidance?.lateralCaptured]);
+  }, [activeLegBehavior.sequencingCaptureNm, activeLegIndex, activeOwnship, activeProcedureExecutionProfilePreview.armAtProgressPct, activeProcedureExecutionProfilePreview.openAtProgressPct, activeProcedureExecutionProfilePreview.requiresLateralCapture, activeProcedureRoleExecutionPolicyPreview.armBiasPct, activeProcedureRoleExecutionPolicyPreview.openBiasPct, activeProcedureRoleExecutionPolicyPreview.sequencingModel, activeRoutePoints, lateralCapturedForSequencing, routeProgress, sequencingSuspended]);
   const flightDeckPhaseSummary = useMemo(() => {
     if (!activeOwnship) {
       return {
@@ -2008,6 +2091,68 @@ export default function FlightPlannerScreen() {
     () => visibleTrafficTargets.find((target) => target.id === selectedTrafficId) || topTrafficTarget || null,
     [selectedTrafficId, topTrafficTarget, visibleTrafficTargets]
   );
+  const destinationElevationFtEstimate = useMemo(
+    () => terrainProfile?.samples?.[terrainProfile.samples.length - 1]?.elevationFt ?? 0,
+    [terrainProfile?.samples],
+  );
+  const departureRunway = useMemo(
+    () => resolveDestinationRunway(departureBriefing),
+    [departureBriefing]
+  );
+  const destinationRunway = useMemo(
+    () => resolveDestinationRunway(destinationBriefing),
+    [destinationBriefing]
+  );
+  const destinationRunwayCue = useMemo<DestinationRunwayCue | null>(() => {
+    const destinationPoint = activeRoutePoints[activeRoutePoints.length - 1];
+    if (!activeOwnship || !destinationPoint || !destinationRunway) return null;
+    if (flightPhase !== 'arrival') return null;
+    const destinationElevationFt = terrainProfile?.samples?.[terrainProfile.samples.length - 1]?.elevationFt ?? 0;
+    const currentAltitudeFt = activeOwnship.altitudeFt ?? simulationAltitudeFt;
+    return buildArrivalRunwayCue({
+      ownship: {
+        lat: activeOwnship.lat,
+        lon: activeOwnship.lon,
+        heading: activeOwnship.heading ?? destinationRunway.headingDeg,
+        altitudeFt: currentAltitudeFt,
+      },
+      airport: {
+        latitude: destinationPoint.latitude,
+        longitude: destinationPoint.longitude,
+      },
+      runway: destinationRunway,
+      destinationElevationFt,
+      activeRangeNm: 18,
+      maxDistanceNm: 30,
+    });
+  }, [activeOwnship, activeRoutePoints, destinationRunway, flightPhase, simulationAltitudeFt, terrainProfile?.samples]);
+  const destinationRunwayOverlay = useMemo<DestinationRunwayOverlay | null>(() => {
+    const destinationPoint = activeRoutePoints[activeRoutePoints.length - 1];
+    if (!destinationPoint || !destinationRunway || !destinationRunwayCue) return null;
+    return buildArrivalRunwayOverlay({
+      airport: {
+        latitude: destinationPoint.latitude,
+        longitude: destinationPoint.longitude,
+      },
+      runway: destinationRunway,
+      approachLengthNm: flightPhase === 'arrival' ? 8 : 5,
+    });
+  }, [activeRoutePoints, destinationRunway, destinationRunwayCue, flightPhase]);
+  const departureRunwayOverlay = useMemo<DestinationRunwayOverlay | null>(() => {
+    const departurePoint = activeRoutePoints[0];
+    if (!departurePoint || !departureRunway || flightPhase !== 'departure') return null;
+    return buildDepartureRunwayOverlay({
+      airport: {
+        latitude: departurePoint.latitude,
+        longitude: departurePoint.longitude,
+      },
+      runway: departureRunway,
+    });
+  }, [activeRoutePoints, departureRunway, flightPhase]);
+  const activeRunwayOverlay = flightPhase === 'arrival' ? destinationRunwayOverlay : departureRunwayOverlay;
+  const activeRunwayOverlayLabel = flightPhase === 'arrival'
+    ? destinationRunway ? `Final ${destinationRunway.runwayId}` : null
+    : departureRunway ? `Dep ${departureRunway.runwayId}` : null;
   const tacticalMapRegion = useMemo(
     () =>
       buildTacticalMapRegion({
@@ -2210,552 +2355,6 @@ export default function FlightPlannerScreen() {
             : 0.75,
     };
   }, [flightDeckPhaseSummary.stage]);
-  const mapVerticalGuidancePresentation = useMemo(() => {
-    if (!activeOwnship || activeRoutePoints.length < 2) return null;
-
-    const ownshipPoint = { latitude: activeOwnship.lat, longitude: activeOwnship.lon };
-    const activeLegIndex = Math.min(routeProgress?.legIndex ?? 0, Math.max(0, activeRoutePoints.length - 2));
-    const remainingRouteNm =
-      typeof routeProgress?.remainingRouteNm === 'number' && Number.isFinite(routeProgress.remainingRouteNm)
-        ? routeProgress.remainingRouteNm
-        : null;
-    const activeConstraintDistanceNm =
-      typeof flightDeckVerticalConstraintSummary.activeConstraintDistanceNm === 'number' &&
-      Number.isFinite(flightDeckVerticalConstraintSummary.activeConstraintDistanceNm)
-        ? flightDeckVerticalConstraintSummary.activeConstraintDistanceNm
-        : null;
-    const todDistanceNm =
-      typeof flightDeckVerticalPathSummary.distanceToTodNm === 'number' &&
-      Number.isFinite(flightDeckVerticalPathSummary.distanceToTodNm) &&
-      flightDeckVerticalPathSummary.distanceToTodNm > 0
-        ? flightDeckVerticalPathSummary.distanceToTodNm
-        : null;
-
-    let kind: 'constraint' | 'tod' | null = null;
-    let anchorDistanceNm: number | null = null;
-    let label = '';
-    let subtitle = '';
-    let detail = '';
-
-    if (
-      flightDeckVerticalConstraintSummary.targetAltitudeFt != null &&
-      activeConstraintDistanceNm != null &&
-      activeConstraintDistanceNm > 0.15
-    ) {
-      kind = 'constraint';
-      anchorDistanceNm = activeConstraintDistanceNm;
-      label = flightDeckVerticalConstraintSummary.modeLabel === 'Leg constraint' ? 'ALT' : 'PROC';
-      subtitle = `${Math.round(flightDeckVerticalConstraintSummary.targetAltitudeFt)} FT`;
-      detail = flightDeckVerticalConstraintSummary.activeConstraintLabel;
-    } else if (todDistanceNm != null && todDistanceNm > 0.35) {
-      kind = 'tod';
-      anchorDistanceNm = todDistanceNm;
-      label = 'TOD';
-      subtitle = `${todDistanceNm.toFixed(1)} NM`;
-      detail = flightDeckVerticalPathSummary.modeLabel;
-    }
-
-    if (!kind || anchorDistanceNm == null) return null;
-
-    const boundedDistanceNm =
-      remainingRouteNm != null ? Math.min(anchorDistanceNm, Math.max(remainingRouteNm, 0.2)) : anchorDistanceNm;
-    const coordinate = projectPointAlongRoute(activeRoutePoints, ownshipPoint, activeLegIndex, boundedDistanceNm);
-
-    return {
-      kind,
-      label,
-      subtitle,
-      detail,
-      distanceNm: anchorDistanceNm,
-      coordinate,
-    };
-  }, [
-    activeOwnship,
-    activeRoutePoints,
-    flightDeckVerticalConstraintSummary.activeConstraintDistanceNm,
-    flightDeckVerticalConstraintSummary.activeConstraintLabel,
-    flightDeckVerticalConstraintSummary.modeLabel,
-    flightDeckVerticalConstraintSummary.targetAltitudeFt,
-    flightDeckVerticalPathSummary.distanceToTodNm,
-    flightDeckVerticalPathSummary.modeLabel,
-    routeProgress?.legIndex,
-    routeProgress?.remainingRouteNm,
-  ]);
-  const destinationElevationFtEstimate = useMemo(
-    () => terrainProfile?.samples?.[terrainProfile.samples.length - 1]?.elevationFt ?? 0,
-    [terrainProfile?.samples],
-  );
-  const selectedTrafficTrend = useMemo(
-    () => (selectedTrafficTarget ? trafficTrendMap[selectedTrafficTarget.id] || null : null),
-    [selectedTrafficTarget, trafficTrendMap]
-  );
-  const selectedDiversionRunwaySummary = useMemo(() => {
-    if (selectedDiversionBriefingLoading) return 'Loading runway briefing';
-    if (selectedDiversionBriefing?.advisory) {
-      return `Runway ${selectedDiversionBriefing.advisory.runway || '--'} Â· HW ${selectedDiversionBriefing.advisory.headwind ?? '--'} kt Â· XW ${selectedDiversionBriefing.advisory.crosswind ?? '--'} kt`;
-    }
-    if (selectedDiversionBriefing?.runwayInUse) {
-      return `Runway in use ${selectedDiversionBriefing.runwayInUse}`;
-    }
-    return 'Runway advisory pending';
-  }, [selectedDiversionBriefing, selectedDiversionBriefingLoading]);
-  const departureRunway = useMemo(
-    () => resolveDestinationRunway(departureBriefing),
-    [departureBriefing]
-  );
-  const destinationRunway = useMemo(
-    () => resolveDestinationRunway(destinationBriefing),
-    [destinationBriefing]
-  );
-  useEffect(() => {
-    if (!simulationEnabled && !receiverOwnship && !gpsData && !simulatedGpsData) return;
-    const timer = setInterval(() => {
-      setOwnshipClockMs(Date.now());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [gpsData, receiverOwnship, simulatedGpsData, simulationEnabled]);
-  useEffect(() => {
-    if (!activeOwnship || !rankedTrafficTargets.length) {
-      setTrafficTrendMap({});
-      trafficSnapshotRef.current = {};
-      return;
-    }
-
-    const nextSnapshots: Record<string, { distanceNm: number; bearingDelta: number; at: number }> = {};
-    const nextTrends: Record<string, TrafficTrend> = {};
-    const now = Date.now();
-
-    rankedTrafficTargets.forEach((target) => {
-      const bearingToTraffic = bearingBetweenPoints(
-        { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
-        { latitude: target.lat, longitude: target.lon },
-      );
-      const bearingDelta = normalizeHeadingDelta(bearingToTraffic - (activeOwnship.heading ?? 0));
-      const previous = trafficSnapshotRef.current[target.id];
-      let distanceRateNmPerMin: number | null = null;
-      let bearingRateDegPerMin: number | null = null;
-      if (previous) {
-        const elapsedMinutes = Math.max((now - previous.at) / 60000, 0.016);
-        distanceRateNmPerMin = (target.distanceNm - previous.distanceNm) / elapsedMinutes;
-        bearingRateDegPerMin = normalizeHeadingDelta(bearingDelta - previous.bearingDelta) / elapsedMinutes;
-      }
-      const closureText =
-        distanceRateNmPerMin == null
-          ? 'Monitor'
-          : distanceRateNmPerMin <= -1
-            ? 'Closing fast'
-            : distanceRateNmPerMin <= -0.25
-              ? 'Converging'
-              : distanceRateNmPerMin >= 0.35
-                ? 'Opening'
-                : 'Stable';
-      nextTrends[target.id] = {
-        distanceRateNmPerMin,
-        bearingRateDegPerMin,
-        closureText,
-      };
-      nextSnapshots[target.id] = {
-        distanceNm: target.distanceNm,
-        bearingDelta,
-        at: now,
-      };
-    });
-
-    trafficSnapshotRef.current = nextSnapshots;
-    setTrafficTrendMap(nextTrends);
-  }, [activeOwnship, rankedTrafficTargets]);
-  const terrainPathParam = useMemo(
-    () =>
-      activeRoutePoints.length >= 2
-        ? activeRoutePoints.map((point) => `${point.latitude},${point.longitude}`).join(';')
-        : ',
-    [activeRoutePoints]
-  );
-  const nextWaypointMeta = useMemo(() => {
-    if (!routeProgress?.nextWaypoint) return null;
-    const normalized = routeProgress.nextWaypoint.toUpperCase();
-    return activeRoutePoints.find((point) => point.icao.toUpperCase() === normalized) || activeRoutePoints[1] || null;
-  }, [activeRoutePoints, routeProgress?.nextWaypoint]);
-  const terrainTrendFt = useMemo(() => {
-    const samples = terrainProfile?.samples ?? [];
-    if (samples.length < 3) return 0;
-    const near = samples.slice(0, Math.min(samples.length, 6)).map((sample) => sample.elevationFt ?? 0);
-    return Math.max(...near) - (near[0] ?? 0);
-  }, [terrainProfile?.samples]);
-  const terrainAlertThresholds = useMemo(() => {
-    const baseWarning = flightPhase === 'departure' || flightPhase === 'arrival' ? 1500 : 1000;
-    const baseCaution = flightPhase === 'departure' || flightPhase === 'arrival' ? 2500 : 2000;
-    const riseBuffer = terrainTrendFt > 1200 ? 500 : terrainTrendFt > 600 ? 250 : 0;
-    return {
-      warningFt: baseWarning + riseBuffer,
-      cautionFt: baseCaution + riseBuffer,
-      closingFast: terrainTrendFt > 1200,
-    };
-  }, [flightPhase, terrainTrendFt]);
-  const terrainClearanceFt = useMemo(() => {
-    if (!terrainProfile?.maxElevationFt || !Number.isFinite(simulationAltitudeFt)) return null;
-    return simulationAltitudeFt - terrainProfile.maxElevationFt;
-  }, [simulationAltitudeFt, terrainProfile?.maxElevationFt]);
-  const terrainRisk = useMemo<'nominal' | 'caution' | 'warning' | 'unknown'>(() => {
-    if (terrainClearanceFt == null) return 'unknown';
-    if (terrainClearanceFt < terrainAlertThresholds.warningFt) return 'warning';
-    if (terrainClearanceFt < terrainAlertThresholds.cautionFt) return 'caution';
-    return 'nominal';
-  }, [terrainAlertThresholds.cautionFt, terrainAlertThresholds.warningFt, terrainClearanceFt]);
-  const highestObstacleHeightFt = obstacleScan?.highestObstacle?.amslFt ?? obstacleScan?.highestObstacle?.aglFt ?? null;
-  const closestObstacleDistanceNm = useMemo(() => {
-    const obstacles = obstacleScan?.obstacles ?? [];
-    if (!obstacles.length) return null;
-    return obstacles.reduce((min, obstacle) => Math.min(min, obstacle.distanceNm), Number.POSITIVE_INFINITY);
-  }, [obstacleScan?.obstacles]);
-  const obstacleTimeMinutes = useMemo(() => {
-    if (!closestObstacleDistanceNm || !activeOwnship?.speedKts || activeOwnship.speedKts < 40) return null;
-    return (closestObstacleDistanceNm / activeOwnship.speedKts) * 60;
-  }, [activeOwnship?.speedKts, closestObstacleDistanceNm]);
-  const obstacleAlertThresholds = useMemo(() => {
-    const baseWarning = flightPhase === 'departure' || flightPhase === 'arrival' ? 1000 : 700;
-    const baseCaution = flightPhase === 'departure' || flightPhase === 'arrival' ? 1800 : 1500;
-    const closureBuffer = obstacleTimeMinutes != null && obstacleTimeMinutes <= 4
-      ? 300
-      : obstacleTimeMinutes != null && obstacleTimeMinutes <= 8
-        ? 150
-        : 0;
-    return {
-      warningFt: baseWarning + closureBuffer,
-      cautionFt: baseCaution + closureBuffer,
-      closingFast: obstacleTimeMinutes != null && obstacleTimeMinutes <= 4,
-    };
-  }, [flightPhase, obstacleTimeMinutes]);
-  const obstacleClearanceFt = useMemo(() => {
-    if (highestObstacleHeightFt == null) return null;
-    const referenceAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
-    return referenceAltitude - highestObstacleHeightFt;
-  }, [activeOwnship?.altitudeFt, highestObstacleHeightFt, simulationAltitudeFt]);
-  const obstacleRisk = useMemo<'nominal' | 'caution' | 'warning' | 'unknown'>(() => {
-    if (obstacleClearanceFt == null) return 'unknown';
-    if (obstacleClearanceFt < obstacleAlertThresholds.warningFt) return 'warning';
-    if (obstacleClearanceFt < obstacleAlertThresholds.cautionFt) return 'caution';
-    return 'nominal';
-  }, [obstacleAlertThresholds.cautionFt, obstacleAlertThresholds.warningFt, obstacleClearanceFt]);
-  const activeFlightAlert = useMemo(() => {
-    if (selectedTrafficTarget?.threatLevel === 'immediate') {
-      return {
-        severity: 'warning' as const,
-        title: 'Immediate traffic',
-        detail: `${selectedTrafficTarget.callsign || 'Traffic'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM Â· ${formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}`,
-      };
-    }
-    if (
-      selectedDiversion &&
-      (
-        selectedDiversion.flightCategory === 'IFR' ||
-        selectedDiversion.flightCategory === 'LIFR' ||
-        (selectedDiversionBriefing?.advisory?.crosswind ?? 0) >= 15
-      )
-    ) {
-      return {
-        severity: 'caution' as const,
-        title: 'Diversion caution',
-        detail: `${selectedDiversion.icao} ${selectedDiversion.flightCategory || 'WX'}${selectedDiversionBriefing?.advisory?.crosswind ? ` Â· XW ${selectedDiversionBriefing.advisory.crosswind} kt` : '}`,
-      };
-    }
-    if (terrainRisk === 'warning') {
-      return {
-        severity: 'warning' as const,
-        title: 'Terrain warning',
-        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft${terrainAlertThresholds.closingFast ? ' - terrain rising quickly' : '}`,
-      };
-    }
-    if (obstacleRisk === 'warning') {
-      return {
-        severity: 'warning' as const,
-        title: 'Obstacle warning',
-        detail: `Nearby obstacle clearance ${Math.round(obstacleClearanceFt || 0)} ft${obstacleAlertThresholds.closingFast ? ' - closure increasing' : '}`,
-      };
-    }
-    if (terrainRisk === 'caution') {
-      return {
-        severity: 'caution' as const,
-        title: 'Terrain caution',
-        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft`,
-      };
-    }
-    if (flightDeckVerticalAlertSummary.severity && flightDeckVerticalAlertSummary.title && flightDeckVerticalAlertSummary.detail) {
-      return {
-        severity: flightDeckVerticalAlertSummary.severity,
-        title: flightDeckVerticalAlertSummary.title,
-        detail: flightDeckVerticalAlertSummary.detail,
-      };
-    }
-    return null;
-  }, [
-    flightDeckVerticalAlertSummary.detail,
-    flightDeckVerticalAlertSummary.severity,
-    flightDeckVerticalAlertSummary.title,
-    obstacleAlertThresholds.closingFast,
-    obstacleClearanceFt,
-    obstacleRisk,
-    selectedDiversion,
-    selectedDiversionBriefing?.advisory?.crosswind,
-    selectedTrafficTarget,
-    terrainAlertThresholds.closingFast,
-    terrainClearanceFt,
-    terrainRisk,
-  ]);
-  const flightDeckVisibleAlert = useMemo(() => {
-    if (selectedTrafficTarget?.threatLevel === 'immediate') {
-      return {
-        severity: 'warning' as const,
-        title: 'Immediate traffic',
-        detail: `${selectedTrafficTarget.callsign || 'Traffic'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM Â· ${formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}`,
-      };
-    }
-    if (terrainRisk === 'warning') {
-      return {
-        severity: 'warning' as const,
-        title: 'Terrain warning',
-        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft${terrainAlertThresholds.closingFast ? ' - terrain rising quickly' : '}`,
-      };
-    }
-    if (obstacleRisk === 'warning') {
-      return {
-        severity: 'warning' as const,
-        title: 'Obstacle warning',
-        detail: `Nearby obstacle clearance ${Math.round(obstacleClearanceFt || 0)} ft${obstacleAlertThresholds.closingFast ? ' - closure increasing' : '}`,
-      };
-    }
-    if (flightDeckAdvisoriesMuted) {
-      return null;
-    }
-    if (flightDeckVerticalAlertSummary.severity && flightDeckVerticalAlertSummary.title && flightDeckVerticalAlertSummary.detail) {
-      return {
-        severity: flightDeckVerticalAlertSummary.severity,
-        title: flightDeckVerticalAlertSummary.title,
-        detail: flightDeckVerticalAlertSummary.detail,
-      };
-    }
-    return activeFlightAlert;
-  }, [
-    activeFlightAlert,
-    flightDeckAdvisoriesMuted,
-    flightDeckVerticalAlertSummary.detail,
-    flightDeckVerticalAlertSummary.severity,
-    flightDeckVerticalAlertSummary.title,
-    obstacleAlertThresholds.closingFast,
-    obstacleClearanceFt,
-    obstacleRisk,
-    selectedTrafficTarget,
-    terrainAlertThresholds.closingFast,
-    terrainClearanceFt,
-    terrainRisk,
-  ]);
-  const visionGuidance = useMemo(() => {
-    if (selectedTrafficTarget?.threatLevel === 'immediate') {
-      return `Traffic ${selectedTrafficTarget.callsign || 'target'} ahead`;
-    }
-    if (terrainRisk === 'warning') {
-      return terrainAlertThresholds.closingFast ? 'Terrain rising rapidly' : 'Terrain margin low';
-    }
-    if (terrainRisk === 'caution') {
-      return 'Terrain rising ahead';
-    }
-    if (selectedDiversion) {
-      return `Nearest escape ${selectedDiversion.icao}`;
-    }
-    if (routeProgress?.activeLegLabel) {
-      return routeProgress.sequencingState === 'reintercept'
-        ? `Rejoin ${routeProgress.activeLegLabel}`
-        : `${activeLegBehavior.annunciation}`;
-    }
-    if (routeProgress?.nextWaypoint) {
-      return `Track to ${routeProgress.nextWaypoint}`;
-    }
-    return 'Hold current route';
-  }, [activeLegBehavior.annunciation, routeProgress?.activeLegLabel, routeProgress?.nextWaypoint, routeProgress?.sequencingState, selectedDiversion, selectedTrafficTarget, terrainRisk]);
-  const visionTerrainColumns = useMemo(() => {
-    const samples = terrainProfile?.samples ?? [];
-    const ownshipAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
-    return buildVisionTerrainColumns({
-      samples,
-      ownshipAltitudeFt: ownshipAltitude,
-      maxColumns: 14,
-      keyPrefix: 'terrain-column',
-    });
-  }, [activeOwnship?.altitudeFt, simulationAltitudeFt, terrainProfile?.samples]);
-  const visionObstacleCues = useMemo(() => {
-    const obstacles = obstacleScan?.obstacles ?? [];
-    if (!obstacles.length || !activeOwnship) return [];
-    return buildVisionObstacleCues({
-      ownship: {
-        lat: activeOwnship.lat,
-        lon: activeOwnship.lon,
-        heading: activeOwnship.heading ?? 0,
-        altitudeFt: activeOwnship.altitudeFt ?? simulationAltitudeFt,
-      },
-      obstacles,
-      maxCues: 3,
-    });
-  }, [activeOwnship, obstacleScan?.obstacles, simulationAltitudeFt]);
-  const visionTrafficCue = useMemo(() => {
-    if (!selectedTrafficTarget || !activeOwnship) return null;
-    const closureOverride =
-      trafficTrendMap[selectedTrafficTarget.id]?.closureText ||
-      undefined;
-    return buildVisionTrafficCue({
-      ownship: {
-        lat: activeOwnship.lat,
-        lon: activeOwnship.lon,
-        heading: activeOwnship.heading ?? 0,
-        altitudeFt: activeOwnship.altitudeFt ?? simulationAltitudeFt,
-      },
-      target: {
-        id: selectedTrafficTarget.id,
-        lat: selectedTrafficTarget.lat,
-        lon: selectedTrafficTarget.lon,
-        altitudeDeltaFt: selectedTrafficTarget.altitudeDeltaFt,
-        distanceNm: selectedTrafficTarget.distanceNm,
-        threatLevel: selectedTrafficTarget.threatLevel,
-      },
-      bearingRateDegPerMin: trafficTrendMap[selectedTrafficTarget.id]?.bearingRateDegPerMin ?? 0,
-      distanceRateNmPerMin: trafficTrendMap[selectedTrafficTarget.id]?.distanceRateNmPerMin,
-      closureText: closureOverride,
-    });
-  }, [activeOwnship, selectedTrafficTarget, trafficTrendMap]);
-  const visionRouteGuidance = useMemo(() => {
-    if (!activeOwnship || !nextWaypointMeta || !routeProgress) return null;
-    const desiredTrack = routeProgress.desiredTrackDeg ?? bearingBetweenPoints(
-      { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
-      { latitude: nextWaypointMeta.latitude, longitude: nextWaypointMeta.longitude },
-    );
-    const headingDelta = normalizeHeadingDelta(desiredTrack - (activeOwnship.heading ?? desiredTrack));
-    const centerShiftPct = clamp(headingDelta / 2.6 + routeProgress.crossTrackNm * 5.2, -18, 18);
-    const gates = [0, 1, 2, 3].map((index) => {
-      const width = 58 - index * 11;
-      const height = 14 - index * 2;
-      const top = 62 - index * 12;
-      const center = 50 + centerShiftPct * (1 - index * 0.18);
-      return {
-        key: `vision-gate-${index}`,
-        leftPct: center - width / 2,
-        widthPct: width,
-        topPct: top,
-        heightPct: height,
-      };
-    });
-    const tunnelBands = gates.slice(0, 3).map((gate, index) => ({
-      key: `vision-band-${index}`,
-      leftPct: gate.leftPct + 3.5,
-      widthPct: Math.max(12, gate.widthPct - 7),
-      topPct: gate.topPct + 1.5,
-      heightPct: Math.max(5, gate.heightPct - 3),
-    }));
-    const lateralCaptured = Math.abs(routeProgress.crossTrackNm) < 0.25 && Math.abs(headingDelta) < 5;
-    const corridorSeverity =
-      routeProgress.offRouteNm > 2.5 || Math.abs(headingDelta) > 25
-        ? 'warning'
-        : routeProgress.offRouteNm > 1.5 || Math.abs(headingDelta) > 12
-          ? 'caution'
-          : 'nominal';
-    return {
-      desiredTrack,
-      headingDelta,
-      offRouteNm: routeProgress.offRouteNm,
-      crossTrackNm: routeProgress.crossTrackNm,
-      centerlineLeftPct: 49.5 + clamp(centerShiftPct * 0.45, -10, 10),
-      gates,
-      tunnelBands,
-      lateralCaptured,
-      corridorSeverity,
-      lateralCue:
-        routeProgress.offRouteNm > 1.5
-          ? routeProgress.crossTrackNm >= 0
-            ? 'Correct right to rejoin'
-            : 'Correct left to rejoin'
-          : Math.abs(headingDelta) > 8
-            ? headingDelta >= 0
-              ? 'Ease right on course'
-              : 'Ease left on course'
-            : 'Centered on route',
-    };
-  }, [activeOwnship, nextWaypointMeta, routeProgress]);
-  const terrainEscapeGuidance = useMemo(() => {
-    if (terrainRisk === 'nominal' && obstacleRisk === 'nominal') return null;
-    const terrainSafeAltitude = terrainProfile?.maxElevationFt != null ? Math.ceil((terrainProfile.maxElevationFt + 2000) / 100) * 100 : null;
-    const obstacleSafeAltitude = highestObstacleHeightFt != null ? Math.ceil((highestObstacleHeightFt + 1500) / 100) * 100 : null;
-    const safeAltitudeFt = Math.max(terrainSafeAltitude ?? 0, obstacleSafeAltitude ?? 0, simulationAltitudeFt);
-    if (terrainRisk === 'warning' || obstacleRisk === 'warning') {
-      return selectedDiversion
-        ? `Climb toward ${safeAltitudeFt.toFixed(0)} ft or divert ${selectedDiversion.icao}`
-        : `Climb toward ${safeAltitudeFt.toFixed(0)} ft immediately`;
-    }
-    if (terrainRisk === 'caution' || obstacleRisk === 'caution') {
-      return selectedDiversion
-        ? `Monitor climb margin. ${selectedDiversion.icao} is the nearest escape.`
-        : `Monitor climb margin. Terrain funnel tightening ahead.`;
-    }
-    return null;
-  }, [highestObstacleHeightFt, obstacleRisk, selectedDiversion, simulationAltitudeFt, terrainProfile?.maxElevationFt, terrainRisk]);
-  const terrainEscapeTargetFt = useMemo(() => {
-    const terrainSafeAltitude = terrainProfile?.maxElevationFt != null ? Math.ceil((terrainProfile.maxElevationFt + 2000) / 100) * 100 : null;
-    const obstacleSafeAltitude = highestObstacleHeightFt != null ? Math.ceil((highestObstacleHeightFt + 1500) / 100) * 100 : null;
-    const best = Math.max(terrainSafeAltitude ?? 0, obstacleSafeAltitude ?? 0);
-    return best > 0 ? best : null;
-  }, [highestObstacleHeightFt, terrainProfile?.maxElevationFt]);
-  const visionManeuverRecommendation = useMemo(() => {
-    if (selectedTrafficTarget?.threatLevel === 'immediate') {
-      const sector = visionTrafficCue?.sector || 'ahead';
-      const altitudeDelta = selectedTrafficTarget.altitudeDeltaFt ?? 0;
-      const closure = visionTrafficCue?.closureText || 'Monitor';
-      if (sector.includes('left')) {
-        return altitudeDelta >= 0 ? `${closure}: traffic left/high. Turn right and hold altitude.` : `${closure}: traffic left/low. Turn right and consider climb.`;
-      }
-      if (sector.includes('right')) {
-        return altitudeDelta >= 0 ? `${closure}: traffic right/high. Turn left and hold altitude.` : `${closure}: traffic right/low. Turn left and consider climb.`;
-      }
-      return altitudeDelta >= 0 ? `${closure}: traffic ahead/high. Offset right and monitor descent.` : `${closure}: traffic ahead/low. Hold course and climb if needed.`;
-    }
-    if (terrainRisk === 'warning' || obstacleRisk === 'warning') {
-      return terrainEscapeGuidance || 'Immediate escape action recommended.';
-    }
-    if (terrainRisk === 'caution' || obstacleRisk === 'caution') {
-      return selectedDiversion ? `Keep ${selectedDiversion.icao} available as an escape.` : 'Maintain climb margin and stay centered in the corridor.';
-    }
-    if (visionRouteGuidance?.offRouteNm && visionRouteGuidance.offRouteNm > 1.5) {
-      return 'Rejoin the route corridor before the next waypoint.';
-    }
-    return 'Continue current route and monitor traffic.';
-  }, [obstacleRisk, selectedDiversion, selectedTrafficTarget, terrainEscapeGuidance, terrainRisk, visionRouteGuidance?.offRouteNm, visionTrafficCue?.sector]);
-  const trafficConflictGuidance = useMemo(() => {
-    if (selectedTrafficTarget?.threatLevel !== 'immediate') return null;
-    const sector = visionTrafficCue?.sector || 'ahead';
-    const altitudeDelta = selectedTrafficTarget.altitudeDeltaFt ?? 0;
-    const defaultBias =
-      sector.includes('left')
-        ? 'right'
-        : sector.includes('right')
-          ? 'left'
-          : altitudeDelta >= 0
-            ? 'left'
-            : 'right';
-    const bias = trafficResolutionBias || defaultBias;
-    const verticalCommand = altitudeDelta < 0 ? 'Consider climb for separation' : 'Hold altitude';
-    if (sector.includes('left') || sector.includes('right')) {
-      return {
-        lateralOffsetPct: bias === 'right' ? 12 : -12,
-        verticalOffsetPct: altitudeDelta < 0 ? -6 : 0,
-        turnCommand: `Traffic bias ${bias}`,
-        verticalCommand,
-        mode: 'traffic' as const,
-      };
-    }
-    return {
-      lateralOffsetPct: bias === 'right' ? 8 : -8,
-      verticalOffsetPct: altitudeDelta < 0 ? -8 : 4,
-      turnCommand: `Traffic ahead - bias ${bias}`,
-      verticalCommand: altitudeDelta < 0 ? 'Climb if needed for separation' : 'Hold altitude / monitor descent',
-      mode: 'traffic' as const,
-    };
-  }, [selectedTrafficTarget, trafficResolutionBias, visionTrafficCue?.sector]);
   const flightDeckVerticalPathSummary = useMemo(() => {
     const roundedCruiseAltitudeFt = Math.max(1000, Math.round((plannedAltitudeValue ?? simulationAltitudeFt) / 100) * 100);
     const manualBugActive = flightDeckTargetAltitudeFt != null;
@@ -2944,139 +2543,181 @@ export default function FlightPlannerScreen() {
     simulationAltitudeFt,
     simulationCruiseKts,
   ]);
-  const visionDirectorCue = useMemo(() => {
-    if (trafficConflictGuidance) {
-      return {
-        ...trafficConflictGuidance,
-        lateralCaptured: false,
-        verticalCaptured: false,
+  const plannerNavDataSnapshot = useMemo(() => {
+    const navDataLegsByIndex = buildStructuredCourseFixNavDataLegs(
+      routeSummary?.legs || [],
+      plannedRouteAnchorTokens,
+      plannedAltitudeValue,
+    );
+    const providerNavDataLegsByIndex = buildProviderCourseFixNavDataLegs(
+      routeSummary?.legs || [],
+      providerRouteAnchorTokens,
+      plannedAltitudeValue,
+      providerRouteSearch?.environment || providerRouteSearch?.provider || null,
+    );
+    Object.entries(providerNavDataLegsByIndex).forEach(([legIndex, payload]) => {
+      if (payload) {
+        navDataLegsByIndex[Number(legIndex)] = payload;
+      }
+    });
+    const plannerLegs = routeSummary?.legs || [];
+    const departureLeg = plannerLegs[0];
+    const arrivalFeedLeg = plannerLegs.length > 1 ? plannerLegs[plannerLegs.length - 2] : null;
+    const finalLeg = plannerLegs[plannerLegs.length - 1];
+    if (departureLeg && departureRunway) {
+      navDataLegsByIndex[departureLeg.index] = {
+        kind: 'runway-release-nav-data',
+        sourceKind: 'briefing-data',
+        label: `${departure.trim().toUpperCase() || departureLeg.from} ${departureRunway.runwayId}`,
+        airportIdent: departure.trim().toUpperCase() || departureLeg.from,
+        runwayIdent: departureRunway.runwayId,
+        releaseHeading: departureRunway.headingDeg,
+        initialAltitudeFt: plannedAltitudeValue ?? null,
+        sourceCycle: null,
       };
     }
-    const currentAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
-    const headingDelta = visionRouteGuidance?.headingDelta ?? 0;
-    const targetAltitude =
-      terrainRisk === 'warning' || obstacleRisk === 'warning'
-        ? Math.max(terrainEscapeTargetFt ?? 0, flightDeckTargetAltitudeFt ?? 0, currentAltitude)
-        : flightDeckTargetAltitudeFt ?? flightDeckVerticalPathSummary.targetAltitudeFt ?? simulationAltitudeFt;
-    const altitudeErrorFt =
-      terrainRisk === 'warning' || obstacleRisk === 'warning'
-        ? targetAltitude - currentAltitude
-        : flightDeckTargetAltitudeFt != null
-          ? flightDeckTargetAltitudeFt - currentAltitude
-          : flightDeckVerticalPathSummary.verticalErrorFt ?? targetAltitude - currentAltitude;
-    const lateralCaptured = Boolean(visionRouteGuidance?.lateralCaptured);
-    const verticalCaptured = Math.abs(altitudeErrorFt) < 150;
-    const mode =
-      terrainRisk === 'warning' || obstacleRisk === 'warning'
-        ? 'escape'
-        : !lateralCaptured || Math.abs(headingDelta) > 12
-          ? 'intercept'
-          : !verticalCaptured
-            ? 'capture'
-            : 'track';
+    if (arrivalFeedLeg && destinationRunway) {
+      navDataLegsByIndex[arrivalFeedLeg.index] = {
+        kind: 'terminal-feed-nav-data',
+        sourceKind: 'briefing-data',
+        label: `${destination.trim().toUpperCase() || arrivalFeedLeg.to} ${destinationRunway.runwayId} arrival feed`,
+        arrivalIdent: `${destination.trim().toUpperCase() || arrivalFeedLeg.to} ${destinationRunway.runwayId}`,
+        transitionFix: arrivalFeedLeg.from,
+        handoffFix: arrivalFeedLeg.to,
+        altitudeConstraintFt: plannedAltitudeValue ?? null,
+        sourceCycle: null,
+      };
+    }
+    if (finalLeg && destinationRunway) {
+      navDataLegsByIndex[finalLeg.index] = {
+        kind: 'final-capture-nav-data',
+        sourceKind: 'briefing-data',
+        label: `${destinationRunway.runwayId} final`,
+        runwayIdent: destinationRunway.runwayId,
+        finalCourseDeg: destinationRunway.headingDeg,
+        thresholdFix: destination.trim().toUpperCase() || finalLeg.to,
+        glideslopeAngleDeg: 3,
+        sourceCycle: null,
+      };
+    }
+    const payloads = Object.values(navDataLegsByIndex).filter(Boolean);
+    const structuredLegCount = payloads.filter((payload) => payload?.sourceKind === 'route-structure').length;
+    const briefingLegCount = payloads.filter((payload) => payload?.sourceKind === 'briefing-data').length;
+    const navDataLegCount = payloads.filter((payload) => payload?.sourceKind === 'nav-data').length;
+    const totalLegCount = routeSummary?.legs?.length || 0;
+    const coveredLegCount = payloads.length;
+    const coveragePct = totalLegCount > 0 ? Math.round((coveredLegCount / totalLegCount) * 100) : 0;
     return {
-      lateralOffsetPct: clamp(headingDelta * 0.32, -16, 16),
-      verticalOffsetPct: clamp(-altitudeErrorFt / 90, -18, 18),
-      lateralCaptured,
-      verticalCaptured,
-      mode,
-      turnCommand:
-        Math.abs(headingDelta) < 6 ? 'Track centered'
-        : headingDelta > 0 ? `Turn right ${Math.round(Math.abs(headingDelta))}Â°`
-        : `Turn left ${Math.round(Math.abs(headingDelta))}Â°`,
-      verticalCommand:
-        terrainRisk === 'warning' || obstacleRisk === 'warning'
-          ? Math.abs(altitudeErrorFt) < 150 ? 'Hold altitude'
-          : altitudeErrorFt > 0 ? `Climb to ${Math.round(targetAltitude)} ft`
-          : `Descend to ${Math.round(targetAltitude)} ft`
-          : flightDeckTargetAltitudeFt == null
-            ? flightDeckVerticalPathSummary.advisoryCall
-            : Math.abs(altitudeErrorFt) < 150 ? 'Hold altitude'
-            : altitudeErrorFt > 0 ? `Climb to ${Math.round(targetAltitude)} ft`
-            : `Descend to ${Math.round(targetAltitude)} ft`,
+      source:
+        navDataLegCount > 0
+          ? ('nav-data' as const)
+          : briefingLegCount > 0 && structuredLegCount > 0
+            ? ('hybrid' as const)
+            : briefingLegCount > 0
+              ? ('briefing-data' as const)
+              : structuredLegCount > 0
+                ? ('route-structure' as const)
+                : ('route-chain' as const),
+      navDataLegsByIndex,
+      structuredLegCount,
+      briefingLegCount,
+      navDataLegCount,
+      totalLegCount,
+      coveredLegCount,
+      coveragePct,
+      warnings: plannedRouteAnalysis.warnings,
+      providerWarnings: Array.isArray(providerRouteSearch?.warnings) ? providerRouteSearch.warnings : [],
+      airwaySegments: plannedRouteAnalysis.airwaySegments,
+      providerRoute: providerRouteSearch?.route || null,
+      providerRouteAvailable: Boolean(providerRouteSearch?.available && providerRouteSearch?.route),
+      tokenCounts: plannedRouteAnalysis.counts,
     };
-  }, [activeOwnship?.altitudeFt, flightDeckTargetAltitudeFt, flightDeckVerticalPathSummary.advisoryCall, flightDeckVerticalPathSummary.targetAltitudeFt, flightDeckVerticalPathSummary.verticalErrorFt, obstacleRisk, simulationAltitudeFt, terrainEscapeTargetFt, terrainRisk, trafficConflictGuidance, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
-  const mapTacticalSummary = useMemo(() => {
-    const modeLabel =
+  }, [departure, departureRunway, destination, destinationRunway, plannedRouteAnalysis, plannedRouteAnchorTokens, plannedAltitudeValue, providerRouteAnchorTokens, providerRouteSearch?.available, providerRouteSearch?.environment, providerRouteSearch?.provider, providerRouteSearch?.route, providerRouteSearch?.warnings, routeSummary?.legs]);
+  const activeNavDataLegsByIndex = useMemo(
+    () =>
       routeExecutionOverride?.mode === 'direct-to-diversion'
-        ? 'Direct'
-        : activeProcedureCueStackPreview.modeLabel === 'Departure'
-          ? 'Departure'
-          : activeProcedureCueStackPreview.modeLabel === 'Arrival'
-            ? 'Arrival'
-            : activeProcedureCueStackPreview.modeLabel === 'Final'
-              ? 'Final'
-              : activeLegBehavior.guidanceMode === 'departure'
-          ? 'Departure'
-          : activeLegBehavior.guidanceMode === 'terminal'
-            ? 'Terminal'
-            : visionDirectorCue.mode === 'traffic'
-        ? 'Traffic'
-        : visionDirectorCue.mode === 'escape'
-        ? 'Escape'
-        : visionDirectorCue.mode === 'intercept'
-          ? 'Intercept'
-          : visionDirectorCue.mode === 'capture'
-            ? 'Capture'
-            : 'Track';
-    const focusLabel =
-      flightDeckPhaseSummary.stage === 'taxi-out' || flightDeckPhaseSummary.stage === 'taxi-in'
-        ? 'Ground corridor'
-        : flightDeckPhaseSummary.stage === 'departure'
-          ? 'Departure corridor'
-          : flightDeckPhaseSummary.stage === 'climb'
-            ? 'Climb scan'
-            : flightDeckPhaseSummary.stage === 'cruise'
-              ? 'Enroute scan'
-              : flightDeckPhaseSummary.stage === 'descent'
-                ? 'Arrival setup'
-                : flightDeckPhaseSummary.stage === 'arrival'
-                  ? 'Terminal corridor'
-                  : flightDeckPhaseSummary.stage === 'final'
-                    ? 'Final map'
-                    : 'Route scan';
-    const support =
-      selectedTrafficTarget?.threatLevel === 'immediate'
-        ? `Traffic priority ${selectedTrafficTarget.callsign || 'target'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM`
-        : selectedDiversion
-          ? `Diversion staged ${selectedDiversion.icao} ${selectedDiversion.distanceNm.toFixed(1)} NM`
-          : routeProgress
-            ? `${routeProgress.remainingLegNm.toFixed(1)} NM leg / ${routeProgress.remainingRouteNm.toFixed(1)} NM route`
-            : flightDeckPhaseSummary.detail;
+        ? {}
+        : plannerNavDataSnapshot.navDataLegsByIndex,
+    [plannerNavDataSnapshot.navDataLegsByIndex, routeExecutionOverride?.mode]
+  );
+  const activeExecutionPlan = useMemo(
+    () => buildMobileRouteExecutionPlan(activeRouteLegs, { navDataLegsByIndex: activeNavDataLegsByIndex }),
+    [activeNavDataLegsByIndex, activeRouteLegs]
+  );
+  const activeProcedureChains = useMemo(
+    () => buildMobileRouteProcedureChains(activeExecutionPlan),
+    [activeExecutionPlan]
+  );
+  const plannerExecutionPlan = useMemo(
+    () => buildMobileRouteExecutionPlan(routeSummary?.legs || [], { navDataLegsByIndex: plannerNavDataSnapshot.navDataLegsByIndex }),
+    [plannerNavDataSnapshot.navDataLegsByIndex, routeSummary?.legs]
+  );
+  const plannerProcedureChains = useMemo(
+    () => buildMobileRouteProcedureChains(plannerExecutionPlan),
+    [plannerExecutionPlan]
+  );
+  const nextWaypointMeta = useMemo(() => {
+    if (!routeProgress?.nextWaypoint) return null;
+    const normalized = routeProgress.nextWaypoint.toUpperCase();
+    return activeRoutePoints.find((point) => point.icao.toUpperCase() === normalized) || activeRoutePoints[1] || null;
+  }, [activeRoutePoints, routeProgress?.nextWaypoint]);
+  const visionRouteGuidance = useMemo(() => {
+    if (!activeOwnship || !nextWaypointMeta || !routeProgress) return null;
+    const desiredTrack = routeProgress.desiredTrackDeg ?? bearingBetweenPoints(
+      { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
+      { latitude: nextWaypointMeta.latitude, longitude: nextWaypointMeta.longitude },
+    );
+    const headingDelta = normalizeHeadingDelta(desiredTrack - (activeOwnship.heading ?? desiredTrack));
+    const centerShiftPct = clamp(headingDelta / 2.6 + routeProgress.crossTrackNm * 5.2, -18, 18);
+    const gates = [0, 1, 2, 3].map((index) => {
+      const width = 58 - index * 11;
+      const height = 14 - index * 2;
+      const top = 62 - index * 12;
+      const center = 50 + centerShiftPct * (1 - index * 0.18);
+      return {
+        key: `vision-gate-${index}`,
+        leftPct: center - width / 2,
+        widthPct: width,
+        topPct: top,
+        heightPct: height,
+      };
+    });
+    const tunnelBands = gates.slice(0, 3).map((gate, index) => ({
+      key: `vision-band-${index}`,
+      leftPct: gate.leftPct + 3.5,
+      widthPct: Math.max(12, gate.widthPct - 7),
+      topPct: gate.topPct + 1.5,
+      heightPct: Math.max(5, gate.heightPct - 3),
+    }));
+    const lateralCaptured = Math.abs(routeProgress.crossTrackNm) < 0.25 && Math.abs(headingDelta) < 5;
+    const corridorSeverity =
+      routeProgress.offRouteNm > 2.5 || Math.abs(headingDelta) > 25
+        ? 'warning'
+        : routeProgress.offRouteNm > 1.5 || Math.abs(headingDelta) > 12
+          ? 'caution'
+          : 'nominal';
     return {
-      modeLabel: activeExecutionSegmentPreview.label || modeLabel,
-      heading: visionDirectorCue.turnCommand,
-      vertical: visionDirectorCue.verticalCommand,
-      verticalSupport: flightDeckVerticalPathSummary.support,
-      verticalConstraintCall: routeExecutionSummary.verticalConstraintCall,
-      recommendation:
-        selectedTrafficTarget?.threatLevel === 'immediate' || selectedDiversion
-          ? activeProcedureCueStackPreview.sequencingSummary || visionManeuverRecommendation
-          : flightDeckVerticalPathSummary.recommendation || activeProcedureCueStackPreview.sequencingSummary || visionManeuverRecommendation,
-      focusLabel,
-      rangeLabel: tacticalMapRangeLabel,
-      support,
+      desiredTrack,
+      headingDelta,
+      offRouteNm: routeProgress.offRouteNm,
+      crossTrackNm: routeProgress.crossTrackNm,
+      centerlineLeftPct: 49.5 + clamp(centerShiftPct * 0.45, -10, 10),
+      gates,
+      tunnelBands,
+      lateralCaptured,
+      corridorSeverity,
+      lateralCue:
+        routeProgress.offRouteNm > 1.5
+          ? routeProgress.crossTrackNm >= 0
+            ? 'Correct right to rejoin'
+            : 'Correct left to rejoin'
+          : Math.abs(headingDelta) > 8
+            ? headingDelta >= 0
+              ? 'Ease right on course'
+              : 'Ease left on course'
+            : 'Centered on route',
     };
-  }, [
-    activeExecutionSegmentPreview.label,
-    activeLegBehavior.guidanceMode,
-    activeProcedureCueStackPreview.modeLabel,
-    activeProcedureCueStackPreview.sequencingSummary,
-    flightDeckVerticalPathSummary.support,
-    flightDeckVerticalPathSummary.recommendation,
-    flightDeckPhaseSummary.detail,
-    flightDeckPhaseSummary.stage,
-    routeExecutionSummary.verticalConstraintCall,
-    routeExecutionOverride?.mode,
-    routeProgress,
-    selectedDiversion,
-    selectedTrafficTarget,
-    tacticalMapRangeLabel,
-    visionDirectorCue.mode,
-    visionDirectorCue.turnCommand,
-    visionDirectorCue.verticalCommand,
-    visionManeuverRecommendation,
-  ]);
+  }, [activeOwnship, nextWaypointMeta, routeProgress]);
   const routeExecutionSummary = useMemo(() => {
     if (!routeProgress) {
       return {
@@ -3284,6 +2925,7 @@ export default function FlightPlannerScreen() {
                           ? 'Direct navigation'
                           : 'Enroute structure',
                 },
+                navDataPayload: null,
               },
               {
                 entryIndexInChain: 0,
@@ -3392,6 +3034,19 @@ export default function FlightPlannerScreen() {
     };
     const activeVerticalConstraintLabel = formatVerticalConstraintLabel(activeVerticalConstraintPayload);
     const nextVerticalConstraintLabel = formatVerticalConstraintLabel(nextVerticalConstraintPayload);
+    const sequenceGateState =
+      sequencingSuspended
+        ? 'hold'
+        : routeProgress.sequencingState === 'reintercept'
+          ? 'blocked'
+          : routeProgress.legProgressPct >= openProgressPct &&
+              (!activeProcedureExecutionProfile.requiresLateralCapture || visionRouteGuidance?.lateralCaptured)
+            ? activeProcedureRoleExecutionPolicy.sequencingModel === 'managed'
+              ? 'manual-open'
+              : 'open'
+            : routeProgress.legProgressPct >= armingProgressPct
+              ? 'armed'
+              : 'blocked';
     const nextVerticalConstraintArmed =
       Boolean(nextVerticalConstraintPayload) &&
       (nextLegArmed || sequenceGateState === 'armed' || sequenceGateState === 'manual-open' || sequenceGateState === 'open');
@@ -3434,19 +3089,6 @@ export default function FlightPlannerScreen() {
             : routeProgress.offRouteNm <= 0.45 && Math.abs(visionRouteGuidance?.headingDelta ?? 0) <= 10
             ? 'capture'
               : 'intercept';
-    const sequenceGateState =
-      sequencingSuspended
-        ? 'hold'
-        : routeProgress.sequencingState === 'reintercept'
-          ? 'blocked'
-          : routeProgress.legProgressPct >= openProgressPct &&
-              (!activeProcedureExecutionProfile.requiresLateralCapture || visionRouteGuidance?.lateralCaptured)
-            ? activeProcedureRoleExecutionPolicy.sequencingModel === 'managed'
-              ? 'manual-open'
-              : 'open'
-            : routeProgress.legProgressPct >= armingProgressPct
-              ? 'armed'
-              : 'blocked';
     const sequenceGateCall =
       sequenceGateState === 'hold'
         ? activeProcedureRoleCueProfile.transitionCalls.hold
@@ -3501,7 +3143,7 @@ export default function FlightPlannerScreen() {
                 ? activeProcedureRoleCueProfile.transitionCalls.capture || activeProcedureRoleCueProfile.transitionCalls.intercept
                 : activeProcedureRoleCueProfile.transitionCalls.intercept;
     const activeExecutionSegment = getMobileRouteExecutionSegment(activeLegBehavior.profile, {
-      sequenceGateState,
+      sequenceGateState: sequenceGateState === 'manual-open' ? 'open' : sequenceGateState,
     });
     const nextExecutionSegmentEntry = activeExecutionPlan[routeProgress.legIndex + 1] || null;
     const nextExecutionSegment =
@@ -3642,24 +3284,6 @@ export default function FlightPlannerScreen() {
       sequencingDetail: `${sequencingDetail} ${activeProcedureRoleCueProfile.sequencingSummary}. ${activeProcedureCueStack.sequencingSummary}. ${activeProcedureEntryTransitionBehavior.sequencingCue} Handoff ${activeExecutionPlan[routeProgress.legIndex]?.handoff?.label || 'Auto course handoff'}. ${activeProcedureEntryTransitionBehavior.handoffCue} ${activeProcedureTransitionTable.handoffPathLabel}. ${activeProcedureChainBehavior?.label || 'Enroute auto block'}. ${activeProcedureTemplate.label}. Arm at ${armingProgressPct.toFixed(0)}%${activeProcedureRoleExecutionPolicy.manualReason ? ` ${activeProcedureRoleExecutionPolicy.manualReason}` : ''}`,
     };
   }, [activeExecutionPlan, activeLegBehavior.annunciation, activeLegBehavior.guidanceMode, activeLegBehavior.profile, activeProcedureChains, activeRouteLegs, activeRoutePoints, plannerNavDataSnapshot.airwaySegments.length, plannerNavDataSnapshot.briefingLegCount, plannerNavDataSnapshot.coveragePct, plannerNavDataSnapshot.coveredLegCount, plannerNavDataSnapshot.navDataLegCount, plannerNavDataSnapshot.providerRouteAvailable, plannerNavDataSnapshot.providerWarnings, plannerNavDataSnapshot.source, plannerNavDataSnapshot.structuredLegCount, plannerNavDataSnapshot.totalLegCount, plannerNavDataSnapshot.warnings, routeExecutionOverride?.mode, routeProgress, sequencingSuspended, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
-  const activeExecutionPlanView = useMemo(
-    () =>
-      annotateMobileRouteExecutionPlan(activeExecutionPlan, {
-        activeLegIndex: routeProgress?.legIndex ?? -1,
-        nextLegArmed: routeExecutionSummary.nextLegArmed,
-        sequencingSuspended: routeExecutionSummary.sequencingSuspended,
-        sequenceGateState: routeExecutionSummary.sequenceGateState,
-        procedureChains: activeProcedureChains,
-      }),
-    [
-      activeExecutionPlan,
-      activeProcedureChains,
-      routeExecutionSummary.nextLegArmed,
-      routeExecutionSummary.sequenceGateState,
-      routeExecutionSummary.sequencingSuspended,
-      routeProgress?.legIndex,
-    ]
-  );
   const flightDeckVerticalConstraintSummary = useMemo(() => {
     const activePayload = routeExecutionSummary.activeParsedLegPayload;
     const nextPayload = routeExecutionSummary.nextParsedLegPayload;
@@ -3877,6 +3501,216 @@ export default function FlightPlannerScreen() {
     simulationAltitudeFt,
     simulationCruiseKts,
   ]);
+  const mapVerticalGuidancePresentation = useMemo(() => {
+    if (!activeOwnship || activeRoutePoints.length < 2) return null;
+
+    const ownshipPoint = { latitude: activeOwnship.lat, longitude: activeOwnship.lon };
+    const activeLegIndex = Math.min(routeProgress?.legIndex ?? 0, Math.max(0, activeRoutePoints.length - 2));
+    const remainingRouteNm =
+      typeof routeProgress?.remainingRouteNm === 'number' && Number.isFinite(routeProgress.remainingRouteNm)
+        ? routeProgress.remainingRouteNm
+        : null;
+    const activeConstraintDistanceNm =
+      typeof flightDeckVerticalConstraintSummary.activeConstraintDistanceNm === 'number' &&
+      Number.isFinite(flightDeckVerticalConstraintSummary.activeConstraintDistanceNm)
+        ? flightDeckVerticalConstraintSummary.activeConstraintDistanceNm
+        : null;
+    const todDistanceNm =
+      typeof flightDeckVerticalPathSummary.distanceToTodNm === 'number' &&
+      Number.isFinite(flightDeckVerticalPathSummary.distanceToTodNm) &&
+      flightDeckVerticalPathSummary.distanceToTodNm > 0
+        ? flightDeckVerticalPathSummary.distanceToTodNm
+        : null;
+
+    let kind: 'constraint' | 'tod' | null = null;
+    let anchorDistanceNm: number | null = null;
+    let label = '';
+    let subtitle = '';
+    let detail = '';
+
+    if (
+      flightDeckVerticalConstraintSummary.targetAltitudeFt != null &&
+      activeConstraintDistanceNm != null &&
+      activeConstraintDistanceNm > 0.15
+    ) {
+      kind = 'constraint';
+      anchorDistanceNm = activeConstraintDistanceNm;
+      label = flightDeckVerticalConstraintSummary.modeLabel === 'Leg constraint' ? 'ALT' : 'PROC';
+      subtitle = `${Math.round(flightDeckVerticalConstraintSummary.targetAltitudeFt)} FT`;
+      detail = flightDeckVerticalConstraintSummary.activeConstraintLabel;
+    } else if (todDistanceNm != null && todDistanceNm > 0.35) {
+      kind = 'tod';
+      anchorDistanceNm = todDistanceNm;
+      label = 'TOD';
+      subtitle = `${todDistanceNm.toFixed(1)} NM`;
+      detail = flightDeckVerticalPathSummary.modeLabel;
+    }
+
+    if (!kind || anchorDistanceNm == null) return null;
+
+    const boundedDistanceNm =
+      remainingRouteNm != null ? Math.min(anchorDistanceNm, Math.max(remainingRouteNm, 0.2)) : anchorDistanceNm;
+    const coordinate = projectPointAlongRoute(activeRoutePoints, ownshipPoint, activeLegIndex, boundedDistanceNm);
+
+    return {
+      kind,
+      label,
+      subtitle,
+      detail,
+      distanceNm: anchorDistanceNm,
+      coordinate,
+    };
+  }, [
+    activeOwnship,
+    activeRoutePoints,
+    flightDeckVerticalConstraintSummary.activeConstraintDistanceNm,
+    flightDeckVerticalConstraintSummary.activeConstraintLabel,
+    flightDeckVerticalConstraintSummary.modeLabel,
+    flightDeckVerticalConstraintSummary.targetAltitudeFt,
+    flightDeckVerticalPathSummary.distanceToTodNm,
+    flightDeckVerticalPathSummary.modeLabel,
+    routeProgress?.legIndex,
+    routeProgress?.remainingRouteNm,
+  ]);
+  const selectedTrafficTrend = useMemo(
+    () => (selectedTrafficTarget ? trafficTrendMap[selectedTrafficTarget.id] || null : null),
+    [selectedTrafficTarget, trafficTrendMap]
+  );
+  const selectedDiversionRunwaySummary = useMemo(() => {
+    if (selectedDiversionBriefingLoading) return 'Loading runway briefing';
+    if (selectedDiversionBriefing?.advisory) {
+      return `Runway ${selectedDiversionBriefing.advisory.runway || '--'} Â· HW ${selectedDiversionBriefing.advisory.headwind ?? '--'} kt Â· XW ${selectedDiversionBriefing.advisory.crosswind ?? '--'} kt`;
+    }
+    if (selectedDiversionBriefing?.runwayInUse) {
+      return `Runway in use ${selectedDiversionBriefing.runwayInUse}`;
+    }
+    return 'Runway advisory pending';
+  }, [selectedDiversionBriefing, selectedDiversionBriefingLoading]);
+  useEffect(() => {
+    if (!simulationEnabled && !receiverOwnship && !gpsData && !simulatedGpsData) return;
+    const timer = setInterval(() => {
+      setOwnshipClockMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [gpsData, receiverOwnship, simulatedGpsData, simulationEnabled]);
+  useEffect(() => {
+    if (!activeOwnship || !rankedTrafficTargets.length) {
+      setTrafficTrendMap({});
+      trafficSnapshotRef.current = {};
+      return;
+    }
+
+    const nextSnapshots: Record<string, { distanceNm: number; bearingDelta: number; at: number }> = {};
+    const nextTrends: Record<string, TrafficTrend> = {};
+    const now = Date.now();
+
+    rankedTrafficTargets.forEach((target) => {
+      const bearingToTraffic = bearingBetweenPoints(
+        { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
+        { latitude: target.lat, longitude: target.lon },
+      );
+      const bearingDelta = normalizeHeadingDelta(bearingToTraffic - (activeOwnship.heading ?? 0));
+      const previous = trafficSnapshotRef.current[target.id];
+      let distanceRateNmPerMin: number | null = null;
+      let bearingRateDegPerMin: number | null = null;
+      if (previous) {
+        const elapsedMinutes = Math.max((now - previous.at) / 60000, 0.016);
+        distanceRateNmPerMin = (target.distanceNm - previous.distanceNm) / elapsedMinutes;
+        bearingRateDegPerMin = normalizeHeadingDelta(bearingDelta - previous.bearingDelta) / elapsedMinutes;
+      }
+      const closureText =
+        distanceRateNmPerMin == null
+          ? 'Monitor'
+          : distanceRateNmPerMin <= -1
+            ? 'Closing fast'
+            : distanceRateNmPerMin <= -0.25
+              ? 'Converging'
+              : distanceRateNmPerMin >= 0.35
+                ? 'Opening'
+                : 'Stable';
+      nextTrends[target.id] = {
+        distanceRateNmPerMin,
+        bearingRateDegPerMin,
+        closureText,
+      };
+      nextSnapshots[target.id] = {
+        distanceNm: target.distanceNm,
+        bearingDelta,
+        at: now,
+      };
+    });
+
+    trafficSnapshotRef.current = nextSnapshots;
+    setTrafficTrendMap(nextTrends);
+  }, [activeOwnship, rankedTrafficTargets]);
+  const terrainPathParam = useMemo(
+    () =>
+      activeRoutePoints.length >= 2
+        ? activeRoutePoints.map((point) => `${point.latitude},${point.longitude}`).join(';')
+        : '',
+    [activeRoutePoints]
+  );
+  const terrainTrendFt = useMemo(() => {
+    const samples = terrainProfile?.samples ?? [];
+    if (samples.length < 3) return 0;
+    const near = samples.slice(0, Math.min(samples.length, 6)).map((sample) => sample.elevationFt ?? 0);
+    return Math.max(...near) - (near[0] ?? 0);
+  }, [terrainProfile?.samples]);
+  const terrainAlertThresholds = useMemo(() => {
+    const baseWarning = flightPhase === 'departure' || flightPhase === 'arrival' ? 1500 : 1000;
+    const baseCaution = flightPhase === 'departure' || flightPhase === 'arrival' ? 2500 : 2000;
+    const riseBuffer = terrainTrendFt > 1200 ? 500 : terrainTrendFt > 600 ? 250 : 0;
+    return {
+      warningFt: baseWarning + riseBuffer,
+      cautionFt: baseCaution + riseBuffer,
+      closingFast: terrainTrendFt > 1200,
+    };
+  }, [flightPhase, terrainTrendFt]);
+  const terrainClearanceFt = useMemo(() => {
+    if (!terrainProfile?.maxElevationFt || !Number.isFinite(simulationAltitudeFt)) return null;
+    return simulationAltitudeFt - terrainProfile.maxElevationFt;
+  }, [simulationAltitudeFt, terrainProfile?.maxElevationFt]);
+  const terrainRisk = useMemo<'nominal' | 'caution' | 'warning' | 'unknown'>(() => {
+    if (terrainClearanceFt == null) return 'unknown';
+    if (terrainClearanceFt < terrainAlertThresholds.warningFt) return 'warning';
+    if (terrainClearanceFt < terrainAlertThresholds.cautionFt) return 'caution';
+    return 'nominal';
+  }, [terrainAlertThresholds.cautionFt, terrainAlertThresholds.warningFt, terrainClearanceFt]);
+  const highestObstacleHeightFt = obstacleScan?.highestObstacle?.amslFt ?? obstacleScan?.highestObstacle?.aglFt ?? null;
+  const closestObstacleDistanceNm = useMemo(() => {
+    const obstacles = obstacleScan?.obstacles ?? [];
+    if (!obstacles.length) return null;
+    return obstacles.reduce((min, obstacle) => Math.min(min, obstacle.distanceNm), Number.POSITIVE_INFINITY);
+  }, [obstacleScan?.obstacles]);
+  const obstacleTimeMinutes = useMemo(() => {
+    if (!closestObstacleDistanceNm || !activeOwnship?.speedKts || activeOwnship.speedKts < 40) return null;
+    return (closestObstacleDistanceNm / activeOwnship.speedKts) * 60;
+  }, [activeOwnship?.speedKts, closestObstacleDistanceNm]);
+  const obstacleAlertThresholds = useMemo(() => {
+    const baseWarning = flightPhase === 'departure' || flightPhase === 'arrival' ? 1000 : 700;
+    const baseCaution = flightPhase === 'departure' || flightPhase === 'arrival' ? 1800 : 1500;
+    const closureBuffer = obstacleTimeMinutes != null && obstacleTimeMinutes <= 4
+      ? 300
+      : obstacleTimeMinutes != null && obstacleTimeMinutes <= 8
+        ? 150
+        : 0;
+    return {
+      warningFt: baseWarning + closureBuffer,
+      cautionFt: baseCaution + closureBuffer,
+      closingFast: obstacleTimeMinutes != null && obstacleTimeMinutes <= 4,
+    };
+  }, [flightPhase, obstacleTimeMinutes]);
+  const obstacleClearanceFt = useMemo(() => {
+    if (highestObstacleHeightFt == null) return null;
+    const referenceAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
+    return referenceAltitude - highestObstacleHeightFt;
+  }, [activeOwnship?.altitudeFt, highestObstacleHeightFt, simulationAltitudeFt]);
+  const obstacleRisk = useMemo<'nominal' | 'caution' | 'warning' | 'unknown'>(() => {
+    if (obstacleClearanceFt == null) return 'unknown';
+    if (obstacleClearanceFt < obstacleAlertThresholds.warningFt) return 'warning';
+    if (obstacleClearanceFt < obstacleAlertThresholds.cautionFt) return 'caution';
+    return 'nominal';
+  }, [obstacleAlertThresholds.cautionFt, obstacleAlertThresholds.warningFt, obstacleClearanceFt]);
   const flightDeckVerticalAlertSummary = useMemo(() => {
     const activeTargetAltitudeFt =
       flightDeckVerticalConstraintSummary.targetAltitudeFt ?? flightDeckVerticalPathSummary.targetAltitudeFt;
@@ -3973,6 +3807,419 @@ export default function FlightPlannerScreen() {
     flightDeckVerticalPathSummary.verticalErrorFt,
     simulationAltitudeFt,
   ]);
+  const activeFlightAlert = useMemo(() => {
+    if (selectedTrafficTarget?.threatLevel === 'immediate') {
+      return {
+        severity: 'warning' as const,
+        title: 'Immediate traffic',
+        detail: `${selectedTrafficTarget.callsign || 'Traffic'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM Â· ${formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}`,
+      };
+    }
+    if (
+      selectedDiversion &&
+      (
+        selectedDiversion.flightCategory === 'IFR' ||
+        selectedDiversion.flightCategory === 'LIFR' ||
+        (selectedDiversionBriefing?.advisory?.crosswind ?? 0) >= 15
+      )
+    ) {
+      return {
+        severity: 'caution' as const,
+        title: 'Diversion caution',
+        detail: `${selectedDiversion.icao} ${selectedDiversion.flightCategory || 'WX'}${selectedDiversionBriefing?.advisory?.crosswind ? ` Â· XW ${selectedDiversionBriefing.advisory.crosswind} kt` : ''}`,
+      };
+    }
+    if (terrainRisk === 'warning') {
+      return {
+        severity: 'warning' as const,
+        title: 'Terrain warning',
+        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft${terrainAlertThresholds.closingFast ? ' - terrain rising quickly' : ''}`,
+      };
+    }
+    if (obstacleRisk === 'warning') {
+      return {
+        severity: 'warning' as const,
+        title: 'Obstacle warning',
+        detail: `Nearby obstacle clearance ${Math.round(obstacleClearanceFt || 0)} ft${obstacleAlertThresholds.closingFast ? ' - closure increasing' : ''}`,
+      };
+    }
+    if (terrainRisk === 'caution') {
+      return {
+        severity: 'caution' as const,
+        title: 'Terrain caution',
+        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft`,
+      };
+    }
+    if (flightDeckVerticalAlertSummary.severity && flightDeckVerticalAlertSummary.title && flightDeckVerticalAlertSummary.detail) {
+      return {
+        severity: flightDeckVerticalAlertSummary.severity,
+        title: flightDeckVerticalAlertSummary.title,
+        detail: flightDeckVerticalAlertSummary.detail,
+      };
+    }
+    return null;
+  }, [
+    flightDeckVerticalAlertSummary.detail,
+    flightDeckVerticalAlertSummary.severity,
+    flightDeckVerticalAlertSummary.title,
+    obstacleAlertThresholds.closingFast,
+    obstacleClearanceFt,
+    obstacleRisk,
+    selectedDiversion,
+    selectedDiversionBriefing?.advisory?.crosswind,
+    selectedTrafficTarget,
+    terrainAlertThresholds.closingFast,
+    terrainClearanceFt,
+    terrainRisk,
+  ]);
+  const flightDeckVisibleAlert = useMemo(() => {
+    if (selectedTrafficTarget?.threatLevel === 'immediate') {
+      return {
+        severity: 'warning' as const,
+        title: 'Immediate traffic',
+        detail: `${selectedTrafficTarget.callsign || 'Traffic'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM Â· ${formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}`,
+      };
+    }
+    if (terrainRisk === 'warning') {
+      return {
+        severity: 'warning' as const,
+        title: 'Terrain warning',
+        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft${terrainAlertThresholds.closingFast ? ' - terrain rising quickly' : ''}`,
+      };
+    }
+    if (obstacleRisk === 'warning') {
+      return {
+        severity: 'warning' as const,
+        title: 'Obstacle warning',
+        detail: `Nearby obstacle clearance ${Math.round(obstacleClearanceFt || 0)} ft${obstacleAlertThresholds.closingFast ? ' - closure increasing' : ''}`,
+      };
+    }
+    if (flightDeckAdvisoriesMuted) {
+      return null;
+    }
+    if (flightDeckVerticalAlertSummary.severity && flightDeckVerticalAlertSummary.title && flightDeckVerticalAlertSummary.detail) {
+      return {
+        severity: flightDeckVerticalAlertSummary.severity,
+        title: flightDeckVerticalAlertSummary.title,
+        detail: flightDeckVerticalAlertSummary.detail,
+      };
+    }
+    return activeFlightAlert;
+  }, [
+    activeFlightAlert,
+    flightDeckAdvisoriesMuted,
+    flightDeckVerticalAlertSummary.detail,
+    flightDeckVerticalAlertSummary.severity,
+    flightDeckVerticalAlertSummary.title,
+    obstacleAlertThresholds.closingFast,
+    obstacleClearanceFt,
+    obstacleRisk,
+    selectedTrafficTarget,
+    terrainAlertThresholds.closingFast,
+    terrainClearanceFt,
+    terrainRisk,
+  ]);
+  const visionGuidance = useMemo(() => {
+    if (selectedTrafficTarget?.threatLevel === 'immediate') {
+      return `Traffic ${selectedTrafficTarget.callsign || 'target'} ahead`;
+    }
+    if (terrainRisk === 'warning') {
+      return terrainAlertThresholds.closingFast ? 'Terrain rising rapidly' : 'Terrain margin low';
+    }
+    if (terrainRisk === 'caution') {
+      return 'Terrain rising ahead';
+    }
+    if (selectedDiversion) {
+      return `Nearest escape ${selectedDiversion.icao}`;
+    }
+    if (routeProgress?.activeLegLabel) {
+      return routeProgress.sequencingState === 'reintercept'
+        ? `Rejoin ${routeProgress.activeLegLabel}`
+        : `${activeLegBehavior.annunciation}`;
+    }
+    if (routeProgress?.nextWaypoint) {
+      return `Track to ${routeProgress.nextWaypoint}`;
+    }
+    return 'Hold current route';
+  }, [activeLegBehavior.annunciation, routeProgress?.activeLegLabel, routeProgress?.nextWaypoint, routeProgress?.sequencingState, selectedDiversion, selectedTrafficTarget, terrainRisk]);
+  const visionTerrainColumns = useMemo(() => {
+    const samples = terrainProfile?.samples ?? [];
+    const ownshipAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
+    return buildVisionTerrainColumns({
+      samples,
+      ownshipAltitudeFt: ownshipAltitude,
+      maxColumns: 14,
+      keyPrefix: 'terrain-column',
+    });
+  }, [activeOwnship?.altitudeFt, simulationAltitudeFt, terrainProfile?.samples]);
+  const visionObstacleCues = useMemo(() => {
+    const obstacles = obstacleScan?.obstacles ?? [];
+    if (!obstacles.length || !activeOwnship) return [];
+    return buildVisionObstacleCues({
+      ownship: {
+        lat: activeOwnship.lat,
+        lon: activeOwnship.lon,
+        heading: activeOwnship.heading ?? 0,
+        altitudeFt: activeOwnship.altitudeFt ?? simulationAltitudeFt,
+      },
+      obstacles,
+      maxCues: 3,
+    });
+  }, [activeOwnship, obstacleScan?.obstacles, simulationAltitudeFt]);
+  const visionTrafficCue = useMemo(() => {
+    if (!selectedTrafficTarget || !activeOwnship) return null;
+    const closureOverride =
+      trafficTrendMap[selectedTrafficTarget.id]?.closureText ||
+      undefined;
+    return buildVisionTrafficCue({
+      ownship: {
+        lat: activeOwnship.lat,
+        lon: activeOwnship.lon,
+        heading: activeOwnship.heading ?? 0,
+        altitudeFt: activeOwnship.altitudeFt ?? simulationAltitudeFt,
+      },
+      target: {
+        id: selectedTrafficTarget.id,
+        lat: selectedTrafficTarget.lat,
+        lon: selectedTrafficTarget.lon,
+        altitudeDeltaFt: selectedTrafficTarget.altitudeDeltaFt,
+        distanceNm: selectedTrafficTarget.distanceNm,
+        threatLevel: selectedTrafficTarget.threatLevel,
+      },
+      bearingRateDegPerMin: trafficTrendMap[selectedTrafficTarget.id]?.bearingRateDegPerMin ?? 0,
+      distanceRateNmPerMin: trafficTrendMap[selectedTrafficTarget.id]?.distanceRateNmPerMin,
+      closureText: closureOverride,
+    });
+  }, [activeOwnship, selectedTrafficTarget, trafficTrendMap]);
+  const terrainEscapeGuidance = useMemo(() => {
+    if (terrainRisk === 'nominal' && obstacleRisk === 'nominal') return null;
+    const terrainSafeAltitude = terrainProfile?.maxElevationFt != null ? Math.ceil((terrainProfile.maxElevationFt + 2000) / 100) * 100 : null;
+    const obstacleSafeAltitude = highestObstacleHeightFt != null ? Math.ceil((highestObstacleHeightFt + 1500) / 100) * 100 : null;
+    const safeAltitudeFt = Math.max(terrainSafeAltitude ?? 0, obstacleSafeAltitude ?? 0, simulationAltitudeFt);
+    if (terrainRisk === 'warning' || obstacleRisk === 'warning') {
+      return selectedDiversion
+        ? `Climb toward ${safeAltitudeFt.toFixed(0)} ft or divert ${selectedDiversion.icao}`
+        : `Climb toward ${safeAltitudeFt.toFixed(0)} ft immediately`;
+    }
+    if (terrainRisk === 'caution' || obstacleRisk === 'caution') {
+      return selectedDiversion
+        ? `Monitor climb margin. ${selectedDiversion.icao} is the nearest escape.`
+        : `Monitor climb margin. Terrain funnel tightening ahead.`;
+    }
+    return null;
+  }, [highestObstacleHeightFt, obstacleRisk, selectedDiversion, simulationAltitudeFt, terrainProfile?.maxElevationFt, terrainRisk]);
+  const terrainEscapeTargetFt = useMemo(() => {
+    const terrainSafeAltitude = terrainProfile?.maxElevationFt != null ? Math.ceil((terrainProfile.maxElevationFt + 2000) / 100) * 100 : null;
+    const obstacleSafeAltitude = highestObstacleHeightFt != null ? Math.ceil((highestObstacleHeightFt + 1500) / 100) * 100 : null;
+    const best = Math.max(terrainSafeAltitude ?? 0, obstacleSafeAltitude ?? 0);
+    return best > 0 ? best : null;
+  }, [highestObstacleHeightFt, terrainProfile?.maxElevationFt]);
+  const visionManeuverRecommendation = useMemo(() => {
+    if (selectedTrafficTarget?.threatLevel === 'immediate') {
+      const sector = visionTrafficCue?.sector || 'ahead';
+      const altitudeDelta = selectedTrafficTarget.altitudeDeltaFt ?? 0;
+      const closure = visionTrafficCue?.closureText || 'Monitor';
+      if (sector.includes('left')) {
+        return altitudeDelta >= 0 ? `${closure}: traffic left/high. Turn right and hold altitude.` : `${closure}: traffic left/low. Turn right and consider climb.`;
+      }
+      if (sector.includes('right')) {
+        return altitudeDelta >= 0 ? `${closure}: traffic right/high. Turn left and hold altitude.` : `${closure}: traffic right/low. Turn left and consider climb.`;
+      }
+      return altitudeDelta >= 0 ? `${closure}: traffic ahead/high. Offset right and monitor descent.` : `${closure}: traffic ahead/low. Hold course and climb if needed.`;
+    }
+    if (terrainRisk === 'warning' || obstacleRisk === 'warning') {
+      return terrainEscapeGuidance || 'Immediate escape action recommended.';
+    }
+    if (terrainRisk === 'caution' || obstacleRisk === 'caution') {
+      return selectedDiversion ? `Keep ${selectedDiversion.icao} available as an escape.` : 'Maintain climb margin and stay centered in the corridor.';
+    }
+    if (visionRouteGuidance?.offRouteNm && visionRouteGuidance.offRouteNm > 1.5) {
+      return 'Rejoin the route corridor before the next waypoint.';
+    }
+    return 'Continue current route and monitor traffic.';
+  }, [obstacleRisk, selectedDiversion, selectedTrafficTarget, terrainEscapeGuidance, terrainRisk, visionRouteGuidance?.offRouteNm, visionTrafficCue?.sector]);
+  const trafficConflictGuidance = useMemo(() => {
+    if (selectedTrafficTarget?.threatLevel !== 'immediate') return null;
+    const sector = visionTrafficCue?.sector || 'ahead';
+    const altitudeDelta = selectedTrafficTarget.altitudeDeltaFt ?? 0;
+    const defaultBias =
+      sector.includes('left')
+        ? 'right'
+        : sector.includes('right')
+          ? 'left'
+          : altitudeDelta >= 0
+            ? 'left'
+            : 'right';
+    const bias = trafficResolutionBias || defaultBias;
+    const verticalCommand = altitudeDelta < 0 ? 'Consider climb for separation' : 'Hold altitude';
+    if (sector.includes('left') || sector.includes('right')) {
+      return {
+        lateralOffsetPct: bias === 'right' ? 12 : -12,
+        verticalOffsetPct: altitudeDelta < 0 ? -6 : 0,
+        turnCommand: `Traffic bias ${bias}`,
+        verticalCommand,
+        mode: 'traffic' as const,
+      };
+    }
+    return {
+      lateralOffsetPct: bias === 'right' ? 8 : -8,
+      verticalOffsetPct: altitudeDelta < 0 ? -8 : 4,
+      turnCommand: `Traffic ahead - bias ${bias}`,
+      verticalCommand: altitudeDelta < 0 ? 'Climb if needed for separation' : 'Hold altitude / monitor descent',
+      mode: 'traffic' as const,
+    };
+  }, [selectedTrafficTarget, trafficResolutionBias, visionTrafficCue?.sector]);
+  const visionDirectorCue = useMemo(() => {
+    if (trafficConflictGuidance) {
+      return {
+        ...trafficConflictGuidance,
+        lateralCaptured: false,
+        verticalCaptured: false,
+      };
+    }
+    const currentAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
+    const headingDelta = visionRouteGuidance?.headingDelta ?? 0;
+    const targetAltitude =
+      terrainRisk === 'warning' || obstacleRisk === 'warning'
+        ? Math.max(terrainEscapeTargetFt ?? 0, flightDeckTargetAltitudeFt ?? 0, currentAltitude)
+        : flightDeckTargetAltitudeFt ?? flightDeckVerticalPathSummary.targetAltitudeFt ?? simulationAltitudeFt;
+    const altitudeErrorFt =
+      terrainRisk === 'warning' || obstacleRisk === 'warning'
+        ? targetAltitude - currentAltitude
+        : flightDeckTargetAltitudeFt != null
+          ? flightDeckTargetAltitudeFt - currentAltitude
+          : flightDeckVerticalPathSummary.verticalErrorFt ?? targetAltitude - currentAltitude;
+    const lateralCaptured = Boolean(visionRouteGuidance?.lateralCaptured);
+    const verticalCaptured = Math.abs(altitudeErrorFt) < 150;
+    const mode =
+      terrainRisk === 'warning' || obstacleRisk === 'warning'
+        ? 'escape'
+        : !lateralCaptured || Math.abs(headingDelta) > 12
+          ? 'intercept'
+          : !verticalCaptured
+            ? 'capture'
+            : 'track';
+    return {
+      lateralOffsetPct: clamp(headingDelta * 0.32, -16, 16),
+      verticalOffsetPct: clamp(-altitudeErrorFt / 90, -18, 18),
+      lateralCaptured,
+      verticalCaptured,
+      mode,
+      turnCommand:
+        Math.abs(headingDelta) < 6 ? 'Track centered'
+        : headingDelta > 0 ? `Turn right ${Math.round(Math.abs(headingDelta))}Â°`
+        : `Turn left ${Math.round(Math.abs(headingDelta))}Â°`,
+      verticalCommand:
+        terrainRisk === 'warning' || obstacleRisk === 'warning'
+          ? Math.abs(altitudeErrorFt) < 150 ? 'Hold altitude'
+          : altitudeErrorFt > 0 ? `Climb to ${Math.round(targetAltitude)} ft`
+          : `Descend to ${Math.round(targetAltitude)} ft`
+          : flightDeckTargetAltitudeFt == null
+            ? flightDeckVerticalPathSummary.advisoryCall
+            : Math.abs(altitudeErrorFt) < 150 ? 'Hold altitude'
+            : altitudeErrorFt > 0 ? `Climb to ${Math.round(targetAltitude)} ft`
+            : `Descend to ${Math.round(targetAltitude)} ft`,
+    };
+  }, [activeOwnship?.altitudeFt, flightDeckTargetAltitudeFt, flightDeckVerticalPathSummary.advisoryCall, flightDeckVerticalPathSummary.targetAltitudeFt, flightDeckVerticalPathSummary.verticalErrorFt, obstacleRisk, simulationAltitudeFt, terrainEscapeTargetFt, terrainRisk, trafficConflictGuidance, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
+  const mapTacticalSummary = useMemo(() => {
+    const modeLabel =
+      routeExecutionOverride?.mode === 'direct-to-diversion'
+        ? 'Direct'
+        : activeProcedureCueStackPreview.modeLabel === 'Departure'
+          ? 'Departure'
+          : activeProcedureCueStackPreview.modeLabel === 'Arrival'
+            ? 'Arrival'
+            : activeProcedureCueStackPreview.modeLabel === 'Final'
+              ? 'Final'
+              : activeLegBehavior.guidanceMode === 'departure'
+          ? 'Departure'
+          : activeLegBehavior.guidanceMode === 'terminal'
+            ? 'Terminal'
+            : visionDirectorCue.mode === 'traffic'
+        ? 'Traffic'
+        : visionDirectorCue.mode === 'escape'
+        ? 'Escape'
+        : visionDirectorCue.mode === 'intercept'
+          ? 'Intercept'
+          : visionDirectorCue.mode === 'capture'
+            ? 'Capture'
+            : 'Track';
+    const focusLabel =
+      flightDeckPhaseSummary.stage === 'taxi-out' || flightDeckPhaseSummary.stage === 'taxi-in'
+        ? 'Ground corridor'
+        : flightDeckPhaseSummary.stage === 'departure'
+          ? 'Departure corridor'
+          : flightDeckPhaseSummary.stage === 'climb'
+            ? 'Climb scan'
+            : flightDeckPhaseSummary.stage === 'cruise'
+              ? 'Enroute scan'
+              : flightDeckPhaseSummary.stage === 'descent'
+                ? 'Arrival setup'
+                : flightDeckPhaseSummary.stage === 'arrival'
+                  ? 'Terminal corridor'
+                  : flightDeckPhaseSummary.stage === 'final'
+                    ? 'Final map'
+                    : 'Route scan';
+    const support =
+      selectedTrafficTarget?.threatLevel === 'immediate'
+        ? `Traffic priority ${selectedTrafficTarget.callsign || 'target'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM`
+        : selectedDiversion
+          ? `Diversion staged ${selectedDiversion.icao} ${selectedDiversion.distanceNm.toFixed(1)} NM`
+          : routeProgress
+            ? `${routeProgress.remainingLegNm.toFixed(1)} NM leg / ${routeProgress.remainingRouteNm.toFixed(1)} NM route`
+            : flightDeckPhaseSummary.detail;
+    return {
+      modeLabel: activeExecutionSegmentPreview.label || modeLabel,
+      heading: visionDirectorCue.turnCommand,
+      vertical: visionDirectorCue.verticalCommand,
+      verticalSupport: flightDeckVerticalPathSummary.support,
+      verticalConstraintCall: routeExecutionSummary.verticalConstraintCall,
+      recommendation:
+        selectedTrafficTarget?.threatLevel === 'immediate' || selectedDiversion
+          ? activeProcedureCueStackPreview.sequencingSummary || visionManeuverRecommendation
+          : flightDeckVerticalPathSummary.recommendation || activeProcedureCueStackPreview.sequencingSummary || visionManeuverRecommendation,
+      focusLabel,
+      rangeLabel: tacticalMapRangeLabel,
+      support,
+    };
+  }, [
+    activeExecutionSegmentPreview.label,
+    activeLegBehavior.guidanceMode,
+    activeProcedureCueStackPreview.modeLabel,
+    activeProcedureCueStackPreview.sequencingSummary,
+    flightDeckVerticalPathSummary.support,
+    flightDeckVerticalPathSummary.recommendation,
+    flightDeckPhaseSummary.detail,
+    flightDeckPhaseSummary.stage,
+    routeExecutionSummary.verticalConstraintCall,
+    routeExecutionOverride?.mode,
+    routeProgress,
+    selectedDiversion,
+    selectedTrafficTarget,
+    tacticalMapRangeLabel,
+    visionDirectorCue.mode,
+    visionDirectorCue.turnCommand,
+    visionDirectorCue.verticalCommand,
+    visionManeuverRecommendation,
+  ]);
+  const activeExecutionPlanView = useMemo(
+    () =>
+      annotateMobileRouteExecutionPlan(activeExecutionPlan, {
+        activeLegIndex: routeProgress?.legIndex ?? -1,
+        nextLegArmed: routeExecutionSummary.nextLegArmed,
+        sequencingSuspended: routeExecutionSummary.sequencingSuspended,
+        sequenceGateState: routeExecutionSummary.sequenceGateState as 'open' | 'armed' | 'blocked' | 'hold' | 'manual-open' | undefined,
+        procedureChains: activeProcedureChains,
+      }),
+    [
+      activeExecutionPlan,
+      activeProcedureChains,
+      routeExecutionSummary.nextLegArmed,
+      routeExecutionSummary.sequenceGateState,
+      routeExecutionSummary.sequencingSuspended,
+      routeProgress?.legIndex,
+    ]
+  );
   const plannerExecutionPlanView = useMemo(
     () =>
       annotateMobileRouteExecutionPlan(plannerExecutionPlan, {
@@ -3990,7 +4237,7 @@ export default function FlightPlannerScreen() {
             : false,
         sequenceGateState:
           routeProgress && routeExecutionOverride?.mode !== 'direct-to-diversion'
-            ? routeExecutionSummary.sequenceGateState
+            ? (routeExecutionSummary.sequenceGateState as 'open' | 'armed' | 'blocked' | 'hold' | 'manual-open' | undefined)
             : 'blocked',
         procedureChains: plannerProcedureChains,
       }),
@@ -4219,12 +4466,12 @@ export default function FlightPlannerScreen() {
 
   useEffect(() => {
     const routeParams = route.params || {};
-    const nextDeparture = typeof routeParams.departure === 'string' ? routeParams.departure.trim().toUpperCase() : ';
-    const nextDestination = typeof routeParams.destination === 'string' ? routeParams.destination.trim().toUpperCase() : ';
-    const nextWaypoints = typeof routeParams.waypoints === 'string' ? routeParams.waypoints.trim().toUpperCase() : ';
-    const nextPlannedStops = typeof routeParams.plannedStops === 'string' ? routeParams.plannedStops.trim().toUpperCase() : ';
-    const nextPlannedAltitude = typeof routeParams.plannedAltitude === 'string' ? routeParams.plannedAltitude.trim() : ';
-    const nextCruiseKtas = typeof routeParams.cruiseKtas === 'string' ? routeParams.cruiseKtas.trim() : ';
+    const nextDeparture = typeof routeParams.departure === 'string' ? routeParams.departure.trim().toUpperCase() : '';
+    const nextDestination = typeof routeParams.destination === 'string' ? routeParams.destination.trim().toUpperCase() : '';
+    const nextWaypoints = typeof routeParams.waypoints === 'string' ? routeParams.waypoints.trim().toUpperCase() : '';
+    const nextPlannedStops = typeof routeParams.plannedStops === 'string' ? routeParams.plannedStops.trim().toUpperCase() : '';
+    const nextPlannedAltitude = typeof routeParams.plannedAltitude === 'string' ? routeParams.plannedAltitude.trim() : '';
+    const nextCruiseKtas = typeof routeParams.cruiseKtas === 'string' ? routeParams.cruiseKtas.trim() : '';
 
     if (nextDeparture) setDeparture(nextDeparture);
     if (nextDestination) setDestination(nextDestination);
@@ -5134,196 +5381,6 @@ export default function FlightPlannerScreen() {
     }
     return routeHeadline;
   }, [routeExecutionOverride, routeHeadline]);
-  const activeRoutePoints = useMemo(() => {
-    if (routeExecutionOverride?.mode !== 'direct-to-diversion') return routePoints;
-    return [routeExecutionOverride.origin, routeExecutionOverride.target];
-  }, [routeExecutionOverride, routePoints]);
-  const plannedRouteStructureText = useMemo(() => {
-    const dep = departure.trim().toUpperCase();
-    const dest = destination.trim().toUpperCase();
-    const stopList = plannedStops
-      .split(/[\s,]+/)
-      .map((code) => code.trim().toUpperCase())
-      .filter(Boolean);
-    const wpList = waypoints
-      .split(/[\s,]+/)
-      .map((code) => code.trim().toUpperCase())
-      .filter(Boolean);
-    return [dep, ...stopList, ...wpList, dest].filter(Boolean).join(' ');
-  }, [departure, destination, plannedStops, waypoints]);
-  const plannedRouteAnalysis = useMemo(() => analyzeFiledRoute(plannedRouteStructureText), [plannedRouteStructureText]);
-  const providerRouteAnalysis = useMemo(
-    () => analyzeFiledRoute(providerRouteSearch?.route || ''),
-    [providerRouteSearch?.route]
-  );
-  const plannedRouteAnchorTokens = useMemo(
-    () =>
-      plannedRouteAnalysis.tokens
-        .filter((token) => isFiledRouteAnchorKind(token.kind))
-        .map((token) => token.token),
-    [plannedRouteAnalysis]
-  );
-  const providerRouteAnchorTokens = useMemo(
-    () =>
-      providerRouteAnalysis.tokens
-        .filter((token) => isFiledRouteAnchorKind(token.kind))
-        .map((token) => token.token),
-    [providerRouteAnalysis]
-  );
-  const plannerNavDataSnapshot = useMemo(() => {
-    const navDataLegsByIndex = buildStructuredCourseFixNavDataLegs(
-      routeSummary?.legs || [],
-      plannedRouteAnchorTokens,
-      plannedAltitudeValue,
-    );
-    const providerNavDataLegsByIndex = buildProviderCourseFixNavDataLegs(
-      routeSummary?.legs || [],
-      providerRouteAnchorTokens,
-      plannedAltitudeValue,
-      providerRouteSearch?.environment || providerRouteSearch?.provider || null,
-    );
-    Object.entries(providerNavDataLegsByIndex).forEach(([legIndex, payload]) => {
-      if (payload) {
-        navDataLegsByIndex[Number(legIndex)] = payload;
-      }
-    });
-    const plannerLegs = routeSummary?.legs || [];
-    const departureLeg = plannerLegs[0];
-    const arrivalFeedLeg = plannerLegs.length > 1 ? plannerLegs[plannerLegs.length - 2] : null;
-    const finalLeg = plannerLegs[plannerLegs.length - 1];
-    if (departureLeg && departureRunway) {
-      navDataLegsByIndex[departureLeg.index] = {
-        kind: 'runway-release-nav-data',
-        sourceKind: 'briefing-data',
-        label: `${departure.trim().toUpperCase() || departureLeg.from} ${departureRunway.runwayId}`,
-        airportIdent: departure.trim().toUpperCase() || departureLeg.from,
-        runwayIdent: departureRunway.runwayId,
-        releaseHeading: departureRunway.headingDeg,
-        initialAltitudeFt: plannedAltitudeValue ?? null,
-        sourceCycle: null,
-      };
-    }
-    if (arrivalFeedLeg && destinationRunway) {
-      navDataLegsByIndex[arrivalFeedLeg.index] = {
-        kind: 'terminal-feed-nav-data',
-        sourceKind: 'briefing-data',
-        label: `${destination.trim().toUpperCase() || arrivalFeedLeg.to} ${destinationRunway.runwayId} arrival feed`,
-        arrivalIdent: `${destination.trim().toUpperCase() || arrivalFeedLeg.to} ${destinationRunway.runwayId}`,
-        transitionFix: arrivalFeedLeg.from,
-        handoffFix: arrivalFeedLeg.to,
-        altitudeConstraintFt: plannedAltitudeValue ?? null,
-        sourceCycle: null,
-      };
-    }
-    if (finalLeg && destinationRunway) {
-      navDataLegsByIndex[finalLeg.index] = {
-        kind: 'final-capture-nav-data',
-        sourceKind: 'briefing-data',
-        label: `${destinationRunway.runwayId} final`,
-        runwayIdent: destinationRunway.runwayId,
-        finalCourseDeg: destinationRunway.headingDeg,
-        thresholdFix: destination.trim().toUpperCase() || finalLeg.to,
-        glideslopeAngleDeg: 3,
-        sourceCycle: null,
-      };
-    }
-    const payloads = Object.values(navDataLegsByIndex).filter(Boolean);
-    const structuredLegCount = payloads.filter((payload) => payload?.sourceKind === 'route-structure').length;
-    const briefingLegCount = payloads.filter((payload) => payload?.sourceKind === 'briefing-data').length;
-    const navDataLegCount = payloads.filter((payload) => payload?.sourceKind === 'nav-data').length;
-    const totalLegCount = routeSummary?.legs?.length || 0;
-    const coveredLegCount = payloads.length;
-    const coveragePct = totalLegCount > 0 ? Math.round((coveredLegCount / totalLegCount) * 100) : 0;
-    return {
-      source:
-        navDataLegCount > 0
-          ? ('nav-data' as const)
-          : briefingLegCount > 0 && structuredLegCount > 0
-            ? ('hybrid' as const)
-            : briefingLegCount > 0
-              ? ('briefing-data' as const)
-              : structuredLegCount > 0
-                ? ('route-structure' as const)
-                : ('route-chain' as const),
-      navDataLegsByIndex,
-      structuredLegCount,
-      briefingLegCount,
-      navDataLegCount,
-      totalLegCount,
-      coveredLegCount,
-      coveragePct,
-      warnings: plannedRouteAnalysis.warnings,
-      providerWarnings: Array.isArray(providerRouteSearch?.warnings) ? providerRouteSearch.warnings : [],
-      airwaySegments: plannedRouteAnalysis.airwaySegments,
-      providerRoute: providerRouteSearch?.route || null,
-      providerRouteAvailable: Boolean(providerRouteSearch?.available && providerRouteSearch?.route),
-      tokenCounts: plannedRouteAnalysis.counts,
-    };
-  }, [departure, departureRunway, destination, destinationRunway, plannedRouteAnalysis, plannedRouteAnchorTokens, plannedAltitudeValue, providerRouteAnchorTokens, providerRouteSearch?.available, providerRouteSearch?.environment, providerRouteSearch?.provider, providerRouteSearch?.route, providerRouteSearch?.warnings, routeSummary?.legs]);
-  const activeRouteLegs = useMemo(
-    () =>
-      buildMobileRouteLegs(activeRoutePoints, {
-        mode: routeExecutionOverride?.mode === 'direct-to-diversion' ? 'direct-to' : 'planned',
-      }),
-    [activeRoutePoints, routeExecutionOverride?.mode]
-  );
-  const activeNavDataLegsByIndex = useMemo(
-    () =>
-      routeExecutionOverride?.mode === 'direct-to-diversion'
-        ? {}
-        : plannerNavDataSnapshot.navDataLegsByIndex,
-    [plannerNavDataSnapshot.navDataLegsByIndex, routeExecutionOverride?.mode]
-  );
-  const activeExecutionPlan = useMemo(
-    () => buildMobileRouteExecutionPlan(activeRouteLegs, { navDataLegsByIndex: activeNavDataLegsByIndex }),
-    [activeNavDataLegsByIndex, activeRouteLegs]
-  );
-  const activeProcedureChains = useMemo(
-    () => buildMobileRouteProcedureChains(activeExecutionPlan),
-    [activeExecutionPlan]
-  );
-  const plannerExecutionPlan = useMemo(
-    () => buildMobileRouteExecutionPlan(routeSummary?.legs || [], { navDataLegsByIndex: plannerNavDataSnapshot.navDataLegsByIndex }),
-    [plannerNavDataSnapshot.navDataLegsByIndex, routeSummary?.legs]
-  );
-  const plannerProcedureChains = useMemo(
-    () => buildMobileRouteProcedureChains(plannerExecutionPlan),
-    [plannerExecutionPlan]
-  );
-  const activeLegDefinition = useMemo(
-    () => activeRouteLegs[Math.min(activeLegIndex, Math.max(0, activeRouteLegs.length - 1))] || null,
-    [activeLegIndex, activeRouteLegs]
-  );
-  const activeLegBehavior = useMemo(
-    () =>
-      getMobileRouteLegBehavior(activeLegDefinition, {
-        legProgressPct: routeProgress?.legProgressPct,
-        remainingRouteNm: routeProgress?.remainingRouteNm,
-      }),
-    [activeLegDefinition, routeProgress?.legProgressPct, routeProgress?.remainingRouteNm]
-  );
-  const activeExecutionSegmentPreview = useMemo(
-    () => getMobileRouteExecutionSegment(activeLegBehavior.profile, { sequenceGateState: 'blocked' }),
-    [activeLegBehavior.profile]
-  );
-  const activeProcedureExecutionProfilePreview = useMemo(
-    () => getMobileRouteProcedureExecutionProfile(getMobileRouteProcedureContext(activeLegBehavior.profile).kind),
-    [activeLegBehavior.profile]
-  );
-  const activeProcedureCueStackPreview = useMemo(
-    () => getMobileRouteProcedureCueStack(getMobileRouteProcedureContext(activeLegBehavior.profile).kind),
-    [activeLegBehavior.profile]
-  );
-  const activeProcedureRoleExecutionPolicyPreview = useMemo(
-    () =>
-      getMobileRouteProcedureRoleExecutionPolicy(
-        getMobileRouteProcedureEntryRole(getMobileRouteProcedureContext(activeLegBehavior.profile).kind, {
-          entryIndexInChain: 0,
-          entryCount: 1,
-        }).kind,
-      ),
-    [activeLegBehavior.profile]
-  );
 
   useEffect(() => {
     if (effectiveProfile) {
@@ -5619,7 +5676,7 @@ export default function FlightPlannerScreen() {
   );
   const cloudTileUrl = cloudFrames.length > 0
     ? `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${cloudSource === 'goes-west' ? 'GOES-West_ABI_GeoColor' : 'GOES-East_ABI_GeoColor'}/default/${encodeURIComponent(cloudFrames[cloudFrameIndex])}/GoogleMapsCompatible_Level4/{z}/{y}/{x}.jpg`
-    : ';
+    : '';
   const cloudTimeLabel = formatCloudTimeLabel(cloudFrames[cloudFrameIndex]);
   const resolvedDepartureTimeZone = normalizeTimeZone(departureTimeZone || deviceTimeZone);
   const resolvedDestinationTimeZone = normalizeTimeZone(destinationTimeZone || deviceTimeZone);
@@ -5755,56 +5812,6 @@ export default function FlightPlannerScreen() {
       { duration: 450 },
     );
   }, [activeOwnship?.heading, activeOwnship?.lat, activeOwnship?.lon, activeOwnship?.speedKts, flightDeckView, isFlightDeck, simulationCruiseKts]);
-  const destinationRunwayCue = useMemo<DestinationRunwayCue | null>(() => {
-    const destinationPoint = activeRoutePoints[activeRoutePoints.length - 1];
-    if (!activeOwnship || !destinationPoint || !destinationRunway) return null;
-    if (flightPhase !== 'arrival' && flightPhase !== 'surface-arrival') return null;
-    const destinationElevationFt = terrainProfile?.samples?.[terrainProfile.samples.length - 1]?.elevationFt ?? 0;
-    const currentAltitudeFt = activeOwnship.altitudeFt ?? simulationAltitudeFt;
-    return buildArrivalRunwayCue({
-      ownship: {
-        lat: activeOwnship.lat,
-        lon: activeOwnship.lon,
-        heading: activeOwnship.heading ?? destinationRunway.headingDeg,
-        altitudeFt: currentAltitudeFt,
-      },
-      airport: {
-        latitude: destinationPoint.latitude,
-        longitude: destinationPoint.longitude,
-      },
-      runway: destinationRunway,
-      destinationElevationFt,
-      activeRangeNm: 18,
-      maxDistanceNm: 30,
-    });
-  }, [activeOwnship, activeRoutePoints, destinationRunway, flightPhase, simulationAltitudeFt, terrainProfile?.samples]);
-  const destinationRunwayOverlay = useMemo<DestinationRunwayOverlay | null>(() => {
-    const destinationPoint = activeRoutePoints[activeRoutePoints.length - 1];
-    if (!destinationPoint || !destinationRunway || !destinationRunwayCue) return null;
-    return buildArrivalRunwayOverlay({
-      airport: {
-        latitude: destinationPoint.latitude,
-        longitude: destinationPoint.longitude,
-      },
-      runway: destinationRunway,
-      approachLengthNm: flightPhase === 'arrival' ? 8 : 5,
-    });
-  }, [activeRoutePoints, destinationRunway, destinationRunwayCue, flightPhase]);
-  const departureRunwayOverlay = useMemo<DestinationRunwayOverlay | null>(() => {
-    const departurePoint = activeRoutePoints[0];
-    if (!departurePoint || !departureRunway || flightPhase !== 'departure') return null;
-    return buildDepartureRunwayOverlay({
-      airport: {
-        latitude: departurePoint.latitude,
-        longitude: departurePoint.longitude,
-      },
-      runway: departureRunway,
-    });
-  }, [activeRoutePoints, departureRunway, flightPhase]);
-  const activeRunwayOverlay = flightPhase === 'arrival' ? destinationRunwayOverlay : departureRunwayOverlay;
-  const activeRunwayOverlayLabel = flightPhase === 'arrival'
-    ? destinationRunway ? `Final ${destinationRunway.runwayId}` : null
-    : departureRunway ? `Dep ${departureRunway.runwayId}` : null;
   const flightDeckSurfacePreview = useMemo<FlightDeckSurfacePreview | null>(() => {
     const departureSurface = flightPhase === 'departure';
     const airport = departureSurface ? activeRoutePoints[0] : activeRoutePoints[activeRoutePoints.length - 1];
@@ -6233,7 +6240,7 @@ export default function FlightPlannerScreen() {
     setSelectedDiversionIcao,
     setSelectedTrafficId,
     setFlightDeckDrawerOpen,
-    setFlightDeckPanel,
+    setFlightDeckPanel: (panel: string) => setFlightDeckPanel(panel as FlightDeckPanel),
     setTrafficEnabled,
     setGpsEnabled,
     setSimulationEnabled,
@@ -6355,7 +6362,7 @@ export default function FlightPlannerScreen() {
                 }}
               >
                 <Text style={styles.suggestionItemText}>
-                  {airport.icao} {airport.name ? `* ${airport.name}` : '}
+                  {airport.icao} {airport.name ? `* ${airport.name}` : ''}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -6377,7 +6384,7 @@ export default function FlightPlannerScreen() {
                 }}
               >
                 <Text style={styles.suggestionItemText}>
-                  {airport.icao} {airport.name ? `* ${airport.name}` : '}
+                  {airport.icao} {airport.name ? `* ${airport.name}` : ''}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -6668,7 +6675,7 @@ export default function FlightPlannerScreen() {
           <View style={styles.alertCard}>
             <Text style={styles.alertTitle}>Immediate traffic</Text>
             <Text style={styles.alertText}>
-              {immediateTrafficCount} nearby target{immediateTrafficCount === 1 ? ' : 's'} in the conflict band.
+              {immediateTrafficCount} nearby target{immediateTrafficCount === 1 ? '' : 's'} in the conflict band.
             </Text>
           </View>
         )}
@@ -6861,7 +6868,7 @@ export default function FlightPlannerScreen() {
                       <Callout>
                         <Text style={styles.calloutText}>
                           {point.icao || point.stationId}: {Math.round(point.windDir)} deg / {Math.round(point.windSpeed)} kt
-                          {point.tempC !== null ? `, ${point.tempC}C` : '}
+                          {point.tempC !== null ? `, ${point.tempC}C` : ''}
                         </Text>
                       </Callout>
                     </Marker>
@@ -6879,7 +6886,7 @@ export default function FlightPlannerScreen() {
                 key={target.id}
                 coordinate={{ latitude: target.lat, longitude: target.lon }}
                 title={target.callsign || 'Traffic'}
-                description={`${target.distanceNm.toFixed(1)} NM${target.altitudeFt ? ` â€¢ ${target.altitudeFt} ft` : '}`}
+                description={`${target.distanceNm.toFixed(1)} NM${target.altitudeFt ? ` â€¢ ${target.altitudeFt} ft` : ''}`}
                 pinColor={target.threatLevel === 'immediate' ? '#dc2626' : target.threatLevel === 'advisory' ? '#f97316' : '#eab308'}
               />
             ))}
@@ -6888,7 +6895,7 @@ export default function FlightPlannerScreen() {
                 coordinate={{ latitude: activeOwnship.lat, longitude: activeOwnship.lon }}
                 anchor={{ x: 0.5, y: 0.5 }}
                 title={simulationEnabled ? 'Simulated ownship' : 'Ownship'}
-                description={`${activeOwnship.speedKts ? `${Math.round(activeOwnship.speedKts)} kt` : 'Speed --'}${activeOwnship.altitudeFt ? ` Â· ${Math.round(activeOwnship.altitudeFt)} ft` : '}`}
+                description={`${activeOwnship.speedKts ? `${Math.round(activeOwnship.speedKts)} kt` : 'Speed --'}${activeOwnship.altitudeFt ? ` Â· ${Math.round(activeOwnship.altitudeFt)} ft` : ''}`}
               >
                 <View
                   style={[
@@ -7029,10 +7036,10 @@ export default function FlightPlannerScreen() {
                   </View>
                   <Text style={styles.diversionMeta}>
                     {target.distanceNm.toFixed(1)} NM
-                    {typeof target.altitudeFt === 'number' ? ` â€¢ ${Math.round(target.altitudeFt)} ft` : '}
+                    {typeof target.altitudeFt === 'number' ? ` â€¢ ${Math.round(target.altitudeFt)} ft` : ''}
                     {typeof target.altitudeDeltaFt === 'number'
                       ? ` â€¢ ${target.altitudeDeltaFt >= 0 ? '+' : '-'}${Math.round(target.altitudeDeltaFt)} ft`
-                      : '}
+                      : ''}
                   </Text>
                   <Text style={styles.helperText}>Threat score {target.threatScore}</Text>
                 </View>
@@ -7061,11 +7068,11 @@ export default function FlightPlannerScreen() {
                   <View style={styles.diversionHeader}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.diversionTitle}>
-                        {airport.icao}{airport.name ? ` Â· ${airport.name}` : '}
+                        {airport.icao}{airport.name ? ` Â· ${airport.name}` : ''}
                       </Text>
                       <Text style={styles.diversionMeta}>
                         {airport.distanceNm.toFixed(1)} NM Â· {Math.round(airport.bearingDeg)}Â°
-                        {airport.maxRunwayFt ? ` Â· ${airport.maxRunwayFt.toLocaleString()} ft` : '}
+                        {airport.maxRunwayFt ? ` Â· ${airport.maxRunwayFt.toLocaleString()} ft` : ''}
                       </Text>
                     </View>
                     {airport.flightCategory ? (
@@ -7080,7 +7087,7 @@ export default function FlightPlannerScreen() {
                         Runway {selectedDiversionBriefing.advisory.runway || '--'} Â·
                         HW {selectedDiversionBriefing.advisory.headwind ?? '--'} kt Â·
                         XW {selectedDiversionBriefing.advisory.crosswind ?? '--'} kt
-                        {selectedDiversionBriefing.runwayInUse ? ` Â· In use ${selectedDiversionBriefing.runwayInUse}` : '}
+                        {selectedDiversionBriefing.runwayInUse ? ` Â· In use ${selectedDiversionBriefing.runwayInUse}` : ''}
                       </Text>
                     ) : selectedDiversionBriefing?.runwayInUse ? (
                       <Text style={styles.helperText}>Runway in use {selectedDiversionBriefing.runwayInUse}</Text>
@@ -7092,7 +7099,7 @@ export default function FlightPlannerScreen() {
                   {selectedDiversionIcao === airport.icao && selectedDiversionBestComm ? (
                     <Text style={styles.helperText}>
                       Best comm: {selectedDiversionBestComm.type || selectedDiversionBestComm.description || 'Frequency'}
-                      {selectedDiversionBestComm.frequencyMhz ? ` ${selectedDiversionBestComm.frequencyMhz.toFixed(3)}` : '}
+                      {selectedDiversionBestComm.frequencyMhz ? ` ${selectedDiversionBestComm.frequencyMhz.toFixed(3)}` : ''}
                     </Text>
                   ) : null}
                   <View style={styles.diversionActions}>
@@ -7104,8 +7111,8 @@ export default function FlightPlannerScreen() {
                       onPress={() => {
                         setDestination(airport.icao);
                         setSuggestedMode('direct');
-                        setWaypoints(');
-                        setPlannedStops(');
+                        setWaypoints('');
+                        setPlannedStops('');
                       }}
                     >
                       <Text style={styles.secondaryButtonText}>Use as destination</Text>

@@ -1,25 +1,28 @@
 import type { MutableRefObject } from 'react';
 import type { Region } from 'react-native-maps';
 import type { EdgeInsets } from 'react-native-safe-area-context';
+import type { MobileRouteExecutionPlanViewEntry } from '../../lib/flightMath';
 
 // ---------------------------------------------------------------------------
 // Shared primitives
 // ---------------------------------------------------------------------------
 
-export type LatLon = { lat: number; lon: number };
+export type LatLon = { latitude: number; longitude: number };
 
 export type OwnshipPosition = {
   lat: number;
   lon: number;
-  altitudeFt: number;
+  altitudeFt?: number | null;
   groundSpeedKts?: number | null;
   trackDeg?: number | null;
   verticalSpeedFpm?: number | null;
+  heading?: number | null;
+  speedKts?: number | null;
 };
 
 export type AttitudeData = {
-  rollDeg: number;
-  pitchDeg: number;
+  rollDeg?: number | null;
+  pitchDeg?: number | null;
   headingDeg?: number | null;
 };
 
@@ -27,6 +30,8 @@ export type SourceSummary = {
   code: 'SIM' | 'RXR' | 'GPS' | 'STALE' | 'PREFLT' | string;
   label?: string | null;
   freshness?: string | null;
+  detail?: string | null;
+  pilotGrade?: string | boolean | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -41,13 +46,16 @@ export type MapRouteDisplay = {
 
 export type TrafficPresentation = {
   id: string;
-  lat: number;
-  lon: number;
+  lat?: number | null;
+  lon?: number | null;
   altitudeFt?: number | null;
+  altitudeLabel?: string | null;
+  closureText?: string | null;
   callsign?: string | null;
   trackDeg?: number | null;
   groundSpeedKts?: number | null;
   verticalTrend?: 'climb' | 'descend' | 'level' | null;
+  vector?: { latitude: number; longitude: number }[];
 };
 
 export type MapOverlayProfile = {
@@ -71,6 +79,9 @@ export type MapTacticalSummary = {
   verticalSupport: string;
   verticalConstraintCall: string;
   recommendation: string;
+  focusLabel?: string | null;
+  support?: string | null;
+  rangeLabel?: string | null;
 };
 
 export type MapRunwayFocusSummary = {
@@ -136,15 +147,17 @@ export type VisionDirectorCue = {
 // ---------------------------------------------------------------------------
 
 export type FlightDeckActionButton = {
-  id: string;
+  key: string;
   label: string;
+  value?: string;
+  tone?: string;
+  active?: boolean;
   icon?: string | null;
-  tone?: 'primary' | 'warning' | 'danger' | 'default' | string;
   onPress?: () => void;
 };
 
 export type FlightDeckVisibleAlert = {
-  id: string;
+  id?: string;
   severity: 'info' | 'caution' | 'warning' | string;
   title: string;
   detail?: string | null;
@@ -155,7 +168,9 @@ export type FlightDeckVisibleAlert = {
 // ---------------------------------------------------------------------------
 
 export type BankTick = {
-  deg: number;
+  value: number;
+  leftPct: number;
+  major: boolean;
   label?: string | null;
 };
 
@@ -180,6 +195,7 @@ export type SurfacePreview = {
   runwayMeta: string;
   support: string;
   clearanceLabel: string;
+  mode?: string | null;
   surfaceRegion?: Region | null;
   surfaceFeatures?: Array<{
     geometry: {
@@ -204,6 +220,9 @@ export type TrafficTarget = {
   trackDeg?: number | null;
   verticalTrend?: 'climb' | 'descend' | 'level' | null;
   threatLevel?: 'traffic' | 'proximity' | 'advisory' | string | null;
+  distanceNm?: number | null;
+  altitudeDeltaFt?: number | null;
+  threatScore?: number | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -247,7 +266,7 @@ export type ExecutionPlanEntry = {
 export type RouteExecutionSummary = {
   activeLegIndex: number | null;
   sequencingSuspended?: boolean;
-  [key: string]: unknown;
+  [key: string]: any;
 };
 
 // ---------------------------------------------------------------------------
@@ -262,21 +281,21 @@ export interface FlightDeckStateProps {
   // Route planning inputs
   departure: string | null;
   destination: string | null;
-  waypoints: string[];
-  plannedStops: unknown[];
-  plannedAltitude: number | null;
-  cruiseKtas: number | null;
+  waypoints: string;
+  plannedStops: string;
+  plannedAltitude: string;
+  cruiseKtas: string;
 
   // Route summary
   routeHeadline: string | null;
-  routeProgress: unknown | null;
+  routeProgress: any | null;
   routeExecutionSummary: RouteExecutionSummary | null;
-  activeExecutionPlanView: ExecutionPlanEntry[];
+  activeExecutionPlanView: MobileRouteExecutionPlanViewEntry[];
   routeRiskLabel: string | null;
 
   // Flight deck session
   flightDeckSessionState: string | null;
-  flightDeckPhaseSummary: string | null;
+  flightDeckPhaseSummary: { stage?: string; label?: string; detail?: string } | null;
 
   // UI state
   flightDeckView: 'map' | 'vision' | 'surface' | string;
@@ -293,31 +312,31 @@ export interface FlightDeckStateProps {
   flightDeckCommandBankDeg: number;
   flightDeckBankTicks: BankTick[];
   flightDeckSurfacePreview: SurfacePreview;
-  flightDeckRunwayOpsSummary: unknown | null;
+  flightDeckRunwayOpsSummary: any | null;
 
   // Terrain
   terrainRisk: string | null;
   terrainClearanceFt: number | null;
   terrainProfileLoading: boolean;
-  terrainProfile: unknown | null;
-  terrainEscapeGuidance: unknown | null;
+  terrainProfile: any | null;
+  terrainEscapeGuidance: any | null;
 
   // Obstacles
   obstacleRisk: string | null;
   obstacleClearanceFt: number | null;
   obstacleScanLoading: boolean;
-  obstacleScan: unknown | null;
-  visionObstacleCues: unknown[];
+  obstacleScan: any | null;
+  visionObstacleCues: any[];
 
   // Vision / synthetic
-  visionRouteGuidance: unknown | null;
-  visionTerrainColumns: unknown[];
+  visionRouteGuidance: any | null;
+  visionTerrainColumns: any[];
   visionDirectorCue: VisionDirectorCue;
   visionVerticalCueLabel: string | null;
-  visionGuidance: unknown | null;
-  visionTrafficCue: unknown | null;
-  visionReadinessSummary: unknown | null;
-  visionManeuverRecommendation: unknown | null;
+  visionGuidance: any | null;
+  visionTrafficCue: any | null;
+  visionReadinessSummary: any | null;
+  visionManeuverRecommendation: any | null;
 
   // Vertical path
   flightDeckVerticalPathSummary: VerticalPathSummary;
@@ -333,22 +352,22 @@ export interface FlightDeckStateProps {
   attitudeSourceSummary: SourceSummary | null;
 
   // Receiver
-  receiverStatusSummary: unknown | null;
-  receiverHealth: unknown | null;
+  receiverStatusSummary: any | null;
+  receiverHealth: any | null;
   receiverOwnshipAgeMs: number | null;
   receiverOwnshipFresh: boolean;
   gpsOwnshipAgeMs: number | null;
   gpsOwnshipFresh: boolean;
 
   // Map
-  mapRef: MutableRefObject<unknown> | null;
+  mapRef: MutableRefObject<any> | null;
   mapStyle: string;
   routePoints: LatLon[];
   tacticalMapRegion: Region | null;
   mapRouteDisplay: MapRouteDisplay;
   mapTrafficPresentation: TrafficPresentation[];
   mapDisplayTrafficTargets: TrafficTarget[];
-  mapVerticalGuidancePresentation: unknown | null;
+  mapVerticalGuidancePresentation: any | null;
   mapTacticalSummary: MapTacticalSummary;
   mapOverlayProfile: MapOverlayProfile;
   mapRunwayFocusSummary: MapRunwayFocusSummary;
@@ -358,26 +377,26 @@ export interface FlightDeckStateProps {
   gibsDate: string | null;
   cloudTileUrl: string | null;
   cloudFrameIndex: number;
-  visibleWindsPoints: unknown[];
+  visibleWindsPoints: any[];
 
   // Diversion
   selectedDiversionPoint: LatLon | null;
   selectedDiversionIcao: string | null;
   diversionCandidates: DiversionCandidate[];
-  selectedDiversion: unknown | null;
-  selectedDiversionRunwaySummary: unknown | null;
-  selectedDiversionBestComm: unknown | null;
+  selectedDiversion: any | null;
+  selectedDiversionRunwaySummary: any | null;
+  selectedDiversionBestComm: any | null;
   selectedDiversionBriefingLoading: boolean;
-  selectedDiversionBriefing: unknown | null;
+  selectedDiversionBriefing: any | null;
   diversionPanelAirports: DiversionCandidate[];
 
   // Departure / destination
-  departureBriefing: unknown | null;
+  departureBriefing: any | null;
   departureBriefingLoading: boolean;
   destinationBriefingLoading: boolean;
-  destinationRunwayCue: unknown | null;
-  destinationRunwayOverlay: unknown | null;
-  activeRunwayOverlay: unknown | null;
+  destinationRunwayCue: any | null;
+  destinationRunwayOverlay: any | null;
+  activeRunwayOverlay: any | null;
   activeRunwayOverlayLabel: string | null;
   departureFrequenciesLoading: boolean;
   destinationFrequenciesLoading: boolean;
@@ -385,7 +404,7 @@ export interface FlightDeckStateProps {
   // Traffic
   visibleTrafficTargets: TrafficTarget[];
   selectedTrafficTarget: TrafficTarget | null;
-  selectedTrafficTrend: unknown | null;
+  selectedTrafficTrend: any | null;
   topTrafficTarget: TrafficTarget | null;
   trafficPanelTargets: TrafficTarget[];
   immediateTrafficCount: number;
@@ -395,7 +414,7 @@ export interface FlightDeckStateProps {
   // Simulation
   simulationEnabled: boolean;
   simulationProgress: number | null;
-  simulationSpeed: number;
+  simulationSpeed: '1x' | '4x' | '8x';
   simulationConflictEnabled: boolean;
 
   // GPS
@@ -408,31 +427,31 @@ export interface FlightDeckStateProps {
   summaryCounts: SummaryCounts;
 
   // Misc
-  formatAltitudeDelta: ((delta: number) => string) | null;
+  formatAltitudeDelta: ((delta: number | null | undefined) => string) | null;
 }
 
 export interface FlightDeckActionsProps {
-  pulseFlightDeckChrome: () => void;
+  pulseFlightDeckChrome: (keepVisible?: boolean) => void;
   toggleFlightDeckView: () => void;
   toggleFlightDeckHud: () => void;
   setMapRegion: (region: Region) => void;
   setSelectedDiversionIcao: (icao: string | null) => void;
   setSelectedTrafficId: (id: string | null) => void;
   setFlightDeckDrawerOpen: (open: boolean) => void;
-  setFlightDeckPanel: (panel: string | null) => void;
+  setFlightDeckPanel: (panel: string) => void;
   setTrafficEnabled: (enabled: boolean) => void;
   setGpsEnabled: (enabled: boolean) => void;
   setSimulationEnabled: (enabled: boolean) => void;
-  setSimulationSpeed: (speed: number) => void;
+  setSimulationSpeed: (speed: '1x' | '4x' | '8x') => void;
   setSimulationConflictEnabled: (enabled: boolean) => void;
-  setMapStyle: (style: string) => void;
-  setTrafficFilter: (filter: string | null) => void;
-  focusDiversionAirport: (icao: string) => void;
-  engageDirectToDiversion: () => void;
+  setMapStyle: (style: 'standard' | 'winds' | 'terrain' | 'sectional' | 'radar' | 'clouds') => void;
+  setTrafficFilter: (filter: 'all' | 'conflict' | 'above' | 'below') => void;
+  focusDiversionAirport: (airport: any) => void;
+  engageDirectToDiversion: (airport: any) => void;
   resumePlannedRoute: () => void;
   toggleSequencingSuspend: () => void;
   sequencePreviousLeg: () => void;
   sequenceNextLeg: () => void;
-  focusTrafficTarget: (id: string) => void;
+  focusTrafficTarget: (target: any) => void;
   setAlternate: (icao: string) => void;
 }

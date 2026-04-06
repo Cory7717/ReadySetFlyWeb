@@ -3,7 +3,18 @@
     "allow": [
       "Bash(npx tsc:*)",
       "Bash(ls *.json)",
-      "Bash(ls vite.config.*)"
+      "Bash(ls vite.config.*)",
+      "Bash(node -e \":*)",
+      "Bash(echo \"Exit: $?\")",
+      "Read(//tmp/**)",
+      "Bash(powershell -Command \"npx tsc --noEmit 2>&1 | Select-String ''''TS2448'''' | Select-Object -First 60\")",
+      "Bash(powershell -Command \"& { $result = npx tsc --noEmit 2>&1; $result | Out-File -FilePath ''C:/tmp/tsc_out.txt'' -Encoding utf8; Write-Host ''Done, lines:'' \\($result.Count\\) }\")",
+      "Bash(echo \"Done. Exit: $?\")",
+      "Bash(/c/Python312/python -:*)",
+      "Bash(/c/Python312/python fix_tsc2448.py)",
+      "Bash(echo \"exit: $?\")",
+      "Read(//c/tmp/**)",
+      "Bash(ls /c/Users/carme/ReadySetFlyWeb/ReadySetFly/mobile/src/components/flight-deck/FlightDeckViewTypes*)"
     ]
   }
 }

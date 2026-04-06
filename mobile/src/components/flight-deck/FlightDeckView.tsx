@@ -7,7 +7,7 @@ import type { FlightDeckStateProps, FlightDeckActionsProps } from './FlightDeckV
 type FlightDeckViewProps = {
   state: FlightDeckStateProps;
   actions: FlightDeckActionsProps;
-  styles: Record<string, unknown>;
+  styles: Record<string, any>;
 };
 
 function formatSourceAge(ms: number | null | undefined) {
@@ -326,7 +326,7 @@ function FlightDeckSurfaceMap({ preview, styles }: { preview: any; styles: any }
   );
 }
 
-export default function FlightDeckView({ state = {}, actions = {}, styles = {} }: FlightDeckViewProps) {
+export default function FlightDeckView({ state, actions, styles = {} }: FlightDeckViewProps) {
   const {
     insets,
     navigation,
@@ -1085,7 +1085,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               <View style={styles.flightDeckVisionTrafficCue}>
                 <Text style={styles.flightDeckVisionTrafficCueTitle}>Traffic</Text>
                 <Text style={styles.flightDeckVisionTrafficCueText}>
-                  {selectedTrafficTarget.callsign || 'target'} - {selectedTrafficTarget.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}
+                  {selectedTrafficTarget.callsign || 'target'} - {(selectedTrafficTarget.distanceNm ?? 0).toFixed(1)} NM - {formatAltitudeDelta?.(selectedTrafficTarget.altitudeDeltaFt ?? null) ?? '--'}
                 </Text>
                 <Text style={styles.flightDeckVisionTrafficCueMeta}>
                   {visionTrafficCue?.closureText || 'Monitor'} - {visionTrafficCue?.sector || 'sector'} - {visionTrafficCue?.clock || '--'}
@@ -1293,7 +1293,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
             {mapDisplayTrafficTargets.map((target: any) => {
               const trafficPresentation = mapTrafficPresentation.find((item: any) => item.id === target.id);
               return [
-                trafficPresentation?.vector?.length > 1 && mapOverlayProfile.showTrafficVectors ? (
+                trafficPresentation?.vector && trafficPresentation.vector.length > 1 && mapOverlayProfile.showTrafficVectors ? (
                   <Polyline
                     key={`flight-traffic-vector-${target.id}`}
                     coordinates={trafficPresentation.vector}
@@ -1687,7 +1687,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                   </Text>
                 </View>
                 <Text style={styles.flightDeckContextCardTitle}>
-                  {selectedTrafficTarget.callsign || 'Traffic'} - {selectedTrafficTarget.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}
+                  {selectedTrafficTarget.callsign || 'Traffic'} - {(selectedTrafficTarget.distanceNm ?? 0).toFixed(1)} NM - {formatAltitudeDelta?.(selectedTrafficTarget.altitudeDeltaFt ?? null) ?? '--'}
                 </Text>
                 <Text style={styles.flightDeckContextCardText}>
                   Sector {visionTrafficCue?.sector || 'ahead'} - threat {selectedTrafficTarget.threatLevel} - score {selectedTrafficTarget.threatScore}
@@ -2143,25 +2143,25 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 </Text>
               ) : null}
               <View style={styles.flightDeckControlRow}>
-                <TouchableOpacity style={[styles.flightDeckChip, trafficEnabled && styles.flightDeckChipActive]} onPress={() => setTrafficEnabled((prev: boolean) => !prev)}>
+                <TouchableOpacity style={[styles.flightDeckChip, trafficEnabled && styles.flightDeckChipActive]} onPress={() => setTrafficEnabled(!trafficEnabled)}>
                   <Text style={[styles.flightDeckChipText, trafficEnabled && styles.flightDeckChipTextActive]}>Traffic</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.flightDeckChip, gpsEnabled && styles.flightDeckChipActive]}
-                  onPress={() => setGpsEnabled((prev: boolean) => !prev)}
+                  onPress={() => setGpsEnabled(!gpsEnabled)}
                   disabled={simulationEnabled}
                 >
                   <Text style={[styles.flightDeckChipText, gpsEnabled && styles.flightDeckChipTextActive]}>GPS</Text>
                 </TouchableOpacity>
                 {isSuperAdmin ? (
-                  <TouchableOpacity style={[styles.flightDeckChip, simulationEnabled && styles.flightDeckChipActive]} onPress={() => setSimulationEnabled((prev: boolean) => !prev)}>
+                  <TouchableOpacity style={[styles.flightDeckChip, simulationEnabled && styles.flightDeckChipActive]} onPress={() => setSimulationEnabled(!simulationEnabled)}>
                     <Text style={[styles.flightDeckChipText, simulationEnabled && styles.flightDeckChipTextActive]}>Sim</Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
               {isSuperAdmin && simulationEnabled ? (
                 <Text style={styles.flightDeckPanelText}>
-                  {Math.round(simulationProgress * 100)}% complete at {simulationSpeed}.
+                  {Math.round((simulationProgress ?? 0) * 100)}% complete at {simulationSpeed}.
                 </Text>
               ) : null}
               <View style={styles.flightDeckControlRow}>
@@ -2639,7 +2639,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               ) : null}
               {topTrafficTarget ? (
                 <Text style={styles.flightDeckPanelText}>
-                  Highest traffic target {topTrafficTarget.callsign || 'Traffic'} - {topTrafficTarget.distanceNm.toFixed(1)} NM - score {topTrafficTarget.threatScore}
+                  Highest traffic target {topTrafficTarget.callsign || 'Traffic'} - {(topTrafficTarget.distanceNm ?? 0).toFixed(1)} NM - score {topTrafficTarget.threatScore}
                 </Text>
               ) : null}
             </View>
@@ -2650,7 +2650,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               <Text style={styles.flightDeckPanelTitle}>Quick Actions</Text>
               {selectedTrafficTarget ? (
                 <Text style={styles.flightDeckPanelText}>
-                  Selected traffic {selectedTrafficTarget.callsign || 'Traffic'} - {selectedTrafficTarget.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}
+                  Selected traffic {selectedTrafficTarget.callsign || 'Traffic'} - {(selectedTrafficTarget.distanceNm ?? 0).toFixed(1)} NM - {formatAltitudeDelta?.(selectedTrafficTarget.altitudeDeltaFt ?? null) ?? '--'}
                 </Text>
               ) : null}
               {selectedDiversion ? (
@@ -2753,7 +2753,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                   <View style={styles.flightDeckControlRow}>
                     <TouchableOpacity
                       style={[styles.flightDeckChip, simulationConflictEnabled && styles.flightDeckChipActive]}
-                      onPress={() => setSimulationConflictEnabled((prev: boolean) => !prev)}
+                      onPress={() => setSimulationConflictEnabled(!simulationConflictEnabled)}
                     >
                       <Text style={[styles.flightDeckChipText, simulationConflictEnabled && styles.flightDeckChipTextActive]}>
                         {simulationConflictEnabled ? 'Conflict injected' : 'Inject conflict'}
@@ -2788,7 +2788,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                       {target.threatLevel === 'immediate' ? 'Immediate' : target.threatLevel === 'advisory' ? 'Advisory' : 'Monitor'} / score {target.threatScore}
                     </Text>
                     <Text style={styles.flightDeckPanelText}>
-                      {target.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(target.altitudeDeltaFt)}
+                      {(target.distanceNm ?? 0).toFixed(1)} NM - {formatAltitudeDelta?.(target.altitudeDeltaFt ?? null) ?? '--'}
                       {typeof target.altitudeFt === 'number' ? ` - ${Math.round(target.altitudeFt)} ft` : ''}
                     </Text>
                     <View style={styles.flightDeckControlRow}>

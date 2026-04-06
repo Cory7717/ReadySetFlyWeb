@@ -35,6 +35,7 @@
     "@google-cloud/storage": "^7.17.2",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
+    "@marsidev/react-turnstile": "^1.5.0",
     "@neondatabase/serverless": "^0.10.4",
     "@paypal/payouts-sdk": "^1.1.1",
     "@paypal/paypal-server-sdk": "^1.1.0",

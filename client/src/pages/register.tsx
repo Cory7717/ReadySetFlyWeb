@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Turnstile } from '@marsidev/react-turnstile';
 import { useLocation } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -33,6 +34,7 @@ export default function RegisterPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string>('');
   const redirectTarget = getReturnToFromWindow();
 
   useEffect(() => {
@@ -59,7 +61,7 @@ export default function RegisterPage() {
       const response = await fetch(apiUrl('/api/auth/web-register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, turnstileToken }),
         credentials: 'include',
       });
 
@@ -295,6 +297,12 @@ export default function RegisterPage() {
                   <p className="text-sm text-destructive">{form.formState.errors.confirmPassword.message}</p>
                 )}
               </div>
+
+              <Turnstile
+                siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || ''}
+                onSuccess={(token) => setTurnstileToken(token)}
+                options={{ theme: 'light' }}
+              />
 
               <Button
                 type="submit"

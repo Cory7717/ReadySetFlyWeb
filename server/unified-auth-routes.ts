@@ -12,6 +12,22 @@ import { getEntitlementsForUser, resolveMembershipFromStoreSignals } from './mem
 
 const router = Router();
 
+async function verifyTurnstileToken(token: string, ip: string): Promise<boolean> {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) { console.warn('TURNSTILE_SECRET_KEY not set, skipping verification'); return true; }
+  try {
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret, response: token, remoteip: ip }),
+    });
+    const data = await response.json() as { success: boolean };
+    return data.success === true;
+  } catch {
+    return process.env.NODE_ENV !== 'production';
+  }
+}
+
 const registrationRateLimiter = createSoftAuthRateLimiter({
   windowMs: 60 * 60 * 1000,
   anonMax: 5,
@@ -67,6 +83,7 @@ const registerSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
+  turnstileToken: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -128,7 +145,17 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         return;
       }
 
-      const { email, password, firstName, lastName } = result.data;
+      const { email, password, firstName, lastName, turnstileToken } = result.data;
+
+      // Verify Turnstile CAPTCHA
+      const clientIp = req.ip || req.connection?.remoteAddress || '';
+      if (turnstileToken) {
+        const turnstileValid = await verifyTurnstileToken(turnstileToken, clientIp);
+        if (!turnstileValid) {
+          res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
+          return;
+        }
+      }
 
       // Check if user already exists
       const existingUser = await storage.getUserByEmail(email);
@@ -285,7 +312,17 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         return;
       }
 
-      const { email, password, firstName, lastName } = result.data;
+      const { email, password, firstName, lastName, turnstileToken } = result.data;
+
+      // Verify Turnstile CAPTCHA
+      const clientIp = req.ip || (req as any).connection?.remoteAddress || '';
+      if (turnstileToken) {
+        const turnstileValid = await verifyTurnstileToken(turnstileToken, clientIp);
+        if (!turnstileValid) {
+          res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
+          return;
+        }
+      }
 
       // Check if user already exists
       const existingUser = await storage.getUserByEmail(email);

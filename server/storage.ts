@@ -180,6 +180,7 @@ import {
   hkRoomsSoldImports,
   promoCodes,
   promoCodeUsages,
+  partnerRedirects,
   membershipPartnerOffers,
   membershipPartnerOfferMembers,
   refreshTokens,
@@ -1139,6 +1140,8 @@ export class DatabaseStorage implements IStorage {
         )
       );
       await db.delete(analyticsEvents).where(eq(analyticsEvents.userId, id));
+
+      await db.delete(partnerRedirects).where(eq(partnerRedirects.userId, id));
       
       // 12. Finally, delete the user account
       const result = await db.delete(users).where(eq(users.id, id)).returning();

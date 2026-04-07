@@ -252,16 +252,16 @@ export default function CabinBrief() {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,hsl(var(--primary)/0.08),transparent_25%),#EEF3F9]">
+    <div className="min-h-screen bg-[#0A0E14]">
       <div className="container mx-auto px-4 py-8 sm:px-6 sm:py-10">
         <div className="space-y-8">
-          <section className="rounded-[1.6rem] border border-white/10 bg-[linear-gradient(135deg,#112b4a,#1e4368)] p-6 text-white shadow-[var(--shadow-rsf-panel)] sm:p-8">
+          <section className="rounded-[1.6rem] border border-[#5b4520] bg-[linear-gradient(180deg,rgba(20,14,4,0.98),rgba(13,22,34,0.94))] p-6 text-[#F1F5FA] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.8)] sm:p-8">
             <div className="space-y-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#F0B429]">
-                Cabin Brief - For Passengers
+              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#D9A441]">
+                Plain-English flight weather — no pilot license required
               </div>
               <div className="text-3xl font-semibold tracking-tight sm:text-4xl">Cabin Brief</div>
-              <div className="text-sm text-slate-200">
+              <div className="text-base text-[#9CB4CC] leading-7">
                 Plain-English flight weather for passengers - no pilot license required.
               </div>
               {hasRoute ? (
@@ -269,7 +269,7 @@ export default function CabinBrief() {
                   <div className="pt-2 text-2xl font-semibold sm:text-3xl">
                     {departureLabel} -&gt; {arrivalLabel}
                   </div>
-                  <div className="text-sm text-slate-200">
+                  <div className="text-sm text-[#9CB4CC]">
                     {formatDisplayDate(date)}
                     {cabinBrief.data?.generatedAt
                       ? ` - Briefing generated at ${new Date(cabinBrief.data.generatedAt).toLocaleTimeString([], {
@@ -280,7 +280,7 @@ export default function CabinBrief() {
                   </div>
                 </>
               ) : (
-                <div className="text-sm text-slate-200">
+                <div className="text-sm text-[#9CB4CC]">
                   Enter a departure and destination below to generate a passenger-friendly weather briefing.
                 </div>
               )}
@@ -288,10 +288,10 @@ export default function CabinBrief() {
           </section>
 
           {!hasRoute ? (
-            <Card>
+            <Card className="rounded-[1.4rem] border border-[#5b4520] bg-[linear-gradient(180deg,rgba(20,14,4,0.98),rgba(13,22,34,0.94))] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.8)]">
               <CardHeader>
-                <CardTitle>Start a Cabin Brief</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-[#F1F5FA]">Start a Cabin Brief</CardTitle>
+                <CardDescription className="text-[#9CB4CC]">
                   Pick the airports you are flying between and RSF will turn the weather into plain-English passenger language.
                 </CardDescription>
               </CardHeader>
@@ -310,58 +310,58 @@ export default function CabinBrief() {
           ) : (
             <>
               {cabinBrief.data?.overall ? (
-                <Card className="border-[#F0B429]/30 bg-white/90">
-                  <CardContent className="p-5 text-base leading-relaxed text-slate-800">
+                <Card className="rounded-xl border border-[#5b4520] bg-[#0f1a28]">
+                  <CardContent className="p-5 text-sm leading-7 text-[#E8EDF4]">
                     {cabinBrief.data.overall}
                   </CardContent>
                 </Card>
               ) : null}
 
               <div className="space-y-4">
-                <Card className="border-l-4 border-l-sky-500">
+                <Card className="rounded-xl border border-[#203249] bg-[#0d1622] border-l-4 border-l-[#4DA8A8]">
                   <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <PlaneTakeoff className="h-5 w-5 text-sky-600" />
+                    <CardTitle className="flex items-center gap-2 text-lg text-[#F1F5FA]">
+                      <PlaneTakeoff className="h-5 w-5 text-[#4DA8A8]" />
                       Departure
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm leading-7 text-slate-700">
+                  <CardContent className="text-sm leading-7 text-[#E8EDF4]">
                     {cabinBrief.isLoading ? "Building your departure briefing..." : cabinBrief.data?.departure || "Departure summary unavailable."}
                   </CardContent>
                 </Card>
 
-                <Card className="border-l-4 border-l-[#F0B429]">
+                <Card className="rounded-xl border border-[#203249] bg-[#0d1622] border-l-4 border-l-[#D9A441]">
                   <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Send className="h-5 w-5 text-[#d89d15]" />
+                    <CardTitle className="flex items-center gap-2 text-lg text-[#F1F5FA]">
+                      <Send className="h-5 w-5 text-[#D9A441]" />
                       En Route
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm leading-7 text-slate-700">
+                  <CardContent className="text-sm leading-7 text-[#E8EDF4]">
                     {cabinBrief.isLoading ? "Building your en route briefing..." : cabinBrief.data?.enRoute || "En route summary unavailable."}
                   </CardContent>
                 </Card>
 
-                <Card className="border-l-4 border-l-emerald-500">
+                <Card className="rounded-xl border border-[#203249] bg-[#0d1622] border-l-4 border-l-[#9CB4CC]">
                   <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <PlaneLanding className="h-5 w-5 text-emerald-600" />
+                    <CardTitle className="flex items-center gap-2 text-lg text-[#F1F5FA]">
+                      <PlaneLanding className="h-5 w-5 text-[#9CB4CC]" />
                       Arrival
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm leading-7 text-slate-700">
+                  <CardContent className="text-sm leading-7 text-[#E8EDF4]">
                     {cabinBrief.isLoading ? "Building your arrival briefing..." : cabinBrief.data?.arrival || "Arrival summary unavailable."}
                   </CardContent>
                 </Card>
               </div>
 
-              <Alert className="border-amber-300 bg-amber-50">
-                <AlertTriangle className="h-4 w-4 text-amber-700" />
-                <AlertDescription className="flex flex-col gap-3 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+              <Alert className="border-[#6d5520] bg-[#271d0b]">
+                <AlertTriangle className="h-4 w-4 text-[#D9A441]" />
+                <AlertDescription className="flex flex-col gap-3 text-[#ffd278] sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     Weather data refreshes every hour. If your flight is more than 2 hours away - or you are on a longer trip - tap "Refresh Briefing" for the latest conditions closer to departure.
                   </div>
-                  <Button size="sm" variant="outline" className="border-amber-400 bg-white" onClick={handleRefresh}>
+                  <Button size="sm" variant="outline" className="border-[#6d5520] bg-[#0A0E14] text-[#ffd278] hover:bg-[#271d0b]" onClick={handleRefresh}>
                     <RefreshCcw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
                     Refresh Briefing
                   </Button>
@@ -369,15 +369,15 @@ export default function CabinBrief() {
               </Alert>
 
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Button variant="outline" onClick={handleShare}>
+                <Button variant="outline" className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]" onClick={handleShare}>
                   <Copy className="mr-2 h-4 w-4" />
                   Share This Briefing
                 </Button>
-                <div className="text-sm text-muted-foreground">
+                <div className="text-sm text-[#7A9BB8]">
                   Create a free account to save your briefings.{" "}
                   <Link
                     href="/register"
-                    className="font-medium text-primary underline underline-offset-4"
+                    className="font-medium text-[#D9A441] underline underline-offset-4 hover:text-[#efb85b]"
                     onClick={() => trackEvent("cta_click", { label: "cabin_brief_register", target: "/register" })}
                   >
                     Create free account
@@ -393,13 +393,13 @@ export default function CabinBrief() {
                 </Alert>
               ) : null}
 
-              <Card>
+              <Card className="rounded-xl border border-[#203249] bg-[#0d1622]">
                 <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
-                    <div className="text-sm font-semibold">Are you the pilot?</div>
-                    <div className="text-sm text-muted-foreground">Get the full professional weather briefing.</div>
+                    <div className="text-sm font-semibold text-[#F1F5FA]">Are you the pilot?</div>
+                    <div className="text-sm text-[#7A9BB8]">Get the full professional weather briefing.</div>
                   </div>
-                  <Button asChild variant="outline">
+                  <Button asChild variant="outline" className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]">
                     <Link
                       href="/aviation-weather"
                       onClick={() => trackEvent("cta_click", { label: "cabin_brief_pilot_cta", target: "/aviation-weather" })}
@@ -410,10 +410,10 @@ export default function CabinBrief() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="rounded-[1.4rem] border border-[#5b4520] bg-[linear-gradient(180deg,rgba(20,14,4,0.98),rgba(13,22,34,0.94))]">
                 <CardHeader>
-                  <CardTitle>Check another route</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-[#F1F5FA]">Check another route</CardTitle>
+                  <CardDescription className="text-[#9CB4CC]">
                     Search another trip without going back to the landing page.
                   </CardDescription>
                 </CardHeader>

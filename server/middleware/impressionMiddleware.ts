@@ -13,13 +13,20 @@ declare global {
 }
 
 // ---------------------------------------------------------------------------
+// Gate flag — do NOT use NODE_ENV here. Vite owns that variable during the
+// Render build step and conflicts with it, causing a 127 exit code.
+// Set REQUIRE_CF_GUARD=true in Render environment on readysetfly-api only.
+// ---------------------------------------------------------------------------
+const CF_REQUIRED = process.env.REQUIRE_CF_GUARD === 'true';
+
+// ---------------------------------------------------------------------------
 // 1. Cloudflare Origin Guard
 //    Blocks direct-origin requests that bypass Cloudflare (no CF headers).
-//    Only active in production so local dev is unaffected.
+//    Only active when CF_REQUIRED is true so local dev is unaffected.
 // ---------------------------------------------------------------------------
 export function cloudflareGuard(req: Request, res: Response, next: NextFunction): void {
-  if (process.env.NODE_ENV !== 'production') {
-    // In dev, set a synthetic clientIP and pass through
+  if (!CF_REQUIRED) {
+    // In dev/staging, set a synthetic clientIP and pass through
     req.clientIP = req.ip || '127.0.0.1';
     return next();
   }
@@ -64,7 +71,7 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 export function impressionRateLimiter(req: Request, res: Response, next: NextFunction): void {
-  if (process.env.NODE_ENV !== 'production') return next();
+  if (!CF_REQUIRED) return next();
 
   const ip = req.clientIP || req.ip || 'unknown';
   const now = Date.now();

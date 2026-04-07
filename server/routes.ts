@@ -43,6 +43,7 @@ import { buildCorsOptions } from "./corsOptions";
 import { resolveTfmsProviderKey, type TfmsOverlay, type TfmsStatus } from "./services/tfms/provider";
 import { createStubTfmsProvider } from "./services/tfms/providers/stub";
 import { createSoftAuthRateLimiter } from "./middleware/rateLimit";
+import { impressionRateLimiter, impressionDedup } from "./middleware/impressionMiddleware";
 import { getSharedCacheJson, setSharedCacheJson } from "./redisCache";
 import { createDbTfmsProvider } from "./services/tfms/providers/db";
 import { computeTfmsRisk } from "./services/tfms/risk";
@@ -13765,32 +13766,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/banner-ads/:id/impression", bannerImpressionRateLimiter, async (req, res) => {
+  // Middleware chain: cloudflareGuard (global) → impressionRateLimiter → impressionDedup → handler
+  app.post("/api/banner-ads/:id/impression", bannerImpressionRateLimiter, impressionRateLimiter, impressionDedup, async (req, res) => {
     try {
-      const clientIp = req.ip || req.connection?.remoteAddress || 'unknown';
+      const ip = req.clientIP || req.ip || 'unknown';
       const bannerId = req.params.id;
 
+      // Bot/scraper filter — silent pass-through, don't count
       const userAgent = req.headers['user-agent'] || '';
       const isSuspiciousAgent =
         !userAgent ||
         /bot|crawler|spider|Go-http|python|curl/i.test(userAgent);
 
       if (isSuspiciousAgent) {
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ counted: false, reason: 'bot' });
       }
-
-      const dedupKey = `${bannerId}:${clientIp}`;
-      const lastImpression = bannerImpressionCache.get(dedupKey);
-      const oneHourMs = 60 * 60 * 1000;
-
-      if (lastImpression && Date.now() - lastImpression < oneHourMs) {
-        return res.status(200).json({ ok: true, deduped: true });
-      }
-
-      bannerImpressionCache.set(dedupKey, Date.now());
 
       await storage.incrementBannerImpressions(bannerId);
-      res.json({ success: true });
+      console.log(`[IMPRESSION] Counted: adId=${bannerId} ip=${ip}`);
+      res.json({ counted: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to track impression" });
     }

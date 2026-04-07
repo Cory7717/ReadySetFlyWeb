@@ -19,6 +19,7 @@ import { prewarmOperationalCaches, registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startFinanceAlertsJob } from "./jobs/financeAlerts";
 import { buildCorsOptions } from "./corsOptions";
+import { cloudflareGuard } from "./middleware/impressionMiddleware";
 
 const app = express();
 // Behind Render's proxy; required for secure cookies/session in OAuth flows
@@ -53,6 +54,10 @@ app.get("/api/healthz", (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Cloudflare origin guard — must run before all API routes
+// Blocks direct-origin requests that bypass Cloudflare in production
+app.use("/api", cloudflareGuard);
 
 app.use((req, res, next) => {
   const start = Date.now();

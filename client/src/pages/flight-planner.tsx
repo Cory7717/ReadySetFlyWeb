@@ -5418,11 +5418,11 @@ export default function FlightPlanner() {
         />
       )}
       {!pressDemo.enabled && (
-      <Card className="border-sky-200 bg-[linear-gradient(180deg,hsl(204_100%_98%),hsl(210_40%_97%))] text-slate-900 shadow-sm">
+      <Card className="border-[#29415e] bg-[#0d1622] text-[#E8EDF4] shadow-sm">
         <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="bg-sky-600 text-white hover:bg-sky-600">IFR Scratch Pad</Badge>
+              <Badge className="bg-[#29415e] text-[#9CB4CC] hover:bg-[#29415e]">IFR Scratch Pad</Badge>
               <Badge variant="outline">CRAFT</Badge>
               {scratchPadHasContent && (
                 <Badge variant="secondary">Notes saved</Badge>
@@ -5430,7 +5430,7 @@ export default function FlightPlanner() {
             </div>
             <div>
               <div className="text-sm font-semibold">Write IFR clearance notes with your finger, stylus, or keyboard.</div>
-              <div className="text-sm text-slate-600">
+              <div className="text-sm text-[#7A9BB8]">
                 Ink Pad is fastest for live readback. CRAFT fields stay available when you want the structured version, and both auto-save on this device.
               </div>
             </div>
@@ -5439,7 +5439,7 @@ export default function FlightPlanner() {
             <Button onClick={openScratchPad}>
               {scratchPadHasContent ? "Open scratch pad" : "Start scratch pad"}
             </Button>
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-[#7A9BB8]">
               Opens full-screen. Press <span className="font-mono">Esc</span> to close.
             </div>
           </div>
@@ -5449,16 +5449,16 @@ export default function FlightPlanner() {
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_540px]">
       <div className="min-w-0 space-y-4">
       {!pressDemo.enabled && (
-      <Card className="border-slate-200 bg-white text-slate-900 shadow-sm">
+      <Card className="bg-[#0d1622] border border-[#203249] rounded-xl text-[#E8EDF4] shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Recent Flights</CardTitle>
-          <CardDescription className="text-slate-600">Open a saved route without leaving the planner.</CardDescription>
+          <CardDescription className="text-[#7A9BB8]">Open a saved route without leaving the planner.</CardDescription>
         </CardHeader>
         <CardContent>
           {plansLoading ? (
-            <div className="text-sm text-slate-600">Loading plans...</div>
+            <div className="text-sm text-[#7A9BB8]">Loading plans...</div>
           ) : recentPlans.length === 0 ? (
-            <div className="text-sm text-slate-600">No saved plans yet.</div>
+            <div className="text-sm text-[#7A9BB8]">No saved plans yet.</div>
           ) : (
             <div className="flex gap-2 overflow-x-auto pb-1">
               <Button
@@ -5478,17 +5478,17 @@ export default function FlightPlanner() {
                     setDraftPlanId(plan.id);
                     setEditingPlan(plan);
                   }}
-                  className="min-w-[230px] rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-left transition-colors hover:bg-slate-200"
+                  className="min-w-[230px] rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2 text-left transition-colors hover:bg-[#1a2535]"
                 >
-                  <div className="truncate text-sm font-semibold text-slate-900">{plan.title || `${plan.departure} to ${plan.destination}`}</div>
-                  <div className="text-xs text-slate-700">{plan.departure} to {plan.destination}</div>
+                  <div className="truncate text-sm font-semibold text-[#E8EDF4]">{plan.title || `${plan.departure} to ${plan.destination}`}</div>
+                  <div className="text-xs text-[#E8EDF4]">{plan.departure} to {plan.destination}</div>
                 </button>
               ))}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="min-w-[170px] border-slate-300 text-slate-800 hover:bg-slate-100"
+                className="min-w-[170px] border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]"
                 onClick={() => setActiveTab("file")}
               >
                 Open saved plans
@@ -5498,37 +5498,37 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
       )}
-      <Card className="border-slate-200 bg-white text-slate-900 shadow-sm">
+      <Card className="bg-[#0d1622] border border-[#203249] rounded-xl text-[#E8EDF4] shadow-sm">
         <CardContent className="pt-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 2xl:grid-cols-7">
-            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Route</div>
-              <div className="truncate text-base font-semibold text-slate-900">
+            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Route</div>
+              <div className="truncate text-base font-semibold text-[#E8EDF4]">
                 {(form.departure || "---").toUpperCase()} to {(form.destination || "---").toUpperCase()}
               </div>
             </div>
-            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Legs</div>
-              <div className="text-base font-semibold text-slate-900">{legNavRows.length || 0}</div>
+            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Legs</div>
+              <div className="text-base font-semibold text-[#E8EDF4]">{legNavRows.length || 0}</div>
             </div>
-            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Distance</div>
-              <div className="text-base font-semibold text-slate-900">{totalDistance ? `${totalDistance.toFixed(1)} NM` : "--"}</div>
+            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Distance</div>
+              <div className="text-base font-semibold text-[#E8EDF4]">{totalDistance ? `${totalDistance.toFixed(1)} NM` : "--"}</div>
             </div>
-            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Fuel</div>
-              <div className="text-base font-semibold text-slate-900">{totalFuel ? `${totalFuel.toFixed(1)} gal` : "--"}</div>
+            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Fuel</div>
+              <div className="text-base font-semibold text-[#E8EDF4]">{totalFuel ? `${totalFuel.toFixed(1)} gal` : "--"}</div>
             </div>
-            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Weather</div>
+            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Weather</div>
               <div className={cn("text-base font-semibold", weatherStatusTone)}>{weatherStatusText}</div>
             </div>
-            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Checklist</div>
-              <div className="text-base font-semibold text-slate-900">{checklistCompletionCount}/6 complete</div>
+            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Checklist</div>
+              <div className="text-base font-semibold text-[#E8EDF4]">{checklistCompletionCount}/6 complete</div>
             </div>
-            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Briefing Sync</div>
+            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Briefing Sync</div>
               <div className={cn("text-base font-semibold", briefingUpdatedTone)}>
                 {briefingUpdatedLabel}
                 {isBriefingStale ? " (stale)" : latestBriefingUpdatedAtMs > 0 ? " (fresh)" : ""}
@@ -5537,13 +5537,13 @@ export default function FlightPlanner() {
           </div>
         </CardContent>
       </Card>
-      <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+      <Alert className="border-[#D9A441] bg-[#271d0b] text-[#D9A441]">
         <AlertDescription className="space-y-1 text-sm">
           <div className="font-semibold">Flight Planner testing notice</div>
           <div>
             RSF flight planning and filing workflow is still undergoing testing. Treat the planner as a beta feature and do not rely on RSF for operational live filing yet.
           </div>
-          <div className="text-amber-900/90">
+          <div className="text-[#D9A441]/90">
             Live Leidos filing remains limited to controlled testing while validation is in progress.
           </div>
         </AlertDescription>
@@ -5557,15 +5557,15 @@ export default function FlightPlanner() {
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
         <TabsList
           className={cn(
-            "grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-300 bg-white p-1 md:grid-cols-5",
+            "grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-[#203249] bg-[#0d1622] p-1 md:grid-cols-5",
             isMobile && "border-[#1E2D42] bg-[#111820] p-1.5"
           )}
         >
-          <TabsTrigger value="route" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Route</TabsTrigger>
-          <TabsTrigger value="weather" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Weather</TabsTrigger>
-          <TabsTrigger value="navlog" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Nav Log</TabsTrigger>
-          <TabsTrigger value="analysis" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Analysis</TabsTrigger>
-          <TabsTrigger value="file" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>File &amp; Save</TabsTrigger>
+          <TabsTrigger value="route" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-[#7A9BB8]", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Route</TabsTrigger>
+          <TabsTrigger value="weather" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-[#7A9BB8]", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Weather</TabsTrigger>
+          <TabsTrigger value="navlog" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-[#7A9BB8]", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Nav Log</TabsTrigger>
+          <TabsTrigger value="analysis" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-[#7A9BB8]", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Analysis</TabsTrigger>
+          <TabsTrigger value="file" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-[#7A9BB8]", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>File &amp; Save</TabsTrigger>
         </TabsList>
         <TabsContent value="route" className="space-y-6">
       <PressDemoSpotlight
@@ -5793,7 +5793,7 @@ export default function FlightPlanner() {
                 Saved profiles override library values when selected. This prefill is one of RSF's strongest planning workflow advantages.
               </div>
               {selectedTypeNeedsVerification && (
-                <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+                <Alert className="border-[#D9A441] bg-[#271d0b] text-[#D9A441]">
                   <AlertDescription>
                     This RSF library template is still marked as a planning estimate. Verify the performance values against the POH/AFM before relying on them for fuel, range, or cost planning.
                     {selectedType.sourceNote ? ` ${selectedType.sourceNote}` : ""}
@@ -5881,9 +5881,9 @@ export default function FlightPlanner() {
                 </div>
               )}
               {hasCoastlineRouteOption && (
-                <div className="rounded-md border border-sky-200 bg-sky-50/80 p-3 text-xs text-sky-950 space-y-2">
+                <div className="rounded-md border border-[#29415e] bg-[#0d1622] p-3 text-xs text-[#9CB4CC] space-y-2">
                   <div className="font-medium">Water crossing route options</div>
-                  <div className="text-sky-900/90">
+                  <div className="text-[#9CB4CC]/90">
                     RSF sees this as a likely overwater route. You can keep the more direct helper route, or switch to a coastline-biased assist that adds land-based route guidance for pilots who prefer to stay closer to shore.
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -5909,7 +5909,7 @@ export default function FlightPlanner() {
                       Use coastline assist
                     </Button>
                   </div>
-                  <div className="text-sky-900/80">
+                  <div className="text-[#9CB4CC]/80">
                     Coastline assist:
                     {" "}
                     {suggestedCoastlineStops.length > 0 ? `stops ${suggestedCoastlineStops.join(", ")}` : "no fuel stops"}
@@ -5918,7 +5918,7 @@ export default function FlightPlanner() {
                 </div>
               )}
               {suggestionMeta && suggestedStops.length > 0 && (
-                <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 text-xs text-slate-700 space-y-1">
+                <div className="rounded-md border border-[#203249] bg-[#0d1622] p-3 text-xs text-[#E8EDF4] space-y-1">
                   <div>
                     Max leg ~{suggestionMeta.maxLegNm.toFixed(0)} NM based on {suggestionMeta.fuelGallons.toFixed(0)} gal
                     at {suggestionMeta.fuelBurnGph.toFixed(1)} gph with {suggestionMeta.reserveMinutes} min reserve.
@@ -5948,7 +5948,7 @@ export default function FlightPlanner() {
                     RSF compares the current route and helper alternatives against USGS terrain plus fuel-leg practicality at your selected altitude. Leg comparisons assume a top-off at each planned fuel stop.
                   </div>
                   {terrainAdjustmentRecommendation && (
-                    <div className="rounded-md border border-emerald-300 bg-white/90 p-3 space-y-2">
+                    <div className="rounded-md border border-emerald-300 bg-[#0d1622] p-3 space-y-2">
                       <div className="font-semibold">{terrainAdjustmentRecommendation.title}</div>
                       <div className="text-emerald-900/85">{terrainAdjustmentRecommendation.detail}</div>
                       <div className="flex flex-wrap gap-2">
@@ -5993,7 +5993,7 @@ export default function FlightPlanner() {
                       <div
                         key={`terrain-advisor-${summary.id}`}
                         className={cn(
-                          "rounded-md border bg-white/80 p-3 space-y-2",
+                          "rounded-md border bg-[#0d1622] p-3 space-y-2",
                           recommendedTerrainRoute?.id === summary.id ? "border-emerald-400" : "border-emerald-200"
                         )}
                       >
@@ -6137,11 +6137,11 @@ export default function FlightPlanner() {
                 placeholder="DCT TXK V18 MEM J42 ATL"
                 className="min-h-[88px]"
               />
-              <div className="rounded-md border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 text-xs text-muted-foreground">
+              <div className="rounded-md border border-dashed border-[#203249] bg-[#0d1622] px-3 py-2 text-xs text-muted-foreground">
                 Planning preview only: <span className="font-medium text-foreground">{routePreviewFull || "-"}</span>
               </div>
               {filedRouteTokens.length > 0 && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 space-y-3">
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3 space-y-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <div className="text-sm font-semibold">Parsed Route Structure</div>
@@ -6165,20 +6165,20 @@ export default function FlightPlanner() {
                     {resolvedFiledRouteAnalysis.tokens.map((routeToken, index) => {
                       const badgeClassName =
                         routeToken.kind === "airway"
-                          ? "border-sky-200 bg-sky-50 text-sky-900"
+                          ? "border-[#29415e] bg-[#0d1622] text-[#9CB4CC]"
                           : routeToken.kind === "fix"
                             ? "border-emerald-200 bg-emerald-50 text-emerald-900"
                             : routeToken.kind === "navaid"
                               ? "border-indigo-200 bg-indigo-50 text-indigo-900"
                               : routeToken.kind === "procedure"
-                                ? "border-amber-200 bg-amber-50 text-amber-900"
+                                ? "border-[#D9A441] bg-[#271d0b] text-[#D9A441]"
                                 : routeToken.kind === "airport"
-                                  ? "border-slate-200 bg-white text-slate-900"
+                                  ? "border-[#203249] bg-[#0d1622] text-[#E8EDF4]"
                                   : routeToken.kind === "direct"
                                     ? "border-violet-200 bg-violet-50 text-violet-900"
                                     : routeToken.kind === "coordinate"
                                       ? "border-rose-200 bg-rose-50 text-rose-900"
-                                      : "border-slate-200 bg-slate-100 text-slate-700";
+                                      : "border-[#203249] bg-[#0d1622] text-[#E8EDF4]";
                       return (
                         <Tooltip key={`${routeToken.token}-${index}`}>
                           <TooltipTrigger asChild>
@@ -6194,8 +6194,8 @@ export default function FlightPlanner() {
                     })}
                   </div>
                   {resolvedFiledRouteAnalysis.airwaySegments.length > 0 && (
-                    <div className="rounded-md border border-slate-200 bg-white/80 p-3 text-xs text-slate-700 space-y-1">
-                      <div className="font-medium text-slate-900">Airway segments recognized</div>
+                    <div className="rounded-md border border-[#203249] bg-[#0d1622] p-3 text-xs text-[#E8EDF4] space-y-1">
+                      <div className="font-medium text-[#E8EDF4]">Airway segments recognized</div>
                       {resolvedFiledRouteAnalysis.airwaySegments.map((segment) => (
                         <div key={`${segment.airway}-${segment.index}`}>
                           {segment.airway}: {segment.entryToken || "?"} to {segment.exitToken || "?"}
@@ -6228,7 +6228,7 @@ export default function FlightPlanner() {
                 </div>
               )}
               {filingDraft.flightRules === "IFR" && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <div className="text-sm font-semibold">Leidos Route Assist</div>
@@ -6300,7 +6300,7 @@ export default function FlightPlanner() {
                       ) : null
                     ))}
                     {leidosRouteQuery.data?.warnings?.length ? (
-                      <div className="rounded-md border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-900">
+                      <div className="rounded-md border border-[#D9A441] bg-[#271d0b] p-3 text-xs text-[#D9A441]">
                         {leidosRouteQuery.data.warnings.join(" ")}
                       </div>
                     ) : null}
@@ -6522,7 +6522,7 @@ export default function FlightPlanner() {
           )}
 
           {orderedPlannedStops.length > 0 && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+            <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-4 space-y-3">
               <div>
                 <div className="font-semibold">Planned Fuel Uplifts</div>
                 <div className="text-xs text-muted-foreground">
@@ -6663,7 +6663,7 @@ export default function FlightPlanner() {
             <div className={cn(
               "rounded-lg border px-4 py-2 text-sm font-medium",
               !fuelPlanSummary.firstUnreachableLeg && fuelSurplus >= 0
-                ? "border-green-300 bg-green-50 text-green-800"
+                ? "border-green-300 bg-[#0d2220] text-[#4DA8A8]"
                 : "border-red-300 bg-red-50 text-red-800"
             )}>
               {fuelPlanSummary.firstUnreachableLeg
@@ -6885,7 +6885,7 @@ export default function FlightPlanner() {
                               leg.planningTargetStatus === "warning"
                                 ? "border-red-300 text-red-700"
                                 : leg.planningTargetStatus === "caution"
-                                  ? "border-amber-300 text-amber-700"
+                                  ? "border-[#D9A441] text-[#D9A441]"
                                   : "border-emerald-300 text-emerald-700"
                             )}
                           >
@@ -6936,7 +6936,7 @@ export default function FlightPlanner() {
               <div className="text-xs text-muted-foreground">Flight category trend</div>
               <div className="text-sm font-semibold">{summaryCategoryLabel}</div>
               {hasThunderRisk && (
-                <div className="text-xs text-amber-600 mt-1">Thunderstorm risk in TAFs</div>
+                <div className="text-xs text-[#D9A441] mt-2">Thunderstorm risk in TAFs</div>
               )}
             </div>
             <div className="rounded-lg border p-3">
@@ -7116,10 +7116,10 @@ export default function FlightPlanner() {
                       </div>
                       <Alert className={cn(
                         worstTerrainSegment?.segment.risk === "warning"
-                          ? "border-red-300 bg-red-50 text-red-900"
+                          ? "border-red-300 bg-red-900/20 text-red-300"
                           : worstTerrainSegment?.segment.risk === "caution"
-                            ? "border-amber-300 bg-amber-50 text-amber-900"
-                            : "border-emerald-300 bg-emerald-50 text-emerald-900"
+                            ? "border-[#D9A441] bg-[#271d0b] text-[#D9A441]"
+                            : "border-emerald-400 bg-[#0d2220] text-[#4DA8A8]"
                       )}>
                         <AlertDescription>{terrainClearanceAdvisory}</AlertDescription>
                       </Alert>
@@ -7260,8 +7260,8 @@ export default function FlightPlanner() {
                                 hazard.tone === "red"
                                   ? "border-red-300 bg-red-50 text-red-800"
                                   : hazard.tone === "amber"
-                                    ? "border-amber-300 bg-amber-50 text-amber-800"
-                                    : "border-sky-300 bg-sky-50 text-sky-800"
+                                    ? "border-[#D9A441] bg-[#271d0b] text-[#D9A441]"
+                                    : "border-[#29415e] bg-[#0d1622] text-[#9CB4CC]"
                               }
                             >
                               {hazard.label}
@@ -7276,7 +7276,7 @@ export default function FlightPlanner() {
                         {data?.taf?.rawTAF || "No TAF data"}
                       </div>
                       {hazards.length > 0 && (
-                        <div className="text-[11px] text-amber-700 mt-2">
+                        <div className="text-[11px] text-[#D9A441] mt-2">
                           {category} is category only; additional hazards are flagged above.
                         </div>
                       )}
@@ -7385,7 +7385,7 @@ export default function FlightPlanner() {
                   />
                   <span>{checklistLabels[key] || key}</span>
                   {isAutoSatisfied && !checklist[key as keyof typeof checklist] && (
-                    <span className="text-xs text-green-700/80">(auto-checked — click to override)</span>
+                    <span className="text-xs text-[#4DA8A8]/80">(auto-checked — click to override)</span>
                   )}
                 </label>
               );
@@ -7434,7 +7434,7 @@ export default function FlightPlanner() {
             </div>
           </div>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-            <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+            <div className="space-y-4 rounded-lg border border-[#203249] bg-[#0d1622] p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="font-semibold">Filing Identity</div>
@@ -7539,7 +7539,7 @@ export default function FlightPlanner() {
                 </div>
               </div>
             </div>
-            <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="space-y-4 rounded-lg border border-[#203249] bg-[#0d1622] p-4">
               <div>
                 <div className="font-semibold">Operational Packet</div>
                 <div className="text-xs text-muted-foreground">
@@ -7592,8 +7592,8 @@ export default function FlightPlanner() {
             <Alert
               className={cn(
                 worstTerrainSegment?.segment.risk === "warning"
-                  ? "border-red-300 bg-red-50 text-red-900"
-                  : "border-amber-300 bg-amber-50 text-amber-900"
+                  ? "border-red-300 bg-red-900/20 text-red-300"
+                  : "border-[#D9A441] bg-[#271d0b] text-[#D9A441]"
               )}
             >
               <AlertDescription>
@@ -8120,7 +8120,7 @@ export default function FlightPlanner() {
           title={pressDemo.getStep("route-map")?.title ?? "Route Map"}
           body={pressDemo.getStep("route-map")?.body ?? ""}
         >
-        <Card id="planner-route-map" className="border-slate-200 bg-white text-slate-900 shadow-sm">
+        <Card id="planner-route-map" className="bg-[#0d1622] border border-[#203249] rounded-xl text-[#E8EDF4] shadow-sm">
           <CardHeader>
             <CardTitle>Route Map</CardTitle>
             <CardDescription>Live route view while you build, brief, and file.</CardDescription>
@@ -8129,26 +8129,26 @@ export default function FlightPlanner() {
             <div className="mb-3 flex flex-wrap gap-3 text-sm">
               <a
                 href="/adsb-receiver-help"
-                className="text-blue-700 hover:underline"
+                className="text-[#9CB4CC] hover:underline"
                 onClick={() => trackEvent("adsb_help_click", { target: "/adsb-receiver-help" })}
               >
                 How to connect your ADS-B receiver
               </a>
               <Link
                 href="/flight-demo"
-                className="text-blue-700 hover:underline"
+                className="text-[#9CB4CC] hover:underline"
                 onClick={() => trackEvent("planner_flight_demo_click", { target: "/flight-demo" })}
               >
                 Open RSF Flight Demo
               </Link>
             </div>
-            <div className="mb-3 rounded-lg border border-slate-300 bg-slate-100 p-2">
+            <div className="mb-3 rounded-lg border border-[#203249] bg-[#0d1622] p-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-slate-300 text-slate-800 hover:bg-slate-200"
+                  className="h-8 border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]"
                   onClick={() => setMapRenderVersion((value) => value + 1)}
                 >
                   Fit route
@@ -8157,7 +8157,7 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-slate-300 text-slate-800 hover:bg-slate-200"
+                  className="h-8 border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]"
                   onClick={() => {
                     setActiveTab("weather");
                     openWeatherDetail("metar");
@@ -8169,7 +8169,7 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-slate-300 text-slate-800 hover:bg-slate-200"
+                  className="h-8 border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]"
                   onClick={() => {
                     setActiveTab("weather");
                     openWeatherDetail("notams");
@@ -8181,7 +8181,7 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-slate-300 text-slate-800 hover:bg-slate-200"
+                  className="h-8 border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]"
                   onClick={() => setShowApproachOffer(true)}
                 >
                   Plates
@@ -8190,17 +8190,17 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-slate-300 text-slate-800 hover:bg-slate-200"
+                  className="h-8 border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]"
                   onClick={() => setShowAtcStrip((value) => !value)}
                 >
                   {showAtcStrip ? "Hide" : "Show"} nav strip
                 </Button>
-                <Button type="button" size="sm" variant="outline" className="h-8 border-slate-300 text-slate-800 hover:bg-slate-200" asChild>
+                <Button type="button" size="sm" variant="outline" className="h-8 border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]" asChild>
                   <a href="/tfr-map" target="_blank" rel="noopener noreferrer">Full TFR map</a>
                 </Button>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-slate-600">Airport labels</span>
+                <span className="text-[#7A9BB8]">Airport labels</span>
                 {[
                   { value: "icao", label: "ICAO only" },
                   { value: "full", label: "ICAO + name" },
@@ -8356,7 +8356,7 @@ export default function FlightPlanner() {
               </div>
             )}
             {airportErrors.length === 0 && missingIcaos.length === 0 && unresolvedIcaos.length > 0 && (
-              <div className="mt-3 text-xs text-amber-700">
+              <div className="mt-3 text-xs text-[#D9A441]">
                 Airport reference details are unavailable for: {unresolvedIcaos.join(", ")}. The planner will keep the route, but map labels and airport details may be limited for those helper codes.
               </div>
             )}
@@ -8571,8 +8571,8 @@ export default function FlightPlanner() {
                                 hazard.tone === "red"
                                   ? "border-red-300 bg-red-50 text-red-800"
                                   : hazard.tone === "amber"
-                                    ? "border-amber-300 bg-amber-50 text-amber-800"
-                                    : "border-sky-300 bg-sky-50 text-sky-800"
+                                    ? "border-[#D9A441] bg-[#271d0b] text-[#D9A441]"
+                                    : "border-[#29415e] bg-[#0d1622] text-[#9CB4CC]"
                               )}
                             >
                               {hazard.label}
@@ -8581,7 +8581,7 @@ export default function FlightPlanner() {
                         </div>
                       )}
                       {hazards.length > 0 && (
-                        <div className="text-[11px] text-amber-700 mt-2">
+                        <div className="text-[11px] text-[#D9A441] mt-2">
                           {category} reflects ceiling/visibility only; review hazards before launch.
                         </div>
                       )}
@@ -8823,7 +8823,7 @@ export default function FlightPlanner() {
                   </div>
                 </div>
                 {filingPreview.errors.length > 0 && (
-                  <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-red-900">
+                  <div className="rounded-lg border border-red-300 bg-red-900/20 p-3 text-red-300">
                     <div className="font-semibold">Required fixes before filing</div>
                     <ul className="mt-2 list-disc space-y-1 pl-5">
                       {filingPreview.errors.map((error) => (
@@ -8848,8 +8848,8 @@ export default function FlightPlanner() {
                   <Alert
                     className={cn(
                       worstTerrainSegment?.segment.risk === "warning"
-                        ? "border-red-300 bg-red-50 text-red-900"
-                        : "border-amber-300 bg-amber-50 text-amber-900"
+                        ? "border-red-300 bg-red-900/20 text-red-300"
+                        : "border-[#D9A441] bg-[#271d0b] text-[#D9A441]"
                     )}
                   >
                     <AlertDescription>

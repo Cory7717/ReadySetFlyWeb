@@ -2036,7 +2036,7 @@ export default function Landing() {
       ============================================================ */}
       <div className="py-12 bg-[#0A0E14] border-b border-[#1c3147]">
         <div className="container mx-auto px-4 text-center">
-          <p className="text-2xl font-semibold text-[#F1F5FA]">RSF Welcomes CPA Membeers.</p>
+          <p className="text-2xl font-semibold text-[#F1F5FA]">RSF Welcomes CPA Members.</p>
           <p className="text-sm text-[#7A9BB8] mt-2 max-w-md mx-auto">
             Join our growing family of aviators — from student pilots to ATP.
           </p>

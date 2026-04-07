@@ -269,8 +269,8 @@ export default function Marketplace() {
       )}
 
       <div className="container mx-auto px-4 pt-6">
-        <Alert className="border-sky-200 bg-sky-50">
-          <Gift className="h-4 w-4 text-sky-700" />
+        <Alert className="border-[#29415e] bg-[#0d1622]">
+          <Gift className="h-4 w-4 text-[#9CB4CC]" />
           <AlertTitle>Soft launch listing offer</AlertTitle>
           <AlertDescription className="space-y-2">
             <div>
@@ -309,15 +309,15 @@ export default function Marketplace() {
         {mainPageAlerts.map((alert) => (
           <Alert 
             key={alert.id} 
-            className="mb-6 border-green-500 bg-green-50 dark:bg-green-950/20"
+            className="mb-6 border-[#203249] bg-[#0d2220]"
             data-testid={`alert-promo-${alert.id}`}
           >
-            <Gift className="h-5 w-5 text-green-600 dark:text-green-400" />
+            <Gift className="h-5 w-5 text-[#4DA8A8]" />
             <div className="flex-1">
-              <AlertTitle className="text-green-800 dark:text-green-200 font-semibold">
+              <AlertTitle className="text-[#E8EDF4] font-semibold">
                 {alert.title}
               </AlertTitle>
-              <AlertDescription className="text-green-700 dark:text-green-300">
+              <AlertDescription className="text-[#4DA8A8]">
                 {alert.message}
                 {alert.promoCode && (
                   <span className="inline-block ml-2 px-2 py-1 bg-green-600 text-white text-xs font-mono rounded">
@@ -330,7 +330,7 @@ export default function Marketplace() {
               variant="ghost"
               size="icon"
               onClick={() => handleDismissBanner(alert.id)}
-              className="text-green-600 hover:text-green-800 dark:text-green-400"
+              className="text-[#4DA8A8] hover:text-[#E8EDF4]"
               data-testid={`button-dismiss-alert-${alert.id}`}
             >
               <X className="h-4 w-4" />
@@ -358,7 +358,7 @@ export default function Marketplace() {
               </div>
             </div>
 
-            <div className="rounded-[1.2rem] border border-white/10 bg-white/75 p-5 shadow-[var(--shadow-rsf-soft)]">
+            <div className="rounded-[1.2rem] border border-[#203249] bg-[#0f1a28] p-5 shadow-[var(--shadow-rsf-soft)]">
               <div className="text-sm font-semibold">How to use this page</div>
               <p className="mt-2 text-sm text-muted-foreground">{currentCategoryDetail.helper}</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
@@ -675,7 +675,7 @@ export default function Marketplace() {
             ))}
           </div>
         ) : categoryListings.length === 0 ? (
-          <div className="rounded-[1.2rem] border border-dashed border-white/14 bg-white/70 px-6 py-12 text-center shadow-[var(--shadow-rsf-soft)]">
+          <div className="rounded-[1.2rem] border border-dashed border-[#203249] bg-[#0f1a28] px-6 py-12 text-center shadow-[var(--shadow-rsf-soft)]">
             <h3 className="text-xl font-semibold">{currentCategoryDetail.title} are still building out</h3>
             <p className="mt-2 text-muted-foreground">
               No listings match this category yet. Try another category, widen your filters, or create the first listing here.
@@ -751,8 +751,8 @@ export default function Marketplace() {
         <DialogContent className="sm:max-w-lg" data-testid="dialog-marketplace-soft-launch">
           <DialogHeader>
             <div className="mb-2 flex items-center gap-3">
-              <div className="rounded-full bg-sky-100 p-3 dark:bg-sky-900/30">
-                <Gift className="h-6 w-6 text-sky-700 dark:text-sky-300" />
+              <div className="rounded-full bg-[#0d1622] p-3">
+                <Gift className="h-6 w-6 text-[#9CB4CC]" />
               </div>
               <div className="flex-1">
                 <DialogTitle className="text-xl">Marketplace soft launch offer</DialogTitle>
@@ -763,9 +763,9 @@ export default function Marketplace() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-lg border-2 border-dashed border-sky-300 bg-sky-50 p-4 text-center dark:border-sky-700 dark:bg-sky-950/30">
+          <div className="rounded-lg border-2 border-dashed border-[#29415e] bg-[#0d1622] p-4 text-center">
             <div className="text-sm text-muted-foreground">Promo code</div>
-            <div className="font-mono text-2xl font-bold text-sky-700 dark:text-sky-300">{SOFT_LAUNCH_PROMO_CODE}</div>
+            <div className="font-mono text-2xl font-bold text-[#9CB4CC]">{SOFT_LAUNCH_PROMO_CODE}</div>
             <div className="mt-2 text-xs text-muted-foreground">
               Category-limited. Enforced at validation and checkout.
             </div>
@@ -800,8 +800,8 @@ export default function Marketplace() {
           <DialogContent className="sm:max-w-md" data-testid="dialog-promo-modal">
             <DialogHeader>
               <div className="flex items-center gap-3 mb-2">
-                <div className="p-3 rounded-full bg-green-100 dark:bg-green-900/30">
-                  <Gift className="h-6 w-6 text-green-600 dark:text-green-400" />
+                <div className="p-3 rounded-full bg-[#0d2220]">
+                  <Gift className="h-6 w-6 text-[#4DA8A8]" />
                 </div>
                 <div className="flex-1">
                   <DialogTitle className="text-xl">{categoryAlert.title}</DialogTitle>
@@ -815,7 +815,7 @@ export default function Marketplace() {
             {categoryAlert.promoCode && (
               <div className="mt-4 p-4 bg-muted rounded-lg border-2 border-dashed border-green-500">
                 <p className="text-sm text-muted-foreground mb-2 text-center">Your Promo Code</p>
-                <p className="text-2xl font-mono font-bold text-center text-green-600 dark:text-green-400" data-testid="text-promo-code">
+                <p className="text-2xl font-mono font-bold text-center text-[#4DA8A8]" data-testid="text-promo-code">
                   {categoryAlert.promoCode}
                 </p>
               </div>

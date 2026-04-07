@@ -296,7 +296,7 @@ export default function AviationWeatherHub() {
   const tafRaw = tafData?.rawTAF || tafData?.raw || tafQuery.data?.raw || "";
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-10">
+    <div className="bg-[#0A0E14] min-h-screen container mx-auto max-w-6xl px-4 py-10">
       <div className="space-y-3">
         <div>
           <div className="text-sm text-muted-foreground">Aviation Weather Hub</div>
@@ -313,7 +313,7 @@ export default function AviationWeatherHub() {
                 placeholder="KAUS"
               />
               {!canSearch && icaoInput.trim().length > 0 && (
-                <div className="text-xs text-amber-600">Enter a valid 3-4 letter ICAO code.</div>
+                <div className="text-xs text-[#D9A441]">Enter a valid 3-4 letter ICAO code.</div>
               )}
             </div>
             <Button onClick={submitIcao} disabled={!canSearch}>Load Weather</Button>
@@ -496,44 +496,44 @@ export default function AviationWeatherHub() {
             </CardHeader>
             <CardContent className="space-y-4">
               {metarRaw ? (
-                <div className="rounded-lg border bg-muted p-3 text-xs">
+                <div className="font-mono text-[#F5A623] bg-[#0d1622] rounded-lg p-3 border border-[#203249] text-xs">
                   {metarRaw}
                 </div>
               ) : (
                 <div className="text-sm text-muted-foreground">No METAR loaded.</div>
               )}
               <div className="grid gap-3 text-sm md:grid-cols-2">
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Station</div>
-                  <div className="font-semibold">{metarData?.icaoId || metarData?.station || searchIcao}</div>
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                  <div className="text-xs text-[#7A9BB8]">Station</div>
+                  <div className="font-semibold font-mono text-[#E8EDF4]">{metarData?.icaoId || metarData?.station || searchIcao}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Observed</div>
-                  <div className="font-semibold">{metarData?.obsTime || "-"}</div>
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                  <div className="text-xs text-[#7A9BB8]">Observed</div>
+                  <div className="font-semibold font-mono text-[#E8EDF4]">{metarData?.obsTime || "-"}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Wind</div>
-                  <div className="font-semibold">
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                  <div className="text-xs text-[#7A9BB8]">Wind</div>
+                  <div className="font-semibold font-mono text-[#E8EDF4]">
                     {metarData?.windDir ?? "-"} deg / {metarData?.windSpeed ?? "-"} kt
                   </div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Visibility</div>
-                  <div className="font-semibold">{metarData?.visib ?? metarData?.visibility ?? "-"}</div>
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                  <div className="text-xs text-[#7A9BB8]">Visibility</div>
+                  <div className="font-semibold font-mono text-[#E8EDF4]">{metarData?.visib ?? metarData?.visibility ?? "-"}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Temp / Dewpoint</div>
-                  <div className="font-semibold">
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                  <div className="text-xs text-[#7A9BB8]">Temp / Dewpoint</div>
+                  <div className="font-semibold font-mono text-[#E8EDF4]">
                     {metarData?.temp ?? "-"}C / {metarData?.dewpt ?? "-"}C
                   </div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Altimeter</div>
-                  <div className="font-semibold">{metarData?.altimInHg ?? metarData?.altimeter ?? "-"}</div>
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                  <div className="text-xs text-[#7A9BB8]">Altimeter</div>
+                  <div className="font-semibold font-mono text-[#E8EDF4]">{metarData?.altimInHg ?? metarData?.altimeter ?? "-"}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Flight Category</div>
-                  <div className="font-semibold">{metarData?.fltCat || metarData?.flightCategory || "-"}</div>
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                  <div className="text-xs text-[#7A9BB8]">Flight Category</div>
+                  <div className="font-semibold font-mono text-[#E8EDF4]">{metarData?.fltCat || metarData?.flightCategory || "-"}</div>
                 </div>
               </div>
             </CardContent>
@@ -548,32 +548,32 @@ export default function AviationWeatherHub() {
             </CardHeader>
             <CardContent className="space-y-4">
               {tafRaw ? (
-                <div className="rounded-lg border bg-muted p-3 text-xs">
+                <div className="font-mono text-[#A9C7E6] bg-[#0d1622] rounded-lg p-3 border border-[#203249] text-xs">
                   {tafRaw}
                 </div>
               ) : (
                 <div className="text-sm text-muted-foreground">No TAF loaded.</div>
               )}
               <div className="grid gap-3 text-sm md:grid-cols-2">
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Station</div>
-                  <div className="font-semibold">{tafData?.icaoId || tafData?.station || searchIcao}</div>
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                  <div className="text-xs text-[#7A9BB8]">Station</div>
+                  <div className="font-semibold font-mono text-[#E8EDF4]">{tafData?.icaoId || tafData?.station || searchIcao}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Issued</div>
-                  <div className="font-semibold">{tafData?.issueTime || "-"}</div>
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                  <div className="text-xs text-[#7A9BB8]">Issued</div>
+                  <div className="font-semibold font-mono text-[#E8EDF4]">{tafData?.issueTime || "-"}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Valid From</div>
-                  <div className="font-semibold">{tafData?.validTimeFrom || "-"}</div>
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                  <div className="text-xs text-[#7A9BB8]">Valid From</div>
+                  <div className="font-semibold font-mono text-[#E8EDF4]">{tafData?.validTimeFrom || "-"}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Valid To</div>
-                  <div className="font-semibold">{tafData?.validTimeTo || "-"}</div>
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                  <div className="text-xs text-[#7A9BB8]">Valid To</div>
+                  <div className="font-semibold font-mono text-[#E8EDF4]">{tafData?.validTimeTo || "-"}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Forecast Periods</div>
-                  <div className="font-semibold">{Array.isArray(tafData?.fcsts) ? tafData.fcsts.length : "-"}</div>
+                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                  <div className="text-xs text-[#7A9BB8]">Forecast Periods</div>
+                  <div className="font-semibold font-mono text-[#E8EDF4]">{Array.isArray(tafData?.fcsts) ? tafData.fcsts.length : "-"}</div>
                 </div>
               </div>
             </CardContent>
@@ -594,9 +594,9 @@ export default function AviationWeatherHub() {
                 <div className="text-sm text-muted-foreground">No active NOTAMs.</div>
               )}
               {notamsQuery.data?.notams?.map((notam: any) => (
-                <div key={notam.id} className="rounded-lg border p-3 text-sm">
-                  <div className="font-semibold">{notam.id}</div>
-                  <div className="text-xs text-muted-foreground mt-1">{notam.text}</div>
+                <div key={notam.id} className="bg-[#0f1a28] border border-[#29415e] rounded-lg p-3">
+                  <div className="font-mono text-xs text-[#E8EDF4] font-semibold">{notam.id}</div>
+                  <div className="font-mono text-xs text-[#E8EDF4] mt-1">{notam.text}</div>
                 </div>
               ))}
             </CardContent>
@@ -612,9 +612,9 @@ export default function AviationWeatherHub() {
             <CardContent className="space-y-2">
               {pirepsCount === 0 && <div className="text-sm text-muted-foreground">No recent PIREPs in range.</div>}
               {pirepsQuery.data?.reports?.slice(0, 16).map((report: any, index: number) => (
-                <div key={`${report.rawOb || report.id || index}`} className="rounded-lg border p-3 text-sm">
-                  <div className="font-semibold">{report.rawOb || "PIREP"}</div>
-                  {report.obsTime && <div className="text-xs text-muted-foreground mt-1">{report.obsTime}</div>}
+                <div key={`${report.rawOb || report.id || index}`} className="bg-[#0f1a28] border border-[#29415e] rounded-lg p-3">
+                  <div className="font-mono text-xs text-[#E8EDF4] font-semibold">{report.rawOb || "PIREP"}</div>
+                  {report.obsTime && <div className="text-xs text-[#7A9BB8] mt-1">{report.obsTime}</div>}
                 </div>
               ))}
             </CardContent>
@@ -644,14 +644,14 @@ export default function AviationWeatherHub() {
                   <div className="text-sm text-muted-foreground">No hazard details available.</div>
                 ) : (
                   hazardsSummary.items.slice(0, 16).map((item, index) => (
-                    <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border p-3 text-sm">
+                    <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border border-[#6d5520] bg-[#271d0b] p-3 text-sm">
                       <div className="flex items-center justify-between">
-                        <div className="font-semibold">{item.hazard}</div>
-                        <Badge variant="outline">{item.source.toUpperCase()}</Badge>
+                        <div className="font-semibold text-[#ffd278]">{item.hazard}</div>
+                        <Badge variant="outline" className="border-[#6d5520] bg-[#271d0b] text-[#ffd278]">{item.source.toUpperCase()}</Badge>
                       </div>
-                      {item.dueTo && <div className="text-xs text-muted-foreground mt-1">Due to {item.dueTo}</div>}
+                      {item.dueTo && <div className="text-xs text-[#7A9BB8] mt-1">Due to {item.dueTo}</div>}
                       {(item.validFrom || item.validTo) && (
-                        <div className="text-xs text-muted-foreground mt-1">
+                        <div className="text-xs text-[#7A9BB8] mt-1">
                           Valid {item.validFrom || "-"} to {item.validTo || "-"}
                         </div>
                       )}
@@ -687,9 +687,9 @@ export default function AviationWeatherHub() {
               </div>
               {windsCount === 0 && <div className="text-sm text-muted-foreground">No winds aloft data in range.</div>}
               {windsQuery.data?.stations?.slice(0, 16).map((station: any) => (
-                <div key={`${station.stationId}-${station.lat}`} className="rounded-lg border p-3 text-sm">
-                  <div className="font-semibold">{station.icao || station.stationId}</div>
-                  <div className="text-xs text-muted-foreground">
+                <div key={`${station.stationId}-${station.lat}`} className="rounded-lg border border-[#203249] bg-[#0d1622] p-3 text-sm">
+                  <div className="font-semibold text-[#E8EDF4]">{station.icao || station.stationId}</div>
+                  <div className="font-mono text-xs text-[#7A9BB8]">
                     {station.windDir ?? "-"} deg / {station.windSpeed ?? "-"} kt
                     {station.tempC !== null ? `, ${station.tempC}C` : ""}
                   </div>
@@ -716,14 +716,14 @@ export default function AviationWeatherHub() {
                 <div className="text-sm text-muted-foreground">No icing guidance returned yet.</div>
               ) : (
                 icingSummary.items.slice(0, 16).map((item, index) => (
-                  <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border p-3 text-sm">
+                  <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border border-[#35516e] bg-[#102236] p-3 text-sm">
                     <div className="flex items-center justify-between">
-                      <div className="font-semibold">{item.hazard}</div>
-                      <Badge variant="outline">{item.source.toUpperCase()}</Badge>
+                      <div className="font-semibold text-[#8FC7FF]">{item.hazard}</div>
+                      <Badge variant="outline" className="border-[#35516e] bg-[#102236] text-[#8FC7FF]">{item.source.toUpperCase()}</Badge>
                     </div>
-                    {item.dueTo && <div className="text-xs text-muted-foreground mt-1">Due to {item.dueTo}</div>}
+                    {item.dueTo && <div className="text-xs text-[#7A9BB8] mt-1">Due to {item.dueTo}</div>}
                     {(item.validFrom || item.validTo) && (
-                      <div className="text-xs text-muted-foreground mt-1">
+                      <div className="text-xs text-[#7A9BB8] mt-1">
                         Valid {item.validFrom || "-"} to {item.validTo || "-"}
                       </div>
                     )}
@@ -751,14 +751,14 @@ export default function AviationWeatherHub() {
                 <div className="text-sm text-muted-foreground">No turbulence guidance returned yet.</div>
               ) : (
                 turbulenceSummary.items.slice(0, 16).map((item, index) => (
-                  <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border p-3 text-sm">
+                  <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border border-[#6d2c27] bg-[#2b1111] p-3 text-sm">
                     <div className="flex items-center justify-between">
-                      <div className="font-semibold">{item.hazard}</div>
-                      <Badge variant="outline">{item.source.toUpperCase()}</Badge>
+                      <div className="font-semibold text-[#ff8c84]">{item.hazard}</div>
+                      <Badge variant="outline" className="border-[#6d2c27] bg-[#2b1111] text-[#ff8c84]">{item.source.toUpperCase()}</Badge>
                     </div>
-                    {item.dueTo && <div className="text-xs text-muted-foreground mt-1">Due to {item.dueTo}</div>}
+                    {item.dueTo && <div className="text-xs text-[#7A9BB8] mt-1">Due to {item.dueTo}</div>}
                     {(item.validFrom || item.validTo) && (
-                      <div className="text-xs text-muted-foreground mt-1">
+                      <div className="text-xs text-[#7A9BB8] mt-1">
                         Valid {item.validFrom || "-"} to {item.validTo || "-"}
                       </div>
                     )}

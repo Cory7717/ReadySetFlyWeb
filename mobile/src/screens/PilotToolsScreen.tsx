@@ -115,6 +115,12 @@ export default function PilotToolsScreen({ navigation }: any) {
           onPress={() => navigation.navigate('AirportBriefing')}
         />
         <ToolRail
+          icon="sparkles-outline"
+          title="AI Weather Translator"
+          subtitle="Plain-English weather translation from loaded METAR and TAF data."
+          onPress={() => navigation.navigate('AviationWeatherHub')}
+        />
+        <ToolRail
           icon="document-text-outline"
           title="Approach Plates"
           subtitle="Search and pull FAA plates by airport."

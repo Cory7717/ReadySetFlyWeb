@@ -3,7 +3,7 @@
     "name": "Ready Set Fly",
     "slug": "mobile",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/RSFOpaqueLogo.png",
     "userInterfaceStyle": "light",
     "splash": {

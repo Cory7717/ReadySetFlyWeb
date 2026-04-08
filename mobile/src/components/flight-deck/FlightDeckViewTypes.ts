@@ -296,6 +296,7 @@ export interface FlightDeckStateProps {
   // Flight deck session
   flightDeckSessionState: string | null;
   flightDeckPhaseSummary: { stage?: string; label?: string; detail?: string } | null;
+  visionMode: 'route' | 'free';
 
   // UI state
   flightDeckView: 'map' | 'vision' | 'surface' | string;

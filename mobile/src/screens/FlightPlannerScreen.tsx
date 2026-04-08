@@ -16,7 +16,7 @@ import Constants from 'expo-constants';
 import MapView, { Callout, Marker, Polyline, PROVIDER_GOOGLE, UrlTile, WMSTile } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
-import { DeviceMotion } from 'expo-sensors';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttitudeReport, createGdl90Listener, OwnshipReport, ReceiverHealth, TrafficTarget } from '../utils/gdl90';
 import { API_BASE_URL, api } from '../services/api';
@@ -394,13 +394,6 @@ type ReceiverAttitudeData = {
   source?: 'receiver';
 };
 
-type DeviceAttitudeData = {
-  pitchDeg?: number;
-  rollDeg?: number;
-  updatedAt?: number;
-  source?: 'device-motion';
-};
-
 type WindsAloftPoint = {
   stationId: string;
   icao?: string;
@@ -440,7 +433,6 @@ type RouteExecutionOverride = {
 const RECEIVER_OWNSHIP_STALE_MS = 15000;
 const DEVICE_OWNSHIP_STALE_MS = 15000;
 const RECEIVER_ATTITUDE_STALE_MS = 5000;
-const DEVICE_ATTITUDE_STALE_MS = 2500;
 
 function formatOwnshipAge(ms: number | null | undefined) {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '--';
@@ -1413,7 +1405,6 @@ export default function FlightPlannerScreen() {
   const [trafficTargets, setTrafficTargets] = useState<TrafficTarget[]>([]);
   const [receiverOwnship, setReceiverOwnship] = useState<OwnshipData | null>(null);
   const [receiverAttitude, setReceiverAttitude] = useState<ReceiverAttitudeData | null>(null);
-  const [deviceAttitude, setDeviceAttitude] = useState<DeviceAttitudeData | null>(null);
   const [receiverHealth, setReceiverHealth] = useState<ReceiverHealth | null>(null);
   const [trafficFilter, setTrafficFilter] = useState<'all' | 'conflict' | 'above' | 'below'>('all');
   const [trafficStatus, setTrafficStatus] = useState<'idle' | 'listening' | 'error'>('idle');
@@ -1542,8 +1533,6 @@ export default function FlightPlannerScreen() {
   const receiverOwnshipFresh = receiverOwnshipAgeMs != null && receiverOwnshipAgeMs <= RECEIVER_OWNSHIP_STALE_MS;
   const receiverAttitudeAgeMs = receiverAttitude?.updatedAt ? ownshipClockMs - receiverAttitude.updatedAt : null;
   const receiverAttitudeFresh = receiverAttitudeAgeMs != null && receiverAttitudeAgeMs <= RECEIVER_ATTITUDE_STALE_MS;
-  const deviceAttitudeAgeMs = deviceAttitude?.updatedAt ? ownshipClockMs - deviceAttitude.updatedAt : null;
-  const deviceAttitudeFresh = deviceAttitudeAgeMs != null && deviceAttitudeAgeMs <= DEVICE_ATTITUDE_STALE_MS;
   const gpsOwnshipAgeMs = gpsData?.updatedAt ? ownshipClockMs - gpsData.updatedAt : null;
   const gpsOwnshipFresh = gpsOwnshipAgeMs != null && gpsOwnshipAgeMs <= DEVICE_OWNSHIP_STALE_MS;
   const activeOwnship: OwnshipData | null = simulationEnabled && simulatedGpsData
@@ -1729,42 +1718,27 @@ export default function FlightPlannerScreen() {
         pilotGrade: true,
       };
     }
-    if (deviceAttitudeFresh && (typeof deviceAttitude?.pitchDeg === 'number' || typeof deviceAttitude?.rollDeg === 'number')) {
-      return {
-        code: 'DMOT',
-        label: 'Device motion assist',
-        detail: `Device motion is assisting vision attitude.${typeof deviceAttitude.pitchDeg === 'number' && typeof deviceAttitude.rollDeg === 'number' ? ` Pitch ${deviceAttitude.pitchDeg.toFixed(1)}°, roll ${deviceAttitude.rollDeg.toFixed(1)}°.` : ''}`,
-        pilotGrade: false,
-      };
-    }
     if (receiverOwnshipFresh || receiverHealth?.status === 'healthy') {
       return {
         code: 'WAIT',
         label: 'AHRS awaiting data',
-        detail: 'Receiver ownship is live, but no fresh AHRS attitude message is available yet.',
+        detail: 'Receiver ownship is live, but no fresh AHRS attitude message is available yet. Vision remains stabilized and guidance-only.',
         pilotGrade: false,
       };
     }
     return {
       code: 'PEND',
       label: 'AHRS pending',
-      detail: 'No external AHRS is connected yet. Vision remains guidance-only.',
+      detail: 'No external AHRS is connected yet. Vision remains stabilized and guidance-only.',
       pilotGrade: false,
     };
-  }, [deviceAttitude?.pitchDeg, deviceAttitude?.rollDeg, deviceAttitudeFresh, receiverAttitude?.pitchDeg, receiverAttitude?.rollDeg, receiverAttitudeFresh, receiverHealth?.status, receiverOwnshipFresh, simulatedGpsData, simulationEnabled]);
+  }, [receiverAttitude?.pitchDeg, receiverAttitude?.rollDeg, receiverAttitudeFresh, receiverHealth?.status, receiverOwnshipFresh, simulatedGpsData, simulationEnabled]);
   const visionReadinessSummary = useMemo(() => {
     if (attitudeSourceSummary.pilotGrade) {
       return {
         code: 'FULL',
         label: 'Vision ready',
         detail: 'Attitude-backed synthetic vision is active.',
-      };
-    }
-    if (deviceAttitudeFresh) {
-      return {
-        code: 'ASSIST',
-        label: 'Vision assist',
-        detail: 'Device motion is driving attitude assist. External AHRS is still preferred for pilot-grade vision.',
       };
     }
     if (receiverOwnshipFresh && !receiverAttitudeFresh) {
@@ -1777,9 +1751,9 @@ export default function FlightPlannerScreen() {
     return {
       code: 'GUIDE',
       label: 'Guidance mode',
-      detail: 'Runway and terrain cues are advisory until AHRS is connected.',
+      detail: 'Stable synthetic vision guidance is available, but live attitude remains advisory until AHRS is connected.',
     };
-  }, [attitudeSourceSummary.pilotGrade, deviceAttitudeFresh, receiverAttitudeFresh, receiverOwnshipFresh]);
+  }, [attitudeSourceSummary.pilotGrade, receiverAttitudeFresh, receiverOwnshipFresh]);
   const receiverStatusSummary = useMemo(() => {
     const status = receiverHealth?.status || 'idle';
     if (status === 'healthy') {
@@ -1820,8 +1794,6 @@ export default function FlightPlannerScreen() {
       }
     : receiverAttitudeFresh
       ? receiverAttitude
-      : deviceAttitudeFresh
-        ? deviceAttitude
       : null;
   const flightDeckSessionState = simulationEnabled
     ? 'SIM'
@@ -1894,6 +1866,9 @@ export default function FlightPlannerScreen() {
     () => computeMobileRouteProgress(activeRoutePoints, activeOwnship, { activeLegIndex }),
     [activeLegIndex, activeOwnship, activeRoutePoints]
   );
+  const visionMode = useMemo<'route' | 'free'>(() => (
+    routeProgress?.nextWaypoint || activeRoutePoints.length > 1 ? 'route' : 'free'
+  ), [activeRoutePoints.length, routeProgress?.nextWaypoint]);
   const activeLegBehavior = useMemo(
     () =>
       getMobileRouteLegBehavior(activeLegDefinition, {
@@ -3991,6 +3966,9 @@ export default function FlightPlannerScreen() {
     if (selectedDiversion) {
       return `Nearest escape ${selectedDiversion.icao}`;
     }
+    if (visionMode === 'free' && activeOwnship) {
+      return 'Free-flight awareness active';
+    }
     if (routeProgress?.activeLegLabel) {
       return routeProgress.sequencingState === 'reintercept'
         ? `Rejoin ${routeProgress.activeLegLabel}`
@@ -3999,8 +3977,8 @@ export default function FlightPlannerScreen() {
     if (routeProgress?.nextWaypoint) {
       return `Track to ${routeProgress.nextWaypoint}`;
     }
-    return 'Hold current route';
-  }, [activeLegBehavior.annunciation, routeProgress?.activeLegLabel, routeProgress?.nextWaypoint, routeProgress?.sequencingState, selectedDiversion, selectedTrafficTarget, terrainRisk]);
+    return visionMode === 'free' ? 'Awaiting live ownship source' : 'Hold current route';
+  }, [activeLegBehavior.annunciation, activeOwnship, routeProgress?.activeLegLabel, routeProgress?.nextWaypoint, routeProgress?.sequencingState, selectedDiversion, selectedTrafficTarget, terrainRisk, visionMode]);
   const visionTerrainColumns = useMemo(() => {
     const samples = terrainProfile?.samples ?? [];
     const ownshipAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
@@ -4355,9 +4333,12 @@ export default function FlightPlannerScreen() {
     pulseFlightDeckChrome();
     setFlightDeckView((current) => {
       const next = current === 'map' ? 'vision' : 'map';
-      if (next === 'vision' && !attitudeSourceSummary.pilotGrade) {
-        setFlightDeckPanel('status');
-      }
+      logDiagnostic('flightDeck', 'view_changed', {
+        view: next,
+        visionMode,
+        ownshipAvailable: Boolean(activeOwnship),
+        pilotGradeAttitude: Boolean(attitudeSourceSummary.pilotGrade),
+      });
       return next;
     });
   };
@@ -4380,6 +4361,45 @@ export default function FlightPlannerScreen() {
       450,
     );
   };
+  useEffect(() => {
+    if (!isFlightDeck) {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+      return;
+    }
+
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE)
+      .then(() => {
+        logDiagnostic('flightDeck', 'orientation_lock', {
+          lock: 'landscape',
+        });
+      })
+      .catch((error) => {
+        warnDiagnostic('flightDeck', 'orientation_lock_failed', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, [isFlightDeck]);
+
+  useEffect(() => {
+    logDiagnostic('maps', 'map_style_changed', {
+      style: mapStyle,
+      isFlightDeck,
+      sectionalSource: mapStyle === 'sectional' ? 'faa_wms_proxy' : undefined,
+    });
+  }, [isFlightDeck, mapStyle]);
+
+  useEffect(() => {
+    logDiagnostic('flightDeck', 'vision_mode_changed', {
+      mode: visionMode,
+      routeAvailable: routePoints.length > 1,
+      ownshipAvailable: Boolean(activeOwnship),
+    });
+  }, [activeOwnship, routePoints.length, visionMode]);
+
   useEffect(() => {
     if (!isFlightDeck || flightDeckView !== 'map' || !tacticalMapRegion) return;
 
@@ -5265,30 +5285,12 @@ export default function FlightPlannerScreen() {
 
   useEffect(() => {
     if (!isFlightDeck || simulationEnabled) {
-      setDeviceAttitude(null);
       return;
     }
-
-    DeviceMotion.setUpdateInterval(200);
-    const subscription = DeviceMotion.addListener((motion) => {
-      const beta = motion.rotation?.beta;
-      const gamma = motion.rotation?.gamma;
-      const pitchDeg = typeof beta === 'number' ? clamp((beta * 180) / Math.PI, -35, 35) : undefined;
-      const rollDeg = typeof gamma === 'number' ? clamp((gamma * 180) / Math.PI, -60, 60) : undefined;
-      if (typeof pitchDeg !== 'number' && typeof rollDeg !== 'number') {
-        return;
-      }
-      setDeviceAttitude({
-        pitchDeg,
-        rollDeg,
-        updatedAt: Date.now(),
-        source: 'device-motion',
-      });
+    logDiagnostic('flightDeck', 'device_motion_disabled', {
+      reason: 'external_attitude_required',
+      simulationEnabled,
     });
-
-    return () => {
-      subscription.remove();
-    };
   }, [isFlightDeck, simulationEnabled]);
 
   useEffect(() => {
@@ -6183,6 +6185,7 @@ export default function FlightPlannerScreen() {
     routeHeadline: flightDeckRouteHeadline,
     flightDeckSessionState,
     flightDeckPhaseSummary,
+    visionMode,
     routeProgress,
     routeExecutionSummary,
     activeExecutionPlanView,
@@ -6840,7 +6843,7 @@ export default function FlightPlannerScreen() {
             style={styles.map}
             ref={mapRef}
             provider={plannerMapUsesGoogleProvider ? PROVIDER_GOOGLE : undefined}
-            mapType="standard"
+            mapType={Platform.OS === 'android' && mapStyle === 'sectional' ? 'none' : 'standard'}
             initialRegion={{
               latitude: routePoints[0].latitude,
               longitude: routePoints[0].longitude,
@@ -6872,7 +6875,7 @@ export default function FlightPlannerScreen() {
                 maximumNativeZ={12}
                 minimumZ={2}
                 tileSize={256}
-                opacity={0.85}
+                opacity={1}
                 zIndex={600}
               />
             )}

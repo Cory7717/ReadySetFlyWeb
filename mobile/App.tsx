@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as NavigationBar from 'expo-navigation-bar';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import AppNavigator from './src/navigation/AppNavigator';
 import PushTokenRegistrar from './src/components/PushTokenRegistrar';
 import { initializePurchases } from './src/services/purchases';
@@ -23,6 +24,10 @@ const queryClient = new QueryClient({
 export default function App() {
   useEffect(() => {
     initializePurchases().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => undefined);
   }, []);
 
   useEffect(() => {

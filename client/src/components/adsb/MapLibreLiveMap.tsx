@@ -516,12 +516,12 @@ export default function MapLibreLiveMap({
         map,
         sourceId: SECTIONAL_SOURCE_ID,
         layerId: SECTIONAL_LAYER_ID,
-        tiles: [RSF_SECTIONAL_WMS_TILE_URL],
-        attribution: "FAA SUA Geoserver Charts",
-        opacity: 0.85,
-        minzoom: 2,
-        maxzoom: 12,
-        beforeId: TERRAIN_SURFACE_LAYER_ID,
+          tiles: [RSF_SECTIONAL_WMS_TILE_URL],
+          attribution: "FAA SUA Geoserver Charts",
+          opacity: 1,
+          minzoom: 2,
+          maxzoom: 12,
+          beforeId: TERRAIN_SURFACE_LAYER_ID,
       });
     } else {
       removeRasterLayer(map, SECTIONAL_SOURCE_ID, SECTIONAL_LAYER_ID);

@@ -20,10 +20,12 @@ export function LeafletAviationBaseLayers({
 
   return (
     <>
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      {style !== "sectional" && (
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+      )}
       {style === "sectional" && (
         <WMSTileLayer
           attribution="FAA SUA Geoserver Charts"
@@ -32,7 +34,7 @@ export function LeafletAviationBaseLayers({
           format="image/png"
           transparent={false}
           version="1.1.1"
-          opacity={0.85}
+          opacity={1}
         />
       )}
       {style === "radar" && radarTileUrl && !radarFallbackActive && (

@@ -1,5 +1,6 @@
 ﻿import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useWindowDimensions } from 'react-native';
 import MapView, { Marker, Polygon, Polyline, UrlTile, WMSTile } from 'react-native-maps';
 import { Platform } from 'react-native';
 import { PROVIDER_GOOGLE } from 'react-native-maps';
@@ -346,6 +347,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     routeHeadline,
     flightDeckSessionState,
     flightDeckPhaseSummary,
+    visionMode,
     routeProgress,
     routeExecutionSummary,
     activeExecutionPlanView = [],
@@ -509,6 +511,16 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     trafficFilter,
     formatAltitudeDelta,
   } = state;
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+  const compactHeader = isLandscape || flightDeckView === 'vision';
+  const visionModeLabel = visionMode === 'route' ? 'Route Mode' : 'Free Flight';
+  const visionModeDetail =
+    visionMode === 'route'
+      ? 'Planned route guidance is active.'
+      : activeOwnship
+        ? 'Free-flight awareness stays available without an active route.'
+        : 'Connect GPS or ADS-B ownship to start free-flight awareness.';
 
   const visionRollDeg = Math.max(-45, Math.min(45, activeAttitude?.rollDeg ?? 0));
   const visionPitchDeg = Math.max(-20, Math.min(20, activeAttitude?.pitchDeg ?? 0));
@@ -927,13 +939,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               </Text>
             </View>
             <View style={styles.flightDeckVisionBanner}>
-              <Text style={styles.flightDeckVisionBannerTitle}>Vision Guidance</Text>
+              <Text style={styles.flightDeckVisionBannerTitle}>{visionModeLabel}</Text>
               <Text style={styles.flightDeckVisionBannerText}>
-                {visionRouteGuidance?.lateralCue || visionGuidance}
+                {visionMode === 'route' ? (visionRouteGuidance?.lateralCue || visionGuidance) : visionModeDetail}
               </Text>
               <Text style={styles.flightDeckVisionBannerSupport}>
                 Heading {headingSourceSummary?.code || '--'} - {headingSourceSummary?.label || 'Unavailable'}
               </Text>
+              <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionGuidance}</Text>
               <Text style={styles.flightDeckVisionBannerSupport}>{visionDirectorCue.turnCommand}</Text>
               <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionDirectorCue.verticalCommand}</Text>
               <Text style={styles.flightDeckVisionBannerSupportMuted}>
@@ -1109,7 +1122,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
             style={styles.flightDeckMap}
             ref={mapRef}
             provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-            mapType="standard"
+            mapType={Platform.OS === 'android' && mapStyle === 'sectional' ? 'none' : 'standard'}
             rotateEnabled
             pitchEnabled={false}
             showsCompass={false}
@@ -1131,7 +1144,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 maximumNativeZ={12}
                 minimumZ={2}
                 tileSize={256}
-                opacity={0.85}
+                opacity={1}
                 zIndex={600}
               />
             )}
@@ -1389,8 +1402,19 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
         ) : null}
 
         {flightDeckChromeVisible ? (
-          <View style={[styles.flightDeckHeader, { paddingTop: Math.max(insets.top, spacing.sm) }]}>
-            <View style={styles.flightDeckHeaderCard}>
+          <View
+            style={[
+              styles.flightDeckHeader,
+              { paddingTop: Math.max(insets.top, spacing.sm) },
+              isLandscape ? { paddingHorizontal: spacing.sm } : null,
+            ]}
+          >
+            <View
+              style={[
+                styles.flightDeckHeaderCard,
+                isLandscape ? { flex: 0, width: Math.min(width * 0.56, 560) } : null,
+              ]}
+            >
               <Text style={styles.flightDeckEyebrow}>{flightDeckSessionState}</Text>
               <Text style={styles.flightDeckTitle}>{routeHeadline}</Text>
               <Text style={styles.flightDeckSubtitle}>
@@ -1411,6 +1435,8 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               {routeExecutionSummary?.sequencingSuspended ? (
                 <Text style={styles.flightDeckSubtitle}>Leg sequencing is suspended. The active leg will stay locked until you resume sequencing.</Text>
               ) : null}
+              {!compactHeader ? (
+                <>
               {routeExecutionSummary?.sequencingDetail ? (
                 <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.sequencingDetail}</Text>
               ) : null}
@@ -1580,6 +1606,8 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               {routeExecutionSummary?.turnAnticipationState && routeExecutionSummary.turnAnticipationState !== 'idle' ? (
                 <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.turnAnticipationCall}</Text>
               ) : null}
+                </>
+              ) : null}
               <Text style={styles.flightDeckSubtitle}>
                 Phase {flightDeckPhaseSummary?.label || 'Preflight'} - {flightDeckPhaseSummary?.detail || 'Awaiting active route and ownship.'}
               </Text>
@@ -1617,10 +1645,20 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                     {ownshipStatusLabel}
                   </Text>
                 </View>
+                <View style={[styles.flightDeckHeaderMetaChip, flightDeckView === 'vision' ? styles.flightDeckHeaderMetaChipAccent : null]}>
+                  <Text
+                    style={[
+                      styles.flightDeckHeaderMetaChipText,
+                      flightDeckView === 'vision' ? styles.flightDeckHeaderMetaChipTextAccent : null,
+                    ]}
+                  >
+                    {visionModeLabel}
+                  </Text>
+                </View>
                 <Text style={styles.flightDeckHeaderMetaText}>{ownshipFreshnessText}</Text>
               </View>
             </View>
-            <View style={styles.flightDeckHeaderActions}>
+            <View style={[styles.flightDeckHeaderActions, isLandscape ? { flexDirection: 'column' } : null]}>
               <TouchableOpacity
                 style={[styles.flightDeckExitButton, flightDeckView === 'vision' && styles.flightDeckExitButtonActive]}
                 onPress={toggleFlightDeckView}
@@ -1650,7 +1688,13 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
         ) : null}
 
         {flightDeckVisibleAlert || flightDeckChromeVisible || (flightDeckView === 'map' && (flightDeckTrafficCardVisible || flightDeckDiversionCardVisible)) ? (
-          <View style={[styles.flightDeckBottomStack, { bottom: flightDeckLowerStackBottom }]}>
+          <View
+            style={[
+              styles.flightDeckBottomStack,
+              { bottom: flightDeckLowerStackBottom },
+              isLandscape ? { right: spacing.sm, left: undefined, width: Math.min(width * 0.42, 420) } : null,
+            ]}
+          >
             {flightDeckVisibleAlert ? (
               <View
                 style={[
@@ -1668,7 +1712,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
             ) : null}
             {flightDeckView === 'vision' && !attitudeSourceSummary?.pilotGrade ? (
               <View style={[styles.flightDeckAlertStrip, styles.flightDeckAlertStripCaution]}>
-                <Text style={styles.flightDeckAlertTitle}>Vision assist</Text>
+                <Text style={styles.flightDeckAlertTitle}>No active attitude source</Text>
                 <Text style={styles.flightDeckAlertText}>
                   {visionReadinessSummary?.detail || 'Connect an AHRS source for full synthetic vision attitude.'}
                 </Text>
@@ -1871,8 +1915,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           </View>
         ) : null}
 
-        {flightDeckHudExpanded ? (
-          <View style={[styles.flightDeckHudExpandedCard, { bottom: Math.max(insets.bottom + 106, 118) }]}>
+      {flightDeckHudExpanded ? (
+          <View
+            style={[
+              styles.flightDeckHudExpandedCard,
+              { bottom: Math.max(insets.bottom + 106, 118) },
+              isLandscape ? { left: spacing.sm, right: undefined, width: Math.min(width * 0.42, 420) } : null,
+            ]}
+          >
             <View style={styles.flightDeckHudExpandedRow}>
               <View style={styles.flightDeckHudExpandedMetric}>
                 <Text style={styles.flightDeckHudExpandedLabel}>Leg</Text>
@@ -2059,7 +2109,20 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
 
       {flightDeckDrawerOpen ? (
         <ScrollView
-          style={[styles.flightDeckSheet, { bottom: Math.max(insets.bottom + 110, 122) }]}
+          style={[
+            styles.flightDeckSheet,
+            { bottom: Math.max(insets.bottom + 110, 122) },
+            isLandscape
+              ? {
+                  left: undefined,
+                  right: spacing.sm,
+                  top: Math.max(insets.top + 72, 88),
+                  bottom: Math.max(insets.bottom + 84, 92),
+                  width: Math.min(width * 0.42, 440),
+                  maxHeight: undefined,
+                }
+              : null,
+          ]}
           contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 16, 24) }}
           showsVerticalScrollIndicator={false}
         >

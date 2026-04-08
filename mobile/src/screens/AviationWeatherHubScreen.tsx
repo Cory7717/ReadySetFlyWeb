@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import AIWeatherTranslatorCard from '../components/AIWeatherTranslatorCard';
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 const WINDS_ALOFT_LEVELS = [3000, 6000, 9000, 12000, 18000, 24000, 30000, 34000, 39000];
@@ -385,22 +386,31 @@ export default function AviationWeatherHubScreen() {
       </ScrollView>
 
       {activeTab === 'overview' && (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Overview</Text>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>METAR</Text>
-            <Text style={styles.summaryValue}>{metarQuery.data?.raw || metarQuery.data?.data?.rawOb || 'No METAR loaded.'}</Text>
+        <>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Overview</Text>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>METAR</Text>
+              <Text style={styles.summaryValue}>{metarQuery.data?.raw || metarQuery.data?.data?.rawOb || 'No METAR loaded.'}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>TAF</Text>
+              <Text style={styles.summaryValue}>{tafQuery.data?.raw || tafQuery.data?.data?.rawTAF || 'No TAF loaded.'}</Text>
+            </View>
+            <View style={styles.pillRow}>
+              <Text style={styles.pill}>NOTAMs {notamsCount} - US-only</Text>
+              <Text style={styles.pill}>PIREPs {pirepsCount} - US-only</Text>
+              <Text style={styles.pill}>Winds {windsCount}</Text>
+            </View>
           </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>TAF</Text>
-            <Text style={styles.summaryValue}>{tafQuery.data?.raw || tafQuery.data?.data?.rawTAF || 'No TAF loaded.'}</Text>
-          </View>
-          <View style={styles.pillRow}>
-            <Text style={styles.pill}>NOTAMs {notamsCount} - US-only</Text>
-            <Text style={styles.pill}>PIREPs {pirepsCount} - US-only</Text>
-            <Text style={styles.pill}>Winds {windsCount}</Text>
-          </View>
-        </View>
+          <AIWeatherTranslatorCard
+            origin={searchIcao}
+            metar={metarRaw}
+            taf={tafRaw}
+            pireps={pirepsQuery.data?.reports?.slice(0, 10).map((report) => report.rawOb || report.obsTime || '').filter(Boolean).join('\n')}
+            sigmet={hazardsSummary.items.slice(0, 8).map((item) => `${item.source.toUpperCase()}: ${item.hazard}${item.dueTo ? ` due to ${item.dueTo}` : ''}`).join('\n')}
+          />
+        </>
       )}
 
       {activeTab === 'metar' && (

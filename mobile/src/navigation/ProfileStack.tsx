@@ -42,6 +42,7 @@ import HelpSupportScreen from '../screens/HelpSupportScreen';
 import FAQScreen from '../screens/FAQScreen';
 import ContactUsScreen from '../screens/ContactUsScreen';
 import ReceiverHelpScreen from '../screens/ReceiverHelpScreen';
+import { colors } from '../styles/theme';
 
 export type ProfileStackParamList = {
   ProfileHome: undefined;
@@ -112,7 +113,23 @@ const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
 export default function ProfileStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: true,
+        headerStyle: {
+          backgroundColor: colors.flightBackground,
+        },
+        headerShadowVisible: false,
+        headerTintColor: colors.flightText,
+        headerTitleStyle: {
+          color: colors.flightText,
+          fontWeight: '700',
+        },
+        contentStyle: {
+          backgroundColor: colors.background,
+        },
+      }}
+    >
       <Stack.Screen 
         name="ProfileHome" 
         component={ProfileScreen}
@@ -168,10 +185,10 @@ export default function ProfileStack() {
         component={FlightPlannerScreen}
         options={{ title: 'Flight Planner' }}
       />
-      <Stack.Screen
+      <Stack.Screen 
         name="FlightDeck"
         component={FlightDeckScreen}
-        options={{ title: 'Flight Deck' }}
+        options={{ headerShown: false, title: 'Flight Deck' }}
       />
       <Stack.Screen 
         name="RadioCommsTrainer" 

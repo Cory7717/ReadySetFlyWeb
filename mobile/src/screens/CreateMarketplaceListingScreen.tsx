@@ -18,6 +18,7 @@ import { AIDescriptionGenerator } from '../components/AIDescriptionGenerator';
 import { apiEndpoints } from '../services/api';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { extractApiErrorMessage } from '../utils/diagnostics';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 const categories = [
   { id: 'aircraft-sale', label: 'Aircraft for Sale', icon: 'airplane', color: '#7c3aed' },
@@ -118,6 +119,7 @@ function SectionCard({
 
 export default function CreateMarketplaceListingScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const [step, setStep] = useState(1);
   const [category, setCategory] = useState('');
   const [tier, setTier] = useState('basic');
@@ -437,7 +439,7 @@ export default function CreateMarketplaceListingScreen({ navigation }: any) {
 
       <ScrollView
         style={styles.content}
-        contentContainerStyle={[styles.contentInner, { paddingBottom: 140 + insets.bottom }]}
+        contentContainerStyle={[styles.contentInner, { paddingBottom: 140 + insets.bottom + tabBarHeight }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -448,7 +450,7 @@ export default function CreateMarketplaceListingScreen({ navigation }: any) {
         {step === 5 && renderPromoCode()}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.sm) + spacing.xs }]}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + tabBarHeight, spacing.sm) + spacing.xs }]}>
         {step < 5 ? (
           <TouchableOpacity style={styles.nextButton} onPress={handleNext} activeOpacity={0.92} data-testid="button-next">
             <Text style={styles.nextButtonText}>Continue</Text>

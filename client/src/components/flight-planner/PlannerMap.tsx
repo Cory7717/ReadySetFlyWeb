@@ -503,6 +503,11 @@ export default function PlannerMap({
             : `relative overflow-hidden rounded-[1.2rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] ${heightClassName}`
         }
       >
+        {mapStyle === "sectional" && !isFullscreen && (
+          <div className="pointer-events-none absolute left-3 top-3 z-[1100] rounded-full border border-[#5d6f85]/24 bg-[rgba(9,12,17,0.78)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#d8e6f6] shadow-[0_16px_28px_-24px_rgba(0,0,0,0.88)]">
+            Leaflet Sectional · Direct FAA WMS
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setIsFullscreen((prev) => !prev)}

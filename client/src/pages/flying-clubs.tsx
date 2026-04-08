@@ -108,6 +108,8 @@ export default function FlyingClubsPage() {
       kicker="Flying Clubs"
       title="Manage club members, fleet access, and bookings inside RSF."
       description="This first version gives clubs a clean place to establish a profile, organize members, assign aircraft, and build toward a shared scheduling workflow."
+      className="rsf-community-theme"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
       actions={
         <>
           <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">Club operations</Badge>
@@ -116,7 +118,7 @@ export default function FlyingClubsPage() {
       }
       contentClassName="space-y-8"
     >
-      <section className="rounded-[1.8rem] border border-white/12 bg-[linear-gradient(135deg,rgba(13,26,54,0.96),rgba(25,66,156,0.9))] p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
+      <section className="rsf-metal-panel rounded-[1.8rem] p-6 text-white sm:p-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <div className="text-xs font-semibold uppercase tracking-[0.28em] text-amber-300">First Rule Of Flight Club</div>
@@ -130,17 +132,17 @@ export default function FlyingClubsPage() {
           <div className="flex flex-wrap gap-3">
             {!isAuthenticated ? (
               <>
-                <Button asChild size="lg" className="bg-white text-slate-950 hover:bg-slate-100">
+                <Button asChild size="lg" className="rsf-metal-button-primary">
                   <Link href="/register">Create RSF account</Link>
                 </Button>
-                <Button asChild size="lg" variant="outline" className="border-white/24 bg-white/6 text-white hover:bg-white/12">
+                <Button asChild size="lg" variant="outline" className="rsf-metal-button-secondary">
                   <Link href="/login">Sign in</Link>
                 </Button>
               </>
             ) : (
               <Button
                 size="lg"
-                className="bg-white text-slate-950 hover:bg-slate-100"
+                className="rsf-metal-button-primary"
                 onClick={() => document.getElementById("start-flight-club")?.scrollIntoView({ behavior: "smooth", block: "start" })}
               >
                 Start a club
@@ -151,19 +153,19 @@ export default function FlyingClubsPage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <Card className="border-white/12 bg-white/80">
+        <Card>
           <CardHeader>
             <CardTitle>Member Operations</CardTitle>
             <CardDescription>Give club owners and managers one place to keep a current roster and define booking access.</CardDescription>
           </CardHeader>
         </Card>
-        <Card className="border-white/12 bg-white/80">
+        <Card>
           <CardHeader>
             <CardTitle>Fleet Visibility</CardTitle>
             <CardDescription>Associate club aircraft with RSF listings or add fleet records directly for internal scheduling.</CardDescription>
           </CardHeader>
         </Card>
-        <Card className="border-white/12 bg-white/80">
+        <Card>
           <CardHeader>
             <CardTitle>Scheduling Base</CardTitle>
             <CardDescription>Reservations, blackout periods, and announcements are part of the core model so the workflow can expand cleanly.</CardDescription>
@@ -172,7 +174,7 @@ export default function FlyingClubsPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-        <Card className="border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.78))]">
+        <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="bg-primary text-primary-foreground">Launch Pricing</Badge>
@@ -184,7 +186,7 @@ export default function FlyingClubsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+            <div className="rsf-community-subpanel rounded-xl px-4 py-4">
               <div className="text-sm font-semibold text-slate-900">Included in the current version</div>
               <div className="mt-3 grid gap-3 text-sm text-slate-700">
                 <div>Club profile and public discovery inside RSF</div>
@@ -200,7 +202,7 @@ export default function FlyingClubsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-white/12 bg-white/86">
+        <Card>
           <CardHeader>
             <CardTitle>Planned Additions</CardTitle>
             <CardDescription>
@@ -208,19 +210,19 @@ export default function FlyingClubsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="rsf-community-subpanel rounded-xl px-4 py-4">
               <div className="text-sm font-semibold text-slate-900">Billing Management</div>
               <div className="mt-2 text-sm leading-6 text-slate-700">Club dues, member charges, and recurring billing workflows.</div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="rsf-community-subpanel rounded-xl px-4 py-4">
               <div className="text-sm font-semibold text-slate-900">Maintenance Controls</div>
               <div className="mt-2 text-sm leading-6 text-slate-700">Aircraft downtime, blackout periods, squawks, and service coordination.</div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="rsf-community-subpanel rounded-xl px-4 py-4">
               <div className="text-sm font-semibold text-slate-900">Policy Enforcement</div>
               <div className="mt-2 text-sm leading-6 text-slate-700">Checkout requirements, booking windows, and club-specific operating rules.</div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="rsf-community-subpanel rounded-xl px-4 py-4">
               <div className="text-sm font-semibold text-slate-900">Advanced Scheduling</div>
               <div className="mt-2 text-sm leading-6 text-slate-700">Waitlists, approval flows, conflict handling, and richer calendar operations.</div>
             </div>
@@ -229,13 +231,13 @@ export default function FlyingClubsPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <Card className="border-white/12 bg-white/85">
+        <Card>
           <CardHeader>
             <CardTitle>Listed Flying Clubs</CardTitle>
             <CardDescription>Public clubs can use RSF as a discovery page today, then expand into member operations as the workflow rolls out.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(0,1.2fr)_180px_140px]">
+            <div className="grid gap-3 rounded-2xl border border-[#5d6f85]/18 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] p-4 md:grid-cols-[minmax(0,1.2fr)_180px_140px]">
               <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search club name, city, or description" />
               <Input value={airportFilter} onChange={(event) => setAirportFilter(event.target.value)} placeholder="Airport (e.g. KAUS)" />
               <Input value={stateFilter} onChange={(event) => setStateFilter(event.target.value)} placeholder="State" />
@@ -260,28 +262,28 @@ export default function FlyingClubsPage() {
             {isLoading ? (
               <div className="text-sm text-muted-foreground">Loading clubs...</div>
             ) : filteredClubs.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-muted-foreground">
+              <div className="rounded-xl border border-dashed border-[#5d6f85]/24 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-4 py-6 text-sm text-[#A9BBCD]">
                 No clubs match those filters yet. Try a different airport, state, or search phrase.
               </div>
             ) : (
               filteredClubs.map((club) => (
-                <div key={club.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div key={club.id} className="rsf-community-subpanel rounded-2xl p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-xl font-semibold text-slate-900">{club.name}</h2>
+                        <h2 className="text-xl font-semibold text-[#F5F8FC]">{club.name}</h2>
                         <Badge variant="outline">{club.homeAirport || "Club profile"}</Badge>
                       </div>
-                      <div className="mt-1 text-sm text-muted-foreground">
+                      <div className="mt-1 text-sm text-[#A9BBCD]">
                         {[club.city, club.state].filter(Boolean).join(", ") || "Location coming soon"}
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+                    <div className="flex flex-wrap gap-2 text-xs text-[#A9BBCD]">
                       <Badge variant="secondary">{club.memberCount} members</Badge>
                       <Badge variant="secondary">{club.aircraftCount} aircraft</Badge>
                     </div>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-slate-700">
+                  <p className="mt-3 text-sm leading-6 text-[#C7D7EA]">
                     {club.description || "This club profile is live inside RSF and ready for member, fleet, and scheduling setup."}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-3 text-sm">
@@ -305,7 +307,7 @@ export default function FlyingClubsPage() {
           </CardContent>
         </Card>
 
-        <Card id="start-flight-club" className="border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.76))]">
+        <Card id="start-flight-club">
           <CardHeader>
             <CardTitle>Start A Club</CardTitle>
             <CardDescription>

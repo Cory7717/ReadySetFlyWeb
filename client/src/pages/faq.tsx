@@ -52,15 +52,17 @@ export default function FaqPage() {
       kicker="Support"
       title="FAQ"
       description="Quick answers to common questions about Ready Set Fly."
+      className="rsf-community-theme"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
       contentClassName="max-w-4xl space-y-6"
     >
       <Accordion type="single" collapsible className="space-y-3">
         {FAQS.map((item) => (
-          <AccordionItem key={item.id} value={item.id} className="rounded-lg border">
-            <AccordionTrigger className="px-4 py-3 text-left">
+          <AccordionItem key={item.id} value={item.id} className="rsf-community-accordion-item border-0">
+            <AccordionTrigger className="rsf-community-accordion-trigger px-4 py-3 text-left text-base">
               {item.question}
             </AccordionTrigger>
-            <AccordionContent className="px-4 pb-4 text-sm text-muted-foreground">
+            <AccordionContent className="px-4 pb-4 text-sm leading-7 text-[#A9BBCD]">
               {item.answer}
             </AccordionContent>
           </AccordionItem>

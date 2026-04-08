@@ -14,6 +14,7 @@ import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { SignatureDialog } from "@/components/cfi/SignatureDialog";
+import { PageShell } from "@/components/layout/PageShell";
 import type {
   CfiLesson,
   CfiLessonTemplate,
@@ -572,7 +573,7 @@ export default function CfiTrainingCenter() {
 
   if (!canUseCfi) {
     return (
-      <div className="container mx-auto px-4 py-10">
+      <div className="rsf-community-theme container mx-auto px-4 py-10">
         <Card>
           <CardHeader>
             <CardTitle>CFI Training Center</CardTitle>
@@ -591,8 +592,14 @@ export default function CfiTrainingCenter() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-10 space-y-8">
+    <PageShell
+      kicker="CFI Training"
+      title="Manage students, lessons, and endorsements."
+      description="Run the instructor training workflow from one place, including lesson plans, milestones, student files, messaging, and endorsements."
+      className="rsf-community-theme"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
+      contentClassName="space-y-8"
+    >
         <div className="space-y-2">
           <Badge variant="outline">CFI Training Center</Badge>
           <h1 className="text-3xl font-bold">Manage students and training plans</h1>
@@ -1413,7 +1420,6 @@ export default function CfiTrainingCenter() {
           title="Sign endorsement"
           description="Capture a signature to finalize this endorsement."
         />
-      </div>
-    </div>
+    </PageShell>
   );
 }

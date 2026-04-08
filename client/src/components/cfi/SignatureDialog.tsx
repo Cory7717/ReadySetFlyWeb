@@ -119,7 +119,7 @@ export function SignatureDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[640px]">
+      <DialogContent className="border-[hsl(214_18%_76%_/_0.16)] bg-[linear-gradient(180deg,hsl(220_18%_16%_/_0.98),hsl(220_22%_9%_/_0.99))] text-[#E8EDF4] shadow-[0_28px_64px_-36px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.08)] sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -147,7 +147,7 @@ export function SignatureDialog({
 
           {mode === "draw" ? (
             <div className="space-y-2">
-              <div className="border rounded-md overflow-hidden touch-none">
+              <div className="overflow-hidden rounded-md border border-[#5d6f85]/20 touch-none">
                 <canvas
                   ref={canvasRef}
                   className="w-full h-52 bg-white"
@@ -161,7 +161,7 @@ export function SignatureDialog({
                 <Button type="button" variant="outline" size="sm" onClick={clearSignature}>
                   Clear
                 </Button>
-                <p className="text-xs text-muted-foreground self-center">
+                <p className="self-center text-xs text-muted-foreground">
                   Use finger/stylus on mobile or mouse on desktop.
                 </p>
               </div>

@@ -88,17 +88,19 @@ export default function CfiDirectory() {
       kicker="CFI Directory"
       title="Find a flight instructor by airport, rating, and training fit."
       description="Search instructors, review rates and ratings held, then contact the CFI that matches the training you need next."
+      className="rsf-community-theme"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
       actions={
         <>
           <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">Instructor search</Badge>
-          <Button asChild variant="outline" className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10">
+          <Button asChild variant="outline" className="rsf-metal-button-secondary">
             <Link href="/cfi/student-terms">Student terms</Link>
           </Button>
         </>
       }
       contentClassName="space-y-8"
     >
-      <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
+      <section className="rsf-metal-panel rounded-[1.6rem] p-5 sm:p-6">
         <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-5">
             <div className="flex flex-wrap gap-2">
@@ -107,21 +109,21 @@ export default function CfiDirectory() {
               <Badge variant="outline">Local search</Badge>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+              <div className="rsf-community-subpanel rounded-[1.05rem] px-4 py-4">
                 <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">1. Search by airport</div>
                 <div className="mt-2 text-sm text-slate-700">Start with your home airport or the area where you want to train.</div>
               </div>
-              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+              <div className="rsf-community-subpanel rounded-[1.05rem] px-4 py-4">
                 <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">2. Review training fit</div>
                 <div className="mt-2 text-sm text-slate-700">Compare hourly rate, ratings held, aircraft types, and language support.</div>
               </div>
-              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+              <div className="rsf-community-subpanel rounded-[1.05rem] px-4 py-4">
                 <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">3. Publish or contact</div>
                 <div className="mt-2 text-sm text-slate-700">CFIs can create profiles. Students can browse and reach the right instructor faster.</div>
               </div>
             </div>
 
-            <div className="rounded-[1.25rem] border border-white/12 bg-white/80 p-4 shadow-[0_12px_26px_rgba(15,23,42,0.08)] sm:p-5">
+            <div className="rsf-community-subpanel rounded-[1.25rem] p-4 sm:p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <span className="rsf-kicker">Search instructors</span>
@@ -189,7 +191,7 @@ export default function CfiDirectory() {
             </div>
           </div>
 
-          <div className="space-y-4 rounded-[1.4rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.78),rgba(255,255,255,0.56))] p-5 shadow-[0_18px_38px_rgba(15,23,42,0.12)]">
+          <div className="rsf-community-subpanel space-y-4 rounded-[1.4rem] p-5">
             <div>
               <span className="rsf-kicker">For instructors</span>
               <h3 className="mt-2 text-2xl font-semibold text-slate-900">Create your RSF profile and show students how you teach.</h3>
@@ -198,11 +200,11 @@ export default function CfiDirectory() {
               Publish your home airport, training specialties, aircraft types, and hourly rate so students can find the right instructor without back-and-forth guessing.
             </p>
             <div className="grid gap-3">
-              <div className="rounded-[1rem] border border-primary/14 bg-white/72 px-4 py-3">
+              <div className="rsf-community-subpanel rounded-[1rem] px-4 py-3">
                 <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Publish your profile</div>
                 <div className="mt-1 text-sm text-slate-700">List ratings, aircraft experience, languages, and availability.</div>
               </div>
-              <div className="rounded-[1rem] border border-primary/14 bg-white/72 px-4 py-3">
+              <div className="rsf-community-subpanel rounded-[1rem] px-4 py-3">
                 <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Reach the right students</div>
                 <div className="mt-1 text-sm text-slate-700">Show up in airport and state searches where students are already looking.</div>
               </div>
@@ -232,7 +234,7 @@ export default function CfiDirectory() {
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="rounded-[1.45rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.85),rgba(255,255,255,0.62))] p-5 shadow-sm sm:p-6">
+        <section className="rsf-metal-panel rounded-[1.45rem] p-5 sm:p-6">
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <span className="rsf-kicker">Available instructors</span>

@@ -5,7 +5,10 @@ import { getRequestedWebMapEngine } from "@/map/engine";
 
 export default function Planner2DMapSurface(props: Planner2DMapProps) {
   const prefersMapLibre = getRequestedWebMapEngine() === "maplibre";
-  const canUseMapLibre = prefersMapLibre && props.mapStyle !== "winds";
+  const canUseMapLibre =
+    prefersMapLibre &&
+    props.mapStyle !== "winds" &&
+    props.mapStyle !== "sectional";
 
   if (canUseMapLibre) {
     return <MapLibrePlannerMap {...props} />;

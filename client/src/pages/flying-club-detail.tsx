@@ -512,6 +512,8 @@ export default function FlyingClubDetailPage() {
         kicker="Flying Clubs"
         title="Loading club..."
         description="Preparing the club workspace."
+        className="rsf-community-theme"
+        canopyClassName="rsf-metal-hero border-b border-white/10"
         contentClassName="space-y-6"
       >
         <div className="text-sm text-muted-foreground">Loading flying club...</div>
@@ -524,6 +526,8 @@ export default function FlyingClubDetailPage() {
       kicker="Flying Club"
       title={data.club.name}
       description={data.club.description || "Club profile, fleet, member roster, governance, and scheduling workspace."}
+      className="rsf-community-theme"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
       actions={
         <>
           <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">
@@ -537,25 +541,25 @@ export default function FlyingClubDetailPage() {
       contentClassName="space-y-8"
     >
       <section className="grid gap-4 md:grid-cols-4">
-        <Card className="border-white/12 bg-white/82">
+        <Card>
           <CardHeader>
             <CardTitle>{data.members.filter((member) => member.status === "active").length}</CardTitle>
             <CardDescription>Active members</CardDescription>
           </CardHeader>
         </Card>
-        <Card className="border-white/12 bg-white/82">
+        <Card>
           <CardHeader>
             <CardTitle>{data.aircraft.length}</CardTitle>
             <CardDescription>Fleet records</CardDescription>
           </CardHeader>
         </Card>
-        <Card className="border-white/12 bg-white/82">
+        <Card>
           <CardHeader>
             <CardTitle>{upcomingReservations.length}</CardTitle>
             <CardDescription>Scheduled reservations</CardDescription>
           </CardHeader>
         </Card>
-        <Card className="border-white/12 bg-white/82">
+        <Card>
           <CardHeader>
             <CardTitle>{data.viewerMembership?.role || (data.canManage ? "manager" : "visitor")}</CardTitle>
             <CardDescription>Your access level</CardDescription>
@@ -564,15 +568,15 @@ export default function FlyingClubDetailPage() {
       </section>
 
       {data.pendingRequiredDocuments.length > 0 ? (
-        <Card className="border-amber-200 bg-amber-50">
+        <Card className="border-[#7f6327]/34 bg-[linear-gradient(180deg,rgba(36,27,12,0.98),rgba(19,14,7,0.98))] text-[#F2DCA4]">
           <CardHeader>
-            <CardTitle className="text-amber-950">Review required club documents before booking</CardTitle>
-            <CardDescription className="text-amber-900">
+            <CardTitle className="text-[#F5E6BF]">Review required club documents before booking</CardTitle>
+            <CardDescription className="text-[#E6C97B]">
               {data.pendingRequiredDocuments.length} required document
               {data.pendingRequiredDocuments.length === 1 ? "" : "s"} still need acceptance for this club.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm text-amber-950">
+          <CardContent className="space-y-2 text-sm text-[#F2DCA4]">
             {data.pendingRequiredDocuments.map((document) => (
               <div key={document.id}>
                 {document.title} (v{document.version})
@@ -583,7 +587,7 @@ export default function FlyingClubDetailPage() {
       ) : null}
 
       <Tabs defaultValue="overview" className="space-y-5">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-300 bg-white p-1 md:grid-cols-6">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border p-1 md:grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="fleet">Fleet</TabsTrigger>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
@@ -593,18 +597,18 @@ export default function FlyingClubDetailPage() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          <Card className="border-white/12 bg-white/86">
+          <Card>
             <CardHeader>
               <CardTitle>Club Details</CardTitle>
               <CardDescription>
                 {[data.club.city, data.club.state].filter(Boolean).join(", ") || "Location coming soon"}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 text-sm text-slate-700">
+            <CardContent className="space-y-4 text-sm text-[#C7D7EA]">
               <div>{data.club.policiesSummary || data.club.bookingNotes || "This club is building its operating workflow inside RSF."}</div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="font-medium text-slate-900">Club booking governance</div>
-                <div className="mt-2 text-sm text-slate-600">
+              <div className="rsf-community-subpanel rounded-xl px-4 py-4">
+                <div className="font-medium text-[#F5F8FC]">Club booking governance</div>
+                <div className="mt-2 text-sm text-[#A9BBCD]">
                   {data.club.requirePolicyAcceptanceBeforeBooking
                     ? "Members must accept required club rules and agreement documents before booking aircraft."
                     : "This club currently allows booking without a required policy acceptance gate."}
@@ -626,7 +630,7 @@ export default function FlyingClubDetailPage() {
           </Card>
 
           {!data.viewerMembership && !data.canManage ? (
-            <Card className="border-white/12 bg-white/86">
+            <Card>
               <CardHeader>
                 <CardTitle>Join This Club</CardTitle>
                 <CardDescription>Send a membership request to the club manager.</CardDescription>

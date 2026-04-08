@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
+import { PageShell } from "@/components/layout/PageShell";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -184,8 +185,14 @@ export default function CfiDashboard() {
 
   if (!canUseCfi) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 py-10 space-y-6 max-w-3xl">
+      <PageShell
+        kicker="CFI Dashboard"
+        title="Become a CFI on Ready Set Fly"
+        description="Unlock the instructor profile, booking workflow, and scheduling workspace with the CFI trial or RSF Pro."
+        className="rsf-community-theme"
+        canopyClassName="rsf-metal-hero border-b border-white/10"
+        contentClassName="max-w-3xl space-y-6"
+      >
           <Badge variant="outline">CFI Dashboard</Badge>
           <h1 className="text-3xl font-bold">Become a CFI on Ready Set Fly</h1>
           <p className="text-muted-foreground">
@@ -219,8 +226,7 @@ export default function CfiDashboard() {
               </Button>
             </CardContent>
           </Card>
-        </div>
-      </div>
+      </PageShell>
     );
   }
 
@@ -493,7 +499,7 @@ export default function CfiDashboard() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-10">
+      <div className="rsf-community-theme container mx-auto px-4 py-10">
         <Card>
           <CardHeader>
             <CardTitle>Loading CFI dashboard...</CardTitle>
@@ -506,8 +512,14 @@ export default function CfiDashboard() {
   const pendingBookingCount = bookingRequests.filter((request) => request.status === "PENDING").length;
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-10 space-y-8">
+    <PageShell
+      kicker="CFI Dashboard"
+      title="Manage your instructor profile, credentials, and bookings."
+      description="Keep the instructor profile current, manage availability, and handle incoming booking activity from one workspace."
+      className="rsf-community-theme"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
+      contentClassName="space-y-8"
+    >
         <div className="space-y-2">
           <Badge variant="outline">CFI Dashboard</Badge>
           <h1 className="text-3xl font-bold">Manage your CFI profile</h1>
@@ -1104,7 +1116,6 @@ export default function CfiDashboard() {
             ))}
           </CardContent>
         </Card>
-      </div>
-    </div>
+    </PageShell>
   );
 }

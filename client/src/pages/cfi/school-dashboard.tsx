@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PageShell } from "@/components/layout/PageShell";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
@@ -166,7 +167,7 @@ export default function CfiSchoolDashboard() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-10">
+      <div className="rsf-community-theme container mx-auto px-4 py-10">
         <Card>
           <CardHeader>
             <CardTitle>Loading school dashboard...</CardTitle>
@@ -181,8 +182,14 @@ export default function CfiSchoolDashboard() {
   const metrics = dashboard?.metrics;
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-10 space-y-8">
+    <PageShell
+      kicker="CFI School Dashboard"
+      title="Manage your flight school."
+      description="Keep the school profile current, monitor training activity, and manage instructor membership from one workspace."
+      className="rsf-community-theme"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
+      contentClassName="space-y-8"
+    >
         <div className="space-y-2">
           <Badge variant="outline">CFI School Dashboard</Badge>
           <h1 className="text-3xl font-bold">Manage your flight school</h1>
@@ -389,7 +396,6 @@ export default function CfiSchoolDashboard() {
             </CardContent>
           </Card>
         )}
-      </div>
-    </div>
+    </PageShell>
   );
 }

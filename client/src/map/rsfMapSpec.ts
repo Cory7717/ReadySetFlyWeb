@@ -6,6 +6,7 @@ export type RsfLiveMapStyle = Exclude<RsfPlannerMapStyle, "winds">;
 export type RsfDemoViewMode = "overhead" | "vision" | "surface";
 export type RsfCockpitAccent = "map" | "vision" | "globe" | "winds";
 
+export const RSF_FAA_WMS_DIRECT_URL = "https://sua.faa.gov/geoserver/wms";
 export const RSF_FAA_WMS_URL = apiUrl("/api/tiles/faa/wms");
 export const RSF_SECTIONAL_WMS_TILE_URL =
   `${RSF_FAA_WMS_URL}?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}`;

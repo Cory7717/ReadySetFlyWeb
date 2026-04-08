@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PageShell } from "@/components/layout/PageShell";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
@@ -113,8 +114,14 @@ export default function CfiRequestPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-10 max-w-2xl space-y-6">
+    <PageShell
+      kicker="Session Request"
+      title="Request a training session."
+      description="Send a structured session request without leaving the instructor workflow."
+      className="rsf-community-theme"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
+      contentClassName="max-w-2xl space-y-6"
+    >
         <div className="space-y-1">
           <Badge variant="outline">Session Request</Badge>
           <h1 className="text-2xl font-bold">
@@ -239,7 +246,6 @@ export default function CfiRequestPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
-    </div>
+    </PageShell>
   );
 }

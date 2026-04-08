@@ -149,7 +149,7 @@ export type Live2DMapSurfaceProps = {
 export default function Live2DMapSurface(props: Live2DMapSurfaceProps) {
   const prefersMapLibre = getRequestedWebMapEngine() === "maplibre";
 
-  if (prefersMapLibre) {
+  if (prefersMapLibre && props.mapStyle !== "sectional") {
     const mapLibreProps: MapLibreLiveMapProps = props;
     return <MapLibreLiveMap {...mapLibreProps} />;
   }

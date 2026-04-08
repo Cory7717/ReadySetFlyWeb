@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageShell } from "@/components/layout/PageShell";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
@@ -252,13 +253,18 @@ export default function CabinBrief() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0E14]">
-      <div className="container mx-auto px-4 py-8 sm:px-6 sm:py-10">
-        <div className="space-y-8">
+    <PageShell
+      kicker="Cabin Brief"
+      title="Plain-English passenger weather briefing."
+      description="Translate route weather into a passenger-ready summary while keeping the rest of the RSF flight workflow intact."
+      className="rsf-community-theme"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
+      contentClassName="space-y-8"
+    >
           <section className="rounded-[1.6rem] border border-[#5b4520] bg-[linear-gradient(180deg,rgba(20,14,4,0.98),rgba(13,22,34,0.94))] p-6 text-[#F1F5FA] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.8)] sm:p-8">
             <div className="space-y-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#D9A441]">
-                Plain-English flight weather — no pilot license required
+                Passenger-ready flight weather without pilot shorthand
               </div>
               <div className="text-3xl font-semibold tracking-tight sm:text-4xl">Cabin Brief</div>
               <div className="text-base text-[#9CB4CC] leading-7">
@@ -434,8 +440,6 @@ export default function CabinBrief() {
               </Card>
             </>
           )}
-        </div>
-      </div>
-    </div>
+    </PageShell>
   );
 }

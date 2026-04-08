@@ -19,7 +19,7 @@ import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttitudeReport, createGdl90Listener, OwnshipReport, ReceiverHealth, TrafficTarget } from '../utils/gdl90';
-import { API_BASE_URL, api } from '../services/api';
+import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import {
   buildArrivalRunwayCue,
@@ -86,7 +86,7 @@ type AircraftType = {
 };
 
 const FAA_SECTIONAL_WMS_TEMPLATE =
-  `${API_BASE_URL.replace(/\/$/, '')}/api/tiles/faa/wms?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:900913&bbox={minX},{minY},{maxX},{maxY}&width={width}&height={height}`;
+  'https://sua.faa.gov/geoserver/wms?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:900913&bbox={minX},{minY},{maxX},{maxY}&width={width}&height={height}';
 
 type AircraftProfile = {
   id: string;

@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PageShell } from "@/components/layout/PageShell";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -47,9 +48,14 @@ export default function CfiStudentTermsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-10 max-w-2xl">
-        <div className="space-y-6">
+    <PageShell
+      kicker="Student Terms"
+      title="Ready Set Fly CFI Student Agreement"
+      description="Review the student agreement before requesting instruction through the CFI workflow."
+      className="rsf-community-theme"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
+      contentClassName="max-w-2xl space-y-6"
+    >
           <div className="space-y-2">
             <Badge variant="outline">Student Terms</Badge>
             <h1 className="text-3xl font-bold">
@@ -60,7 +66,7 @@ export default function CfiStudentTermsPage() {
             </p>
           </div>
 
-          <div className="rounded-xl border bg-card p-6 sm:p-8 space-y-5 text-sm text-muted-foreground leading-relaxed">
+          <div className="rsf-community-legal-copy space-y-5 p-6 text-sm leading-relaxed text-muted-foreground sm:p-8">
             <p>
               By requesting a session with a CFI through Ready Set Fly, you agree to coordinate training directly with
               the instructor. Ready Set Fly does not broker or process payments for instruction.
@@ -79,7 +85,7 @@ export default function CfiStudentTermsPage() {
 
           <div className="rounded-lg border bg-muted/30 p-4 flex flex-wrap items-center justify-between gap-4">
             <div className="text-sm">
-              {acceptance ? "✓ You have accepted these terms." : "Please review and accept before continuing."}
+              {acceptance ? "Accepted. You have already approved these terms." : "Please review and accept before continuing."}
             </div>
             <div className="flex flex-wrap gap-3">
               {isAuthenticated ? (
@@ -96,8 +102,6 @@ export default function CfiStudentTermsPage() {
               </Button>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
+    </PageShell>
   );
 }

@@ -5403,8 +5403,8 @@ export default function FlightPlanner() {
       }
       canopyClassName="rsf-metal-hero border-b border-white/10"
       contentClassName={cn(
-        "rsf-planner-theme max-w-[1400px] space-y-6 p-4 sm:p-6",
-        isMobile && "space-y-4 p-3 text-[#E8EDF4]"
+        "rsf-planner-theme max-w-[1400px] space-y-6 overflow-x-clip p-4 sm:p-6",
+        isMobile && "space-y-4 p-3 pb-24 text-[#E8EDF4]"
       )}
     >
       <UpgradePromptDialog
@@ -5580,7 +5580,7 @@ export default function FlightPlanner() {
           <TabsTrigger value="analysis" className="h-10 rounded-[0.95rem]">Analysis</TabsTrigger>
           <TabsTrigger value="file" className="h-10 rounded-[0.95rem]">File &amp; Save</TabsTrigger>
         </TabsList>
-        <TabsContent value="route" className="space-y-6">
+        <TabsContent value="route" className="min-w-0 space-y-6">
       <PressDemoSpotlight
         active={pressDemo.isActive("route-setup")}
         stepNumber={(pressDemo.getStep("route-setup")?.index ?? 0) + 1}
@@ -8128,19 +8128,19 @@ export default function FlightPlanner() {
       </TabsContent>
       </Tabs>
         </div>
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         <PressDemoSpotlight
           active={pressDemo.isActive("route-map")}
           stepNumber={(pressDemo.getStep("route-map")?.index ?? 0) + 1}
           title={pressDemo.getStep("route-map")?.title ?? "Route Map"}
           body={pressDemo.getStep("route-map")?.body ?? ""}
         >
-        <Card id="planner-route-map" className={plannerPanelClass}>
+        <Card id="planner-route-map" className={cn(plannerPanelClass, "min-w-0")}>
           <CardHeader>
             <CardTitle className={plannerCardTitleClass}>Route Map</CardTitle>
             <CardDescription className={plannerCardDescriptionClass}>Live route view while you build, brief, and file.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-w-0">
             <div className="mb-3 flex flex-wrap gap-3 text-sm">
               <a
                 href="/adsb-receiver-help"

@@ -92,8 +92,8 @@ export default function CfiProfilePage() {
   const languages = normalizeList(profile.languages);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b bg-muted/30">
+    <div className="min-h-screen rsf-app-shell rsf-community-theme bg-[#090c10]">
+      <div className="rsf-metal-hero border-b border-white/10">
         <div className="container mx-auto px-4 py-8">
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div className="flex items-start gap-5">
@@ -124,12 +124,12 @@ export default function CfiProfilePage() {
                 <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                   {profile.airportHome && (
                     <span className="font-semibold text-foreground">
-                      ✈ {profile.airportHome}
+                      Home {profile.airportHome}
                     </span>
                   )}
                   {(profile.locationCity || profile.locationState) && (
                     <span>
-                      📍 {[profile.locationCity, profile.locationState].filter(Boolean).join(", ")}
+                      {[profile.locationCity, profile.locationState].filter(Boolean).join(", ")}
                     </span>
                   )}
                 </div>
@@ -145,7 +145,7 @@ export default function CfiProfilePage() {
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm">
-                <Link href="/cfi">← Back to directory</Link>
+                <Link href="/cfi">Back to directory</Link>
               </Button>
             </div>
           </div>

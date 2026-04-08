@@ -8455,7 +8455,7 @@ export default function FlightPlanner() {
             </div>
             {mapStyle === "sectional" && (
               <div className="text-xs text-muted-foreground mt-2">
-                Sectional tiles appear from zoom 4+; zoom in for FAA chart detail.
+                FAA sectional charts now render across the route view; chart detail sharpens as you zoom in.
               </div>
             )}
             {(mapStyle === "radar" || mapStyle === "winds" || mapStyle === "clouds") && (

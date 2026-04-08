@@ -1,6 +1,6 @@
 ﻿import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker, Polygon, Polyline, UrlTile } from 'react-native-maps';
+import MapView, { Marker, Polygon, Polyline, UrlTile, WMSTile } from 'react-native-maps';
 import { Platform } from 'react-native';
 import { PROVIDER_GOOGLE } from 'react-native-maps';
 import { colors, spacing } from '../../styles/theme';
@@ -11,6 +11,9 @@ type FlightDeckViewProps = {
   actions: FlightDeckActionsProps;
   styles: Record<string, any>;
 };
+
+const FAA_SECTIONAL_WMS_TEMPLATE =
+  'https://sua.faa.gov/geoserver/wms?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:900913&bbox={minX},{minY},{maxX},{maxY}&width={width}&height={height}';
 
 function formatSourceAge(ms: number | null | undefined) {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '--';
@@ -1121,10 +1124,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
             onRegionChangeComplete={(region) => setMapRegion(region)}
           >
             {mapStyle === 'sectional' && (
-              <UrlTile
-                urlTemplate="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
+              <WMSTile
+                urlTemplate={FAA_SECTIONAL_WMS_TEMPLATE}
                 maximumZ={12}
-                minimumZ={4}
+                maximumNativeZ={12}
+                minimumZ={2}
                 tileSize={256}
                 opacity={0.85}
                 zIndex={600}

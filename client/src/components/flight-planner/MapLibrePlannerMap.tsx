@@ -12,7 +12,7 @@ import type {
 import {
   RSF_COCKPIT_MUTED_TEXT_CLASS,
   RSF_ROUTE_HALO_LINE_STYLE,
-  RSF_SECTIONAL_TILE_URL,
+  RSF_SECTIONAL_WMS_TILE_URL,
   RSF_TERRAIN_RISK_STYLES,
   RSF_TERRAIN_SURFACE_STYLES,
 } from "@/map/rsfMapSpec";
@@ -218,7 +218,7 @@ export default function MapLibrePlannerMap({
     (map: MapLibreMap) => {
       if (!map.isStyleLoaded()) return;
 
-      map.setMinZoom(mapStyle === "sectional" ? 4 : 2);
+      map.setMinZoom(mapStyle === "sectional" ? 2 : 2);
       map.setMaxZoom(mapStyle === "sectional" ? 12 : 18);
 
       if (mapStyle === "sectional") {
@@ -226,10 +226,10 @@ export default function MapLibrePlannerMap({
           map,
           sourceId: SECTIONAL_SOURCE_ID,
           layerId: SECTIONAL_LAYER_ID,
-          tiles: [RSF_SECTIONAL_TILE_URL],
-          attribution: "Federal Aviation Administration, Aeronautical Information Services",
+          tiles: [RSF_SECTIONAL_WMS_TILE_URL],
+          attribution: "FAA SUA Geoserver Charts",
           opacity: 0.85,
-          minzoom: 4,
+          minzoom: 2,
           maxzoom: 12,
           beforeId: TERRAIN_SURFACE_LAYER_ID,
         });
@@ -566,7 +566,9 @@ export default function MapLibrePlannerMap({
 
   const engineLabel = useMemo(() => {
     const status = mapReady ? "ready" : "loading";
-    return `MapLibre ${mapStyle} ${status}`;
+    return mapStyle === "sectional"
+      ? `MapLibre sectional ${status} · FAA WMS`
+      : `MapLibre ${mapStyle} ${status}`;
   }, [mapReady, mapStyle]);
   const showWeatherAdvisory = mapStyle === "radar" || mapStyle === "clouds";
 

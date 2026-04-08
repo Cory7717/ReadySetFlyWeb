@@ -1,5 +1,5 @@
 import { TileLayer, WMSTileLayer } from "react-leaflet";
-import { RSF_SECTIONAL_TILE_URL, type RsfLeafletMapStyle, type RsfLiveMapStyle } from "@/map/rsfMapSpec";
+import { RSF_FAA_WMS_URL, type RsfLeafletMapStyle, type RsfLiveMapStyle } from "@/map/rsfMapSpec";
 
 type LeafletWeatherStyle = Extract<RsfLeafletMapStyle | RsfLiveMapStyle, "sectional" | "radar" | "clouds">;
 
@@ -25,12 +25,13 @@ export function LeafletAviationBaseLayers({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       {style === "sectional" && (
-        <TileLayer
-          attribution="Federal Aviation Administration, Aeronautical Information Services"
-          url={RSF_SECTIONAL_TILE_URL}
-          minZoom={4}
-          maxZoom={12}
-          maxNativeZoom={12}
+        <WMSTileLayer
+          attribution="FAA SUA Geoserver Charts"
+          url={RSF_FAA_WMS_URL}
+          layers="SUA:us_sectionals"
+          format="image/png"
+          transparent={false}
+          version="1.1.1"
           opacity={0.85}
         />
       )}

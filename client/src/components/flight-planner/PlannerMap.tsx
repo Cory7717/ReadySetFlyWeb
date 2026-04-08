@@ -90,7 +90,7 @@ function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: Rsf
         if (mapStyle === "sectional") {
           const zoom = map.getZoom();
           if (zoom > 12) map.setZoom(12);
-          if (zoom < 4) map.setZoom(4);
+          if (zoom < 2) map.setZoom(2);
         }
       } catch {
         // Map may be unmounted during transitions; ignore.
@@ -110,10 +110,10 @@ function MapStyleController({ mapStyle }: { mapStyle: RsfLeafletMapStyle }) {
     const raf = requestAnimationFrame(() => {
       try {
         if (mapStyle === "sectional") {
-          map.setMinZoom(4);
+          map.setMinZoom(2);
           map.setMaxZoom(12);
-          if (map.getZoom() < 4) {
-            map.setZoom(4);
+          if (map.getZoom() < 2) {
+            map.setZoom(2);
           }
           return;
         }

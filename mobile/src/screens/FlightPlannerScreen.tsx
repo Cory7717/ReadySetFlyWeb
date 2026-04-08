@@ -13,7 +13,7 @@ import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Constants from 'expo-constants';
-import MapView, { Callout, Marker, Polyline, PROVIDER_GOOGLE, UrlTile } from 'react-native-maps';
+import MapView, { Callout, Marker, Polyline, PROVIDER_GOOGLE, UrlTile, WMSTile } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import { DeviceMotion } from 'expo-sensors';
@@ -84,6 +84,9 @@ type AircraftType = {
   usableFuelGal: number;
   maxGrossWeightLb: number;
 };
+
+const FAA_SECTIONAL_WMS_TEMPLATE =
+  'https://sua.faa.gov/geoserver/wms?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:900913&bbox={minX},{minY},{maxX},{maxY}&width={width}&height={height}';
 
 type AircraftProfile = {
   id: string;
@@ -6863,10 +6866,11 @@ export default function FlightPlannerScreen() {
             onRegionChangeComplete={(region) => setMapRegion(region)}
           >
             {mapStyle === 'sectional' && (
-              <UrlTile
-                urlTemplate="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
+              <WMSTile
+                urlTemplate={FAA_SECTIONAL_WMS_TEMPLATE}
                 maximumZ={12}
-                minimumZ={4}
+                maximumNativeZ={12}
+                minimumZ={2}
                 tileSize={256}
                 opacity={0.85}
                 zIndex={600}
@@ -7004,7 +7008,7 @@ export default function FlightPlannerScreen() {
         )}
         {mapStyle === 'sectional' && (
           <Text style={styles.helperText}>
-            Sectional tiles appear at zoom 4+; zoom in further for FAA chart detail (US-only).
+            FAA sectional charts now render across the route view; chart detail sharpens as you zoom in (US-only).
           </Text>
         )}
         <Text style={styles.helperText}>Sectional tiles provided by FAA/Aeronautical Information Services.</Text>

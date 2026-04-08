@@ -4,8 +4,9 @@ export type RsfLiveMapStyle = Exclude<RsfPlannerMapStyle, "winds">;
 export type RsfDemoViewMode = "overhead" | "vision" | "surface";
 export type RsfCockpitAccent = "map" | "vision" | "globe" | "winds";
 
-export const RSF_SECTIONAL_TILE_URL =
-  "https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}";
+export const RSF_FAA_WMS_URL = "https://sua.faa.gov/geoserver/wms";
+export const RSF_SECTIONAL_WMS_TILE_URL =
+  `${RSF_FAA_WMS_URL}?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}`;
 
 export const RSF_ROUTE_LINE_STYLE = { color: "#2563eb", weight: 3, opacity: 0.78 } as const;
 export const RSF_ROUTE_HALO_LINE_STYLE = { color: "#0ea5e9", weight: 4 } as const;

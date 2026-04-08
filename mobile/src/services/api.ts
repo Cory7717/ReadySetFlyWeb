@@ -10,7 +10,7 @@ import { TokenStorage } from '../utils/tokenStorage';
 import { errorDiagnostic, logDiagnostic, warnDiagnostic } from '../utils/diagnostics';
 
 // Backend API base URL - set EXPO_PUBLIC_API_URL in app config/env
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://readysetfly-api.onrender.com';
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://readysetfly-api.onrender.com';
 
 // Flag to prevent multiple simultaneous refresh attempts
 let isRefreshing = false;

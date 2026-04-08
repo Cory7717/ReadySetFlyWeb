@@ -143,7 +143,7 @@ const MapInstanceBridge = ({ onReady }: { onReady: (map: L.Map) => void }) => {
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 type BasemapMode = "standard" | "sectional" | "ifr";
 
-const FAA_WMS_URL = "https://sua.faa.gov/geoserver/wms";
+const FAA_WMS_URL = apiUrl("/api/tiles/faa/wms");
 
 const AviationBasemapLayer = ({ mode }: { mode: BasemapMode }) => {
   const map = useMap();

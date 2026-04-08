@@ -2354,6 +2354,7 @@ const TFR_ARCGIS_URLS = TFR_ARCGIS_URLS_ENV
   : [];
 const TFR_WFS_ENABLED = String(process.env.TFR_WFS_ENABLED || "true").toLowerCase() === "true";
 const TFR_WFS_URL = (process.env.TFR_WFS_URL || "https://sua.faa.gov/geoserver/wfs").trim();
+const FAA_WMS_URL = (process.env.FAA_WMS_URL || "https://sua.faa.gov/geoserver/wms").trim();
 const SUA_ARCGIS_URL = (process.env.SUA_ARCGIS_URL || "https://coast.noaa.gov/arcgis/rest/services/Hosted/MilitarySpecialUseAirspace/FeatureServer/0/query").trim();
 const NOTAM_SOURCE = (process.env.NOTAM_SOURCE || "http").trim().toLowerCase();
 const NOTAM_HTTP_BASE_URL = (process.env.NOTAM_HTTP_BASE_URL || "").trim();
@@ -2372,6 +2373,11 @@ const FAA_TFR_ARCGIS_URLS = [
   "https://services1.arcgis.com/n4Ot9Qz0t5espY4s/arcgis/rest/services/FAA_TFRs/FeatureServer/0/query",
   "https://gis.faa.gov/arcgis/rest/services/TFMS/TFR/MapServer/0/query",
 ].filter((value, index, arr) => value && arr.indexOf(value) === index);
+const FAA_WMS_ALLOWED_LAYERS = new Set([
+  "SUA:us_sectionals",
+  "SUA:ifr_enroute_low",
+  "SUA:ifr_enroute_high",
+]);
 let swimTokenCache: { token: string; expiresAt: number } | null = null;
 const COASTAL_STATE_CODES = new Set([
   "AK", "AL", "CA", "CT", "DE", "FL", "GA", "HI", "LA", "MA", "MD", "ME", "MI",
@@ -16168,6 +16174,99 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       if (!isAbortLike) {
         console.error("RainViewer tile proxy failed:", error);
+      }
+    }
+  });
+
+  app.get("/api/tiles/faa/wms", async (req, res) => {
+    const query = req.query as Record<string, string | string[] | undefined>;
+    const readQuery = (...keys: string[]) => {
+      for (const key of keys) {
+        const value = query[key];
+        if (typeof value === "string" && value.trim()) return value.trim();
+      }
+      return "";
+    };
+
+    const service = readQuery("service", "SERVICE");
+    const requestType = readQuery("request", "REQUEST");
+    const layers = readQuery("layers", "LAYERS");
+    const bbox = readQuery("bbox", "BBOX");
+    const width = readQuery("width", "WIDTH");
+    const height = readQuery("height", "HEIGHT");
+    const format = readQuery("format", "FORMAT") || "image/png";
+    const styles = readQuery("styles", "STYLES");
+    const version = readQuery("version", "VERSION") || "1.1.1";
+    const transparent = readQuery("transparent", "TRANSPARENT") || "false";
+    const srs = readQuery("srs", "SRS");
+    const crs = readQuery("crs", "CRS");
+
+    if (service.toUpperCase() !== "WMS" || requestType.toUpperCase() !== "GETMAP") {
+      return res.status(400).json({ error: "Unsupported FAA WMS request" });
+    }
+    if (!FAA_WMS_ALLOWED_LAYERS.has(layers)) {
+      return res.status(400).json({ error: "Unsupported FAA WMS layer" });
+    }
+    if (!bbox || !width || !height) {
+      return res.status(400).json({ error: "Missing FAA WMS tile parameters" });
+    }
+
+    try {
+      const targetUrl = new URL(FAA_WMS_URL);
+      targetUrl.searchParams.set("service", "WMS");
+      targetUrl.searchParams.set("request", "GetMap");
+      targetUrl.searchParams.set("layers", layers);
+      targetUrl.searchParams.set("styles", styles);
+      targetUrl.searchParams.set("format", format);
+      targetUrl.searchParams.set("transparent", transparent);
+      targetUrl.searchParams.set("version", version);
+      if (srs) {
+        targetUrl.searchParams.set("srs", srs);
+      } else if (crs) {
+        targetUrl.searchParams.set("crs", crs);
+      }
+      targetUrl.searchParams.set("width", width);
+      targetUrl.searchParams.set("height", height);
+      targetUrl.searchParams.set("bbox", bbox);
+
+      const response = await fetchWithTimeout(
+        targetUrl.toString(),
+        { headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" } },
+        12000
+      );
+      const contentType = response.headers.get("content-type") || format;
+      const buffer = Buffer.from(await response.arrayBuffer());
+
+      if (!response.ok) {
+        console.warn("FAA WMS proxy upstream failure:", {
+          status: response.status,
+          layer: layers,
+          contentType,
+        });
+      }
+
+      res.status(response.status);
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", response.ok ? "public, max-age=1800" : "no-store");
+      res.setHeader("X-RSF-FAA-WMS-Layer", layers);
+      res.send(buffer);
+    } catch (error: any) {
+      const errorName = String(error?.name || "");
+      const errorMessage = String(error?.message || "");
+      const isAbortLike =
+        errorName === "AbortError" ||
+        /aborted|timed out|timeout/i.test(errorMessage);
+
+      if (!res.headersSent) {
+        if (isAbortLike) {
+          return res.status(504).json({ error: "FAA WMS timeout" });
+        }
+        console.error("FAA WMS proxy failed:", error);
+        return res.status(502).json({ error: "FAA WMS unavailable" });
+      }
+
+      if (!isAbortLike) {
+        console.error("FAA WMS proxy failed:", error);
       }
     }
   });

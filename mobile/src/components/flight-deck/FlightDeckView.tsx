@@ -4,6 +4,7 @@ import MapView, { Marker, Polygon, Polyline, UrlTile, WMSTile } from 'react-nati
 import { Platform } from 'react-native';
 import { PROVIDER_GOOGLE } from 'react-native-maps';
 import { colors, spacing } from '../../styles/theme';
+import { API_BASE_URL } from '../../services/api';
 import type { FlightDeckStateProps, FlightDeckActionsProps } from './FlightDeckViewTypes';
 
 type FlightDeckViewProps = {
@@ -13,7 +14,7 @@ type FlightDeckViewProps = {
 };
 
 const FAA_SECTIONAL_WMS_TEMPLATE =
-  'https://sua.faa.gov/geoserver/wms?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:900913&bbox={minX},{minY},{maxX},{maxY}&width={width}&height={height}';
+  `${API_BASE_URL.replace(/\/$/, '')}/api/tiles/faa/wms?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:900913&bbox={minX},{minY},{maxX},{maxY}&width={width}&height={height}`;
 
 function formatSourceAge(ms: number | null | undefined) {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '--';

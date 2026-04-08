@@ -24,7 +24,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { extractAtisIdentifier, extractRunwayInUse, parseFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import av8mapsLogo from "@assets/Av8Maps.JPG";
-import rsfOpaqueLogo from "@assets/RSFOpaqueLogo_1761494760586.png";
 
 interface WeatherData {
   icao: string;
@@ -1627,13 +1626,12 @@ export default function Landing() {
                 General Aviation Ecosystem
               </div>
               <div className="space-y-4">
-                <img src={rsfOpaqueLogo} alt="Ready Set Fly" className="h-11 w-auto" />
-                <h1 className="max-w-4xl text-4xl font-semibold tracking-[-0.045em] text-[#F6F8FC] sm:text-5xl xl:text-6xl" style={{ fontFamily: "var(--font-display)" }}>
+                <h1 className="max-w-4xl text-4xl font-semibold tracking-[-0.045em] text-[#F6F8FC] sm:text-5xl xl:text-6xl [font-family:var(--font-display)]">
                   Stop bouncing from app to app.
                   <span className="block text-[#cdd9ee]">Everything general aviation needs, in one place.</span>
                 </h1>
                 <p className="max-w-3xl text-lg leading-8 text-[#CCD6E4]">
-                  Plan on the web, file directly to the FAA via Leidos / 1-800-WX-BRIEF, then pick it up with ATC and follow the flight in the app with full FMS capability, live traffic, en route weather, and ADS-B connectivity.
+                  Plan on the web, file directly to the FAA via Leidos / 1-800-WX-BRIEF, then pick it up with ATC and follow the flight in the app with full FMS capability, live traffic, en route weather, and ADS-B connectivity. A connected rental and traditional marketplace that you can't find anywhere else.
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">

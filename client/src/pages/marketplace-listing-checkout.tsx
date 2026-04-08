@@ -275,11 +275,11 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
   if (isFree) {
     return (
       <div className="space-y-4">
-        <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 p-4 rounded-lg">
-          <p className="text-sm text-green-800 dark:text-green-200 font-medium">
+        <div className="rsf-marketplace-subpanel rounded-lg border-[#3a7d6e]/34 p-4">
+          <p className="text-sm font-medium text-[#d7efe7]">
             🎉 100% Discount Applied!
           </p>
-          <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+          <p className="mt-1 text-sm text-[#b9ddd1]">
             Your listing is completely free with the applied promo code.
           </p>
         </div>
@@ -287,7 +287,7 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
         <Button
           onClick={handleFreeListing}
           size="lg"
-          className="w-full bg-accent text-accent-foreground hover:bg-accent"
+          className="rsf-metal-button-primary w-full"
           disabled={isProcessing}
           data-testid="button-claim-free-listing"
         >
@@ -304,14 +304,14 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
           <label htmlFor="card-name-field" className="block text-sm font-medium mb-2">
             Cardholder Name
           </label>
-          <div id="card-name-field" className="border rounded-md p-3 min-h-[44px]"></div>
+          <div id="card-name-field" className="min-h-[44px] rounded-md border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] p-3"></div>
         </div>
         
         <div>
           <label htmlFor="card-number-field" className="block text-sm font-medium mb-2">
             Card Number
           </label>
-          <div id="card-number-field" className="border rounded-md p-3 min-h-[44px]"></div>
+          <div id="card-number-field" className="min-h-[44px] rounded-md border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] p-3"></div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -319,13 +319,13 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
             <label htmlFor="card-expiry-field" className="block text-sm font-medium mb-2">
               Expiration Date
             </label>
-            <div id="card-expiry-field" className="border rounded-md p-3 min-h-[44px]"></div>
+            <div id="card-expiry-field" className="min-h-[44px] rounded-md border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] p-3"></div>
           </div>
           <div>
             <label htmlFor="card-cvv-field" className="block text-sm font-medium mb-2">
               CVV
             </label>
-            <div id="card-cvv-field" className="border rounded-md p-3 min-h-[44px]"></div>
+            <div id="card-cvv-field" className="min-h-[44px] rounded-md border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] p-3"></div>
           </div>
         </div>
       </div>
@@ -333,18 +333,18 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
       <Button
         type="submit"
         size="lg"
-        className="w-full bg-accent text-accent-foreground hover:bg-accent"
+        className="rsf-metal-button-primary w-full"
         disabled={!isReady || isProcessing}
         data-testid="button-confirm-payment"
       >
         {isProcessing ? "Processing..." : "Confirm Payment"}
       </Button>
       
-      <div className="mt-4 p-3 bg-muted rounded-md">
-        <p className="text-xs text-center text-muted-foreground">
+      <div className="rsf-marketplace-subpanel mt-4 rounded-md p-3">
+        <p className="text-center text-xs text-[#A9BBCD]">
           🔒 Secure payments processed by <span className="font-semibold">PayPal Business/Commerce</span>, a trusted global payments platform
         </p>
-        <p className="text-xs text-center text-muted-foreground mt-1">
+        <p className="mt-1 text-center text-xs text-[#A9BBCD]">
           Your payment information is encrypted and never stored on our servers
         </p>
       </div>
@@ -738,7 +738,7 @@ export default function MarketplaceListingCheckout() {
   if (!isUpgradeMode && listingData && feeQuoteLoading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <div className="flex items-center justify-center min-h-[300px] text-sm text-muted-foreground">
+        <div className="flex min-h-[300px] items-center justify-center text-sm text-[#A9BBCD]">
           Loading listing fee details...
         </div>
       </div>
@@ -748,8 +748,8 @@ export default function MarketplaceListingCheckout() {
   if (!isUpgradeMode && listingData && feeQuoteError) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <Card>
-          <CardContent className="p-6 text-sm text-muted-foreground">
+        <Card className="rsf-metal-panel text-[#E8EDF4]">
+          <CardContent className="p-6 text-sm text-[#A9BBCD]">
             {feeQuoteError}
           </CardContent>
         </Card>
@@ -776,20 +776,23 @@ export default function MarketplaceListingCheckout() {
   }
 
   const effectiveTotal = promoApplied ? finalAmount : totalAmount;
+  const marketplacePanelClass = "rsf-metal-panel text-[#E8EDF4]";
+  const marketplacePrimaryButtonClass = "rsf-metal-button-primary";
+  const marketplaceSecondaryButtonClass = "rsf-metal-button-secondary";
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-2xl">
+    <div className="rsf-marketplace-theme container mx-auto max-w-2xl px-4 py-8">
       <Button
         variant="ghost"
         onClick={() => navigate(isUpgradeMode ? "/my-listings" : "/create-marketplace-listing")}
-        className="mb-6"
+        className={`mb-6 ${marketplaceSecondaryButtonClass}`}
         data-testid="button-back"
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
         {isUpgradeMode ? "Back to My Listings" : "Back to Listing"}
       </Button>
 
-      <Card>
+      <Card className={marketplacePanelClass}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {isUpgradeMode ? "Complete Upgrade Payment" : "Complete Your Payment"}
@@ -800,7 +803,7 @@ export default function MarketplaceListingCheckout() {
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Order Summary */}
-          <div className="bg-muted p-4 rounded-lg space-y-2">
+          <div className="rsf-marketplace-subpanel rounded-lg p-4 space-y-2">
             <h3 className="font-semibold">{isUpgradeMode ? "Upgrade Summary" : "Order Summary"}</h3>
             
             {isUpgradeMode && upgradeContext ? (
@@ -815,7 +818,7 @@ export default function MarketplaceListingCheckout() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>New Tier:</span>
-                  <span className="capitalize font-medium text-primary">{upgradeContext.newTier}</span>
+                  <span className="capitalize font-medium text-[#9ebdff]">{upgradeContext.newTier}</span>
                 </div>
                 <div className="flex justify-between text-sm pt-2 border-t">
                   <span>Upgrade Fee:</span>
@@ -847,7 +850,7 @@ export default function MarketplaceListingCheckout() {
                   <span>${baseAmount.toFixed(2)}</span>
                 </div>
                 {feeQuote && feeQuote.membershipDiscountPct > 0 && (
-                  <div className="flex justify-between text-sm text-emerald-600">
+                  <div className="flex justify-between text-sm text-[#8fd0bf]">
                     <span>Membership Discount ({feeQuote.membershipDiscountPct}%):</span>
                     <span>-${feeQuote.membershipDiscountAmount.toFixed(2)}</span>
                   </div>
@@ -871,9 +874,9 @@ export default function MarketplaceListingCheckout() {
           </div>
 
           {/* Promo Code Section */}
-          <div className="bg-muted p-4 rounded-lg space-y-3">
+          <div className="rsf-marketplace-subpanel rounded-lg p-4 space-y-3">
             <h3 className="font-semibold">Promo Code</h3>
-            <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+            <div className="rounded-lg border border-[#45658b]/34 bg-[linear-gradient(180deg,rgba(16,27,41,0.98),rgba(10,15,22,0.98))] px-3 py-2 text-sm text-[#d7e6f6]">
               Soft launch offer: the first 5 eligible users in each marketplace category can get their first listing free for 3 months with promo code <span className="font-mono font-semibold">TAILWINDS</span>.
             </div>
             <div className="flex gap-2">
@@ -887,6 +890,7 @@ export default function MarketplaceListingCheckout() {
               {appliedPromo ? (
                 <Button
                   variant="outline"
+                  className={marketplaceSecondaryButtonClass}
                   onClick={handleRemovePromo}
                   data-testid="button-remove-promo"
                 >
@@ -894,6 +898,7 @@ export default function MarketplaceListingCheckout() {
                 </Button>
               ) : (
                 <Button
+                  className={marketplacePrimaryButtonClass}
                   onClick={() => handleApplyPromo()}
                   disabled={!promoCode || isApplyingPromo}
                   data-testid="button-apply-promo"
@@ -903,28 +908,28 @@ export default function MarketplaceListingCheckout() {
               )}
             </div>
             {appliedPromo && (
-              <div className="text-sm text-green-600 dark:text-green-400">
+              <div className="text-sm text-[#8fd0bf]">
                 Promo code "{appliedPromo.code}" applied! {appliedPromo.description}
               </div>
             )}
             {adminGrant && (
-              <div className="text-sm text-green-600 dark:text-green-400">
+              <div className="text-sm text-[#8fd0bf]">
                 Admin free grant active ({adminGrant.durationDays || 30} days). Checkout will publish without payment.
               </div>
             )}
             {promoError && (
-              <div className="text-sm text-destructive">{promoError}</div>
+              <div className="text-sm text-[#f09aa8]">{promoError}</div>
             )}
           </div>
 
           {/* Updated Total with Discount */}
           {promoApplied && (
-            <div className="bg-muted p-4 rounded-lg space-y-2">
+            <div className="rsf-marketplace-subpanel rounded-lg p-4 space-y-2">
               <div className="flex justify-between text-sm">
                 <span>Original Total:</span>
                 <span className="line-through">${totalAmount.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+              <div className="flex justify-between text-sm text-[#8fd0bf]">
                 <span>Discount:</span>
                 <span>-${discountAmount.toFixed(2)}</span>
               </div>
@@ -949,7 +954,7 @@ export default function MarketplaceListingCheckout() {
             upgradeContext={upgradeContext}
           />
 
-          <p className="text-xs text-muted-foreground text-center">
+          <p className="text-center text-xs text-[#A9BBCD]">
             Your payment information is securely processed by PayPal Business/Commerce, a trusted global payments platform. We never store your card details.
           </p>
         </CardContent>

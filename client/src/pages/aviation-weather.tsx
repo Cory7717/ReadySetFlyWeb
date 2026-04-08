@@ -296,13 +296,13 @@ export default function AviationWeatherHub() {
   const tafRaw = tafData?.rawTAF || tafData?.raw || tafQuery.data?.raw || "";
 
   return (
-    <div className="bg-[#0A0E14] min-h-screen container mx-auto max-w-6xl px-4 py-10">
-      <div className="space-y-3">
-        <div>
-          <div className="text-sm text-muted-foreground">Aviation Weather Hub</div>
-          <h1 className="text-2xl font-semibold">NOAA/AWC Aviation Weather</h1>
+    <div className="bg-[#0A0E14] min-h-screen rsf-tools-theme">
+      <div className="container mx-auto max-w-6xl px-4 py-10">
+        <div className="space-y-3">
+          <div className="text-sm text-[#A9BBCD]">Aviation Weather Hub</div>
+          <h1 className="text-2xl font-semibold text-[#F1F5FA]">NOAA/AWC Aviation Weather</h1>
         </div>
-        <Card>
+        <Card className="rsf-card-shell">
           <CardContent className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
             <div className="space-y-2">
               <Label htmlFor="icao">Airport ICAO</Label>
@@ -316,36 +316,36 @@ export default function AviationWeatherHub() {
                 <div className="text-xs text-[#D9A441]">Enter a valid 3-4 letter ICAO code.</div>
               )}
             </div>
-            <Button onClick={submitIcao} disabled={!canSearch}>Load Weather</Button>
+            <Button onClick={submitIcao} disabled={!canSearch} className="rsf-metal-button-primary">Load Weather</Button>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rsf-card-shell">
           <CardHeader>
-            <CardTitle>Favorite airports & alerts</CardTitle>
-            <CardDescription>Save airports and toggle IFR/MVFR push alerts.</CardDescription>
+            <CardTitle className="text-[#F1F5FA]">Favorite airports & alerts</CardTitle>
+            <CardDescription className="text-[#A9BBCD]">Save airports and toggle IFR/MVFR push alerts.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
                 <div className="text-sm font-semibold">{searchIcao}</div>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-xs text-[#A9BBCD]">
                   {airportQuery.data?.name
-                    ? `${airportQuery.data?.name}${airportQuery.data?.city ? ` · ${airportQuery.data?.city}` : ""}${airportQuery.data?.state ? `, ${airportQuery.data?.state}` : ""}`
+                    ? `${airportQuery.data?.name}${airportQuery.data?.city ? ` | ${airportQuery.data?.city}` : ""}${airportQuery.data?.state ? `, ${airportQuery.data?.state}` : ""}`
                     : "Save this airport for quick access and alerts."}
                 </div>
               </div>
-              <Button variant={currentFavorite ? "outline" : "default"} onClick={handleToggleFavorite}>
+              <Button variant={currentFavorite ? "outline" : "default"} className={currentFavorite ? "rsf-metal-button-secondary" : "rsf-metal-button-primary"} onClick={handleToggleFavorite}>
                 {currentFavorite ? "Remove favorite" : "Save airport"}
               </Button>
             </div>
 
             {!isAuthenticated && (
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-                <div className="text-xs text-muted-foreground">
+              <div className="rsf-metal-subpanel p-3">
+                <div className="text-xs text-[#A9BBCD]">
                   Save favorite airports and IFR/MVFR alerts with a free RSF account.
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button asChild size="sm">
+                  <Button asChild size="sm" className="rsf-metal-button-primary">
                     <Link
                       href="/register"
                       onClick={() => trackEvent("cta_click", { label: "weather_favorite_register", target: "/register" })}
@@ -353,7 +353,7 @@ export default function AviationWeatherHub() {
                       Create free account
                     </Link>
                   </Button>
-                  <Button asChild size="sm" variant="outline">
+                  <Button asChild size="sm" variant="outline" className="rsf-metal-button-secondary">
                     <Link
                       href="/login"
                       onClick={() => trackEvent("cta_click", { label: "weather_favorite_sign_in", target: "/login" })}
@@ -367,20 +367,20 @@ export default function AviationWeatherHub() {
 
             {currentFavorite && (
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="flex items-center justify-between rsf-metal-subpanel p-3">
                   <div>
                     <div className="text-sm font-semibold">IFR/LIFR alerts</div>
-                    <div className="text-xs text-muted-foreground">Notify when conditions drop to IFR.</div>
+                    <div className="text-xs text-[#A9BBCD]">Notify when conditions drop to IFR.</div>
                   </div>
                   <Switch
                     checked={Boolean(currentFavorite.alertIfr)}
                     onCheckedChange={(checked) => handleUpdateAlerts({ alertIfr: checked })}
                   />
                 </div>
-                <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="flex items-center justify-between rsf-metal-subpanel p-3">
                   <div>
                     <div className="text-sm font-semibold">MVFR alerts</div>
-                    <div className="text-xs text-muted-foreground">Notify when conditions drop to MVFR or worse.</div>
+                    <div className="text-xs text-[#A9BBCD]">Notify when conditions drop to MVFR or worse.</div>
                   </div>
                   <Switch
                     checked={Boolean(currentFavorite.alertMvfr)}
@@ -397,6 +397,7 @@ export default function AviationWeatherHub() {
                     key={favorite.id}
                     variant={favorite.icao === searchIcao ? "default" : "outline"}
                     size="sm"
+                    className={favorite.icao === searchIcao ? "rsf-metal-button-primary" : "rsf-metal-button-secondary"}
                     onClick={() => {
                       setSearchIcao(favorite.icao);
                       setIcaoInput(favorite.icao);
@@ -409,10 +410,10 @@ export default function AviationWeatherHub() {
             )}
           </CardContent>
         </Card>
-      </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
-        <TabsList className="flex flex-wrap">
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
+        <TabsList className="flex flex-wrap gap-2 border border-[#29415e]/30 bg-[#0d1420]/70 p-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="metar">METAR</TabsTrigger>
           <TabsTrigger value="taf">TAF</TabsTrigger>
@@ -426,41 +427,41 @@ export default function AviationWeatherHub() {
 
         <TabsContent value="overview" className="mt-6">
           <div className="grid gap-4 md:grid-cols-3">
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
-                <CardTitle>METAR</CardTitle>
-                <CardDescription>Latest surface observation.</CardDescription>
+                <CardTitle className="text-[#F1F5FA]">METAR</CardTitle>
+                <CardDescription className="text-[#A9BBCD]">Latest surface observation.</CardDescription>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
+              <CardContent className="text-sm text-[#A9BBCD] font-mono">
                 {metarQuery.data?.raw || metarQuery.data?.data?.rawOb || "No METAR loaded."}
               </CardContent>
             </Card>
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
-                <CardTitle>TAF</CardTitle>
-                <CardDescription>Terminal forecast.</CardDescription>
+                <CardTitle className="text-[#F1F5FA]">TAF</CardTitle>
+                <CardDescription className="text-[#A9BBCD]">Terminal forecast.</CardDescription>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
+              <CardContent className="text-sm text-[#A9BBCD] font-mono">
                 {tafQuery.data?.raw || tafQuery.data?.data?.rawTAF || "No TAF loaded."}
               </CardContent>
             </Card>
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
-                <CardTitle>Route Signals</CardTitle>
-                <CardDescription>Quick hazard + report counts.</CardDescription>
+                <CardTitle className="text-[#F1F5FA]">Route Signals</CardTitle>
+                <CardDescription className="text-[#A9BBCD]">Quick hazard + report counts.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2">
-                <Badge variant="secondary">NOTAMs {notamsCount} · US-only</Badge>
-                <Badge variant="secondary">PIREPs {pirepsCount} · US-only</Badge>
-                <Badge variant="secondary">Winds {windsCount}</Badge>
+                <Badge variant="secondary" className="border-[#5d6f85]/20 bg-[#141b24] text-[#A9BBCD]">NOTAMs {notamsCount} · US-only</Badge>
+                <Badge variant="secondary" className="border-[#5d6f85]/20 bg-[#141b24] text-[#A9BBCD]">PIREPs {pirepsCount} · US-only</Badge>
+                <Badge variant="secondary" className="border-[#5d6f85]/20 bg-[#141b24] text-[#A9BBCD]">Winds {windsCount}</Badge>
               </CardContent>
             </Card>
           </div>
-          <div className="mt-4 rounded-lg border bg-muted/20 p-4">
+          <div className="mt-4 rounded-lg border border-[#5d6f85]/20 bg-[#0d1420]/50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
                 <div className="text-sm font-semibold">AI weather briefing</div>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-xs text-[#A9BBCD]">
                   Translate METAR, TAF, PIREPs, and SIGMETs into a short pilot-ready summary.
                 </div>
               </div>
@@ -469,7 +470,7 @@ export default function AviationWeatherHub() {
                 size="sm"
                 variant="outline"
                 onClick={() => setShowAiWeatherSummary((current) => !current)}
-                className="w-full sm:w-auto"
+                className="rsf-metal-button-secondary w-full sm:w-auto"
               >
                 {showAiWeatherSummary ? "Hide AI summary" : "Open AI summary"}
               </Button>
@@ -489,10 +490,10 @@ export default function AviationWeatherHub() {
         </TabsContent>
 
         <TabsContent value="metar" className="mt-6">
-          <Card>
+          <Card className="rsf-card-shell">
             <CardHeader>
-              <CardTitle>METAR</CardTitle>
-              <CardDescription>Decoded + raw observation.</CardDescription>
+              <CardTitle className="text-[#F1F5FA]">METAR</CardTitle>
+              <CardDescription className="text-[#A9BBCD]">Decoded + raw observation.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {metarRaw ? (
@@ -500,7 +501,7 @@ export default function AviationWeatherHub() {
                   {metarRaw}
                 </div>
               ) : (
-                <div className="text-sm text-muted-foreground">No METAR loaded.</div>
+                <div className="text-sm text-[#A9BBCD]">No METAR loaded.</div>
               )}
               <div className="grid gap-3 text-sm md:grid-cols-2">
                 <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
@@ -541,10 +542,10 @@ export default function AviationWeatherHub() {
         </TabsContent>
 
         <TabsContent value="taf" className="mt-6">
-          <Card>
+          <Card className="rsf-card-shell">
             <CardHeader>
-              <CardTitle>TAF</CardTitle>
-              <CardDescription>Forecast details.</CardDescription>
+              <CardTitle className="text-[#F1F5FA]">TAF</CardTitle>
+              <CardDescription className="text-[#A9BBCD]">Forecast details.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {tafRaw ? (
@@ -552,7 +553,7 @@ export default function AviationWeatherHub() {
                   {tafRaw}
                 </div>
               ) : (
-                <div className="text-sm text-muted-foreground">No TAF loaded.</div>
+                <div className="text-sm text-[#A9BBCD]">No TAF loaded.</div>
               )}
               <div className="grid gap-3 text-sm md:grid-cols-2">
                 <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
@@ -581,17 +582,17 @@ export default function AviationWeatherHub() {
         </TabsContent>
 
         <TabsContent value="notams" className="mt-6">
-          <Card>
+          <Card className="rsf-card-shell">
             <CardHeader>
-              <CardTitle>NOTAMs</CardTitle>
-              <CardDescription>Active notices for {searchIcao}. US-only (FAA).</CardDescription>
+              <CardTitle className="text-[#F1F5FA]">NOTAMs</CardTitle>
+              <CardDescription className="text-[#A9BBCD]">Active notices for {searchIcao}. US-only (FAA).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {notamsQuery.isError && (
-                <div className="text-sm text-muted-foreground">NOTAM feed unavailable.</div>
+                <div className="text-sm text-[#A9BBCD]">NOTAM feed unavailable.</div>
               )}
               {!notamsQuery.isError && notamsCount === 0 && (
-                <div className="text-sm text-muted-foreground">No active NOTAMs.</div>
+                <div className="text-sm text-[#A9BBCD]">No active NOTAMs.</div>
               )}
               {notamsQuery.data?.notams?.map((notam: any) => (
                 <div key={notam.id} className="bg-[#0f1a28] border border-[#29415e] rounded-lg p-3">
@@ -604,13 +605,13 @@ export default function AviationWeatherHub() {
         </TabsContent>
 
         <TabsContent value="pireps" className="mt-6">
-          <Card>
+          <Card className="rsf-card-shell">
             <CardHeader>
-              <CardTitle>PIREPs</CardTitle>
-              <CardDescription>Recent reports within 200 NM. US-only (FAA).</CardDescription>
+              <CardTitle className="text-[#F1F5FA]">PIREPs</CardTitle>
+              <CardDescription className="text-[#A9BBCD]">Recent reports within 200 NM. US-only (FAA).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              {pirepsCount === 0 && <div className="text-sm text-muted-foreground">No recent PIREPs in range.</div>}
+              {pirepsCount === 0 && <div className="text-sm text-[#A9BBCD]">No recent PIREPs in range.</div>}
               {pirepsQuery.data?.reports?.slice(0, 16).map((report: any, index: number) => (
                 <div key={`${report.rawOb || report.id || index}`} className="bg-[#0f1a28] border border-[#29415e] rounded-lg p-3">
                   <div className="font-mono text-xs text-[#E8EDF4] font-semibold">{report.rawOb || "PIREP"}</div>
@@ -622,18 +623,18 @@ export default function AviationWeatherHub() {
         </TabsContent>
 
         <TabsContent value="hazards" className="mt-6">
-          <Card>
+          <Card className="rsf-card-shell">
             <CardHeader>
-              <CardTitle>Hazards</CardTitle>
-              <CardDescription>Domestic SIGMETs, G-AIRMETs, and convective forecasts (US-only).</CardDescription>
+              <CardTitle className="text-[#F1F5FA]">Hazards</CardTitle>
+              <CardDescription className="text-[#A9BBCD]">Domestic SIGMETs, G-AIRMETs, and convective forecasts (US-only).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {hazardsSummary.warnings.length > 0 && (
-                <Alert>
-                  <AlertDescription>{hazardsSummary.warnings.join(" ")}</AlertDescription>
+                <Alert className="border-[#7f6327]/38 bg-[#1a140a]/80">
+                  <AlertDescription className="text-[#F2DCA4]">{hazardsSummary.warnings.join(" ")}</AlertDescription>
                 </Alert>
               )}
-              <div className="text-sm text-muted-foreground">
+              <div className="text-sm text-[#A9BBCD]">
                 {hazardsSummary.items.length > 0
                   ? `${hazardsSummary.items.length} hazard items available.`
                   : "No hazards returned."}
@@ -641,7 +642,7 @@ export default function AviationWeatherHub() {
               </div>
               <div className="space-y-2">
                 {hazardsSummary.items.length === 0 && hazardsSummary.tcfCount === 0 ? (
-                  <div className="text-sm text-muted-foreground">No hazard details available.</div>
+                  <div className="text-sm text-[#A9BBCD]">No hazard details available.</div>
                 ) : (
                   hazardsSummary.items.slice(0, 16).map((item, index) => (
                     <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border border-[#6d5520] bg-[#271d0b] p-3 text-sm">
@@ -664,14 +665,14 @@ export default function AviationWeatherHub() {
         </TabsContent>
 
         <TabsContent value="winds" className="mt-6">
-          <Card>
+          <Card className="rsf-card-shell">
             <CardHeader>
-              <CardTitle>Winds & Temps Aloft</CardTitle>
-              <CardDescription>NOAA AWC wind/temp table overlay.</CardDescription>
+              <CardTitle className="text-[#F1F5FA]">Winds & Temps Aloft</CardTitle>
+              <CardDescription className="text-[#A9BBCD]">NOAA AWC wind/temp table overlay.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground">Altitude</Label>
+                <Label className="text-xs text-[#A9BBCD]">Altitude</Label>
                 <Select value={windsAltitude} onValueChange={setWindsAltitude}>
                   <SelectTrigger className="h-8 w-[140px]">
                     <SelectValue />
@@ -685,7 +686,7 @@ export default function AviationWeatherHub() {
                   </SelectContent>
                 </Select>
               </div>
-              {windsCount === 0 && <div className="text-sm text-muted-foreground">No winds aloft data in range.</div>}
+              {windsCount === 0 && <div className="text-sm text-[#A9BBCD]">No winds aloft data in range.</div>}
               {windsQuery.data?.stations?.slice(0, 16).map((station: any) => (
                 <div key={`${station.stationId}-${station.lat}`} className="rounded-lg border border-[#203249] bg-[#0d1622] p-3 text-sm">
                   <div className="font-semibold text-[#E8EDF4]">{station.icao || station.stationId}</div>
@@ -700,20 +701,20 @@ export default function AviationWeatherHub() {
         </TabsContent>
 
         <TabsContent value="icing" className="mt-6">
-          <Alert>
-            <AlertDescription>
+          <Alert className="border-[#5d6f85]/30 bg-[#0d1420]/70">
+            <AlertDescription className="text-[#A9BBCD]">
               Icing guidance is currently stubbed until NOAA/AWC provides a direct API or tile feed.
             </AlertDescription>
           </Alert>
-          <Card className="mt-4">
+          <Card className="rsf-card-shell mt-4">
             <CardContent className="space-y-3">
               {icingSummary.warnings.length > 0 && (
-                <Alert>
-                  <AlertDescription>{icingSummary.warnings.join(" ")}</AlertDescription>
+                <Alert className="border-[#7f6327]/38 bg-[#1a140a]/80">
+                  <AlertDescription className="text-[#F2DCA4]">{icingSummary.warnings.join(" ")}</AlertDescription>
                 </Alert>
               )}
               {icingSummary.items.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No icing guidance returned yet.</div>
+                <div className="text-sm text-[#A9BBCD]">No icing guidance returned yet.</div>
               ) : (
                 icingSummary.items.slice(0, 16).map((item, index) => (
                   <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border border-[#35516e] bg-[#102236] p-3 text-sm">
@@ -735,20 +736,20 @@ export default function AviationWeatherHub() {
         </TabsContent>
 
         <TabsContent value="turbulence" className="mt-6">
-          <Alert>
-            <AlertDescription>
+          <Alert className="border-[#5d6f85]/30 bg-[#0d1420]/70">
+            <AlertDescription className="text-[#A9BBCD]">
               Turbulence guidance is currently stubbed until NOAA/AWC provides a direct API or tile feed.
             </AlertDescription>
           </Alert>
-          <Card className="mt-4">
+          <Card className="rsf-card-shell mt-4">
             <CardContent className="space-y-3">
               {turbulenceSummary.warnings.length > 0 && (
-                <Alert>
-                  <AlertDescription>{turbulenceSummary.warnings.join(" ")}</AlertDescription>
+                <Alert className="border-[#7f6327]/38 bg-[#1a140a]/80">
+                  <AlertDescription className="text-[#F2DCA4]">{turbulenceSummary.warnings.join(" ")}</AlertDescription>
                 </Alert>
               )}
               {turbulenceSummary.items.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No turbulence guidance returned yet.</div>
+                <div className="text-sm text-[#A9BBCD]">No turbulence guidance returned yet.</div>
               ) : (
                 turbulenceSummary.items.slice(0, 16).map((item, index) => (
                   <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border border-[#6d2c27] bg-[#2b1111] p-3 text-sm">
@@ -768,11 +769,12 @@ export default function AviationWeatherHub() {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
+        </Tabs>
 
       {gfaQuery.data?.warnings?.length ? (
-        <div className="mt-6 text-xs text-muted-foreground">{gfaQuery.data.warnings.join(" ")}</div>
+        <div className="mt-6 text-xs text-[#A9BBCD]">{gfaQuery.data.warnings.join(" ")}</div>
       ) : null}
+      </div>
     </div>
   );
 }

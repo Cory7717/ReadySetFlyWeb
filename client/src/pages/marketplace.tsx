@@ -217,6 +217,11 @@ export default function Marketplace() {
   const hasActiveFilters = Boolean(
     cityFilter || minPrice || maxPrice || engineTypeFilter !== "all" || keywordFilter || radiusFilter !== "100" || cfiRatingFilter !== "all"
   );
+  const marketplacePanelClass = "rsf-metal-panel text-[#E8EDF4]";
+  const marketplaceSubpanelClass = "rsf-marketplace-subpanel rounded-[1rem] text-[#DCE6F2]";
+  const marketplacePrimaryButtonClass = "rsf-metal-button-primary";
+  const marketplaceSecondaryButtonClass = "rsf-metal-button-secondary";
+  const marketplaceSelectContentClass = "border-[#5d6f85]/30 bg-[#11161d] text-[#E8EDF4] shadow-[0_22px_44px_-30px_rgba(0,0,0,0.9)]";
 
   return (
     <PageShell
@@ -227,6 +232,7 @@ export default function Marketplace() {
         <>
             <Button
               variant="default"
+              className={marketplacePrimaryButtonClass}
               onClick={() => {
                 trackEvent("cta_click", { label: "marketplace_to_rentals", target: "/rentals" });
                 navigate("/rentals");
@@ -236,6 +242,7 @@ export default function Marketplace() {
             </Button>
             <Button
               variant="outline"
+              className={marketplaceSecondaryButtonClass}
               onClick={() => {
                 trackEvent("cta_click", { label: "marketplace_post_listing", target: "/create-marketplace-listing" });
                 if (!isAuthenticated) {
@@ -250,17 +257,18 @@ export default function Marketplace() {
             </Button>
         </>
       }
-      contentClassName="px-0 py-0"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
+      contentClassName="rsf-marketplace-theme max-w-[1440px] space-y-6 px-0 py-0"
     >
       {!isAuthenticated && (
         <div className="container mx-auto px-4 pt-6">
-          <Alert>
+          <Alert className={marketplacePanelClass}>
             <AlertDescription className="flex flex-wrap items-center gap-3">
               <span>Create a free account to save listings and contact sellers faster.</span>
-              <Button asChild size="sm">
+              <Button asChild size="sm" className={marketplacePrimaryButtonClass}>
                 <Link href="/register">Create free account</Link>
               </Button>
-              <Button asChild size="sm" variant="outline">
+              <Button asChild size="sm" variant="outline" className={marketplaceSecondaryButtonClass}>
                 <Link href="/login">Sign in</Link>
               </Button>
             </AlertDescription>
@@ -269,21 +277,21 @@ export default function Marketplace() {
       )}
 
       <div className="container mx-auto px-4 pt-6">
-        <Alert className="border-[#29415e] bg-[#0d1622]">
+        <Alert className="border-[#45658b]/34 bg-[linear-gradient(180deg,rgba(16,27,41,0.98),rgba(10,15,22,0.98))] text-[#E8EDF4]">
           <Gift className="h-4 w-4 text-[#9CB4CC]" />
           <AlertTitle>Soft launch listing offer</AlertTitle>
           <AlertDescription className="space-y-2">
             <div>
               RSF is in soft launch and we are actively building the aviation community. The first 5 eligible users in each marketplace category can get their first listing free for 3 months with promo code <span className="font-mono font-semibold">{SOFT_LAUNCH_PROMO_CODE}</span>.
             </div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-xs text-[#A9BBCD]">
               Availability is limited by category and enforced during validation and checkout.
             </div>
           </AlertDescription>
         </Alert>
       </div>
 
-      <section className="sticky top-16 z-40 border-b border-white/10 bg-[hsl(var(--card)/0.9)] backdrop-blur-md">
+      <section className="sticky top-16 z-40 border-b border-white/10 bg-[linear-gradient(180deg,rgba(16,19,25,0.94),rgba(9,12,16,0.96))] backdrop-blur-md">
         <div className="container mx-auto px-4">
           <div className="overflow-x-auto">
             <div className="flex min-w-max gap-2 py-4">
@@ -292,7 +300,7 @@ export default function Marketplace() {
                   key={category.id}
                   variant={selectedCategory === category.id ? "default" : "outline"}
                   onClick={() => setSelectedCategory(category.id)}
-                  className="rounded-full shrink-0"
+                  className={`${selectedCategory === category.id ? marketplacePrimaryButtonClass : marketplaceSecondaryButtonClass} rounded-full shrink-0`}
                   data-testid={`button-category-${category.id}`}
                 >
                   {category.label}
@@ -309,7 +317,7 @@ export default function Marketplace() {
         {mainPageAlerts.map((alert) => (
           <Alert 
             key={alert.id} 
-            className="mb-6 border-[#203249] bg-[#0d2220]"
+            className="mb-6 border-[#2f7a6a]/28 bg-[linear-gradient(180deg,rgba(15,31,28,0.98),rgba(10,18,17,0.98))]"
             data-testid={`alert-promo-${alert.id}`}
           >
             <Gift className="h-5 w-5 text-[#4DA8A8]" />
@@ -320,7 +328,7 @@ export default function Marketplace() {
               <AlertDescription className="text-[#4DA8A8]">
                 {alert.message}
                 {alert.promoCode && (
-                  <span className="inline-block ml-2 px-2 py-1 bg-green-600 text-white text-xs font-mono rounded">
+                  <span className="ml-2 inline-block rounded border border-[#4d8d7d] bg-[#153028] px-2 py-1 text-xs font-mono text-[#d7efe7]">
                     {alert.promoCode}
                   </span>
                 )}
@@ -330,7 +338,7 @@ export default function Marketplace() {
               variant="ghost"
               size="icon"
               onClick={() => handleDismissBanner(alert.id)}
-              className="text-[#4DA8A8] hover:text-[#E8EDF4]"
+              className="text-[#4DA8A8] hover:bg-transparent hover:text-[#E8EDF4]"
               data-testid={`button-dismiss-alert-${alert.id}`}
             >
               <X className="h-4 w-4" />
@@ -340,30 +348,32 @@ export default function Marketplace() {
 
         <div className="mb-8 grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-            <div className="rounded-[1.2rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] p-5 shadow-[var(--shadow-rsf-panel)]">
+            <div className={`${marketplacePanelClass} rounded-[1.2rem] p-5`}>
               <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary/80">Browse category</div>
               <h2 className="font-display text-2xl font-bold">{currentCategoryDetail.title}</h2>
-              <p className="mt-2 text-sm text-muted-foreground sm:text-base">{currentCategoryDetail.summary}</p>
+              <p className="mt-2 text-sm text-[#A9BBCD] sm:text-base">{currentCategoryDetail.summary}</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button
                   variant="outline"
+                  className={marketplaceSecondaryButtonClass}
                   onClick={() => setShowFilters((current) => !current)}
                   data-testid="button-toggle-filters-summary"
                 >
                   <SlidersHorizontal className="mr-2 h-4 w-4" />
                   {showFilters ? "Hide filters" : "Refine results"}
                 </Button>
-                <Badge variant="outline">{categoryListings.length} active listings</Badge>
-                {hasActiveFilters ? <Badge variant="secondary">Filters applied</Badge> : null}
+                <Badge variant="outline" className="border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4]">{categoryListings.length} active listings</Badge>
+                {hasActiveFilters ? <Badge variant="secondary" className="border-0 bg-[#21324a] text-[#e3ecfb]">Filters applied</Badge> : null}
               </div>
             </div>
 
-            <div className="rounded-[1.2rem] border border-[#203249] bg-[#0f1a28] p-5 shadow-[var(--shadow-rsf-soft)]">
+            <div className={`${marketplacePanelClass} rounded-[1.2rem] p-5`}>
               <div className="text-sm font-semibold">How to use this page</div>
-              <p className="mt-2 text-sm text-muted-foreground">{currentCategoryDetail.helper}</p>
+              <p className="mt-2 text-sm text-[#A9BBCD]">{currentCategoryDetail.helper}</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                 <Button
                   variant="default"
+                  className={marketplacePrimaryButtonClass}
                   onClick={() => {
                     trackEvent("marketplace_create_listing_click", { category: selectedCategory });
                     navigate("/create-marketplace-listing");
@@ -374,6 +384,7 @@ export default function Marketplace() {
                 </Button>
                 <Button
                   variant="outline"
+                  className={marketplaceSecondaryButtonClass}
                   onClick={() => {
                     trackEvent("cta_click", { label: "marketplace_to_rentals", target: "/rentals" });
                     navigate("/rentals");
@@ -397,15 +408,15 @@ export default function Marketplace() {
             <h2 className="font-display text-xl sm:text-2xl font-bold mb-1">
               {currentCategory.label}
             </h2>
-            <p className="text-sm sm:text-base text-muted-foreground">
+            <p className="text-sm sm:text-base text-[#A9BBCD]">
               <span data-testid="text-marketplace-count">{categoryListings.length}</span> active listings
             </p>
           </div>
           <div className="flex gap-2">
             <Button 
               variant="outline" 
+              className={`${marketplaceSecondaryButtonClass} flex-1 sm:flex-initial`}
               onClick={() => setShowFilters(!showFilters)}
-              className="flex-1 sm:flex-initial"
               data-testid="button-toggle-filters"
             >
               <SlidersHorizontal className="w-4 h-4 mr-2" />
@@ -417,7 +428,7 @@ export default function Marketplace() {
                 trackEvent("marketplace_create_listing_click", { category: selectedCategory });
                 navigate("/create-marketplace-listing");
               }}
-              className="flex-1 sm:flex-initial"
+              className={`flex-1 sm:flex-initial ${marketplacePrimaryButtonClass}`}
               data-testid="button-create-listing"
             >
               Create Listing
@@ -427,7 +438,7 @@ export default function Marketplace() {
 
         {/* Filter Panel */}
         {showFilters && (
-          <Card className="mb-6 border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(255,255,255,0.74))]">
+          <Card className={`mb-6 ${marketplacePanelClass}`}>
             <CardContent className="pt-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Aviation Jobs Filters */}
@@ -472,7 +483,7 @@ export default function Marketplace() {
                         <SelectTrigger id="radius-filter" data-testid="select-radius-filter">
                           <SelectValue placeholder="Select radius" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className={marketplaceSelectContentClass}>
                           <SelectItem value="10">Within 10 miles</SelectItem>
                           <SelectItem value="25">Within 25 miles</SelectItem>
                           <SelectItem value="50">Within 50 miles</SelectItem>
@@ -538,7 +549,7 @@ export default function Marketplace() {
                         <SelectTrigger id="engine-type" data-testid="select-engine-type">
                           <SelectValue placeholder="All types" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className={marketplaceSelectContentClass}>
                           <SelectItem value="all">All types</SelectItem>
                           <SelectItem value="Single-Engine">Single-Engine</SelectItem>
                           <SelectItem value="Multi-Engine">Multi-Engine</SelectItem>
@@ -577,7 +588,7 @@ export default function Marketplace() {
                         <SelectTrigger id="cfi-rating" data-testid="select-cfi-rating">
                           <SelectValue placeholder="All ratings" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className={marketplaceSelectContentClass}>
                           <SelectItem value="all">All ratings</SelectItem>
                           <SelectItem value="CFI">CFI (Basic)</SelectItem>
                           <SelectItem value="CFII">CFII (Instrument)</SelectItem>
@@ -648,6 +659,7 @@ export default function Marketplace() {
                 <div className="mt-4 flex justify-end">
                   <Button 
                     variant="ghost" 
+                    className="text-[#A9BBCD] hover:bg-transparent hover:text-[#F5F8FC]"
                     onClick={() => {
                       setCityFilter("");
                       setMinPrice("");
@@ -671,18 +683,19 @@ export default function Marketplace() {
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-96 rounded-xl bg-muted animate-pulse" />
+              <div key={i} className="h-96 rounded-xl border border-[#5d6f85]/16 bg-[linear-gradient(180deg,rgba(18,22,28,0.96),rgba(9,12,16,0.98))] animate-pulse" />
             ))}
           </div>
         ) : categoryListings.length === 0 ? (
-          <div className="rounded-[1.2rem] border border-dashed border-[#203249] bg-[#0f1a28] px-6 py-12 text-center shadow-[var(--shadow-rsf-soft)]">
+          <div className={`${marketplacePanelClass} rounded-[1.2rem] border-dashed px-6 py-12 text-center`}>
             <h3 className="text-xl font-semibold">{currentCategoryDetail.title} are still building out</h3>
-            <p className="mt-2 text-muted-foreground">
+            <p className="mt-2 text-[#A9BBCD]">
               No listings match this category yet. Try another category, widen your filters, or create the first listing here.
             </p>
             <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row">
               <Button
                 variant="default"
+                className={marketplacePrimaryButtonClass}
                 onClick={() => {
                   trackEvent("marketplace_create_listing_click", { category: selectedCategory, source: "empty_state" });
                   navigate("/create-marketplace-listing");
@@ -690,7 +703,7 @@ export default function Marketplace() {
               >
                 Create Listing
               </Button>
-              <Button variant="outline" onClick={() => setSelectedCategory("aircraft-sale")}>
+              <Button variant="outline" className={marketplaceSecondaryButtonClass} onClick={() => setSelectedCategory("aircraft-sale")}>
                 Browse another category
               </Button>
             </div>
@@ -748,10 +761,10 @@ export default function Marketplace() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg" data-testid="dialog-marketplace-soft-launch">
+        <DialogContent className="rsf-marketplace-theme rsf-metal-panel sm:max-w-lg text-[#E8EDF4]" data-testid="dialog-marketplace-soft-launch">
           <DialogHeader>
             <div className="mb-2 flex items-center gap-3">
-              <div className="rounded-full bg-[#0d1622] p-3">
+              <div className="rounded-full border border-[#5d6f85]/24 bg-[#0d1622] p-3">
                 <Gift className="h-6 w-6 text-[#9CB4CC]" />
               </div>
               <div className="flex-1">
@@ -763,10 +776,10 @@ export default function Marketplace() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-lg border-2 border-dashed border-[#29415e] bg-[#0d1622] p-4 text-center">
-            <div className="text-sm text-muted-foreground">Promo code</div>
+          <div className={`${marketplaceSubpanelClass} rounded-lg border-dashed p-4 text-center`}>
+            <div className="text-sm text-[#A9BBCD]">Promo code</div>
             <div className="font-mono text-2xl font-bold text-[#9CB4CC]">{SOFT_LAUNCH_PROMO_CODE}</div>
-            <div className="mt-2 text-xs text-muted-foreground">
+            <div className="mt-2 text-xs text-[#A9BBCD]">
               Category-limited. Enforced at validation and checkout.
             </div>
           </div>
@@ -774,6 +787,7 @@ export default function Marketplace() {
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button
               variant="outline"
+              className={marketplaceSecondaryButtonClass}
               onClick={() => {
                 setShowSoftLaunchModal(false);
                 trackEvent("marketplace_soft_launch_modal_later");
@@ -782,6 +796,7 @@ export default function Marketplace() {
               Maybe later
             </Button>
             <Button
+              className={marketplacePrimaryButtonClass}
               onClick={() => {
                 setShowSoftLaunchModal(false);
                 trackEvent("marketplace_soft_launch_modal_create_listing");
@@ -797,10 +812,10 @@ export default function Marketplace() {
       {/* Category-Specific Promo Modal */}
       {categoryAlert && (
         <Dialog open={showPromoModal} onOpenChange={setShowPromoModal}>
-          <DialogContent className="sm:max-w-md" data-testid="dialog-promo-modal">
+          <DialogContent className="rsf-marketplace-theme rsf-metal-panel sm:max-w-md text-[#E8EDF4]" data-testid="dialog-promo-modal">
             <DialogHeader>
               <div className="flex items-center gap-3 mb-2">
-                <div className="p-3 rounded-full bg-[#0d2220]">
+                <div className="rounded-full border border-[#2f7a6a]/28 bg-[#0d2220] p-3">
                   <Gift className="h-6 w-6 text-[#4DA8A8]" />
                 </div>
                 <div className="flex-1">
@@ -813,8 +828,8 @@ export default function Marketplace() {
             </DialogHeader>
             
             {categoryAlert.promoCode && (
-              <div className="mt-4 p-4 bg-muted rounded-lg border-2 border-dashed border-green-500">
-                <p className="text-sm text-muted-foreground mb-2 text-center">Your Promo Code</p>
+              <div className={`${marketplaceSubpanelClass} mt-4 rounded-lg border-dashed p-4`}>
+                <p className="mb-2 text-center text-sm text-[#A9BBCD]">Your Promo Code</p>
                 <p className="text-2xl font-mono font-bold text-center text-[#4DA8A8]" data-testid="text-promo-code">
                   {categoryAlert.promoCode}
                 </p>
@@ -822,7 +837,7 @@ export default function Marketplace() {
             )}
             
             <div className="flex justify-end mt-4">
-              <Button onClick={() => setShowPromoModal(false)} data-testid="button-close-promo-modal">
+              <Button className={marketplacePrimaryButtonClass} onClick={() => setShowPromoModal(false)} data-testid="button-close-promo-modal">
                 Got it, thanks!
               </Button>
             </div>
@@ -831,7 +846,7 @@ export default function Marketplace() {
       )}
 
       <Dialog open={showSchoolEmptyModal} onOpenChange={setShowSchoolEmptyModal}>
-        <DialogContent className="sm:max-w-md" data-testid="dialog-flight-school-empty">
+        <DialogContent className="rsf-marketplace-theme rsf-metal-panel sm:max-w-md text-[#E8EDF4]" data-testid="dialog-flight-school-empty">
           <DialogHeader>
             <DialogTitle className="text-xl">Flight schools are coming soon</DialogTitle>
             <DialogDescription className="text-base">
@@ -841,6 +856,7 @@ export default function Marketplace() {
           <div className="flex flex-col sm:flex-row gap-2 pt-2">
             <Button
               variant="default"
+              className={marketplacePrimaryButtonClass}
               onClick={() => setSelectedCategory("cfi")}
               data-testid="button-flight-school-to-cfi"
             >
@@ -848,6 +864,7 @@ export default function Marketplace() {
             </Button>
             <Button
               variant="outline"
+              className={marketplaceSecondaryButtonClass}
               onClick={() => setShowSchoolEmptyModal(false)}
               data-testid="button-flight-school-close"
             >

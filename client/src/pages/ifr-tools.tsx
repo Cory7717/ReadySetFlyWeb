@@ -109,10 +109,10 @@ export default function IfrTools() {
       }
       actions={
         <>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" className="rsf-metal-button-secondary">
             <Link href="/flight-planner">Open planner</Link>
           </Button>
-          <Button asChild variant="outline">
+          <Button asChild className="rsf-metal-button-primary">
             <Link href="/approach-plates">Open plates</Link>
           </Button>
         </>
@@ -121,20 +121,20 @@ export default function IfrTools() {
     >
       <section className="space-y-6">
         <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[1.15rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] p-5 shadow-[var(--shadow-rsf-panel)]">
-            <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary/80">Available now</div>
-            <h2 className="text-2xl font-semibold">Use the IFR tools that are ready today</h2>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          <div className="rsf-card-shell p-5">
+            <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#D9A441]">Available now</div>
+            <h2 className="text-2xl font-semibold text-[#F1F5FA]">Use the IFR tools that are ready today</h2>
+            <p className="mt-2 max-w-2xl text-sm text-[#A9BBCD]">
               Plates, planning, weather, NOTAM review, and radio practice are live now. The deeper IFR trainer surfaces stay visible below, but they remain clearly marked until they are ready.
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <Button asChild className="w-full">
+              <Button asChild className="rsf-metal-button-primary w-full">
                 <Link href="/approach-plates">Open plates</Link>
               </Button>
-              <Button asChild variant="outline" className="w-full">
+              <Button asChild variant="outline" className="rsf-metal-button-secondary w-full">
                 <Link href="/flight-planner">Open planner</Link>
               </Button>
-              <Button asChild variant="outline" className="w-full">
+              <Button asChild variant="outline" className="rsf-metal-button-secondary w-full">
                 <Link href="/radio-comms-trainer">Open trainer</Link>
               </Button>
             </div>
@@ -146,35 +146,35 @@ export default function IfrTools() {
               { icon: Plane, title: "Plan ahead", text: "Build routes, timing, and fuel estimates with the same planner used elsewhere in RSF." },
               { icon: Radio, title: "Practice communication", text: "Use radio scenarios and VOR practice to sharpen IFR cockpit habits on the ground." },
             ].map((item) => (
-              <div key={item.title} className="rounded-[1rem] border border-white/10 bg-white/75 p-4 shadow-[var(--shadow-rsf-soft)]">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <item.icon className="h-4 w-4 text-primary" />
+              <div key={item.title} className="rsf-metal-subpanel p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[#F1F5FA]">
+                  <item.icon className="h-4 w-4 text-[#D9A441]" />
                   {item.title}
                 </div>
-                <p className="mt-2 text-sm text-muted-foreground">{item.text}</p>
+                <p className="mt-2 text-sm text-[#A9BBCD]">{item.text}</p>
               </div>
             ))}
           </div>
         </div>
 
-        <Alert>
-          <AlertTitle>Training aid only</AlertTitle>
-          <AlertDescription>
+        <Alert className="border-[#7f6327]/38 bg-[#1a140a]/80 text-[#F2DCA4]">
+          <AlertTitle className="text-[#F2DCA4]">Training aid only</AlertTitle>
+          <AlertDescription className="text-[#c9a96a]">
             RSF IFR tools are for training support and are not FAA-approved devices.
           </AlertDescription>
         </Alert>
 
         {canPreviewInternal ? (
-          <Alert className="border-primary/25 bg-primary/5">
-            <AlertTitle>Internal preview enabled</AlertTitle>
-            <AlertDescription>
+          <Alert className="border-[#2e4c74]/34 bg-[#0b1423]/80 text-[#C7D7EA]">
+            <AlertTitle className="text-[#C7D7EA]">Internal preview enabled</AlertTitle>
+            <AlertDescription className="text-[#A9BBCD]">
               Hidden IFR surfaces are open for your Super Admin account so you can review trainer quality before wider release.
             </AlertDescription>
           </Alert>
         ) : (
-          <Alert className="border-dashed">
-            <AlertTitle>Roadmap preview</AlertTitle>
-            <AlertDescription>
+          <Alert className="border-[#5d6f85]/30 bg-[#0d1420]/70 text-[#A9BBCD]">
+            <AlertTitle className="text-[#E8EDF4]">Roadmap preview</AlertTitle>
+            <AlertDescription className="text-[#A9BBCD]">
               GPS trainers and Live Traffic stay visible here for roadmap clarity. Synthetic Vision is now available as a browser demo of the new FlightDeck experience.
             </AlertDescription>
           </Alert>
@@ -183,8 +183,8 @@ export default function IfrTools() {
         <div className="space-y-6">
           <div className="space-y-3">
             <div className="space-y-1">
-              <h2 className="text-2xl font-semibold">Available now</h2>
-              <p className="text-sm text-muted-foreground">
+              <h2 className="text-2xl font-semibold text-[#F1F5FA]">Available now</h2>
+              <p className="text-sm text-[#A9BBCD]">
                 These tools are live and ready for planning, procedure review, and IFR practice today.
               </p>
             </div>
@@ -192,16 +192,16 @@ export default function IfrTools() {
               {previewAvailableNow.map((tool) => {
                 const isPreviewCard = Boolean(tool.comingSoon && canPreviewInternal);
                 return (
-                <Card key={tool.href} className="hover-elevate">
+                <Card key={tool.href} className="rsf-card-shell">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-[#F1F5FA]">
                       {tool.title}
-                      {isPreviewCard ? <Badge variant="outline">Internal Preview</Badge> : null}
+                      {isPreviewCard ? <Badge variant="outline" className="border-[#5d6f85]/40 text-[#A9BBCD]">Internal Preview</Badge> : null}
                     </CardTitle>
-                    <CardDescription>{tool.description}</CardDescription>
+                    <CardDescription className="text-[#A9BBCD]">{tool.description}</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button asChild variant="outline" className="w-full">
+                    <Button asChild variant="outline" className="rsf-metal-button-secondary w-full">
                       <Link href={tool.href}>{isPreviewCard ? "Open Internal Preview" : tool.cta}</Link>
                     </Button>
                   </CardContent>
@@ -214,11 +214,11 @@ export default function IfrTools() {
           {previewComingSoon.length > 0 ? (
           <div className="space-y-3">
             <div className="space-y-1">
-              <h2 className="flex items-center gap-2 text-2xl font-semibold">
-                <AlertTriangle className="h-5 w-5 text-primary" />
+              <h2 className="flex items-center gap-2 text-2xl font-semibold text-[#F1F5FA]">
+                <AlertTriangle className="h-5 w-5 text-[#D9A441]" />
                 Coming soon
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-[#A9BBCD]">
                 These IFR-critical surfaces stay visible for the roadmap, but they remain intentionally disabled until they are ready.
               </p>
             </div>
@@ -226,17 +226,17 @@ export default function IfrTools() {
               {previewComingSoon.map((tool) => (
                 <Card
                   key={tool.href}
-                  className="border-dashed bg-muted/40 text-muted-foreground opacity-70"
+                  className="rsf-card-shell opacity-70"
                 >
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-[#8fa6c0]">
                       {tool.title}
-                      <Badge variant="secondary">Coming soon</Badge>
+                      <Badge variant="secondary" className="border-[#5d6f85]/20 bg-[#141b24] text-[#8fa6c0]">Coming soon</Badge>
                     </CardTitle>
-                    <CardDescription>{tool.description}</CardDescription>
+                    <CardDescription className="text-[#5d7a96]">{tool.description}</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button variant="outline" className="w-full" disabled aria-disabled>
+                    <Button variant="outline" className="rsf-metal-button-secondary w-full opacity-70" disabled aria-disabled>
                       Coming soon
                     </Button>
                   </CardContent>

@@ -684,13 +684,18 @@ export default function CreateMarketplaceListing() {
     // Navigate to checkout
     navigate("/marketplace/listing/checkout");
   };
+  const marketplacePanelClass = "rsf-metal-panel text-[#E8EDF4]";
+  const marketplacePrimaryButtonClass = "rsf-metal-button-primary";
+  const marketplaceSecondaryButtonClass = "rsf-metal-button-secondary";
+  const marketplaceSubpanelClass = "rsf-marketplace-subpanel rounded-[1rem] text-[#DCE6F2]";
+  const marketplaceSelectContentClass = "border-[#5d6f85]/30 bg-[#11161d] text-[#E8EDF4] shadow-[0_22px_44px_-30px_rgba(0,0,0,0.9)]";
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="rsf-marketplace-theme container mx-auto max-w-4xl px-4 py-8">
       <Button
         variant="ghost"
         onClick={() => navigate("/marketplace")}
-        className="mb-6"
+        className={`mb-6 ${marketplaceSecondaryButtonClass}`}
         data-testid="button-back"
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
@@ -701,18 +706,18 @@ export default function CreateMarketplaceListing() {
         <h1 className="text-3xl font-bold text-foreground mb-2" data-testid="text-page-title">
           {isEditMode ? "Edit Marketplace Listing" : "Create Marketplace Listing"}
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-[#A9BBCD]">
           {isEditMode 
             ? "Update your listing details below" 
             : "List your services, aircraft for sale, job openings, or other aviation-related offerings"}
         </p>
         {isSampleListing && (
-          <div className="mt-4 rounded-lg border border-amber-400/50 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="mt-4 rounded-lg border border-[#7f6327]/40 bg-[linear-gradient(180deg,rgba(36,27,12,0.98),rgba(19,14,7,0.98))] px-4 py-3 text-sm text-[#f2dca4]">
             This is a sample listing for reference only. Sample listings are read-only.
           </div>
         )}
         {adminFreeContext && !isEditMode && (
-          <Alert className="mt-4">
+          <Alert className={`mt-4 ${marketplacePanelClass}`}>
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Admin free listing enabled</AlertTitle>
             <AlertDescription>
@@ -743,7 +748,7 @@ export default function CreateMarketplaceListing() {
             });
           }
         })} className="space-y-6">
-          <Card>
+          <Card className={marketplacePanelClass}>
             <CardHeader>
               <CardTitle>Basic Information</CardTitle>
               <CardDescription>Choose a category and provide details about your listing</CardDescription>
@@ -761,7 +766,7 @@ export default function CreateMarketplaceListing() {
                           <SelectValue placeholder="Select a category" />
                         </SelectTrigger>
                       </FormControl>
-                      <SelectContent>
+                      <SelectContent className={marketplaceSelectContentClass}>
                         {categories.map((cat) => (
                           <SelectItem key={cat.value} value={cat.value}>
                             {cat.label}
@@ -812,7 +817,7 @@ export default function CreateMarketplaceListing() {
                   onChange={(e) => setAiPrompt(e.target.value)}
                   data-testid="input-ai-prompt"
                 />
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-[#A9BBCD]">
                   Provide specific details for AI to generate a description, or leave blank to use the title
                 </p>
               </div>
@@ -839,10 +844,10 @@ export default function CreateMarketplaceListing() {
                         type="button"
                         variant="outline"
                         size="sm"
+                        className={`shrink-0 ${marketplaceSecondaryButtonClass}`}
                         onClick={handleGenerateDescription}
                         disabled={generateDescriptionMutation.isPending}
                         data-testid="button-generate-description"
-                        className="shrink-0"
                       >
                         {generateDescriptionMutation.isPending ? (
                           <>Generating...</>
@@ -911,7 +916,7 @@ export default function CreateMarketplaceListing() {
                       <FormLabel>Asking Price (Optional)</FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8fa6c0]" />
                           <Input
                             type="number"
                             placeholder="0.00"
@@ -930,7 +935,7 @@ export default function CreateMarketplaceListing() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className={marketplacePanelClass}>
             <CardHeader>
               <CardTitle>Contact Information</CardTitle>
               <CardDescription>How should interested parties reach you?</CardDescription>
@@ -1011,7 +1016,7 @@ export default function CreateMarketplaceListing() {
           </Card>
 
           {/* Promo Code */}
-          <Card>
+          <Card className={marketplacePanelClass}>
             <CardHeader>
               <CardTitle>Promo Code (Optional)</CardTitle>
               <CardDescription>
@@ -1019,7 +1024,7 @@ export default function CreateMarketplaceListing() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Alert className="mb-4 border-sky-200 bg-sky-50">
+              <Alert className="mb-4 border-[#45658b]/34 bg-[linear-gradient(180deg,rgba(16,27,41,0.98),rgba(10,15,22,0.98))] text-[#d7e6f6]">
                 <AlertDescription className="text-sm">
                   Soft launch offer: the first 5 eligible users in each marketplace category can get their first listing free for 3 months with promo code <span className="font-mono font-semibold">TAILWINDS</span>.
                 </AlertDescription>
@@ -1037,6 +1042,7 @@ export default function CreateMarketplaceListing() {
                 />
                 <Button
                   type="button"
+                  className={marketplacePrimaryButtonClass}
                   onClick={checkPromoCode}
                   disabled={!promoCode.trim() || promoCodeChecking}
                   data-testid="button-check-promo"
@@ -1045,12 +1051,12 @@ export default function CreateMarketplaceListing() {
                 </Button>
               </div>
               {promoCodeValid === true && (
-                <div className="mt-2 text-sm text-chart-2 flex items-center gap-1">
+                <div className="mt-2 flex items-center gap-1 text-sm text-[#8fd0bf]">
                   Promo code applied.
                 </div>
               )}
               {promoCodeValid === false && (
-                <div className="mt-2 text-sm text-destructive flex items-center gap-1">
+                <div className="mt-2 flex items-center gap-1 text-sm text-[#f09aa8]">
                   Invalid promo code
                 </div>
               )}
@@ -1059,7 +1065,7 @@ export default function CreateMarketplaceListing() {
 
           {/* Image Upload */}
           {selectedCategory && (
-            <Card>
+          <Card className={marketplacePanelClass}>
               <CardHeader>
                 <CardTitle>Photos</CardTitle>
                 <CardDescription>
@@ -1074,7 +1080,7 @@ export default function CreateMarketplaceListing() {
                   {imageFiles.map((url, index) => (
                     <div
                       key={index}
-                      className="relative aspect-square rounded-md border overflow-hidden group select-none bg-white"
+                      className="group relative aspect-square select-none overflow-hidden rounded-md border border-[#5d6f85]/18 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))]"
                       draggable
                       onDragStart={() => handleDragStart(index)}
                       onDragOver={handleDragOver}
@@ -1090,7 +1096,7 @@ export default function CreateMarketplaceListing() {
                         type="button"
                         variant="destructive"
                         size="icon"
-                        className="absolute top-2 right-2 h-7 w-7 bg-background/80 hover:bg-background"
+                        className="absolute right-2 top-2 h-7 w-7 border border-[#5d6f85]/20 bg-[#0f141a]/92 hover:bg-[#141b24]"
                         onClick={() => removeImage(index)}
                         data-testid={`button-remove-image-${index}`}
                         aria-label={`Remove photo ${index + 1}`}
@@ -1106,31 +1112,31 @@ export default function CreateMarketplaceListing() {
                       onGetUploadParameters={handleGetUploadParameters}
                       onComplete={handleUploadComplete}
                       onError={(msg) => setUploadError(msg)}
-                      buttonClassName="aspect-square rounded-md border-2 border-dashed flex flex-col items-center justify-center w-full h-full"
+                      buttonClassName="aspect-square h-full w-full rounded-md border-2 border-dashed border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] text-[#A9BBCD] flex flex-col items-center justify-center"
                       buttonVariant="ghost"
                     >
-                      <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                      <span className="text-sm text-muted-foreground">Upload</span>
+                      <Upload className="mb-2 h-8 w-8 text-[#8fa6c0]" />
+                      <span className="text-sm text-[#A9BBCD]">Upload</span>
                     </ObjectUploader>
                   )}
                 </div>
                 {uploadError && (
-                  <div className="text-xs text-destructive mt-2">{uploadError}</div>
+                  <div className="mt-2 text-xs text-[#f09aa8]">{uploadError}</div>
                 )}
                 {imageFiles.length >= maxImages && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-[#A9BBCD]">
                     Remove a photo to add another.
                   </p>
                 )}
-                <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-[#A9BBCD]">
                   {imageFiles.length} of {maxImages} photos uploaded
                   {selectedCategory === 'aircraft-sale' && selectedTier && (
-                    <span className="ml-2 text-accent">
+                    <span className="ml-2 text-[#9ebdff]">
                       (Upgrade tier for more photos)
                     </span>
                   )}
                 </p>
-                <p className="text-[11px] text-muted-foreground">Tip: drag photos to reorder. First photo appears as the primary.</p>
+                <p className="text-[11px] text-[#8fa6c0]">Tip: drag photos to reorder. First photo appears as the primary.</p>
               </CardContent>
             </Card>
           )}
@@ -1138,7 +1144,7 @@ export default function CreateMarketplaceListing() {
           {/* Aircraft for Sale - Category Specific Fields */}
           {selectedCategory === "aircraft-sale" && (
             <>
-              <Card>
+              <Card className={marketplacePanelClass}>
                 <CardHeader>
                   <CardTitle>Aircraft Details</CardTitle>
                   <CardDescription>Specific information about the aircraft for sale</CardDescription>
@@ -1244,7 +1250,7 @@ export default function CreateMarketplaceListing() {
                                 <SelectValue placeholder="Select engine type" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
+                            <SelectContent className={marketplaceSelectContentClass}>
                               <SelectItem value="Single-Engine">Single-Engine</SelectItem>
                               <SelectItem value="Multi-Engine">Multi-Engine</SelectItem>
                               <SelectItem value="Turboprop">Turboprop</SelectItem>
@@ -1331,7 +1337,7 @@ export default function CreateMarketplaceListing() {
                                 <SelectValue placeholder="Select condition" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
+                            <SelectContent className={marketplaceSelectContentClass}>
                               <SelectItem value="excellent">Excellent</SelectItem>
                               <SelectItem value="good">Good</SelectItem>
                               <SelectItem value="fair">Fair</SelectItem>
@@ -1354,7 +1360,7 @@ export default function CreateMarketplaceListing() {
                                 <SelectValue placeholder="Select condition" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
+                            <SelectContent className={marketplaceSelectContentClass}>
                               <SelectItem value="excellent">Excellent</SelectItem>
                               <SelectItem value="good">Good</SelectItem>
                               <SelectItem value="fair">Fair</SelectItem>
@@ -1388,7 +1394,7 @@ export default function CreateMarketplaceListing() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className={marketplacePanelClass}>
                 <CardHeader>
                   <CardTitle>Listing Tier</CardTitle>
                   <CardDescription>Choose your listing package</CardDescription>
@@ -1406,23 +1412,23 @@ export default function CreateMarketplaceListing() {
                               <SelectValue placeholder="Select a tier" />
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent>
+                          <SelectContent className={marketplaceSelectContentClass}>
                             <SelectItem value="basic">
                               <div className="flex flex-col py-1">
                                 <span className="font-semibold">Basic - $25/month</span>
-                                <span className="text-xs text-muted-foreground">30-day listing, up to 3 photos</span>
+                                <span className="text-xs text-[#A9BBCD]">30-day listing, up to 3 photos</span>
                               </div>
                             </SelectItem>
                             <SelectItem value="standard">
                               <div className="flex flex-col py-1">
                                 <span className="font-semibold">Standard - $40/month</span>
-                                <span className="text-xs text-muted-foreground">30-day listing, up to 5 photos, priority placement</span>
+                                <span className="text-xs text-[#A9BBCD]">30-day listing, up to 5 photos, priority placement</span>
                               </div>
                             </SelectItem>
                             <SelectItem value="premium">
                               <div className="flex flex-col py-1">
                                 <span className="font-semibold">Premium - $100/month</span>
-                                <span className="text-xs text-muted-foreground">30-day listing, up to 10 photos, featured on homepage</span>
+                                <span className="text-xs text-[#A9BBCD]">30-day listing, up to 10 photos, featured on homepage</span>
                               </div>
                             </SelectItem>
                           </SelectContent>
@@ -1431,7 +1437,7 @@ export default function CreateMarketplaceListing() {
                       </FormItem>
                     )}
                   />
-                  <div className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
+                  <div className={`${marketplaceSubpanelClass} p-3 text-sm`}>
                     <p className="font-medium mb-1">Tier Benefits:</p>
                     <ul className="list-disc list-inside space-y-1">
                       <li>Basic: Standard listing visibility</li>
@@ -1446,7 +1452,7 @@ export default function CreateMarketplaceListing() {
 
           {/* Aviation Job - Category Specific Fields */}
           {selectedCategory === "job" && (
-            <Card>
+            <Card className={marketplacePanelClass}>
               <CardHeader>
                 <CardTitle>Job Details</CardTitle>
                 <CardDescription>Information about the aviation job opening</CardDescription>
@@ -1494,7 +1500,7 @@ export default function CreateMarketplaceListing() {
                               <SelectValue placeholder="Select type" />
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent>
+                          <SelectContent className={marketplaceSelectContentClass}>
                             <SelectItem value="full-time">Full-time</SelectItem>
                             <SelectItem value="part-time">Part-time</SelectItem>
                             <SelectItem value="contract">Contract</SelectItem>
@@ -1544,7 +1550,7 @@ export default function CreateMarketplaceListing() {
 
           {/* CFI - Category Specific Fields */}
           {selectedCategory === "cfi" && (
-            <Card>
+            <Card className={marketplacePanelClass}>
               <CardHeader>
                 <CardTitle>CFI Details</CardTitle>
                 <CardDescription>Information about your flight instruction services</CardDescription>
@@ -1572,7 +1578,7 @@ export default function CreateMarketplaceListing() {
                       <FormLabel>Hourly Rate (Optional)</FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8fa6c0]" />
                           <Input
                             type="number"
                             placeholder="0.00"
@@ -1611,7 +1617,7 @@ export default function CreateMarketplaceListing() {
 
           {/* Flight School - Category Specific Fields */}
           {selectedCategory === "flight-school" && (
-            <Card>
+            <Card className={marketplacePanelClass}>
               <CardHeader>
                 <CardTitle>Flight School Details</CardTitle>
                 <CardDescription>Information about your flight school</CardDescription>
@@ -1693,7 +1699,7 @@ export default function CreateMarketplaceListing() {
 
           {/* Mechanic - Category Specific Fields */}
           {selectedCategory === "mechanic" && (
-            <Card>
+            <Card className={marketplacePanelClass}>
               <CardHeader>
                 <CardTitle>Mechanic Services</CardTitle>
                 <CardDescription>Information about your aviation maintenance services</CardDescription>
@@ -1751,7 +1757,7 @@ export default function CreateMarketplaceListing() {
 
           {/* Charter - Category Specific Fields */}
           {selectedCategory === "charter" && (
-            <Card>
+            <Card className={marketplacePanelClass}>
               <CardHeader>
                 <CardTitle>Charter Services</CardTitle>
                 <CardDescription>Information about your charter operation</CardDescription>
@@ -1830,7 +1836,7 @@ export default function CreateMarketplaceListing() {
             <Button
               type="submit"
               size="lg"
-              className="flex-1 bg-accent text-accent-foreground hover:bg-accent"
+              className={`flex-1 ${marketplacePrimaryButtonClass}`}
               disabled={createListingMutation.isPending || (isEditMode && loadingListing) || isSampleListing}
               data-testid="button-submit-listing"
             >
@@ -1846,6 +1852,7 @@ export default function CreateMarketplaceListing() {
               type="button"
               variant="outline"
               size="lg"
+              className={marketplaceSecondaryButtonClass}
               onClick={() => navigate("/marketplace")}
               data-testid="button-cancel"
             >

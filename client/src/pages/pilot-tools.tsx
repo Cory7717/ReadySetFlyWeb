@@ -186,7 +186,7 @@ function RunwayDiagram({
                 className="fill-slate-400" />
       </svg>
 
-      <div className="flex gap-4 text-xs text-muted-foreground">
+      <div className="flex gap-4 text-xs text-[#A9BBCD]">
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-0.5 bg-sky-500 rounded" />
           Wind
@@ -197,9 +197,9 @@ function RunwayDiagram({
         </span>
       </div>
 
-      <div className="text-xs text-center text-muted-foreground">
-        {isHeadwind ? "Headwind" : "Tailwind"} from {windDirDeg}°
-        {crossDir ? ` · crosswind from ${crossDir === "R" ? "right" : "left"}` : ""}
+      <div className="text-xs text-center text-[#A9BBCD]">
+        {isHeadwind ? "Headwind" : "Tailwind"} from {windDirDeg} deg
+        {crossDir ? ` | crosswind from ${crossDir === "R" ? "right" : "left"}` : ""}
       </div>
     </div>
   );
@@ -428,6 +428,7 @@ export default function PilotTools() {
   }, []);
 
   return (
+    <div className="min-h-screen bg-[#0A0E14] rsf-tools-theme">
     <div className="container mx-auto max-w-7xl px-4 py-8">
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">
@@ -444,52 +445,53 @@ export default function PilotTools() {
         )}
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold flex items-center justify-center gap-2">
-            <CloudSun className="h-8 w-8" />
+          <h1 className="text-3xl font-bold flex items-center justify-center gap-2 text-[#F1F5FA]">
+            <CloudSun className="h-8 w-8 text-[#D9A441]" />
             Pilot Tools
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-[#A9BBCD]">
             Start with free aviation tools. Upgrade only when saved workflow and repeat-use speed become worth it.
           </p>
         </div>
 
-        <Card className="border-primary/20 bg-primary/5">
+        <Card className="rsf-card-shell">
           <CardContent className="grid gap-4 p-5 lg:grid-cols-[1.15fr_0.85fr]">
             <div className="space-y-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">Subscription Value</div>
-              <h2 className="text-2xl font-semibold text-slate-900">RSF Pro is about reducing repeat work, not collecting “advanced features.”</h2>
-              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#D9A441]">Subscription Value</div>
+              <h2 className="text-2xl font-semibold text-[#F1F5FA]">RSF Pro is about reducing repeat work, not collecting "advanced features."</h2>
+              <p className="max-w-3xl text-sm leading-6 text-[#A9BBCD]">
                 Use the free tools to plan, calculate, and browse. Upgrade when you want saved plans, saved aircraft assumptions, practice history, and a cleaner pilot workflow across sessions.
               </p>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border bg-background px-4 py-3">
-                  <div className="text-sm font-semibold">Plan faster</div>
-                  <div className="mt-1 text-xs text-muted-foreground">Reuse saved route setups instead of rebuilding them.</div>
+                <div className="rsf-metal-subpanel px-4 py-3">
+                  <div className="text-sm font-semibold text-[#F1F5FA]">Plan faster</div>
+                  <div className="mt-1 text-xs text-[#A9BBCD]">Reuse saved route setups instead of rebuilding them.</div>
                 </div>
-                <div className="rounded-xl border bg-background px-4 py-3">
-                  <div className="text-sm font-semibold">Train with continuity</div>
-                  <div className="mt-1 text-xs text-muted-foreground">Keep comms and training history tied to your account.</div>
+                <div className="rsf-metal-subpanel px-4 py-3">
+                  <div className="text-sm font-semibold text-[#F1F5FA]">Train with continuity</div>
+                  <div className="mt-1 text-xs text-[#A9BBCD]">Keep comms and training history tied to your account.</div>
                 </div>
-                <div className="rounded-xl border bg-background px-4 py-3">
-                  <div className="text-sm font-semibold">Keep records cleaner</div>
-                  <div className="mt-1 text-xs text-muted-foreground">Tie planning, logbook, and reminders together in one workflow.</div>
+                <div className="rsf-metal-subpanel px-4 py-3">
+                  <div className="text-sm font-semibold text-[#F1F5FA]">Keep records cleaner</div>
+                  <div className="mt-1 text-xs text-[#A9BBCD]">Tie planning, logbook, and reminders together in one workflow.</div>
                 </div>
               </div>
             </div>
-            <div className="space-y-3 rounded-2xl border bg-background p-4">
-              <div className="text-sm font-semibold">Best next step</div>
-              <div className="text-sm text-muted-foreground">
+            <div className="rsf-metal-subpanel space-y-3 p-4">
+              <div className="text-sm font-semibold text-[#F1F5FA]">Best next step</div>
+              <div className="text-sm text-[#A9BBCD]">
                 If you are still exploring, stay free. If you are flying often enough that repeated setup feels annoying, that is the time to trial Pro.
               </div>
               <div className="flex flex-wrap gap-2">
                 {!user ? (
-                  <Button asChild>
+                  <Button asChild className="rsf-metal-button-primary">
                     <Link href={withReturnTo("/register", getCurrentReturnTo())}>Create free account</Link>
                   </Button>
                 ) : null}
                 <Button
                   asChild
                   variant="outline"
+                  className="rsf-metal-button-secondary"
                   onClick={() => trackEvent("subscription_cta_click", { source_page: "/pilot-tools", target: "/logbook/pro", context: "pilot_tools_value_panel" })}
                 >
                   <Link href={withSourceParam("/logbook/pro", "/pilot-tools")}>See Pro plans</Link>
@@ -499,10 +501,10 @@ export default function PilotTools() {
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 bg-slate-50">
+        <Card className="rsf-card-shell">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Cloud className="h-5 w-5 text-sky-600" />
+            <CardTitle className="flex items-center gap-2 text-[#F1F5FA]">
+              <Cloud className="h-5 w-5 text-[#4A9FD4]" />
               Aviation Weather Hub
             </CardTitle>
             <CardDescription>
@@ -510,17 +512,17 @@ export default function PilotTools() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
-            <Button asChild onClick={() => trackEvent("cta_click", { label: "aviation_weather_hub", target: "/aviation-weather" })}>
+            <Button asChild className="rsf-metal-button-primary" onClick={() => trackEvent("cta_click", { label: "aviation_weather_hub", target: "/aviation-weather" })}>
               <Link href="/aviation-weather">Open Aviation Weather Hub</Link>
             </Button>
-            <Badge variant="outline">New</Badge>
+            <Badge variant="outline" className="border-[#5d6f85]/30 text-[#A9BBCD]">New</Badge>
           </CardContent>
         </Card>
 
-        <Card className="border-primary/20 bg-primary/5">
+        <Card className="rsf-card-shell">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Plane className="h-5 w-5 text-primary" />
+            <CardTitle className="flex items-center gap-2 text-[#F1F5FA]">
+              <Plane className="h-5 w-5 text-[#D9A441]" />
               Need an aircraft?
             </CardTitle>
             <CardDescription>
@@ -528,12 +530,13 @@ export default function PilotTools() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
-            <Button asChild onClick={() => trackEvent("cta_click", { label: "browse_rentals", target: "/rentals" })}>
+            <Button asChild className="rsf-metal-button-primary" onClick={() => trackEvent("cta_click", { label: "browse_rentals", target: "/rentals" })}>
               <Link href="/rentals">Browse Rentals</Link>
             </Button>
             <Button
               variant="outline"
               asChild
+              className="rsf-metal-button-secondary"
               onClick={() => trackEvent("cta_click", { label: "browse_marketplace", target: "/marketplace" })}
             >
               <Link href="/marketplace">Explore Marketplace</Link>
@@ -541,6 +544,7 @@ export default function PilotTools() {
             <Button
               variant="outline"
               asChild
+              className="rsf-metal-button-secondary"
               onClick={() => trackEvent("cta_click", { label: "post_listing", target: "/create-marketplace-listing" })}
             >
               <Link href="/create-marketplace-listing">Post a Listing</Link>
@@ -548,7 +552,7 @@ export default function PilotTools() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rsf-card-shell">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Plane className="h-5 w-5" />
@@ -557,7 +561,7 @@ export default function PilotTools() {
             <CardDescription>Preview the planner free. Pro becomes valuable when you want saved routes, saved aircraft assumptions, and faster repeat planning.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
-            <Button asChild>
+            <Button asChild className="rsf-metal-button-primary">
               <Link href="/flight-planner">
                 {isPro ? "Open Flight Planner" : "Preview Flight Planner"}
               </Link>
@@ -566,7 +570,7 @@ export default function PilotTools() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rsf-card-shell">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Radio className="h-5 w-5" />
@@ -575,7 +579,7 @@ export default function PilotTools() {
             <CardDescription>Try guided scenarios free. Pro unlocks full practice history, scoring, and repeat training continuity.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
-            <Button asChild>
+            <Button asChild className="rsf-metal-button-primary">
               <Link href="/radio-comms-trainer">
                 {isPro ? "Open Trainer" : "Try Demo"}
               </Link>
@@ -584,7 +588,7 @@ export default function PilotTools() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rsf-card-shell">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
@@ -593,14 +597,14 @@ export default function PilotTools() {
             <CardDescription>Search and download current FAA approach plates.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
-            <Button asChild>
+            <Button asChild className="rsf-metal-button-primary">
               <Link href="/approach-plates">Open Approach Plates</Link>
             </Button>
             <Badge variant="outline">Hosted by ReadySetFly</Badge>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rsf-card-shell">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
@@ -609,14 +613,14 @@ export default function PilotTools() {
             <CardDescription>RSF-owned TFR map powered by FAA SWIM.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
-            <Button asChild>
+            <Button asChild className="rsf-metal-button-primary">
               <Link href={`/tfr-map?icao=${encodeURIComponent(searchIcao)}`}>Open TFR Map</Link>
             </Button>
             <Badge variant="outline">Live airspace</Badge>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rsf-card-shell">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Plane className="h-5 w-5" />
@@ -627,7 +631,7 @@ export default function PilotTools() {
           <CardContent className="flex flex-wrap items-center gap-3">
             {canPreviewInternal ? (
               <>
-                <Button asChild>
+                <Button asChild className="rsf-metal-button-primary">
                   <Link href="/live-traffic">Open Internal Preview</Link>
                 </Button>
                 <Badge variant="outline">Internal Preview</Badge>
@@ -644,7 +648,7 @@ export default function PilotTools() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rsf-card-shell">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
@@ -653,7 +657,7 @@ export default function PilotTools() {
             <CardDescription>Live NOTAMs and runway advisory for any airport.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
-            <Button asChild>
+            <Button asChild className="rsf-metal-button-primary">
               <a href="#airport-briefing">Open Airport Briefing</a>
             </Button>
             <Badge variant="outline">FAA SWIM</Badge>
@@ -665,7 +669,7 @@ export default function PilotTools() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-lg font-semibold">Pilot Calculators</h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-[#A9BBCD]">
                 Crosswind, density altitude, e6b, weight & balance, and cost planning.
               </p>
             </div>
@@ -679,7 +683,7 @@ export default function PilotTools() {
           title={pressDemo.getStep("crosswind")?.title ?? "Crosswind Calculator"}
           body={pressDemo.getStep("crosswind")?.body ?? ""}
         >
-        <Card>
+        <Card className="rsf-card-shell">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Wind className="h-5 w-5" />
@@ -693,14 +697,14 @@ export default function PilotTools() {
               const windMatch = raw.match(/\b(\d{3})(\d{2})(?:G(\d{2}))?KT\b/);
               if (!windMatch) return null;
               return (
-                <div className="flex items-center gap-2 rounded-lg border bg-sky-50 px-3 py-2 text-xs text-sky-800">
+                <div className="flex items-center gap-2 rounded-lg border border-[#2e4c74]/34 bg-[#0b1423]/80 px-3 py-2 text-xs text-[#C7D7EA]">
                   <span>
                     METAR wind: {windMatch[1]}° at {windMatch[2]}kt
                     {windMatch[3] ? ` gusting ${windMatch[3]}kt` : ""}
                   </span>
                   <button
                     type="button"
-                    className="ml-auto rounded border border-sky-300 px-2 py-0.5 text-xs font-semibold hover:bg-sky-100 transition-colors"
+                    className="ml-auto rounded border border-[#2e4c74]/50 px-2 py-0.5 text-xs font-semibold text-[#A9BBCD] hover:bg-[#1a2430] transition-colors"
                     onClick={() => {
                       setWindDirection(windMatch[1]);
                       setWindSpeed(windMatch[2]);
@@ -734,15 +738,15 @@ export default function PilotTools() {
             <div className="grid gap-6 md:grid-cols-[1fr_auto]">
               <div className="space-y-3">
                 <div className="grid gap-3 grid-cols-2">
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">Crosswind (steady)</div>
+                  <div className="rsf-metal-subpanel p-3">
+                    <div className="text-xs text-[#A9BBCD]">Crosswind (steady)</div>
                     <div className="text-xl font-bold">
                       {Math.abs(crosswind).toFixed(1)} kt
                     </div>
-                    <div className="text-xs text-muted-foreground">{crosswindDir}</div>
+                    <div className="text-xs text-[#A9BBCD]">{crosswindDir}</div>
                   </div>
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">
+                  <div className="rsf-metal-subpanel p-3">
+                    <div className="text-xs text-[#A9BBCD]">
                       {headwind >= 0 ? "Headwind" : "Tailwind"} (steady)
                     </div>
                     <div className="text-xl font-bold">
@@ -751,19 +755,19 @@ export default function PilotTools() {
                   </div>
                   {gustKt > 0 && (
                     <>
-                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                        <div className="text-xs text-muted-foreground">
+                      <div className="rounded-lg border border-[#7f6327]/38 bg-[#1a140a]/80 p-3">
+                        <div className="text-xs text-[#A9BBCD]">
                           Crosswind (gust)
                         </div>
-                        <div className="text-xl font-bold text-amber-800">
+                        <div className="text-xl font-bold text-[#F2DCA4]">
                           {maxCrosswind.toFixed(1)} kt
                         </div>
                       </div>
-                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                        <div className="text-xs text-muted-foreground">
+                      <div className="rounded-lg border border-[#7f6327]/38 bg-[#1a140a]/80 p-3">
+                        <div className="text-xs text-[#A9BBCD]">
                           {maxHeadwind >= 0 ? "Headwind" : "Tailwind"} (gust)
                         </div>
-                        <div className="text-xl font-bold text-amber-800">
+                        <div className="text-xl font-bold text-[#F2DCA4]">
                           {Math.abs(maxHeadwind).toFixed(1)} kt
                         </div>
                       </div>
@@ -771,8 +775,8 @@ export default function PilotTools() {
                   )}
                 </div>
 
-                <div className="rounded-lg border bg-muted/30 px-4 py-3 text-xs text-muted-foreground space-y-1">
-                  <div className="font-semibold text-foreground text-sm mb-1">
+                <div className="rounded-lg border border-[#5d6f85]/20 bg-[#0d1420]/70 px-4 py-3 text-xs text-[#A9BBCD] space-y-1">
+                  <div className="font-semibold text-[#E8EDF4] text-sm mb-1">
                     Component breakdown
                   </div>
                   <div>
@@ -784,13 +788,13 @@ export default function PilotTools() {
                   </div>
                   <div>
                     Crosswind = {windKt} × sin({Math.abs(angle).toFixed(0)}°) ={" "}
-                    <span className="font-semibold text-foreground">
+                    <span className="font-semibold text-[#E8EDF4]">
                       {Math.abs(crosswind).toFixed(1)} kt
                     </span>
                   </div>
                   <div>
                     Headwind = {windKt} × cos({Math.abs(angle).toFixed(0)}°) ={" "}
-                    <span className="font-semibold text-foreground">
+                    <span className="font-semibold text-[#E8EDF4]">
                       {Math.abs(headwind).toFixed(1)} kt
                     </span>
                   </div>
@@ -805,8 +809,8 @@ export default function PilotTools() {
                     <div className={cn(
                       "rounded-lg border px-4 py-2 text-sm font-medium",
                       maxXwind >= dangerThreshold
-                        ? "border-red-300 bg-red-50 text-red-800"
-                        : "border-amber-300 bg-amber-50 text-amber-800"
+                        ? "border-[#7a3440]/38 bg-[#1a0b0e]/80 text-[#F4CDD3]"
+                        : "border-[#7f6327]/38 bg-[#1a140a]/80 text-[#F2DCA4]"
                     )}>
                       {maxXwind >= dangerThreshold
                         ? `⚠ ${maxXwind.toFixed(1)} kt crosswind exceeds typical light aircraft limits`
@@ -824,8 +828,8 @@ export default function PilotTools() {
                 headwindKt={headwind}
               />
             </div>
-            <Alert>
-              <AlertDescription className="text-xs">
+            <Alert className="border-[#5d6f85]/30 bg-[#0d1420]/70 text-[#A9BBCD]">
+              <AlertDescription className="text-xs text-[#A9BBCD]">
                 For planning only. Verify with official sources and aircraft limitations.
               </AlertDescription>
             </Alert>
@@ -839,7 +843,7 @@ export default function PilotTools() {
           title={pressDemo.getStep("density-altitude")?.title ?? "Density Altitude Calculator"}
           body={pressDemo.getStep("density-altitude")?.body ?? ""}
         >
-        <Card>
+        <Card className="rsf-card-shell">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gauge className="h-5 w-5" />
@@ -878,9 +882,9 @@ export default function PilotTools() {
                         setTempUnit("C");
                       }
                     }}
-                    className="rounded border border-input bg-background px-2 py-1 text-xs font-semibold hover:bg-muted transition-colors whitespace-nowrap"
+                    className="rsf-metal-button-secondary px-2 py-1 text-xs font-semibold whitespace-nowrap"
                   >
-                    °{tempUnit === "C" ? "C → F" : "F → C"}
+                    deg {tempUnit === "C" ? "C to F" : "F to C"}
                   </button>
                 </div>
               </div>
@@ -895,41 +899,41 @@ export default function PilotTools() {
             </div>
             <div className="space-y-3">
               <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Pressure Altitude</div>
+                <div className="rsf-metal-subpanel p-3">
+                  <div className="text-xs text-[#A9BBCD]">Pressure Altitude</div>
                   <div className="text-xl font-bold">
                     {pressureAltitude.toLocaleString()} ft
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="text-xs text-[#A9BBCD] mt-1">
                     Field elev {elevation.toLocaleString()} ft
                     {pressureAltitude > elevation
-                      ? ` · +${(pressureAltitude - elevation).toLocaleString()} ft (low pressure)`
+                      ? ` | +${(pressureAltitude - elevation).toLocaleString()} ft (low pressure)`
                       : pressureAltitude < elevation
-                        ? ` · ${(pressureAltitude - elevation).toLocaleString()} ft (high pressure)`
-                        : " · standard pressure"}
+                        ? ` | ${(pressureAltitude - elevation).toLocaleString()} ft (high pressure)`
+                        : " | standard pressure"}
                   </div>
                 </div>
 
                 <div className={cn(
-                  "rounded-lg border p-3",
+                  "rounded-lg p-3",
                   densityAltitude > elevation + 2000
-                    ? "border-red-200 bg-red-50"
+                    ? "border-[#7a3440]/38 bg-[#1a0b0e]/80"
                     : densityAltitude > elevation + 1000
-                      ? "border-amber-200 bg-amber-50"
-                      : ""
+                      ? "border-[#7f6327]/38 bg-[#1a140a]/80"
+                      : "rsf-metal-subpanel"
                 )}>
-                  <div className="text-xs text-muted-foreground">Density Altitude</div>
+                  <div className="text-xs text-[#A9BBCD]">Density Altitude</div>
                   <div className={cn(
                     "text-xl font-bold",
                     densityAltitude > elevation + 2000
-                      ? "text-red-700"
+                      ? "text-[#F4CDD3]"
                       : densityAltitude > elevation + 1000
-                        ? "text-amber-700"
-                        : ""
+                        ? "text-[#F2DCA4]"
+                        : "text-[#E8EDF4]"
                   )}>
                     {densityAltitude.toLocaleString()} ft
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="text-xs text-[#A9BBCD] mt-1">
                     {densityAltitude > elevation
                       ? `+${(densityAltitude - elevation).toLocaleString()} ft above field`
                       : `${(densityAltitude - elevation).toLocaleString()} ft below field`}
@@ -937,22 +941,22 @@ export default function PilotTools() {
                 </div>
 
                 <div className={cn(
-                  "rounded-lg border p-3",
+                  "rounded-lg p-3",
                   isaDeviation > 15
-                    ? "border-red-200 bg-red-50"
+                    ? "border-[#7a3440]/38 bg-[#1a0b0e]/80"
                     : isaDeviation > 8
-                      ? "border-amber-200 bg-amber-50"
-                      : ""
+                      ? "border-[#7f6327]/38 bg-[#1a140a]/80"
+                      : "rsf-metal-subpanel"
                 )}>
-                  <div className="text-xs text-muted-foreground">ISA Deviation</div>
+                  <div className="text-xs text-[#A9BBCD]">ISA Deviation</div>
                   <div className={cn(
                     "text-xl font-bold",
-                    isaDeviation > 15 ? "text-red-700" : isaDeviation > 8 ? "text-amber-700" : ""
+                    isaDeviation > 15 ? "text-[#F4CDD3]" : isaDeviation > 8 ? "text-[#F2DCA4]" : "text-[#E8EDF4]"
                   )}>
-                    {isaDeviation > 0 ? "+" : ""}{isaDeviation}°C
+                    {isaDeviation > 0 ? "+" : ""}{isaDeviation} deg C
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    ISA at this PA = {Math.round(isaTemp)}°C
+                  <div className="text-xs text-[#A9BBCD] mt-1">
+                    ISA at this PA = {Math.round(isaTemp)} deg C
                   </div>
                 </div>
               </div>
@@ -961,30 +965,30 @@ export default function PilotTools() {
                 const daDiff = densityAltitude - elevation;
                 if (daDiff > 3000) {
                   return (
-                    <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-800">
-                      ⚠ DA {densityAltitude.toLocaleString()} ft — significantly degraded performance. Verify takeoff/climb data carefully.
+                    <div className="rounded-lg border border-[#7a3440]/38 bg-[#1a0b0e]/80 px-4 py-2 text-sm font-medium text-[#F4CDD3]">
+                      Warning: DA {densityAltitude.toLocaleString()} ft. Significantly degraded performance. Verify takeoff/climb data carefully.
                     </div>
                   );
                 }
                 if (daDiff > 1500) {
                   return (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">
-                      ⚡ DA {densityAltitude.toLocaleString()} ft — expect noticeably reduced climb rate. Review POH performance charts.
+                    <div className="rounded-lg border border-[#7f6327]/38 bg-[#1a140a]/80 px-4 py-2 text-sm font-medium text-[#F2DCA4]">
+                      Caution: DA {densityAltitude.toLocaleString()} ft. Expect noticeably reduced climb rate. Review POH performance charts.
                     </div>
                   );
                 }
                 if (daDiff < -500) {
                   return (
-                    <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-800">
-                      ✓ DA below field elevation — favorable performance conditions.
+                    <div className="rounded-lg border border-emerald-700/40 bg-[#0a1f14]/80 px-4 py-2 text-sm font-medium text-emerald-400">
+                      DA below field elevation. Favorable performance conditions.
                     </div>
                   );
                 }
                 return null;
               })()}
             </div>
-            <Alert>
-              <AlertDescription className="text-xs">
+            <Alert className="border-[#5d6f85]/30 bg-[#0d1420]/70 text-[#A9BBCD]">
+              <AlertDescription className="text-xs text-[#A9BBCD]">
                 Density altitude is an estimate. Always consult official performance charts.
               </AlertDescription>
             </Alert>
@@ -992,7 +996,7 @@ export default function PilotTools() {
         </Card>
         </PressDemoSpotlight>
 
-        <Card>
+        <Card className="rsf-card-shell">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gauge className="h-5 w-5" />
@@ -1001,14 +1005,14 @@ export default function PilotTools() {
             <CardDescription>Performance + wind + fuel with configurable outputs.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
-            <Button asChild>
+            <Button asChild className="rsf-metal-button-primary">
               <Link href="/tools/e6b">Open e6b advanced</Link>
             </Button>
             <Badge variant="outline">New tool</Badge>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rsf-card-shell">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Scale className="h-5 w-5" />
@@ -1017,14 +1021,14 @@ export default function PilotTools() {
             <CardDescription>Calculate CG and gross weight using the RSF aircraft library.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
-            <Button asChild>
+            <Button asChild className="rsf-metal-button-primary">
               <Link href="/weight-balance">Open Weight & Balance</Link>
             </Button>
             <Badge variant="outline">Planning tool</Badge>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rsf-card-shell">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gauge className="h-5 w-5" />
@@ -1033,7 +1037,7 @@ export default function PilotTools() {
             <CardDescription>Estimate monthly and annual ownership costs.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
-            <Button asChild>
+            <Button asChild className="rsf-metal-button-primary">
               <Link href="/ownership-cost-calculator">Open Ownership Cost</Link>
             </Button>
             <Badge variant="outline">Planning tool</Badge>
@@ -1041,7 +1045,7 @@ export default function PilotTools() {
         </Card>
 
         {/* Search */}
-        <Card id="airport-weather" className="overflow-visible">
+        <Card id="airport-weather" className="rsf-card-shell overflow-visible">
           <CardHeader>
             <CardTitle>Airport Weather</CardTitle>
             <CardDescription>Enter an ICAO code or city/state to find nearby airports.</CardDescription>
@@ -1058,19 +1062,19 @@ export default function PilotTools() {
                   placeholder="ICAO or city (e.g., KAUS or Dallas, TX)"
                 />
                 {loadingSuggestions && (
-                  <div className="text-xs text-muted-foreground">Searching airports...</div>
+                  <div className="text-xs text-[#A9BBCD]">Searching airports...</div>
                 )}
                 {airportSuggestions.length > 0 && (
-                  <div className="rounded-lg border bg-background shadow-sm">
+                  <div className="rounded-lg border border-[#29415e] bg-[#0f1a28] shadow-sm">
                     {airportSuggestions.map((airport) => (
                       <button
                         key={`${airport.icao}-${airport.name ?? ""}`}
                         type="button"
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                        className="w-full px-3 py-2 text-left text-sm text-[#E8EDF4] hover:bg-[#1a2430]"
                         onClick={() => handleSelectAirport(airport)}
                       >
                         <div className="font-medium">{airport.icao}</div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-[#A9BBCD]">
                           {airport.name || "Unknown airport"}
                           {airport.city ? ` - ${airport.city}` : ""}
                           {airport.state ? `, ${airport.state}` : ""}
@@ -1080,13 +1084,13 @@ export default function PilotTools() {
                   </div>
                 )}
                 {airportMeta && (
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-[#A9BBCD]">
                     {airportMeta.name ?? "Unknown airport"}
                     {airportLocation ? ` (${airportLocation})` : ""}
                   </div>
                 )}
               </div>
-              <Button onClick={handleSearch} disabled={isLoading}>
+              <Button onClick={handleSearch} disabled={isLoading} className="rsf-metal-button-primary">
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
                 Search
               </Button>
@@ -1095,9 +1099,9 @@ export default function PilotTools() {
         </Card>
 
         {error && (
-          <Alert variant="destructive">
+          <Alert className="border-[#7a3440]/38 bg-[#1a0b0e]/80 text-[#F4CDD3]">
             <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
+            <AlertDescription className="text-[#F4CDD3]">
               {error instanceof Error && error.message.includes("404") 
                 ? `No weather data available for this airport. ${searchIcao} may not report METAR/TAF.`
                 : "Failed to fetch weather data. Please check the ICAO code and try again."}
@@ -1108,7 +1112,7 @@ export default function PilotTools() {
         {weather && (
           <>
             {/* Flight Category & Quick Info */}
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <CardTitle className="flex items-center gap-2">
@@ -1128,12 +1132,12 @@ export default function PilotTools() {
                       {flightCategory.category}
                     </Badge>
                     {runwayInUseDisplay && (
-                      <Badge variant="outline" className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200">
+                      <Badge variant="outline" className="border-[#7f6327]/38 bg-[#1a140a]/80 text-[#F2DCA4]">
                         Active RWY: {runwayInUseDisplay}
                       </Badge>
                     )}
                     {atisInfo && (
-                      <Badge variant="outline" className="bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-200">
+                      <Badge variant="outline" className="border-[#35516e]/40 bg-[#102236] text-[#8FC7FF]">
                         ATIS: {atisInfo}
                       </Badge>
                     )}
@@ -1143,10 +1147,10 @@ export default function PilotTools() {
                         variant="outline"
                         className={
                           hazard.tone === "red"
-                            ? "border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200"
+                            ? "border-[#7a3440]/38 bg-[#1a0b0e]/80 text-[#F4CDD3]"
                             : hazard.tone === "amber"
-                              ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
-                              : "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-200"
+                              ? "border-[#7f6327]/38 bg-[#1a140a]/80 text-[#F2DCA4]"
+                              : "border-[#35516e]/40 bg-[#102236] text-[#8FC7FF]"
                         }
                       >
                         {hazard.label}
@@ -1161,20 +1165,20 @@ export default function PilotTools() {
                     </span>
                   )}
                   {weather.cached && (
-                    <Badge variant="secondary" className="text-xs">Cached</Badge>
+                    <Badge variant="secondary" className="border-[#5d6f85]/20 bg-[#141b24] text-[#A9BBCD] text-xs">Cached</Badge>
                   )}
                   {(weatherFetching || runwayFetching || notamsFetching) && (
-                    <Badge variant="secondary" className="text-xs">Refreshing</Badge>
+                    <Badge variant="secondary" className="border-[#5d6f85]/20 bg-[#141b24] text-[#A9BBCD] text-xs">Refreshing</Badge>
                   )}
                   {runwayInUseDisplay && (
-                    <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200">
+                    <Badge variant="outline" className="text-xs border-[#7f6327]/38 bg-[#1a140a]/80 text-[#F2DCA4]">
                       Runway {runwayInUseDisplay} in use
                     </Badge>
                   )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Alert className={weatherHazards.length > 0 ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20" : ""}>
+                <Alert className={weatherHazards.length > 0 ? "border-[#7f6327]/38 bg-[#1a140a]/80" : "border-[#5d6f85]/30 bg-[#0d1420]/70"}>
                   <AlertTriangle className={cn(
                     "h-4 w-4",
                     weatherHazards.some((hazard) => hazard.tone === "red")
@@ -1194,13 +1198,13 @@ export default function PilotTools() {
                   <>
                     <div>
                       <Label className="text-sm font-semibold">METAR</Label>
-                      <p className="font-mono text-sm bg-muted p-3 rounded-md mt-1">
+                      <p className="font-mono text-sm bg-[#0d1622] text-[#F5A623] border border-[#203249] p-3 rounded-md mt-1">
                         {weather.metar.rawOb}
                       </p>
                     </div>
                   </>
                 ) : (
-                  <p className="text-sm text-muted-foreground">No METAR data available</p>
+                  <p className="text-sm text-[#A9BBCD]">No METAR data available</p>
                 )}
 
                 <Separator />
@@ -1208,22 +1212,22 @@ export default function PilotTools() {
                 {weather.taf ? (
                   <div>
                     <Label className="text-sm font-semibold">TAF (Forecast)</Label>
-                    <p className="font-mono text-sm bg-muted p-3 rounded-md mt-1 whitespace-pre-wrap">
+                    <p className="font-mono text-sm bg-[#0d1622] text-[#F5A623] border border-[#203249] p-3 rounded-md mt-1 whitespace-pre-wrap">
                       {weather.taf.rawTAF}
                     </p>
                   </div>
                 ) : (
                   <div>
                     <Label className="text-sm font-semibold">TAF (Forecast)</Label>
-                    <p className="text-sm text-muted-foreground mt-1">No TAF data available</p>
+                    <p className="text-sm text-[#A9BBCD] mt-1">No TAF data available</p>
                   </div>
                 )}
 
-                <div className="rounded-lg border bg-muted/20 p-3">
+                <div className="rounded-lg border border-[#5d6f85]/20 bg-[#0d1420]/50 p-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                       <div className="text-sm font-semibold">AI weather briefing</div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-[#A9BBCD]">
                         Summarize METAR and TAF into a short pilot-ready briefing.
                       </div>
                     </div>
@@ -1232,7 +1236,7 @@ export default function PilotTools() {
                       size="sm"
                       variant="outline"
                       onClick={() => setShowAiWeatherSummary((current) => !current)}
-                      className="w-full sm:w-auto"
+                      className="rsf-metal-button-secondary w-full sm:w-auto"
                     >
                       {showAiWeatherSummary ? "Hide AI summary" : "Open AI summary"}
                     </Button>
@@ -1248,10 +1252,10 @@ export default function PilotTools() {
                   )}
                 </div>
 
-                <Alert>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription className="text-xs">
-                    <strong>Disclaimer:</strong> This information is for planning purposes only and is not for official flight briefings. 
+                <Alert className="border-[#5d6f85]/30 bg-[#0d1420]/70">
+                  <AlertTriangle className="h-4 w-4 text-[#A9BBCD]" />
+                  <AlertDescription className="text-xs text-[#A9BBCD]">
+                    <strong className="text-[#E8EDF4]">Disclaimer:</strong> This information is for planning purposes only and is not for official flight briefings.
                     Always obtain an official weather briefing before flight.
                   </AlertDescription>
                 </Alert>
@@ -1264,7 +1268,7 @@ export default function PilotTools() {
               title={pressDemo.getStep("airport-briefing")?.title ?? "Airport Briefing"}
               body={pressDemo.getStep("airport-briefing")?.body ?? ""}
             >
-            <Card id="airport-briefing">
+            <Card id="airport-briefing" className="rsf-card-shell">
               <CardHeader>
                 <CardTitle>Airport Briefing</CardTitle>
                 <CardDescription>Runway guidance and live NOTAMs for {weather.icao}</CardDescription>
@@ -1273,36 +1277,36 @@ export default function PilotTools() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <Label className="text-sm font-semibold">Runway Advisory</Label>
-                    {runwayLoading && <Badge variant="secondary">Loading runways</Badge>}
+                    {runwayLoading && <Badge variant="secondary" className="border-[#5d6f85]/20 bg-[#141b24] text-[#A9BBCD]">Loading runways</Badge>}
                   </div>
                   {(runwayInUseDisplay || atisInfo) && (
                     <div className="flex flex-wrap gap-2">
                       {runwayInUseDisplay && (
-                        <Badge variant="outline" className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200">
+                        <Badge variant="outline" className="border-[#7f6327]/38 bg-[#1a140a]/80 text-[#F2DCA4]">
                           Active RWY: {runwayInUseDisplay}
                         </Badge>
                       )}
                       {atisInfo && (
-                        <Badge variant="outline" className="bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-200">
+                        <Badge variant="outline" className="border-[#35516e]/40 bg-[#102236] text-[#8FC7FF]">
                           ATIS: {atisInfo}
                         </Badge>
                       )}
                     </div>
                   )}
                   {runwayBriefing?.advisory ? (
-                    <div className="rounded-lg border p-3 text-sm">
+                    <div className="rsf-metal-subpanel rounded-lg p-3 text-sm">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline">Recommended: {runwayBriefing.advisory.runway}</Badge>
-                        <span className="text-muted-foreground">
+                        <Badge variant="outline" className="border-[#5d6f85]/30 text-[#A9BBCD]">Recommended: {runwayBriefing.advisory.runway}</Badge>
+                        <span className="text-[#A9BBCD]">
                           Headwind {runwayBriefing.advisory.headwind} kt - Crosswind {runwayBriefing.advisory.crosswind} kt
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-2">
+                      <p className="text-xs text-[#A9BBCD] mt-2">
                         Advisory only. ATC assigns runways; verify with ATIS and tower.
                       </p>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-[#A9BBCD]">
                       Runway advisory unavailable. Check ATIS or tower for active runway.
                     </p>
                   )}
@@ -1310,18 +1314,18 @@ export default function PilotTools() {
                   {runwayBriefing?.runways?.length ? (
                     <div className="grid gap-2 sm:grid-cols-2">
                       {runwayBriefing.runways.slice(0, 6).map((runway, index) => (
-                        <div key={`${runway.leIdent}-${runway.heIdent}-${index}`} className="rounded-lg border p-2 text-xs">
+                        <div key={`${runway.leIdent}-${runway.heIdent}-${index}`} className="rounded-lg border border-[#29415e] bg-[#0f1a28] p-2 text-xs text-[#E8EDF4]">
                           <div className="font-semibold">
                             {runway.leIdent || "--"} / {runway.heIdent || "--"}
                           </div>
-                          <div className="text-muted-foreground">
+                          <div className="text-[#A9BBCD]">
                             {runway.surface || "Surface N/A"} - {runway.lengthFt ? `${runway.lengthFt} ft` : "Length N/A"}
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Runway details not available.</p>
+                    <p className="text-xs text-[#A9BBCD]">Runway details not available.</p>
                   )}
                 </div>
 
@@ -1330,17 +1334,17 @@ export default function PilotTools() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <Label className="text-sm font-semibold">NOTAMs</Label>
-                    {notamsLoading && <Badge variant="secondary">Loading NOTAMs</Badge>}
+                    {notamsLoading && <Badge variant="secondary" className="border-[#5d6f85]/20 bg-[#141b24] text-[#A9BBCD]">Loading NOTAMs</Badge>}
                   </div>
                   {notamsError ? (
-                    <p className="text-sm text-muted-foreground">NOTAM feed unavailable.</p>
+                    <p className="text-sm text-[#A9BBCD]">NOTAM feed unavailable.</p>
                   ) : notams?.notams?.length ? (
                     <div className="space-y-2">
                       {notams.notams.slice(0, 6).map((item) => (
-                        <div key={item.id} className="rounded-lg border p-3 text-xs space-y-1">
-                          <div className="font-semibold">{item.text}</div>
+                        <div key={item.id} className="rounded-lg border border-[#29415e] bg-[#0f1a28] p-3 text-xs space-y-1">
+                          <div className="font-semibold text-[#E8EDF4]">{item.text}</div>
                           {(item.effective || item.expires) && (
-                            <div className="text-muted-foreground">
+                            <div className="text-[#A9BBCD]">
                               {item.effective ? `Effective ${item.effective}` : ""}{" "}
                               {item.expires ? `- Expires ${item.expires}` : ""}
                             </div>
@@ -1349,18 +1353,18 @@ export default function PilotTools() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">No active NOTAMs.</p>
+                    <p className="text-sm text-[#A9BBCD]">No active NOTAMs.</p>
                   )}
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-[#A9BBCD]">
                     NOTAMs powered by FAA SWIM.
                   </p>
                 </div>
 
-                <div className="rounded-lg border bg-muted/20 p-3">
+                <div className="rounded-lg border border-[#5d6f85]/20 bg-[#0d1420]/50 p-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                       <div className="text-sm font-semibold">AI NOTAM translator</div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-[#A9BBCD]">
                         Translate raw NOTAMs into plain-English operational and legality impacts.
                       </div>
                     </div>
@@ -1369,7 +1373,7 @@ export default function PilotTools() {
                       size="sm"
                       variant="outline"
                       onClick={() => setShowAiNotamTranslator((current) => !current)}
-                      className="w-full sm:w-auto"
+                      className="rsf-metal-button-secondary w-full sm:w-auto"
                     >
                       {showAiNotamTranslator ? "Hide AI translator" : "Open AI translator"}
                     </Button>
@@ -1394,32 +1398,32 @@ export default function PilotTools() {
               title={pressDemo.getStep("resources")?.title ?? "Aviation Resources"}
               body={pressDemo.getStep("resources")?.body ?? ""}
             >
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
                 <CardTitle>Aviation Resources</CardTitle>
                 <CardDescription>Official sources for flight planning</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[#6D88A6]">
                     RSF Tools
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Button variant="outline" className="justify-start" asChild>
+                    <Button variant="outline" className="rsf-metal-button-secondary justify-start" asChild>
                       <a href="#airport-weather">
                         <Cloud className="h-4 w-4 mr-2" />
                         RSF METAR/TAF
                       </a>
                     </Button>
 
-                    <Button variant="outline" className="justify-start" asChild>
+                    <Button variant="outline" className="rsf-metal-button-secondary justify-start" asChild>
                       <a href="#airport-briefing">
                         <AlertTriangle className="h-4 w-4 mr-2" />
                         RSF NOTAMs + Runway
                       </a>
                     </Button>
 
-                    <Button variant="outline" className="justify-start" asChild>
+                    <Button variant="outline" className="rsf-metal-button-secondary justify-start" asChild>
                       <Link href={`/tfr-map?icao=${encodeURIComponent(searchIcao)}`}>
                         <AlertTriangle className="h-4 w-4 mr-2" />
                         RSF TFR Map
@@ -1431,11 +1435,11 @@ export default function PilotTools() {
                 <Separator className="my-2" />
 
                 <div className="space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[#6D88A6]">
                     Official Sources
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Button variant="outline" className="justify-start" asChild>
+                  <Button variant="outline" className="rsf-metal-button-secondary justify-start" asChild>
                     <a
                       href={`https://www.aviationweather.gov/metar/data?ids=${weather.icao}&format=decoded`}
                       target="_blank"
@@ -1449,7 +1453,7 @@ export default function PilotTools() {
 
                   <Button
                     variant="outline"
-                    className="justify-start"
+                    className="rsf-metal-button-secondary justify-start"
                     onClick={() => window.open(`https://tfr.faa.gov/tfr2/list.html`, "_blank", "noopener,noreferrer")}
                   >
                     <AlertTriangle className="h-4 w-4 mr-2" />
@@ -1459,7 +1463,7 @@ export default function PilotTools() {
 
                   <Button
                     variant="outline"
-                    className="justify-start"
+                    className="rsf-metal-button-secondary justify-start"
                     onClick={() => window.open(`https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/dafd/`, "_blank", "noopener,noreferrer")}
                   >
                     <FileText className="h-4 w-4 mr-2" />
@@ -1469,7 +1473,7 @@ export default function PilotTools() {
 
                   <Button
                     variant="outline"
-                    className="justify-start"
+                    className="rsf-metal-button-secondary justify-start"
                     onClick={() => window.open(`https://www.1800wxbrief.com/`, "_blank", "noopener,noreferrer")}
                   >
                     <Radio className="h-4 w-4 mr-2" />
@@ -1479,7 +1483,7 @@ export default function PilotTools() {
 
                   <Button
                     variant="outline"
-                    className="justify-start"
+                    className="rsf-metal-button-secondary justify-start"
                     onClick={() => window.open(`https://skyvector.com/airport/${weather.icao}`, "_blank", "noopener,noreferrer")}
                   >
                     <FileText className="h-4 w-4 mr-2" />
@@ -1491,7 +1495,7 @@ export default function PilotTools() {
 
                 <Separator className="my-4" />
 
-                <div className="text-xs text-muted-foreground space-y-1">
+                <div className="text-xs text-[#A9BBCD] space-y-1">
                   <p><strong>METAR:</strong> Current observed weather conditions</p>
                   <p><strong>TAF:</strong> Terminal Aerodrome Forecast (6-30 hour forecast)</p>
                   <p><strong>NOTAMs:</strong> Notices to Airmen (runway closures, navaid outages, etc.)</p>
@@ -1512,6 +1516,7 @@ export default function PilotTools() {
         />
         )}
       </div>
+    </div>
     </div>
   );
 }

@@ -150,7 +150,7 @@ export default function ToolHub() {
   return (
     <div className="min-h-screen bg-[#0A0E14]">
       {/* Hero */}
-      <section className="border-b border-[#1c3147] bg-[linear-gradient(135deg,#0d1622,#0f2236)] py-10 text-[#E8EDF4] shadow-[inset_0_-1px_0_rgba(255,255,255,0.04)]">
+      <section className="rsf-metal-hero py-10 text-[#E8EDF4]">
         <div className="container mx-auto px-4 space-y-4">
           <span className="rsf-kicker border-[#29415e] bg-[#0d1622] text-[#7A9BB8]">PILOT TOOL HUB</span>
           <h1 className="font-display text-3xl sm:text-4xl font-bold text-[#F1F5FA]">Aviation tools for every phase of flight.</h1>
@@ -163,10 +163,10 @@ export default function ToolHub() {
             <span className="rounded-full border border-[#29415e] bg-[#0d1622] px-3 py-1">TRAINING & CALCULATORS</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button asChild onClick={() => trackEvent("tool_hub_click", { target: "/marketplace" })}>
+            <Button asChild className="rsf-metal-button-primary" onClick={() => trackEvent("tool_hub_click", { target: "/marketplace" })}>
               <Link href="/marketplace">Open Marketplace</Link>
             </Button>
-            <Button variant="outline" asChild className="border-[#29415e] bg-[#0d1622] text-[#E8EDF4] hover:bg-[#15304b]">
+            <Button variant="outline" asChild className="rsf-metal-button-secondary">
               <Link href="/rentals">Browse Rentals</Link>
             </Button>
           </div>
@@ -176,7 +176,7 @@ export default function ToolHub() {
       <section className="container mx-auto px-4 py-8 sm:py-10 space-y-8">
 
         {/* Quick Open */}
-        <div className="rounded-xl border border-[#203249] bg-[#0d1622] p-5 shadow-sm">
+        <div className="rsf-card-shell p-5">
           <div className="mb-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6D88A6]">Quick Open</div>
             <p className="mt-1 text-xs text-[#7A9BB8]">Type a tool name and jump directly.</p>
@@ -200,7 +200,7 @@ export default function ToolHub() {
                     key={tool.id}
                     asChild
                     variant="outline"
-                    className="justify-start border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]"
+                    className="rsf-metal-button-secondary justify-start"
                     onClick={() => recordToolOpen(tool)}
                   >
                     <Link href={tool.path}>{tool.title}</Link>
@@ -212,7 +212,7 @@ export default function ToolHub() {
         </div>
 
         {/* Pro value panel */}
-        <div className="rounded-xl border border-[#203249] bg-[#0d1622] shadow-sm">
+        <div className="rsf-card-shell">
           <div className="grid gap-4 p-6 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#D9A441]">Why RSF Pro Exists</div>
@@ -221,35 +221,35 @@ export default function ToolHub() {
                 RSF Pro becomes useful when you want saved plans, saved aircraft assumptions, practice history, logbook continuity, and reminders that keep repeat flying easier.
               </p>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-[#203249] bg-[#0f1a28] px-4 py-3">
+                <div className="rsf-metal-subpanel px-4 py-3">
                   <div className="text-sm font-semibold text-[#F1F5FA]">Free</div>
                   <div className="mt-1 text-xs text-[#7A9BB8]">Explore tools, plan one-offs, browse marketplace value.</div>
                 </div>
-                <div className="rounded-xl border border-[#203249] bg-[#0f1a28] px-4 py-3">
+                <div className="rsf-metal-subpanel px-4 py-3">
                   <div className="text-sm font-semibold text-[#F1F5FA]">Pro</div>
                   <div className="mt-1 text-xs text-[#7A9BB8]">Save repeat workflows, keep history, and reduce planning/admin friction.</div>
                 </div>
-                <div className="rounded-xl border border-[#203249] bg-[#0f1a28] px-4 py-3">
+                <div className="rsf-metal-subpanel px-4 py-3">
                   <div className="text-sm font-semibold text-[#F1F5FA]">Pro+</div>
                   <div className="mt-1 text-xs text-[#7A9BB8]">Layer on deeper planning context and power-user tools as they ship.</div>
                 </div>
               </div>
             </div>
-            <div className="space-y-3 rounded-2xl border border-[#203249] bg-[#0f1a28] p-4">
+            <div className="rsf-metal-subpanel space-y-3 p-4">
               <div className="text-sm font-semibold text-[#F1F5FA]">Best next step</div>
               <div className="text-sm text-[#7A9BB8]">
                 Use the free tools first. If you keep coming back to the same workflows, that is your upgrade moment.
               </div>
               <div className="flex flex-wrap gap-2">
                 {!isAuthenticated ? (
-                  <Button asChild>
+                  <Button asChild className="rsf-metal-button-primary">
                     <Link href={withReturnTo("/register", getCurrentReturnTo())}>Create free account</Link>
                   </Button>
                 ) : null}
                 <Button
                   asChild
                   variant="outline"
-                  className="border-[#29415e] bg-[#0d1622] text-[#E8EDF4] hover:bg-[#15304b]"
+                  className="rsf-metal-button-secondary"
                   onClick={() => trackEvent("subscription_cta_click", { source_page: "/tool-hub", target: "/logbook/pro", context: "tool_hub_value_panel" })}
                 >
                   <Link href={withSourceParam("/logbook/pro", "/tool-hub")}>See Pro plans</Link>
@@ -261,7 +261,7 @@ export default function ToolHub() {
 
         {/* Pinned + Recent */}
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-[#203249] bg-[#0d1622] p-4 shadow-sm">
+          <div className="rsf-card-shell p-4">
             <div className="mb-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6D88A6]">Pinned Tools</div>
               <p className="mt-0.5 text-xs text-[#7A9BB8]">Tools you want at the top every session.</p>
@@ -272,7 +272,7 @@ export default function ToolHub() {
               ) : (
                 pinnedTools.map((tool) => (
                   <Button key={tool.id} asChild variant="outline" size="sm"
-                    className="border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]"
+                    className="rsf-metal-button-secondary"
                     onClick={() => recordToolOpen(tool)}>
                     <Link href={tool.path}>{tool.title}</Link>
                   </Button>
@@ -281,7 +281,7 @@ export default function ToolHub() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-[#203249] bg-[#0d1622] p-4 shadow-sm">
+          <div className="rsf-card-shell p-4">
             <div className="mb-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6D88A6]">Recent Tools</div>
               <p className="mt-0.5 text-xs text-[#7A9BB8]">Last tools opened from this hub.</p>
@@ -292,7 +292,7 @@ export default function ToolHub() {
               ) : (
                 recentTools.map((tool) => (
                   <Button key={tool.id} asChild variant="outline" size="sm"
-                    className="border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]"
+                    className="rsf-metal-button-secondary"
                     onClick={() => recordToolOpen(tool)}>
                     <Link href={tool.path}>{tool.title}</Link>
                   </Button>
@@ -311,10 +311,10 @@ export default function ToolHub() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {MARKETPLACE_PATHS.map(({ path, label, desc, Icon }) => (
               <Link key={path} href={path} onClick={() => trackEvent("tool_hub_click", { target: path })}>
-                <div className="rounded-xl border border-[#29415e] bg-[#0f1a28] p-4 hover:bg-[#15304b] transition cursor-pointer h-full">
+                <div className="rsf-metal-panel rsf-metal-panel-interactive cursor-pointer h-full p-4">
                   <Icon className="h-5 w-5 text-[#D9A441] mb-2" />
                   <div className="text-sm font-semibold text-[#F1F5FA]">{label}</div>
-                  <div className="mt-1 text-xs text-[#7A9BB8]">{desc}</div>
+                  <div className="mt-1 text-xs text-[#A9BBCD]">{desc}</div>
                 </div>
               </Link>
             ))}
@@ -330,10 +330,10 @@ export default function ToolHub() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {PILOT_TOOL_PATHS.map(({ path, label, desc, Icon }) => (
               <Link key={path} href={path} onClick={() => trackEvent("tool_hub_click", { target: path })}>
-                <div className="rounded-xl border border-[#29415e] bg-[#0f1a28] p-4 hover:bg-[#15304b] transition cursor-pointer h-full">
+                <div className="rsf-metal-panel rsf-metal-panel-interactive cursor-pointer h-full p-4">
                   <Icon className="h-5 w-5 text-[#D9A441] mb-2" />
                   <div className="text-sm font-semibold text-[#F1F5FA]">{label}</div>
-                  <div className="mt-1 text-xs text-[#7A9BB8]">{desc}</div>
+                  <div className="mt-1 text-xs text-[#A9BBCD]">{desc}</div>
                 </div>
               </Link>
             ))}
@@ -349,10 +349,10 @@ export default function ToolHub() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {PLAN_TRACK_PATHS.map(({ path, label, desc, Icon }) => (
               <Link key={path} href={path} onClick={() => trackEvent("tool_hub_click", { target: path })}>
-                <div className="rounded-xl border border-[#29415e] bg-[#0f1a28] p-4 hover:bg-[#15304b] transition cursor-pointer h-full">
+                <div className="rsf-metal-panel rsf-metal-panel-interactive cursor-pointer h-full p-4">
                   <Icon className="h-5 w-5 text-[#D9A441] mb-2" />
                   <div className="text-sm font-semibold text-[#F1F5FA]">{label}</div>
-                  <div className="mt-1 text-xs text-[#7A9BB8]">{desc}</div>
+                  <div className="mt-1 text-xs text-[#A9BBCD]">{desc}</div>
                 </div>
               </Link>
             ))}
@@ -368,10 +368,10 @@ export default function ToolHub() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {CABIN_BRIEF_PATHS.map(({ path, label, desc, Icon }) => (
               <Link key={path} href={path} onClick={() => trackEvent("tool_hub_click", { target: path })}>
-                <div className="rounded-xl border border-[#5b4520] bg-[#1a1208] p-4 hover:bg-[#231a0c] transition cursor-pointer h-full">
+                <div className="rsf-metal-panel rsf-metal-panel-interactive cursor-pointer h-full p-4">
                   <Icon className="h-5 w-5 text-[#D9A441] mb-2" />
-                  <div className="text-sm font-semibold text-[#F5C86A]">{label}</div>
-                  <div className="mt-1 text-xs text-[#a88a4a]">{desc}</div>
+                  <div className="text-sm font-semibold text-[#F1F5FA]">{label}</div>
+                  <div className="mt-1 text-xs text-[#A9BBCD]">{desc}</div>
                 </div>
               </Link>
             ))}
@@ -379,7 +379,7 @@ export default function ToolHub() {
         </div>
 
         {/* Bottom CTA */}
-        <div className="rounded-xl border border-[#203249] bg-[#0d1622] shadow-sm">
+        <div className="rsf-card-shell">
           <div className="p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -390,17 +390,17 @@ export default function ToolHub() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button asChild variant="outline"
-                  className="border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]"
+                  className="rsf-metal-button-secondary"
                   onClick={() => trackEvent("tool_hub_click", { target: "/marketplace" })}>
                   <Link href="/marketplace">Marketplace</Link>
                 </Button>
                 <Button asChild variant="outline"
-                  className="border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]"
+                  className="rsf-metal-button-secondary"
                   onClick={() => trackEvent("tool_hub_click", { target: "/rentals" })}>
                   <Link href="/rentals">Rentals</Link>
                 </Button>
                 {!isAuthenticated ? (
-                  <Button asChild>
+                  <Button asChild className="rsf-metal-button-primary">
                     <Link href={withReturnTo("/register", getCurrentReturnTo())}>Create free account</Link>
                   </Button>
                 ) : null}

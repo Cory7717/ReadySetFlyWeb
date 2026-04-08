@@ -295,11 +295,15 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
   const Icon = listing ? categoryIcons[listing.category] : Plane;
   const instagramUrl = listing ? resolveSocialUrl(listing.instagramUrl, "instagram") : undefined;
   const facebookUrl = listing ? resolveSocialUrl(listing.facebookUrl, "facebook") : undefined;
+  const marketplacePanelClass = "rsf-metal-panel text-[#E8EDF4]";
+  const marketplaceSubpanelClass = "rsf-marketplace-subpanel rounded-[1rem] p-4 text-[#DCE6F2]";
+  const marketplacePrimaryButtonClass = "rsf-metal-button-primary";
+  const marketplaceSecondaryButtonClass = "rsf-metal-button-secondary";
 
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="modal-marketplace-listing">
+      <DialogContent className="rsf-marketplace-theme rsf-metal-panel max-h-[90vh] max-w-5xl overflow-y-auto text-[#E8EDF4]" data-testid="modal-marketplace-listing">
         <DialogDescription className="sr-only">
           Marketplace listing details and actions.
         </DialogDescription>
@@ -310,7 +314,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
         ) : listing ? (
           <>
             {(listing as any).isExample && (
-              <div className="bg-amber-500 text-white px-6 py-3 -mx-6 -mt-6 mb-4 text-center font-semibold" data-testid="banner-example-modal">
+              <div className="-mx-6 -mt-6 mb-4 border-b border-[#7f6327]/40 bg-[linear-gradient(180deg,rgba(54,40,18,0.98),rgba(28,21,10,0.98))] px-6 py-3 text-center font-semibold text-[#f2dca4]" data-testid="banner-example-modal">
                 EXAMPLE LISTING - For Reference Only
                 <p className="text-sm font-normal mt-1 opacity-90">
                   This is an example to help you create your own quality listing
@@ -321,11 +325,11 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <Badge className="capitalize" data-testid="badge-category">
+                    <Badge className="border border-[#45658b]/40 bg-[#122030] capitalize text-[#d7e6f6]" data-testid="badge-category">
                       {categoryLabels[listing.category]}
                     </Badge>
                     {listing.tier && (
-                      <Badge variant="outline" className="capitalize">
+                      <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] capitalize text-[#E8EDF4]">
                         {listing.tier} Tier
                       </Badge>
                     )}
@@ -337,12 +341,12 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                     {categoryLabels[listing.category]} listing for {listing.title}
                   </DialogDescription>
                   {listing.location && (
-                    <div className="flex items-center gap-2 text-muted-foreground mt-2">
+                    <div className="mt-2 flex items-center gap-2 text-[#A9BBCD]">
                       <MapPin className="h-4 w-4" />
                       <span>{listing.location}</span>
                     </div>
                   )}
-                  <div className="flex items-center gap-2 text-muted-foreground mt-2">
+                  <div className="mt-2 flex items-center gap-2 text-[#A9BBCD]">
                     <Eye className="h-4 w-4" />
                     <span>{listing.viewCount || 0} views</span>
                   </div>
@@ -354,7 +358,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                   />
                   {listing.price && (
                     <div className="text-right">
-                      <div className="text-3xl font-bold text-primary">
+                      <div className="text-3xl font-bold text-[#9ebdff]">
                         ${parseFloat(listing.price).toLocaleString()}
                       </div>
                     </div>
@@ -370,7 +374,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                   <CarouselContent>
                     {listing.images.map((img, idx) => (
                       <CarouselItem key={idx}>
-                        <div className="aspect-video rounded-xl overflow-hidden bg-white">
+                        <div className="aspect-video overflow-hidden rounded-xl bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))]">
                           <img
                             src={resolveImageUrl(img)}
                             alt={`${listing.title} - Image ${idx + 1}`}
@@ -391,16 +395,16 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
             )}
 
             {/* Description */}
-            <div>
+            <div className={marketplaceSubpanelClass}>
               <h3 className="font-display text-xl font-semibold mb-3">Description</h3>
-              <p className="text-muted-foreground whitespace-pre-wrap">{listing.description}</p>
+              <p className="whitespace-pre-wrap text-[#DCE6F2]">{listing.description}</p>
             </div>
 
             <Separator />
 
             {/* Category-Specific Details */}
             {listing.details && (
-              <div className="space-y-6">
+              <div className={`${marketplaceSubpanelClass} space-y-6`}>
                 <h3 className="font-display text-xl font-semibold">Details</h3>
 
                 {/* Aircraft Sale Details */}
@@ -666,12 +670,12 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
             <Separator />
 
             {/* Contact Information */}
-            <div>
+            <div className={marketplaceSubpanelClass}>
               <h3 className="font-display text-xl font-semibold mb-4">Contact Information</h3>
               <div className="grid md:grid-cols-2 gap-4">
                 {listing.contactEmail && (
                   <div className="flex items-center gap-3">
-                    <Mail className="h-5 w-5 text-muted-foreground" />
+                    <Mail className="h-5 w-5 text-[#8fa6c0]" />
                     <div>
                       <p className="text-sm text-muted-foreground">Email</p>
                       {canViewContact ? (
@@ -693,7 +697,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                 )}
                 {listing.contactPhone && (
                   <div className="flex items-center gap-3">
-                    <Phone className="h-5 w-5 text-muted-foreground" />
+                    <Phone className="h-5 w-5 text-[#8fa6c0]" />
                     <div>
                       <p className="text-sm text-muted-foreground">Phone</p>
                       {canViewContact ? (
@@ -715,7 +719,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                 )}
                 {(instagramUrl || facebookUrl) && (
                   <div className="flex items-center gap-3">
-                    <div className="h-5 w-5 text-muted-foreground" />
+                    <div className="h-5 w-5 text-[#8fa6c0]" />
                     <div>
                       <p className="text-sm text-muted-foreground">Social</p>
                       {canViewContact ? (
@@ -760,7 +764,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                 )}
               </div>
               {!canViewContact && (
-                <p className="text-xs text-muted-foreground mt-2">
+                <p className="mt-2 text-xs text-[#A9BBCD]">
                   Create an account to contact sellers, apply for jobs, or request more info.
                 </p>
               )}
@@ -770,7 +774,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
             <div className="flex gap-3 pt-4">
               {listing.category === "job" ? (
                 <Button
-                  className="flex-1"
+                  className={`flex-1 ${marketplacePrimaryButtonClass}`}
                   onClick={() => {
                     if (!user) {
                       requireLogin();
@@ -788,7 +792,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                 <>
                   {listing.contactEmail && (
                     <Button
-                      className="flex-1 bg-accent text-accent-foreground hover:bg-accent"
+                      className={`flex-1 ${marketplacePrimaryButtonClass}`}
                       onClick={() => {
                         if (!user) {
                           requireLogin();
@@ -805,6 +809,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                   {listing.contactPhone && (
                     <Button
                       variant="outline"
+                      className={marketplaceSecondaryButtonClass}
                       onClick={() => {
                         if (!user) {
                           requireLogin();
@@ -831,10 +836,10 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                 ) : (
                   <Button
                     variant="outline"
+                    className={`${marketplaceSecondaryButtonClass} text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground`}
                     onClick={() => setFlagConfirmOpen(true)}
                     disabled={flagListingMutation.isPending}
                     data-testid="button-flag-listing"
-                    className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
                   >
                     <Flag className="h-4 w-4 mr-2" />
                     Flag as Spam
@@ -845,13 +850,13 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
 
             {/* Admin Actions */}
             {user?.isAdmin && (
-              <div className="border-t pt-6 mt-6 space-y-6">
+              <div className="mt-6 space-y-6 border-t border-[#5d6f85]/16 pt-6">
                 <h3 className="font-display text-lg font-semibold">Admin Actions</h3>
                 
                 {/* Quick Actions */}
                 <div className="grid md:grid-cols-2 gap-4">
                   {/* Toggle Active */}
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className={marketplaceSubpanelClass}>
                     <div className="space-y-1">
                       <Label className="font-semibold">Listing Status</Label>
                       <p className="text-sm text-muted-foreground">
@@ -867,7 +872,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                   </div>
 
                   {/* Toggle Featured */}
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className={marketplaceSubpanelClass}>
                     <div className="space-y-1">
                       <Label className="font-semibold">Featured/Boosted</Label>
                       <p className="text-sm text-muted-foreground">
@@ -935,7 +940,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                 <div className="flex gap-3 flex-wrap">
                   {!(listing as any).isExample && (
                     <Link href={`/edit-marketplace-listing/${listing.id}`}>
-                      <Button variant="outline" data-testid="button-edit-listing">
+                      <Button variant="outline" className={marketplaceSecondaryButtonClass} data-testid="button-edit-listing">
                         <Edit className="h-4 w-4 mr-2" />
                         Edit Listing
                       </Button>
@@ -961,7 +966,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
 
     {/* Flag Confirmation Dialog */}
     <AlertDialog open={flagConfirmOpen} onOpenChange={setFlagConfirmOpen}>
-      <AlertDialogContent data-testid="dialog-flag-confirm">
+      <AlertDialogContent className={marketplacePanelClass} data-testid="dialog-flag-confirm">
         <AlertDialogHeader>
           <AlertDialogTitle>Flag this listing as spam or fraud?</AlertDialogTitle>
           <AlertDialogDescription>
@@ -969,7 +974,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel data-testid="button-cancel-flag">Cancel</AlertDialogCancel>
+          <AlertDialogCancel className={marketplaceSecondaryButtonClass} data-testid="button-cancel-flag">Cancel</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => {
               if (listing) {
@@ -987,7 +992,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
 
     {/* Login Prompt Dialog */}
     <AlertDialog open={loginPromptOpen} onOpenChange={setLoginPromptOpen}>
-      <AlertDialogContent data-testid="dialog-login-prompt">
+      <AlertDialogContent className={marketplacePanelClass} data-testid="dialog-login-prompt">
         <AlertDialogHeader>
           <AlertDialogTitle>Sign in to continue</AlertDialogTitle>
           <AlertDialogDescription>
@@ -995,7 +1000,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel data-testid="button-cancel-login">Continue Browsing</AlertDialogCancel>
+          <AlertDialogCancel className={marketplaceSecondaryButtonClass} data-testid="button-cancel-login">Continue Browsing</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => window.location.href = apiUrl('/api/auth/google')}
             data-testid="button-go-login"
@@ -1017,7 +1022,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
 
     {/* Contact Seller Dialog */}
     <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
-      <DialogContent className="max-w-md" data-testid="dialog-contact-seller">
+      <DialogContent className="rsf-marketplace-theme rsf-metal-panel max-w-md text-[#E8EDF4]" data-testid="dialog-contact-seller">
         <DialogHeader>
           <DialogTitle>Contact seller</DialogTitle>
           <DialogDescription>
@@ -1090,6 +1095,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
               <Button
                 type="button"
                 variant="outline"
+                className={marketplaceSecondaryButtonClass}
                 onClick={() => setContactDialogOpen(false)}
                 data-testid="button-cancel-contact-seller"
               >
@@ -1097,6 +1103,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
               </Button>
               <Button
                 type="submit"
+                className={marketplacePrimaryButtonClass}
                 disabled={sendContactMutation.isPending}
                 data-testid="button-submit-contact-seller"
               >

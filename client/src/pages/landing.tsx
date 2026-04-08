@@ -1720,8 +1720,8 @@ export default function Landing() {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px] xl:items-start">
-            <Card className={`${metallicPanelClass} text-[#E8EDF4]`}>
+          <div className="mt-6 grid gap-6 xl:grid-cols-2 xl:items-stretch">
+            <Card className={`${metallicPanelClass} h-full text-[#E8EDF4]`}>
               <CardContent className="space-y-5 p-5 sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-2">
@@ -1763,7 +1763,7 @@ export default function Landing() {
               </CardContent>
             </Card>
 
-            <div className={`${metallicPanelClass} rounded-[1.15rem] p-4`}>
+            <div className={`${metallicPanelClass} flex h-full flex-col rounded-[1.15rem] p-4`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#a8bedf]">
@@ -1783,7 +1783,7 @@ export default function Landing() {
                 placement="home"
                 variant="compact"
                 showLeadIn={false}
-                className="mt-4"
+                className="mt-4 flex-1"
               />
             </div>
           </div>

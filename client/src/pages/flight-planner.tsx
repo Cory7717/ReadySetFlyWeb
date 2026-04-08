@@ -5366,7 +5366,7 @@ export default function FlightPlanner() {
     }));
   }, [selectedProfile, editingPlan]);
 
-  const plannerPanelClass = "rounded-[1.35rem] border-[#5d6f85]/20 bg-transparent text-[#E8EDF4]";
+  const plannerPanelClass = "rsf-card-shell rounded-[1.35rem] text-[#E8EDF4]";
   const plannerCardTitleClass = "text-[#F5F8FC]";
   const plannerCardDescriptionClass = "text-[#A9BBCD]";
   const plannerMetricClass = "rsf-planner-metric px-3 py-2.5";
@@ -5596,7 +5596,7 @@ export default function FlightPlanner() {
           <Accordion type="multiple" className="w-full space-y-2">
             <AccordionItem value="airport-conditions" className="rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-4">
               <AccordionTrigger className="text-sm">Airport conditions</AccordionTrigger>
-              <AccordionContent className="space-y-3 pb-3 text-sm text-muted-foreground">
+              <AccordionContent className="space-y-3 pb-3 text-sm text-[#A9BBCD]">
                 <p>Jump to the route weather summary already on this page.</p>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToSection("route-weather-summary", "planner_jump_weather_summary", "weather")}>
@@ -5607,13 +5607,13 @@ export default function FlightPlanner() {
             </AccordionItem>
             <AccordionItem value="airspace-review" className="rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-4">
               <AccordionTrigger className="text-sm">Airspace review</AccordionTrigger>
-              <AccordionContent className="space-y-3 pb-3 text-sm text-muted-foreground">
+              <AccordionContent className="space-y-3 pb-3 text-sm text-[#A9BBCD]">
                 <p>Review route conflicts in this page, or open the full TFR map in a new tab.</p>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToSection("route-analysis", "planner_jump_route_analysis", "analysis")}>
                     Go to route analysis
                   </Button>
-                  <Button type="button" size="sm" asChild>
+                  <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} asChild>
                     <a href="/tfr-map" target="_blank" rel="noopener noreferrer">Open full TFR map</a>
                   </Button>
                 </div>
@@ -5621,10 +5621,10 @@ export default function FlightPlanner() {
             </AccordionItem>
             <AccordionItem value="approach-plates" className="rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-4">
               <AccordionTrigger className="text-sm">Approach plates</AccordionTrigger>
-              <AccordionContent className="space-y-3 pb-3 text-sm text-muted-foreground">
+              <AccordionContent className="space-y-3 pb-3 text-sm text-[#A9BBCD]">
                 <p>Open RSF approach plates in a new tab while keeping the planner route loaded here.</p>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" asChild>
+                  <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} asChild>
                     <a href="/approach-plates" target="_blank" rel="noopener noreferrer">Open approach plates</a>
                   </Button>
                 </div>
@@ -5720,7 +5720,7 @@ export default function FlightPlanner() {
                       key={option.ident}
                       type="button"
                       size="sm"
-                      variant={departureRunway === option.ident ? "default" : "outline"}
+                      className={departureRunway === option.ident ? "rsf-metal-button-primary" : plannerInsetActionClass}
                       onClick={() => setDepartureRunway(option.ident)}
                     >
                       {option.ident}
@@ -8439,7 +8439,7 @@ export default function FlightPlanner() {
               </div>
             )}
             <div className="mt-4 space-y-2">
-              <div className="text-xs text-muted-foreground">Map style</div>
+              <div className="text-xs text-[#8fa6c0] uppercase tracking-[0.12em]">Map style</div>
               <RsfModeToggle
                 value={mapStyle}
                 options={RSF_PLANNER_MAP_STYLE_OPTIONS}
@@ -8447,7 +8447,7 @@ export default function FlightPlanner() {
               />
               {mapStyle === "winds" && (
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Winds altitude</span>
+                  <span className="text-[#8fa6c0]">Winds altitude</span>
                   <Select value={windsAltitudeChoice} onValueChange={setWindsAltitudeChoice}>
                     <SelectTrigger className="h-8 w-[170px]">
                       <SelectValue />
@@ -8469,34 +8469,34 @@ export default function FlightPlanner() {
               )}
             </div>
             {mapStyle === "sectional" && (
-              <div className="text-xs text-muted-foreground mt-2">
+              <div className="text-xs text-[#A9BBCD] mt-2">
                 FAA sectional charts now render across the route view; chart detail sharpens as you zoom in.
               </div>
             )}
             {(mapStyle === "radar" || mapStyle === "winds" || mapStyle === "clouds") && (
-              <div className="text-xs text-muted-foreground mt-2">
+              <div className="text-xs text-[#A9BBCD] mt-2">
                 Weather layers are for situational awareness only. Radar shows precip; clouds are satellite IR.
                 Winds aloft uses NOAA AWC data near your planned altitude. Verify with official sources.
               </div>
             )}
             {mapStyle === "globe" && (
-              <div className="text-xs text-muted-foreground mt-2">
+              <div className="text-xs text-[#A9BBCD] mt-2">
                 3D globe view uses CesiumJS. Weather overlays are available in 2D for now.
               </div>
             )}
             {mapStyle === "winds" && (
-              <div className="text-xs text-muted-foreground mt-1">
+              <div className="text-xs text-[#A9BBCD] mt-1">
                 Wind arrows point in the direction the wind is blowing from; size scales with speed.
               </div>
             )}
             {!isAuthenticated && routePoints.length > 0 && (
-              <Alert className="mt-3">
-                <AlertDescription className="flex flex-wrap items-center gap-3">
+              <Alert className="mt-3 border-[#5d6f85]/30 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))]">
+                <AlertDescription className="flex flex-wrap items-center gap-3 text-[#C7D7EA]">
                   <span>Save this route and keep repeat planning faster with a free account.</span>
-                  <Button asChild size="sm">
+                  <Button asChild size="sm" className="rsf-metal-button-primary">
                     <Link href={withReturnTo("/register", getCurrentReturnTo())}>Create free account</Link>
                   </Button>
-                  <Button asChild size="sm" variant="outline">
+                  <Button asChild size="sm" variant="outline" className={plannerInsetActionClass}>
                     <Link href={withReturnTo("/login", getCurrentReturnTo())}>Sign in</Link>
                   </Button>
                 </AlertDescription>

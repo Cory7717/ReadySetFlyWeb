@@ -350,6 +350,11 @@ export default function Landing() {
     : isPaidUser
       ? "Open your RSF Pro page to manage plan details, trials, and membership settings."
       : "Open the dedicated RSF Pro page for plan details, feature breakdowns, and subscription links.";
+  const metallicPrimaryButtonClass = "rsf-metal-button-primary";
+  const metallicSecondaryButtonClass = "rsf-metal-button-secondary";
+  const metallicPanelClass = "rsf-metal-panel";
+  const metallicPanelInteractiveClass = "rsf-metal-panel rsf-metal-panel-interactive";
+  const metallicSubpanelClass = "rsf-metal-subpanel";
   const fragmentedWorkflowCards = [
     {
       title: "Flight Planning",
@@ -779,7 +784,7 @@ export default function Landing() {
       {activeMobileTab === "weather" && (
         <div className="md:hidden">
           <div className="container mx-auto space-y-4 px-4 pt-4 text-[#E8EDF4]">
-            <Card className="overflow-visible border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)]">
+            <Card className={`${metallicPanelClass} overflow-visible rounded-[1.2rem]`}>
               <CardContent className="relative z-30 p-4">
                 <div className="space-y-2">
                   <Label htmlFor="mobile-weather-icao" className="text-sm font-semibold text-[#F1F5FA]">
@@ -798,13 +803,13 @@ export default function Landing() {
                         }
                       }}
                       placeholder="KAUS or Austin, TX"
-                      className="border-[#29415e] bg-[#0d1622] pr-10 text-[#F1F5FA] placeholder:text-[#6f87a0]"
+                      className="border-[#55657a]/35 bg-[#11161d] pr-10 text-[#F1F5FA] placeholder:text-[#708299]"
                     />
-                    <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7A9BB8]" />
+                    <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#90a6c0]" />
                     {(loadingSuggestions || airportSuggestions.length > 0) && (
-                      <div className="absolute z-20 mt-2 w-full rounded-md border border-[#29415e] bg-[#0d1622] shadow-sm">
+                      <div className="absolute z-20 mt-2 w-full rounded-xl border border-[#55657a]/35 bg-[#11161d] shadow-[0_20px_40px_-28px_rgba(0,0,0,0.9)]">
                         {loadingSuggestions ? (
-                          <div className="px-3 py-2 text-xs text-[#7A9BB8]">Searching airports...</div>
+                          <div className="px-3 py-2 text-xs text-[#91a8c3]">Searching airports...</div>
                         ) : (
                           <ul className="max-h-56 overflow-auto">
                             {airportSuggestions.map((suggestion) => (
@@ -813,10 +818,10 @@ export default function Landing() {
                                   type="button"
                                   onMouseDown={(event) => event.preventDefault()}
                                   onClick={() => applySuggestion(suggestion)}
-                                  className="w-full px-3 py-2 text-left text-sm text-[#E8EDF4] hover:bg-[#15283d]"
+                                  className="w-full px-3 py-2 text-left text-sm text-[#E8EDF4] transition-colors hover:bg-[#18212d]"
                                 >
                                   <div className="font-semibold text-[#F1F5FA]">{suggestion.icao}</div>
-                                  <div className="text-xs text-[#7A9BB8]">
+                                  <div className="text-xs text-[#91a8c3]">
                                     {suggestion.name}
                                     {suggestion.city ? ` - ${suggestion.city}` : ""}
                                     {suggestion.state ? `, ${suggestion.state}` : ""}
@@ -829,7 +834,7 @@ export default function Landing() {
                       </div>
                     )}
                     {airportMeta && (
-                      <div className="mt-2 text-xs text-[#7A9BB8]">
+                      <div className="mt-2 text-xs text-[#91a8c3]">
                         {airportMeta.name ?? "Unknown airport"}
                         {airportLocation ? ` (${airportLocation})` : ""}
                       </div>
@@ -840,7 +845,7 @@ export default function Landing() {
                     size="sm"
                     onClick={refreshAirportConditions}
                     disabled={!ICAO_REGEX.test(icaoInput.trim().toUpperCase())}
-                    className="w-full border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]"
+                    className={`w-full ${metallicSecondaryButtonClass}`}
                   >
                     {weatherFetching || runwayFetching || notamsFetching ? "Refreshing..." : "Update conditions"}
                   </Button>
@@ -864,12 +869,12 @@ export default function Landing() {
                 {flightCategory.category}
               </Badge>
               {runwayInUseDisplay && (
-                <Badge variant="outline" className="border-[#29415e] bg-[#102236] text-[#9FC6EA]">
+                <Badge variant="outline" className="border-[#5b6e87]/35 bg-[#131923] text-[#9db8d8]">
                   Active RWY: {runwayInUseDisplay}
                 </Badge>
               )}
               {atisInfo && (
-                <Badge variant="outline" className="border-[#35516e] bg-[#102236] text-[#8FC7FF]">
+                <Badge variant="outline" className="border-[#5c74a3]/40 bg-[#141b28] text-[#9fc0ff]">
                   ATIS: {atisInfo}
                 </Badge>
               )}
@@ -882,7 +887,7 @@ export default function Landing() {
                       ? "border-[#6d2c27] bg-[#2b1111] text-[#ff8c84]"
                       : hazard.tone === "amber"
                         ? "border-[#6d5520] bg-[#271d0b] text-[#ffd278]"
-                        : "border-[#35516e] bg-[#102236] text-[#8FC7FF]"
+                        : "border-[#5c74a3]/40 bg-[#141b28] text-[#9fc0ff]"
                   }
                 >
                   {hazard.label}
@@ -898,7 +903,7 @@ export default function Landing() {
                 </p>
               </div>
             ) : (
-              <p className="text-sm text-[#7A9BB8]">No METAR data available.</p>
+              <p className="text-sm text-[#91a8c3]">No METAR data available.</p>
             )}
 
             {weather?.taf && (
@@ -910,17 +915,17 @@ export default function Landing() {
               </div>
             )}
 
-            <div className="rounded-lg border border-[#29415e] bg-[linear-gradient(180deg,rgba(13,22,34,0.98),rgba(18,31,48,0.94))] p-4">
+            <div className={`${metallicSubpanelClass} rounded-[1rem] p-4`}>
               <div className="mb-3 space-y-1">
                 <div className="text-sm font-semibold text-[#F1F5FA]">AI weather briefing</div>
-                <div className="text-xs text-[#7A9BB8]">
+                <div className="text-xs text-[#91a8c3]">
                   Plain-English summary of METAR and TAF for {searchIcao}.
                 </div>
               </div>
                 <Button
                   type="button"
                   size="sm"
-                  className="w-full bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]"
+                  className={`w-full ${metallicPrimaryButtonClass}`}
                   onClick={() => {
                     const next = !showAiWeatherSummary;
                     setShowAiWeatherSummary(next);
@@ -945,10 +950,10 @@ export default function Landing() {
               )}
             </div>
 
-            <div className="rounded-lg border border-[#29415e] bg-[linear-gradient(180deg,rgba(13,22,34,0.98),rgba(18,31,48,0.94))] p-4">
+            <div className={`${metallicSubpanelClass} rounded-[1rem] p-4`}>
               <div className="mb-3 space-y-1">
                 <div className="text-sm font-semibold text-[#F1F5FA]">AI NOTAM translator</div>
-                <div className="text-xs text-[#7A9BB8]">
+                <div className="text-xs text-[#91a8c3]">
                   Plain-English operational impacts for active NOTAMs at {searchIcao}.
                 </div>
               </div>
@@ -956,7 +961,7 @@ export default function Landing() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="w-full border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]"
+                  className={`w-full ${metallicSecondaryButtonClass}`}
                   onClick={() => {
                     const next = !showAiNotamTranslator;
                     setShowAiNotamTranslator(next);
@@ -984,10 +989,10 @@ export default function Landing() {
               <div className="space-y-2">
                 <Label className="text-sm font-semibold text-[#F1F5FA]">Active NOTAMs</Label>
                 {notams.notams.slice(0, 4).map((item) => (
-                  <div key={item.id} className="space-y-1 rounded-lg border border-[#29415e] bg-[#0f1a28] p-3 text-xs text-[#E8EDF4]">
+                  <div key={item.id} className={`${metallicSubpanelClass} space-y-1 rounded-[0.95rem] p-3 text-xs text-[#E8EDF4]`}>
                     <div className="font-semibold">{item.text}</div>
                     {(item.effective || item.expires) && (
-                      <div className="text-[#7A9BB8]">
+                      <div className="text-[#91a8c3]">
                         {item.effective ? `Effective ${item.effective}` : ""}
                         {item.expires ? ` - Expires ${item.expires}` : ""}
                       </div>
@@ -998,15 +1003,15 @@ export default function Landing() {
             ) : null}
 
             {runwayBriefing?.advisory && (
-              <div className="rounded-lg border border-[#29415e] bg-[#0f1a28] p-3 text-sm text-[#E8EDF4]">
+              <div className={`${metallicSubpanelClass} rounded-[0.95rem] p-3 text-sm text-[#E8EDF4]`}>
                 <Label className="mb-2 block text-sm font-semibold text-[#F1F5FA]">Runway Advisory</Label>
                 <div className="sr-only">
                   <Badge variant="outline">Recommended: {runwayBriefing.advisory.runway}</Badge>
-                  <span className="text-xs text-[#7A9BB8]">
+                  <span className="text-xs text-[#91a8c3]">
                     Headwind {runwayBriefing.advisory.headwind} kt - Crosswind {runwayBriefing.advisory.crosswind} kt
                   </span>
                 </div>
-                <p className="mt-2 text-xs text-[#7A9BB8]">
+                <p className="mt-2 text-xs text-[#91a8c3]">
                   Advisory only. ATC assigns runways - verify with ATIS and tower.
                 </p>
               </div>
@@ -1035,8 +1040,8 @@ export default function Landing() {
               </div>
             </div>
 
-            <Alert className="border-[#6d5520] bg-[#271d0b] text-[#E8EDF4]">
-              <AlertTriangle className="h-4 w-4 text-[#ffd278]" />
+            <Alert className="border-[#596778]/35 bg-[linear-gradient(180deg,rgba(31,34,40,0.96),rgba(20,23,28,0.98))] text-[#E8EDF4]">
+              <AlertTriangle className="h-4 w-4 text-[#9ec0ff]" />
               <AlertDescription className="text-xs">
                 <strong>Disclaimer:</strong> Planning use only. Always obtain an official weather briefing before flight.
               </AlertDescription>
@@ -1048,7 +1053,7 @@ export default function Landing() {
         <div className="container mx-auto space-y-4 px-4 pt-4 text-[#E8EDF4] md:hidden">
           <div className="space-y-1">
             <h2 className="text-xl font-semibold text-[#F1F5FA]">Plan your flight</h2>
-            <p className="text-sm text-[#7A9BB8]">
+            <p className="text-sm text-[#91a8c3]">
               Tools for route planning, performance, and airspace awareness.
             </p>
           </div>
@@ -1071,10 +1076,10 @@ export default function Landing() {
                   })
                 }
               >
-                <div className="flex h-full flex-col gap-2 rounded-xl border border-[#29415e] bg-[linear-gradient(180deg,rgba(13,22,34,0.98),rgba(18,31,48,0.94))] p-4 transition hover:bg-[#15304b]">
-                  <item.icon className="h-4 w-4 text-[#D9A441]" />
+                <div className={`${metallicPanelInteractiveClass} flex h-full flex-col gap-2 rounded-[1.05rem] p-4`}>
+                  <item.icon className="h-4 w-4 text-[#9ec0ff]" />
                   <div className="text-sm font-semibold leading-tight text-[#F1F5FA]">{item.label}</div>
-                  <div className="text-xs leading-snug text-[#7A9BB8]">{item.desc}</div>
+                  <div className="text-xs leading-snug text-[#a7b8cd]">{item.desc}</div>
                 </div>
               </Link>
             ))}
@@ -1087,11 +1092,11 @@ export default function Landing() {
             <>
               <div className="space-y-1">
                 <h2 className="text-xl font-semibold text-[#F1F5FA]">Your logbook</h2>
-                <p className="text-sm text-[#7A9BB8]">
+                <p className="text-sm text-[#91a8c3]">
                   Track flights, endorsements, and currency.
                 </p>
               </div>
-              <Button asChild className="w-full bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]" size="lg">
+              <Button asChild className={`w-full ${metallicPrimaryButtonClass}`} size="lg">
                 <Link
                   href="/logbook"
                   onClick={() => trackEvent("cta_click", { label: "mobile_log_tab_open_logbook", target: "/logbook" })}
@@ -1100,16 +1105,16 @@ export default function Landing() {
                 </Link>
               </Button>
               {hasProPlus ? (
-                <Button asChild variant="outline" className="w-full border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]">
+                <Button asChild variant="outline" className={`w-full ${metallicSecondaryButtonClass}`}>
                   <Link href="/cfi/training-center">CFI Training Center</Link>
                 </Button>
               ) : (
-                <div className="rounded-lg border border-[#5b4520] bg-[#271d0b] p-4 text-sm text-[#E8EDF4]">
+                <div className={`${metallicSubpanelClass} rounded-[1rem] p-4 text-sm text-[#E8EDF4]`}>
                   <div className="mb-1 font-semibold text-[#F1F5FA]">Upgrade to Pro+</div>
-                  <p className="mb-3 text-xs text-[#d7b57a]">
+                  <p className="mb-3 text-xs text-[#9bb1cc]">
                     Unlock GPS simulators and the CFI training center.
                   </p>
-                  <Button asChild size="sm" className="w-full bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                  <Button asChild size="sm" className={`w-full ${metallicPrimaryButtonClass}`}>
                     <Link href="/logbook/pro">Upgrade to Pro+</Link>
                   </Button>
                 </div>
@@ -1119,28 +1124,28 @@ export default function Landing() {
             <>
               <div className="space-y-1">
                 <h2 className="text-xl font-semibold text-[#F1F5FA]">Free digital logbook</h2>
-                <p className="text-sm text-[#7A9BB8]">
+                <p className="text-sm text-[#91a8c3]">
                   Log flights with the basic RSF logbook now. Upgrade for saved plans, enhanced tracking, and Pro features.
                 </p>
               </div>
-              <div className="rounded-lg border border-[#29415e] bg-[linear-gradient(180deg,rgba(13,22,34,0.98),rgba(18,31,48,0.94))] p-4 text-sm text-[#E8EDF4]">
+              <div className={`${metallicSubpanelClass} rounded-[1rem] p-4 text-sm text-[#E8EDF4]`}>
                 <div className="font-semibold text-[#F1F5FA]">Included with a free account</div>
-                <ul className="mt-2 space-y-2 text-xs text-[#7A9BB8]">
+                <ul className="mt-2 space-y-2 text-xs text-[#91a8c3]">
                   <li className="flex items-start gap-2">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#D9A441]" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#9ec0ff]" />
                     Basic digital logbook access
                   </li>
                   <li className="flex items-start gap-2">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#D9A441]" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#9ec0ff]" />
                     Core flight entry and tracking
                   </li>
                   <li className="flex items-start gap-2">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#D9A441]" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#9ec0ff]" />
                     Upgrade when you need saved plans and enhanced tools
                   </li>
                 </ul>
               </div>
-              <Button asChild className="w-full bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]" size="lg">
+              <Button asChild className={`w-full ${metallicPrimaryButtonClass}`} size="lg">
                 <Link
                   href="/logbook"
                   onClick={() => trackEvent("cta_click", { label: "mobile_log_tab_open_logbook", target: "/logbook" })}
@@ -1148,7 +1153,7 @@ export default function Landing() {
                   Open free logbook
                 </Link>
               </Button>
-              <Button asChild variant="outline" className="w-full border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]">
+              <Button asChild variant="outline" className={`w-full ${metallicSecondaryButtonClass}`}>
                 <Link
                   href="/logbook/pro"
                   onClick={() => trackEvent("cta_click", { label: "mobile_log_tab_start_trial", target: "/logbook/pro" })}
@@ -1162,23 +1167,23 @@ export default function Landing() {
       )}
       {activeMobileTab === "pricing" && (
         <div className="container mx-auto space-y-4 px-4 pt-4 md:hidden">
-          <Card className="border-[#29415e] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] text-[#E8EDF4] shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)]">
+          <Card className={`${metallicPanelClass} text-[#E8EDF4]`}>
             <CardHeader className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <span className="rsf-kicker border-[#29415e] bg-[#102236] text-[#D9A441]">RSF Pro</span>
-                <Badge variant="outline" className="border-[#29415e] bg-[#102236] text-[#9FC6EA]">
+                <span className="rsf-kicker">RSF Pro</span>
+                <Badge variant="outline" className="border-[#5b6e87]/35 bg-[#131923] text-[#9db8d8]">
                   Plans moved off this page
                 </Badge>
               </div>
               <div className="space-y-2">
                 <CardTitle className="text-xl text-[#F1F5FA]">Open the dedicated membership page.</CardTitle>
-                <CardDescription className="text-sm text-[#7A9BB8]">
+                <CardDescription className="text-sm text-[#91a8c3]">
                   {membershipCtaDescription}
                 </CardDescription>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button asChild className="w-full bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+              <Button asChild className={`w-full ${metallicPrimaryButtonClass}`}>
                 <Link
                   href={membershipPageHref}
                   onClick={() => trackEvent("cta_click", { label: "mobile_pricing_tab_membership_cta", target: membershipPageHref })}
@@ -1186,7 +1191,7 @@ export default function Landing() {
                   {membershipCtaLabel}
                 </Link>
               </Button>
-              <p className="text-xs text-[#7A9BB8]">
+              <p className="text-xs text-[#91a8c3]">
                 The RSF Pro page now carries the full plan details, trial language, and subscribe flows.
               </p>
             </CardContent>
@@ -1194,20 +1199,20 @@ export default function Landing() {
         </div>
       )}
       {!weatherJumpDismissed && !hasUsedWeatherTool && (
-        <div className="hidden border-b border-[#1c3147] bg-[linear-gradient(180deg,rgba(13,22,34,0.98),rgba(10,14,20,0.96))] md:block">
+        <div className="hidden border-b border-white/10 bg-[linear-gradient(180deg,rgba(19,23,29,0.98),rgba(10,12,16,0.98))] md:block">
           <div className="container mx-auto px-4 py-3">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className={`${metallicPanelClass} flex flex-col gap-3 rounded-[1.15rem] px-4 py-3 md:flex-row md:items-center md:justify-between`}>
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A9BB8]">Weather &amp; NOTAM Briefing</p>
-                <p className="text-sm font-semibold text-[#E8EDF4]">Get current airport weather and NOTAMs</p>
-                <p className="text-xs text-[#9CB4CC]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9fb3ca]">Weather &amp; NOTAM Briefing</p>
+                <p className="text-sm font-semibold text-[#EEF4FF]">Get current airport weather and NOTAMs</p>
+                <p className="text-xs text-[#a2b5cc]">
                   Check live METARs, TAFs, runway conditions, and airport briefing details from the landing page.
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
-                  className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]"
+                  className={metallicPrimaryButtonClass}
                   onClick={() => {
                     trackEvent("landing_weather_jump_bar_click", { target: "airport-weather" });
                     setHasUsedWeatherTool(true);
@@ -1219,7 +1224,7 @@ export default function Landing() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-8 w-8 text-[#7A9BB8] hover:text-[#E8EDF4]"
+                  className="h-8 w-8 text-[#91a8c3] hover:bg-white/5 hover:text-[#EEF4FF]"
                   aria-label="Dismiss weather briefing banner"
                   onClick={() => {
                     trackEvent("landing_weather_jump_bar_dismissed", { target: "airport-weather" });
@@ -1541,7 +1546,7 @@ export default function Landing() {
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row">
-                    <Button size="lg" asChild data-testid="button-marketplace">
+                <Button size="lg" asChild className={metallicPrimaryButtonClass} data-testid="button-marketplace">
                       <Link
                         href="/marketplace"
                         onClick={() => trackEvent("cta_click", { label: "landing_marketplace", target: "/marketplace" })}
@@ -1549,7 +1554,7 @@ export default function Landing() {
                         Browse listings
                       </Link>
                     </Button>
-                    <Button size="lg" variant="outline" asChild data-testid="button-rentals">
+                <Button size="lg" variant="outline" asChild className={metallicSecondaryButtonClass} data-testid="button-rentals">
                       <Link
                         href="/rentals"
                         onClick={() => trackEvent("cta_click", { label: "landing_rentals", target: "/rentals" })}
@@ -1557,7 +1562,7 @@ export default function Landing() {
                         Find rentals
                       </Link>
                     </Button>
-                    <Button size="lg" variant="outline" asChild data-testid="button-plan-flight">
+                <Button size="lg" variant="outline" asChild className={metallicSecondaryButtonClass} data-testid="button-plan-flight">
                       <Link
                         href="/flight-planner"
                         onClick={() => trackEvent("cta_click", { label: "landing_plan_flight", target: "/flight-planner" })}
@@ -1574,6 +1579,7 @@ export default function Landing() {
                         if (!openLandingModules.includes("conditions")) toggleLandingModule("conditions");
                         document.getElementById("airport-weather")?.scrollIntoView({ behavior: "smooth", block: "start" });
                       }}
+                      className={metallicSecondaryButtonClass}
                       data-testid="button-fuel-open-weather"
                     >
                       Open weather below
@@ -1584,17 +1590,17 @@ export default function Landing() {
               </div>
             </div>
             <div className="space-y-3">
-              <div className="rounded-[1.1rem] border border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] p-4 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)]">
+              <div className={`${metallicPanelClass} rounded-[1.1rem] p-4`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#D9A441]">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#a8bedf]">
                       Featured Sponsor
                     </div>
-                    <div className="text-sm text-[#9CB4CC]">
+                    <div className="text-sm text-[#C0CDDC]">
                       Aviation businesses can appear here in a clean sponsored placement inside RSF.
                     </div>
                   </div>
-                  <Button asChild size="sm" variant="outline" className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]" data-testid="button-banner-ad-info-public">
+                  <Button asChild size="sm" variant="outline" className={metallicSecondaryButtonClass} data-testid="button-banner-ad-info-public">
                     <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
                       Advertise
                     </a>
@@ -1612,21 +1618,21 @@ export default function Landing() {
         </div>
       </div>
 
-      <div className="relative overflow-hidden border-b border-[#1c3147] bg-[radial-gradient(circle_at_top_left,rgba(74,159,212,0.16),transparent_30%),radial-gradient(circle_at_80%_12%,rgba(217,164,65,0.16),transparent_24%),linear-gradient(180deg,#081019_0%,#0b1420_42%,#0d1825_100%)]">
+      <div className="rsf-metal-hero relative overflow-hidden">
         <div className="container mx-auto px-4 py-12 md:py-16 xl:py-20">
           <div className="grid gap-8 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)] xl:items-start">
             <div className="space-y-6">
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#29415e] bg-[#102236] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#9FC6EA]">
-                <Plane className="h-3.5 w-3.5 text-[#D9A441]" />
+              <div className="rsf-kicker text-[#bfd0e8]">
+                <Plane className="h-3.5 w-3.5 text-[#8eb3ff]" />
                 General Aviation Ecosystem
               </div>
               <div className="space-y-4">
                 <img src={rsfOpaqueLogo} alt="Ready Set Fly" className="h-11 w-auto" />
-                <h1 className="max-w-4xl text-4xl font-semibold tracking-[-0.03em] text-[#F1F5FA] sm:text-5xl xl:text-6xl" style={{ fontFamily: "var(--font-display)" }}>
+                <h1 className="max-w-4xl text-4xl font-semibold tracking-[-0.045em] text-[#F6F8FC] sm:text-5xl xl:text-6xl" style={{ fontFamily: "var(--font-display)" }}>
                   Stop bouncing from app to app.
-                  <span className="block text-[#D9A441]">Everything general aviation needs, in one place.</span>
+                  <span className="block text-[#cdd9ee]">Everything general aviation needs, in one place.</span>
                 </h1>
-                <p className="max-w-3xl text-lg leading-8 text-[#B5C8DA]">
+                <p className="max-w-3xl text-lg leading-8 text-[#CCD6E4]">
                   Plan on the web, file directly to the FAA via Leidos / 1-800-WX-BRIEF, then pick it up with ATC and follow the flight in the app with full FMS capability, live traffic, en route weather, and ADS-B connectivity.
                 </p>
               </div>
@@ -1637,13 +1643,13 @@ export default function Landing() {
                   "Live flight plan submission to the FAA through Leidos",
                   "Training, rentals, marketplace, and pilot tools under one account",
                 ].map((item) => (
-                  <div key={item} className="rounded-[1rem] border border-[#203249] bg-[#0f1a28]/90 px-4 py-3 text-sm text-[#D7E1EC]">
+                  <div key={item} className={`${metallicSubpanelClass} px-4 py-3 text-sm text-[#E0E7F1]`}>
                     {item}
                   </div>
                 ))}
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Button asChild size="lg" className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                <Button asChild size="lg" className={metallicPrimaryButtonClass}>
                   <Link
                     href="/flight-planner"
                     onClick={() => trackEvent("cta_click", { label: "landing_hero_open_planner", target: "/flight-planner" })}
@@ -1654,7 +1660,7 @@ export default function Landing() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]"
+                  className={metallicSecondaryButtonClass}
                   onClick={() => {
                     trackEvent("cta_click", { label: "landing_hero_explore_ecosystem", target: "#landing-quickstart-section" });
                     document.getElementById("landing-quickstart-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1663,35 +1669,35 @@ export default function Landing() {
                   Explore the Ecosystem
                 </Button>
               </div>
-              <div className="flex flex-wrap items-center gap-3 text-xs text-[#7A9BB8]">
-                <Badge variant="outline" className="border-[#29415e] bg-[#102236] text-[#9FC6EA]">US-only</Badge>
-                <span>Plan. File. Fly. Follow.</span>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-[#A8B8CC]">
+                <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141a22] text-[#d2dbe8]">US-only</Badge>
+                <span className="tracking-[0.16em] text-[#8fa6c8]">Plan. File. Fly. Follow.</span>
               </div>
             </div>
 
             <div className="space-y-4 xl:pt-2">
-              <Card className="overflow-hidden border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.78)]">
+              <Card className={`${metallicPanelClass} overflow-hidden text-[#E8EDF4]`}>
                 <CardContent className="space-y-5 p-5 sm:p-6">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="rsf-metal-divider flex flex-wrap items-center justify-between gap-3 pb-4">
                     <div>
-                      <div className="text-[10px] uppercase tracking-[0.24em] text-[#7EA8CC]">Web-to-App Continuity</div>
-                      <div className="mt-1 text-xl font-semibold text-[#F1F5FA]">One flight, one workflow, one ecosystem.</div>
+                      <div className="text-[10px] uppercase tracking-[0.24em] text-[#9cb8df]">Web-to-App Continuity</div>
+                      <div className="mt-1 text-xl font-semibold tracking-[-0.02em] text-[#F6F8FC]">One flight, one workflow, one ecosystem.</div>
                     </div>
-                    <Badge variant="outline" className="border-[#35516e] bg-[#10233a] text-[#D9A441]">
+                    <Badge variant="outline" className="border-[#5a7398]/35 bg-[#141d29] text-[#d6e4ff]">
                       Live FAA filing
                     </Badge>
                   </div>
                   <div className="grid gap-3">
                     {workflowSteps.map((step, index) => (
-                      <div key={step.title} className="rounded-[1rem] border border-[#203249] bg-[#0d1622] p-4">
+                      <div key={step.title} className={`${metallicPanelInteractiveClass} rounded-[1rem] p-4`}>
                         <div className="flex items-start gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#35516e] bg-[#102236] text-[#D9A441]">
+                          <div className="rsf-metal-icon-chip flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#9ebdff]">
                             <step.icon className="h-4 w-4" />
                           </div>
                           <div className="space-y-1">
-                            <div className="text-[10px] uppercase tracking-[0.2em] text-[#7EA8CC]">Step {index + 1}</div>
-                            <div className="text-sm font-semibold text-[#F1F5FA]">{step.title}</div>
-                            <div className="text-sm leading-6 text-[#9CB4CC]">{step.description}</div>
+                            <div className="text-[10px] uppercase tracking-[0.2em] text-[#94aed3]">Step {index + 1}</div>
+                            <div className="text-sm font-semibold text-[#F6F8FC]">{step.title}</div>
+                            <div className="text-sm leading-6 text-[#B8C8DA]">{step.description}</div>
                           </div>
                         </div>
                       </div>
@@ -1704,7 +1710,7 @@ export default function Landing() {
                       "ADS-B system connectivity",
                       "Shared plans and follow-through across devices",
                     ].map((item) => (
-                      <div key={item} className="rounded-[0.95rem] border border-[#29415e] bg-[#102236] px-3 py-2 text-sm text-[#D7E1EC]">
+                      <div key={item} className={`${metallicSubpanelClass} rounded-[0.95rem] px-3 py-2 text-sm text-[#E0E7F1]`}>
                         {item}
                       </div>
                     ))}
@@ -1715,36 +1721,36 @@ export default function Landing() {
           </div>
 
           <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px] xl:items-start">
-            <Card className="border-[#5d4717] bg-[linear-gradient(135deg,rgba(200,146,42,0.12),rgba(13,22,34,0.98))] text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.78)]">
+            <Card className={`${metallicPanelClass} text-[#E8EDF4]`}>
               <CardContent className="space-y-5 p-5 sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#D9A441]">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#a8bedf]">
                       RSF Welcomes CPA Members
                     </div>
-                    <div className="max-w-2xl text-sm leading-6 text-[#D0D8E2]">
+                    <div className="max-w-2xl text-sm leading-6 text-[#CCD7E5]">
                       Join our growing family of aviators, from student pilots to ATP, and unlock the CPA member offer directly inside the RSF operations stack.
                     </div>
                   </div>
                   {cpaOffer ? (
-                    <Badge className="border border-[#2d435a] bg-[#10233a] text-[#D6E4F4] hover:bg-[#10233a]">
+                    <Badge className="border border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff] hover:bg-[#141d29]">
                       {cpaOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
                     </Badge>
                   ) : null}
                 </div>
                 {cpaOffer ? (
-                  <div className="rounded-[1rem] border border-[#5d4717] bg-[#1b1408]/80 p-5">
+                  <div className={`${metallicSubpanelClass} rounded-[1rem] p-5`}>
                     <div className="flex flex-wrap items-center gap-2 mb-3">
-                      <Badge className="border border-[#74551d] bg-[#241a09] text-[#F5C86A] hover:bg-[#241a09]">CPA Exclusive</Badge>
-                      <Badge className="border border-[#2d435a] bg-[#10233a] text-[#D6E4F4] hover:bg-[#10233a]">
+                      <Badge className="border border-[#5d6f85]/35 bg-[#151b23] text-[#dbe6f6] hover:bg-[#151b23]">CPA Exclusive</Badge>
+                      <Badge className="border border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff] hover:bg-[#141d29]">
                         {cpaOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
                       </Badge>
                     </div>
-                    <h3 className="text-lg font-semibold text-[#F5F0E4] mb-2">
+                    <h3 className="text-lg font-semibold text-[#F5F8FC] mb-2">
                       {cpaOffer.durationDays / 30} months free for {cpaOffer.partnerName} members
                     </h3>
-                    <p className="text-sm text-[#D0D8E2] mb-4">Claim the partner offer and keep planning, filing, and flight follow-through inside one connected RSF workflow.</p>
-                    <Button asChild className="w-full sm:w-auto bg-[#C8922A] text-[#081019] hover:bg-[#d7a445]">
+                    <p className="text-sm text-[#CCD7E5] mb-4">Claim the partner offer and keep planning, filing, and flight follow-through inside one connected RSF workflow.</p>
+                    <Button asChild className={`w-full sm:w-auto ${metallicPrimaryButtonClass}`}>
                       <Link
                         href={`/logbook/pro?offer=${encodeURIComponent(cpaOffer.slug)}`}
                         onClick={() => trackEvent("cta_click", { label: "landing_social_proof_cpa", target: `/logbook/pro?offer=${cpaOffer.slug}` })}
@@ -1757,17 +1763,17 @@ export default function Landing() {
               </CardContent>
             </Card>
 
-            <div className="rounded-[1.15rem] border border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] p-4 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)]">
+            <div className={`${metallicPanelClass} rounded-[1.15rem] p-4`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#D9A441]">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#a8bedf]">
                     Featured Sponsor
                   </div>
-                  <div className="text-sm text-[#9CB4CC]">
+                  <div className="text-sm text-[#C0CDDC]">
                     Premium aviation partner placement integrated into the RSF homepage.
                   </div>
                 </div>
-                <Button asChild size="sm" variant="outline" className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]">
+                <Button asChild size="sm" variant="outline" className={metallicSecondaryButtonClass}>
                   <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
                     Advertise
                   </a>
@@ -1784,11 +1790,11 @@ export default function Landing() {
         </div>
       </div>
 
-      <div className="bg-[#0d1622] border-y border-[#203249] py-6 px-4">
+      <div className="rsf-metal-section px-4 py-6">
         <div className="max-w-3xl mx-auto">
           <div className="mb-3 text-center">
-            <p className="text-sm font-medium text-[#D7E1EC]">Check live conditions while you plan</p>
-            <p className="text-xs text-[#7A9BB8]">Quick airport weather, runway, and NOTAM context without leaving the homepage.</p>
+            <p className="text-sm font-medium text-[#E1E8F2]">Check live conditions while you plan</p>
+            <p className="text-xs text-[#98AEC8]">Quick airport weather, runway, and NOTAM context without leaving the homepage.</p>
           </div>
           <div className="relative flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
@@ -1800,12 +1806,12 @@ export default function Landing() {
                   if (e.key === "Enter") { e.preventDefault(); refreshAirportConditions(); }
                 }}
                 placeholder="ICAO or city, e.g. KAUS"
-                className="h-12 text-base bg-[#0A0E14] border-[#29415e] text-[#F1F5FA] font-mono placeholder:text-[#4a6480]"
+                className="h-12 border-[#4c5d73]/35 bg-[#0f1318] font-mono text-base text-[#F3F7FC] placeholder:text-[#60758f]"
               />
               {(loadingSuggestions || airportSuggestions.length > 0) && (
-                <div className="absolute z-20 mt-1 w-full rounded-md border border-[#29415e] bg-[#0d1622] shadow-lg">
+                 <div className="absolute z-20 mt-1 w-full rounded-md border border-[#47576c]/35 bg-[#11161d] shadow-lg">
                   {loadingSuggestions ? (
-                    <div className="px-3 py-2 text-xs text-[#7A9BB8]">Searching airports...</div>
+                    <div className="px-3 py-2 text-xs text-[#91a8c3]">Searching airports...</div>
                   ) : (
                     <ul className="max-h-52 overflow-auto">
                       {airportSuggestions.map((s) => (
@@ -1814,10 +1820,10 @@ export default function Landing() {
                             type="button"
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => applySuggestion(s)}
-                            className="w-full px-3 py-2 text-left text-sm text-[#E8EDF4] hover:bg-[#15283d]"
+                            className="w-full px-3 py-2 text-left text-sm text-[#E8EDF4] transition-colors hover:bg-[#18202a]"
                           >
                             <div className="font-semibold font-mono text-[#F1F5FA]">{s.icao}</div>
-                            <div className="text-xs text-[#7A9BB8]">
+                            <div className="text-xs text-[#91a8c3]">
                               {[s.name, s.city, s.state].filter(Boolean).join(" / ")}
                             </div>
                           </button>
@@ -1831,7 +1837,7 @@ export default function Landing() {
             <Button
               onClick={() => { refreshAirportConditions(); scrollToWeatherSection(); }}
               disabled={!ICAO_REGEX.test(icaoInput.trim().toUpperCase())}
-              className="h-12 px-6 bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b] shrink-0"
+              className={`h-12 shrink-0 px-6 ${metallicPrimaryButtonClass}`}
             >
               Check Conditions
             </Button>
@@ -1839,34 +1845,34 @@ export default function Landing() {
         </div>
       </div>
 
-      <section className="border-b border-[#1c3147] bg-[linear-gradient(180deg,#0a1018,#0d1622)]">
+      <section className="rsf-metal-section">
         <div className="container mx-auto px-4 py-14 sm:py-16">
           <div className="max-w-3xl space-y-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#7EA8CC]">Why RSF Exists</div>
-            <h2 className="text-3xl font-semibold tracking-[-0.02em] text-[#F1F5FA] sm:text-4xl">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9cb8df]">Why RSF Exists</div>
+            <h2 className="text-3xl font-semibold tracking-[-0.03em] text-[#F5F8FC] sm:text-4xl">
               Still juggling multiple aviation apps?
             </h2>
-            <p className="text-base leading-7 text-[#9CB4CC]">
+            <p className="text-base leading-7 text-[#C0CDDC]">
               Most GA pilots bounce between separate tools for flight planning, weather, NOTAMs, filing, in-flight tracking, training, rentals, and marketplace activity. RSF brings those workflows back into one aviation-native platform.
             </p>
           </div>
           <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {fragmentedWorkflowCards.map((item) => (
-                <div key={item.title} className="rounded-[1.1rem] border border-[#203249] bg-[#0d1622] p-5">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-[0.85rem] border border-[#3a5b7b] bg-[#102236] text-[#D9A441]">
+                <div key={item.title} className={`${metallicPanelInteractiveClass} rounded-[1.1rem] p-5`}>
+                  <div className="rsf-metal-icon-chip flex h-11 w-11 items-center justify-center rounded-[0.85rem] text-[#9ebdff]">
                     <item.icon className="h-5 w-5" />
                   </div>
-                  <div className="mt-4 text-base font-semibold text-[#F1F5FA]">{item.title}</div>
-                  <p className="mt-2 text-sm leading-6 text-[#9CB4CC]">{item.description}</p>
+                  <div className="mt-4 text-base font-semibold text-[#F5F8FC]">{item.title}</div>
+                  <p className="mt-2 text-sm leading-6 text-[#B8C8DA]">{item.description}</p>
                 </div>
               ))}
             </div>
-            <Card className="border-[#5d4717] bg-[linear-gradient(135deg,rgba(200,146,42,0.12),rgba(13,22,34,0.98))] text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.78)]">
+            <Card className={`${metallicPanelClass} text-[#E8EDF4]`}>
               <CardContent className="space-y-5 p-6">
                 <div>
-                  <div className="text-[10px] uppercase tracking-[0.22em] text-[#D9A441]">Unified Answer</div>
-                  <h3 className="mt-2 text-2xl font-semibold text-[#F1F5FA]">RSF keeps the flight, the tools, and the follow-through on one system.</h3>
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-[#9cb8df]">Unified Answer</div>
+                  <h3 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-[#F5F8FC]">RSF keeps the flight, the tools, and the follow-through on one system.</h3>
                 </div>
                 <div className="space-y-3">
                   {[
@@ -1874,12 +1880,12 @@ export default function Landing() {
                     "One account connects filing, logbook, training, rentals, marketplace, and utilities.",
                     "One ecosystem keeps the pilot workflow connected before, during, and after the flight.",
                   ].map((item) => (
-                    <div key={item} className="rounded-[0.95rem] border border-[#5d4717] bg-[#1b1408]/80 px-4 py-3 text-sm leading-6 text-[#F3DEAD]">
+                    <div key={item} className={`${metallicSubpanelClass} rounded-[0.95rem] px-4 py-3 text-sm leading-6 text-[#DCE6F2]`}>
                       {item}
                     </div>
                   ))}
                 </div>
-                <Button asChild className="w-full bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                <Button asChild className={`w-full ${metallicPrimaryButtonClass}`}>
                   <Link
                     href="/register"
                     onClick={() => trackEvent("cta_click", { label: "landing_fragmentation_register", target: "/register" })}
@@ -1893,15 +1899,15 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="border-b border-[#1c3147] bg-[linear-gradient(180deg,#091018,#0d1622)]">
+      <section className="rsf-metal-section">
         <div className="container mx-auto px-4 py-14 sm:py-16">
           <div className="grid gap-8 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:items-start">
             <div className="space-y-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#7EA8CC]">Serious Differentiator</div>
-              <h2 className="text-3xl font-semibold tracking-[-0.02em] text-[#F1F5FA] sm:text-4xl">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9cb8df]">Serious Differentiator</div>
+              <h2 className="text-3xl font-semibold tracking-[-0.03em] text-[#F5F8FC] sm:text-4xl">
                 Plan on the web. File with the FAA. Follow the flight in the app.
               </h2>
-              <p className="text-base leading-7 text-[#9CB4CC]">
+              <p className="text-base leading-7 text-[#C0CDDC]">
                 RSF is built around continuity. Start the flight plan on the web, send it through Leidos / 1-800-WX-BRIEF, pick it up with ATC when ready, then continue the flight in the app with the same operational context still intact.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -1911,13 +1917,13 @@ export default function Landing() {
                   "ADS-B connectivity for compatible setups",
                   "FAA filing workflow without switching platforms",
                 ].map((item) => (
-                  <div key={item} className="rounded-[1rem] border border-[#203249] bg-[#0f1a28] px-4 py-3 text-sm text-[#D7E1EC]">
+                  <div key={item} className={`${metallicSubpanelClass} rounded-[1rem] px-4 py-3 text-sm text-[#E0E7F1]`}>
                     {item}
                   </div>
                 ))}
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                <Button asChild className={metallicPrimaryButtonClass}>
                   <Link
                     href="/flight-planner"
                     onClick={() => trackEvent("cta_click", { label: "landing_workflow_open_planner", target: "/flight-planner" })}
@@ -1925,7 +1931,7 @@ export default function Landing() {
                     Start on the Web
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]">
+                <Button asChild variant="outline" className={metallicSecondaryButtonClass}>
                   <Link
                     href="/adsb-receiver-help"
                     onClick={() => trackEvent("cta_click", { label: "landing_workflow_adsb_help", target: "/adsb-receiver-help" })}
@@ -1938,15 +1944,15 @@ export default function Landing() {
 
             <div className="grid gap-4">
               {workflowSteps.map((step, index) => (
-                <div key={step.title} className="rounded-[1.15rem] border border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] p-5 text-[#E8EDF4] shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)]">
+                <div key={step.title} className={`${metallicPanelInteractiveClass} rounded-[1.15rem] p-5 text-[#E8EDF4]`}>
                   <div className="flex items-start gap-4">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#35516e] bg-[#102236] text-[#D9A441]">
+                    <div className="rsf-metal-icon-chip flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#9ebdff]">
                       <step.icon className="h-5 w-5" />
                     </div>
                     <div className="space-y-1">
-                      <div className="text-[10px] uppercase tracking-[0.22em] text-[#7EA8CC]">Phase {index + 1}</div>
-                      <div className="text-lg font-semibold text-[#F1F5FA]">{step.title}</div>
-                      <div className="text-sm leading-6 text-[#9CB4CC]">{step.description}</div>
+                      <div className="text-[10px] uppercase tracking-[0.22em] text-[#9cb8df]">Phase {index + 1}</div>
+                      <div className="text-lg font-semibold text-[#F5F8FC]">{step.title}</div>
+                      <div className="text-sm leading-6 text-[#B8C8DA]">{step.description}</div>
                     </div>
                   </div>
                 </div>
@@ -1959,22 +1965,22 @@ export default function Landing() {
       {activeMobileTab === "find" && (
         <div className="border-b border-[#203249] bg-[#0a0e14] md:hidden">
           <div className="container mx-auto px-4 py-4">
-            <Card className="border-[#5d4717] bg-[linear-gradient(135deg,rgba(200,146,42,0.10),rgba(13,22,34,0.98))] shadow-sm">
+            <Card className={`${metallicPanelClass} shadow-none`}>
               <CardContent className="flex flex-col gap-3 p-4">
                 <div className="space-y-1">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#D9A441]">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#9fb3ca]">
                     Cabin Brief - For Passengers
                   </div>
                   <div className="text-base font-semibold text-[#F1F5FA]">
                     Traveling with someone who is not a pilot?
                   </div>
-                  <div className="text-sm text-[#9CB4CC]">
+                  <div className="text-sm text-[#a7b8cd]">
                     Open a plain-English weather briefing built for passengers and nervous flyers.
                   </div>
                 </div>
                 <Button
                   asChild
-                  className="w-full bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]"
+                  className={`w-full ${metallicPrimaryButtonClass}`}
                 >
                   <Link
                     href="/cabin-brief"
@@ -1992,17 +1998,17 @@ export default function Landing() {
       {!isAuthenticated && hasUsedTool && (
         <div className="border-t border-[#1c3147] bg-[#0a0e14]">
           <div className="container mx-auto px-4 py-5">
-            <div className="flex flex-col gap-4 rounded-xl border border-[#29415e] bg-[#0f1a28] p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className={`${metallicPanelClass} flex flex-col gap-4 rounded-xl p-4 sm:flex-row sm:items-center sm:justify-between`}>
               <div className="space-y-0.5">
-                <p className="text-sm font-semibold text-[#F1F5FA]">
+                <p className="text-sm font-semibold text-[#F5F8FC]">
                   Save searches, log flights, and unlock every RSF tool.
                 </p>
-                <p className="text-xs text-[#7A9BB8]">
+                <p className="text-xs text-[#A1B5CC]">
                   Free account — no credit card. Upgrade to Pro anytime with a 14-day trial.
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <Button asChild size="sm">
+                <Button asChild size="sm" className={metallicPrimaryButtonClass}>
                   <Link
                     href="/register"
                     onClick={() => trackEvent("cta_click", {
@@ -2013,7 +2019,7 @@ export default function Landing() {
                     Create free account
                   </Link>
                 </Button>
-                <Button asChild size="sm" variant="outline">
+                <Button asChild size="sm" variant="outline" className={metallicSecondaryButtonClass}>
                   <Link
                     href="/login"
                     onClick={() => trackEvent("cta_click", {
@@ -2033,31 +2039,29 @@ export default function Landing() {
       <div id="landing-quickstart-section" className="hidden rsf-section-band py-8 sm:py-10 md:block">
         <div className="container mx-auto px-4">
           <div className={`grid gap-6 ${!hasProPlus ? "xl:grid-cols-[minmax(0,1.12fr)_320px]" : ""}`}>
-            <section className={`rounded-[1.45rem] border border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] p-5 text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.78)] sm:p-6 ${activeMobileTab === "find" || activeMobileTab === "plan" || activeMobileTab === "log" ? "" : "hidden md:block"}`}>
+            <section className={`${metallicPanelClass} rounded-[1.45rem] p-5 text-[#E8EDF4] sm:p-6 ${activeMobileTab === "find" || activeMobileTab === "plan" || activeMobileTab === "log" ? "" : "hidden md:block"}`}>
               <div className="mb-6 space-y-2">
-                <span className="rsf-kicker border-[#29415e] bg-[#102236] text-[#9FC6EA]">The Full RSF Ecosystem</span>
-                <h2 className="text-2xl font-semibold text-[#F1F5FA] sm:text-3xl">Beyond the flight plan, everything else stays connected too.</h2>
-                <p className="max-w-3xl text-sm text-[#7A9BB8]">RSF is not only a planner. It keeps training, logbook, marketplace, rentals, pilot tools, and follow-through tied back to the same aviation workflow.</p>
+                <span className="rsf-kicker text-[#bfd0e8]">The Full RSF Ecosystem</span>
+                <h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#F5F8FC] sm:text-3xl">Beyond the flight plan, everything else stays connected too.</h2>
+                <p className="max-w-3xl text-sm text-[#AFC1D6]">RSF is not only a planner. It keeps training, logbook, marketplace, rentals, pilot tools, and follow-through tied back to the same aviation workflow.</p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 {ecosystemCards.map((card) => (
-                  <div key={card.title} className="flex flex-col gap-4 rounded-[1.15rem] border border-[#29415e] bg-[#0d1622] p-5">
+                  <div key={card.title} className={`${metallicPanelInteractiveClass} flex flex-col gap-4 rounded-[1.15rem] p-5`}>
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] border border-[#3a5b7b] bg-[#0f1a28]">
-                        <card.icon className="h-5 w-5 text-[#D9A441]" />
+                      <div className="rsf-metal-icon-chip flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem]">
+                        <card.icon className="h-5 w-5 text-[#9ebdff]" />
                       </div>
-                      <div className="text-base font-semibold text-[#F1F5FA]">{card.title}</div>
+                      <div className="text-base font-semibold text-[#F5F8FC]">{card.title}</div>
                     </div>
-                    <p className="text-sm leading-6 text-[#9CB4CC]">{card.description}</p>
+                    <p className="text-sm leading-6 text-[#B8C8DA]">{card.description}</p>
                     <div className="mt-auto flex flex-wrap gap-2 pt-2">
                       {card.actions.map((action, index) => (
                         <Button
                           key={action.href}
                           asChild
                           variant={index === 0 ? "default" : "outline"}
-                          className={index === 0
-                            ? "bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]"
-                            : "border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]"}
+                          className={index === 0 ? metallicPrimaryButtonClass : metallicSecondaryButtonClass}
                         >
                           <Link href={action.href} onClick={() => trackEvent("cta_click", { label: action.track, target: action.href })}>
                             {action.label}
@@ -2071,23 +2075,23 @@ export default function Landing() {
             </section>
             {!hasProPlus && (
               <aside className="hidden md:block">
-                <Card id="landing-membership-section" className="sticky top-24 overflow-hidden border-[#2b4258] bg-[linear-gradient(180deg,rgba(10,14,20,0.99),rgba(16,25,38,0.96))] text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.78)]">
-                  <div className="border-b border-[#203249] bg-[linear-gradient(135deg,rgba(17,28,42,0.95),rgba(25,47,74,0.9))] px-5 py-4">
+                <Card id="landing-membership-section" className={`${metallicPanelClass} sticky top-24 overflow-hidden text-[#E8EDF4]`}>
+                  <div className="rsf-metal-divider bg-[linear-gradient(135deg,rgba(22,28,36,0.96),rgba(19,34,61,0.92),rgba(13,19,28,0.98))] px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="rsf-kicker border-[#35516e] bg-[#10233a] text-[#D9A441]">RSF Pro</span>
-                      <Badge variant="outline" className="border-[#35516e] bg-[#10233a] text-[#9FC6EA]">
+                      <span className="rsf-kicker text-[#d4e1f7]">RSF Pro</span>
+                      <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff]">
                         Membership status
                       </Badge>
                     </div>
                     <div className="mt-3 space-y-1">
-                      <div className="text-[10px] uppercase tracking-[0.24em] text-[#7EA8CC]">Pilot workflow upgrade</div>
-                      <div className="text-2xl font-semibold text-[#F1F5FA]">{membershipCtaLabel}</div>
+                      <div className="text-[10px] uppercase tracking-[0.24em] text-[#9cb8df]">Pilot workflow upgrade</div>
+                      <div className="text-2xl font-semibold tracking-[-0.02em] text-[#F5F8FC]">{membershipCtaLabel}</div>
                     </div>
                   </div>
                   <CardContent className="space-y-4 p-5">
-                    <div className="rounded-[0.95rem] border border-[#203249] bg-[#0f1a28] p-4">
-                      <div className="text-[10px] uppercase tracking-[0.22em] text-[#7EA8CC]">Why this lives here</div>
-                      <p className="mt-2 text-sm leading-6 text-[#B5C8DA]">
+                    <div className={`${metallicSubpanelClass} rounded-[0.95rem] p-4`}>
+                      <div className="text-[10px] uppercase tracking-[0.22em] text-[#9cb8df]">Why this lives here</div>
+                      <p className="mt-2 text-sm leading-6 text-[#C1D0E0]">
                         {membershipCtaDescription}
                       </p>
                     </div>
@@ -2097,12 +2101,12 @@ export default function Landing() {
                         "Quick Start stays focused on day-of-flight workflows",
                         "Use the dedicated membership page for subscribe and manage actions",
                       ].map((item) => (
-                        <div key={item} className="rounded-[0.95rem] border border-[#203249] bg-[#0d1622] px-3 py-2.5 text-sm text-[#D7E1EC]">
+                        <div key={item} className={`${metallicSubpanelClass} rounded-[0.95rem] px-3 py-2.5 text-sm text-[#E0E7F1]`}>
                           {item}
                         </div>
                       ))}
                     </div>
-                    <Button asChild className="w-full bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                    <Button asChild className={`w-full ${metallicPrimaryButtonClass}`}>
                       <Link
                         href={membershipPageHref}
                         onClick={() => trackEvent("cta_click", { label: "landing_sidebar_membership_cta", target: membershipPageHref })}
@@ -2110,7 +2114,7 @@ export default function Landing() {
                         {membershipCtaLabel}
                       </Link>
                     </Button>
-                    <p className="text-xs text-[#7A9BB8]">
+                    <p className="text-xs text-[#A1B5CC]">
                       The membership page now carries plan details, feature breakdowns, and subscription links instead of splitting attention on the landing surface.
                     </p>
                   </CardContent>
@@ -2225,16 +2229,16 @@ export default function Landing() {
             />
           ) : null}
           {(openLandingModules.includes("cfi") || activeMobileTab === "find") ? (
-          <Card className="mt-6 border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] text-[#E8EDF4] shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)]">
+          <Card className={`${metallicPanelClass} mt-6 text-[#E8EDF4]`}>
             <CardContent className="p-5 sm:p-6 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-4 max-w-3xl">
                 <div className="space-y-2">
-                  <span className="rsf-kicker border-[#29415e] bg-[#102236] text-[#8FC7FF]">CFI Marketplace</span>
-                  <div className="flex items-center gap-2 text-base sm:text-lg font-semibold text-[#F1F5FA]">
-                    <BookOpen className="h-5 w-5 text-[#8FC7FF]" />
+                  <span className="rsf-kicker text-[#d4e1f7]">CFI Marketplace</span>
+                  <div className="flex items-center gap-2 text-base sm:text-lg font-semibold text-[#F5F8FC]">
+                    <BookOpen className="h-5 w-5 text-[#9ebdff]" />
                     CFI Instructors: Create your RSF profile
                   </div>
-                  <p className="text-sm text-[#7A9BB8] max-w-2xl">
+                  <p className="text-sm text-[#AFC1D6] max-w-2xl">
                     Get discovered by student pilots, highlight your ratings, set your training focus, and accept booking requests through the CFI marketplace.
                   </p>
                 </div>
@@ -2244,14 +2248,14 @@ export default function Landing() {
                     "Build your instructor profile with ratings and specialties",
                     "Appear in the directory and receive student inquiries",
                   ].map((item) => (
-                    <div key={item} className="rounded-[0.9rem] border border-[#29415e] bg-[#0f1a28] p-3 text-sm text-[#7A9BB8]">
+                    <div key={item} className={`${metallicSubpanelClass} rounded-[0.9rem] p-3 text-sm text-[#AFC1D6]`}>
                       {item}
                     </div>
                   ))}
                 </div>
               </div>
               <div className="flex w-full flex-col gap-3 sm:w-auto sm:min-w-[260px]">
-                <Button variant="outline" asChild className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]">
+                <Button variant="outline" asChild className={metallicSecondaryButtonClass}>
                   <Link
                     href="/cfi"
                     onClick={() => trackEvent("cta_click", { label: "landing_cfi_directory", target: "/cfi" })}
@@ -2259,7 +2263,7 @@ export default function Landing() {
                     View CFI directory
                   </Link>
                 </Button>
-                <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                <Button asChild className={metallicPrimaryButtonClass}>
                   <Link
                     href={isAuthenticated ? "/dashboard/cfi" : "/register"}
                     onClick={() =>
@@ -2273,7 +2277,7 @@ export default function Landing() {
                   </Link>
                 </Button>
                 {!isAuthenticated ? (
-                  <Button variant="ghost" asChild className="text-[#9FC6EA] hover:bg-[#102236] hover:text-[#E8EDF4]">
+                    <Button variant="ghost" asChild className="text-[#b9cbdf] hover:bg-[#161d27] hover:text-[#F5F8FC]">
                     <Link
                       href="/login"
                       onClick={() => trackEvent("cta_click", { label: "landing_cfi_sign_in", target: "/login" })}
@@ -2286,16 +2290,16 @@ export default function Landing() {
             </CardContent>
           </Card>
           ) : null}
-          <Card className="mt-6 border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] text-[#E8EDF4] shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)]">
+          <Card className={`${metallicPanelClass} mt-6 text-[#E8EDF4]`}>
             <CardContent className="p-5 sm:p-6 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-4 max-w-3xl">
                 <div className="space-y-2">
-                  <span className="rsf-kicker border-[#29415e] bg-[#102236] text-[#D9A441]">Flying Clubs</span>
-                  <div className="flex items-center gap-2 text-base sm:text-lg font-semibold text-[#F1F5FA]">
-                    <Users className="h-5 w-5 text-[#D9A441]" />
+                  <span className="rsf-kicker text-[#d4e1f7]">Flying Clubs</span>
+                  <div className="flex items-center gap-2 text-base sm:text-lg font-semibold text-[#F5F8FC]">
+                    <Users className="h-5 w-5 text-[#9ebdff]" />
                     Run your flying club inside RSF
                   </div>
-                  <p className="text-sm text-[#7A9BB8] max-w-2xl">
+                  <p className="text-sm text-[#AFC1D6] max-w-2xl">
                     Clubs can create a profile, organize members, assign aircraft, and build a shared scheduling workflow. Pilots can also browse listed clubs through the RSF club directory.
                   </p>
                 </div>
@@ -2305,14 +2309,14 @@ export default function Landing() {
                     "Organize member access, fleet records, and club communications",
                     "Grow into deeper scheduling, billing, and maintenance workflows over time",
                   ].map((item) => (
-                    <div key={item} className="rounded-[0.9rem] border border-[#29415e] bg-[#0f1a28] p-3 text-sm text-[#7A9BB8]">
+                    <div key={item} className={`${metallicSubpanelClass} rounded-[0.9rem] p-3 text-sm text-[#AFC1D6]`}>
                       {item}
                     </div>
                   ))}
                 </div>
               </div>
               <div className="flex w-full flex-col gap-3 sm:w-auto sm:min-w-[260px]">
-                <Button variant="outline" asChild className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]">
+                <Button variant="outline" asChild className={metallicSecondaryButtonClass}>
                   <Link
                     href="/flying-clubs"
                     onClick={() => trackEvent("cta_click", { label: "landing_flying_clubs_directory", target: "/flying-clubs" })}
@@ -2320,7 +2324,7 @@ export default function Landing() {
                     View Flying Clubs
                   </Link>
                 </Button>
-                <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                <Button asChild className={metallicPrimaryButtonClass}>
                   <Link
                     href={isAuthenticated ? "/flying-clubs" : "/register"}
                     onClick={() =>
@@ -2334,7 +2338,7 @@ export default function Landing() {
                   </Link>
                 </Button>
                 {!isAuthenticated ? (
-                  <Button variant="ghost" asChild className="text-[#9FC6EA] hover:bg-[#102236] hover:text-[#E8EDF4]">
+                  <Button variant="ghost" asChild className="text-[#b9cbdf] hover:bg-[#161d27] hover:text-[#F5F8FC]">
                     <Link
                       href="/login"
                       onClick={() => trackEvent("cta_click", { label: "landing_flying_clubs_sign_in", target: "/login" })}

@@ -326,18 +326,23 @@ img.uppy-Dashboard-Item-previewImg {
     position: relative;
     overflow: hidden;
     border-radius: 1.2rem;
-    border: 1px solid hsl(var(--card-border) / 0.96);
+    border: 1px solid hsl(214 18% 76% / 0.16);
     background:
-      linear-gradient(180deg, hsl(var(--card) / 0.97) 0%, hsl(var(--card) / 0.94) 72%, hsl(var(--muted) / 0.82) 100%);
-    box-shadow: var(--shadow-rsf-panel);
+      radial-gradient(circle at 50% 0%, hsl(216 20% 92% / 0.08), transparent 26%),
+      linear-gradient(180deg, hsl(220 18% 16% / 0.98) 0%, hsl(220 20% 12% / 0.98) 56%, hsl(220 22% 8% / 0.99) 100%);
+    box-shadow:
+      0 26px 58px -34px hsl(220 42% 2% / 0.9),
+      inset 0 1px 0 hsl(0 0% 100% / 0.1),
+      inset 0 -1px 0 hsl(215 16% 58% / 0.08);
   }
 
   .rsf-card-shell::before {
     content: "";
     position: absolute;
-    inset: 0 0 auto 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, hsl(0 0% 100% / 0.5), transparent);
+    inset: 0;
+    background:
+      linear-gradient(180deg, hsl(0 0% 100% / 0.12), transparent 12%),
+      linear-gradient(90deg, transparent 0%, hsl(210 24% 80% / 0.06) 48%, transparent 100%);
     pointer-events: none;
   }
 
@@ -346,23 +351,37 @@ img.uppy-Dashboard-Item-previewImg {
     align-items: center;
     gap: 0.4rem;
     border-radius: 999px;
-    border: 1px solid hsl(var(--border));
-    background: hsl(var(--card) / 0.94);
+    border: 1px solid hsl(215 20% 74% / 0.16);
+    background:
+      linear-gradient(180deg, hsl(220 18% 17% / 0.98), hsl(220 20% 11% / 0.98));
+    box-shadow:
+      inset 0 1px 0 hsl(0 0% 100% / 0.09),
+      0 10px 22px -18px hsl(220 40% 2% / 0.78);
     padding: 0.2rem 0.65rem;
     font-size: 0.65rem;
     font-weight: 700;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: hsl(var(--muted-foreground));
+    color: hsl(213 30% 78%);
   }
 
   .rsf-section-band {
-    border-top: 1px solid hsl(0 0% 100% / 0.1);
-    border-bottom: 1px solid hsl(0 0% 100% / 0.08);
+    position: relative;
+    border-top: 1px solid hsl(214 20% 76% / 0.09);
+    border-bottom: 1px solid hsl(214 20% 76% / 0.08);
     background:
-      linear-gradient(180deg, hsl(var(--primary) / 0.18), transparent 22%),
-      linear-gradient(180deg, hsl(215 30% 96% / 0.16), hsl(215 30% 96% / 0.06));
-    backdrop-filter: blur(12px);
+      radial-gradient(circle at 50% 0%, hsl(220 28% 84% / 0.06), transparent 22%),
+      linear-gradient(180deg, hsl(220 19% 11%) 0%, hsl(220 18% 9%) 100%);
+  }
+
+  .rsf-section-band::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(215 18% 88% / 0.2) 14%, hsl(218 42% 56% / 0.32) 50%, hsl(215 18% 88% / 0.2) 86%, transparent);
+    pointer-events: none;
   }
 
   .rsf-app-shell {
@@ -414,6 +433,174 @@ img.uppy-Dashboard-Item-previewImg {
       radial-gradient(circle at 18% 18%, hsl(0 0% 100% / 0.12), transparent 22%),
       linear-gradient(120deg, transparent 0%, hsl(0 0% 100% / 0.035) 48%, transparent 74%);
     pointer-events: none;
+  }
+
+  .rsf-metal-hero {
+    position: relative;
+    border-bottom: 1px solid hsl(214 18% 76% / 0.12);
+    background:
+      radial-gradient(circle at 50% -4%, hsl(215 26% 90% / 0.08), transparent 24%),
+      radial-gradient(circle at 18% 12%, hsl(223 62% 36% / 0.2), transparent 24%),
+      radial-gradient(circle at 82% 18%, hsl(215 22% 80% / 0.06), transparent 22%),
+      linear-gradient(180deg, #15181d 0%, #0d1014 42%, #080a0d 100%);
+    box-shadow: inset 0 -1px 0 hsl(215 18% 76% / 0.05);
+  }
+
+  .rsf-metal-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, hsl(0 0% 100% / 0.04), transparent 14%),
+      linear-gradient(120deg, transparent 0%, hsl(217 44% 62% / 0.05) 48%, transparent 76%);
+    pointer-events: none;
+  }
+
+  .rsf-metal-section {
+    position: relative;
+    border-top: 1px solid hsl(214 18% 76% / 0.08);
+    border-bottom: 1px solid hsl(214 18% 76% / 0.08);
+    background:
+      radial-gradient(circle at 50% 0%, hsl(218 22% 88% / 0.04), transparent 20%),
+      linear-gradient(180deg, #12151a 0%, #0d1014 48%, #090b0f 100%);
+  }
+
+  .rsf-metal-panel {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid hsl(214 18% 76% / 0.14);
+    background:
+      radial-gradient(circle at 50% 0%, hsl(214 24% 88% / 0.05), transparent 24%),
+      linear-gradient(180deg, hsl(220 18% 17% / 0.98) 0%, hsl(220 18% 12% / 0.98) 52%, hsl(220 22% 8% / 0.99) 100%);
+    box-shadow:
+      0 28px 60px -34px hsl(220 46% 2% / 0.88),
+      inset 0 1px 0 hsl(0 0% 100% / 0.08),
+      inset 0 -1px 0 hsl(214 18% 76% / 0.04);
+  }
+
+  .rsf-metal-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, hsl(0 0% 100% / 0.08), transparent 10%),
+      linear-gradient(90deg, transparent 0%, hsl(216 40% 76% / 0.04) 50%, transparent 100%);
+    pointer-events: none;
+  }
+
+  .rsf-metal-panel-interactive {
+    transition:
+      transform 180ms ease,
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      background 180ms ease;
+  }
+
+  .rsf-metal-panel-interactive:hover {
+    transform: translateY(-2px);
+    border-color: hsl(214 24% 82% / 0.22);
+    box-shadow:
+      0 32px 66px -34px hsl(220 48% 2% / 0.92),
+      0 0 0 1px hsl(219 72% 62% / 0.08),
+      inset 0 1px 0 hsl(0 0% 100% / 0.1),
+      inset 0 -1px 0 hsl(214 18% 76% / 0.05);
+  }
+
+  .rsf-metal-subpanel {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid hsl(214 18% 76% / 0.12);
+    background:
+      linear-gradient(180deg, hsl(220 18% 15% / 0.98), hsl(220 20% 10% / 0.98));
+    box-shadow:
+      inset 0 1px 0 hsl(0 0% 100% / 0.06),
+      0 18px 36px -28px hsl(220 44% 2% / 0.8);
+  }
+
+  .rsf-metal-subpanel::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(0 0% 100% / 0.16), transparent);
+    pointer-events: none;
+  }
+
+  .rsf-metal-divider {
+    position: relative;
+  }
+
+  .rsf-metal-divider::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 -1px 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(214 18% 82% / 0.18) 14%, hsl(219 62% 56% / 0.26) 50%, hsl(214 18% 82% / 0.18) 86%, transparent);
+    pointer-events: none;
+  }
+
+  .rsf-metal-icon-chip {
+    border: 1px solid hsl(214 18% 76% / 0.14);
+    background:
+      linear-gradient(180deg, hsl(222 30% 22% / 0.92), hsl(220 26% 14% / 0.98));
+    box-shadow:
+      inset 0 1px 0 hsl(0 0% 100% / 0.08),
+      0 14px 24px -18px hsl(219 56% 10% / 0.72);
+  }
+
+  .rsf-metal-button-primary {
+    border: 1px solid hsl(217 72% 62% / 0.55) !important;
+    background:
+      linear-gradient(180deg, hsl(220 76% 58%) 0%, hsl(220 70% 42%) 54%, hsl(222 72% 30%) 100%) !important;
+    color: hsl(214 100% 98%) !important;
+    box-shadow:
+      0 18px 34px -24px hsl(221 80% 40% / 0.72),
+      0 0 0 1px hsl(217 88% 72% / 0.1),
+      inset 0 1px 0 hsl(0 0% 100% / 0.2),
+      inset 0 -1px 0 hsl(223 76% 18% / 0.72) !important;
+    transition:
+      transform 180ms ease,
+      box-shadow 180ms ease,
+      filter 180ms ease,
+      background 180ms ease;
+  }
+
+  .rsf-metal-button-primary:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.04);
+    box-shadow:
+      0 24px 38px -24px hsl(221 80% 40% / 0.82),
+      0 0 18px hsl(219 82% 62% / 0.12),
+      inset 0 1px 0 hsl(0 0% 100% / 0.22),
+      inset 0 -1px 0 hsl(223 76% 18% / 0.76) !important;
+  }
+
+  .rsf-metal-button-secondary {
+    border: 1px solid hsl(214 18% 76% / 0.18) !important;
+    background:
+      linear-gradient(180deg, hsl(220 18% 18% / 0.98), hsl(220 20% 10% / 0.98)) !important;
+    color: hsl(214 28% 94%) !important;
+    box-shadow:
+      0 18px 34px -26px hsl(220 42% 2% / 0.82),
+      inset 0 1px 0 hsl(0 0% 100% / 0.08),
+      inset 0 -1px 0 hsl(214 18% 76% / 0.06) !important;
+    transition:
+      transform 180ms ease,
+      box-shadow 180ms ease,
+      border-color 180ms ease,
+      background 180ms ease;
+  }
+
+  .rsf-metal-button-secondary:hover {
+    transform: translateY(-1px);
+    border-color: hsl(217 46% 72% / 0.32) !important;
+    background:
+      linear-gradient(180deg, hsl(221 24% 20% / 0.99), hsl(220 22% 12% / 0.99)) !important;
+    box-shadow:
+      0 22px 38px -26px hsl(220 42% 2% / 0.88),
+      0 0 0 1px hsl(219 72% 62% / 0.08),
+      inset 0 1px 0 hsl(0 0% 100% / 0.1),
+      inset 0 -1px 0 hsl(214 18% 76% / 0.06) !important;
   }
 }
 

@@ -12,6 +12,7 @@ import { formatPrice } from "@/lib/formatters";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { UpgradeListingModal } from "@/components/upgrade-listing-modal";
+import { PageShell } from "@/components/layout/PageShell";
 
 export default function MyListings() {
   const { user } = useAuth();
@@ -87,15 +88,13 @@ export default function MyListings() {
   const marketplaceSecondaryButtonClass = "rsf-metal-button-secondary";
 
   return (
-    <div className="rsf-marketplace-theme container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="font-display text-3xl sm:text-4xl font-bold mb-2" data-testid="text-my-listings-title">
-          My Listings
-        </h1>
-        <p className="text-sm sm:text-base text-[#A9BBCD]">
-          Manage your aircraft rentals and marketplace listings
-        </p>
-      </div>
+    <PageShell
+      kicker="Marketplace"
+      title="My Listings"
+      description="Manage marketplace inventory, rental listings, refreshes, and upgrades from one operations view."
+      canopyClassName="rsf-metal-hero border-b border-white/10"
+      contentClassName="rsf-marketplace-theme space-y-6"
+    >
 
       <Tabs defaultValue="marketplace" className="space-y-6">
         <TabsList className="grid h-auto w-full grid-cols-2 rounded-[1.1rem] p-1">
@@ -327,6 +326,6 @@ export default function MyListings() {
           onClose={() => setSelectedListingForUpgrade(null)}
         />
       )}
-    </div>
+    </PageShell>
   );
 }

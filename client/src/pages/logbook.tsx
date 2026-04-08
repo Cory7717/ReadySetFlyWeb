@@ -682,6 +682,11 @@ export default function Logbook() {
 
   const totalHours = entries.reduce((sum, e) => sum + parseFloat(e.pic || "0") + parseFloat(e.sic || "0"), 0).toFixed(1);
   const totals = calculateTotals(entries);
+  const logbookPanelClass = "rsf-metal-panel text-[#E8EDF4]";
+  const logbookSubpanelClass = "rsf-logbook-subpanel rounded-[1rem] text-[#DCE6F2]";
+  const logbookMetricClass = "rsf-logbook-metric px-4 py-4";
+  const logbookPrimaryButtonClass = "rsf-metal-button-primary";
+  const logbookSecondaryButtonClass = "rsf-metal-button-secondary";
 
   return (
     <PageShell
@@ -693,7 +698,8 @@ export default function Logbook() {
           Free digital logbook
         </Badge>
       }
-      contentClassName="space-y-6"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
+      contentClassName="rsf-logbook-theme space-y-6"
     >
       <UpgradePromptDialog
         open={showUpgradePrompt}
@@ -723,35 +729,35 @@ export default function Logbook() {
         title={pressDemo.getStep("overview")?.title ?? "Logbook Overview"}
         body={pressDemo.getStep("overview")?.body ?? ""}
       >
-      <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
+      <section className={`${logbookPanelClass} rounded-[1.6rem] p-5 sm:p-6`}>
         <div className="grid gap-5 xl:grid-cols-[1.3fr_0.9fr]">
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="border-green-200 bg-green-50 text-green-800">
+              <Badge variant="outline" className="border-[#3a7d6e]/40 bg-[#10211d] text-[#d1ece3]">
                 Free digital logbook
               </Badge>
-              <Badge variant="outline">Export anytime</Badge>
-              <Badge variant="outline">{entries.length} entries</Badge>
+              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Export anytime</Badge>
+              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">{entries.length} entries</Badge>
             </div>
             <div className="space-y-2">
-              <h2 className="text-2xl font-semibold text-slate-900">Keep flights, endorsements, and totals in one working logbook.</h2>
-              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+              <h2 className="text-2xl font-semibold text-[#F5F8FC]">Keep flights, endorsements, and totals in one working logbook.</h2>
+              <p className="max-w-3xl text-sm leading-6 text-[#A9BBCD]">
                 Add entries as you fly, export records anytime, and move into RSF Pro only when you want alerts, endorsements, or deeper currency tracking.
               </p>
             </div>
             {entries.some((e) => !e.isLocked) && (
-              <div className="rounded-[1rem] border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900">
+              <div className="rounded-[1rem] border border-[#7f6327]/40 bg-[linear-gradient(180deg,rgba(36,27,12,0.98),rgba(19,14,7,0.98))] px-4 py-3 text-sm text-[#f2dca4]">
                 Unsigned entries are still drafts. Use <span className="font-semibold">Sign</span> when an entry is final.
               </div>
             )}
             {isGuest && (
-              <div className="rounded-[1rem] border border-primary/20 bg-primary/5 px-4 py-3">
-              <div className="text-sm font-semibold text-slate-900">Create a free account to keep your logbook tied to RSF.</div>
-              <div className="mt-1 text-xs text-muted-foreground">
+              <div className={`${logbookSubpanelClass} px-4 py-3`}>
+              <div className="text-sm font-semibold text-[#F5F8FC]">Create a free account to keep your logbook tied to RSF.</div>
+              <div className="mt-1 text-xs text-[#A9BBCD]">
                   Save entries, export anytime, and move into Pro only when alerts, currency tracking, and saved workflow become worth it.
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button asChild size="sm">
+                  <Button asChild size="sm" className={logbookPrimaryButtonClass}>
                     <Link
                       href={withReturnTo("/register", getCurrentReturnTo())}
                       onClick={() => trackEvent("cta_click", { label: "logbook_guest_register", target: "/register" })}
@@ -759,7 +765,7 @@ export default function Logbook() {
                       Create free account
                     </Link>
                   </Button>
-                  <Button asChild size="sm" variant="outline">
+                  <Button asChild size="sm" variant="outline" className={logbookSecondaryButtonClass}>
                     <Link
                       href={withReturnTo("/login", getCurrentReturnTo())}
                       onClick={() => trackEvent("cta_click", { label: "logbook_guest_sign_in", target: "/login" })}
@@ -771,13 +777,13 @@ export default function Logbook() {
               </div>
             )}
             {!isGuest && !isPro && (
-              <div className="rounded-[1rem] border border-emerald-200 bg-emerald-50/90 px-4 py-3">
-                <div className="text-sm font-semibold text-emerald-900">Ready for alerts, endorsements, and deeper currency tracking?</div>
-                <div className="mt-1 text-xs text-emerald-800">
+              <div className={`${logbookSubpanelClass} px-4 py-3`}>
+                <div className="text-sm font-semibold text-[#F5F8FC]">Ready for alerts, endorsements, and deeper currency tracking?</div>
+                <div className="mt-1 text-xs text-[#A9BBCD]">
                   Start a 14-day Pro trial once the free logbook workflow is already saving you time.
                 </div>
                 <div className="mt-3">
-                  <Button asChild size="sm" variant="outline" className="border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100">
+                  <Button asChild size="sm" variant="outline" className={logbookSecondaryButtonClass}>
                     <Link
                       href={withSourceParam("/logbook/pro", "/logbook")}
                       onClick={() => {
@@ -800,41 +806,41 @@ export default function Logbook() {
               ].map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]"
+                  className={logbookMetricClass}
                 >
-                  <div className="text-2xl font-semibold text-primary">{item.value}</div>
-                  <div className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">{item.label}</div>
+                  <div className="text-2xl font-semibold text-[#9ebdff]">{item.value}</div>
+                  <div className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-[#8FA6C0]">{item.label}</div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-[1.3rem] border border-primary/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(255,255,255,0.58))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
+          <div className={`${logbookSubpanelClass} p-4`}>
             <span className="rsf-kicker">Start here</span>
-            <h3 className="mt-3 text-xl font-semibold text-slate-900">Most pilots use this page for three things.</h3>
-            <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+            <h3 className="mt-3 text-xl font-semibold text-[#F5F8FC]">Most pilots use this page for three things.</h3>
+            <div className="mt-4 space-y-3 text-sm text-[#A9BBCD]">
               <div>
-                <div className="font-semibold text-slate-900">Add a flight</div>
+                <div className="font-semibold text-[#F5F8FC]">Add a flight</div>
                 <div>Record the route, aircraft, time, landings, and instrument work.</div>
               </div>
               <div>
-                <div className="font-semibold text-slate-900">Lock the entry when it is final</div>
+                <div className="font-semibold text-[#F5F8FC]">Lock the entry when it is final</div>
                 <div>Signed entries stay protected while draft entries can still be edited.</div>
               </div>
               <div>
-                <div className="font-semibold text-slate-900">Export or add Pro later</div>
+                <div className="font-semibold text-[#F5F8FC]">Export or add Pro later</div>
                 <div>Keep the free logbook or add alerts, endorsements, and currency tracking when you need them.</div>
               </div>
             </div>
             <div className="mt-5 flex flex-col gap-2 sm:flex-row xl:flex-col">
               <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button className="w-full">
+                  <Button className={`w-full ${logbookPrimaryButtonClass}`}>
                     <Plus className="mr-2 h-4 w-4" />
                     Add flight entry
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="rsf-logbook-theme rsf-metal-panel max-h-[90vh] max-w-2xl overflow-y-auto text-[#E8EDF4]">
                   <LogbookEntryForm
                     onSubmit={(data) => createMutation.mutate(data)}
                     isPending={createMutation.isPending}
@@ -843,7 +849,7 @@ export default function Logbook() {
               </Dialog>
               <Button
                 variant="outline"
-                className="w-full"
+                className={`w-full ${logbookSecondaryButtonClass}`}
                 onClick={() => exportToCSV(entries)}
                 disabled={entries.length === 0}
               >
@@ -852,7 +858,7 @@ export default function Logbook() {
               </Button>
               <Button
                 variant="outline"
-                className="w-full"
+                className={`w-full ${logbookSecondaryButtonClass}`}
                 onClick={() => exportToPDF(entries)}
                 disabled={entries.length === 0}
               >
@@ -872,7 +878,7 @@ export default function Logbook() {
         title={pressDemo.getStep("currency")?.title ?? "Totals and Currency"}
         body={pressDemo.getStep("currency")?.body ?? ""}
       >
-      <Card className="mb-6">
+      <Card className={`${logbookPanelClass} mb-6`}>
         <CardHeader>
           <CardTitle className="text-lg">Flight Time Breakdown</CardTitle>
         </CardHeader>
@@ -917,7 +923,7 @@ export default function Logbook() {
         title={pressDemo.getStep("entries")?.title ?? "Flight Entries"}
         body={pressDemo.getStep("entries")?.body ?? ""}
       >
-      <Card>
+      <Card className={logbookPanelClass}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -930,7 +936,7 @@ export default function Logbook() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Badge variant="outline">{entries.length} logged flights</Badge>
+              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">{entries.length} logged flights</Badge>
             </div>
           </div>
         </CardHeader>
@@ -940,7 +946,7 @@ export default function Logbook() {
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : entries.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="py-8 text-center text-[#A9BBCD]">
               No logbook entries yet. Add your first flight!
             </div>
           ) : (
@@ -964,7 +970,7 @@ export default function Logbook() {
                 {entries.map((entry) => (
                   <TableRow
                     key={entry.id}
-                    className="cursor-pointer hover:bg-muted/40"
+                    className="cursor-pointer hover:bg-transparent"
                     onClick={() => setViewingEntry(entry)}
                   >
                     <TableCell>{new Date(entry.flightDate).toLocaleDateString()}</TableCell>
@@ -1064,7 +1070,7 @@ export default function Logbook() {
       </PressDemoSpotlight>
 
       {isPro ? (
-        <Card className="mt-6">
+        <Card className={`${logbookPanelClass} mt-6`}>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <FileArchive className="h-5 w-5 text-primary" />
@@ -1133,7 +1139,7 @@ export default function Logbook() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="mt-6 border-primary/10 bg-primary/5">
+        <Card className={`${logbookPanelClass} mt-6`}>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <FileArchive className="h-5 w-5 text-primary" />
@@ -1142,7 +1148,7 @@ export default function Logbook() {
             <CardDescription>Keep a secure PDF backup of your paper logbooks.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="default" asChild>
+            <Button className={logbookPrimaryButtonClass} asChild>
               <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
             </Button>
           </CardContent>
@@ -1150,7 +1156,7 @@ export default function Logbook() {
       )}
 
       {isPro && (
-        <Card className="mt-6">
+        <Card className={`${logbookPanelClass} mt-6`}>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-primary" />
@@ -1215,7 +1221,7 @@ export default function Logbook() {
                 <div className="text-xs text-muted-foreground">
                   IPC date: {formatDisplayDate(proSummary?.expirations?.ipcDate)}
                 </div>
-                <Button variant="outline" size="sm" asChild>
+                <Button variant="outline" size="sm" className={logbookSecondaryButtonClass} asChild>
                   <Link href="/flight-planner">Open Flight Planner</Link>
                 </Button>
               </div>
@@ -1264,6 +1270,7 @@ export default function Logbook() {
                   </div>
                 </div>
                 <Button
+                  className={logbookPrimaryButtonClass}
                   onClick={() => saveProSettingsMutation.mutate()}
                   disabled={saveProSettingsMutation.isPending}
                 >
@@ -1276,7 +1283,7 @@ export default function Logbook() {
       )}
 
       {isPro && (
-        <Card className="mt-6">
+        <Card className={`${logbookPanelClass} mt-6`}>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Bell className="h-5 w-5 text-primary" />
@@ -1316,6 +1323,7 @@ export default function Logbook() {
               />
             </div>
             <Button
+              className={logbookPrimaryButtonClass}
               onClick={() => saveNotificationPrefsMutation.mutate()}
               disabled={saveNotificationPrefsMutation.isPending}
             >
@@ -1326,7 +1334,7 @@ export default function Logbook() {
       )}
 
       {isPro && (
-        <Card className="mt-6">
+        <Card className={`${logbookPanelClass} mt-6`}>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Award className="h-5 w-5 text-primary" />
@@ -1340,6 +1348,7 @@ export default function Logbook() {
                 {endorsementsLoading ? "Loading endorsements..." : `${endorsements.length} endorsement${endorsements.length === 1 ? "" : "s"}`}
               </div>
               <Button
+                className={logbookPrimaryButtonClass}
                 size="sm"
                 onClick={() => {
                   setEditingEndorsement(null);
@@ -1427,7 +1436,7 @@ export default function Logbook() {
       )}
 
       {/* RSF Pro CTA */}
-      <Card className="mt-6 border-primary/20 bg-primary/5">
+      <Card className={`${logbookPanelClass} mt-6`}>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Award className="h-5 w-5 text-primary" />
@@ -1490,7 +1499,7 @@ export default function Logbook() {
             <p className="text-xs text-muted-foreground text-center">
               Tip: <strong>Your logbook data stays free and exportable.</strong> Pro adds saved workflow value through currency tracking, reminders, and instructor-ready records.
             </p>
-            <Button variant="default" asChild>
+            <Button className={logbookPrimaryButtonClass} asChild>
               <Link
                 href={withSourceParam("/logbook/pro", "/logbook")}
                 onClick={() => trackEvent("subscription_cta_click", { source_page: "/logbook", target: "/logbook/pro", context: "logbook_footer_cta" })}
@@ -1507,7 +1516,7 @@ export default function Logbook() {
 
       {editingEntry && (
         <Dialog open={!!editingEntry} onOpenChange={() => setEditingEntry(null)}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="rsf-logbook-theme rsf-metal-panel max-h-[90vh] max-w-2xl overflow-y-auto text-[#E8EDF4]">
             <LogbookEntryForm
               initialData={editingEntry}
               onSubmit={(data) => updateMutation.mutate({ id: editingEntry.id, data })}
@@ -1519,7 +1528,7 @@ export default function Logbook() {
 
       {isSignDialogOpen && selectedEntryId && (
         <Dialog open={isSignDialogOpen} onOpenChange={setIsSignDialogOpen}>
-          <DialogContent>
+          <DialogContent className="rsf-logbook-theme rsf-metal-panel text-[#E8EDF4]">
             <SignatureDialog
               role={signRole}
               onSign={(signatureDataUrl, signedByName, cfiCertNumber, cfiCertExpires) => {
@@ -1543,7 +1552,7 @@ export default function Logbook() {
 
       {viewingEntry && (
         <Dialog open={!!viewingEntry} onOpenChange={() => setViewingEntry(null)}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="rsf-logbook-theme rsf-metal-panel max-h-[90vh] max-w-2xl overflow-y-auto text-[#E8EDF4]">
             <DialogHeader>
               <DialogTitle>Logbook Entry Details</DialogTitle>
               <DialogDescription>Review flight details and remarks.</DialogDescription>
@@ -1684,7 +1693,7 @@ export default function Logbook() {
             }
           }}
         >
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="rsf-logbook-theme rsf-metal-panel max-h-[90vh] max-w-2xl overflow-y-auto text-[#E8EDF4]">
             <DialogHeader>
               <DialogTitle>{editingEndorsement ? "Edit Endorsement" : "Add Endorsement"}</DialogTitle>
               <DialogDescription>Track instructor sign-offs and expiration dates.</DialogDescription>

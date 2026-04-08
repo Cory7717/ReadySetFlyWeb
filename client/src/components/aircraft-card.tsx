@@ -42,15 +42,15 @@ export function AircraftCard({
 }: AircraftCardProps) {
   return (
     <Card 
-      className="overflow-hidden hover-elevate transition-all duration-200 hover:scale-[1.02] cursor-pointer" 
+      className="group rsf-metal-panel rsf-metal-panel-interactive overflow-hidden cursor-pointer text-[#E8EDF4] transition-all duration-200 hover:scale-[1.02]" 
       onClick={onCardClick}
       data-testid={`card-aircraft-${id}`}
     >
-      <div className="relative aspect-[3/2] overflow-hidden rounded-t-xl">
+      <div className="relative aspect-[3/2] overflow-hidden rounded-t-xl bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))]">
         <img
           src={image}
           alt={`${year} ${make} ${model}`}
-          className="w-full h-full object-cover"
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
         />
         {isExample && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -61,7 +61,7 @@ export function AircraftCard({
         )}
         <div className="absolute top-3 left-3 flex gap-2">
           {certifications.map((cert) => (
-            <Badge key={cert} className="bg-chart-2 text-white text-xs font-semibold" data-testid={`badge-cert-${cert}`}>
+            <Badge key={cert} className="border border-[#3a7d6e]/40 bg-[#10211d] text-xs font-semibold text-[#d1ece3]" data-testid={`badge-cert-${cert}`}>
               {cert}
             </Badge>
           ))}
@@ -71,30 +71,30 @@ export function AircraftCard({
           listingType="aircraft"
           variant="ghost"
           size="icon"
-          className="absolute top-3 right-3 bg-background/80 backdrop-blur hover:bg-background"
+          className="absolute top-3 right-3 border border-[#5d6f85]/24 bg-[#0f141a]/92 text-[#E8EDF4] backdrop-blur hover:bg-[#17202a]"
         />
         <div className="absolute bottom-3 left-3">
-          <Badge variant="outline" className="bg-background/80 backdrop-blur">
-            <CheckCircle2 className="h-3 w-3 mr-1 text-chart-2" />
+          <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#0f141a]/92 text-[#E8EDF4] backdrop-blur">
+            <CheckCircle2 className="mr-1 h-3 w-3 text-[#6dc8ab]" />
             Verified Owner
           </Badge>
         </div>
       </div>
 
       <CardContent className="p-6">
-        <h3 className="font-display text-xl font-semibold mb-1 hover:text-primary transition-colors" data-testid={`title-aircraft-${id}`}>
+        <h3 className="mb-1 font-display text-xl font-semibold text-[#F5F8FC] transition-colors hover:text-[#9ebdff]" data-testid={`title-aircraft-${id}`}>
           {year} {make} {model}
         </h3>
 
-        <div className="flex items-baseline gap-2 mb-4">
+        <div className="mb-4 flex items-baseline gap-2">
           <span className="text-2xl font-bold" data-testid={`text-rate-${id}`}>${hourlyRate}</span>
-          <span className="text-muted-foreground text-sm">/hour</span>
+          <span className="text-sm text-[#A9BBCD]">/hour</span>
           {insuranceIncluded && (
-            <Badge variant="outline" className="text-xs">Insurance Included</Badge>
+            <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-xs text-[#E8EDF4]">Insurance Included</Badge>
           )}
         </div>
 
-        <div className="space-y-2 text-sm text-muted-foreground mb-4">
+        <div className="mb-4 space-y-2 text-sm text-[#A9BBCD]">
           <div className="flex items-center gap-2">
             <Gauge className="h-4 w-4" />
             <span>{year} | {totalTime.toLocaleString()} hrs | {avionics}</span>
@@ -105,7 +105,7 @@ export function AircraftCard({
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-4 border-t text-xs text-muted-foreground">
+        <div className="flex items-center justify-between border-t border-[#5d6f85]/16 pt-4 text-xs text-[#8fa6c0]">
           <span>{viewCount} views</span>
           <span>Response: {responseTime}h</span>
           <span>Acceptance: {acceptanceRate}%</span>

@@ -42,6 +42,11 @@ export default function LogbookProPage() {
     return new URLSearchParams(window.location.search).get("claim")?.trim() || "";
   }, []);
   const [partnerMemberNumber, setPartnerMemberNumber] = useState("");
+  const logbookPanelClass = "rsf-metal-panel text-[#E8EDF4]";
+  const logbookSubpanelClass = "rsf-logbook-subpanel rounded-[1rem] text-[#DCE6F2]";
+  const logbookMetricClass = "rsf-logbook-metric px-4 py-4";
+  const logbookPrimaryButtonClass = "rsf-metal-button-primary";
+  const logbookSecondaryButtonClass = "rsf-metal-button-secondary";
 
   const {
     data: partnerOffer,
@@ -235,56 +240,57 @@ export default function LogbookProPage() {
           <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">PayPal Business/Commerce</Badge>
         </>
       }
-      contentClassName="space-y-8"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
+      contentClassName="rsf-logbook-theme space-y-8"
     >
-      <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
+      <section className={`${logbookPanelClass} rounded-[1.6rem] p-5 sm:p-6`}>
         <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-5">
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">Save plans</Badge>
-              <Badge variant="outline">Track currency</Badge>
-              <Badge variant="outline">Logbook continuity</Badge>
+              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Save plans</Badge>
+              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Track currency</Badge>
+              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Logbook continuity</Badge>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Save your work</div>
-                <div className="mt-2 text-sm text-slate-700">Keep routes, aircraft profiles, and training history from disappearing between sessions.</div>
+              <div className={logbookMetricClass}>
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-[#8FA6C0]">Save your work</div>
+                <div className="mt-2 text-sm text-[#DCE6F2]">Keep routes, aircraft profiles, and training history from disappearing between sessions.</div>
               </div>
-              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Stay current</div>
-                <div className="mt-2 text-sm text-slate-700">Track landings, IFR recency, medical, flight review, and IPC deadlines without separate reminders.</div>
+              <div className={logbookMetricClass}>
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-[#8FA6C0]">Stay current</div>
+                <div className="mt-2 text-sm text-[#DCE6F2]">Track landings, IFR recency, medical, flight review, and IPC deadlines without separate reminders.</div>
               </div>
-              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Train with context</div>
-                <div className="mt-2 text-sm text-slate-700">Keep logbook records, radio comms practice, and guided training workflows in one system.</div>
+              <div className={logbookMetricClass}>
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-[#8FA6C0]">Train with context</div>
+                <div className="mt-2 text-sm text-[#DCE6F2]">Keep logbook records, radio comms practice, and guided training workflows in one system.</div>
               </div>
             </div>
 
-            <div className="rounded-[1.25rem] border border-primary/16 bg-white/80 p-4 shadow-[0_12px_26px_rgba(15,23,42,0.08)] sm:p-5">
+            <div className={`${logbookSubpanelClass} p-4 sm:p-5`}>
               <span className="rsf-kicker">When pilots upgrade</span>
               <div className="mt-3 grid gap-3 md:grid-cols-3">
-                <div className="rounded-[1rem] border border-primary/12 bg-white/78 p-4">
-                  <div className="text-sm font-semibold text-slate-900">Repeat routes start piling up</div>
-                  <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                <div className={`${logbookSubpanelClass} p-4`}>
+                  <div className="text-sm font-semibold text-[#F5F8FC]">Repeat routes start piling up</div>
+                  <div className="mt-2 text-xs leading-5 text-[#A9BBCD]">
                     Pro pays off when you are rebuilding the same planning setup, notes, and aircraft assumptions more than once.
                   </div>
                 </div>
-                <div className="rounded-[1rem] border border-primary/12 bg-white/78 p-4">
-                  <div className="text-sm font-semibold text-slate-900">Deadlines matter</div>
-                  <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                <div className={`${logbookSubpanelClass} p-4`}>
+                  <div className="text-sm font-semibold text-[#F5F8FC]">Deadlines matter</div>
+                  <div className="mt-2 text-xs leading-5 text-[#A9BBCD]">
                     Alerts become valuable when medical, flight review, IPC, and landing currency need one system of record.
                   </div>
                 </div>
-                <div className="rounded-[1rem] border border-primary/12 bg-white/78 p-4">
-                  <div className="text-sm font-semibold text-slate-900">You want continuity</div>
-                  <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                <div className={`${logbookSubpanelClass} p-4`}>
+                  <div className="text-sm font-semibold text-[#F5F8FC]">You want continuity</div>
+                  <div className="mt-2 text-xs leading-5 text-[#A9BBCD]">
                     Saved training history, logbook depth, and cross-tool continuity matter more than one-off feature access.
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-[1.25rem] border border-white/12 bg-white/80 p-4 shadow-[0_12px_26px_rgba(15,23,42,0.08)] sm:p-5">
+            <div className={`${logbookSubpanelClass} p-4 sm:p-5`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <span className="rsf-kicker">Your current plan</span>
@@ -307,7 +313,7 @@ export default function LogbookProPage() {
                 </div>
               </div>
 
-              <div className="mt-4 rounded-[1rem] border border-primary/14 bg-white/72 p-4">
+              <div className={`${logbookSubpanelClass} mt-4 p-4`}>
                 <div className="text-sm font-semibold">What {membershipTierInfo[selectedTier].title} changes in daily use</div>
                 <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
                   {membershipTierInfo[selectedTier].features.map((feature) => (
@@ -332,19 +338,19 @@ export default function LogbookProPage() {
             </div>
 
             {offerSlug ? (
-              <div className="rounded-[1.25rem] border border-primary/16 bg-white/80 p-4 shadow-[0_12px_26px_rgba(15,23,42,0.08)] sm:p-5">
+              <div className={`${logbookSubpanelClass} p-4 sm:p-5`}>
                 <span className="rsf-kicker">Partner offer</span>
                 {partnerOfferLoading ? (
-                  <div className="mt-3 text-sm text-muted-foreground">Loading partner offer...</div>
+                  <div className="mt-3 text-sm text-[#A9BBCD]">Loading partner offer...</div>
                 ) : partnerOffer ? (
                   <div className="space-y-4">
                     <div>
-                      <h3 className="mt-2 text-xl font-semibold text-slate-900">{partnerOffer.name}</h3>
-                      <p className="mt-2 text-sm text-muted-foreground">
+                      <h3 className="mt-2 text-xl font-semibold text-[#F5F8FC]">{partnerOffer.name}</h3>
+                      <p className="mt-2 text-sm text-[#A9BBCD]">
                         {partnerOffer.partnerName} members can unlock {partnerOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"} for {partnerOffer.durationDays} days by entering their member number below.
                       </p>
                       {partnerOffer.description ? (
-                        <p className="mt-2 text-xs text-muted-foreground">{partnerOffer.description}</p>
+                        <p className="mt-2 text-xs text-[#A9BBCD]">{partnerOffer.description}</p>
                       ) : null}
                     </div>
 
@@ -423,10 +429,10 @@ export default function LogbookProPage() {
             ) : null}
           </div>
 
-          <div className="space-y-4 rounded-[1.4rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.78),rgba(255,255,255,0.56))] p-5 shadow-[0_18px_38px_rgba(15,23,42,0.12)]">
+          <div className={`${logbookSubpanelClass} space-y-4 p-5`}>
             <div>
               <span className="rsf-kicker">Choose a plan</span>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-900">Pick the point where saved workflow becomes worth paying for.</h3>
+              <h3 className="mt-2 text-2xl font-semibold text-[#F5F8FC]">Pick the point where saved workflow becomes worth paying for.</h3>
             </div>
             <div className="flex flex-wrap gap-3">
               {(Object.keys(membershipTierInfo) as MembershipTier[]).map((tier) => {
@@ -498,7 +504,7 @@ export default function LogbookProPage() {
                   </div>
                 </div>
 
-                <Button onClick={handleSubscribe} disabled={loading}>
+                <Button className={logbookPrimaryButtonClass} onClick={handleSubscribe} disabled={loading}>
                   {loading
                     ? "Redirecting..."
                     : hasTrial

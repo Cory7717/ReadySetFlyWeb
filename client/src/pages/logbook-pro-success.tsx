@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { trackEvent } from "@/lib/analytics";
+import { PageShell } from "@/components/layout/PageShell";
 
 export default function LogbookProSuccess() {
   const [status, setStatus] = useState<string>("Processing...");
@@ -36,8 +37,14 @@ export default function LogbookProSuccess() {
   }, []);
 
   return (
-    <div className="container mx-auto py-10 px-4">
-      <Card>
+    <PageShell
+      kicker="Membership"
+      title="RSF Pro Activated"
+      description="Membership confirmation is complete. Your upgraded logbook workflow is ready."
+      canopyClassName="rsf-metal-hero border-b border-white/10"
+      contentClassName="rsf-logbook-theme space-y-6"
+    >
+      <Card className="rsf-metal-panel max-w-2xl text-[#E8EDF4]">
         <CardHeader>
           <CardTitle>RSF Pro Activated</CardTitle>
           <CardDescription>Thanks for upgrading!</CardDescription>
@@ -45,11 +52,11 @@ export default function LogbookProSuccess() {
         <CardContent className="space-y-4">
           <div className="text-sm">{status}</div>
           {error && <div className="text-sm text-red-600">{error}</div>}
-          <Button asChild>
+          <Button className="rsf-metal-button-primary" asChild>
             <Link href="/logbook">Go to Logbook</Link>
           </Button>
         </CardContent>
       </Card>
-    </div>
+    </PageShell>
   );
 }

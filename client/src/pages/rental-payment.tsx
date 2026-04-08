@@ -221,14 +221,14 @@ function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraf
           <label htmlFor="card-name-field" className="block text-sm font-medium mb-2">
             Cardholder Name
           </label>
-          <div id="card-name-field" className="border rounded-md p-3 min-h-[44px]"></div>
+          <div id="card-name-field" className="min-h-[44px] rounded-md border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] p-3"></div>
         </div>
         
         <div>
           <label htmlFor="card-number-field" className="block text-sm font-medium mb-2">
             Card Number
           </label>
-          <div id="card-number-field" className="border rounded-md p-3 min-h-[44px]"></div>
+          <div id="card-number-field" className="min-h-[44px] rounded-md border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] p-3"></div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -236,13 +236,13 @@ function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraf
             <label htmlFor="card-expiry-field" className="block text-sm font-medium mb-2">
               Expiration Date
             </label>
-            <div id="card-expiry-field" className="border rounded-md p-3 min-h-[44px]"></div>
+            <div id="card-expiry-field" className="min-h-[44px] rounded-md border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] p-3"></div>
           </div>
           <div>
             <label htmlFor="card-cvv-field" className="block text-sm font-medium mb-2">
               CVV
             </label>
-            <div id="card-cvv-field" className="border rounded-md p-3 min-h-[44px]"></div>
+            <div id="card-cvv-field" className="min-h-[44px] rounded-md border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] p-3"></div>
           </div>
         </div>
       </div>
@@ -250,18 +250,18 @@ function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraf
       <Button
         type="submit"
         disabled={!isReady || isProcessing}
-        className="w-full bg-accent text-accent-foreground hover:bg-accent"
+        className="rsf-metal-button-primary w-full"
         size="lg"
         data-testid="button-submit-payment"
       >
         {isProcessing ? "Processing..." : `Pay $${parseFloat(rental.totalCostRenter).toFixed(2)}`}
       </Button>
       
-      <div className="mt-4 p-3 bg-muted rounded-md">
-        <p className="text-xs text-center text-muted-foreground">
+      <div className="rsf-rentals-subpanel mt-4 rounded-md p-3">
+        <p className="text-center text-xs text-[#A9BBCD]">
           🔒 Secure payments processed by <span className="font-semibold">PayPal Business/Commerce</span>, a trusted global payments platform
         </p>
-        <p className="text-xs text-center text-muted-foreground mt-1">
+        <p className="mt-1 text-center text-xs text-[#A9BBCD]">
           Your payment information is encrypted and never stored on our servers
         </p>
       </div>
@@ -306,17 +306,17 @@ export default function RentalPayment() {
 
   if (!rental || !aircraft) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen rsf-app-shell rsf-rentals-theme flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading rental details...</p>
+          <p className="text-[#A9BBCD]">Loading rental details...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen rsf-app-shell rsf-rentals-theme">
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto">
           <h1 className="font-display text-4xl font-bold mb-8" data-testid="text-payment-title">
@@ -325,20 +325,20 @@ export default function RentalPayment() {
 
           <div className="grid gap-6">
             {/* Rental Summary */}
-            <Card>
+            <Card className="rsf-metal-panel text-[#E8EDF4]">
               <CardHeader>
                 <CardTitle>Rental Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <Plane className="h-5 w-5 text-muted-foreground" />
+                  <Plane className="h-5 w-5 text-[#8fa6c0]" />
                   <div>
                     <p className="font-semibold">{aircraft.year} {aircraft.make} {aircraft.model}</p>
-                    <p className="text-sm text-muted-foreground">{aircraft.registration}</p>
+                    <p className="text-sm text-[#A9BBCD]">{aircraft.registration}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Calendar className="h-5 w-5 text-muted-foreground" />
+                  <Calendar className="h-5 w-5 text-[#8fa6c0]" />
                   <div>
                     <p className="text-sm">
                       {new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}
@@ -346,7 +346,7 @@ export default function RentalPayment() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-muted-foreground" />
+                  <Clock className="h-5 w-5 text-[#8fa6c0]" />
                   <div>
                     <p className="text-sm">{parseFloat(rental.estimatedHours)} estimated flight hours</p>
                   </div>
@@ -354,19 +354,19 @@ export default function RentalPayment() {
 
                 <div className="pt-4 border-t space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Base cost</span>
+                    <span className="text-[#A9BBCD]">Base cost</span>
                     <span>${parseFloat(rental.baseCost).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Sales tax (8.25%)</span>
+                    <span className="text-[#A9BBCD]">Sales tax (8.25%)</span>
                     <span>${parseFloat(rental.salesTax).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Platform fee (7.5%)</span>
+                    <span className="text-[#A9BBCD]">Platform fee (7.5%)</span>
                     <span>${parseFloat(rental.platformFeeRenter).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Processing fee (3%)</span>
+                    <span className="text-[#A9BBCD]">Processing fee (3%)</span>
                     <span>${parseFloat(rental.processingFee).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between font-bold text-lg pt-2 border-t">
@@ -378,7 +378,7 @@ export default function RentalPayment() {
             </Card>
 
             {/* Payment Form */}
-            <Card>
+            <Card className="rsf-metal-panel text-[#E8EDF4]">
               <CardHeader>
                 <CardTitle>Payment Information</CardTitle>
               </CardHeader>
@@ -396,3 +396,4 @@ export default function RentalPayment() {
     </div>
   );
 }
+

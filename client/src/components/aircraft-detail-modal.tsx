@@ -134,7 +134,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="modal-aircraft-detail">
+      <DialogContent className="rsf-rentals-theme rsf-metal-panel max-h-[90vh] max-w-4xl overflow-y-auto text-[#E8EDF4]" data-testid="modal-aircraft-detail">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
@@ -142,7 +142,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
         ) : aircraft ? (
           <>
             {(aircraft as any).isExample && (
-              <div className="bg-amber-500 text-white px-6 py-3 -mx-6 -mt-6 mb-4 text-center font-semibold" data-testid="banner-example-rental">
+              <div className="-mx-6 -mt-6 mb-4 border-b border-[#7f6327]/40 bg-[linear-gradient(180deg,rgba(54,40,18,0.98),rgba(28,21,10,0.98))] px-6 py-3 text-center font-semibold text-[#f2dca4]" data-testid="banner-example-rental">
                 SAMPLE RENTAL LISTING
                 <p className="text-sm font-normal mt-1 opacity-90">
                   This is a demo listing. Submit a request to see a live rental instead.
@@ -161,7 +161,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
                 <CarouselContent>
                   {displayImages.map((img, idx) => (
                     <CarouselItem key={idx}>
-                      <div className="aspect-video rounded-xl overflow-hidden bg-muted">
+                      <div className="aspect-video overflow-hidden rounded-xl bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))]">
                         <img
                           src={img}
                           alt={`${aircraft.year} ${aircraft.make} ${aircraft.model} - Image ${idx + 1}`}
@@ -185,17 +185,17 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
                   <div>
                     <div className="flex items-baseline gap-2">
                       <span className="text-3xl font-bold">${aircraft.hourlyRate}</span>
-                      <span className="text-muted-foreground">/hour</span>
+                      <span className="text-[#A9BBCD]">/hour</span>
                     </div>
                     <div className="flex gap-2 mt-2">
-                      <Badge variant="outline">{aircraft.location}</Badge>
-                      {aircraft.airportCode && <Badge variant="outline">{aircraft.airportCode}</Badge>}
-                      <Badge variant="secondary">{aircraft.viewCount || 0} views</Badge>
+                      <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">{aircraft.location}</Badge>
+                      {aircraft.airportCode && <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">{aircraft.airportCode}</Badge>}
+                      <Badge variant="secondary" className="border-0 bg-[#21324a] text-[#e3ecfb]">{aircraft.viewCount || 0} views</Badge>
                     </div>
                   </div>
               
               {user && !user.identityVerified ? (
-                <Alert className="max-w-sm border-amber-300 bg-amber-50/80" data-testid="alert-verification-required-modal">
+                <Alert className="max-w-sm border-[#7f6327]/40 bg-[linear-gradient(180deg,rgba(36,27,12,0.98),rgba(19,14,7,0.98))] text-[#f2dca4]" data-testid="alert-verification-required-modal">
                   <AlertTitle>Pilot Verification Required</AlertTitle>
                   <AlertDescription className="space-y-3">
                     <p className="text-xs">
@@ -211,14 +211,14 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
                       }}
                       data-testid="button-complete-verification-modal"
                     >
-                      Complete Verification →
+                      Complete Verification
                     </Button>
                   </AlertDescription>
                 </Alert>
               ) : (
                 <Button
                   size="lg"
-                  className="bg-accent text-accent-foreground hover:bg-accent"
+                  className="rsf-metal-button-primary"
                   onClick={() => {
                     if (!user) {
                       setLoginPromptOpen(true);
@@ -242,36 +242,36 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
                 
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
-                    <Gauge className="h-5 w-5 text-muted-foreground" />
+                    <Gauge className="h-5 w-5 text-[#8fa6c0]" />
                     <div>
                       <p className="font-medium">Total Time</p>
-                      <p className="text-sm text-muted-foreground">{aircraft.totalTime.toLocaleString()} hours</p>
+                      <p className="text-sm text-[#A9BBCD]">{aircraft.totalTime.toLocaleString()} hours</p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <Plane className="h-5 w-5 text-muted-foreground" />
+                    <Plane className="h-5 w-5 text-[#8fa6c0]" />
                     <div>
                       <p className="font-medium">Registration</p>
-                      <p className="text-sm text-muted-foreground">{aircraft.registration}</p>
+                      <p className="text-sm text-[#A9BBCD]">{aircraft.registration}</p>
                     </div>
                   </div>
 
                   {aircraft.avionicsSuite && (
                     <div className="flex items-center gap-3">
-                      <Shield className="h-5 w-5 text-muted-foreground" />
+                      <Shield className="h-5 w-5 text-[#8fa6c0]" />
                       <div>
                         <p className="font-medium">Avionics</p>
-                        <p className="text-sm text-muted-foreground">{aircraft.avionicsSuite}</p>
+                        <p className="text-sm text-[#A9BBCD]">{aircraft.avionicsSuite}</p>
                       </div>
                     </div>
                   )}
 
                   <div className="flex items-center gap-3">
-                    <Shield className="h-5 w-5 text-muted-foreground" />
+                    <Shield className="h-5 w-5 text-[#8fa6c0]" />
                     <div>
                       <p className="font-medium">Insurance</p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-[#A9BBCD]">
                         {aircraft.insuranceIncluded ? "Included in hourly rate" : "Not included"}
                       </p>
                     </div>
@@ -282,7 +282,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
                   <p className="font-medium mb-2">Required Certifications</p>
                   <div className="flex flex-wrap gap-2">
                     {aircraft.requiredCertifications.map((cert) => (
-                      <Badge key={cert} className="bg-chart-2 text-white">
+                      <Badge key={cert} className="border border-[#3a7d6e]/40 bg-[#10211d] text-[#d1ece3]">
                         {cert}
                       </Badge>
                     ))}
@@ -305,11 +305,11 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
 
                   <div className="grid grid-cols-2 gap-4 pt-4">
                     <div>
-                      <p className="text-sm text-muted-foreground">Response Time</p>
+                      <p className="text-sm text-[#8fa6c0]">Response Time</p>
                       <p className="text-lg font-semibold">{aircraft.responseTime || 24}h</p>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Acceptance Rate</p>
+                      <p className="text-sm text-[#8fa6c0]">Acceptance Rate</p>
                       <p className="text-lg font-semibold">{aircraft.acceptanceRate || 95}%</p>
                     </div>
                   </div>
@@ -321,22 +321,22 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
             {aircraft.description && (
               <div>
                 <h3 className="font-display text-xl font-semibold mb-3">Description</h3>
-                <p className="text-muted-foreground whitespace-pre-wrap">{aircraft.description}</p>
+                <p className="whitespace-pre-wrap text-[#A9BBCD]">{aircraft.description}</p>
               </div>
             )}
 
             {/* Admin Actions */}
             {user?.isAdmin && (
-              <div className="border-t pt-6 mt-6 space-y-6">
+              <div className="mt-6 space-y-6 border-t border-[#5d6f85]/16 pt-6">
                 <h3 className="font-display text-lg font-semibold">Admin Actions</h3>
                 
                 {/* Quick Actions */}
                 <div className="grid md:grid-cols-2 gap-4">
                   {/* Toggle Active */}
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="rsf-rentals-subpanel flex items-center justify-between rounded-lg p-4">
                     <div className="space-y-1">
                       <Label className="font-semibold">Listing Status</Label>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-[#A9BBCD]">
                         {aircraft.isListed ? "Active - visible to renters" : "Inactive - hidden from search"}
                       </p>
                     </div>
@@ -349,10 +349,10 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
                   </div>
 
                   {/* Toggle Featured */}
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="rsf-rentals-subpanel flex items-center justify-between rounded-lg p-4">
                     <div className="space-y-1">
                       <Label className="font-semibold">Featured/Boosted</Label>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-[#A9BBCD]">
                         {aircraft.isFeatured ? "Featured - shown at top" : "Normal priority"}
                       </p>
                     </div>
@@ -416,7 +416,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
 
     {/* Login Prompt Dialog */}
     <AlertDialog open={loginPromptOpen} onOpenChange={setLoginPromptOpen}>
-      <AlertDialogContent data-testid="dialog-login-prompt">
+      <AlertDialogContent className="rsf-rentals-theme rsf-metal-panel text-[#E8EDF4]" data-testid="dialog-login-prompt">
         <AlertDialogHeader>
           <AlertDialogTitle>Sign in to continue</AlertDialogTitle>
           <AlertDialogDescription>

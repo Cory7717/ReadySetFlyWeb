@@ -226,6 +226,11 @@ export default function Home() {
   const isVerifiedOwner = Boolean(user?.isVerified);
   const listAircraftHref = !isAuthenticated ? "/register" : "/list-aircraft";
   const verificationHref = !isAuthenticated ? "/register" : "/verify-identity";
+  const rentalsPanelClass = "rsf-metal-panel text-[#E8EDF4]";
+  const rentalsSubpanelClass = "rsf-rentals-subpanel rounded-[1rem] text-[#DCE6F2]";
+  const rentalsMetricClass = "rsf-rentals-metric px-4 py-4";
+  const rentalsPrimaryButtonClass = "rsf-metal-button-primary";
+  const rentalsSecondaryButtonClass = "rsf-metal-button-secondary";
 
   return (
     <PageShell
@@ -235,15 +240,16 @@ export default function Home() {
       actions={
         <>
           <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">Verified listings</Badge>
-          <Button asChild className="bg-white/90 text-slate-900 hover:bg-white">
+          <Button asChild className={rentalsPrimaryButtonClass}>
             <Link href={listAircraftHref}>Create Rental Listing</Link>
           </Button>
-          <Button asChild variant="outline" className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10">
+          <Button asChild variant="outline" className={rentalsSecondaryButtonClass}>
             <Link href="/marketplace">Explore Marketplace</Link>
           </Button>
         </>
       }
-      contentClassName="space-y-8"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
+      contentClassName="rsf-rentals-theme space-y-8"
     >
       {pressDemo.enabled && (
         <PressDemoBanner
@@ -257,7 +263,7 @@ export default function Home() {
         />
       )}
       {!pressDemo.enabled && showVerificationNudge && (
-        <Alert className="border-primary/30 bg-primary/5" data-testid="alert-verification-nudge">
+        <Alert className={`${rentalsPanelClass} border-[#45658b]/34`} data-testid="alert-verification-nudge">
           <Shield className="h-4 w-4" />
           <AlertTitle>Complete Verification to Book</AlertTitle>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -266,12 +272,13 @@ export default function Home() {
               minutes.
             </span>
             <div className="flex items-center gap-2">
-              <Button asChild size="sm" data-testid="button-verify-now">
-                <Link href="/verify-identity">Verify Now →</Link>
+              <Button asChild size="sm" className={rentalsPrimaryButtonClass} data-testid="button-verify-now">
+                <Link href="/verify-identity">Verify Now</Link>
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
+                className="text-[#A9BBCD] hover:bg-transparent hover:text-[#F5F8FC]"
                 onClick={() => {
                   if (typeof window !== "undefined") {
                     const sessionId = window.sessionStorage.getItem("rsf_verification_nudge_session");
@@ -297,36 +304,36 @@ export default function Home() {
         title={pressDemo.getStep("search-rentals")?.title ?? "Search rentals"}
         body={pressDemo.getStep("search-rentals")?.body ?? ""}
       >
-      <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
+      <section className={`${rentalsPanelClass} rounded-[1.6rem] p-5 sm:p-6`}>
         <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-5">
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">Aircraft access</Badge>
-              <Badge variant="outline">Training friendly</Badge>
-              <Badge variant="outline">Plan in RSF</Badge>
+              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Aircraft access</Badge>
+              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Training friendly</Badge>
+              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Plan in RSF</Badge>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">1. Search by mission</div>
-                <div className="mt-2 text-sm text-slate-700">Filter by aircraft type, location, and training needs before you compare listings.</div>
+              <div className={rentalsMetricClass}>
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-[#8FA6C0]">1. Search by mission</div>
+                <div className="mt-2 text-sm text-[#DCE6F2]">Filter by aircraft type, location, and training needs before you compare listings.</div>
               </div>
-              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">2. Check the aircraft</div>
-                <div className="mt-2 text-sm text-slate-700">Review rates, avionics, insurance, and location before you request access.</div>
+              <div className={rentalsMetricClass}>
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-[#8FA6C0]">2. Check the aircraft</div>
+                <div className="mt-2 text-sm text-[#DCE6F2]">Review rates, avionics, insurance, and location before you request access.</div>
               </div>
-              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">3. Plan the trip</div>
-                <div className="mt-2 text-sm text-slate-700">Move into route planning, airport conditions, and airspace review once you know what you want to fly.</div>
+              <div className={rentalsMetricClass}>
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-[#8FA6C0]">3. Plan the trip</div>
+                <div className="mt-2 text-sm text-[#DCE6F2]">Move into route planning, airport conditions, and airspace review once you know what you want to fly.</div>
               </div>
             </div>
 
-            <div className="rounded-[1.25rem] border border-white/12 bg-white/80 p-4 shadow-[0_12px_26px_rgba(15,23,42,0.08)] sm:p-5">
+            <div className={`${rentalsSubpanelClass} p-4 sm:p-5`}>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <span className="rsf-kicker">Search rentals</span>
-                  <h2 className="mt-2 text-2xl font-semibold text-slate-900">Start with the aircraft that matches the mission.</h2>
+                  <h2 className="mt-2 text-2xl font-semibold text-[#F5F8FC]">Start with the aircraft that matches the mission.</h2>
                 </div>
-                <p className="max-w-xl text-sm text-muted-foreground">
+                <p className="max-w-xl text-sm text-[#A9BBCD]">
                   Use the quick search below, then narrow the results with filters once you see what is available.
                 </p>
               </div>
@@ -394,7 +401,7 @@ export default function Home() {
                     <Badge
                       key={filter.value}
                       variant="outline"
-                      className="cursor-pointer hover-elevate text-xs sm:text-sm"
+                      className="cursor-pointer border-[#5d6f85]/24 bg-[#141b24] text-xs text-[#E8EDF4] hover:border-[#6d87a6]/30 hover:bg-[#18212c] sm:text-sm"
                       data-testid={`badge-filter-${filter.value}`}
                     >
                       {filter.label}
@@ -402,7 +409,7 @@ export default function Home() {
                   ))}
                 </div>
                 <Button
-                  className="w-full rounded-full bg-accent text-accent-foreground hover:bg-accent sm:w-auto"
+                  className={`w-full sm:w-auto ${rentalsPrimaryButtonClass}`}
                   size="lg"
                   data-testid="button-search"
                   onClick={() => trackEvent("rentals_search_click", { keyword, city, state, radius })}
@@ -414,16 +421,16 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-[1.4rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.76),rgba(255,255,255,0.5))] shadow-[0_18px_38px_rgba(15,23,42,0.12)]">
+          <div className={`${rentalsPanelClass} overflow-hidden rounded-[1.4rem]`}>
             <img
               src={wingtipImage}
               alt="Wingtip view from a rental aircraft"
               className="h-64 w-full object-cover xl:h-full"
             />
             <div className="space-y-2 p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Rental access</div>
-              <h3 className="text-xl font-semibold text-slate-900">Find the aircraft first, then use the rest of RSF around it.</h3>
-              <p className="text-sm leading-6 text-muted-foreground">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8FA6C0]">Rental access</div>
+              <h3 className="text-xl font-semibold text-[#F5F8FC]">Find the aircraft first, then use the rest of RSF around it.</h3>
+              <p className="text-sm leading-6 text-[#A9BBCD]">
                 Compare aircraft, then move into route planning, current conditions, and TFR review without starting from scratch on another site.
               </p>
             </div>
@@ -440,15 +447,15 @@ export default function Home() {
             title={pressDemo.getStep("owner-listing")?.title ?? "Owner listing"}
             body={pressDemo.getStep("owner-listing")?.body ?? ""}
           >
-          <Card className="border-primary/20 bg-primary/5">
+          <Card className={rentalsPanelClass}>
             <CardContent className="space-y-4 p-5 sm:p-6">
               <div>
-                <div className="text-sm font-semibold">List your aircraft on RSF rentals</div>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <div className="text-sm font-semibold text-[#F5F8FC]">List your aircraft on RSF rentals</div>
+                <p className="mt-1 text-sm text-[#A9BBCD]">
                   Owners need an RSF account and verification before publishing live rental listings.
                 </p>
               </div>
-              <div className="rounded-lg border border-primary/20 bg-white/70 px-4 py-3 text-xs text-muted-foreground">
+              <div className={`${rentalsSubpanelClass} px-4 py-3 text-xs text-[#A9BBCD]`}>
                 {!isAuthenticated
                   ? "Create your free account first, then complete owner verification and publish your listing."
                   : isVerifiedOwner
@@ -459,12 +466,14 @@ export default function Home() {
                 <Button
                   onClick={() => trackEvent("cta_click", { label: "rentals_create_listing", target: listAircraftHref })}
                   asChild
+                  className={rentalsPrimaryButtonClass}
                 >
                   <Link href={listAircraftHref}>Create rental listing</Link>
                 </Button>
                 {!isVerifiedOwner && (
                   <Button
                     variant="outline"
+                    className={rentalsSecondaryButtonClass}
                     onClick={() => trackEvent("cta_click", { label: "rentals_verify_owner", target: verificationHref })}
                     asChild
                   >
@@ -478,11 +487,11 @@ export default function Home() {
 
           {!pressDemo.enabled ? (
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 px-4 py-3 text-sm">
-              <div className="text-muted-foreground">
+            <div className={`${rentalsSubpanelClass} flex flex-wrap items-center justify-between gap-3 rounded-xl border-dashed px-4 py-3 text-sm`}>
+              <div className="text-[#A9BBCD]">
                 Want information on becoming a sponsored business?
               </div>
-              <Button asChild size="sm" variant="secondary" data-testid="button-banner-ad-info-rentals">
+              <Button asChild size="sm" className={rentalsSecondaryButtonClass} data-testid="button-banner-ad-info-rentals">
                 <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
                   Click here
                 </a>
@@ -514,7 +523,7 @@ export default function Home() {
           <Button
             variant="outline"
             onClick={() => setShowFilters(!showFilters)}
-            className="w-full sm:w-auto"
+            className={`w-full sm:w-auto ${rentalsSecondaryButtonClass}`}
             data-testid="button-toggle-filters"
           >
             {showFilters ? "Hide" : "Show"} filters
@@ -552,12 +561,12 @@ export default function Home() {
             {isLoading ? (
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-96 rounded-xl bg-muted animate-pulse" />
+                  <div key={i} className="h-96 rounded-xl border border-[#5d6f85]/16 bg-[linear-gradient(180deg,rgba(18,22,28,0.96),rgba(9,12,16,0.98))] animate-pulse" />
                 ))}
               </div>
             ) : filteredAircraft.length === 0 ? (
-              <div className="rounded-[1.4rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.95),rgba(255,255,255,0.7))] px-6 py-10 text-center shadow-sm">
-                <p className="text-muted-foreground">No aircraft match your current filters.</p>
+              <div className={`${rentalsPanelClass} rounded-[1.4rem] px-6 py-10 text-center`}>
+                <p className="text-[#A9BBCD]">No aircraft match your current filters.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -597,36 +606,36 @@ export default function Home() {
       </section>
       </PressDemoSpotlight>
 
-      <section className="bg-muted py-16">
+      <section className="rsf-metal-section py-16">
         <div className="container mx-auto px-4">
           <h2 className="mb-12 text-center font-display text-3xl font-bold">
             Why pilots use RSF rentals
           </h2>
           <div className="grid gap-8 md:grid-cols-3">
-            <div className="text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+            <div className={`${rentalsPanelClass} p-6 text-center`}>
+              <div className="rsf-metal-icon-chip mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full">
                 <Shield className="h-8 w-8 text-primary" />
               </div>
               <h3 className="mb-2 font-display text-xl font-semibold">Verified pilots</h3>
-              <p className="text-muted-foreground">
+              <p className="text-[#A9BBCD]">
                 All pilots are verified with license and insurance checks before they rent through the platform.
               </p>
             </div>
-            <div className="text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+            <div className={`${rentalsPanelClass} p-6 text-center`}>
+              <div className="rsf-metal-icon-chip mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full">
                 <Shield className="h-8 w-8 text-primary" />
               </div>
               <h3 className="mb-2 font-display text-xl font-semibold">Insurance required</h3>
-              <p className="text-muted-foreground">
+              <p className="text-[#A9BBCD]">
                 Owners and renters are required to carry the coverage needed for responsible aircraft access.
               </p>
             </div>
-            <div className="text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+            <div className={`${rentalsPanelClass} p-6 text-center`}>
+              <div className="rsf-metal-icon-chip mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full">
                 <Search className="h-8 w-8 text-primary" />
               </div>
               <h3 className="mb-2 font-display text-xl font-semibold">Built for planning</h3>
-              <p className="text-muted-foreground">
+              <p className="text-[#A9BBCD]">
                 Once you find the aircraft, RSF keeps you in the same workflow for weather, routes, and airspace review.
               </p>
             </div>

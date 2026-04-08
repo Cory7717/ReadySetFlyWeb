@@ -187,7 +187,7 @@ export default function AircraftDetail() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading aircraft details...</p>
+          <p className="text-[#A9BBCD]">Loading aircraft details...</p>
         </div>
       </div>
     );
@@ -205,9 +205,13 @@ export default function AircraftDetail() {
   const displayImages = aircraft.images && aircraft.images.length > 0 
     ? aircraft.images 
     : ["https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=1200"];
+  const rentalsPanelClass = "rsf-metal-panel text-[#E8EDF4]";
+  const rentalsSubpanelClass = "rsf-rentals-subpanel rounded-[1rem] text-[#DCE6F2]";
+  const rentalsPrimaryButtonClass = "rsf-metal-button-primary";
+  const rentalsSecondaryButtonClass = "rsf-metal-button-secondary";
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen rsf-app-shell rsf-rentals-theme">
       {/* Image Gallery Carousel */}
       <section className="container mx-auto px-4 py-8">
         <div className="relative mb-6">
@@ -215,7 +219,7 @@ export default function AircraftDetail() {
             <CarouselContent>
               {displayImages.map((img, idx) => (
                 <CarouselItem key={idx}>
-                  <div className="aspect-[16/9] rounded-xl overflow-hidden bg-muted">
+                  <div className="aspect-[16/9] overflow-hidden rounded-xl bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))]">
                     <img
                       src={img}
                       alt={`${aircraft.year} ${aircraft.make} ${aircraft.model} - Image ${idx + 1}`}
@@ -234,12 +238,12 @@ export default function AircraftDetail() {
           </Carousel>
         </div>
 
-        <div className="flex items-center justify-between mb-6">
+        <div className={`${rentalsPanelClass} mb-6 flex items-center justify-between rounded-[1.35rem] p-6`}>
           <div>
             <h1 className="font-display text-4xl font-bold mb-2" data-testid="text-aircraft-title">
               {aircraft.year} {aircraft.make} {aircraft.model}
             </h1>
-            <div className="flex items-center gap-4 text-muted-foreground">
+            <div className="flex items-center gap-4 text-[#A9BBCD]">
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
                 <span>{aircraft.location}{aircraft.airportCode ? ` (${aircraft.airportCode})` : ""}</span>
@@ -250,19 +254,20 @@ export default function AircraftDetail() {
               </div>
               <div className="flex items-center gap-2">
                 <Star className="h-4 w-4 fill-current text-accent" />
-                <span className="font-semibold text-foreground">4.95</span>
+                <span className="font-semibold text-[#F5F8FC]">4.95</span>
                 <span>(24 reviews)</span>
               </div>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="icon" data-testid="button-share" aria-label="Share listing">
+            <Button variant="outline" size="icon" className={rentalsSecondaryButtonClass} data-testid="button-share" aria-label="Share listing">
               <Share2 className="h-5 w-5" />
             </Button>
             <FavoriteButton 
               listingId={aircraft.id} 
               listingType="aircraft"
               variant="outline"
+              className={rentalsSecondaryButtonClass}
             />
           </div>
         </div>
@@ -274,34 +279,34 @@ export default function AircraftDetail() {
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-8">
             {/* Specifications */}
-            <Card>
+            <Card className={rentalsPanelClass}>
               <CardHeader>
                 <CardTitle>Aircraft Specifications</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                   <div>
-                    <div className="text-sm text-muted-foreground mb-1">Make & Model</div>
+                    <div className="mb-1 text-sm text-[#8fa6c0]">Make & Model</div>
                     <div className="font-semibold">{aircraft.make} {aircraft.model}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-muted-foreground mb-1">Year</div>
+                    <div className="mb-1 text-sm text-[#8fa6c0]">Year</div>
                     <div className="font-semibold">{aircraft.year}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-muted-foreground mb-1">Registration</div>
+                    <div className="mb-1 text-sm text-[#8fa6c0]">Registration</div>
                     <div className="font-semibold">{aircraft.registration}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-muted-foreground mb-1">Total Time</div>
+                    <div className="mb-1 text-sm text-[#8fa6c0]">Total Time</div>
                     <div className="font-semibold">{aircraft.totalTime.toLocaleString()} hours</div>
                   </div>
                   <div>
-                    <div className="text-sm text-muted-foreground mb-1">Engine</div>
+                    <div className="mb-1 text-sm text-[#8fa6c0]">Engine</div>
                     <div className="font-semibold">{aircraft.engine || "N/A"}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-muted-foreground mb-1">Avionics</div>
+                    <div className="mb-1 text-sm text-[#8fa6c0]">Avionics</div>
                     <div className="font-semibold">{aircraft.avionicsSuite || "N/A"}</div>
                   </div>
                 </div>
@@ -309,17 +314,17 @@ export default function AircraftDetail() {
             </Card>
 
             {/* Required Certifications */}
-            <Card>
+            <Card className={rentalsPanelClass}>
               <CardHeader>
                 <CardTitle>Required Certifications</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-3">
                   {aircraft.requiredCertifications.map((cert) => (
-                    <Badge key={cert} className="bg-primary text-primary-foreground px-4 py-2">{cert}</Badge>
+                    <Badge key={cert} className="border border-[#3a7d6e]/40 bg-[#10211d] px-4 py-2 text-[#d1ece3]">{cert}</Badge>
                   ))}
                   {aircraft.minFlightHours && aircraft.minFlightHours > 0 && (
-                    <Badge variant="outline" className="px-4 py-2">
+                    <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] px-4 py-2 text-[#E8EDF4]">
                       Minimum {aircraft.minFlightHours} flight hours
                     </Badge>
                   )}
@@ -328,17 +333,17 @@ export default function AircraftDetail() {
             </Card>
 
             {/* Description */}
-            <Card>
+            <Card className={rentalsPanelClass}>
               <CardHeader>
                 <CardTitle>Description</CardTitle>
               </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
+              <CardContent className="prose prose-sm max-w-none prose-invert">
                 <p>{aircraft.description}</p>
               </CardContent>
             </Card>
 
             {/* Owner Info */}
-            <Card>
+            <Card className={rentalsPanelClass}>
               <CardHeader>
                 <CardTitle>Aircraft Owner</CardTitle>
               </CardHeader>
@@ -362,17 +367,18 @@ export default function AircraftDetail() {
                           size="sm"
                         />
                       )}
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-4 text-sm text-[#A9BBCD]">
                         <span>Response time: {aircraft.responseTime}h</span>
                         <span>Acceptance rate: {aircraft.acceptanceRate}%</span>
                         {owner?.isVerified && (
-                          <Badge className="bg-chart-2 text-white">Verified</Badge>
+                          <Badge className="border border-[#3a7d6e]/40 bg-[#10211d] text-[#d1ece3]">Verified</Badge>
                         )}
                       </div>
                     </div>
                   </div>
                   <Button
                     variant="outline"
+                    className={rentalsSecondaryButtonClass}
                     data-testid="button-message-owner"
                     onClick={() => {
                       if (!isAuthenticated) {
@@ -394,16 +400,16 @@ export default function AircraftDetail() {
 
           {/* Booking Card (Sticky) */}
           <div className="lg:col-span-1">
-            <Card className="sticky top-24 shadow-xl">
+            <Card className={`${rentalsPanelClass} sticky top-24 shadow-xl`}>
               <CardHeader>
                 <div className="flex items-baseline gap-2">
                   <span className="text-3xl font-bold" data-testid="text-booking-rate">${hourlyRate.toFixed(0)}</span>
-                  <span className="text-muted-foreground">/hour</span>
+                  <span className="text-[#A9BBCD]">/hour</span>
                 </div>
                 {aircraft.insuranceIncluded && (
                   <div className="flex items-center gap-2 text-sm">
                     <Shield className="h-4 w-4 text-chart-2" />
-                    <span className="text-muted-foreground">Insurance included</span>
+                    <span className="text-[#A9BBCD]">Insurance included</span>
                   </div>
                 )}
               </CardHeader>
@@ -411,7 +417,7 @@ export default function AircraftDetail() {
                 <div className="space-y-2">
                   <Label htmlFor="start-date">Start Date</Label>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8fa6c0]" />
                     <Input
                       id="start-date"
                       type="date"
@@ -426,7 +432,7 @@ export default function AircraftDetail() {
                 <div className="space-y-2">
                   <Label htmlFor="end-date">End Date</Label>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8fa6c0]" />
                     <Input
                       id="end-date"
                       type="date"
@@ -456,25 +462,25 @@ export default function AircraftDetail() {
 
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      ${hourlyRate} × {estimatedHours} hours
+                    <span className="text-[#A9BBCD]">
+                      ${hourlyRate} x {estimatedHours} hours
                     </span>
                     <span data-testid="text-base-cost">${baseCost.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Sales tax (8.25%)</span>
+                    <span className="text-[#A9BBCD]">Sales tax (8.25%)</span>
                     <span data-testid="text-sales-tax">${salesTax.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Platform fee (7.5%)</span>
+                    <span className="text-[#A9BBCD]">Platform fee (7.5%)</span>
                     <span data-testid="text-platform-fee">${platformFee.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between pt-2 border-t">
-                    <span className="text-muted-foreground">Subtotal</span>
+                    <span className="text-[#A9BBCD]">Subtotal</span>
                     <span data-testid="text-subtotal">${subtotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Processing fee (3%)</span>
+                    <span className="text-[#A9BBCD]">Processing fee (3%)</span>
                     <span data-testid="text-processing-fee">${processingFee.toFixed(2)}</span>
                   </div>
                 </div>
@@ -487,7 +493,7 @@ export default function AircraftDetail() {
                 </div>
 
                 {isAuthenticated && !user?.identityVerified ? (
-                  <Alert className="border-amber-300 bg-amber-50/80" data-testid="alert-verification-required">
+                  <Alert className="border-[#7f6327]/40 bg-[linear-gradient(180deg,rgba(36,27,12,0.98),rgba(19,14,7,0.98))] text-[#f2dca4]" data-testid="alert-verification-required">
                     <AlertTitle>Pilot Verification Required</AlertTitle>
                     <AlertDescription className="space-y-3">
                       <p>
@@ -499,13 +505,13 @@ export default function AircraftDetail() {
                         onClick={() => navigate("/verify-identity")}
                         data-testid="button-complete-verification"
                       >
-                        Complete Verification →
+                        Complete Verification
                       </Button>
                     </AlertDescription>
                   </Alert>
                 ) : (
                   <Button 
-                    className="w-full bg-accent text-accent-foreground hover:bg-accent" 
+                    className={`w-full ${rentalsPrimaryButtonClass}`} 
                     size="lg" 
                     onClick={handleRequestBooking}
                     disabled={createRentalMutation.isPending}
@@ -517,17 +523,17 @@ export default function AircraftDetail() {
 
                 {/* Logbook Integration Hint */}
                 {isAuthenticated && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-xs text-blue-900 font-semibold mb-1">
-                      ✈️ Don't forget to log your flight!
+                  <div className={`${rentalsSubpanelClass} p-3`}>
+                    <p className="mb-1 text-xs font-semibold text-[#F5F8FC]">
+                      Don't forget to log your flight.
                     </p>
-                    <p className="text-xs text-blue-700">
+                    <p className="text-xs text-[#A9BBCD]">
                       After your rental, visit your <a href="/logbook" className="underline font-semibold">digital logbook</a> to record flight time.
                     </p>
                   </div>
                 )}
 
-                <p className="text-xs text-muted-foreground text-center">
+                <p className="text-center text-xs text-[#A9BBCD]">
                   You won't be charged yet
                 </p>
               </CardContent>
@@ -538,7 +544,7 @@ export default function AircraftDetail() {
 
       {/* Login Prompt Dialog */}
       <AlertDialog open={loginPromptOpen} onOpenChange={setLoginPromptOpen}>
-        <AlertDialogContent data-testid="dialog-login-prompt">
+        <AlertDialogContent className="rsf-rentals-theme rsf-metal-panel text-[#E8EDF4]" data-testid="dialog-login-prompt">
           <AlertDialogHeader>
             <AlertDialogTitle>Sign in to continue</AlertDialogTitle>
             <AlertDialogDescription>
@@ -559,17 +565,17 @@ export default function AircraftDetail() {
 
       {/* Rental Best Practices Dialog */}
       <AlertDialog open={showBestPractices} onOpenChange={setShowBestPractices}>
-        <AlertDialogContent className="max-w-2xl">
+        <AlertDialogContent className="rsf-rentals-theme rsf-metal-panel max-w-2xl text-[#E8EDF4]">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Info className="h-5 w-5 text-primary" />
               Aircraft Rental Best Practices
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-left space-y-4 pt-4">
+            <AlertDialogDescription className="space-y-4 pt-4 text-left">
               <div className="space-y-3">
                 <div>
-                  <h4 className="font-semibold text-foreground mb-2">Advance Notice Requirements</h4>
-                  <p className="text-sm text-muted-foreground">
+                  <h4 className="mb-2 font-semibold text-[#F5F8FC]">Advance Notice Requirements</h4>
+                  <p className="text-sm text-[#A9BBCD]">
                     We recommend booking aircraft rentals <strong>3-5 days in advance</strong> to ensure 
                     availability and give aircraft owners adequate time to prepare the aircraft for your flight. 
                     Last-minute bookings may be subject to owner approval and availability.
@@ -577,8 +583,8 @@ export default function AircraftDetail() {
                 </div>
 
                 <div>
-                  <h4 className="font-semibold text-foreground mb-2">Weather Policy & Disclaimer</h4>
-                  <p className="text-sm text-muted-foreground">
+                  <h4 className="mb-2 font-semibold text-[#F5F8FC]">Weather Policy & Disclaimer</h4>
+                  <p className="text-sm text-[#A9BBCD]">
                     <strong>Important:</strong> Ready Set Fly is not responsible for weather or weather-related 
                     cancellations. <strong>No refunds will be issued for weather-related cancellations.</strong> 
                     We strongly recommend checking weather forecasts 24-48 hours before your scheduled flight 
@@ -588,8 +594,8 @@ export default function AircraftDetail() {
                 </div>
 
                 <div>
-                  <h4 className="font-semibold text-foreground mb-2">Communication</h4>
-                  <p className="text-sm text-muted-foreground">
+                  <h4 className="mb-2 font-semibold text-[#F5F8FC]">Communication</h4>
+                  <p className="text-sm text-[#A9BBCD]">
                     Please maintain open communication with the aircraft owner regarding your flight plans, 
                     any changes to your schedule, and any concerns you may have. The owner may require a 
                     pre-flight briefing or checkout depending on the aircraft and your experience level.
@@ -597,8 +603,8 @@ export default function AircraftDetail() {
                 </div>
               </div>
 
-              <div className="bg-muted p-3 rounded-lg mt-4">
-                <p className="text-xs text-muted-foreground">
+              <div className={`${rentalsSubpanelClass} mt-4 p-3`}>
+                <p className="text-xs text-[#A9BBCD]">
                   By continuing, you acknowledge that you understand these best practices and will communicate 
                   with the aircraft owner regarding any questions or concerns.
                 </p>
@@ -611,7 +617,7 @@ export default function AircraftDetail() {
             </AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleConfirmBooking}
-              className="bg-accent text-accent-foreground hover:bg-accent"
+              className={rentalsPrimaryButtonClass}
               data-testid="button-confirm-booking"
             >
               I Understand - Continue to Book

@@ -121,12 +121,12 @@ export function RentalMessaging({ rentalId, userId, rentalStatus }: RentalMessag
 
   if (rentalStatus !== "active") {
     return (
-      <Card>
+      <Card className="rsf-metal-panel text-[#E8EDF4]">
         <CardHeader>
           <CardTitle>Messages</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
+          <div className="py-8 text-center text-[#A9BBCD]">
             Messaging is only available during active rentals
           </div>
         </CardContent>
@@ -135,7 +135,7 @@ export function RentalMessaging({ rentalId, userId, rentalStatus }: RentalMessag
   }
 
   return (
-    <Card>
+    <Card className="rsf-metal-panel text-[#E8EDF4]">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle>Messages</CardTitle>
         <div className="flex items-center gap-2">
@@ -143,14 +143,14 @@ export function RentalMessaging({ rentalId, userId, rentalStatus }: RentalMessag
             className={`h-2 w-2 rounded-full ${isConnected ? "bg-chart-2" : "bg-destructive"}`}
             data-testid="status-connection"
           />
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-[#A9BBCD]">
             {isConnected ? "Connected" : "Disconnected"}
           </span>
         </div>
       </CardHeader>
       <CardContent>
         {error && (
-          <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
+          <div className="mb-4 rounded-lg border border-[#7d3b49]/34 bg-[linear-gradient(180deg,rgba(58,23,32,0.98),rgba(27,11,16,0.98))] p-3 text-sm text-[#f2b8c3]">
             {error}
           </div>
         )}
@@ -160,7 +160,7 @@ export function RentalMessaging({ rentalId, userId, rentalStatus }: RentalMessag
           <ScrollArea className="h-[400px] pr-4" ref={scrollRef}>
             <div className="space-y-4">
               {messages.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
+                <div className="py-8 text-center text-sm text-[#A9BBCD]">
                   No messages yet. Start the conversation!
                 </div>
               ) : (
@@ -184,13 +184,13 @@ export function RentalMessaging({ rentalId, userId, rentalStatus }: RentalMessag
                         <div
                           className={`inline-block px-4 py-2 rounded-lg ${
                             isOwnMessage
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted"
+                              ? "bg-[linear-gradient(180deg,hsl(220_76%_58%),hsl(220_70%_42%))] text-white"
+                              : "bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] text-[#E8EDF4]"
                           }`}
                         >
                           {msg.content}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">
+                        <div className="mt-1 text-xs text-[#8fa6c0]">
                           {new Date(msg.timestamp).toLocaleTimeString()}
                         </div>
                       </div>

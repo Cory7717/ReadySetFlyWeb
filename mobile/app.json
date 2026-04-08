@@ -16,7 +16,9 @@
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Ready Set Fly connects to nearby ADS-B receivers to show live traffic.",
         "NSLocationWhenInUseUsageDescription": "Ready Set Fly uses your location to show live flight stats and nearby airports.",
-        "NSBonjourServices": ["_gdl90._udp"]
+        "NSBonjourServices": [
+          "_gdl90._udp"
+        ]
       }
     },
     "android": {
@@ -44,6 +46,9 @@
         "projectId": "ba4313c5-ab2d-4896-8125-68b2e54d88af"
       }
     },
-    "owner": "carmer7717-2"
+    "owner": "carmer7717-2",
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
   }
 }

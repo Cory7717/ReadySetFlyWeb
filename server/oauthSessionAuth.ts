@@ -9,6 +9,7 @@ import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
+import { verifyAccessToken } from "./jwt";
 
 // Flags / env
 const AUTH_DISABLED = String(process.env.AUTH_DISABLED ?? "").toLowerCase() === "true";
@@ -179,6 +180,15 @@ function makeRequestUserFromDbUser(dbUser: {
   };
 }
 
+function getBearerToken(req: any): string | null {
+  const authorizationHeader = req.get?.("Authorization") || req.headers?.authorization;
+  if (typeof authorizationHeader !== "string") {
+    return null;
+  }
+  const match = authorizationHeader.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+}
+
 // Resolve user from OAuth profile WITHOUT changing existing IDs:
 // 1) If existing user by email, use that (keeps uuid ids)
 // 2) Else create user (uuid default via DB if you omit id)
@@ -218,15 +228,31 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
   // ✅ Unified auth guard:
   // - Passport OAuth users: req.isAuthenticated() + req.user.claims.sub
   // - Web email/password users: req.session.userId
-  export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
-    if (AUTH_DISABLED) return next();
+export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
+  if (AUTH_DISABLED) return next();
 
     // Passport session (Google/Replit OAuth)
-    if (typeof req.isAuthenticated === "function") {
-      if (req.isAuthenticated() && req.user?.claims?.sub) return next();
+  if (typeof req.isAuthenticated === "function") {
+    if (req.isAuthenticated() && req.user?.claims?.sub) return next();
+  }
+
+  const bearerToken = getBearerToken(req);
+  if (bearerToken) {
+    const payload = verifyAccessToken(bearerToken);
+    if (!payload?.userId) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // Email/password web session (set in /api/auth/web-login)
+    const dbUser = await storage.getUser(String(payload.userId));
+    if (!dbUser) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    req.user = makeRequestUserFromDbUser(dbUser);
+    return next();
+  }
+
+  // Email/password web session (set in /api/auth/web-login)
     if (req.session?.userId) {
       if (!req.user?.claims?.sub) {
         const dbUser = await storage.getUser(String(req.session.userId));

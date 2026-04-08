@@ -3,6 +3,7 @@ import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacit
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
+import FormDateTimeField from '../components/FormDateTimeField';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { membershipPlanOptions, membershipTierInfo, type MembershipInterval, type MembershipTier } from '@shared/membership-plans';
@@ -13,6 +14,7 @@ import {
   restorePurchasesSafe,
   selectOfferingPackage,
 } from '../services/purchases';
+import { extractApiErrorMessage } from '../utils/diagnostics';
 
 function formatDate(value?: string | null) {
   if (!value) return '-';
@@ -21,6 +23,10 @@ function formatDate(value?: string | null) {
   } catch (error) {
     return value;
   }
+}
+
+function toDateOnlyValue(value?: string | null) {
+  return value ? String(value).slice(0, 10) : '';
 }
 
 export default function LogbookProScreen({ navigation }: any) {
@@ -74,14 +80,14 @@ export default function LogbookProScreen({ navigation }: any) {
       if (summaryRes.data?.settings) {
         setProForm({
           medicalClass: summaryRes.data.settings.medicalClass || '',
-          medicalIssuedAt: summaryRes.data.settings.medicalIssuedAt || '',
-          medicalExpiresAt: summaryRes.data.settings.medicalExpiresAt || '',
-          flightReviewDate: summaryRes.data.settings.flightReviewDate || '',
-          ipcDate: summaryRes.data.settings.ipcDate || '',
+          medicalIssuedAt: toDateOnlyValue(summaryRes.data.settings.medicalIssuedAt),
+          medicalExpiresAt: toDateOnlyValue(summaryRes.data.settings.medicalExpiresAt),
+          flightReviewDate: toDateOnlyValue(summaryRes.data.settings.flightReviewDate),
+          ipcDate: toDateOnlyValue(summaryRes.data.settings.ipcDate),
         });
       }
     } catch (error: any) {
-      Alert.alert('RSF Pro', error?.response?.data?.error || 'Unable to load RSF Pro data.');
+      Alert.alert('RSF Pro', extractApiErrorMessage(error, 'Unable to load RSF Pro data.'));
     }
   };
 
@@ -123,7 +129,7 @@ export default function LogbookProScreen({ navigation }: any) {
       await api.put('/api/notifications/preferences', prefs);
       Alert.alert('Saved', 'Notification preferences updated.');
     } catch (error: any) {
-      Alert.alert('Update failed', error?.response?.data?.error || 'Unable to save preferences.');
+      Alert.alert('Update failed', extractApiErrorMessage(error, 'Unable to save preferences.'));
     } finally {
       setSavingPrefs(false);
     }
@@ -142,7 +148,7 @@ export default function LogbookProScreen({ navigation }: any) {
       await loadProData();
       Alert.alert('Saved', 'RSF Pro settings updated.');
     } catch (error: any) {
-      Alert.alert('Update failed', error?.response?.data?.error || 'Unable to save RSF Pro settings.');
+      Alert.alert('Update failed', extractApiErrorMessage(error, 'Unable to save RSF Pro settings.'));
     } finally {
       setSavingSettings(false);
     }
@@ -235,42 +241,49 @@ export default function LogbookProScreen({ navigation }: any) {
 
           <View style={styles.row}>
             <View style={styles.rowItem}>
-              <Text style={styles.label}>Medical Issued</Text>
-              <TextInput
-                style={styles.input}
+              <FormDateTimeField
+                label="Medical Issued"
                 value={proForm.medicalIssuedAt}
                 onChangeText={(value) => setProForm((prev) => ({ ...prev, medicalIssuedAt: value }))}
-                placeholder="2026-01-20"
+                placeholder="Select issue date"
+                mode="date"
+                style={styles.fieldWrapper}
               />
             </View>
             <View style={styles.rowItem}>
-              <Text style={styles.label}>Medical Expires</Text>
-              <TextInput
-                style={styles.input}
+              <FormDateTimeField
+                label="Medical Expires"
                 value={proForm.medicalExpiresAt}
                 onChangeText={(value) => setProForm((prev) => ({ ...prev, medicalExpiresAt: value }))}
-                placeholder="2027-01-20"
+                placeholder="Select expiration date"
+                mode="date"
+                optional
+                style={styles.fieldWrapper}
               />
             </View>
           </View>
 
           <View style={styles.row}>
             <View style={styles.rowItem}>
-              <Text style={styles.label}>Flight Review Date</Text>
-              <TextInput
-                style={styles.input}
+              <FormDateTimeField
+                label="Flight Review Date"
                 value={proForm.flightReviewDate}
                 onChangeText={(value) => setProForm((prev) => ({ ...prev, flightReviewDate: value }))}
-                placeholder="2026-05-12"
+                placeholder="Select flight review date"
+                mode="date"
+                optional
+                style={styles.fieldWrapper}
               />
             </View>
             <View style={styles.rowItem}>
-              <Text style={styles.label}>IPC Date</Text>
-              <TextInput
-                style={styles.input}
+              <FormDateTimeField
+                label="IPC Date"
                 value={proForm.ipcDate}
                 onChangeText={(value) => setProForm((prev) => ({ ...prev, ipcDate: value }))}
-                placeholder="2026-09-01"
+                placeholder="Select IPC date"
+                mode="date"
+                optional
+                style={styles.fieldWrapper}
               />
             </View>
           </View>
@@ -492,6 +505,7 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', gap: spacing.sm },
   rowItem: { flex: 1 },
+  fieldWrapper: { marginTop: spacing.sm },
   statsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   statsCard: {
     flex: 1,

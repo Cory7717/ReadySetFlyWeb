@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
+import FormDateTimeField from '../components/FormDateTimeField';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import { extractApiErrorMessage, logDiagnostic } from '../utils/diagnostics';
 
 type Endorsement = {
   id: string;
@@ -31,6 +33,10 @@ const emptyForm = {
   documentUrl: '',
 };
 
+function toDateOnlyValue(value?: string | null) {
+  return value ? String(value).slice(0, 10) : '';
+}
+
 export default function EndorsementsScreen() {
   const { isAuthenticated } = useIsAuthenticated();
   const [endorsements, setEndorsements] = useState<Endorsement[]>([]);
@@ -43,8 +49,9 @@ export default function EndorsementsScreen() {
     try {
       const res = await api.get('/api/endorsements');
       setEndorsements(res.data || []);
+      logDiagnostic('endorsements', 'loaded', { count: Array.isArray(res.data) ? res.data.length : 0 });
     } catch (error: any) {
-      Alert.alert('Endorsements', error?.response?.data?.error || 'Unable to load endorsements.');
+      Alert.alert('Endorsements', extractApiErrorMessage(error, 'Unable to load endorsements.'));
     } finally {
       setLoading(false);
     }
@@ -84,7 +91,7 @@ export default function EndorsementsScreen() {
       await loadEndorsements();
       Alert.alert('Saved', 'Endorsement saved.');
     } catch (error: any) {
-      Alert.alert('Save failed', error?.response?.data?.error || 'Unable to save endorsement.');
+      Alert.alert('Save failed', extractApiErrorMessage(error, 'Unable to save endorsement.'));
     } finally {
       setLoading(false);
     }
@@ -95,8 +102,8 @@ export default function EndorsementsScreen() {
       id: item.id,
       title: item.title || '',
       endorsementType: item.endorsementType || '',
-      issuedAt: item.issuedAt || '',
-      expiresAt: item.expiresAt || '',
+      issuedAt: toDateOnlyValue(item.issuedAt),
+      expiresAt: toDateOnlyValue(item.expiresAt),
       instructorName: item.instructorName || '',
       instructorCertificate: item.instructorCertificate || '',
       aircraftType: item.aircraftType || '',
@@ -117,7 +124,7 @@ export default function EndorsementsScreen() {
             await api.delete(`/api/endorsements/${id}`);
             await loadEndorsements();
           } catch (error: any) {
-            Alert.alert('Delete failed', error?.response?.data?.error || 'Unable to delete endorsement.');
+            Alert.alert('Delete failed', extractApiErrorMessage(error, 'Unable to delete endorsement.'));
           } finally {
             setLoading(false);
           }
@@ -159,21 +166,24 @@ export default function EndorsementsScreen() {
 
         <View style={styles.row}>
           <View style={styles.rowItem}>
-            <Text style={styles.label}>Issued (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
+            <FormDateTimeField
+              label="Issued"
               value={form.issuedAt}
               onChangeText={(value) => setForm((prev) => ({ ...prev, issuedAt: value }))}
-              placeholder="2026-01-20"
+              placeholder="Select issue date"
+              mode="date"
+              style={styles.fieldWrapper}
             />
           </View>
           <View style={styles.rowItem}>
-            <Text style={styles.label}>Expires (optional)</Text>
-            <TextInput
-              style={styles.input}
+            <FormDateTimeField
+              label="Expires"
               value={form.expiresAt}
               onChangeText={(value) => setForm((prev) => ({ ...prev, expiresAt: value }))}
-              placeholder="2027-01-20"
+              placeholder="Select expiration date"
+              mode="date"
+              optional
+              style={styles.fieldWrapper}
             />
           </View>
         </View>
@@ -290,6 +300,7 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 80, textAlignVertical: 'top' },
   row: { flexDirection: 'row', gap: spacing.sm },
   rowItem: { flex: 1 },
+  fieldWrapper: { marginTop: spacing.sm },
   rowButtons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   primaryButton: { flex: 1, backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.sm, alignItems: 'center' },
   primaryButtonText: { color: '#fff', fontWeight: '600' },

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
+import FormDateTimeField from '../components/FormDateTimeField';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import { extractApiErrorMessage, logDiagnostic } from '../utils/diagnostics';
 
 function SummaryMetric({ label, value }: { label: string; value: string }) {
   return (
@@ -43,6 +45,28 @@ function Field({
   );
 }
 
+function toDateOnlyValue(value?: string | null) {
+  return value ? String(value).slice(0, 10) : '';
+}
+
+function decimalStringOrUndefined(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) {
+    throw new Error('Use numbers like 1 or 1.5 for hour fields.');
+  }
+  return trimmed;
+}
+
+function integerOrZero(value: string, fieldLabel: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error(`${fieldLabel} must be a whole number.`);
+  }
+  return Number(trimmed);
+}
+
 export default function LogbookEntryScreen({ navigation, route }: any) {
   const entryId = route?.params?.entryId as string | undefined;
   const [loading, setLoading] = useState(false);
@@ -80,8 +104,9 @@ export default function LogbookEntryScreen({ navigation, route }: any) {
     try {
       const res = await api.get(`/api/logbook/${entryId}`);
       const entry = res.data;
+      logDiagnostic('logbook', 'entry_loaded', { entryId, flightDate: entry?.flightDate });
       setForm({
-        flightDate: entry.flightDate || '',
+        flightDate: toDateOnlyValue(entry.flightDate),
         tailNumber: entry.tailNumber || '',
         aircraftType: entry.aircraftType || '',
         route: entry.route || '',
@@ -98,7 +123,7 @@ export default function LogbookEntryScreen({ navigation, route }: any) {
         remarks: entry.remarks || '',
       });
     } catch (error: any) {
-      Alert.alert('Logbook', error?.response?.data?.error || 'Unable to load entry.');
+      Alert.alert('Logbook', extractApiErrorMessage(error, 'Unable to load entry.'));
     } finally {
       setLoading(false);
     }
@@ -120,18 +145,19 @@ export default function LogbookEntryScreen({ navigation, route }: any) {
         tailNumber: form.tailNumber || null,
         aircraftType: form.aircraftType || null,
         route: form.route || null,
-        timeDay: form.timeDay ? Number(form.timeDay) : 0,
-        timeNight: form.timeNight ? Number(form.timeNight) : 0,
-        pic: form.pic ? Number(form.pic) : 0,
-        sic: form.sic ? Number(form.sic) : 0,
-        dual: form.dual ? Number(form.dual) : 0,
-        instrumentActual: form.instrumentActual ? Number(form.instrumentActual) : 0,
-        landingsDay: form.landingsDay ? Number(form.landingsDay) : 0,
-        landingsNight: form.landingsNight ? Number(form.landingsNight) : 0,
-        approaches: form.approaches ? Number(form.approaches) : 0,
-        holds: form.holds ? Number(form.holds) : 0,
+        timeDay: decimalStringOrUndefined(form.timeDay),
+        timeNight: decimalStringOrUndefined(form.timeNight),
+        pic: decimalStringOrUndefined(form.pic),
+        sic: decimalStringOrUndefined(form.sic),
+        dual: decimalStringOrUndefined(form.dual),
+        instrumentActual: decimalStringOrUndefined(form.instrumentActual),
+        landingsDay: integerOrZero(form.landingsDay, 'Day landings'),
+        landingsNight: integerOrZero(form.landingsNight, 'Night landings'),
+        approaches: integerOrZero(form.approaches, 'Approaches'),
+        holds: integerOrZero(form.holds, 'Holds'),
         remarks: form.remarks || null,
       };
+      logDiagnostic('logbook', 'entry_save_started', { entryId: entryId || 'new', payload });
       if (entryId) {
         await api.patch(`/api/logbook/${entryId}`, payload);
       } else {
@@ -140,7 +166,7 @@ export default function LogbookEntryScreen({ navigation, route }: any) {
       Alert.alert('Saved', 'Logbook entry saved successfully.');
       navigation.goBack();
     } catch (error: any) {
-      Alert.alert('Save failed', error?.response?.data?.error || 'Unable to save entry.');
+      Alert.alert('Save failed', extractApiErrorMessage(error, 'Unable to save entry.'));
     } finally {
       setLoading(false);
     }
@@ -181,11 +207,14 @@ export default function LogbookEntryScreen({ navigation, route }: any) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Flight Details</Text>
         <Text style={styles.sectionSubtitle}>Basic identity, aircraft, and route information.</Text>
-        <Field
-          label="Flight Date (YYYY-MM-DD)"
+        <FormDateTimeField
+          label="Flight Date"
           value={form.flightDate}
           onChangeText={(value) => setForm((prev) => ({ ...prev, flightDate: value }))}
-          placeholder="2026-01-28"
+          placeholder="Select flight date"
+          mode="date"
+          helperText="Stored as YYYY-MM-DD for backend submission."
+          style={styles.fieldBlock}
         />
         <View style={styles.row}>
           <View style={styles.rowItem}>

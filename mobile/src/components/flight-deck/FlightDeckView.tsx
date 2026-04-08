@@ -1,6 +1,8 @@
 ﻿import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Polygon, Polyline, UrlTile } from 'react-native-maps';
+import { Platform } from 'react-native';
+import { PROVIDER_GOOGLE } from 'react-native-maps';
 import { colors, spacing } from '../../styles/theme';
 import type { FlightDeckStateProps, FlightDeckActionsProps } from './FlightDeckViewTypes';
 
@@ -164,6 +166,7 @@ function FlightDeckSurfaceMap({ preview, styles }: { preview: any; styles: any }
       <View style={styles.flightDeckSurfaceDiagram}>
         <MapView
           style={styles.flightDeckSurfaceMap}
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           region={preview.surfaceRegion}
           scrollEnabled={false}
           zoomEnabled={false}
@@ -1101,6 +1104,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           <MapView
             style={styles.flightDeckMap}
             ref={mapRef}
+            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
             mapType="standard"
             rotateEnabled
             pitchEnabled={false}
@@ -1578,10 +1582,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 {ownshipSourceSummary?.label || 'No ownship'} - {ownshipSourceSummary?.detail || 'Tracking source unavailable.'}
               </Text>
               <Text style={styles.flightDeckSubtitle}>
-                Heading {headingSourceSummary?.code || '--'} - {headingSourceSummary?.detail || 'No heading source'} - Vision {visionReadinessSummary?.code || '--'}
-              </Text>
-              <Text style={styles.flightDeckSubtitle}>
-                Receiver {receiverStatusSummary?.code || '--'} - {receiverStatusSummary?.detail || 'No receiver health summary'}
+                Heading {headingSourceSummary?.code || '--'} - Vision {visionReadinessSummary?.code || '--'} - Receiver {receiverStatusSummary?.code || '--'}
               </Text>
               <View style={styles.flightDeckHeaderMetaRow}>
                 <View
@@ -1665,6 +1666,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 <Text style={styles.flightDeckAlertTitle}>Vision assist</Text>
                 <Text style={styles.flightDeckAlertText}>
                   {visionReadinessSummary?.detail || 'Connect an AHRS source for full synthetic vision attitude.'}
+                </Text>
+              </View>
+            ) : null}
+            {flightDeckView === 'vision' && !activeOwnship ? (
+              <View style={[styles.flightDeckAlertStrip, styles.flightDeckAlertStripAdvisory]}>
+                <Text style={styles.flightDeckAlertTitle}>Ownship unavailable</Text>
+                <Text style={styles.flightDeckAlertText}>
+                  Vision Assist stays active until dismissed. Reconnect GPS or ADS-B ownship input to restore live guidance.
                 </Text>
               </View>
             ) : null}

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import FormDateTimeField from '../components/FormDateTimeField';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 export default function StudentProgressScreen({ navigation }: any) {
@@ -50,8 +51,15 @@ export default function StudentProgressScreen({ navigation }: any) {
         <TextInput style={styles.input} value={solos} onChangeText={setSolos} keyboardType="numeric" />
         <Text style={styles.label}>Cross-country hours</Text>
         <TextInput style={styles.input} value={xcHours} onChangeText={setXcHours} keyboardType="numeric" />
-        <Text style={styles.label}>Checkride date (optional)</Text>
-        <TextInput style={styles.input} value={checkrideDate} onChangeText={setCheckrideDate} placeholder="YYYY-MM-DD" />
+        <FormDateTimeField
+          label="Checkride date"
+          value={checkrideDate}
+          onChangeText={setCheckrideDate}
+          placeholder="Select checkride date"
+          mode="date"
+          optional
+          style={styles.fieldWrapper}
+        />
         <TouchableOpacity
           style={[styles.toggleButton, writtenPassed && styles.toggleButtonActive]}
           onPress={() => setWrittenPassed(!writtenPassed)}
@@ -112,6 +120,7 @@ const styles = StyleSheet.create({
   sectionTitle: { ...typography.h2 },
   label: { fontSize: 12, fontWeight: '700', color: colors.text, marginTop: spacing.md, marginBottom: spacing.xs },
   input: { backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.md },
+  fieldWrapper: { marginTop: spacing.md },
   toggleButton: { marginTop: spacing.md, backgroundColor: colors.surfaceMuted, padding: spacing.md, borderRadius: radius.lg, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
   toggleButtonActive: { backgroundColor: colors.accentSoft, borderColor: '#86efac' },
   toggleButtonText: { fontSize: 12, fontWeight: '700', color: colors.textMuted },

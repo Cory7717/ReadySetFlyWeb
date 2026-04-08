@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import { extractApiErrorMessage, logDiagnostic } from '../utils/diagnostics';
 
 type LogbookEntry = {
   id: string;
@@ -46,8 +47,12 @@ export default function LogbookScreen({ navigation }: any) {
     try {
       const res = await api.get('/api/logbook');
       setEntries(res.data || []);
+      logDiagnostic('logbook', 'entries_loaded', {
+        count: Array.isArray(res.data) ? res.data.length : 0,
+        userId: user?.id,
+      });
     } catch (error: any) {
-      Alert.alert('Logbook', error?.response?.data?.error || 'Unable to load logbook entries.');
+      Alert.alert('Logbook', extractApiErrorMessage(error, 'Unable to load logbook entries.'));
     } finally {
       setLoading(false);
     }

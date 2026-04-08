@@ -1,4 +1,4 @@
-import axios, { AxiosResponse, AxiosError } from 'axios';
+import axios, { AxiosResponse, AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type { 
   AircraftListing, 
   MarketplaceListing, 
@@ -7,20 +7,29 @@ import type {
   Message 
 } from '@shared/schema';
 import { TokenStorage } from '../utils/tokenStorage';
+import { errorDiagnostic, logDiagnostic, warnDiagnostic } from '../utils/diagnostics';
 
 // Backend API base URL - set EXPO_PUBLIC_API_URL in app config/env
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://readysetfly-api.onrender.com';
 
 // Flag to prevent multiple simultaneous refresh attempts
 let isRefreshing = false;
-let refreshSubscribers: ((token: string) => void)[] = [];
+let refreshSubscribers: Array<{
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+}> = [];
 
-function subscribeTokenRefresh(cb: (token: string) => void) {
-  refreshSubscribers.push(cb);
+function subscribeTokenRefresh(resolve: (token: string) => void, reject: (error: unknown) => void) {
+  refreshSubscribers.push({ resolve, reject });
 }
 
 function onTokenRefreshed(token: string) {
-  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers.forEach((subscriber) => subscriber.resolve(token));
+  refreshSubscribers = [];
+}
+
+function onTokenRefreshFailed(error: unknown) {
+  refreshSubscribers.forEach((subscriber) => subscriber.reject(error));
   refreshSubscribers = [];
 }
 
@@ -36,10 +45,17 @@ export const api = axios.create({
 // Request interceptor to add JWT token to headers
 api.interceptors.request.use(
   async (config) => {
+    (config as InternalAxiosRequestConfig & { metadata?: { startedAt: number } }).metadata = {
+      startedAt: Date.now(),
+    };
     const token = await TokenStorage.getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    logDiagnostic('api', 'request', {
+      method: config.method?.toUpperCase(),
+      url: `${config.baseURL || ''}${config.url || ''}`,
+    });
     return config;
   },
   (error) => Promise.reject(error)
@@ -47,19 +63,38 @@ api.interceptors.request.use(
 
 // Response interceptor to handle token refresh on 401
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const metadata = (response.config as InternalAxiosRequestConfig & { metadata?: { startedAt: number } }).metadata;
+    logDiagnostic('api', 'response', {
+      method: response.config.method?.toUpperCase(),
+      url: `${response.config.baseURL || ''}${response.config.url || ''}`,
+      status: response.status,
+      durationMs: metadata?.startedAt ? Date.now() - metadata.startedAt : undefined,
+    });
+    return response;
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as any;
+    const metadata = (originalRequest as InternalAxiosRequestConfig & { metadata?: { startedAt: number } })?.metadata;
+
+    warnDiagnostic('api', 'response_error', {
+      method: originalRequest?.method?.toUpperCase(),
+      url: `${originalRequest?.baseURL || ''}${originalRequest?.url || ''}`,
+      status: error.response?.status,
+      durationMs: metadata?.startedAt ? Date.now() - metadata.startedAt : undefined,
+      code: error.code,
+      message: error.message,
+    });
 
     // If error is 401 and we haven't already tried to refresh
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
         // Wait for the refresh to complete
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
           subscribeTokenRefresh((token: string) => {
             originalRequest.headers.Authorization = `Bearer ${token}`;
             resolve(axios(originalRequest));
-          });
+          }, reject);
         });
       }
 
@@ -69,13 +104,13 @@ api.interceptors.response.use(
       try {
         const refreshToken = await TokenStorage.getRefreshToken();
         if (!refreshToken) {
-          // No refresh token, clear everything and reject
-          await TokenStorage.clearTokens();
+          warnDiagnostic('auth', 'refresh_skipped_missing_refresh_token');
           isRefreshing = false;
           return Promise.reject(error);
         }
 
         // Try to refresh the token using unified auth endpoint
+        logDiagnostic('auth', 'refresh_started');
         const response = await axios.post(
           `${API_BASE_URL}/api/auth/refresh`,
           { refreshToken },
@@ -94,12 +129,22 @@ api.interceptors.response.use(
         // Notify all subscribers
         onTokenRefreshed(accessToken);
         isRefreshing = false;
+        logDiagnostic('auth', 'refresh_succeeded');
 
         // Retry the original request
         return axios(originalRequest);
       } catch (refreshError) {
-        // Refresh failed, clear tokens
-        await TokenStorage.clearTokens();
+        const refreshStatus = axios.isAxiosError(refreshError) ? refreshError.response?.status : undefined;
+        const shouldClearTokens = refreshStatus === 400 || refreshStatus === 401 || refreshStatus === 403;
+        if (shouldClearTokens) {
+          await TokenStorage.clearTokens();
+        }
+        errorDiagnostic('auth', 'refresh_failed', {
+          status: refreshStatus,
+          shouldClearTokens,
+          message: refreshError instanceof Error ? refreshError.message : String(refreshError),
+        });
+        onTokenRefreshFailed(refreshError);
         isRefreshing = false;
         return Promise.reject(refreshError);
       }

@@ -165,3 +165,27 @@ The app uses Replit Auth (OIDC) for authentication:
 **Can't scan QR code:**
 - Ensure phone and computer are on same network
 - Try tunnel mode: `expo start --tunnel`
+
+## Mobile Build Notes
+
+### Android Google Maps key
+
+- `react-native-maps` on Android needs the Google Maps API key in the native app build.
+- Set `GOOGLE_MAPS_API_KEY` in the Expo/EAS build environment used for the Android build.
+- `mobile/app.config.ts` injects that key into `android.config.googleMaps.apiKey`.
+- The app also exposes `extra.googleMaps.androidApiKeyConfigured` so QA can see whether the build received the key.
+- A Render env var on `readysetfly-api` does not reach the Android native build, so setting it only on Render is not sufficient.
+
+### Auth model
+
+- Mobile uses bearer tokens for native auth.
+- Shared backend routes protected by `isAuthenticated` now accept both bearer tokens and session auth.
+- Auth resume diagnostics log under `[RSF:auth]` and `[RSF:api]`.
+
+### QA logging
+
+- JS/runtime logs: `npx expo start` or `npx expo start --dev-client`
+- Android logs: `adb logcat | findstr RSF:`
+- Native crash logs: `adb logcat AndroidRuntime:E *:S`
+- Enable app diagnostics with `EXPO_PUBLIC_ENABLE_DEBUG_LOGS=true`
+- Route map diagnostics appear in Flight Planner when diagnostics are enabled or when the map times out

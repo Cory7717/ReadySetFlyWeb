@@ -1,12 +1,14 @@
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as NavigationBar from 'expo-navigation-bar';
 import AppNavigator from './src/navigation/AppNavigator';
 import PushTokenRegistrar from './src/components/PushTokenRegistrar';
 import { initializePurchases } from './src/services/purchases';
+import { TokenStorage } from './src/utils/tokenStorage';
+import { logDiagnostic } from './src/utils/diagnostics';
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -31,6 +33,22 @@ export default function App() {
     NavigationBar.setButtonStyleAsync('dark').catch(() => undefined);
     NavigationBar.setBehaviorAsync('overlay-swipe').catch(() => undefined);
     NavigationBar.setVisibilityAsync('hidden').catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      logDiagnostic('auth', 'app_state_changed', { nextState });
+      if (nextState !== 'active') return;
+      void TokenStorage.getAccessToken().then((token) => {
+        if (!token) return;
+        logDiagnostic('auth', 'app_state_refresh_auth_query');
+        void queryClient.invalidateQueries({ queryKey: ['/api/mobile/auth/me'] });
+      });
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   return (

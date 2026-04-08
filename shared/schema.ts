@@ -2293,6 +2293,18 @@ export const aircraftProfiles = pgTable("aircraft_profiles", {
   index("idx_aircraft_profiles_user").on(table.userId),
 ]);
 
+const logbookDecimalField = z
+  .union([
+    z.string().regex(/^\d+(\.\d{1,2})?$/),
+    z.number().finite().min(0),
+    z.literal(''),
+  ])
+  .optional()
+  .transform((value) => {
+    if (value === '' || value === undefined) return undefined;
+    return typeof value === 'number' ? String(value) : value;
+  });
+
 export const insertLogbookEntrySchema = createInsertSchema(logbookEntries).omit({
   id: true,
   userId: true,
@@ -2311,20 +2323,20 @@ export const insertLogbookEntrySchema = createInsertSchema(logbookEntries).omit(
   cfiCertExpires: true,
 }).extend({
   flightDate: z.coerce.date(),
-  timeDay: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
-  timeNight: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
-  pic: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
-  sic: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
-  dual: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
-  solo: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
-  crossCountry: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
-  instrumentActual: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+  timeDay: logbookDecimalField,
+  timeNight: logbookDecimalField,
+  pic: logbookDecimalField,
+  sic: logbookDecimalField,
+  dual: logbookDecimalField,
+  solo: logbookDecimalField,
+  crossCountry: logbookDecimalField,
+  instrumentActual: logbookDecimalField,
   approaches: z.number().min(0).optional(),
   landingsDay: z.number().min(0).optional(),
   landingsNight: z.number().min(0).optional(),
   holds: z.number().min(0).optional(),
-  hobbsStart: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
-  hobbsEnd: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+  hobbsStart: logbookDecimalField,
+  hobbsEnd: logbookDecimalField,
 });
 
 export const insertLogbookProSettingsSchema = createInsertSchema(logbookProSettings).omit({

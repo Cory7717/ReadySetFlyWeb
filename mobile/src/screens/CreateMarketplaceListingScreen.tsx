@@ -8,12 +8,16 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PromoCodeInput } from '../components/PromoCodeInput';
 import { AIDescriptionGenerator } from '../components/AIDescriptionGenerator';
 import { apiEndpoints } from '../services/api';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import { extractApiErrorMessage } from '../utils/diagnostics';
 
 const categories = [
   { id: 'aircraft-sale', label: 'Aircraft for Sale', icon: 'airplane', color: '#7c3aed' },
@@ -113,6 +117,7 @@ function SectionCard({
 }
 
 export default function CreateMarketplaceListingScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const [step, setStep] = useState(1);
   const [category, setCategory] = useState('');
   const [tier, setTier] = useState('basic');
@@ -211,7 +216,7 @@ export default function CreateMarketplaceListingScreen({ navigation }: any) {
         { text: 'OK', onPress: () => navigation.navigate('MarketplaceHome') },
       ]);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create listing');
+      Alert.alert('Error', extractApiErrorMessage(error, 'Failed to create listing'));
     } finally {
       setIsSubmitting(false);
     }
@@ -395,7 +400,11 @@ export default function CreateMarketplaceListingScreen({ navigation }: any) {
   );
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}
+    >
       <View style={styles.heroPanel}>
         <View style={styles.heroTopRow}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.92} data-testid="button-back">
@@ -426,7 +435,12 @@ export default function CreateMarketplaceListingScreen({ navigation }: any) {
         </View>
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={[styles.contentInner, { paddingBottom: 140 + insets.bottom }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {step === 1 && renderCategorySelection()}
         {step === 2 && renderBaseFields()}
         {step === 3 && renderCategoryFields()}
@@ -434,7 +448,7 @@ export default function CreateMarketplaceListingScreen({ navigation }: any) {
         {step === 5 && renderPromoCode()}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.sm) + spacing.xs }]}>
         {step < 5 ? (
           <TouchableOpacity style={styles.nextButton} onPress={handleNext} activeOpacity={0.92} data-testid="button-next">
             <Text style={styles.nextButtonText}>Continue</Text>
@@ -461,7 +475,7 @@ export default function CreateMarketplaceListingScreen({ navigation }: any) {
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

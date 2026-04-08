@@ -1,6 +1,7 @@
 ﻿import {
   ActivityIndicator,
   Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,7 +12,8 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import MapView, { Callout, Marker, Polyline, UrlTile } from 'react-native-maps';
+import Constants from 'expo-constants';
+import MapView, { Callout, Marker, Polyline, PROVIDER_GOOGLE, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import { DeviceMotion } from 'expo-sensors';
@@ -60,7 +62,9 @@ import {
 import type { MobileRouteLeg, MobileRouteNavDataLegPayload, MobileRouteProgressSummary } from '../lib/flightMath';
 import { analyzeFiledRoute, isFiledRouteAnchorKind } from '@shared/flight-plan-route';
 import FlightDeckView from '../components/flight-deck/FlightDeckView';
+import FormDateTimeField from '../components/FormDateTimeField';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import { diagnosticsEnabled, logDiagnostic, warnDiagnostic } from '../utils/diagnostics';
 
 type AirportMeta = {
   icao: string;
@@ -1398,6 +1402,9 @@ export default function FlightPlannerScreen() {
   const [cloudError, setCloudError] = useState<string | null>(null);
   const cloudTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [mapRegion, setMapRegion] = useState<{ latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number } | null>(null);
+  const [plannerMapLayoutReady, setPlannerMapLayoutReady] = useState(false);
+  const [plannerMapReady, setPlannerMapReady] = useState(false);
+  const [plannerMapRenderTimedOut, setPlannerMapRenderTimedOut] = useState(false);
   const [trafficEnabled, setTrafficEnabled] = useState(false);
   const [trafficPort, setTrafficPort] = useState('4000');
   const [trafficTargets, setTrafficTargets] = useState<TrafficTarget[]>([]);
@@ -1549,6 +1556,55 @@ export default function FlightPlannerScreen() {
       : gpsOwnshipFresh && gpsData
         ? gpsData
         : null;
+  const mapConfig = (Constants.expoConfig?.extra as { googleMaps?: { androidApiKeyConfigured?: boolean; androidPackage?: string } } | undefined)
+    ?.googleMaps;
+  const plannerMapUsesGoogleProvider = Platform.OS === 'android';
+  const plannerMapKeyConfigured = !plannerMapUsesGoogleProvider || Boolean(mapConfig?.androidApiKeyConfigured);
+  const showPlannerMapDiagnostics =
+    diagnosticsEnabled() || plannerMapRenderTimedOut || (plannerMapUsesGoogleProvider && !plannerMapKeyConfigured);
+  useEffect(() => {
+    if (!routePoints.length) return;
+    setPlannerMapReady(false);
+    setPlannerMapRenderTimedOut(false);
+  }, [routePoints]);
+
+  useEffect(() => {
+    if (!routePoints.length) {
+      setPlannerMapLayoutReady(false);
+      setPlannerMapReady(false);
+      setPlannerMapRenderTimedOut(false);
+      return;
+    }
+
+    if (plannerMapReady) {
+      setPlannerMapRenderTimedOut(false);
+      return;
+    }
+
+    setPlannerMapRenderTimedOut(false);
+    const timeout = setTimeout(() => {
+      setPlannerMapRenderTimedOut(true);
+      warnDiagnostic('maps', 'planner_map_ready_timeout', {
+        provider: plannerMapUsesGoogleProvider ? 'google' : 'default',
+        keyConfigured: plannerMapKeyConfigured,
+        packageName: mapConfig?.androidPackage,
+        routePointCount: routePoints.length,
+        layoutReady: plannerMapLayoutReady,
+      });
+    }, 8000);
+
+    return () => clearTimeout(timeout);
+  }, [mapConfig?.androidPackage, plannerMapKeyConfigured, plannerMapLayoutReady, plannerMapReady, plannerMapUsesGoogleProvider, routePoints.length]);
+
+  useEffect(() => {
+    if (plannerMapRenderTimedOut) return;
+    if (flightDeckView === 'vision' && !activeOwnship) {
+      warnDiagnostic('flightDeck', 'vision_missing_ownship', {
+        isFlightDeck,
+        ownshipSource: null,
+      });
+    }
+  }, [activeOwnship, flightDeckView, isFlightDeck, plannerMapRenderTimedOut]);
   const ownshipSourceSummary = useMemo(() => {
     if (simulationEnabled && simulatedGpsData) {
       return {
@@ -4497,9 +4553,6 @@ export default function FlightPlannerScreen() {
       setTrafficResolutionBias(null);
       return;
     }
-    if (flightDeckView === 'vision' && !activeOwnship) {
-      setFlightDeckView('map');
-    }
   }, [activeOwnship, flightDeckView, isFlightDeck]);
 
   useEffect(() => {
@@ -6338,9 +6391,12 @@ export default function FlightPlannerScreen() {
               mode: 'flight',
             })}
           >
-            <Text style={styles.heroSecondaryActionText}>Flight Deck</Text>
+            <Text style={styles.heroSecondaryActionText}>Open Flight Deck</Text>
           </TouchableOpacity>
         </View>
+        <Text style={styles.heroHelperText}>
+          Planner is for route building, timing, performance, weather, and validation. Flight Deck is the in-flight display once planning is complete.
+        </Text>
       </View>
 
       <View style={styles.section}>
@@ -6780,12 +6836,29 @@ export default function FlightPlannerScreen() {
           <MapView
             style={styles.map}
             ref={mapRef}
+            provider={plannerMapUsesGoogleProvider ? PROVIDER_GOOGLE : undefined}
             mapType="standard"
             initialRegion={{
               latitude: routePoints[0].latitude,
               longitude: routePoints[0].longitude,
               latitudeDelta: 3,
               longitudeDelta: 3,
+            }}
+            onLayout={() => {
+              setPlannerMapLayoutReady(true);
+              logDiagnostic('maps', 'planner_map_layout_ready', {
+                provider: plannerMapUsesGoogleProvider ? 'google' : 'default',
+                keyConfigured: plannerMapKeyConfigured,
+              });
+            }}
+            onMapReady={() => {
+              setPlannerMapReady(true);
+              setPlannerMapRenderTimedOut(false);
+              logDiagnostic('maps', 'planner_map_ready', {
+                provider: plannerMapUsesGoogleProvider ? 'google' : 'default',
+                keyConfigured: plannerMapKeyConfigured,
+                routePointCount: routePoints.length,
+              });
             }}
             onRegionChangeComplete={(region) => setMapRegion(region)}
           >
@@ -6935,6 +7008,27 @@ export default function FlightPlannerScreen() {
           </Text>
         )}
         <Text style={styles.helperText}>Sectional tiles provided by FAA/Aeronautical Information Services.</Text>
+        {showPlannerMapDiagnostics && (
+          <View style={styles.mapDiagnosticCard}>
+            <Text style={styles.mapDiagnosticTitle}>Map diagnostics</Text>
+            <Text style={styles.mapDiagnosticText}>
+              Provider: {plannerMapUsesGoogleProvider ? 'Google' : 'Default'} | Build key: {plannerMapKeyConfigured ? 'present' : 'missing'}
+            </Text>
+            <Text style={styles.mapDiagnosticText}>
+              Layout: {plannerMapLayoutReady ? 'ready' : 'pending'} | Engine: {plannerMapReady ? 'ready' : plannerMapRenderTimedOut ? 'timeout' : 'pending'}
+            </Text>
+            {plannerMapUsesGoogleProvider && !plannerMapKeyConfigured ? (
+              <Text style={styles.mapDiagnosticWarning}>
+                Android Google Maps key is not in the mobile build config. Set `GOOGLE_MAPS_API_KEY` in the Expo/EAS build environment. Render API env vars do not reach the native app build.
+              </Text>
+            ) : null}
+            {plannerMapRenderTimedOut ? (
+              <Text style={styles.mapDiagnosticWarning}>
+                If layout is ready but the map never becomes ready, check Google Maps SDK enablement, Android app restriction package `com.readysetfly.mobile`, and matching SHA-1/SHA-256 fingerprints.
+              </Text>
+            ) : null}
+          </View>
+        )}
         {mapStyle === 'terrain' && <Text style={styles.helperText}>Terrain tiles provided by USGS National Map.</Text>}
         {mapStyle === 'radar' && (
           <Text style={styles.helperText}>
@@ -7277,12 +7371,13 @@ export default function FlightPlannerScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Schedule & Timing</Text>
         <Text style={styles.sectionSubtitle}>Local time at each airport. Arrival auto-calculates from ETE.</Text>
-        <Text style={styles.fieldLabel}>Planned Departure</Text>
-        <TextInput
-          style={styles.input}
+        <FormDateTimeField
+          label="Planned Departure"
           value={plannedDepartureAt}
           onChangeText={setPlannedDepartureAt}
-          placeholder="YYYY-MM-DD HH:MM"
+          placeholder="Select departure date and time"
+          mode="datetime"
+          style={styles.fieldBlock}
         />
         <Text style={styles.helperText}>Local time at departure ({resolvedDepartureTimeZone}).</Text>
         <View style={styles.rowBetween}>
@@ -7295,14 +7390,16 @@ export default function FlightPlannerScreen() {
             <Text style={styles.autoCalcText}>Auto-calc</Text>
           </TouchableOpacity>
         </View>
-        <TextInput
-          style={styles.input}
+        <FormDateTimeField
+          label="Planned Arrival"
           value={plannedArrivalAt}
           onChangeText={(value) => {
             setPlannedArrivalAt(value);
             setArrivalAuto(false);
           }}
-          placeholder="YYYY-MM-DD HH:MM"
+          placeholder="Select arrival date and time"
+          mode="datetime"
+          style={styles.fieldBlock}
         />
         <Text style={styles.helperText}>Local time at destination ({resolvedDestinationTimeZone}).</Text>
       </View>
@@ -9261,6 +9358,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  heroHelperText: {
+    fontSize: 12,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    lineHeight: 18,
+  },
   section: {
     padding: spacing.md,
     backgroundColor: colors.surface,
@@ -9274,6 +9377,7 @@ const styles = StyleSheet.create({
   sectionSubtitle: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.sm, lineHeight: 18 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.text, marginTop: spacing.xs },
   fieldHelper: { fontSize: 11, color: colors.textMuted, marginBottom: spacing.xs },
+  fieldBlock: { marginBottom: spacing.sm },
   input: {
     backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
@@ -9390,6 +9494,18 @@ const styles = StyleSheet.create({
   mapToggleActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
   mapToggleText: { fontSize: 12, color: colors.text },
   map: { width: '100%', height: 240, borderRadius: radius.lg, overflow: 'hidden' },
+  mapDiagnosticCard: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+  },
+  mapDiagnosticTitle: { fontSize: 12, fontWeight: '700', color: colors.text },
+  mapDiagnosticText: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  mapDiagnosticWarning: { fontSize: 12, color: colors.warning, marginTop: 6 },
   helpLink: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.sm },
   helpLinkText: { fontSize: 12, color: colors.primary, fontWeight: '600' },
   trafficRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },

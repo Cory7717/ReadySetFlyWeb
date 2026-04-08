@@ -14,7 +14,7 @@ import { MobileBottomNav as LandingMobileBottomNav, MobilePillNav as LandingMobi
 import WeatherBriefingSummarizer from "@/components/ai/WeatherBriefingSummarizer";
 import NotamTranslator from "@/components/ai/NotamTranslator";
 import CabinBriefSearchForm from "@/components/CabinBriefSearchForm";
-import { BookOpen, CalendarDays, Plane, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users, Search, MapPin, X, DollarSign, UserPlus } from "lucide-react";
+import { BookOpen, CalendarDays, Plane, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users, Search, MapPin, X, DollarSign, UserPlus, Smartphone } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -23,11 +23,8 @@ import { pixelEvent } from "@/lib/pixel";
 import { useAuth } from "@/hooks/useAuth";
 import { extractAtisIdentifier, extractRunwayInUse, parseFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import useEmblaCarousel from "embla-carousel-react";
 import av8mapsLogo from "@assets/Av8Maps.JPG";
 import rsfOpaqueLogo from "@assets/RSFOpaqueLogo_1761494760586.png";
-import rsfPromoVideo from "@assets/rsf-video-2026-02-28.mp4";
 
 interface WeatherData {
   icao: string;
@@ -165,10 +162,6 @@ export default function Landing() {
   const [showAiNotamTranslator, setShowAiNotamTranslator] = useState(false);
   const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [introPhase, setIntroPhase] = useState(0);
-  const introTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const [activeSlide, setActiveSlide] = useState(0);
-  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
   const av8mapsTiles = useMemo(
     () => [
       {
@@ -357,6 +350,98 @@ export default function Landing() {
     : isPaidUser
       ? "Open your RSF Pro page to manage plan details, trials, and membership settings."
       : "Open the dedicated RSF Pro page for plan details, feature breakdowns, and subscription links.";
+  const fragmentedWorkflowCards = [
+    {
+      title: "Flight Planning",
+      description: "Route building, alternates, performance inputs, and departure-to-destination planning.",
+      icon: Plane,
+    },
+    {
+      title: "Weather / NOTAMs",
+      description: "METARs, TAFs, NOTAMs, runway advisories, and quick hazard context before launch.",
+      icon: AlertTriangle,
+    },
+    {
+      title: "Filing / Briefing",
+      description: "Preflight packet review and FAA filing through Leidos / 1-800-WX-BRIEF.",
+      icon: FileText,
+    },
+    {
+      title: "In-Flight Tracking",
+      description: "App follow-through with route awareness, traffic, and weather while en route.",
+      icon: MapPin,
+    },
+    {
+      title: "Training Tools",
+      description: "Student progress, training utilities, endorsements, and post-flight follow-up.",
+      icon: BookOpen,
+    },
+    {
+      title: "Rentals / Marketplace",
+      description: "Aircraft rentals, CFIs, marketplace listings, clubs, and aviation services.",
+      icon: ShoppingBag,
+    },
+  ] as const;
+  const workflowSteps = [
+    {
+      title: "Plan on the web",
+      description: "Build the route, review weather and NOTAM context, and stage the whole flight in one web workflow.",
+      icon: Plane,
+    },
+    {
+      title: "File to the FAA",
+      description: "Submit through Leidos / 1-800-WX-BRIEF, then pick the plan up with ATC when you are ready.",
+      icon: FileText,
+    },
+    {
+      title: "Continue in the app",
+      description: "Open the same flight in the app with full FMS capability instead of starting over on another device.",
+      icon: Smartphone,
+    },
+    {
+      title: "Fly with live awareness",
+      description: "See live traffic, en route weather, and ADS-B-connected situational awareness as the flight unfolds.",
+      icon: CheckCircle2,
+    },
+  ] as const;
+  const ecosystemCards = [
+    {
+      title: "Planning and Flight Following",
+      description: "Web planning, FAA filing, app follow-through, live traffic, and en route weather in one lane.",
+      icon: Plane,
+      actions: [
+        { label: "Flight Planner", href: "/flight-planner", track: "landing_ecosystem_flight_planner" },
+        { label: "ADS-B Setup", href: "/adsb-receiver-help", track: "landing_ecosystem_adsb_help" },
+      ],
+    },
+    {
+      title: "Training and Logbook",
+      description: "Training tools, endorsements, student progress, currency, and post-flight records on the same account.",
+      icon: BookOpen,
+      actions: [
+        { label: "Student Hub", href: "/student", track: "landing_ecosystem_student_hub" },
+        { label: "Logbook", href: "/logbook", track: "landing_ecosystem_logbook" },
+      ],
+    },
+    {
+      title: "Marketplace and Rentals",
+      description: "Browse aircraft rentals, listings, CFIs, clubs, and aviation services without leaving RSF.",
+      icon: ShoppingBag,
+      actions: [
+        { label: "Marketplace", href: "/marketplace", track: "landing_ecosystem_marketplace" },
+        { label: "Rentals", href: "/rentals", track: "landing_ecosystem_rentals" },
+      ],
+    },
+    {
+      title: "Pilot Tools and Utilities",
+      description: "E6B, weather utilities, passenger briefings, and day-of-flight pilot tools stay close to the plan.",
+      icon: Calculator,
+      actions: [
+        { label: "Tool Hub", href: "/tool-hub", track: "landing_ecosystem_tool_hub" },
+        { label: "Cabin Brief", href: "/cabin-brief", track: "landing_ecosystem_cabin_brief" },
+      ],
+    },
+  ] as const;
   const fuelAirports = useMemo(
     () =>
       (fuelPrices?.results ?? [])
@@ -682,34 +767,6 @@ export default function Landing() {
   useEffect(() => {
     trackEvent("starting_point_section_view");
   }, []);
-
-  const runIntroSequence = () => {
-    introTimersRef.current.forEach(clearTimeout);
-    introTimersRef.current = [];
-    setIntroPhase(0);
-    const schedule = (phase: number, ms: number) => {
-      const t = setTimeout(() => setIntroPhase(phase), ms);
-      introTimersRef.current.push(t);
-    };
-    schedule(1, 2500);
-    schedule(2, 3400);
-    schedule(3, 4000);
-    schedule(4, 4700);
-    schedule(5, 5500);
-  };
-
-  useEffect(() => {
-    runIntroSequence();
-    return () => introTimersRef.current.forEach(clearTimeout);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!emblaApi) return;
-    const onSelect = () => setActiveSlide(emblaApi.selectedScrollSnap());
-    emblaApi.on("select", onSelect);
-    return () => { emblaApi.off("select", onSelect); };
-  }, [emblaApi]);
   
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -1527,252 +1584,169 @@ export default function Landing() {
               </div>
             </div>
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 px-4 py-3 text-sm">
-                <div className="text-muted-foreground">
-                  Want information on becoming a sponsored business?
+              <div className="rounded-[1.1rem] border border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] p-4 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#D9A441]">
+                      Featured Sponsor
+                    </div>
+                    <div className="text-sm text-[#9CB4CC]">
+                      Aviation businesses can appear here in a clean sponsored placement inside RSF.
+                    </div>
+                  </div>
+                  <Button asChild size="sm" variant="outline" className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]" data-testid="button-banner-ad-info-public">
+                    <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
+                      Advertise
+                    </a>
+                  </Button>
                 </div>
-                <Button asChild size="sm" variant="secondary" data-testid="button-banner-ad-info-public">
-                  <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
-                    Click here
-                  </a>
+                <BannerAdRotation
+                  placement="home"
+                  variant="compact"
+                  showLeadIn={false}
+                  className="mt-4"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative overflow-hidden border-b border-[#1c3147] bg-[radial-gradient(circle_at_top_left,rgba(74,159,212,0.16),transparent_30%),radial-gradient(circle_at_80%_12%,rgba(217,164,65,0.16),transparent_24%),linear-gradient(180deg,#081019_0%,#0b1420_42%,#0d1825_100%)]">
+        <div className="container mx-auto px-4 py-12 md:py-16 xl:py-20">
+          <div className="grid gap-8 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)] xl:items-start">
+            <div className="space-y-6">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#29415e] bg-[#102236] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#9FC6EA]">
+                <Plane className="h-3.5 w-3.5 text-[#D9A441]" />
+                General Aviation Ecosystem
+              </div>
+              <div className="space-y-4">
+                <img src={rsfOpaqueLogo} alt="Ready Set Fly" className="h-11 w-auto" />
+                <h1 className="max-w-4xl text-4xl font-semibold tracking-[-0.03em] text-[#F1F5FA] sm:text-5xl xl:text-6xl" style={{ fontFamily: "var(--font-display)" }}>
+                  Stop bouncing from app to app.
+                  <span className="block text-[#D9A441]">Everything general aviation needs, in one place.</span>
+                </h1>
+                <p className="max-w-3xl text-lg leading-8 text-[#B5C8DA]">
+                  Plan on the web, file directly to the FAA via Leidos / 1-800-WX-BRIEF, then pick it up with ATC and follow the flight in the app with full FMS capability, live traffic, en route weather, and ADS-B connectivity.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  "One shared workflow from planning to post-flight follow-through",
+                  "Web-to-app continuity instead of disconnected tools",
+                  "Live flight plan submission to the FAA through Leidos",
+                  "Training, rentals, marketplace, and pilot tools under one account",
+                ].map((item) => (
+                  <div key={item} className="rounded-[1rem] border border-[#203249] bg-[#0f1a28]/90 px-4 py-3 text-sm text-[#D7E1EC]">
+                    {item}
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button asChild size="lg" className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                  <Link
+                    href="/flight-planner"
+                    onClick={() => trackEvent("cta_click", { label: "landing_hero_open_planner", target: "/flight-planner" })}
+                  >
+                    Open Flight Planner
+                  </Link>
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]"
+                  onClick={() => {
+                    trackEvent("cta_click", { label: "landing_hero_explore_ecosystem", target: "#landing-quickstart-section" });
+                    document.getElementById("landing-quickstart-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                >
+                  Explore the Ecosystem
                 </Button>
               </div>
-              <BannerAdRotation
-                placement="home"
-                variant="compact"
-                showLeadIn={false}
-              />
+              <div className="flex flex-wrap items-center gap-3 text-xs text-[#7A9BB8]">
+                <Badge variant="outline" className="border-[#29415e] bg-[#102236] text-[#9FC6EA]">US-only</Badge>
+                <span>Plan. File. Fly. Follow.</span>
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* ============================================================
-          DIRECTION 2 HERO — "The Collapse" animation
-      ============================================================ */}
-      <div className="relative border-b border-[#1c3147] bg-[linear-gradient(180deg,#081019_0%,#0a1420_42%,#0c1825_100%)]">
-        <div className="container mx-auto px-4 py-10 md:py-16">
-          <div className="md:max-w-2xl md:mx-auto">
-            {/* Animation panel */}
-            <div className="relative flex min-h-[400px] flex-col items-center justify-center md:min-h-[520px]">
-              {/* Skip intro button */}
-              <AnimatePresence>
-                {introPhase < 5 && (
-                  <motion.button
-                    type="button"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="absolute right-0 top-0 z-20 text-xs text-[#7A9BB8] hover:text-[#E8EDF4] transition-colors"
-                    onClick={() => {
-                      introTimersRef.current.forEach(clearTimeout);
-                      setIntroPhase(5);
-                    }}
-                  >
-                    Skip intro
-                  </motion.button>
-                )}
-              </AnimatePresence>
-
-              {/* Phase 0-2: Scattered tiles */}
-              <AnimatePresence>
-                {introPhase <= 2 && (
-                  <motion.div
-                    key="tiles"
-                    className="relative flex items-center justify-center w-full h-64 md:h-80"
-                    exit={{ opacity: 0 }}
-                  >
-                    <p className="absolute top-0 left-1/2 -translate-x-1/2 text-sm text-[#7A9BB8] text-center mb-6 whitespace-nowrap">
-                      Sound familiar?
-                    </p>
-                    {[
-                      {
-                        label: "Weather App",
-                        body: "KAUS 041753Z 18012KT 10SM FEW045 28/14",
-                        bodyClass: "font-mono text-xs text-[#F5A623]",
-                        extra: <span className="inline-flex items-center gap-1 rounded-full bg-green-700/80 px-2 py-0.5 text-[10px] text-white">VFR</span>,
-                        initX: -120, initY: -80, initR: -8,
-                        delay: 0,
-                      },
-                      {
-                        label: "Logbook App",
-                        body: "N12345 · KAUS→KSAT · 1.4hrs",
-                        bodyClass: "font-mono text-xs text-[#E8EDF4]",
-                        extra: null,
-                        initX: 100, initY: -60, initR: 6,
-                        delay: 0.5,
-                      },
-                      {
-                        label: "Flight Plan App",
-                        body: "KAUS DCT KSAT DCT KDAL",
-                        bodyClass: "font-mono text-xs text-[#9CB4CC]",
-                        extra: null,
-                        initX: -90, initY: 80, initR: 4,
-                        delay: 1.0,
-                      },
-                      {
-                        label: "Marketplace App",
-                        body: "Cessna 172S · $185/hr · KAUS",
-                        bodyClass: "font-mono text-xs text-[#E8EDF4]",
-                        extra: null,
-                        initX: 110, initY: 90, initR: -5,
-                        delay: 1.5,
-                      },
-                    ].map((tile, i) => (
-                      <motion.div
-                        key={tile.label}
-                        className="absolute w-44 h-24 md:w-48 md:h-28 rounded-xl border border-[#29415e] bg-[#0d1622] p-3 shadow-lg"
-                        initial={{ x: tile.initX, y: tile.initY, rotate: tile.initR, scale: 1, opacity: 0 }}
-                        animate={
-                          introPhase === 0
-                            ? {
-                                x: [tile.initX, tile.initX, tile.initX],
-                                y: [tile.initY, tile.initY - 6, tile.initY],
-                                rotate: tile.initR,
-                                scale: 1,
-                                opacity: 1,
-                                transition: {
-                                  opacity: { duration: 0.4, delay: tile.delay },
-                                  y: {
-                                    duration: 3,
-                                    repeat: Infinity,
-                                    ease: "easeInOut",
-                                    delay: tile.delay,
-                                  },
-                                },
-                              }
-                            : introPhase === 1
-                            ? {
-                                x: 0, y: 0, rotate: 0, scale: 0.7, opacity: 1,
-                                transition: { duration: 0.8, ease: "easeInOut" },
-                              }
-                            : {
-                                x: 0, y: 0, rotate: 0, scale: 0, opacity: 0,
-                                transition: { duration: 0.4, ease: "easeIn" },
-                              }
-                        }
-                      >
-                        <div className="flex items-center gap-2 mb-1.5">
-                          {tile.extra}
-                          <span className="text-[10px] text-[#7A9BB8]">{tile.label}</span>
+            <div className="space-y-4 xl:pt-2">
+              <Card className="overflow-hidden border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.78)]">
+                <CardContent className="space-y-5 p-5 sm:p-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.24em] text-[#7EA8CC]">Web-to-App Continuity</div>
+                      <div className="mt-1 text-xl font-semibold text-[#F1F5FA]">One flight, one workflow, one ecosystem.</div>
+                    </div>
+                    <Badge variant="outline" className="border-[#35516e] bg-[#10233a] text-[#D9A441]">
+                      Live FAA filing
+                    </Badge>
+                  </div>
+                  <div className="grid gap-3">
+                    {workflowSteps.map((step, index) => (
+                      <div key={step.title} className="rounded-[1rem] border border-[#203249] bg-[#0d1622] p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#35516e] bg-[#102236] text-[#D9A441]">
+                            <step.icon className="h-4 w-4" />
+                          </div>
+                          <div className="space-y-1">
+                            <div className="text-[10px] uppercase tracking-[0.2em] text-[#7EA8CC]">Step {index + 1}</div>
+                            <div className="text-sm font-semibold text-[#F1F5FA]">{step.title}</div>
+                            <div className="text-sm leading-6 text-[#9CB4CC]">{step.description}</div>
+                          </div>
                         </div>
-                        <div className={tile.bodyClass}>{tile.body}</div>
-                      </motion.div>
+                      </div>
                     ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {[
+                      "Full FMS capability in the app",
+                      "Live traffic and en route weather",
+                      "ADS-B system connectivity",
+                      "Shared plans and follow-through across devices",
+                    ].map((item) => (
+                      <div key={item} className="rounded-[0.95rem] border border-[#29415e] bg-[#102236] px-3 py-2 text-sm text-[#D7E1EC]">
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
 
-              {/* Phase 2: pulse burst */}
-              <AnimatePresence>
-                {introPhase === 2 && (
-                  <motion.div
-                    key="pulse"
-                    className="absolute rounded-full bg-[#D9A441]"
-                    initial={{ scale: 0, opacity: 1, width: 64, height: 64 }}
-                    animate={{ scale: 1.5, opacity: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.6, ease: "easeOut" }}
-                    style={{ left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}
-                  />
-                )}
-              </AnimatePresence>
-
-              {/* Phase 3+: logo */}
-              <AnimatePresence>
-                {introPhase >= 3 && (
-                  <motion.div
-                    key="emerge"
-                    className="absolute inset-0 flex flex-col items-center justify-center gap-5"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.5 }}
-                  >
-                    <motion.img
-                      src={rsfOpaqueLogo}
-                      alt="Ready Set Fly"
-                      className="h-14 mx-auto"
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.6 }}
-                    />
-
-                    <AnimatePresence>
-                      {introPhase >= 4 && (
-                        <motion.p
-                          key="tagline"
-                          className="text-xl md:text-2xl font-semibold text-[#F1F5FA] text-center px-4"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ duration: 0.8 }}
-                        >
-                          Where pilots land before they fly.
-                        </motion.p>
-                      )}
-                    </AnimatePresence>
-
-                    <AnimatePresence>
-                      {introPhase >= 5 && (
-                        <motion.div
-                          key="ctas"
-                          className="flex flex-col gap-3 w-full max-w-xs"
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.5 }}
-                        >
-                          <Button asChild className="w-full bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
-                            <Link
-                              href="/register"
-                              onClick={() => trackEvent("cta_click", { label: "hero_intro_get_started", target: "/register" })}
-                            >
-                              Get Started
-                            </Link>
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className="w-full border-[#29415e] bg-transparent text-[#E8EDF4] hover:bg-[#102236]"
-                            onClick={() => {
-                              document.getElementById("rsf-feature-rail")?.scrollIntoView({ behavior: "smooth" });
-                            }}
-                          >
-                            See What&apos;s Inside
-                          </Button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    {/* Replay button */}
-                    <AnimatePresence>
-                      {introPhase >= 5 && (
-                        <motion.button
-                          key="replay"
-                          type="button"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.5 }}
-                          className="text-xs text-[#6D88A6] hover:text-[#9CB4CC] transition-colors mt-1"
-                          onClick={runIntroSequence}
-                        >
-                          ↺ Replay
-                        </motion.button>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <div className="hidden rounded-[1.15rem] border border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] p-4 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)] lg:block">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#D9A441]">
+                      Featured Sponsor
+                    </div>
+                    <div className="text-sm text-[#9CB4CC]">
+                      Premium aviation partner placement integrated into the RSF homepage.
+                    </div>
+                  </div>
+                  <Button asChild size="sm" variant="outline" className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]">
+                    <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
+                      Advertise
+                    </a>
+                  </Button>
+                </div>
+                <BannerAdRotation
+                  placement="home"
+                  variant="compact"
+                  showLeadIn={false}
+                  className="mt-4"
+                />
+              </div>
             </div>
-
           </div>
         </div>
       </div>
 
-      {/* ============================================================
-          SECTION 2 — ICAO SEARCH BAR
-      ============================================================ */}
       <div className="bg-[#0d1622] border-y border-[#203249] py-6 px-4">
-        <div className="max-w-2xl mx-auto">
-          <p className="text-sm text-[#7A9BB8] mb-2 text-center">Check conditions at your airport</p>
-          <div className="relative flex gap-2">
+        <div className="max-w-3xl mx-auto">
+          <div className="mb-3 text-center">
+            <p className="text-sm font-medium text-[#D7E1EC]">Check live conditions while you plan</p>
+            <p className="text-xs text-[#7A9BB8]">Quick airport weather, runway, and NOTAM context without leaving the homepage.</p>
+          </div>
+          <div className="relative flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
               <Input
                 value={icaoInput}
@@ -1800,7 +1774,7 @@ export default function Landing() {
                           >
                             <div className="font-semibold font-mono text-[#F1F5FA]">{s.icao}</div>
                             <div className="text-xs text-[#7A9BB8]">
-                              {[s.name, s.city, s.state].filter(Boolean).join(" · ")}
+                              {[s.name, s.city, s.state].filter(Boolean).join(" / ")}
                             </div>
                           </button>
                         </li>
@@ -1821,224 +1795,128 @@ export default function Landing() {
         </div>
       </div>
 
-      {/* ============================================================
-          SECTION 3 — FEATURE RAIL (Embla carousel)
-      ============================================================ */}
-      <div id="rsf-feature-rail" className="relative border-b border-[#1c3147]">
-        <div className="overflow-hidden" ref={emblaRef}>
-          <div className="flex">
-            {[
-              {
-                kicker: "Always On",
-                headline: "Live conditions before you leave the ground.",
-                description: "METARs, TAFs, NOTAMs, and runway advisories — pulled live from FAA sources and translated into plain English by AI.",
-                cta: "Check Conditions",
-                ctaAction: () => scrollToWeatherSection(),
-                panel: (
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap gap-2">
-                      <Badge className={`${flightCategory.color === "green" ? "bg-green-700" : flightCategory.color === "blue" ? "bg-blue-700" : flightCategory.color === "red" ? "bg-red-700" : "bg-purple-700"} text-white border-0`}>
-                        {flightCategory.category}
-                      </Badge>
-                      {weatherHazards.slice(0, 3).map((h) => (
-                        <Badge key={h.id} variant="outline" className={h.tone === "red" ? "border-[#6d2c27] bg-[#2b1111] text-[#ff8c84]" : h.tone === "amber" ? "border-[#6d5520] bg-[#271d0b] text-[#ffd278]" : "border-[#35516e] bg-[#102236] text-[#8FC7FF]"}>
-                          {h.label}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="rounded-xl border border-[#203249] bg-[#0a111a] p-3">
-                      <div className="text-[9px] uppercase tracking-[0.2em] text-[#6D88A6] mb-1.5">METAR</div>
-                      <p className="font-mono text-xs text-[#F5A623] break-all line-clamp-4">{metarDisplay}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-lg border border-[#1f3248] bg-[#0f1a28] p-2.5">
-                        <div className="text-[#6D88A6] mb-1">NOTAMs</div>
-                        <div className="font-mono text-[#E8EDF4]">{notams?.notams?.length ?? 0} active</div>
-                      </div>
-                      <div className="rounded-lg border border-[#1f3248] bg-[#0f1a28] p-2.5">
-                        <div className="text-[#6D88A6] mb-1">Runway</div>
-                        <div className="font-mono text-[#E8EDF4]">{runwayHeadline}</div>
-                      </div>
-                    </div>
+      <section className="border-b border-[#1c3147] bg-[linear-gradient(180deg,#0a1018,#0d1622)]">
+        <div className="container mx-auto px-4 py-14 sm:py-16">
+          <div className="max-w-3xl space-y-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#7EA8CC]">Why RSF Exists</div>
+            <h2 className="text-3xl font-semibold tracking-[-0.02em] text-[#F1F5FA] sm:text-4xl">
+              Still juggling multiple aviation apps?
+            </h2>
+            <p className="text-base leading-7 text-[#9CB4CC]">
+              Most GA pilots bounce between separate tools for flight planning, weather, NOTAMs, filing, in-flight tracking, training, rentals, and marketplace activity. RSF brings those workflows back into one aviation-native platform.
+            </p>
+          </div>
+          <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {fragmentedWorkflowCards.map((item) => (
+                <div key={item.title} className="rounded-[1.1rem] border border-[#203249] bg-[#0d1622] p-5">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-[0.85rem] border border-[#3a5b7b] bg-[#102236] text-[#D9A441]">
+                    <item.icon className="h-5 w-5" />
                   </div>
-                ),
-              },
-              {
-                kicker: "Route to Wheels Up",
-                headline: "Plan the whole flight, not just the route.",
-                description: "Departure to destination, fuel stops, alternates, TFR awareness, and a full preflight briefing in one workflow.",
-                cta: "Open Flight Planner",
-                ctaHref: "/flight-planner",
-                panel: (
-                  <div className="space-y-3">
-                    <div className="rounded-xl border border-[#203249] bg-[#0a111a] p-3 space-y-2">
-                      <div className="text-[9px] uppercase tracking-[0.2em] text-[#6D88A6]">Route</div>
-                      <p className="font-mono text-sm text-[#9CB4CC]">KAUS DCT LLO DCT KSAT</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {[
-                        { label: "Fuel Stop", value: "KSAT" },
-                        { label: "Alternate", value: "KMSY" },
-                        { label: "Est. Time", value: "1h 12m" },
-                        { label: "TFRs", value: "0 active" },
-                      ].map((r) => (
-                        <div key={r.label} className="rounded-lg border border-[#1f3248] bg-[#0f1a28] p-2.5">
-                          <div className="text-[#6D88A6] mb-1">{r.label}</div>
-                          <div className="font-mono text-[#E8EDF4]">{r.value}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ),
-              },
-              {
-                kicker: "Find. Fly. Own.",
-                headline: "Rentals, listings, and CFIs in one place.",
-                description: "Browse aircraft rentals, find a CFI, list your aircraft, or connect with flying clubs — without opening another tab.",
-                cta: "Browse Marketplace",
-                ctaHref: "/marketplace",
-                panel: (
-                  <div className="space-y-3">
-                    {[
-                      { icao: "KAUS", model: "Cessna 172S", price: "$185/hr", detail: "VFR / IFR · Wet" },
-                      { icao: "KAUS", model: "Piper PA-28", price: "$145/hr", detail: "VFR · Dry" },
-                      { icao: "KSAT", model: "DA-40 Diamond", price: "$210/hr", detail: "G1000 · IFR" },
-                    ].map((ac) => (
-                      <div key={ac.model} className="rounded-xl border border-[#203249] bg-[#0a111a] p-3 flex items-center justify-between gap-3">
-                        <div>
-                          <div className="font-mono text-sm text-[#F1F5FA]">{ac.model}</div>
-                          <div className="text-xs text-[#7A9BB8]">{ac.icao} · {ac.detail}</div>
-                        </div>
-                        <div className="font-mono text-sm text-[#D9A441] shrink-0">{ac.price}</div>
-                      </div>
-                    ))}
-                  </div>
-                ),
-              },
-              {
-                kicker: "Every Flight Counts",
-                headline: "Your logbook lives here now.",
-                description: "Digital flight records, endorsements, currency tracking, and training progress — all in one pilot profile.",
-                cta: "Open Logbook",
-                ctaHref: "/logbook",
-                panel: (
-                  <div className="space-y-3">
-                    {[
-                      { date: "2026-04-04", route: "KAUS → KSAT", time: "1.4", remarks: "Night XC" },
-                      { date: "2026-04-01", route: "KSAT → KHOU", time: "0.9", remarks: "Currency" },
-                      { date: "2026-03-28", route: "KAUS → KAUS", time: "1.1", remarks: "Pattern work" },
-                    ].map((entry) => (
-                      <div key={entry.date} className="rounded-xl border border-[#203249] bg-[#0a111a] p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="font-mono text-xs text-[#9CB4CC]">{entry.date}</span>
-                          <span className="font-mono text-xs text-[#D9A441]">{entry.time} hrs</span>
-                        </div>
-                        <div className="mt-1 font-mono text-sm text-[#F1F5FA]">{entry.route}</div>
-                        <div className="text-xs text-[#7A9BB8]">{entry.remarks}</div>
-                      </div>
-                    ))}
-                  </div>
-                ),
-              },
-              {
-                kicker: "For Everyone on Board",
-                headline: "Your passengers deserve to know too.",
-                description: "Cabin Brief gives non-pilots a plain-English AI summary of the flight ahead — weather, turbulence, what to expect. One tap to share.",
-                cta: "Try Cabin Brief",
-                ctaHref: "/cabin-brief",
-                goldTint: true,
-                panel: (
-                  <div className="space-y-3">
-                    <div className="rounded-xl border border-[#5b4520] bg-[#120e04] p-4 space-y-2">
-                      <div className="text-[9px] uppercase tracking-[0.2em] text-[#D9A441]">Cabin Brief · KAUS → KSAT</div>
-                      <p className="text-sm leading-6 text-[#E8C57A]">
-                        Expect a smooth 1hr 12min flight. Light winds at altitude, some bumps possible over the Hill Country. Skies will be clear with good visibility.
-                      </p>
-                      <div className="flex gap-2 pt-1">
-                        <span className="rounded-full border border-[#5b4520] bg-[#1e1408] px-2 py-0.5 text-[10px] text-[#D9A441]">VFR</span>
-                        <span className="rounded-full border border-[#5b4520] bg-[#1e1408] px-2 py-0.5 text-[10px] text-[#D9A441]">Light turbulence possible</span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-[#7A9BB8] text-center">Share with passengers before departure</p>
-                  </div>
-                ),
-              },
-            ].map((slide, i) => (
-              <div key={i} className="flex-[0_0_100%] min-w-0">
-                <div className={`min-h-[480px] md:min-h-[78vh] flex items-center border-b border-[#1c3147] bg-[linear-gradient(180deg,#0A0E14,#0d1622)] px-4 py-16 md:px-8 ${slide.goldTint ? "" : ""}`}>
-                  <div className="max-w-6xl mx-auto w-full grid gap-8 md:grid-cols-[3fr_2fr] md:items-center">
-                    <div>
-                      <div className="text-[10px] uppercase tracking-[0.24em] text-[#6D88A6] mb-3">{slide.kicker}</div>
-                      <h2 className="text-3xl md:text-4xl font-semibold text-[#F1F5FA] mb-4 leading-tight">{slide.headline}</h2>
-                      <p className="text-base text-[#9CB4CC] leading-7 max-w-lg mb-6">{slide.description}</p>
-                      {slide.ctaHref ? (
-                        <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
-                          <Link
-                            href={slide.ctaHref}
-                            onClick={() => trackEvent("cta_click", { label: `feature_rail_slide_${i}`, target: slide.ctaHref })}
-                          >
-                            {slide.cta}
-                          </Link>
-                        </Button>
-                      ) : (
-                        <Button
-                          className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]"
-                          onClick={(slide as any).ctaAction}
-                        >
-                          {slide.cta}
-                        </Button>
-                      )}
-                    </div>
-                    <div className="hidden md:block">{slide.panel}</div>
-                  </div>
+                  <div className="mt-4 text-base font-semibold text-[#F1F5FA]">{item.title}</div>
+                  <p className="mt-2 text-sm leading-6 text-[#9CB4CC]">{item.description}</p>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <Card className="border-[#5d4717] bg-[linear-gradient(135deg,rgba(200,146,42,0.12),rgba(13,22,34,0.98))] text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.78)]">
+              <CardContent className="space-y-5 p-6">
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-[#D9A441]">Unified Answer</div>
+                  <h3 className="mt-2 text-2xl font-semibold text-[#F1F5FA]">RSF keeps the flight, the tools, and the follow-through on one system.</h3>
+                </div>
+                <div className="space-y-3">
+                  {[
+                    "One route can flow from web planning into the app instead of being rebuilt from scratch.",
+                    "One account connects filing, logbook, training, rentals, marketplace, and utilities.",
+                    "One ecosystem keeps the pilot workflow connected before, during, and after the flight.",
+                  ].map((item) => (
+                    <div key={item} className="rounded-[0.95rem] border border-[#5d4717] bg-[#1b1408]/80 px-4 py-3 text-sm leading-6 text-[#F3DEAD]">
+                      {item}
+                    </div>
+                  ))}
+                </div>
+                <Button asChild className="w-full bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                  <Link
+                    href="/register"
+                    onClick={() => trackEvent("cta_click", { label: "landing_fragmentation_register", target: "/register" })}
+                  >
+                    Create Free Account
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </div>
+      </section>
 
-        {/* Nav arrows */}
-        <button
-          type="button"
-          onClick={() => emblaApi?.scrollPrev()}
-          className="absolute left-3 top-1/2 -translate-y-1/2 z-10 hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-[#29415e] bg-[#0d1622] text-[#7A9BB8] hover:text-[#D9A441] transition-colors"
-          aria-label="Previous slide"
-        >
-          ‹
-        </button>
-        <button
-          type="button"
-          onClick={() => emblaApi?.scrollNext()}
-          className="absolute right-3 top-1/2 -translate-y-1/2 z-10 hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-[#29415e] bg-[#0d1622] text-[#7A9BB8] hover:text-[#D9A441] transition-colors"
-          aria-label="Next slide"
-        >
-          ›
-        </button>
+      <section className="border-b border-[#1c3147] bg-[linear-gradient(180deg,#091018,#0d1622)]">
+        <div className="container mx-auto px-4 py-14 sm:py-16">
+          <div className="grid gap-8 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:items-start">
+            <div className="space-y-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#7EA8CC]">Serious Differentiator</div>
+              <h2 className="text-3xl font-semibold tracking-[-0.02em] text-[#F1F5FA] sm:text-4xl">
+                Plan on the web. File with the FAA. Follow the flight in the app.
+              </h2>
+              <p className="text-base leading-7 text-[#9CB4CC]">
+                RSF is built around continuity. Start the flight plan on the web, send it through Leidos / 1-800-WX-BRIEF, pick it up with ATC when ready, then continue the flight in the app with the same operational context still intact.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  "Full FMS capability in the mobile app",
+                  "Live traffic and en route weather",
+                  "ADS-B connectivity for compatible setups",
+                  "FAA filing workflow without switching platforms",
+                ].map((item) => (
+                  <div key={item} className="rounded-[1rem] border border-[#203249] bg-[#0f1a28] px-4 py-3 text-sm text-[#D7E1EC]">
+                    {item}
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
+                  <Link
+                    href="/flight-planner"
+                    onClick={() => trackEvent("cta_click", { label: "landing_workflow_open_planner", target: "/flight-planner" })}
+                  >
+                    Start on the Web
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]">
+                  <Link
+                    href="/adsb-receiver-help"
+                    onClick={() => trackEvent("cta_click", { label: "landing_workflow_adsb_help", target: "/adsb-receiver-help" })}
+                  >
+                    See ADS-B Connectivity
+                  </Link>
+                </Button>
+              </div>
+            </div>
 
-        {/* Dot indicators */}
-        <div className="flex items-center justify-center gap-2 py-4 bg-[#0A0E14]">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => emblaApi?.scrollTo(i)}
-              className={`rounded-full transition-all duration-300 ${
-                activeSlide === i ? "bg-[#4DA8A8] w-6 h-1.5" : "bg-[#29415e] w-1.5 h-1.5"
-              }`}
-              aria-label={`Go to slide ${i + 1}`}
-            />
-          ))}
+            <div className="grid gap-4">
+              {workflowSteps.map((step, index) => (
+                <div key={step.title} className="rounded-[1.15rem] border border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] p-5 text-[#E8EDF4] shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)]">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#35516e] bg-[#102236] text-[#D9A441]">
+                      <step.icon className="h-5 w-5" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-[10px] uppercase tracking-[0.22em] text-[#7EA8CC]">Phase {index + 1}</div>
+                      <div className="text-lg font-semibold text-[#F1F5FA]">{step.title}</div>
+                      <div className="text-sm leading-6 text-[#9CB4CC]">{step.description}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
 
-      {/* ============================================================
-          SECTION 4 — SOCIAL PROOF
-      ============================================================ */}
       <div className="py-12 bg-[#0A0E14] border-b border-[#1c3147]">
         <div className="container mx-auto px-4 text-center">
           <p className="text-2xl font-semibold text-[#F1F5FA]">RSF Welcomes CPA Members.</p>
           <p className="text-sm text-[#7A9BB8] mt-2 max-w-md mx-auto">
-            Join our growing family of aviators — from student pilots to ATP.
+            Join our growing family of aviators - from student pilots to ATP.
           </p>
           {cpaOffer ? (
             <div className="mt-8 mx-auto max-w-md rounded-[1.2rem] border border-[#5d4717] bg-[linear-gradient(135deg,rgba(200,146,42,0.18),rgba(15,25,38,0.96))] p-5 text-left">
@@ -2064,58 +1942,6 @@ export default function Landing() {
           ) : null}
         </div>
       </div>
-
-      {/* ============================================================
-          EDITORIAL HERO — desktop only, below the carousel
-      ============================================================ */}
-      <div className="hidden border-b border-[#1c3147] bg-[radial-gradient(ellipse_at_20%_50%,rgba(77,168,168,0.08),transparent_52%),radial-gradient(ellipse_at_80%_20%,rgba(200,146,42,0.10),transparent_40%),linear-gradient(180deg,#0a0f17,#0d1622)] md:block">
-        <div className="container mx-auto px-4 py-16 sm:py-20">
-          <div className="mx-auto max-w-4xl text-center">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#2a425f] bg-[#0d1826] px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-[#7A9BB8]">
-              <Plane className="h-3.5 w-3.5 text-[#D9A441]" />
-              Preflight Platform
-            </div>
-            <h2 className="mt-4 text-4xl font-semibold tracking-[-0.03em] text-[#E8EDF4] sm:text-5xl xl:text-6xl" style={{ fontFamily: "var(--font-display)" }}>
-              Where pilots land<br className="hidden sm:block" /> before they fly.
-            </h2>
-            <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#9CB4CC]">
-              Airport conditions, flight planning, pilot tools, and marketplace access — the whole preflight stack in one aviation-native surface.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-              <Button asChild size="lg" className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
-                <Link
-                  href="/register"
-                  onClick={() => trackEvent("cta_click", { label: "landing_editorial_get_started", target: "/register" })}
-                >
-                  Get Started Free
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="border-[#2a425f] bg-[#0f1825] text-[#D8E2ED] hover:bg-[#122033] hover:text-[#F2F6FB]">
-                <Link
-                  href="/tool-hub"
-                  onClick={() => trackEvent("cta_click", { label: "landing_editorial_explore", target: "/tool-hub" })}
-                >
-                  Explore the Platform
-                </Link>
-              </Button>
-            </div>
-            <div className="mt-12 grid gap-4 sm:grid-cols-3">
-              {[
-                { label: "Live Airport Conditions", detail: "METARs, TAFs, NOTAMs, runway advisories, hazard flags", icon: <AlertTriangle className="h-5 w-5 text-[#4DA8A8] mb-3" /> },
-                { label: "Flight Planning Suite", detail: "Route builder, fuel stops, TFR awareness, alternates", icon: <Plane className="h-5 w-5 text-[#4DA8A8] mb-3" /> },
-                { label: "Marketplace & Tools", detail: "Aircraft rentals, CFI directory, E6B, logbook, crosswind calc", icon: <ShoppingBag className="h-5 w-5 text-[#4DA8A8] mb-3" /> },
-              ].map((item) => (
-                <div key={item.label} className="rounded-[1.1rem] border border-[#203249] bg-[#0d1622] p-5 text-left">
-                  {item.icon}
-                  <div className="text-sm font-semibold text-[#E8EDF4]">{item.label}</div>
-                  <div className="mt-1.5 text-xs leading-5 text-[#7A9BB8]">{item.detail}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {activeMobileTab === "find" && (
         <div className="border-b border-[#203249] bg-[#0a0e14] md:hidden">
           <div className="container mx-auto px-4 py-4">
@@ -2195,88 +2021,40 @@ export default function Landing() {
           <div className={`grid gap-6 ${!hasProPlus ? "xl:grid-cols-[minmax(0,1.12fr)_320px]" : ""}`}>
             <section className={`rounded-[1.45rem] border border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] p-5 text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.78)] sm:p-6 ${activeMobileTab === "find" || activeMobileTab === "plan" || activeMobileTab === "log" ? "" : "hidden md:block"}`}>
               <div className="mb-6 space-y-2">
-                <span className="rsf-kicker border-[#29415e] bg-[#102236] text-[#9FC6EA]">Flight Operations</span>
-                <h2 className="text-2xl font-semibold text-[#F1F5FA] sm:text-3xl">Where do you want to go?</h2>
-                <p className="max-w-2xl text-sm text-[#7A9BB8]">Four paths into the RSF platform — pick the one that matches your next move.</p>
+                <span className="rsf-kicker border-[#29415e] bg-[#102236] text-[#9FC6EA]">The Full RSF Ecosystem</span>
+                <h2 className="text-2xl font-semibold text-[#F1F5FA] sm:text-3xl">Beyond the flight plan, everything else stays connected too.</h2>
+                <p className="max-w-3xl text-sm text-[#7A9BB8]">RSF is not only a planner. It keeps training, logbook, marketplace, rentals, pilot tools, and follow-through tied back to the same aviation workflow.</p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-4 rounded-[1.15rem] border border-[#29415e] bg-[#0d1622] p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] border border-[#3a5b7b] bg-[#0f1a28]">
-                      <ShoppingBag className="h-5 w-5 text-[#D9A441]" />
+                {ecosystemCards.map((card) => (
+                  <div key={card.title} className="flex flex-col gap-4 rounded-[1.15rem] border border-[#29415e] bg-[#0d1622] p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] border border-[#3a5b7b] bg-[#0f1a28]">
+                        <card.icon className="h-5 w-5 text-[#D9A441]" />
+                      </div>
+                      <div className="text-base font-semibold text-[#F1F5FA]">{card.title}</div>
                     </div>
-                    <div className="text-base font-semibold text-[#F1F5FA]">Marketplace</div>
-                  </div>
-                  <p className="text-sm leading-6 text-[#9CB4CC]">Browse aircraft rentals, listings, CFI directory, and aviation services.</p>
-                  <div className="mt-auto flex flex-wrap gap-2 pt-2">
-                    <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
-                      <Link href="/marketplace" onClick={() => trackEvent("cta_click", { label: "path_card_marketplace", target: "/marketplace" })}>
-                        Browse Listings
-                      </Link>
-                    </Button>
-                    <Button asChild variant="outline" className="border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]">
-                      <Link href="/rentals" onClick={() => trackEvent("cta_click", { label: "path_card_rentals", target: "/rentals" })}>
-                        Find Rentals
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-4 rounded-[1.15rem] border border-[#29415e] bg-[#0d1622] p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] border border-[#3a5b7b] bg-[#0f1a28]">
-                      <Calculator className="h-5 w-5 text-[#D9A441]" />
+                    <p className="text-sm leading-6 text-[#9CB4CC]">{card.description}</p>
+                    <div className="mt-auto flex flex-wrap gap-2 pt-2">
+                      {card.actions.map((action, index) => (
+                        <Button
+                          key={action.href}
+                          asChild
+                          variant={index === 0 ? "default" : "outline"}
+                          className={index === 0
+                            ? "bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]"
+                            : "border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]"}
+                        >
+                          <Link href={action.href} onClick={() => trackEvent("cta_click", { label: action.track, target: action.href })}>
+                            {action.label}
+                          </Link>
+                        </Button>
+                      ))}
                     </div>
-                    <div className="text-base font-semibold text-[#F1F5FA]">Pilot Tools</div>
                   </div>
-                  <p className="text-sm leading-6 text-[#9CB4CC]">E6B, crosswind, density altitude, weight &amp; balance, and more.</p>
-                  <div className="mt-auto flex flex-wrap gap-2 pt-2">
-                    <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
-                      <Link href="/tool-hub" onClick={() => trackEvent("cta_click", { label: "path_card_tool_hub", target: "/tool-hub" })}>
-                        Open Tool Hub
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-4 rounded-[1.15rem] border border-[#29415e] bg-[#0d1622] p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] border border-[#3a5b7b] bg-[#0f1a28]">
-                      <Plane className="h-5 w-5 text-[#D9A441]" />
-                    </div>
-                    <div className="text-base font-semibold text-[#F1F5FA]">Plan &amp; Track</div>
-                  </div>
-                  <p className="text-sm leading-6 text-[#9CB4CC]">Flight planner, digital logbook, TFR map, and route builder.</p>
-                  <div className="mt-auto flex flex-wrap gap-2 pt-2">
-                    <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
-                      <Link href="/flight-planner" onClick={() => trackEvent("cta_click", { label: "path_card_flight_planner", target: "/flight-planner" })}>
-                        Flight Planner
-                      </Link>
-                    </Button>
-                    <Button asChild variant="outline" className="border-[#29415e] bg-[#0f1a28] text-[#E8EDF4] hover:bg-[#15304b]">
-                      <Link href="/logbook" onClick={() => trackEvent("cta_click", { label: "path_card_logbook", target: "/logbook" })}>
-                        Logbook
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-4 rounded-[1.15rem] border border-[#5d4717] bg-[linear-gradient(135deg,rgba(200,146,42,0.10),rgba(13,22,34,0.98))] p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem] border border-[#5d4717] bg-[#1e1408]">
-                      <Users className="h-5 w-5 text-[#D9A441]" />
-                    </div>
-                    <div className="text-base font-semibold text-[#F1F5FA]">Cabin Brief</div>
-                  </div>
-                  <p className="text-sm leading-6 text-[#9CB4CC]">Not a pilot? Get a plain-English AI weather brief for your flight.</p>
-                  <div className="mt-auto flex flex-wrap gap-2 pt-2">
-                    <Button asChild className="bg-[#D9A441] text-[#0A0E14] hover:bg-[#efb85b]">
-                      <Link href="/cabin-brief" onClick={() => trackEvent("cta_click", { label: "path_card_cabin_brief", target: "/cabin-brief" })}>
-                        Get Cabin Brief
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
+                ))}
               </div>
             </section>
-
             {!hasProPlus && (
               <aside className="hidden md:block">
                 <Card id="landing-membership-section" className="sticky top-24 overflow-hidden border-[#2b4258] bg-[linear-gradient(180deg,rgba(10,14,20,0.99),rgba(16,25,38,0.96))] text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.78)]">
@@ -2583,5 +2361,7 @@ export default function Landing() {
     </div>
   );
 }
+
+
 
 

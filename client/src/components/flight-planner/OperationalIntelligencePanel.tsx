@@ -68,6 +68,12 @@ const getSeverityBadge = (severity: TfmsAlert["severity"]) => {
 
 const formatConfidence = (value: number) => `${Math.round(value * 100)}%`;
 
+const plannerPanelClass = "rounded-[1.35rem] border-[#5d6f85]/20 bg-transparent text-[#E8EDF4]";
+const plannerSubpanelClass = "rsf-planner-subpanel";
+const plannerMutedClass = "text-[#A9BBCD]";
+const plannerTitleClass = "text-[#F5F8FC]";
+const plannerSelectActionClass = "rsf-metal-button-secondary";
+
 export function OperationalIntelligencePanelView({
   tier,
   status,
@@ -95,25 +101,25 @@ export function OperationalIntelligencePanelView({
   const congestion = status?.congestion;
 
   return (
-    <Card>
+    <Card className={plannerPanelClass}>
       <CardHeader>
-        <CardTitle>Operational Intelligence (TFMS)</CardTitle>
-        <CardDescription>
+        <CardTitle className={plannerTitleClass}>Operational Intelligence (TFMS)</CardTitle>
+        <CardDescription className={plannerMutedClass}>
           Flow, delay, and restriction signals to support preflight awareness.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {tier === "free" && (
           <div className="space-y-3">
-            <div className="rounded-lg border p-4">
-              <div className="text-sm font-semibold">Upgrade to unlock TFMS</div>
-              <ul className="mt-2 list-disc pl-4 text-xs text-muted-foreground space-y-1">
+            <div className={`${plannerSubpanelClass} p-4`}>
+              <div className="text-sm font-semibold text-[#F5F8FC]">Upgrade to unlock TFMS</div>
+              <ul className={`mt-2 list-disc space-y-1 pl-4 text-xs ${plannerMutedClass}`}>
                 {lockedBullets.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
             </div>
-            <Button asChild>
+            <Button asChild className="rsf-metal-button-primary">
               <Link href="/logbook/pro">Upgrade to Pro Core</Link>
             </Button>
           </div>
@@ -122,13 +128,13 @@ export function OperationalIntelligencePanelView({
         {tier !== "free" && (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-semibold">Operational Alerts</div>
-              <Button size="sm" variant="outline" onClick={onRetryStatus}>
+              <div className="text-sm font-semibold text-[#F5F8FC]">Operational Alerts</div>
+              <Button size="sm" variant="outline" className={plannerSelectActionClass} onClick={onRetryStatus}>
                 Refresh
               </Button>
             </div>
             {!hasRoute && (
-              <div className="text-sm text-muted-foreground">
+              <div className={`text-sm ${plannerMutedClass}`}>
                 Enter a departure and destination to load TFMS alerts.
               </div>
             )}
@@ -144,23 +150,23 @@ export function OperationalIntelligencePanelView({
             )}
 
             {!hasError && isLoading && hasRoute && (
-              <div className="text-sm text-muted-foreground">Loading operational alerts...</div>
+              <div className={`text-sm ${plannerMutedClass}`}>Loading operational alerts...</div>
             )}
 
             {!hasError && !isLoading && hasRoute && alerts.length === 0 && (
-              <div className="text-sm text-muted-foreground">No active TFMS advisories detected.</div>
+              <div className={`text-sm ${plannerMutedClass}`}>No active TFMS advisories detected.</div>
             )}
 
             {!hasError && hasRoute && alerts.length > 0 && (
               <div className="space-y-2">
                 {alerts.map((alert) => (
-                  <div key={alert.reference} className="rounded-lg border p-3">
+                  <div key={alert.reference} className={`${plannerSubpanelClass} p-3`}>
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-semibold">{alert.title}</div>
+                      <div className="text-sm font-semibold text-[#F5F8FC]">{alert.title}</div>
                       <Badge variant={getSeverityBadge(alert.severity)}>{alert.severity}</Badge>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1">{alert.details}</div>
-                    <div className="text-xs text-muted-foreground mt-2">
+                    <div className={`mt-1 text-xs ${plannerMutedClass}`}>{alert.details}</div>
+                    <div className={`mt-2 text-xs ${plannerMutedClass}`}>
                       Effective {new Date(alert.effectiveStart).toLocaleString()} - {new Date(alert.effectiveEnd).toLocaleString()}
                     </div>
                   </div>
@@ -170,18 +176,18 @@ export function OperationalIntelligencePanelView({
 
             {hasRoute && (
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">Congestion: {congestion?.summary || "unknown"}</Badge>
+                <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141b24] text-[#d7e1ef]">Congestion: {congestion?.summary || "unknown"}</Badge>
                 {congestion?.confidence !== undefined && (
-                  <span className="text-xs text-muted-foreground">Confidence {formatConfidence(congestion.confidence)}</span>
+                  <span className={`text-xs ${plannerMutedClass}`}>Confidence {formatConfidence(congestion.confidence)}</span>
                 )}
               </div>
             )}
 
             {tier === "pro_core" && (
-              <div className="rounded-lg border p-3 text-xs text-muted-foreground">
+              <div className={`${plannerSubpanelClass} p-3 text-xs ${plannerMutedClass}`}>
                 Congestion overlay and risk score are available in Pro+.
                 <div className="mt-2">
-                  <Button asChild size="sm" variant="outline">
+                  <Button asChild size="sm" variant="outline" className={plannerSelectActionClass}>
                     <Link href="/logbook/pro">Upgrade to Pro+</Link>
                   </Button>
                 </div>
@@ -190,31 +196,31 @@ export function OperationalIntelligencePanelView({
 
             {tier === "pro_plus" && (
               <div className="space-y-3">
-                <div className="rounded-lg border p-3 flex flex-wrap items-center justify-between gap-2">
+                <div className={`${plannerSubpanelClass} flex flex-wrap items-center justify-between gap-2 p-3`}>
                   <div>
-                    <div className="text-sm font-semibold">Congestion Overlay</div>
-                    <div className="text-xs text-muted-foreground">Map layer driven by TFMS corridor hints.</div>
+                    <div className="text-sm font-semibold text-[#F5F8FC]">Congestion Overlay</div>
+                    <div className={`text-xs ${plannerMutedClass}`}>Map layer driven by TFMS corridor hints.</div>
                   </div>
                   <Switch checked={overlayEnabled} onCheckedChange={onToggleOverlay} />
                 </div>
                 {overlayEnabled && mapStyle !== "globe" && (
-                  <div className="text-xs text-muted-foreground">
+                  <div className={`text-xs ${plannerMutedClass}`}>
                     Overlay displays in the 3D globe view.
                   </div>
                 )}
 
-                <div className="rounded-lg border p-3 space-y-2">
+                <div className={`${plannerSubpanelClass} space-y-2 p-3`}>
                   <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">Departure Risk Score</div>
-                    <Badge variant="outline">{risk?.rating || "unknown"}</Badge>
+                    <div className="text-sm font-semibold text-[#F5F8FC]">Departure Risk Score</div>
+                    <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141b24] text-[#d7e1ef]">{risk?.rating || "unknown"}</Badge>
                   </div>
                   {!hasRoute && (
-                    <div className="text-xs text-muted-foreground">
+                    <div className={`text-xs ${plannerMutedClass}`}>
                       Enter a departure and destination to load risk scoring.
                     </div>
                   )}
                   <Progress value={risk?.riskScore ?? 0} />
-                  <div className="text-xs text-muted-foreground">
+                  <div className={`text-xs ${plannerMutedClass}`}>
                     Score {risk?.riskScore ?? 0} / 100
                   </div>
                   <Accordion type="single" collapsible className="w-full">
@@ -224,8 +230,8 @@ export function OperationalIntelligencePanelView({
                         <div className="space-y-2 text-xs">
                           {(risk?.factors || []).map((factor) => (
                             <div key={factor.key} className="flex items-start justify-between gap-2">
-                              <div className="font-semibold">{factor.key}</div>
-                              <div className="text-muted-foreground text-right">{factor.value}</div>
+                              <div className="font-semibold text-[#F5F8FC]">{factor.key}</div>
+                              <div className={`text-right ${plannerMutedClass}`}>{factor.value}</div>
                             </div>
                           ))}
                         </div>
@@ -238,7 +244,7 @@ export function OperationalIntelligencePanelView({
           </>
         )}
 
-        <div className="text-xs text-muted-foreground">
+        <div className={`text-xs ${plannerMutedClass}`}>
           Decision-support only; verify with official sources.
         </div>
       </CardContent>

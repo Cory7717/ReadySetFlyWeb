@@ -1074,14 +1074,14 @@ export default function CesiumGlobe({
 
   return (
     <div className={heightClassName}>
-      <div className="relative h-full w-full rounded-xl overflow-hidden">
+      <div className="relative h-full w-full overflow-hidden rounded-[1.2rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))]">
         {tokenWarning && (
-          <div className="absolute left-3 top-3 z-[1100] rounded-md border bg-white/90 px-3 py-2 text-xs text-slate-700 shadow">
+          <div className="absolute left-3 top-3 z-[1100] rounded-[0.9rem] border border-[#5d6f85]/30 bg-[linear-gradient(180deg,rgba(22,28,36,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-xs text-[#D7E3F2] shadow-[0_16px_28px_-24px_rgba(0,0,0,0.88)]">
             {tokenWarning}
           </div>
         )}
-        <div className="absolute right-3 top-3 z-[1100] space-y-2 rounded-md border bg-white/90 px-3 py-2 text-xs text-slate-700 shadow">
-          <div className="font-semibold">Globe overlays</div>
+        <div className="absolute right-3 top-3 z-[1100] space-y-2 rounded-[0.9rem] border border-[#5d6f85]/30 bg-[linear-gradient(180deg,rgba(22,28,36,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-xs text-[#D7E3F2] shadow-[0_16px_28px_-24px_rgba(0,0,0,0.88)]">
+          <div className="font-semibold text-[#F5F8FC]">Globe overlays</div>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={showClouds} onChange={(e) => setShowClouds(e.target.checked)} />
             Clouds
@@ -1099,10 +1099,10 @@ export default function CesiumGlobe({
             Atmosphere
           </label>
           {!hasIonToken && (
-            <div className="text-[11px] text-slate-500">Terrain needs Ion token.</div>
+            <div className="text-[11px] text-[#A9BBCD]">Terrain needs Ion token.</div>
           )}
           {cameraMode === "follow-ownship" && (
-            <div className="text-[11px] text-slate-500">Camera following ownship corridor.</div>
+            <div className="text-[11px] text-[#A9BBCD]">Camera following ownship corridor.</div>
           )}
         </div>
         <div ref={containerRef} className="h-full w-full" />

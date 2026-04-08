@@ -47,6 +47,7 @@ const defaultIcon = L.icon({
 
 const terrainRiskStyles = RSF_TERRAIN_RISK_STYLES;
 const terrainSurfaceStyles = RSF_TERRAIN_SURFACE_STYLES;
+const plannerTooltipClassName = "rounded-[0.85rem] border border-[#5d6f85]/22 bg-[linear-gradient(180deg,rgba(23,28,36,0.98),rgba(11,15,21,0.98))] px-2.5 py-1.5 text-xs font-semibold text-[#F5F8FC] shadow-[0_14px_30px_-22px_rgba(0,0,0,0.92)]";
 
 const buildTerrainHotSpotIcon = (risk: PlannerTerrainHotSpot["risk"], rank: number) => {
   const tone = risk === "warning" ? "#dc2626" : risk === "caution" ? "#f59e0b" : "#16a34a";
@@ -491,21 +492,21 @@ export default function PlannerMap({
     <div
       className={
         isFullscreen
-          ? "fixed inset-0 z-[1000] bg-black/80 p-3"
+          ? "fixed inset-0 z-[1000] bg-[rgba(7,9,12,0.9)] p-3"
           : "space-y-2"
       }
     >
       <div
         className={
           isFullscreen
-            ? "relative h-full w-full rounded-xl overflow-hidden"
-            : `relative ${heightClassName}`
+            ? "relative h-full w-full overflow-hidden rounded-[1.2rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))]"
+            : `relative overflow-hidden rounded-[1.2rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] ${heightClassName}`
         }
       >
         <button
           type="button"
           onClick={() => setIsFullscreen((prev) => !prev)}
-          className="absolute right-3 top-3 z-[1100] rounded-md border bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow hover:bg-white"
+          className="absolute right-3 top-3 z-[1100] rounded-[0.9rem] border border-[#5d6f85]/30 bg-[linear-gradient(180deg,rgba(22,28,36,0.98),rgba(13,17,22,0.98))] px-3 py-1.5 text-xs font-semibold text-[#E8EDF4] shadow-[0_16px_28px_-24px_rgba(0,0,0,0.88)] transition-all duration-200 hover:-translate-y-px hover:border-[#6f86a7]/35 hover:bg-[linear-gradient(180deg,rgba(28,35,46,0.98),rgba(16,21,28,0.98))]"
         >
           {isFullscreen ? "Close full screen" : "Full screen"}
         </button>
@@ -551,7 +552,7 @@ export default function PlannerMap({
               <Tooltip
                 direction="top"
                 offset={[0, -12]}
-                className="rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow"
+                className={plannerTooltipClassName}
                 opacity={1}
               >
                 {stationLabel}: {Math.round(point.windDir)} deg / {Math.round(point.windSpeed)} kt{tempLabel}
@@ -574,7 +575,7 @@ export default function PlannerMap({
                   <Tooltip
                     direction="top"
                     offset={[0, -12]}
-                    className="rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow"
+                    className={plannerTooltipClassName}
                     opacity={1}
                   >
                     {segment.risk === "warning"
@@ -603,7 +604,7 @@ export default function PlannerMap({
               permanent={airportLabelMode !== "markers"}
               direction="top"
               offset={[0, -18]}
-              className="rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow"
+              className={plannerTooltipClassName}
               opacity={1}
             >
               {point.label ? `${point.icao} • ${point.label}` : point.icao}
@@ -619,7 +620,7 @@ export default function PlannerMap({
             <Tooltip
               direction="top"
               offset={[0, -10]}
-              className="rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow"
+              className={plannerTooltipClassName}
               opacity={1}
             >
               Terrain hot spot {hotSpot.rank}
@@ -635,11 +636,11 @@ export default function PlannerMap({
             <Tooltip
               direction="top"
               offset={[0, -10]}
-              className="rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow"
+              className={plannerTooltipClassName}
               opacity={1}
             >
               {marker.label}
-              <div className="text-[11px] font-normal text-slate-700">{marker.detail}</div>
+              <div className="text-[11px] font-normal text-[#A9BBCD]">{marker.detail}</div>
             </Tooltip>
           </Marker>
         ))}
@@ -649,7 +650,7 @@ export default function PlannerMap({
         </MapContainer>
       </div>
       {showWinds && !isFullscreen && (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-[#A9BBCD]">
           NOAA AWC winds aloft at {windsAloftMeta?.altitudeFt ?? windsAltitude} ft.
           {windsAloftMeta?.validTime ? ` Valid ${windsAloftMeta.validTime}.` : ""}
           {windsAloftMeta?.warnings?.length ? ` ${windsAloftMeta.warnings.join(" ")}` : ""}
@@ -657,10 +658,10 @@ export default function PlannerMap({
         </div>
       )}
       {showWinds && !isFullscreen && nearestWinds.length > 0 && (
-        <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+        <div className="grid gap-2 text-xs text-[#A9BBCD] md:grid-cols-2">
           {nearestWinds.map(({ point, distanceNm }) => (
-            <div key={`${point.stationId}-${point.lat}`} className="flex items-center justify-between rounded-md border px-2 py-1">
-              <span className="font-semibold text-slate-700">
+            <div key={`${point.stationId}-${point.lat}`} className="flex items-center justify-between rounded-[0.9rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-2 py-1">
+              <span className="font-semibold text-[#F5F8FC]">
                 {point.icao || point.stationId}
               </span>
               <span>

@@ -573,22 +573,22 @@ export default function MapLibrePlannerMap({
   const showWeatherAdvisory = mapStyle === "radar" || mapStyle === "clouds";
 
   return (
-    <div className={isFullscreen ? "fixed inset-0 z-[1000] bg-black/80 p-3" : "space-y-2"}>
-      <div className={isFullscreen ? "relative h-full w-full overflow-hidden rounded-xl" : `relative ${heightClassName}`}>
+    <div className={isFullscreen ? "fixed inset-0 z-[1000] bg-[rgba(7,9,12,0.9)] p-3" : "space-y-2"}>
+      <div className={isFullscreen ? "relative h-full w-full overflow-hidden rounded-[1.2rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))]" : `relative overflow-hidden rounded-[1.2rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))] ${heightClassName}`}>
         <button
           type="button"
           onClick={() => setIsFullscreen((prev) => !prev)}
-          className="absolute right-3 top-3 z-[1100] rounded-md border bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow hover:bg-white"
+          className="absolute right-3 top-3 z-[1100] rounded-[0.9rem] border border-[#5d6f85]/30 bg-[linear-gradient(180deg,rgba(22,28,36,0.98),rgba(13,17,22,0.98))] px-3 py-1.5 text-xs font-semibold text-[#E8EDF4] shadow-[0_16px_28px_-24px_rgba(0,0,0,0.88)] transition-all duration-200 hover:-translate-y-px hover:border-[#6f86a7]/35 hover:bg-[linear-gradient(180deg,rgba(28,35,46,0.98),rgba(16,21,28,0.98))]"
         >
           {isFullscreen ? "Close full screen" : "Full screen"}
         </button>
         <div ref={containerRef} className="h-full w-full rounded-xl" />
-        <div className="absolute left-3 top-3 z-[1000] rounded-full border border-[#1E2D42] bg-[#091018]/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">
+        <div className="absolute left-3 top-3 z-[1000] rounded-full border border-[#5d6f85]/25 bg-[rgba(9,13,18,0.9)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#A9BBCD]">
           {engineLabel}
         </div>
       </div>
       {showWeatherAdvisory ? (
-        <div className={`text-xs ${RSF_COCKPIT_MUTED_TEXT_CLASS}`}>
+        <div className={`text-xs ${RSF_COCKPIT_MUTED_TEXT_CLASS} text-[#A9BBCD]`}>
           Weather layers remain advisory-only. This MapLibre path is active for the planner preview while RSF completes the full engine migration.
         </div>
       ) : null}

@@ -1072,11 +1072,11 @@ const checklistDefaults = {
 
 function flightCategoryClassName(cat: string): string {
   switch (cat) {
-    case "VFR": return "bg-green-100 text-green-800 border-green-300";
-    case "MVFR": return "bg-blue-100 text-blue-800 border-blue-300";
-    case "IFR": return "bg-red-100 text-red-800 border-red-300";
-    case "LIFR": return "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300";
-    default: return "bg-slate-100 text-slate-600 border-slate-300";
+    case "VFR": return "bg-[#10211d] text-[#cfe7df] border-[#3a7d6e]/40";
+    case "MVFR": return "bg-[#122030] text-[#d7e6f6] border-[#45658b]/40";
+    case "IFR": return "bg-[#23131a] text-[#f0d4df] border-[#864c63]/38";
+    case "LIFR": return "bg-[#1f162c] text-[#eadcf8] border-[#6f5a99]/38";
+    default: return "bg-[#121820] text-[#d9e4f0] border-[#5d6f85]/26";
   }
 }
 
@@ -1101,11 +1101,11 @@ function ScratchField({
   return (
     <div className="space-y-1">
       <div className="flex items-baseline gap-2">
-        <label htmlFor={fieldId} className="text-sm font-semibold text-white">
+        <label htmlFor={fieldId} className="text-sm font-semibold text-[#F5F8FC]">
           {label}
         </label>
         {hint && (
-          <span className="text-xs text-zinc-500">{hint}</span>
+          <span className="text-xs text-[#8fa6c0]">{hint}</span>
         )}
       </div>
       {multiline ? (
@@ -1117,7 +1117,7 @@ function ScratchField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           rows={tall ? 4 : 2}
-          className="w-full rounded-md border border-zinc-600 bg-zinc-900 px-3 py-2 text-sm font-mono text-white placeholder:text-zinc-600 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 resize-none"
+          className="w-full rounded-[0.95rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-sm font-mono text-[#F5F8FC] placeholder:text-[#6d829c] focus:border-[#6ea2ff]/55 focus:outline-none focus:ring-2 focus:ring-[#6ea2ff]/20 resize-none"
           spellCheck={false}
         />
       ) : (
@@ -1129,7 +1129,7 @@ function ScratchField({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-md border border-zinc-600 bg-zinc-900 px-3 py-2 text-sm font-mono text-white placeholder:text-zinc-600 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+          className="w-full rounded-[0.95rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-sm font-mono text-[#F5F8FC] placeholder:text-[#6d829c] focus:border-[#6ea2ff]/55 focus:outline-none focus:ring-2 focus:ring-[#6ea2ff]/20"
           spellCheck={false}
         />
       )}
@@ -1284,15 +1284,15 @@ function ScratchPadInkBoard({ strokes, layout, onChange }: ScratchPadInkBoardPro
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#A9BBCD]">
         <div>Finger, mouse, or stylus. Write the clearance first, organize later.</div>
         <div className="font-mono">{strokes.length} stroke{strokes.length === 1 ? "" : "s"} saved</div>
       </div>
       <div
         ref={wrapperRef}
-        className="relative h-[60vh] min-h-[360px] overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+        className="relative h-[60vh] min-h-[360px] overflow-hidden rounded-[1.2rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_24px_48px_-36px_rgba(0,0,0,0.88)]"
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between border-b border-zinc-800 px-3 py-2 text-[10px] uppercase tracking-[0.24em] text-zinc-500">
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between border-b border-[#5d6f85]/20 px-3 py-2 text-[10px] uppercase tracking-[0.24em] text-[#8fa6c0]">
           <span>Ink Pad</span>
           <span>Auto-saved</span>
         </div>
@@ -3136,12 +3136,12 @@ export default function FlightPlanner() {
     worstTerrainSegment,
   ]);
   const terrainToneClass = terrainCueCounts.warning > 0
-    ? "text-red-700"
+    ? "text-[#f09aa8]"
     : terrainCueCounts.caution > 0
-      ? "text-amber-700"
+      ? "text-[#e2c06d]"
       : terrainCueSegments.length > 0
-        ? "text-emerald-700"
-        : "text-slate-700";
+        ? "text-[#8fd0bf]"
+        : "text-[#D9E4F0]";
   const terrainProfileChart = useMemo(() => {
     const samples = terrainProfileQuery.data?.samples ?? [];
     const validSamples = samples
@@ -3911,7 +3911,7 @@ export default function FlightPlanner() {
         ? "IFR/LIFR risk"
         : "VFR/MVFR";
   const weatherStatusTone = weatherData.length === 0
-    ? "text-slate-300"
+    ? "text-[#A9BBCD]"
     : hasThunderRisk
       ? "text-amber-300"
       : hasIfrWeather
@@ -3923,7 +3923,7 @@ export default function FlightPlanner() {
       ? `${tfrConflicts.length} conflict${tfrConflicts.length === 1 ? "" : "s"}`
       : "No conflicts";
   const tfrStatusTone = !tfrRouteQuery.isFetched
-    ? "text-slate-300"
+    ? "text-[#A9BBCD]"
     : tfrConflicts.length > 0
       ? "text-amber-300"
       : "text-emerald-300";
@@ -3965,7 +3965,7 @@ export default function FlightPlanner() {
     ? new Date(latestBriefingUpdatedAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : "--";
   const briefingUpdatedTone = latestBriefingUpdatedAtMs === 0
-    ? "text-slate-300"
+    ? "text-[#A9BBCD]"
     : isBriefingStale
       ? "text-amber-300"
       : "text-emerald-300";
@@ -5366,6 +5366,19 @@ export default function FlightPlanner() {
     }));
   }, [selectedProfile, editingPlan]);
 
+  const plannerPanelClass = "rounded-[1.35rem] border-[#5d6f85]/20 bg-transparent text-[#E8EDF4]";
+  const plannerCardTitleClass = "text-[#F5F8FC]";
+  const plannerCardDescriptionClass = "text-[#A9BBCD]";
+  const plannerMetricClass = "rsf-planner-metric px-3 py-2.5";
+  const plannerSubpanelClass = "rsf-planner-subpanel";
+  const plannerSubpanelMutedClass = "rounded-[1rem] border border-[#5d6f85]/16 bg-[#0f141a]/92 p-3 text-[#A9BBCD] shadow-[0_16px_36px_-28px_rgba(0,0,0,0.88)]";
+  const plannerSubpanelInfoClass = "rounded-[1rem] border border-[#2e4c74]/34 bg-[linear-gradient(180deg,rgba(18,25,36,0.98),rgba(11,16,23,0.98))] p-3 text-[#C7D7EA] shadow-[0_18px_38px_-28px_rgba(0,0,0,0.9)]";
+  const plannerSubpanelSuccessClass = "rounded-[1rem] border border-[#2f7a6a]/36 bg-[linear-gradient(180deg,rgba(15,31,28,0.98),rgba(10,18,17,0.98))] p-3 text-[#CFE7DF] shadow-[0_18px_38px_-28px_rgba(0,0,0,0.9)]";
+  const plannerSubpanelWarningClass = "rounded-[1rem] border border-[#7f6327]/38 bg-[linear-gradient(180deg,rgba(36,27,12,0.98),rgba(19,14,7,0.98))] p-3 text-[#F2DCA4] shadow-[0_18px_38px_-28px_rgba(0,0,0,0.9)]";
+  const plannerSubpanelDangerClass = "rounded-[1rem] border border-[#7a3440]/38 bg-[linear-gradient(180deg,rgba(34,15,19,0.98),rgba(17,10,12,0.98))] p-3 text-[#F4CDD3] shadow-[0_18px_38px_-28px_rgba(0,0,0,0.9)]";
+  const plannerSelectContentClass = "border-[#5d6f85]/30 bg-[#11161d] text-[#E8EDF4] shadow-[0_22px_44px_-30px_rgba(0,0,0,0.9)]";
+  const plannerInsetActionClass = "border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4] hover:bg-[#1a2430]";
+
   return (
     <>
     <PageShell
@@ -5380,7 +5393,7 @@ export default function FlightPlanner() {
             <Button
               variant="outline"
               size="sm"
-              className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10"
+              className="rsf-metal-button-secondary"
               onClick={openScratchPad}
             >
               ✏ Scratch Pad
@@ -5388,10 +5401,10 @@ export default function FlightPlanner() {
           </>
         )
       }
-      canopyClassName="hidden"
+      canopyClassName="rsf-metal-hero border-b border-white/10"
       contentClassName={cn(
-        "max-w-[1400px] space-y-6",
-        isMobile && "space-y-4 rounded-[28px] bg-[#0A0E14] p-3 text-slate-100 shadow-[0_20px_80px_rgba(10,14,20,0.35)]"
+        "rsf-planner-theme max-w-[1400px] space-y-6 p-4 sm:p-6",
+        isMobile && "space-y-4 p-3 text-[#E8EDF4]"
       )}
     >
       <UpgradePromptDialog
@@ -5418,28 +5431,28 @@ export default function FlightPlanner() {
         />
       )}
       {!pressDemo.enabled && (
-      <Card className="border-[#29415e] bg-[#0d1622] text-[#E8EDF4] shadow-sm">
+      <Card className={plannerPanelClass}>
         <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="bg-[#29415e] text-[#9CB4CC] hover:bg-[#29415e]">IFR Scratch Pad</Badge>
-              <Badge variant="outline">CRAFT</Badge>
+              <Badge className="border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff] hover:bg-[#141d29]">IFR Scratch Pad</Badge>
+              <Badge variant="outline" className="border-[#5d6f85]/30 bg-[#141b24] text-[#d7e1ef]">CRAFT</Badge>
               {scratchPadHasContent && (
-                <Badge variant="secondary">Notes saved</Badge>
+                <Badge variant="secondary" className="border-0 bg-[#21324a] text-[#e3ecfb]">Notes saved</Badge>
               )}
             </div>
             <div>
-              <div className="text-sm font-semibold">Write IFR clearance notes with your finger, stylus, or keyboard.</div>
-              <div className="text-sm text-[#7A9BB8]">
+              <div className="text-sm font-semibold text-[#F5F8FC]">Write IFR clearance notes with your finger, stylus, or keyboard.</div>
+              <div className="text-sm text-[#A9BBCD]">
                 Ink Pad is fastest for live readback. CRAFT fields stay available when you want the structured version, and both auto-save on this device.
               </div>
             </div>
           </div>
           <div className="flex flex-col gap-2 sm:min-w-[220px]">
-            <Button onClick={openScratchPad}>
+            <Button onClick={openScratchPad} className="rsf-metal-button-primary">
               {scratchPadHasContent ? "Open scratch pad" : "Start scratch pad"}
             </Button>
-            <div className="text-xs text-[#7A9BB8]">
+            <div className="text-xs text-[#A9BBCD]">
               Opens full-screen. Press <span className="font-mono">Esc</span> to close.
             </div>
           </div>
@@ -5449,22 +5462,22 @@ export default function FlightPlanner() {
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_540px]">
       <div className="min-w-0 space-y-4">
       {!pressDemo.enabled && (
-      <Card className="bg-[#0d1622] border border-[#203249] rounded-xl text-[#E8EDF4] shadow-sm">
+      <Card className={plannerPanelClass}>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Recent Flights</CardTitle>
-          <CardDescription className="text-[#7A9BB8]">Open a saved route without leaving the planner.</CardDescription>
+          <CardTitle className={cn("text-base", plannerCardTitleClass)}>Recent Flights</CardTitle>
+          <CardDescription className={plannerCardDescriptionClass}>Open a saved route without leaving the planner.</CardDescription>
         </CardHeader>
         <CardContent>
           {plansLoading ? (
-            <div className="text-sm text-[#7A9BB8]">Loading plans...</div>
+            <div className="text-sm text-[#A9BBCD]">Loading plans...</div>
           ) : recentPlans.length === 0 ? (
-            <div className="text-sm text-[#7A9BB8]">No saved plans yet.</div>
+            <div className="text-sm text-[#A9BBCD]">No saved plans yet.</div>
           ) : (
             <div className="flex gap-2 overflow-x-auto pb-1">
               <Button
                 type="button"
                 size="sm"
-                className="min-w-[170px]"
+                className="min-w-[170px] rsf-metal-button-primary"
                 onClick={handleClearForm}
               >
                 Clear form
@@ -5478,17 +5491,17 @@ export default function FlightPlanner() {
                     setDraftPlanId(plan.id);
                     setEditingPlan(plan);
                   }}
-                  className="min-w-[230px] rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2 text-left transition-colors hover:bg-[#1a2535]"
+                  className="min-w-[230px] rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(22,27,35,0.98),rgba(14,18,24,0.98))] px-3 py-2 text-left transition-all duration-200 hover:-translate-y-px hover:border-[#6f86a7]/35 hover:bg-[linear-gradient(180deg,rgba(28,35,46,0.98),rgba(16,21,28,0.98))]"
                 >
-                  <div className="truncate text-sm font-semibold text-[#E8EDF4]">{plan.title || `${plan.departure} to ${plan.destination}`}</div>
-                  <div className="text-xs text-[#E8EDF4]">{plan.departure} to {plan.destination}</div>
+                  <div className="truncate text-sm font-semibold text-[#F3F7FC]">{plan.title || `${plan.departure} to ${plan.destination}`}</div>
+                  <div className="text-xs text-[#B6C7D9]">{plan.departure} to {plan.destination}</div>
                 </button>
               ))}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="min-w-[170px] border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]"
+                className={cn("min-w-[170px]", plannerInsetActionClass)}
                 onClick={() => setActiveTab("file")}
               >
                 Open saved plans
@@ -5498,37 +5511,37 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
       )}
-      <Card className="bg-[#0d1622] border border-[#203249] rounded-xl text-[#E8EDF4] shadow-sm">
+      <Card className={plannerPanelClass}>
         <CardContent className="pt-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 2xl:grid-cols-7">
-            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Route</div>
-              <div className="truncate text-base font-semibold text-[#E8EDF4]">
+            <div className={plannerMetricClass}>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#8fa6c0]">Route</div>
+              <div className="truncate text-base font-semibold text-[#F5F8FC]">
                 {(form.departure || "---").toUpperCase()} to {(form.destination || "---").toUpperCase()}
               </div>
             </div>
-            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Legs</div>
-              <div className="text-base font-semibold text-[#E8EDF4]">{legNavRows.length || 0}</div>
+            <div className={plannerMetricClass}>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#8fa6c0]">Legs</div>
+              <div className="text-base font-semibold text-[#F5F8FC]">{legNavRows.length || 0}</div>
             </div>
-            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Distance</div>
-              <div className="text-base font-semibold text-[#E8EDF4]">{totalDistance ? `${totalDistance.toFixed(1)} NM` : "--"}</div>
+            <div className={plannerMetricClass}>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#8fa6c0]">Distance</div>
+              <div className="text-base font-semibold text-[#F5F8FC]">{totalDistance ? `${totalDistance.toFixed(1)} NM` : "--"}</div>
             </div>
-            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Fuel</div>
-              <div className="text-base font-semibold text-[#E8EDF4]">{totalFuel ? `${totalFuel.toFixed(1)} gal` : "--"}</div>
+            <div className={plannerMetricClass}>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#8fa6c0]">Fuel</div>
+              <div className="text-base font-semibold text-[#F5F8FC]">{totalFuel ? `${totalFuel.toFixed(1)} gal` : "--"}</div>
             </div>
-            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Weather</div>
+            <div className={plannerMetricClass}>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#8fa6c0]">Weather</div>
               <div className={cn("text-base font-semibold", weatherStatusTone)}>{weatherStatusText}</div>
             </div>
-            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Checklist</div>
-              <div className="text-base font-semibold text-[#E8EDF4]">{checklistCompletionCount}/6 complete</div>
+            <div className={plannerMetricClass}>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#8fa6c0]">Checklist</div>
+              <div className="text-base font-semibold text-[#F5F8FC]">{checklistCompletionCount}/6 complete</div>
             </div>
-            <div className="rounded-md border border-[#203249] bg-[#0d1622] px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-[#7A9BB8]">Briefing Sync</div>
+            <div className={plannerMetricClass}>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#8fa6c0]">Briefing Sync</div>
               <div className={cn("text-base font-semibold", briefingUpdatedTone)}>
                 {briefingUpdatedLabel}
                 {isBriefingStale ? " (stale)" : latestBriefingUpdatedAtMs > 0 ? " (fresh)" : ""}
@@ -5537,9 +5550,9 @@ export default function FlightPlanner() {
           </div>
         </CardContent>
       </Card>
-      <Alert className="border-[#D9A441] bg-[#271d0b] text-[#D9A441]">
+      <Alert className="border-[#6b5828] bg-[linear-gradient(180deg,rgba(36,28,14,0.96),rgba(24,18,10,0.98))] text-[#e7c27b]">
         <AlertDescription className="space-y-1 text-sm">
-          <div className="font-semibold">Flight Planner testing notice</div>
+          <div className="font-semibold text-[#F5E6BF]">Flight Planner testing notice</div>
           <div>
             RSF flight planning and filing workflow is still undergoing testing. Treat the planner as a beta feature and do not rely on RSF for operational live filing yet.
           </div>
@@ -5557,15 +5570,15 @@ export default function FlightPlanner() {
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
         <TabsList
           className={cn(
-            "grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-[#203249] bg-[#0d1622] p-1 md:grid-cols-5",
-            isMobile && "border-[#1E2D42] bg-[#111820] p-1.5"
+            "grid h-auto w-full grid-cols-2 gap-2 rounded-[1.2rem] border p-1.5 md:grid-cols-5",
+            isMobile && "p-1.5"
           )}
         >
-          <TabsTrigger value="route" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-[#7A9BB8]", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Route</TabsTrigger>
-          <TabsTrigger value="weather" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-[#7A9BB8]", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Weather</TabsTrigger>
-          <TabsTrigger value="navlog" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-[#7A9BB8]", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Nav Log</TabsTrigger>
-          <TabsTrigger value="analysis" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-[#7A9BB8]", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Analysis</TabsTrigger>
-          <TabsTrigger value="file" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-[#7A9BB8]", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>File &amp; Save</TabsTrigger>
+          <TabsTrigger value="route" className="h-10 rounded-[0.95rem]">Route</TabsTrigger>
+          <TabsTrigger value="weather" className="h-10 rounded-[0.95rem]">Weather</TabsTrigger>
+          <TabsTrigger value="navlog" className="h-10 rounded-[0.95rem]">Nav Log</TabsTrigger>
+          <TabsTrigger value="analysis" className="h-10 rounded-[0.95rem]">Analysis</TabsTrigger>
+          <TabsTrigger value="file" className="h-10 rounded-[0.95rem]">File &amp; Save</TabsTrigger>
         </TabsList>
         <TabsContent value="route" className="space-y-6">
       <PressDemoSpotlight
@@ -5574,30 +5587,30 @@ export default function FlightPlanner() {
         title={pressDemo.getStep("route-setup")?.title ?? "Route Setup"}
         body={pressDemo.getStep("route-setup")?.body ?? ""}
       >
-      <Card>
+      <Card className={plannerPanelClass}>
         <CardHeader>
-          <CardTitle>Quick Planning References</CardTitle>
-          <CardDescription>Open and hide each reference as needed without leaving the planner workflow.</CardDescription>
+          <CardTitle className={plannerCardTitleClass}>Quick Planning References</CardTitle>
+          <CardDescription className={plannerCardDescriptionClass}>Open and hide each reference as needed without leaving the planner workflow.</CardDescription>
         </CardHeader>
         <CardContent>
           <Accordion type="multiple" className="w-full space-y-2">
-            <AccordionItem value="airport-conditions" className="rounded-lg border px-3">
+            <AccordionItem value="airport-conditions" className="rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-4">
               <AccordionTrigger className="text-sm">Airport conditions</AccordionTrigger>
               <AccordionContent className="space-y-3 pb-3 text-sm text-muted-foreground">
                 <p>Jump to the route weather summary already on this page.</p>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => jumpToSection("route-weather-summary", "planner_jump_weather_summary", "weather")}>
+                  <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToSection("route-weather-summary", "planner_jump_weather_summary", "weather")}>
                     Go to weather summary
                   </Button>
                 </div>
               </AccordionContent>
             </AccordionItem>
-            <AccordionItem value="airspace-review" className="rounded-lg border px-3">
+            <AccordionItem value="airspace-review" className="rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-4">
               <AccordionTrigger className="text-sm">Airspace review</AccordionTrigger>
               <AccordionContent className="space-y-3 pb-3 text-sm text-muted-foreground">
                 <p>Review route conflicts in this page, or open the full TFR map in a new tab.</p>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => jumpToSection("route-analysis", "planner_jump_route_analysis", "analysis")}>
+                  <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToSection("route-analysis", "planner_jump_route_analysis", "analysis")}>
                     Go to route analysis
                   </Button>
                   <Button type="button" size="sm" asChild>
@@ -5606,7 +5619,7 @@ export default function FlightPlanner() {
                 </div>
               </AccordionContent>
             </AccordionItem>
-            <AccordionItem value="approach-plates" className="rounded-lg border px-3">
+            <AccordionItem value="approach-plates" className="rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-4">
               <AccordionTrigger className="text-sm">Approach plates</AccordionTrigger>
               <AccordionContent className="space-y-3 pb-3 text-sm text-muted-foreground">
                 <p>Open RSF approach plates in a new tab while keeping the planner route loaded here.</p>
@@ -5621,10 +5634,10 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={plannerPanelClass}>
         <CardHeader>
-          <CardTitle>Route Setup</CardTitle>
-          <CardDescription>Enter airports, pick your aircraft, and add waypoints or stops before you plot the trip.</CardDescription>
+          <CardTitle className={plannerCardTitleClass}>Route Setup</CardTitle>
+          <CardDescription className={plannerCardDescriptionClass}>Enter airports, pick your aircraft, and add waypoints or stops before you plot the trip.</CardDescription>
         </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
@@ -5635,12 +5648,12 @@ export default function FlightPlanner() {
               placeholder="KJFK or Austin, TX"
             />
             {departureSuggestions.length > 0 && (
-              <div className="rounded-md border bg-background p-2 max-h-40 overflow-y-auto space-y-1 text-sm">
+              <div className="max-h-40 space-y-1 overflow-y-auto rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] p-2 text-sm">
                 {departureSuggestions.map((airport) => (
                   <button
                     key={`${airport.icao}-${airport.name ?? ""}`}
                     type="button"
-                    className="w-full text-left hover:bg-muted rounded px-2 py-1"
+                    className="w-full rounded-[0.8rem] px-2 py-1 text-left transition-colors hover:bg-[#1a2430]"
                     onClick={() => {
                       departureSelectedRef.current = airport.icao.toUpperCase();
                       setForm({ ...form, departure: airport.icao.toUpperCase() });
@@ -5664,12 +5677,12 @@ export default function FlightPlanner() {
               placeholder="KBOS or Dallas, TX"
             />
             {destinationSuggestions.length > 0 && (
-              <div className="rounded-md border bg-background p-2 max-h-40 overflow-y-auto space-y-1 text-sm">
+              <div className="max-h-40 space-y-1 overflow-y-auto rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] p-2 text-sm">
                 {destinationSuggestions.map((airport) => (
                   <button
                     key={`${airport.icao}-${airport.name ?? ""}`}
                     type="button"
-                    className="w-full text-left hover:bg-muted rounded px-2 py-1"
+                    className="w-full rounded-[0.8rem] px-2 py-1 text-left transition-colors hover:bg-[#1a2430]"
                     onClick={() => {
                       destinationSelectedRef.current = airport.icao.toUpperCase();
                       setForm({ ...form, destination: airport.icao.toUpperCase() });
@@ -5739,10 +5752,10 @@ export default function FlightPlanner() {
                 Pulling live runway options for the selected departure airport. You can still type a manual runway if needed.
               </p>
             </div>
-            <div className="md:col-span-2 rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
+            <div className={cn("md:col-span-2 p-4 space-y-3", plannerSubpanelClass)}>
               <div className="flex flex-col gap-1">
-                <div className="font-semibold">Aircraft setup</div>
-                <div className="text-xs text-muted-foreground">
+                <div className="font-semibold text-[#F5F8FC]">Aircraft setup</div>
+                <div className="text-xs text-[#A9BBCD]">
                   Select an aircraft from the RSF library or a saved profile to prefill performance assumptions before you plan the route.
                 </div>
               </div>
@@ -5759,7 +5772,7 @@ export default function FlightPlanner() {
                     <SelectTrigger>
                       <SelectValue placeholder="Select aircraft type" />
                     </SelectTrigger>
-                    <SelectContent className="max-h-72 overflow-y-auto">
+                    <SelectContent className={cn("max-h-72 overflow-y-auto", plannerSelectContentClass)}>
                       <SelectItem value={CUSTOM_TYPE_ID}>Custom entry</SelectItem>
                       <SelectItem value={FALLBACK_TYPE.id}>
                         {FALLBACK_TYPE.make} {FALLBACK_TYPE.model}
@@ -5778,7 +5791,7 @@ export default function FlightPlanner() {
                     <SelectTrigger>
                       <SelectValue placeholder="Select saved profile" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className={plannerSelectContentClass}>
                       <SelectItem value="none">None</SelectItem>
                       {savedProfiles.map((profile) => (
                         <SelectItem key={profile.id} value={profile.id}>
@@ -5789,7 +5802,7 @@ export default function FlightPlanner() {
                   </Select>
                 </div>
               </div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-xs text-[#A9BBCD]">
                 Saved profiles override library values when selected. This prefill is one of RSF's strongest planning workflow advantages.
               </div>
               {selectedTypeNeedsVerification && (
@@ -5881,9 +5894,9 @@ export default function FlightPlanner() {
                 </div>
               )}
               {hasCoastlineRouteOption && (
-                <div className="rounded-md border border-[#29415e] bg-[#0d1622] p-3 text-xs text-[#9CB4CC] space-y-2">
+                <div className={cn("space-y-2 text-xs", plannerSubpanelInfoClass)}>
                   <div className="font-medium">Water crossing route options</div>
-                  <div className="text-[#9CB4CC]/90">
+                  <div className="text-[#AFC4DB]">
                     RSF sees this as a likely overwater route. You can keep the more direct helper route, or switch to a coastline-biased assist that adds land-based route guidance for pilots who prefer to stay closer to shore.
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -5909,7 +5922,7 @@ export default function FlightPlanner() {
                       Use coastline assist
                     </Button>
                   </div>
-                  <div className="text-[#9CB4CC]/80">
+                  <div className="text-[#92AAC3]">
                     Coastline assist:
                     {" "}
                     {suggestedCoastlineStops.length > 0 ? `stops ${suggestedCoastlineStops.join(", ")}` : "no fuel stops"}
@@ -5918,7 +5931,7 @@ export default function FlightPlanner() {
                 </div>
               )}
               {suggestionMeta && suggestedStops.length > 0 && (
-                <div className="rounded-md border border-[#203249] bg-[#0d1622] p-3 text-xs text-[#E8EDF4] space-y-1">
+                <div className={cn("space-y-1 text-xs text-[#D9E4F0]", plannerSubpanelMutedClass)}>
                   <div>
                     Max leg ~{suggestionMeta.maxLegNm.toFixed(0)} NM based on {suggestionMeta.fuelGallons.toFixed(0)} gal
                     at {suggestionMeta.fuelBurnGph.toFixed(1)} gph with {suggestionMeta.reserveMinutes} min reserve.
@@ -5937,20 +5950,20 @@ export default function FlightPlanner() {
                 </div>
               )}
               {terrainAdvisorSummaries.length > 0 && plannedAltitudeValue && (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-950 space-y-2">
+                <div className={cn("space-y-2 text-xs", plannerSubpanelSuccessClass)}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="font-medium">Terrain + leg health advisor</div>
-                    <Badge variant="outline" className="border-emerald-300 text-emerald-900">
+                    <Badge variant="outline" className="border-[#4d8d7d] bg-[#122621] text-[#d7efe7]">
                       {Math.round(plannedAltitudeValue).toLocaleString()} ft planned
                     </Badge>
                   </div>
-                  <div className="text-emerald-900/90">
+                  <div className="text-[#b9ddd1]">
                     RSF compares the current route and helper alternatives against USGS terrain plus fuel-leg practicality at your selected altitude. Leg comparisons assume a top-off at each planned fuel stop.
                   </div>
                   {terrainAdjustmentRecommendation && (
-                    <div className="rounded-md border border-emerald-300 bg-[#0d1622] p-3 space-y-2">
+                    <div className={cn("space-y-2", plannerSubpanelClass, "border-[#3a7d6e]/40 bg-[linear-gradient(180deg,rgba(14,29,25,0.98),rgba(10,18,16,0.98))]")}>
                       <div className="font-semibold">{terrainAdjustmentRecommendation.title}</div>
-                      <div className="text-emerald-900/85">{terrainAdjustmentRecommendation.detail}</div>
+                      <div className="text-[#b9ddd1]">{terrainAdjustmentRecommendation.detail}</div>
                       <div className="flex flex-wrap gap-2">
                         {terrainAdjustmentRecommendation.kind === "raise-altitude" && terrainAdjustmentRecommendation.targetAltitudeFt ? (
                           <Button
@@ -5993,17 +6006,19 @@ export default function FlightPlanner() {
                       <div
                         key={`terrain-advisor-${summary.id}`}
                         className={cn(
-                          "rounded-md border bg-[#0d1622] p-3 space-y-2",
-                          recommendedTerrainRoute?.id === summary.id ? "border-emerald-400" : "border-emerald-200"
+                          "rounded-[1rem] border p-3 space-y-2 shadow-[0_16px_32px_-26px_rgba(0,0,0,0.88)]",
+                          recommendedTerrainRoute?.id === summary.id
+                            ? "border-[#5aa28e] bg-[linear-gradient(180deg,rgba(15,33,29,0.98),rgba(10,18,16,0.98))]"
+                            : "border-[#40695f]/34 bg-[linear-gradient(180deg,rgba(14,23,21,0.96),rgba(10,15,15,0.96))]"
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="font-semibold">{summary.label}</div>
-                            <div className="text-[11px] text-emerald-900/75">{summary.description}</div>
+                            <div className="text-[11px] text-[#a9cec3]">{summary.description}</div>
                           </div>
                           {recommendedTerrainRoute?.id === summary.id && (
-                            <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Recommended</Badge>
+                            <Badge className="border-0 bg-[#2f7a6a] text-[#f2fbf8] hover:bg-[#2f7a6a]">Recommended</Badge>
                           )}
                         </div>
                         <div className="space-y-1">
@@ -6024,10 +6039,10 @@ export default function FlightPlanner() {
                             <span className={cn(
                               "font-medium",
                               summary.risk === "warning"
-                                ? "text-red-700"
+                                ? "text-[#f09aa8]"
                                 : summary.risk === "caution"
-                                  ? "text-amber-700"
-                                  : "text-emerald-700"
+                                  ? "text-[#e2c06d]"
+                                  : "text-[#8fd0bf]"
                             )}>
                               {summary.risk === "warning" ? "Terrain warning" : summary.risk === "caution" ? "Tight clearance" : "Comfortable"}
                             </span>
@@ -6038,10 +6053,10 @@ export default function FlightPlanner() {
                               className={cn(
                                 "font-medium",
                                 summary.fuelStatus === "unreachable"
-                                  ? "text-red-700"
+                                  ? "text-[#f09aa8]"
                                   : summary.fuelStatus === "tight"
-                                    ? "text-amber-700"
-                                    : "text-emerald-700"
+                                    ? "text-[#e2c06d]"
+                                    : "text-[#8fd0bf]"
                               )}
                             >
                               {summary.fuelStatus === "unreachable"
@@ -6067,7 +6082,7 @@ export default function FlightPlanner() {
                           </div>
                         </div>
                         {summary.firstUnreachableLeg ? (
-                          <div className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-800">
+                          <div className={cn(plannerSubpanelDangerClass, "px-2 py-1 text-[11px]")}>
                             Cannot reach {(summary.firstUnreachableLeg as { from: string; to: string; shortageGallons: number }).to} from {(summary.firstUnreachableLeg as { from: string; to: string; shortageGallons: number }).from}; short about {(summary.firstUnreachableLeg as { from: string; to: string; shortageGallons: number }).shortageGallons.toFixed(1)} gal before the planned stop.
                           </div>
                         ) : null}
@@ -6093,7 +6108,7 @@ export default function FlightPlanner() {
                     ))}
                   </div>
                   {recommendedTerrainRoute && recommendedTerrainRoute.id !== "current" && (
-                    <div className="text-emerald-900/85">
+                    <div className="text-[#b9ddd1]">
                       {recommendedTerrainRoute.label} currently offers the healthiest balance of terrain margin and stop-planning practicality at this altitude.
                     </div>
                   )}
@@ -6137,11 +6152,11 @@ export default function FlightPlanner() {
                 placeholder="DCT TXK V18 MEM J42 ATL"
                 className="min-h-[88px]"
               />
-              <div className="rounded-md border border-dashed border-[#203249] bg-[#0d1622] px-3 py-2 text-xs text-muted-foreground">
-                Planning preview only: <span className="font-medium text-foreground">{routePreviewFull || "-"}</span>
+              <div className={cn(plannerSubpanelMutedClass, "border-dashed px-3 py-2 text-xs")}>
+                Planning preview only: <span className="font-medium text-[#F5F8FC]">{routePreviewFull || "-"}</span>
               </div>
               {filedRouteTokens.length > 0 && (
-                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3 space-y-3">
+                <div className={cn("space-y-3", plannerSubpanelClass)}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <div className="text-sm font-semibold">Parsed Route Structure</div>
@@ -6165,20 +6180,20 @@ export default function FlightPlanner() {
                     {resolvedFiledRouteAnalysis.tokens.map((routeToken, index) => {
                       const badgeClassName =
                         routeToken.kind === "airway"
-                          ? "border-[#29415e] bg-[#0d1622] text-[#9CB4CC]"
+                          ? "border-[#45658b]/40 bg-[#122030] text-[#c9dbef]"
                           : routeToken.kind === "fix"
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                            ? "border-[#3a7d6e]/40 bg-[#10211d] text-[#cfe7df]"
                             : routeToken.kind === "navaid"
-                              ? "border-indigo-200 bg-indigo-50 text-indigo-900"
+                              ? "border-[#4f5f90]/40 bg-[#151d31] text-[#d5def7]"
                               : routeToken.kind === "procedure"
-                                ? "border-[#D9A441] bg-[#271d0b] text-[#D9A441]"
+                                ? "border-[#7f6327]/40 bg-[#241c0d] text-[#f2dca4]"
                                 : routeToken.kind === "airport"
-                                  ? "border-[#203249] bg-[#0d1622] text-[#E8EDF4]"
+                                  ? "border-[#5d6f85]/26 bg-[#121820] text-[#E8EDF4]"
                                   : routeToken.kind === "direct"
-                                    ? "border-violet-200 bg-violet-50 text-violet-900"
+                                    ? "border-[#68548c]/36 bg-[#191527] text-[#e1d9f5]"
                                     : routeToken.kind === "coordinate"
-                                      ? "border-rose-200 bg-rose-50 text-rose-900"
-                                      : "border-[#203249] bg-[#0d1622] text-[#E8EDF4]";
+                                      ? "border-[#864c63]/36 bg-[#23131a] text-[#f0d4df]"
+                                      : "border-[#5d6f85]/26 bg-[#121820] text-[#E8EDF4]";
                       return (
                         <Tooltip key={`${routeToken.token}-${index}`}>
                           <TooltipTrigger asChild>
@@ -6194,7 +6209,7 @@ export default function FlightPlanner() {
                     })}
                   </div>
                   {resolvedFiledRouteAnalysis.airwaySegments.length > 0 && (
-                    <div className="rounded-md border border-[#203249] bg-[#0d1622] p-3 text-xs text-[#E8EDF4] space-y-1">
+                    <div className={cn("space-y-1 text-xs text-[#D9E4F0]", plannerSubpanelMutedClass)}>
                       <div className="font-medium text-[#E8EDF4]">Airway segments recognized</div>
                       {resolvedFiledRouteAnalysis.airwaySegments.map((segment) => (
                         <div key={`${segment.airway}-${segment.index}`}>
@@ -6228,7 +6243,7 @@ export default function FlightPlanner() {
                 </div>
               )}
               {filingDraft.flightRules === "IFR" && (
-                <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-3">
+                <div className={cn("space-y-3", plannerSubpanelClass)}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <div className="text-sm font-semibold">Leidos Route Assist</div>
@@ -6257,12 +6272,12 @@ export default function FlightPlanner() {
                       </Alert>
                     )}
                     {leidosRouteQuery.data?.route && (
-                      <div className="rounded-md border border-emerald-200 bg-emerald-50/80 p-3">
-                        <div className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+                      <div className={cn("space-y-2", plannerSubpanelSuccessClass)}>
+                        <div className="text-xs font-medium uppercase tracking-wide text-[#9ccfbe]">
                           System Recommended Assist
                         </div>
-                        <div className="mt-1 font-mono text-sm text-foreground break-words">{leidosRouteQuery.data.route}</div>
-                        <div className="mt-2">
+                        <div className="font-mono text-sm break-words text-[#F5F8FC]">{leidosRouteQuery.data.route}</div>
+                        <div>
                           <Button
                             type="button"
                             size="sm"
@@ -6283,8 +6298,8 @@ export default function FlightPlanner() {
                           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.title}</div>
                           <div className="grid gap-2">
                             {group.routes.slice(0, 3).map((route) => (
-                              <div key={`${group.title}-${route}`} className="flex flex-wrap items-start justify-between gap-2 rounded-md border bg-background px-3 py-2">
-                                <div className="font-mono text-xs text-foreground break-words">{route}</div>
+                              <div key={`${group.title}-${route}`} className="flex flex-wrap items-start justify-between gap-2 rounded-[0.95rem] border border-[#5d6f85]/18 bg-[#0f141a]/94 px-3 py-2 text-[#E8EDF4] shadow-[0_14px_28px_-24px_rgba(0,0,0,0.88)]">
+                                <div className="font-mono text-xs break-words text-[#F5F8FC]">{route}</div>
                                 <Button
                                   type="button"
                                   size="sm"
@@ -6300,7 +6315,7 @@ export default function FlightPlanner() {
                       ) : null
                     ))}
                     {leidosRouteQuery.data?.warnings?.length ? (
-                      <div className="rounded-md border border-[#D9A441] bg-[#271d0b] p-3 text-xs text-[#D9A441]">
+                      <div className={cn("text-xs", plannerSubpanelWarningClass)}>
                         {leidosRouteQuery.data.warnings.join(" ")}
                       </div>
                     ) : null}
@@ -6371,7 +6386,7 @@ export default function FlightPlanner() {
                 Local time at destination ({destinationTimeZone}).
               </p>
             </div>
-            <div className="md:col-span-2 rounded-lg border p-4 space-y-2">
+            <div className={cn("md:col-span-2 space-y-2 p-4", plannerSubpanelClass)}>
               <div className="font-semibold">Quick Route Helpers</div>
               <div className="text-xs text-muted-foreground">
                 Optional planning shortcuts only. Midpoint adds a virtual waypoint for planning and does not replace the route you choose to file.
@@ -6414,10 +6429,10 @@ export default function FlightPlanner() {
         title={pressDemo.getStep("distance-performance")?.title ?? "Distance & Performance"}
         body={pressDemo.getStep("distance-performance")?.body ?? ""}
       >
-      <Card>
+      <Card className={plannerPanelClass}>
         <CardHeader>
-          <CardTitle>Distance & Performance</CardTitle>
-          <CardDescription>Review trip distance, time, and fuel after your aircraft selection fills in the planning assumptions above.</CardDescription>
+          <CardTitle className={plannerCardTitleClass}>Distance & Performance</CardTitle>
+          <CardDescription className={plannerCardDescriptionClass}>Review trip distance, time, and fuel after your aircraft selection fills in the planning assumptions above.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-4">
@@ -6427,7 +6442,7 @@ export default function FlightPlanner() {
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className={plannerSelectContentClass}>
                   <SelectItem value="30">30 min</SelectItem>
                   <SelectItem value="45">45 min</SelectItem>
                   <SelectItem value="60">60 min</SelectItem>
@@ -6482,7 +6497,7 @@ export default function FlightPlanner() {
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={plannerSelectContentClass}>
                     <SelectItem value="standard">Standard ({selectedType.fuel_burn_gph_effective?.toFixed(1) || "-"} gph)</SelectItem>
                     {selectedType.fuel_burn_economy_gph_effective ? (
                       <SelectItem value="economy">Economy ({selectedType.fuel_burn_economy_gph_effective.toFixed(1)} gph)</SelectItem>
@@ -6497,10 +6512,10 @@ export default function FlightPlanner() {
                   {selectedProfile?.fuelBurnOverrideGph ? " Saved profile burn override is active, so the selector is locked." : ""}
                 </p>
               </div>
-              <div className="rounded-lg border p-3 text-sm">
-                <div className="text-xs text-muted-foreground">Selected burn profile</div>
-                <div className="font-semibold">{fuelBurnMode[0].toUpperCase() + fuelBurnMode.slice(1)} • {planningBurn.toFixed(1)} gph</div>
-                <div className="mt-1 text-xs text-muted-foreground">
+              <div className={cn("p-3 text-sm", plannerSubpanelClass)}>
+                <div className="text-xs text-[#A9BBCD]">Selected burn profile</div>
+                <div className="font-semibold text-[#F5F8FC]">{fuelBurnMode[0].toUpperCase() + fuelBurnMode.slice(1)} • {planningBurn.toFixed(1)} gph</div>
+                <div className="mt-1 text-xs text-[#A9BBCD]">
                   Library baseline {selectedType.fuel_burn_gph_effective?.toFixed(1) || "-"} gph
                   {selectedType.fuel_burn_economy_gph_effective ? ` | Economy ${selectedType.fuel_burn_economy_gph_effective.toFixed(1)}` : ""}
                   {selectedType.fuel_burn_performance_gph_effective ? ` | Performance ${selectedType.fuel_burn_performance_gph_effective.toFixed(1)}` : ""}
@@ -6522,7 +6537,7 @@ export default function FlightPlanner() {
           )}
 
           {orderedPlannedStops.length > 0 && (
-            <div className="rounded-lg border border-[#203249] bg-[#0d1622] p-4 space-y-3">
+            <div className={cn("p-4 space-y-3", plannerSubpanelClass)}>
               <div>
                 <div className="font-semibold">Planned Fuel Uplifts</div>
                 <div className="text-xs text-muted-foreground">
@@ -6565,7 +6580,7 @@ export default function FlightPlanner() {
                 <div className="font-semibold mb-1">Stop planning suggestions</div>
                 <div className="space-y-2 text-sm">
                   {stopAdjustmentSuggestions.map((item) => (
-                    <div key={item.id} className="rounded-md border bg-background/60 px-3 py-2">
+                    <div key={item.id} className="rounded-[0.95rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-3 py-2">
                       <div>{item.detail}</div>
                       {item.action ? (
                         <div className="mt-2">
@@ -6640,23 +6655,23 @@ export default function FlightPlanner() {
           )}
 
           <div className="grid gap-4 md:grid-cols-4">
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">Total Distance</div>
-              <div className="text-lg font-semibold">{totalDistance ? totalDistance.toFixed(1) : "-"} NM</div>
+            <div className={plannerMetricClass}>
+              <div className="text-xs text-[#A9BBCD]">Total Distance</div>
+              <div className="text-lg font-semibold text-[#F5F8FC]">{totalDistance ? totalDistance.toFixed(1) : "-"} NM</div>
             </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">ETE</div>
-              <div className="text-lg font-semibold">
+            <div className={plannerMetricClass}>
+              <div className="text-xs text-[#A9BBCD]">ETE</div>
+              <div className="text-lg font-semibold text-[#F5F8FC]">
                 {eteHours ? `${Math.round(eteHours * 60)} min` : "-"}
               </div>
             </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">Trip Fuel</div>
-              <div className="text-lg font-semibold">{tripFuel ? tripFuel.toFixed(1) : "-"} gal</div>
+            <div className={plannerMetricClass}>
+              <div className="text-xs text-[#A9BBCD]">Trip Fuel</div>
+              <div className="text-lg font-semibold text-[#F5F8FC]">{tripFuel ? tripFuel.toFixed(1) : "-"} gal</div>
             </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">Total Fuel + Reserve</div>
-              <div className="text-lg font-semibold">{totalFuel ? totalFuel.toFixed(1) : "-"} gal</div>
+            <div className={plannerMetricClass}>
+              <div className="text-xs text-[#A9BBCD]">Total Fuel + Reserve</div>
+              <div className="text-lg font-semibold text-[#F5F8FC]">{totalFuel ? totalFuel.toFixed(1) : "-"} gal</div>
             </div>
           </div>
           {totalFuel > 0 && (
@@ -6766,10 +6781,10 @@ export default function FlightPlanner() {
       </Card>
       </PressDemoSpotlight>
 
-      <Card>
+      <Card className={plannerPanelClass}>
         <CardHeader>
-          <CardTitle>ATC &amp; Airport Frequencies</CardTitle>
-          <CardDescription>
+          <CardTitle className={plannerCardTitleClass}>ATC &amp; Airport Frequencies</CardTitle>
+          <CardDescription className={plannerCardDescriptionClass}>
             Route airport frequencies from the airport reference feed. Verify against current charts, ATIS, and official airport publications before use.
           </CardDescription>
         </CardHeader>
@@ -6781,7 +6796,7 @@ export default function FlightPlanner() {
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               {routeAirportFrequencyCards.map(({ icao, airport, frequencies }) => (
-                <div key={`freq-${icao}`} className="rounded-lg border p-4 space-y-3">
+                <div key={`freq-${icao}`} className={cn("space-y-3 p-4", plannerSubpanelClass)}>
                   <div>
                     {renderAirportIcaoTooltip(
                       icao,
@@ -6798,7 +6813,7 @@ export default function FlightPlanner() {
                   ) : (
                     <div className="space-y-2">
                       {frequencies.slice(0, 8).map((item, index) => (
-                        <div key={`${icao}-${item.type || "other"}-${item.frequencyMhz || "na"}-${index}`} className="flex items-start justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2">
+                        <div key={`${icao}-${item.type || "other"}-${item.frequencyMhz || "na"}-${index}`} className={cn(plannerSubpanelMutedClass, "flex items-start justify-between gap-3 px-3 py-2")}>
                           <div>
                             <div className="text-sm font-medium">{formatFrequencyTypeLabel(item.type)}</div>
                             {item.description ? (
@@ -6822,12 +6837,12 @@ export default function FlightPlanner() {
 
       <TabsContent value="navlog" className="space-y-6">
 
-      <Card id="planner-nav-log">
+      <Card id="planner-nav-log" className={plannerPanelClass}>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle>Navigation Log</CardTitle>
-              <CardDescription>Leg-by-leg course, time, and fuel summary.</CardDescription>
+              <CardTitle className={plannerCardTitleClass}>Navigation Log</CardTitle>
+              <CardDescription className={plannerCardDescriptionClass}>Leg-by-leg course, time, and fuel summary.</CardDescription>
             </div>
             <Button
               type="button"
@@ -6925,27 +6940,27 @@ export default function FlightPlanner() {
 
       <TabsContent value="weather" className="space-y-6">
 
-      <Card id="route-weather-summary">
+      <Card id="route-weather-summary" className={plannerPanelClass}>
         <CardHeader>
-          <CardTitle>Route Weather Summary</CardTitle>
-          <CardDescription>One-glance NOAA/AWC snapshot for your route.</CardDescription>
+          <CardTitle className={plannerCardTitleClass}>Route Weather Summary</CardTitle>
+          <CardDescription className={plannerCardDescriptionClass}>One-glance NOAA/AWC snapshot for your route.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-lg border p-3">
+            <div className={plannerMetricClass}>
               <div className="text-xs text-muted-foreground">Flight category trend</div>
               <div className="text-sm font-semibold">{summaryCategoryLabel}</div>
               {hasThunderRisk && (
                 <div className="text-xs text-[#D9A441] mt-2">Thunderstorm risk in TAFs</div>
               )}
             </div>
-            <div className="rounded-lg border p-3">
+            <div className={plannerMetricClass}>
               <div className="text-xs text-muted-foreground">Winds aloft coverage</div>
               <div className="text-sm font-semibold">
                 {windsCount > 0 ? `${windsCount} stations` : "No winds data yet"}
               </div>
             </div>
-            <div className="rounded-lg border p-3">
+            <div className={plannerMetricClass}>
               <div className="text-xs text-muted-foreground">NOTAMs</div>
               <div className="text-sm font-semibold">
                 {notamsSummaryQuery.isError ? "Unavailable" : notamsCount > 0 ? `${notamsCount} active` : "None loaded"}
@@ -7002,10 +7017,10 @@ export default function FlightPlanner() {
         title={pressDemo.getStep("route-analysis")?.title ?? "Route Analysis"}
         body={pressDemo.getStep("route-analysis")?.body ?? ""}
       >
-      <Card id="route-analysis" className="relative">
+      <Card id="route-analysis" className={cn("relative", plannerPanelClass)}>
         <CardHeader>
-          <CardTitle>Route Analysis</CardTitle>
-          <CardDescription>Advisory summary based on your route, altitude, and weather.</CardDescription>
+          <CardTitle className={plannerCardTitleClass}>Route Analysis</CardTitle>
+          <CardDescription className={plannerCardDescriptionClass}>Advisory summary based on your route, altitude, and weather.</CardDescription>
         </CardHeader>
         <CardContent className={cn("space-y-4", briefingLocked && "opacity-30 pointer-events-none")}>
           {!briefingReady && (
@@ -7078,10 +7093,10 @@ export default function FlightPlanner() {
               </Alert>
             )}
             {(terrainProfileQuery.isLoading || terrainProfileQuery.data || terrainProfileQuery.error) && (
-              <Card>
+              <Card className={plannerPanelClass}>
                 <CardHeader>
-                  <CardTitle>Terrain Clearance</CardTitle>
-                  <CardDescription>USGS route terrain against your planned cruise altitude.</CardDescription>
+                  <CardTitle className={plannerCardTitleClass}>Terrain Clearance</CardTitle>
+                  <CardDescription className={plannerCardDescriptionClass}>USGS route terrain against your planned cruise altitude.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {terrainProfileQuery.isLoading ? (
@@ -7124,14 +7139,14 @@ export default function FlightPlanner() {
                         <AlertDescription>{terrainClearanceAdvisory}</AlertDescription>
                       </Alert>
                       {terrainProfileChart ? (
-                        <div className="rounded-lg border bg-muted/20 p-3">
+                        <div className={cn("p-3", plannerSubpanelClass)}>
                           <div className="flex items-center justify-between gap-3">
                             <div className="text-sm font-medium">Vertical profile</div>
                             <div className="text-xs text-muted-foreground">
                               Terrain vs {terrainReferenceAltitudeFt != null ? `${Math.round(terrainReferenceAltitudeFt).toLocaleString()} ft planned` : "reference altitude"}
                             </div>
                           </div>
-                          <div className="mt-3 overflow-hidden rounded-md border bg-background">
+                          <div className="mt-3 overflow-hidden rounded-[0.95rem] border border-[#5d6f85]/18 bg-[#0f141a]/96">
                             <svg
                               viewBox={`0 0 ${terrainProfileChart.chartWidth} ${terrainProfileChart.chartHeight}`}
                               className="h-40 w-full"
@@ -7331,10 +7346,10 @@ export default function FlightPlanner() {
       </PressDemoSpotlight>
 
       {contextualTools.length > 0 && (
-        <Card>
+        <Card className={plannerPanelClass}>
           <CardHeader>
-            <CardTitle>Suggested Tools for This Flight</CardTitle>
-            <CardDescription>Recommended based on your route, altitude, and aircraft details.</CardDescription>
+            <CardTitle className={plannerCardTitleClass}>Suggested Tools for This Flight</CardTitle>
+            <CardDescription className={plannerCardDescriptionClass}>Recommended based on your route, altitude, and aircraft details.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 md:grid-cols-2">
@@ -7359,10 +7374,10 @@ export default function FlightPlanner() {
         </Card>
       )}
 
-      <Card>
+      <Card className={plannerPanelClass}>
         <CardHeader>
-          <CardTitle>Go / No-Go Checklist</CardTitle>
-          <CardDescription>Quick preflight checklist (stored locally).</CardDescription>
+          <CardTitle className={plannerCardTitleClass}>Go / No-Go Checklist</CardTitle>
+          <CardDescription className={plannerCardDescriptionClass}>Quick preflight checklist (stored locally).</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm">
           {(() => {
@@ -7403,10 +7418,10 @@ export default function FlightPlanner() {
         title={pressDemo.getStep("filing")?.title ?? "Flight Plan Summary & Filing"}
         body={pressDemo.getStep("filing")?.body ?? ""}
       >
-      <Card>
+      <Card className={plannerPanelClass}>
         <CardHeader>
-          <CardTitle>Flight Plan Summary &amp; Filing</CardTitle>
-          <CardDescription>
+          <CardTitle className={plannerCardTitleClass}>Flight Plan Summary &amp; Filing</CardTitle>
+          <CardDescription className={plannerCardDescriptionClass}>
             Review the current packet, validate it against Leidos, and run filing actions for the plan you are actively editing.
           </CardDescription>
         </CardHeader>
@@ -7434,7 +7449,7 @@ export default function FlightPlanner() {
             </div>
           </div>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-            <div className="space-y-4 rounded-lg border border-[#203249] bg-[#0d1622] p-4">
+            <div className={cn("space-y-4 p-4", plannerSubpanelClass)}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="font-semibold">Filing Identity</div>
@@ -7458,7 +7473,7 @@ export default function FlightPlanner() {
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className={plannerSelectContentClass}>
                       <SelectItem value="VFR">VFR</SelectItem>
                       <SelectItem value="IFR">IFR</SelectItem>
                       <SelectItem value="DVFR">DVFR</SelectItem>
@@ -7539,7 +7554,7 @@ export default function FlightPlanner() {
                 </div>
               </div>
             </div>
-            <div className="space-y-4 rounded-lg border border-[#203249] bg-[#0d1622] p-4">
+            <div className={cn("space-y-4 p-4", plannerSubpanelClass)}>
               <div>
                 <div className="font-semibold">Operational Packet</div>
                 <div className="text-xs text-muted-foreground">
@@ -7547,21 +7562,21 @@ export default function FlightPlanner() {
                 </div>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Cruise / Altitude</div>
-                  <div className="font-semibold">{Math.round(planningCruise)} KTAS at {plannedAltitude || "-"} ft</div>
+                <div className={plannerMetricClass}>
+                  <div className="text-xs text-[#A9BBCD]">Cruise / Altitude</div>
+                  <div className="font-semibold text-[#F5F8FC]">{Math.round(planningCruise)} KTAS at {plannedAltitude || "-"} ft</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Fuel on board / endurance</div>
-                  <div className="font-semibold">{fuelAvailableGallons.toFixed(1)} gal / {formatMinutesLabel(enduranceMinutes)}</div>
+                <div className={plannerMetricClass}>
+                  <div className="text-xs text-[#A9BBCD]">Fuel on board / endurance</div>
+                  <div className="font-semibold text-[#F5F8FC]">{fuelAvailableGallons.toFixed(1)} gal / {formatMinutesLabel(enduranceMinutes)}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Estimated Enroute</div>
-                  <div className="font-semibold">{eteHours ? `${Math.round(eteHours * 60)} min` : "-"}</div>
+                <div className={plannerMetricClass}>
+                  <div className="text-xs text-[#A9BBCD]">Estimated Enroute</div>
+                  <div className="font-semibold text-[#F5F8FC]">{eteHours ? `${Math.round(eteHours * 60)} min` : "-"}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Filing status</div>
-                  <div className="font-semibold">
+                <div className={plannerMetricClass}>
+                  <div className="text-xs text-[#A9BBCD]">Filing status</div>
+                  <div className="font-semibold text-[#F5F8FC]">
                     {hasCurrentSavedPlan ? currentSavedPlanStatus : (filingPreviewMutation.isPending ? "Validating handoff..." : "Save plan to enable lifecycle actions")}
                   </div>
                 </div>
@@ -7641,14 +7656,14 @@ export default function FlightPlanner() {
             </Button>
           </div>
           {isGuest && (
-            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            <div className={cn(plannerSubpanelMutedClass, "border-dashed p-4 text-sm text-[#A9BBCD]")}>
               {guestFlightPlanFileLimitReached
                 ? "Guest filing limit reached. Create a free RSF account to save plans, keep filing through RSF, and manage lifecycle actions."
                 : `Guest access includes ${guestFlightPlanFilesRemaining} remaining direct ${guestFlightPlanFilesRemaining === 1 ? "flight plan filing" : "flight plan filings"} before a free RSF account is required. Amend, cancel, activate, and close actions still require a saved account plan.`}
             </div>
           )}
           {hasCurrentSavedPlan ? (
-            <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+            <div className={cn("space-y-3 p-4", plannerSubpanelClass)}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="font-semibold">Current Saved Plan Actions</div>
@@ -7750,10 +7765,10 @@ export default function FlightPlanner() {
       </Card>
       </PressDemoSpotlight>
 
-      <Card>
+      <Card className={plannerPanelClass}>
         <CardHeader>
-          <CardTitle>Save Flight Plan</CardTitle>
-          <CardDescription>
+          <CardTitle className={plannerCardTitleClass}>Save Flight Plan</CardTitle>
+          <CardDescription className={plannerCardDescriptionClass}>
             Save plans with a free account. After you fly, log it to update currency and history.
           </CardDescription>
         </CardHeader>
@@ -7863,10 +7878,10 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={plannerPanelClass}>
         <CardHeader>
-          <CardTitle>Saved Plans</CardTitle>
-          <CardDescription>Access saved routes and fuel notes. Free accounts keep one plan.</CardDescription>
+          <CardTitle className={plannerCardTitleClass}>Saved Plans</CardTitle>
+          <CardDescription className={plannerCardDescriptionClass}>Access saved routes and fuel notes. Free accounts keep one plan.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!isPro && (
@@ -8072,14 +8087,14 @@ export default function FlightPlanner() {
                   Filing requests submit live when the Leidos environment is fully configured. If a required live path is still missing, RSF keeps the request staged instead of dropping it.
                 </div>
                 {Array.isArray(plan.filingActionHistory) && plan.filingActionHistory.length > 0 && (
-                  <div className="rounded-lg border bg-muted/20 p-3">
+                  <div className={cn("p-3", plannerSubpanelClass)}>
                     <div className="mb-2 font-semibold">Filing history</div>
                     <div className="space-y-2">
                       {[...plan.filingActionHistory]
                         .slice()
                         .reverse()
                         .map((entry: any, index: number) => (
-                          <div key={`${entry?.action || "entry"}-${entry?.stagedAt || index}`} className="rounded-md border bg-background/80 p-3">
+                          <div key={`${entry?.action || "entry"}-${entry?.stagedAt || index}`} className="rounded-[0.95rem] border border-[#5d6f85]/18 bg-[#0f141a]/94 p-3 shadow-[0_14px_28px_-24px_rgba(0,0,0,0.88)]">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="font-medium capitalize">{String(entry?.action || "Unknown action")}</div>
                               <div className="text-xs text-muted-foreground">
@@ -8120,10 +8135,10 @@ export default function FlightPlanner() {
           title={pressDemo.getStep("route-map")?.title ?? "Route Map"}
           body={pressDemo.getStep("route-map")?.body ?? ""}
         >
-        <Card id="planner-route-map" className="bg-[#0d1622] border border-[#203249] rounded-xl text-[#E8EDF4] shadow-sm">
+        <Card id="planner-route-map" className={plannerPanelClass}>
           <CardHeader>
-            <CardTitle>Route Map</CardTitle>
-            <CardDescription>Live route view while you build, brief, and file.</CardDescription>
+            <CardTitle className={plannerCardTitleClass}>Route Map</CardTitle>
+            <CardDescription className={plannerCardDescriptionClass}>Live route view while you build, brief, and file.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="mb-3 flex flex-wrap gap-3 text-sm">
@@ -8142,13 +8157,13 @@ export default function FlightPlanner() {
                 Open RSF Flight Demo
               </Link>
             </div>
-            <div className="mb-3 rounded-lg border border-[#203249] bg-[#0d1622] p-2">
+            <div className={cn("mb-3 p-2", plannerSubpanelClass)}>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]"
+                  className={cn("h-8", plannerInsetActionClass)}
                   onClick={() => setMapRenderVersion((value) => value + 1)}
                 >
                   Fit route
@@ -8157,7 +8172,7 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]"
+                  className={cn("h-8", plannerInsetActionClass)}
                   onClick={() => {
                     setActiveTab("weather");
                     openWeatherDetail("metar");
@@ -8169,7 +8184,7 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]"
+                  className={cn("h-8", plannerInsetActionClass)}
                   onClick={() => {
                     setActiveTab("weather");
                     openWeatherDetail("notams");
@@ -8181,7 +8196,7 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]"
+                  className={cn("h-8", plannerInsetActionClass)}
                   onClick={() => setShowApproachOffer(true)}
                 >
                   Plates
@@ -8190,17 +8205,17 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]"
+                  className={cn("h-8", plannerInsetActionClass)}
                   onClick={() => setShowAtcStrip((value) => !value)}
                 >
                   {showAtcStrip ? "Hide" : "Show"} nav strip
                 </Button>
-                <Button type="button" size="sm" variant="outline" className="h-8 border-[#203249] text-[#E8EDF4] hover:bg-[#0d1622]" asChild>
+                <Button type="button" size="sm" variant="outline" className={cn("h-8", plannerInsetActionClass)} asChild>
                   <a href="/tfr-map" target="_blank" rel="noopener noreferrer">Full TFR map</a>
                 </Button>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-[#7A9BB8]">Airport labels</span>
+                <span className="text-[#A9BBCD]">Airport labels</span>
                 {[
                   { value: "icao", label: "ICAO only" },
                   { value: "full", label: "ICAO + name" },
@@ -8220,14 +8235,14 @@ export default function FlightPlanner() {
               </div>
             </div>
             {routePoints.length > 1 && (
-              <div className="mb-3 rounded-lg border border-slate-700 bg-slate-900/80 p-2">
+              <div className={cn("mb-3 p-2", plannerSubpanelClass)}>
                 <div className="mb-2 flex items-center justify-between">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#A9BBCD]">
                     ATC Leg Strip
                   </div>
                   <button
                     type="button"
-                    className="text-xs text-blue-300 hover:underline"
+                    className="text-xs text-[#7daeea] transition-colors hover:text-[#a9cfff]"
                     onClick={() => setShowAtcStrip((value) => !value)}
                   >
                     {showAtcStrip ? "Collapse" : "Expand"}
@@ -8236,7 +8251,7 @@ export default function FlightPlanner() {
                 {showAtcStrip ? (
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {legNavRows.length === 0 ? (
-                      <div className="text-xs text-slate-300">No route legs yet.</div>
+                      <div className="text-xs text-[#A9BBCD]">No route legs yet.</div>
                     ) : (
                       legNavRows.map((leg) => {
                         const risk = legRiskByKey.get(leg.key);
@@ -8249,13 +8264,13 @@ export default function FlightPlanner() {
                         return (
                           <div
                             key={`strip-${leg.key}`}
-                            className={cn("min-w-[208px] rounded-md border px-2 py-1.5 text-xs text-slate-100", riskContainerClass)}
+                            className={cn("min-w-[208px] rounded-md border px-2 py-1.5 text-xs text-[#E8EDF4]", riskContainerClass)}
                           >
                             <div className="font-semibold">{leg.from} to {leg.to}</div>
-                            <div className="text-slate-300">
+                            <div className="text-[#B5C8DB]">
                               {String(leg.course).padStart(3, "0")} deg · {leg.distanceNm.toFixed(1)} NM
                             </div>
-                            <div className="text-slate-400">
+                            <div className="text-[#89a0b8]">
                               ETA {leg.legEtaUtc ? `${leg.legEtaUtc.toISOString().slice(11, 16)}Z` : "--"}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-1">
@@ -8290,7 +8305,7 @@ export default function FlightPlanner() {
                                 </span>
                               )}
                             </div>
-                            <div className="mt-1 text-[10px] text-slate-300">
+                            <div className="mt-1 text-[10px] text-[#A9BBCD]">
                               Rem fuel {risk ? `${risk.remainingFuelGallons.toFixed(1)} gal` : "--"}
                             </div>
                           </div>
@@ -8299,7 +8314,7 @@ export default function FlightPlanner() {
                     )}
                   </div>
                 ) : (
-                  <div className="text-xs text-slate-300">Collapsed. Expand to see per-leg track, distance, and ETA.</div>
+                  <div className="text-xs text-[#A9BBCD]">Collapsed. Expand to see per-leg track, distance, and ETA.</div>
                 )}
               </div>
             )}
@@ -8361,33 +8376,33 @@ export default function FlightPlanner() {
               </div>
             )}
             {(terrainProfileQuery.isLoading || terrainProfileQuery.data || terrainProfileQuery.error) && (
-              <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-100">
+              <div className={cn("mt-3 p-3 text-sm text-[#E8EDF4]", plannerSubpanelClass)}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="font-semibold">Terrain clearance</div>
-                  <Badge variant="outline" className="border-slate-500 text-slate-100">
+                  <Badge variant="outline" className="border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4]">
                     {plannedAltitudeValue ? `${plannedAltitudeValue.toLocaleString()} ft planned` : "set planned altitude"}
                   </Badge>
                 </div>
                 {terrainProfileQuery.isLoading ? (
-                  <div className="mt-2 text-xs text-slate-300">Loading USGS terrain profile...</div>
+                  <div className="mt-2 text-xs text-[#A9BBCD]">Loading USGS terrain profile...</div>
                 ) : terrainProfileQuery.error ? (
                   <div className="mt-2 text-xs text-red-300">
                     {terrainProfileQuery.error instanceof Error ? terrainProfileQuery.error.message : "Terrain profile unavailable."}
                   </div>
                 ) : terrainProfileQuery.data ? (
                   <div className="mt-2 grid gap-2 md:grid-cols-3">
-                    <div className="rounded-md border border-slate-700 bg-slate-950/50 px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Highest terrain</div>
+                    <div className={plannerMetricClass}>
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[#8fa6c0]">Highest terrain</div>
                       <div className="font-semibold">{terrainProfileQuery.data.maxElevationFt != null ? `${Math.round(terrainProfileQuery.data.maxElevationFt).toLocaleString()} ft` : "--"}</div>
                     </div>
-                    <div className="rounded-md border border-slate-700 bg-slate-950/50 px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Minimum clearance</div>
+                    <div className={plannerMetricClass}>
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[#8fa6c0]">Minimum clearance</div>
                       <div className={cn("font-semibold", terrainToneClass)}>
                         {terrainClearanceHeadline}
                       </div>
                     </div>
-                    <div className="rounded-md border border-slate-700 bg-slate-950/50 px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Hot spots</div>
+                    <div className={plannerMetricClass}>
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[#8fa6c0]">Hot spots</div>
                       <div className="font-semibold">
                         {terrainHotSpots.length > 0 ? `${terrainHotSpots.length} flagged` : "None"}
                       </div>
@@ -8397,28 +8412,28 @@ export default function FlightPlanner() {
               </div>
             )}
             {legNavRows.length > 0 && (
-              <div className="mt-3 rounded-lg border border-sky-900/40 bg-sky-950/70 p-3 text-sm text-slate-100">
+              <div className={cn("mt-3 p-3 text-sm text-[#E8EDF4]", plannerSubpanelInfoClass)}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="font-semibold">Leg planning cue</div>
-                  <Badge variant="outline" className="border-sky-700 text-sky-100">
+                  <Badge variant="outline" className="border-[#45658b]/40 bg-[#122030] text-[#d7e6f6]">
                     {legPlanningTargetNm != null ? `Target ~${legPlanningTargetNm.toFixed(0)} NM` : "Fuel-aware legs"}
                   </Badge>
                 </div>
                 <div className="mt-2 grid gap-2 md:grid-cols-3">
-                  <div className="rounded-md border border-sky-900/50 bg-slate-950/40 px-3 py-2">
-                    <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Healthy</div>
+                  <div className={plannerMetricClass}>
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-[#8fa6c0]">Healthy</div>
                     <div className="font-semibold text-sky-100">{legPlanningSummary.comfortable}</div>
                   </div>
-                  <div className="rounded-md border border-amber-900/50 bg-slate-950/40 px-3 py-2">
-                    <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Tight</div>
+                  <div className={plannerMetricClass}>
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-[#8fa6c0]">Tight</div>
                     <div className="font-semibold text-amber-300">{legPlanningSummary.caution}</div>
                   </div>
-                  <div className="rounded-md border border-red-900/50 bg-slate-950/40 px-3 py-2">
-                    <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Exceeds plan</div>
+                  <div className={plannerMetricClass}>
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-[#8fa6c0]">Exceeds plan</div>
                     <div className="font-semibold text-red-300">{legPlanningSummary.warning}</div>
                   </div>
                 </div>
-                <div className="mt-2 text-xs text-slate-300">
+                <div className="mt-2 text-xs text-[#A9BBCD]">
                   Blue markers on the map show legs inside the current planning target. Amber markers indicate legs that are workable but getting tight. Red markers indicate a leg that exceeds the current planning target or runs out of fuel before the planned stop.
                 </div>
               </div>
@@ -8437,7 +8452,7 @@ export default function FlightPlanner() {
                     <SelectTrigger className="h-8 w-[170px]">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="z-[1001]">
+                    <SelectContent className={cn("z-[1001]", plannerSelectContentClass)}>
                       <SelectItem value="planned">Use planned altitude</SelectItem>
                       <SelectItem value="3000">3,000 ft</SelectItem>
                       <SelectItem value="6000">6,000 ft</SelectItem>
@@ -8602,7 +8617,7 @@ export default function FlightPlanner() {
               <div className="space-y-2 text-sm">
                 {windsCount === 0 && <div className="text-muted-foreground">No winds aloft data in view.</div>}
                 {windsSummaryQuery.data?.stations?.slice(0, 12).map((station: any) => (
-                  <div key={`${station.stationId}-${station.lat}`} className="flex items-center justify-between rounded-lg border p-2">
+                  <div key={`${station.stationId}-${station.lat}`} className={cn("flex items-center justify-between p-2", plannerSubpanelClass)}>
                     <div className="font-semibold">{station.icao || station.stationId}</div>
                     <div className="text-xs text-muted-foreground">
                       {station.windDir ?? "-"} deg / {station.windSpeed ?? "-"} kt
@@ -8627,12 +8642,12 @@ export default function FlightPlanner() {
                   <div className="text-muted-foreground">No active NOTAMs.</div>
                 )}
                 {notamsSummaryQuery.data?.notams?.map((notam: any) => (
-                  <div key={notam.id} className="rounded-lg border p-2">
+                  <div key={notam.id} className={cn("p-2", plannerSubpanelClass)}>
                     <div className="font-semibold">{notam.id}</div>
                     <div className="text-xs text-muted-foreground mt-1">{notam.text}</div>
                   </div>
                 ))}
-                <div className="rounded-lg border bg-muted/20 p-3">
+                <div className={cn("p-3", plannerSubpanelClass)}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                       <div className="text-sm font-semibold">AI NOTAM translator</div>
@@ -8672,7 +8687,7 @@ export default function FlightPlanner() {
               <div className="space-y-2 text-sm">
                 {pirepsCount === 0 && <div className="text-muted-foreground">No recent PIREPs in range.</div>}
                 {pirepsQuery.data?.reports?.slice(0, 12).map((report: any, index: number) => (
-                  <div key={`${report.rawOb || report.id || index}`} className="rounded-lg border p-2">
+                  <div key={`${report.rawOb || report.id || index}`} className={cn("p-2", plannerSubpanelClass)}>
                     <div className="font-semibold">{report.rawOb || "PIREP"}</div>
                     {report.obsTime && <div className="text-xs text-muted-foreground mt-1">{report.obsTime}</div>}
                   </div>
@@ -8898,7 +8913,7 @@ export default function FlightPlanner() {
       </Dialog>
       {scratchPadOpen && (
         <div
-          className="fixed inset-0 z-[2000] flex flex-col bg-zinc-950 text-white"
+          className="fixed inset-0 z-[2000] flex flex-col bg-[linear-gradient(180deg,rgba(10,12,16,0.99),rgba(6,8,11,1))] text-white"
           role="dialog"
           aria-modal="true"
           aria-label="IFR Clearance Scratch Pad"
@@ -8908,18 +8923,18 @@ export default function FlightPlanner() {
             onValueChange={(value) => setScratchPadMode(value as "ink" | "craft")}
             className="flex h-full flex-col"
           >
-            <div className="border-b border-zinc-700 px-4 py-3">
+            <div className="border-b border-[#5d6f85]/20 px-4 py-3">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="text-lg font-bold tracking-tight">
                       ✏ IFR Clearance Scratch Pad
                     </span>
-                    <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs font-mono tracking-widest text-zinc-400">
+                    <span className="rounded-full border border-[#5d6f85]/30 bg-[#141b24] px-2 py-0.5 text-xs font-mono tracking-widest text-[#A9BBCD]">
                       INK + CRAFT
                     </span>
                   </div>
-                  <div className="text-sm text-zinc-400">
+                  <div className="text-sm text-[#A9BBCD]">
                     Ink Pad is built for finger-speed readback. Switch to CRAFT fields when you need structured notes.
                   </div>
                 </div>
@@ -8928,7 +8943,7 @@ export default function FlightPlanner() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="border-zinc-600 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                    className={plannerInsetActionClass}
                     onClick={() => setScratchInk((current) => current.slice(0, -1))}
                     disabled={!scratchPadHasInk}
                   >
@@ -8938,7 +8953,7 @@ export default function FlightPlanner() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="border-zinc-600 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                    className={plannerInsetActionClass}
                     onClick={() => {
                       if (window.confirm("Clear all scratch pad notes and ink?")) {
                         setScratchPad(SCRATCH_PAD_DEFAULT);
@@ -8952,14 +8967,14 @@ export default function FlightPlanner() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="border-zinc-600 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                    className={plannerInsetActionClass}
                     onClick={() => setScratchPadOpen(false)}
                   >
                     Close <span className="ml-1 opacity-50">Esc</span>
                   </Button>
                 </div>
               </div>
-              <TabsList className="mt-3 grid w-full max-w-[320px] grid-cols-2 bg-zinc-900">
+              <TabsList className="mt-3 grid w-full max-w-[320px] grid-cols-2 rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] p-1.5">
                 <TabsTrigger value="ink">Ink Pad</TabsTrigger>
                 <TabsTrigger value="craft">CRAFT Fields</TabsTrigger>
               </TabsList>
@@ -8968,10 +8983,10 @@ export default function FlightPlanner() {
             <div className="flex-1 overflow-y-auto px-4 py-4">
               <TabsContent value="ink" className="mt-0 h-full focus-visible:outline-none">
                 <div className="mx-auto max-w-5xl space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3">
+                  <div className={`${plannerSubpanelClass} flex flex-wrap items-center justify-between gap-3 px-4 py-3`}>
                     <div>
-                      <div className="text-sm font-semibold text-white">Writing surface</div>
-                      <div className="text-xs text-zinc-400">
+                      <div className="text-sm font-semibold text-[#F5F8FC]">Writing surface</div>
+                      <div className="text-xs text-[#A9BBCD]">
                         Choose the pad that matches how you copy clearance notes.
                       </div>
                     </div>
@@ -8986,11 +9001,7 @@ export default function FlightPlanner() {
                           type="button"
                           size="sm"
                           variant={scratchInkLayout === option.value ? "default" : "outline"}
-                          className={
-                            scratchInkLayout === option.value
-                              ? ""
-                              : "border-zinc-600 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
-                          }
+                          className={scratchInkLayout === option.value ? "rsf-metal-button-primary" : plannerInsetActionClass}
                           onClick={() => setScratchInkLayout(option.value)}
                         >
                           {option.label}
@@ -9005,21 +9016,21 @@ export default function FlightPlanner() {
                       onChange={setScratchInk}
                     />
                     <div className="space-y-3">
-                      <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-4">
-                        <div className="text-sm font-semibold text-white">Fast IFR copy flow</div>
-                        <div className="mt-2 space-y-2 text-xs text-zinc-400">
+                      <div className={`${plannerSubpanelClass} p-4`}>
+                        <div className="text-sm font-semibold text-[#F5F8FC]">Fast IFR copy flow</div>
+                        <div className="mt-2 space-y-2 text-xs text-[#A9BBCD]">
                           <div>1. Write the readback freehand while ATC is talking.</div>
                           <div>2. Use Undo if you miss a stroke.</div>
                           <div>3. Use Ruled, Blank, or CRAFT grid depending on the clearance.</div>
                           <div>4. Switch to CRAFT fields if you want a cleaner final copy.</div>
                         </div>
                       </div>
-                      <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-4">
-                        <div className="text-sm font-semibold text-white">Current plan prefill</div>
-                        <div className="mt-2 space-y-1 text-xs text-zinc-400">
-                          <div>Departure: <span className="font-mono text-zinc-200">{form.departure || "-"}</span></div>
-                          <div>Destination: <span className="font-mono text-zinc-200">{form.destination || "-"}</span></div>
-                          <div>Altitude: <span className="font-mono text-zinc-200">{plannedAltitudeFt ? `${plannedAltitudeFt} ft` : "-"}</span></div>
+                      <div className={`${plannerSubpanelClass} p-4`}>
+                        <div className="text-sm font-semibold text-[#F5F8FC]">Current plan prefill</div>
+                        <div className="mt-2 space-y-1 text-xs text-[#A9BBCD]">
+                          <div>Departure: <span className="font-mono text-[#E8EDF4]">{form.departure || "-"}</span></div>
+                          <div>Destination: <span className="font-mono text-[#E8EDF4]">{form.destination || "-"}</span></div>
+                          <div>Altitude: <span className="font-mono text-[#E8EDF4]">{plannedAltitudeFt ? `${plannedAltitudeFt} ft` : "-"}</span></div>
                         </div>
                       </div>
                     </div>
@@ -9065,8 +9076,8 @@ export default function FlightPlanner() {
                     onChange={(v) => setScratchField("squawk", v)}
                   />
 
-                  <div className="border-t border-zinc-700 pt-3">
-                    <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                  <div className="border-t border-[#5d6f85]/20 pt-3">
+                    <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-[#8fa6c0]">
                       Additional
                     </div>
                   </div>
@@ -9097,7 +9108,7 @@ export default function FlightPlanner() {
               </TabsContent>
             </div>
 
-            <div className="flex items-center justify-between border-t border-zinc-700 px-4 py-2 text-xs text-zinc-500">
+            <div className="flex items-center justify-between border-t border-[#5d6f85]/20 px-4 py-2 text-xs text-[#8fa6c0]">
               <span>Content auto-saved - Escape to close</span>
               <span className="font-mono">
                 {scratchPadHasContent

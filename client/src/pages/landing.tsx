@@ -1711,30 +1711,74 @@ export default function Landing() {
                   </div>
                 </CardContent>
               </Card>
+            </div>
+          </div>
 
-              <div className="hidden rounded-[1.15rem] border border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] p-4 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)] lg:block">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
+          <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px] xl:items-start">
+            <Card className="border-[#5d4717] bg-[linear-gradient(135deg,rgba(200,146,42,0.12),rgba(13,22,34,0.98))] text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.78)]">
+              <CardContent className="space-y-5 p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-2">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#D9A441]">
-                      Featured Sponsor
+                      RSF Welcomes CPA Members
                     </div>
-                    <div className="text-sm text-[#9CB4CC]">
-                      Premium aviation partner placement integrated into the RSF homepage.
+                    <div className="max-w-2xl text-sm leading-6 text-[#D0D8E2]">
+                      Join our growing family of aviators, from student pilots to ATP, and unlock the CPA member offer directly inside the RSF operations stack.
                     </div>
                   </div>
-                  <Button asChild size="sm" variant="outline" className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]">
-                    <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
-                      Advertise
-                    </a>
-                  </Button>
+                  {cpaOffer ? (
+                    <Badge className="border border-[#2d435a] bg-[#10233a] text-[#D6E4F4] hover:bg-[#10233a]">
+                      {cpaOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
+                    </Badge>
+                  ) : null}
                 </div>
-                <BannerAdRotation
-                  placement="home"
-                  variant="compact"
-                  showLeadIn={false}
-                  className="mt-4"
-                />
+                {cpaOffer ? (
+                  <div className="rounded-[1rem] border border-[#5d4717] bg-[#1b1408]/80 p-5">
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <Badge className="border border-[#74551d] bg-[#241a09] text-[#F5C86A] hover:bg-[#241a09]">CPA Exclusive</Badge>
+                      <Badge className="border border-[#2d435a] bg-[#10233a] text-[#D6E4F4] hover:bg-[#10233a]">
+                        {cpaOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
+                      </Badge>
+                    </div>
+                    <h3 className="text-lg font-semibold text-[#F5F0E4] mb-2">
+                      {cpaOffer.durationDays / 30} months free for {cpaOffer.partnerName} members
+                    </h3>
+                    <p className="text-sm text-[#D0D8E2] mb-4">Claim the partner offer and keep planning, filing, and flight follow-through inside one connected RSF workflow.</p>
+                    <Button asChild className="w-full sm:w-auto bg-[#C8922A] text-[#081019] hover:bg-[#d7a445]">
+                      <Link
+                        href={`/logbook/pro?offer=${encodeURIComponent(cpaOffer.slug)}`}
+                        onClick={() => trackEvent("cta_click", { label: "landing_social_proof_cpa", target: `/logbook/pro?offer=${cpaOffer.slug}` })}
+                      >
+                        Claim CPA offer
+                      </Link>
+                    </Button>
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <div className="rounded-[1.15rem] border border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(14,22,34,0.94))] p-4 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#D9A441]">
+                    Featured Sponsor
+                  </div>
+                  <div className="text-sm text-[#9CB4CC]">
+                    Premium aviation partner placement integrated into the RSF homepage.
+                  </div>
+                </div>
+                <Button asChild size="sm" variant="outline" className="border-[#29415e] bg-[#102236] text-[#E8EDF4] hover:bg-[#15304b]">
+                  <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
+                    Advertise
+                  </a>
+                </Button>
               </div>
+              <BannerAdRotation
+                placement="home"
+                variant="compact"
+                showLeadIn={false}
+                className="mt-4"
+              />
             </div>
           </div>
         </div>
@@ -1912,36 +1956,6 @@ export default function Landing() {
         </div>
       </section>
 
-      <div className="py-12 bg-[#0A0E14] border-b border-[#1c3147]">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-2xl font-semibold text-[#F1F5FA]">RSF Welcomes CPA Members.</p>
-          <p className="text-sm text-[#7A9BB8] mt-2 max-w-md mx-auto">
-            Join our growing family of aviators - from student pilots to ATP.
-          </p>
-          {cpaOffer ? (
-            <div className="mt-8 mx-auto max-w-md rounded-[1.2rem] border border-[#5d4717] bg-[linear-gradient(135deg,rgba(200,146,42,0.18),rgba(15,25,38,0.96))] p-5 text-left">
-              <div className="flex flex-wrap items-center gap-2 mb-3">
-                <Badge className="border border-[#74551d] bg-[#241a09] text-[#F5C86A] hover:bg-[#241a09]">CPA Exclusive</Badge>
-                <Badge className="border border-[#2d435a] bg-[#10233a] text-[#D6E4F4] hover:bg-[#10233a]">
-                  {cpaOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
-                </Badge>
-              </div>
-              <h3 className="text-lg font-semibold text-[#F5F0E4] mb-2">
-                {cpaOffer.durationDays / 30} months free for {cpaOffer.partnerName} members
-              </h3>
-              <p className="text-sm text-[#D0D8E2] mb-4">Unlock the partner offer directly inside the RSF operations stack.</p>
-              <Button asChild className="w-full bg-[#C8922A] text-[#081019] hover:bg-[#d7a445]">
-                <Link
-                  href={`/logbook/pro?offer=${encodeURIComponent(cpaOffer.slug)}`}
-                  onClick={() => trackEvent("cta_click", { label: "landing_social_proof_cpa", target: `/logbook/pro?offer=${cpaOffer.slug}` })}
-                >
-                  Claim CPA offer
-                </Link>
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      </div>
       {activeMobileTab === "find" && (
         <div className="border-b border-[#203249] bg-[#0a0e14] md:hidden">
           <div className="container mx-auto px-4 py-4">

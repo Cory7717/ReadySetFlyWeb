@@ -6866,7 +6866,7 @@ export default function FlightPlannerScreen() {
               <UrlTile
                 urlTemplate="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
                 maximumZ={12}
-                minimumZ={6}
+                minimumZ={4}
                 tileSize={256}
                 opacity={0.85}
                 zIndex={600}
@@ -7004,7 +7004,7 @@ export default function FlightPlannerScreen() {
         )}
         {mapStyle === 'sectional' && (
           <Text style={styles.helperText}>
-            Sectional tiles appear at zoom 6+; zoom in for FAA chart detail (US-only).
+            Sectional tiles appear at zoom 4+; zoom in further for FAA chart detail (US-only).
           </Text>
         )}
         <Text style={styles.helperText}>Sectional tiles provided by FAA/Aeronautical Information Services.</Text>

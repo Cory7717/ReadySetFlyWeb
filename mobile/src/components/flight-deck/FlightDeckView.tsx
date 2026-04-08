@@ -1124,7 +1124,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               <UrlTile
                 urlTemplate="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
                 maximumZ={12}
-                minimumZ={6}
+                minimumZ={4}
                 tileSize={256}
                 opacity={0.85}
                 zIndex={600}

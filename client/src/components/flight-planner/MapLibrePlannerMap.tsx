@@ -183,6 +183,7 @@ export default function MapLibrePlannerMap({
   );
   const initialZoom = mapStyle === "sectional" ? 4 : points.length ? 6 : 4;
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   const [radarFrames, setRadarFrames] = useState<string[]>([]);
   const [radarFrameIndex, setRadarFrameIndex] = useState(0);
   const [radarError, setRadarError] = useState(false);
@@ -212,6 +213,78 @@ export default function MapLibrePlannerMap({
     if (mapStyle !== "clouds") return "";
     return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
   }, [gibsDate, mapStyle]);
+
+  const syncRasterLayers = useCallback(
+    (map: MapLibreMap) => {
+      if (!map.isStyleLoaded()) return;
+
+      map.setMinZoom(mapStyle === "sectional" ? 4 : 2);
+      map.setMaxZoom(mapStyle === "sectional" ? 12 : 18);
+
+      if (mapStyle === "sectional") {
+        addOrReplaceRasterLayer({
+          map,
+          sourceId: SECTIONAL_SOURCE_ID,
+          layerId: SECTIONAL_LAYER_ID,
+          tiles: [RSF_SECTIONAL_TILE_URL],
+          attribution: "Federal Aviation Administration, Aeronautical Information Services",
+          opacity: 0.85,
+          minzoom: 4,
+          maxzoom: 12,
+          beforeId: TERRAIN_SURFACE_LAYER_ID,
+        });
+      } else {
+        removeRasterLayer(map, SECTIONAL_SOURCE_ID, SECTIONAL_LAYER_ID);
+      }
+
+      if (mapStyle === "radar" && radarTileUrl && !radarFallbackActive) {
+        addOrReplaceRasterLayer({
+          map,
+          sourceId: RADAR_SOURCE_ID,
+          layerId: RADAR_LAYER_ID,
+          tiles: [radarTileUrl],
+          attribution: "RainViewer",
+          opacity: 0.8,
+          beforeId: TERRAIN_SURFACE_LAYER_ID,
+        });
+        removeRasterLayer(map, RADAR_WMS_SOURCE_ID, RADAR_WMS_LAYER_ID);
+      } else {
+        removeRasterLayer(map, RADAR_SOURCE_ID, RADAR_LAYER_ID);
+      }
+
+      if (mapStyle === "radar" && (radarFallbackActive || (!radarTileUrl && radarError))) {
+        addOrReplaceRasterLayer({
+          map,
+          sourceId: RADAR_WMS_SOURCE_ID,
+          layerId: RADAR_WMS_LAYER_ID,
+          tiles: [
+            "https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi?service=WMS&request=GetMap&layers=nexrad-n0r-900913&styles=&format=image/png&transparent=true&version=1.1.1&srs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}",
+          ],
+          attribution: "IEM NEXRAD Base Reflectivity",
+          opacity: 0.75,
+          beforeId: TERRAIN_SURFACE_LAYER_ID,
+        });
+      } else {
+        removeRasterLayer(map, RADAR_WMS_SOURCE_ID, RADAR_WMS_LAYER_ID);
+      }
+
+      if (mapStyle === "clouds" && cloudTileUrl) {
+        addOrReplaceRasterLayer({
+          map,
+          sourceId: CLOUD_SOURCE_ID,
+          layerId: CLOUD_LAYER_ID,
+          tiles: [cloudTileUrl],
+          attribution: "NASA GIBS",
+          opacity: 0.7,
+          maxzoom: 9,
+          beforeId: TERRAIN_SURFACE_LAYER_ID,
+        });
+      } else {
+        removeRasterLayer(map, CLOUD_SOURCE_ID, CLOUD_LAYER_ID);
+      }
+    },
+    [cloudTileUrl, mapStyle, radarError, radarFallbackActive, radarTileUrl],
+  );
 
   useEffect(() => {
     if (mapStyle !== "radar") {
@@ -366,17 +439,21 @@ export default function MapLibrePlannerMap({
           "line-opacity": 0.9,
         },
       });
+
+      setMapReady(true);
+      syncRasterLayers(map);
     });
 
     mapRef.current = map;
     return () => {
+      setMapReady(false);
       clearMarkers(airportMarkersRef.current);
       clearMarkers(terrainMarkersRef.current);
       clearMarkers(healthMarkersRef.current);
       map.remove();
       mapRef.current = null;
     };
-  }, [center, initialZoom, routeGeoJson, terrainGeoJson, terrainSegments.length]);
+  }, [center, initialZoom, routeGeoJson, syncRasterLayers, terrainGeoJson, terrainSegments.length]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -387,72 +464,9 @@ export default function MapLibrePlannerMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-    map.setMinZoom(mapStyle === "sectional" ? 4 : 2);
-    map.setMaxZoom(mapStyle === "sectional" ? 12 : 18);
-
-    if (mapStyle === "sectional") {
-      addOrReplaceRasterLayer({
-        map,
-        sourceId: SECTIONAL_SOURCE_ID,
-        layerId: SECTIONAL_LAYER_ID,
-        tiles: [RSF_SECTIONAL_TILE_URL],
-        attribution: "Federal Aviation Administration, Aeronautical Information Services",
-        opacity: 0.85,
-        minzoom: 4,
-        maxzoom: 12,
-        beforeId: TERRAIN_SURFACE_LAYER_ID,
-      });
-    } else {
-      removeRasterLayer(map, SECTIONAL_SOURCE_ID, SECTIONAL_LAYER_ID);
-    }
-
-    if (mapStyle === "radar" && radarTileUrl && !radarFallbackActive) {
-      addOrReplaceRasterLayer({
-        map,
-        sourceId: RADAR_SOURCE_ID,
-        layerId: RADAR_LAYER_ID,
-        tiles: [radarTileUrl],
-        attribution: "RainViewer",
-        opacity: 0.8,
-        beforeId: TERRAIN_SURFACE_LAYER_ID,
-      });
-      removeRasterLayer(map, RADAR_WMS_SOURCE_ID, RADAR_WMS_LAYER_ID);
-    } else {
-      removeRasterLayer(map, RADAR_SOURCE_ID, RADAR_LAYER_ID);
-    }
-
-    if (mapStyle === "radar" && (radarFallbackActive || (!radarTileUrl && radarError))) {
-      addOrReplaceRasterLayer({
-        map,
-        sourceId: RADAR_WMS_SOURCE_ID,
-        layerId: RADAR_WMS_LAYER_ID,
-        tiles: [
-          "https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi?service=WMS&request=GetMap&layers=nexrad-n0r-900913&styles=&format=image/png&transparent=true&version=1.1.1&srs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}",
-        ],
-        attribution: "IEM NEXRAD Base Reflectivity",
-        opacity: 0.75,
-        beforeId: TERRAIN_SURFACE_LAYER_ID,
-      });
-    } else {
-      removeRasterLayer(map, RADAR_WMS_SOURCE_ID, RADAR_WMS_LAYER_ID);
-    }
-
-    if (mapStyle === "clouds" && cloudTileUrl) {
-      addOrReplaceRasterLayer({
-        map,
-        sourceId: CLOUD_SOURCE_ID,
-        layerId: CLOUD_LAYER_ID,
-        tiles: [cloudTileUrl],
-        attribution: "NASA GIBS",
-        opacity: 0.7,
-        maxzoom: 9,
-        beforeId: TERRAIN_SURFACE_LAYER_ID,
-      });
-    } else {
-      removeRasterLayer(map, CLOUD_SOURCE_ID, CLOUD_LAYER_ID);
-    }
-  }, [cloudTileUrl, mapStyle, radarError, radarFallbackActive, radarTileUrl]);
+    if (!map || !mapReady) return;
+    syncRasterLayers(map);
+  }, [mapReady, syncRasterLayers]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -550,7 +564,10 @@ export default function MapLibrePlannerMap({
     });
   }, [legHealthMarkers]);
 
-  const engineLabel = useMemo(() => "MapLibre preview", []);
+  const engineLabel = useMemo(() => {
+    const status = mapReady ? "ready" : "loading";
+    return `MapLibre ${mapStyle} ${status}`;
+  }, [mapReady, mapStyle]);
   const showWeatherAdvisory = mapStyle === "radar" || mapStyle === "clouds";
 
   return (

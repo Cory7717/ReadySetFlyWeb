@@ -3245,10 +3245,10 @@ export default function SyntheticVisionPage() {
     [flightFrame, remainingMinutes],
   );
 
-  const flightDeckGlassClass = "rounded-[30px] border border-[#1E2D42] bg-[linear-gradient(180deg,rgba(12,18,27,0.96)_0%,rgba(8,12,18,0.96)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur";
-  const flightDeckPanelClass = "rounded-[24px] border border-[#1E2D42] bg-[#0A0E14]/92 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
-  const flightDeckPillClass = "rounded-full border border-[#22324A] bg-[#091018]/88 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]";
-  const flightDeckMetricClass = "rounded-[20px] border border-[#1E2D42] bg-[#091018]/92 px-4 py-3";
+  const flightDeckGlassClass = "rounded-[30px] border border-[hsl(214_18%_76%_/_0.14)] bg-[linear-gradient(180deg,hsl(220_18%_12%_/_0.98)_0%,hsl(220_22%_8%_/_0.99)_100%)] shadow-[0_34px_80px_-34px_hsl(220_46%_2%_/_0.92),inset_0_1px_0_hsl(0_0%_100%_/_0.07)] backdrop-blur";
+  const flightDeckPanelClass = "rounded-[24px] border border-[hsl(214_18%_76%_/_0.13)] bg-[linear-gradient(180deg,hsl(220_18%_14%_/_0.98),hsl(220_22%_9%_/_0.99))] shadow-[inset_0_1px_0_hsl(0_0%_100%_/_0.06),0_18px_40px_-28px_hsl(220_44%_2%_/_0.84)]";
+  const flightDeckPillClass = "rounded-full border border-[hsl(214_18%_76%_/_0.16)] bg-[linear-gradient(180deg,hsl(220_18%_17%_/_0.98),hsl(220_20%_11%_/_0.98))] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8] shadow-[inset_0_1px_0_hsl(0_0%_100%_/_0.08)]";
+  const flightDeckMetricClass = "rounded-[20px] border border-[hsl(214_18%_76%_/_0.12)] bg-[linear-gradient(180deg,hsl(220_18%_13%_/_0.98),hsl(220_22%_9%_/_0.99))] px-4 py-3 shadow-[inset_0_1px_0_hsl(0_0%_100%_/_0.05),0_14px_28px_-20px_hsl(220_44%_2%_/_0.78)]";
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#060A10] text-[#E8EDF4]">

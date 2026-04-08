@@ -1019,7 +1019,7 @@ export default function AdsbLive() {
         status: "idle" as const,
         label: "Inactive",
         badgeClass: "border-slate-200 bg-slate-50 text-slate-700",
-        toneClass: "text-muted-foreground",
+        toneClass: "text-[#A9BBCD]",
         detail: "Switch to Receiver bridge to use a local ADS-B/GDL-90 feed.",
       };
     }
@@ -1029,7 +1029,7 @@ export default function AdsbLive() {
         status: "idle" as const,
         label: "Idle",
         badgeClass: "border-slate-200 bg-slate-50 text-slate-700",
-        toneClass: "text-muted-foreground",
+        toneClass: "text-[#A9BBCD]",
         detail: "Bridge mode is selected, but live tracking has not started yet.",
       };
     }
@@ -1098,7 +1098,7 @@ export default function AdsbLive() {
       status: "idle" as const,
       label: "No data yet",
       badgeClass: "border-slate-200 bg-slate-50 text-slate-700",
-      toneClass: "text-muted-foreground",
+      toneClass: "text-[#A9BBCD]",
       detail: warningText || "Bridge is reachable, but RSF has not received a valid ownship report yet.",
     };
   }, [
@@ -1767,7 +1767,7 @@ export default function AdsbLive() {
       ? "text-amber-600"
       : terrainCueSegments.length > 0
         ? "text-emerald-600"
-        : "text-muted-foreground";
+        : "text-[#A9BBCD]";
   const worstTerrainSegment = useMemo(() => {
     if (terrainCueSegments.length === 0) return null;
     return terrainCueSegments.reduce((worst, segment, index) => {
@@ -1917,26 +1917,26 @@ export default function AdsbLive() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[#080a0d] text-[#E8EDF4]">
       <div className="container mx-auto px-4 py-8 space-y-6">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">Beta</Badge>
-            <Badge className="bg-sky-600 text-white hover:bg-sky-600">Monthly billing, no annual lock-in</Badge>
+            <Badge variant="outline" className="border-[#5d6f85]/40 bg-[#0d1420] text-[#A9BBCD]">Beta</Badge>
+            <Badge className="border-[#27415D] bg-[#0A1725] text-[#CFE7FF] hover:bg-[#0A1725]">Live Flight Map</Badge>
           </div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Plane className="h-6 w-6 text-sky-600" />
+          <h1 className="text-3xl font-bold flex items-center gap-2 text-[#F1F5FA]">
+            <Plane className="h-6 w-6 text-[#4A9FD4]" />
             RSF Live Flight Map
           </h1>
-          <p className="text-muted-foreground max-w-4xl">
+          <p className="text-[#A9BBCD] max-w-4xl">
             Follow your flight with device GPS, nearby traffic, and live weather overlays. This first phase is built around
             browser GPS, RSF traffic/weather layers, and first-pass terrain/obstacle awareness while direct portable
             receiver ingestion continues next.
           </p>
         </div>
 
-        <Alert className="border-dashed">
-          <AlertTitle>Situational awareness only</AlertTitle>
+        <Alert className="border-[#2e4c74]/40 bg-[linear-gradient(180deg,rgba(18,25,36,0.98),rgba(11,16,23,0.98))] text-[#C7D7EA]">
+          <AlertTitle className="text-[#F1F5FA]">Situational awareness only</AlertTitle>
           <AlertDescription>
             RSF Live Flight Map is not primary navigation. Always use certified avionics, current charts, and ATC guidance
             for operational decisions.
@@ -1951,13 +1951,13 @@ export default function AdsbLive() {
         />
 
         {!trackingEnabled && (
-          <Alert>
-            <LocateFixed className="h-4 w-4" />
+          <Alert className="border-[#203249] bg-[linear-gradient(180deg,rgba(14,20,28,0.98),rgba(9,13,19,0.98))] text-[#E8EDF4]">
+            <LocateFixed className="h-4 w-4 text-[#4A9FD4]" />
             <AlertDescription className="flex flex-wrap items-center gap-3">
               {positionSource === "bridge"
                 ? "Start the receiver bridge to pull ownship and traffic into the live map."
                 : "Enable device location to start ownship tracking, traffic lookups, and map following."}
-              <Button size="sm" onClick={beginTracking}>Start live tracking</Button>
+              <Button size="sm" className="rsf-metal-button-primary" onClick={beginTracking}>Start live tracking</Button>
             </AlertDescription>
           </Alert>
         )}
@@ -1973,10 +1973,10 @@ export default function AdsbLive() {
           <Alert
             className={
               bridgeHealthSummary.status === "healthy"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                ? "border-[#2f7a6a]/40 bg-[linear-gradient(180deg,rgba(15,31,28,0.98),rgba(10,18,17,0.98))] text-[#CFE7DF]"
                 : bridgeHealthSummary.status === "disconnected"
-                  ? "border-red-200 bg-red-50 text-red-950"
-                  : "border-amber-200 bg-amber-50 text-amber-950"
+                  ? "border-[#7a3440]/40 bg-[linear-gradient(180deg,rgba(34,15,19,0.98),rgba(17,10,12,0.98))] text-[#F4CDD3]"
+                  : "border-[#7f6327]/40 bg-[linear-gradient(180deg,rgba(36,27,12,0.98),rgba(19,14,7,0.98))] text-[#F2DCA4]"
             }
           >
             <Radio className="h-4 w-4" />
@@ -1986,7 +1986,7 @@ export default function AdsbLive() {
         )}
 
         {trafficAlerts.length > 0 && (
-          <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+          <Alert className="border-[#7f6327]/40 bg-[linear-gradient(180deg,rgba(36,27,12,0.98),rgba(19,14,7,0.98))] text-[#F2DCA4]">
             <ShieldAlert className="h-4 w-4" />
             <AlertDescription>
               {trafficAlerts.length} traffic {trafficAlerts.length === 1 ? "target is" : "targets are"} within 3 NM and 1,000 ft of your current altitude.
@@ -2030,7 +2030,7 @@ export default function AdsbLive() {
         )}
 
         {diversionWarning && diversionAlertKey !== diversionAlertAckRef.current && (
-          <Alert className={diversionWarning.level === "warning" ? "border-amber-300 bg-amber-50 text-amber-950" : "border-dashed"}>
+          <Alert className={diversionWarning.level === "warning" ? "border-[#7f6327]/40 bg-[linear-gradient(180deg,rgba(36,27,12,0.98),rgba(19,14,7,0.98))] text-[#F2DCA4]" : "border-[#203249] bg-[linear-gradient(180deg,rgba(14,20,28,0.98),rgba(9,13,19,0.98))] text-[#E8EDF4]"}>
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>{diversionWarning.title}</AlertTitle>
             <AlertDescription className="space-y-3">
@@ -2061,10 +2061,10 @@ export default function AdsbLive() {
 
         {(topImmediateTraffic || selectedDiversion) && (
           <div className="sticky top-4 z-[900]">
-            <div className="rounded-xl border bg-background/95 p-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <div className="rounded-xl border border-[#203249] bg-[#080a0d]/96 p-3 shadow-[0_24px_56px_-28px_rgba(0,0,0,0.92)] backdrop-blur">
               <div className="grid gap-3 lg:grid-cols-2">
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Active Threat</div>
+                <div className="rounded-lg border border-[#203249] bg-[linear-gradient(180deg,rgba(14,20,28,0.98),rgba(9,13,19,0.98))] p-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-[#8fa6c0]">Active Threat</div>
                   {topImmediateTraffic ? (
                     <div className="mt-2 space-y-2">
                       <div className="flex items-start justify-between gap-3">
@@ -2072,7 +2072,7 @@ export default function AdsbLive() {
                           <div className="font-semibold">
                             {topImmediateTraffic.callsign || topImmediateTraffic.tail || topImmediateTraffic.id}
                           </div>
-                          <div className="text-sm text-muted-foreground">
+                          <div className="text-sm text-[#A9BBCD]">
                             {topImmediateTraffic.distanceNm ? `${topImmediateTraffic.distanceNm.toFixed(1)} NM` : "--"} · {formatSignedAltitude(topImmediateTraffic.relativeAltitudeFt)}
                           </div>
                         </div>
@@ -2100,12 +2100,12 @@ export default function AdsbLive() {
                       </div>
                     </div>
                   ) : (
-                    <div className="mt-2 text-sm text-muted-foreground">No immediate traffic threat is active right now.</div>
+                    <div className="mt-2 text-sm text-[#A9BBCD]">No immediate traffic threat is active right now.</div>
                   )}
                 </div>
 
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Active Diversion</div>
+                <div className="rounded-lg border border-[#203249] bg-[linear-gradient(180deg,rgba(14,20,28,0.98),rgba(9,13,19,0.98))] p-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-[#8fa6c0]">Active Diversion</div>
                   {selectedDiversion ? (
                     <div className="mt-2 space-y-2">
                       <div className="flex items-start justify-between gap-3">
@@ -2113,7 +2113,7 @@ export default function AdsbLive() {
                           <div className="font-semibold">
                             {selectedDiversion.icao}{selectedDiversion.name ? ` · ${selectedDiversion.name}` : ""}
                           </div>
-                          <div className="text-sm text-muted-foreground">
+                          <div className="text-sm text-[#A9BBCD]">
                             {selectedDiversion.distanceNm.toFixed(1)} NM · {formatBearing(selectedDiversion.bearingDeg)}
                           </div>
                         </div>
@@ -2153,7 +2153,7 @@ export default function AdsbLive() {
                       </div>
                     </div>
                   ) : (
-                    <div className="mt-2 text-sm text-muted-foreground">Select a diversion candidate to pin it here for quick action.</div>
+                    <div className="mt-2 text-sm text-[#A9BBCD]">Select a diversion candidate to pin it here for quick action.</div>
                   )}
                 </div>
               </div>
@@ -2162,12 +2162,12 @@ export default function AdsbLive() {
         )}
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(360px,0.7fr)]">
-          <Card className="overflow-hidden">
+          <Card className="rsf-card-shell overflow-hidden">
             <CardHeader className="pb-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <CardTitle>Live map</CardTitle>
-                  <CardDescription>Ownship, nearby traffic, and live weather overlays.</CardDescription>
+                  <CardTitle className="text-[#F5F8FC]">Live map</CardTitle>
+                  <CardDescription className="text-[#A9BBCD]">Ownship, nearby traffic, and live weather overlays.</CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Select value={mapStyle} onValueChange={(value) => setMapStyle(value as MapStyle)}>
@@ -2262,17 +2262,17 @@ export default function AdsbLive() {
                   <Switch checked={showTerrainShading} onCheckedChange={setShowTerrainShading} />
                   Terrain shading
                 </label>
-                <Button type="button" variant="outline" size="sm" onClick={() => trafficQuery.refetch()}>
+                <Button type="button" variant="outline" size="sm" className="border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4] hover:bg-[#1a2430]" onClick={() => trafficQuery.refetch()}>
                   <RefreshCcw className="mr-2 h-4 w-4" />
                   Refresh traffic
                 </Button>
-                <Button type="button" variant="outline" size="sm" asChild>
+                <Button type="button" variant="outline" size="sm" className="border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4] hover:bg-[#1a2430]" asChild>
                   <Link href="/adsb-receiver-help">
                     <Radio className="mr-2 h-4 w-4" />
                     Receiver setup help
                   </Link>
                 </Button>
-                <Button type="button" variant="outline" size="sm" asChild>
+                <Button type="button" variant="outline" size="sm" className="border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4] hover:bg-[#1a2430]" asChild>
                   <Link href="/tfr-map">
                     <ShieldAlert className="mr-2 h-4 w-4" />
                     Open TFR map
@@ -2285,7 +2285,7 @@ export default function AdsbLive() {
                 ) : null}
               </div>
 
-              <div className="h-[580px] overflow-hidden rounded-xl border">
+              <div className="h-[580px] overflow-hidden rounded-xl border border-[#203249]">
                 {mapStyle === "globe" ? (
                   <CesiumGlobe
                     points={routePoints}
@@ -2649,87 +2649,87 @@ export default function AdsbLive() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-4">
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Tracking</div>
+                <div className="rsf-metal-subpanel rounded-lg p-3">
+                  <div className="text-xs text-[#A9BBCD]">Tracking</div>
                   <div className="font-semibold">{trackingEnabled && ownship ? "Live" : "Idle"}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
+                  <div className="mt-1 text-xs text-[#A9BBCD]">
                     {positionSource === "bridge" ? "Receiver bridge" : "Device GPS"}
                   </div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Receiver bridge</div>
+                <div className="rsf-metal-subpanel rounded-lg p-3">
+                  <div className="text-xs text-[#A9BBCD]">Receiver bridge</div>
                   <div className={`font-semibold ${bridgeHealthSummary.toneClass}`}>{bridgeHealthSummary.label}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
+                  <div className="mt-1 text-xs text-[#A9BBCD]">
                     {positionSource === "bridge"
                       ? bridgeHealthSummary.detail
                       : "Bridge health appears here when receiver mode is selected."}
                   </div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Nearby traffic</div>
+                <div className="rsf-metal-subpanel rounded-lg p-3">
+                  <div className="text-xs text-[#A9BBCD]">Nearby traffic</div>
                   <div className="font-semibold">{trafficTargets.length}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Immediate threats</div>
-                  <div className={`font-semibold ${immediateTrafficCount > 0 ? "text-red-700" : ""}`}>{immediateTrafficCount}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
+                <div className="rsf-metal-subpanel rounded-lg p-3">
+                  <div className="text-xs text-[#A9BBCD]">Immediate threats</div>
+                  <div className={`font-semibold ${immediateTrafficCount > 0 ? "text-red-400" : ""}`}>{immediateTrafficCount}</div>
+                  <div className="mt-1 text-xs text-[#A9BBCD]">
                     {trafficFilterMode === "conflict" ? "Using conflict-band filter." : "Threat-ranked from nearby traffic."}
                   </div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Ownship altitude</div>
+                <div className="rsf-metal-subpanel rounded-lg p-3">
+                  <div className="text-xs text-[#A9BBCD]">Ownship altitude</div>
                   <div className="font-semibold">{formatAltitude(ownship?.altitudeFt ?? null)}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Ownship groundspeed</div>
+                <div className="rsf-metal-subpanel rounded-lg p-3">
+                  <div className="text-xs text-[#A9BBCD]">Ownship groundspeed</div>
                   <div className="font-semibold">{formatSpeed(ownship?.speedKt ?? null)}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Nearby TFRs</div>
+                <div className="rsf-metal-subpanel rounded-lg p-3">
+                  <div className="text-xs text-[#A9BBCD]">Nearby TFRs</div>
                   <div className="font-semibold">{showTfrOverlay ? tfrCount : "Off"}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Nearby SUA</div>
+                <div className="rsf-metal-subpanel rounded-lg p-3">
+                  <div className="text-xs text-[#A9BBCD]">Nearby SUA</div>
                   <div className="font-semibold">{showSuaOverlay ? suaCount : "Off"}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Highest nearby obstacle</div>
+                <div className="rsf-metal-subpanel rounded-lg p-3">
+                  <div className="text-xs text-[#A9BBCD]">Highest nearby obstacle</div>
                   <div className="font-semibold">{highestObstacle ? formatAltitude(highestObstacle.amslFt) : "--"}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Max route terrain</div>
+                <div className="rsf-metal-subpanel rounded-lg p-3">
+                  <div className="text-xs text-[#A9BBCD]">Max route terrain</div>
                   <div className="font-semibold">{terrainMaxElevationFt !== null ? formatAltitude(terrainMaxElevationFt) : "--"}</div>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">Best diversion</div>
+                <div className="rsf-metal-subpanel rounded-lg p-3">
+                  <div className="text-xs text-[#A9BBCD]">Best diversion</div>
                   <div className="font-semibold">{bestDiversion ? bestDiversion.icao : "--"}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
+                  <div className="mt-1 text-xs text-[#A9BBCD]">
                     {bestDiversion ? `${bestDiversion.distanceNm.toFixed(1)} NM · ${formatBearing(bestDiversion.bearingDeg)}` : "Start tracking to rank nearby airports."}
                   </div>
                   {bestDiversion?.scoreReasons?.length ? (
-                    <div className="mt-1 text-xs text-muted-foreground">
+                    <div className="mt-1 text-xs text-[#A9BBCD]">
                       Best ranked for {bestDiversion.scoreReasons.join(", ")}.
                     </div>
                   ) : null}
                 </div>
                 <div className="rounded-lg border p-3 md:col-span-2">
-                  <div className="text-xs text-muted-foreground">Terrain cueing</div>
+                  <div className="text-xs text-[#A9BBCD]">Terrain cueing</div>
                   <div className={`font-semibold ${terrainCueToneClass}`}>{terrainCueStatus}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
+                  <div className="mt-1 text-xs text-[#A9BBCD]">
                     {terrainReferenceSource
                       ? `Using ${terrainReferenceSource} ${formatAltitude(terrainReferenceAltitudeFt)} for map clearance cueing.`
                       : "Select a saved route with planned altitude or start GPS tracking for terrain cueing."}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                    <span className="inline-flex items-center gap-1 rounded-full border px-2 py-1">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[#203249] bg-[#0d1420]/70 px-2 py-1 text-[#A9BBCD]">
                       <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
                       Comfortable {terrainCueCounts.comfortable > 0 ? terrainCueCounts.comfortable : ""}
                     </span>
-                    <span className="inline-flex items-center gap-1 rounded-full border px-2 py-1">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[#203249] bg-[#0d1420]/70 px-2 py-1 text-[#A9BBCD]">
                       <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
                       Tight {terrainCueCounts.caution > 0 ? terrainCueCounts.caution : ""}
                     </span>
-                    <span className="inline-flex items-center gap-1 rounded-full border px-2 py-1">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[#203249] bg-[#0d1420]/70 px-2 py-1 text-[#A9BBCD]">
                       <span className="h-2.5 w-2.5 rounded-full bg-red-600" />
                       Warning {terrainCueCounts.warning > 0 ? terrainCueCounts.warning : ""}
                     </span>
@@ -2740,23 +2740,23 @@ export default function AdsbLive() {
           </Card>
 
           <div className="space-y-6">
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
                 <CardTitle>Active route overlay</CardTitle>
                 <CardDescription>Keep your saved planned route visible while tracking live position and terrain context.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {!isAuthenticated ? (
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm text-[#A9BBCD]">
                     Sign in to load saved flight plans as a live route overlay.
                   </div>
                 ) : savedPlansQuery.isLoading ? (
-                  <div className="text-sm text-muted-foreground">Loading saved routes...</div>
+                  <div className="text-sm text-[#A9BBCD]">Loading saved routes...</div>
                 ) : selectedPlan ? (
                   <>
-                    <div className="rounded-lg border p-3">
+                    <div className="rsf-metal-subpanel rounded-lg p-3">
                       <div className="font-medium">{selectedPlan.title || `${selectedPlan.departure} to ${selectedPlan.destination}`}</div>
-                      <div className="mt-1 text-sm text-muted-foreground">{routeSummaryText}</div>
+                      <div className="mt-1 text-sm text-[#A9BBCD]">{routeSummaryText}</div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <Badge variant="outline">{selectedPlan.filingFlightRules || "VFR"}</Badge>
                         <Badge variant="outline">{selectedPlan.filingStatus || "draft"}</Badge>
@@ -2767,53 +2767,53 @@ export default function AdsbLive() {
                       <div className="rounded-lg border p-3 space-y-3">
                         <div className="font-medium">Live route progress</div>
                         <div className="grid gap-3 md:grid-cols-2">
-                          <div className="rounded-lg border bg-muted/30 p-3">
-                            <div className="text-xs text-muted-foreground">Route remaining</div>
+                          <div className="rounded-lg border bg-[#0d1420]/70 p-3">
+                            <div className="text-xs text-[#A9BBCD]">Route remaining</div>
                             <div className="font-semibold">{routeProgress.remainingRouteNm.toFixed(1)} NM</div>
-                            <div className="mt-1 text-xs text-muted-foreground">
+                            <div className="mt-1 text-xs text-[#A9BBCD]">
                               Direct to destination {routeProgress.directToDestinationNm.toFixed(1)} NM
                             </div>
                           </div>
-                          <div className="rounded-lg border bg-muted/30 p-3">
-                            <div className="text-xs text-muted-foreground">Estimated arrival</div>
+                          <div className="rounded-lg border bg-[#0d1420]/70 p-3">
+                            <div className="text-xs text-[#A9BBCD]">Estimated arrival</div>
                             <div className="font-semibold">{formatEtaLocal(routeProgress.etaIso)}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">
+                            <div className="mt-1 text-xs text-[#A9BBCD]">
                               Based on current speed {formatSpeed(ownship?.speedKt ?? null)}
                             </div>
                           </div>
-                          <div className="rounded-lg border bg-muted/30 p-3">
-                            <div className="text-xs text-muted-foreground">Next route point</div>
+                          <div className="rounded-lg border bg-[#0d1420]/70 p-3">
+                            <div className="text-xs text-[#A9BBCD]">Next route point</div>
                             <div className="font-semibold">{routeProgress.nextWaypoint?.icao || selectedPlan.destination}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">
+                            <div className="mt-1 text-xs text-[#A9BBCD]">
                               Active leg {routeProgress.activeLegIndex + 1} of {Math.max(routePoints.length - 1, 1)}
                             </div>
                           </div>
-                          <div className="rounded-lg border bg-muted/30 p-3">
-                            <div className="text-xs text-muted-foreground">Off-route deviation</div>
-                            <div className={`font-semibold ${routeProgress.offRouteNm >= 2 ? "text-red-700" : routeProgress.offRouteNm >= 0.75 ? "text-amber-700" : "text-emerald-700"}`}>
+                          <div className="rounded-lg border bg-[#0d1420]/70 p-3">
+                            <div className="text-xs text-[#A9BBCD]">Off-route deviation</div>
+                            <div className={`font-semibold ${routeProgress.offRouteNm >= 2 ? "text-red-400" : routeProgress.offRouteNm >= 0.75 ? "text-amber-400" : "text-emerald-400"}`}>
                               {routeProgress.offRouteNm.toFixed(1)} NM
                             </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
+                            <div className="mt-1 text-xs text-[#A9BBCD]">
                               Progress {Math.round(routeProgress.progressPct)}% · flown {routeProgress.distanceFlownNm.toFixed(1)} of {routeProgress.totalRouteNm.toFixed(1)} NM
                             </div>
                           </div>
                         </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                        <div className="h-2 overflow-hidden rounded-full bg-[#1a2435]">
                           <div
-                            className="h-full rounded-full bg-sky-600 transition-all"
+                            className="h-full rounded-full bg-[hsl(220,76%,58%)] transition-all"
                             style={{ width: `${Math.max(3, Math.min(100, routeProgress.progressPct))}%` }}
                           />
                         </div>
                       </div>
                     ) : selectedPlan && ownship ? (
-                      <div className="rounded-lg border p-3 text-sm text-muted-foreground">
+                      <div className="rounded-lg border p-3 text-sm text-[#A9BBCD]">
                         RSF needs at least two resolved route points to calculate live route progress for this plan.
                       </div>
                     ) : null}
                     {routePoints.length > 0 ? (
                       <div className="space-y-2">
                         {terrainProfileQuery.isLoading ? (
-                          <div className="rounded-lg border px-3 py-2 text-sm text-muted-foreground">Loading terrain profile...</div>
+                          <div className="rounded-lg border px-3 py-2 text-sm text-[#A9BBCD]">Loading terrain profile...</div>
                         ) : null}
                         {terrainProfileQuery.error ? (
                           <Alert variant="destructive">
@@ -2826,46 +2826,46 @@ export default function AdsbLive() {
                         {terrainProfileQuery.data ? (
                           <div className="rounded-lg border p-3 space-y-3">
                             <div className="font-medium">USGS terrain profile</div>
-                            <div className="mt-1 text-sm text-muted-foreground">
+                            <div className="mt-1 text-sm text-[#A9BBCD]">
                               {terrainProfileQuery.data.sampledPointCount} samples · highest terrain {formatAltitude(terrainProfileQuery.data.maxElevationFt)}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2 text-xs">
                               <Badge variant="outline">
                                 Ref {terrainReferenceSource ? `${terrainReferenceSource} ${formatAltitude(terrainReferenceAltitudeFt)}` : "none"}
                               </Badge>
-                              <Badge variant="outline" className="border-emerald-200 text-emerald-700">
+                              <Badge variant="outline" className="border-emerald-700/50 text-emerald-400">
                                 Comfortable {terrainCueCounts.comfortable}
                               </Badge>
-                              <Badge variant="outline" className="border-amber-200 text-amber-700">
+                              <Badge variant="outline" className="border-amber-700/50 text-amber-400">
                                 Tight {terrainCueCounts.caution}
                               </Badge>
-                              <Badge variant="outline" className="border-red-200 text-red-700">
+                              <Badge variant="outline" className="border-red-700/50 text-red-400">
                                 Warning {terrainCueCounts.warning}
                               </Badge>
                             </div>
                             <div className="grid gap-2 md:grid-cols-2">
-                              <div className="rounded-lg border bg-muted/30 p-3">
-                                <div className="text-xs text-muted-foreground">Worst clearance</div>
+                              <div className="rounded-lg border bg-[#0d1420]/70 p-3">
+                                <div className="text-xs text-[#A9BBCD]">Worst clearance</div>
                                 <div className={`font-semibold ${terrainCueToneClass}`}>{terrainClearanceHeadline}</div>
-                                <div className="mt-1 text-xs text-muted-foreground">{terrainClearanceAdvisory}</div>
+                                <div className="mt-1 text-xs text-[#A9BBCD]">{terrainClearanceAdvisory}</div>
                               </div>
                               {worstTerrainSegment ? (
-                                <div className="rounded-lg border bg-muted/30 p-3">
-                                  <div className="text-xs text-muted-foreground">Highest-risk stretch</div>
+                                <div className="rounded-lg border bg-[#0d1420]/70 p-3">
+                                  <div className="text-xs text-[#A9BBCD]">Highest-risk stretch</div>
                                   <div className="font-semibold">
                                     Segment {worstTerrainSegment.index + 1} of {terrainCueSegments.length}
                                   </div>
-                                  <div className="mt-1 text-xs text-muted-foreground">
+                                  <div className="mt-1 text-xs text-[#A9BBCD]">
                                     Highest terrain {formatAltitude(worstTerrainSegment.segment.maxElevationFt)} · clearance {formatClearance(worstTerrainSegment.segment.clearanceFt)}
                                   </div>
                                 </div>
                               ) : null}
                             </div>
                             {terrainProfileChart ? (
-                              <div className="rounded-lg border bg-muted/20 p-3">
+                              <div className="rounded-lg border bg-[#0d1420]/50 p-3">
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="text-sm font-medium">Vertical profile</div>
-                                  <div className="text-xs text-muted-foreground">
+                                  <div className="text-xs text-[#A9BBCD]">
                                     Terrain vs {terrainReferenceSource ? `${terrainReferenceSource} ${formatAltitude(terrainReferenceAltitudeFt)}` : "reference altitude"}
                                   </div>
                                 </div>
@@ -2959,7 +2959,7 @@ export default function AdsbLive() {
                                     </text>
                                   </svg>
                                 </div>
-                                <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                                <div className="mt-2 flex flex-wrap gap-3 text-xs text-[#A9BBCD]">
                                   <span className="inline-flex items-center gap-1">
                                     <span className="h-2.5 w-2.5 rounded-full bg-violet-600" />
                                     Terrain profile
@@ -2977,14 +2977,14 @@ export default function AdsbLive() {
                             ) : null}
                             {terrainHotSpots.length > 0 ? (
                               <div className="space-y-2">
-                                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                <div className="text-xs font-medium uppercase tracking-wide text-[#A9BBCD]">
                                   Terrain hot spots
                                 </div>
                                 {terrainHotSpots.map((item, hotSpotIndex) => (
                                   <div key={`terrain-hot-spot-${item.index}`} className="rounded-lg border px-3 py-2 text-sm">
                                     <div className="flex items-center justify-between gap-3">
                                       <div className="flex items-center gap-2 font-medium">
-                                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1 text-xs font-semibold">
+                                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#1a2435] px-1 text-xs font-semibold">
                                           {hotSpotIndex + 1}
                                         </span>
                                         <span>
@@ -2997,7 +2997,7 @@ export default function AdsbLive() {
                                       </div>
                                       <Badge variant="outline">{item.progressLabel}</Badge>
                                     </div>
-                                    <div className="mt-1 text-xs text-muted-foreground">
+                                    <div className="mt-1 text-xs text-[#A9BBCD]">
                                       Highest terrain {formatAltitude(item.segment.maxElevationFt)} · clearance {formatClearance(item.segment.clearanceFt)}
                                     </div>
                                   </div>
@@ -3009,25 +3009,25 @@ export default function AdsbLive() {
                         {routePoints.map((point) => (
                           <div key={`point-${point.icao}-${point.lat}-${point.lon}`} className="rounded-lg border px-3 py-2 text-sm">
                             <div className="font-medium">{point.icao}</div>
-                            <div className="text-muted-foreground">{point.label.replace(`${point.icao} · `, "")}</div>
+                            <div className="text-[#A9BBCD]">{point.label.replace(`${point.icao} · `, "")}</div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="text-sm text-muted-foreground">
+                      <div className="text-sm text-[#A9BBCD]">
                         RSF could not resolve route airports from this plan yet.
                       </div>
                     )}
                   </>
                 ) : (
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm text-[#A9BBCD]">
                     Choose a saved flight plan to overlay it on the live map.
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
                 <CardTitle>Operational status</CardTitle>
                 <CardDescription>What this live map can and cannot do right now.</CardDescription>
@@ -3037,21 +3037,21 @@ export default function AdsbLive() {
                   <Navigation className="mt-0.5 h-4 w-4 text-sky-600" />
                   <div>
                     <div className="font-medium">Device GPS ownship is live</div>
-                    <div className="text-muted-foreground">RSF can follow your current position from browser/device geolocation.</div>
+                    <div className="text-[#A9BBCD]">RSF can follow your current position from browser/device geolocation.</div>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <Radar className="mt-0.5 h-4 w-4 text-sky-600" />
                   <div>
                     <div className="font-medium">Traffic and weather overlays are live</div>
-                    <div className="text-muted-foreground">Nearby traffic comes from the RSF ADS-B proxy; radar and cloud overlays are available on-map.</div>
+                    <div className="text-[#A9BBCD]">Nearby traffic comes from the RSF ADS-B proxy; radar and cloud overlays are available on-map.</div>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <Radio className="mt-0.5 h-4 w-4 text-amber-600" />
                   <div>
                     <div className="font-medium">Receiver bridge mode now reports health and stale data</div>
-                    <div className="text-muted-foreground">
+                    <div className="text-[#A9BBCD]">
                       RSF can poll a local receiver bridge for ownship and traffic and now distinguishes healthy, stale,
                       traffic-only, and disconnected bridge states. Direct raw GDL-90 browser ingest is still the next step.
                     </div>
@@ -3061,7 +3061,7 @@ export default function AdsbLive() {
                   <Cloud className="mt-0.5 h-4 w-4 text-amber-600" />
                   <div>
                     <div className="font-medium">Terrain and obstacles are in first-pass beta</div>
-                    <div className="text-muted-foreground">
+                    <div className="text-[#A9BBCD]">
                       RSF now shows obstacle proximity plus terrain clearance cueing on the route. The next step is richer
                       map shading and more advanced hazard logic.
                     </div>
@@ -3070,7 +3070,7 @@ export default function AdsbLive() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -3093,7 +3093,7 @@ export default function AdsbLive() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {trafficQuery.isLoading ? (
-                  <div className="text-sm text-muted-foreground">Loading nearby traffic...</div>
+                  <div className="text-sm text-[#A9BBCD]">Loading nearby traffic...</div>
                 ) : trafficQuery.error ? (
                   <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
@@ -3102,17 +3102,17 @@ export default function AdsbLive() {
                     </AlertDescription>
                   </Alert>
                 ) : filteredTrafficTargets.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm text-[#A9BBCD]">
                     No traffic currently matches the selected filter.
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {filteredTrafficTargets.slice(0, 10).map((target) => (
-                      <div key={`list-${target.id}`} className="rounded-lg border p-3">
+                      <div key={`list-${target.id}`} className="rsf-metal-subpanel rounded-lg p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <div className="font-medium">{target.callsign || target.tail || target.id}</div>
-                            <div className="text-xs text-muted-foreground">
+                            <div className="text-xs text-[#A9BBCD]">
                               {target.category || "Traffic"} {target.onGround ? "· On ground" : ""}
                             </div>
                           </div>
@@ -3125,7 +3125,7 @@ export default function AdsbLive() {
                             </Badge>
                           </div>
                         </div>
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-[#A9BBCD]">
                           <div>Altitude: <span className="font-medium text-foreground">{formatAltitude(target.altitudeFt)}</span></div>
                           <div>Relative: <span className="font-medium text-foreground">{formatSignedAltitude(target.relativeAltitudeFt)}</span></div>
                           <div>Speed: <span className="font-medium text-foreground">{formatSpeed(target.groundSpeedKt)}</span></div>
@@ -3140,14 +3140,14 @@ export default function AdsbLive() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
                 <CardTitle>Diversion candidates</CardTitle>
                 <CardDescription>Nearest practical airports around ownship with runway and frequency context.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {nearbyDiversionsQuery.isLoading ? (
-                  <div className="text-sm text-muted-foreground">Loading nearby diversion airports...</div>
+                  <div className="text-sm text-[#A9BBCD]">Loading nearby diversion airports...</div>
                 ) : nearbyDiversionsQuery.error ? (
                   <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
@@ -3156,24 +3156,24 @@ export default function AdsbLive() {
                     </AlertDescription>
                   </Alert>
                 ) : diversionCandidates.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm text-[#A9BBCD]">
                     Start tracking to load nearby airports suitable for quick diversion review.
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {diversionCandidates.map((airport, index) => (
-                      <div key={`diversion-list-${airport.icao}-${index}`} className="rounded-lg border p-3">
+                      <div key={`diversion-list-${airport.icao}-${index}`} className="rsf-metal-subpanel rounded-lg p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <div className="flex items-center gap-2 font-medium">
-                              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1 text-xs font-semibold">
+                              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#1a2435] px-1 text-xs font-semibold">
                                 {index + 1}
                               </span>
                               <span>{airport.icao}</span>
-                              {airport.name ? <span className="text-muted-foreground">· {airport.name}</span> : null}
+                              {airport.name ? <span className="text-[#A9BBCD]">· {airport.name}</span> : null}
                             </div>
                             {(airport.city || airport.state) ? (
-                              <div className="text-xs text-muted-foreground">
+                              <div className="text-xs text-[#A9BBCD]">
                                 {[airport.city, airport.state].filter(Boolean).join(", ")}
                               </div>
                             ) : null}
@@ -3183,7 +3183,7 @@ export default function AdsbLive() {
                             {index === 0 ? <Badge>Best ranked</Badge> : null}
                           </div>
                         </div>
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-[#A9BBCD]">
                           <div>
                             Bearing: <span className="font-medium text-foreground">{formatBearing(airport.bearingDeg)}</span>
                           </div>
@@ -3217,7 +3217,7 @@ export default function AdsbLive() {
                           </div>
                         </div>
                         {airport.scoreReasons.length > 0 ? (
-                          <div className="mt-2 text-xs text-muted-foreground">
+                          <div className="mt-2 text-xs text-[#A9BBCD]">
                             Ranked for {airport.scoreReasons.join(", ")}.
                           </div>
                         ) : null}
@@ -3247,7 +3247,7 @@ export default function AdsbLive() {
                             ))}
                           </div>
                         ) : (
-                          <div className="mt-2 text-xs text-muted-foreground">No airport frequencies cached yet for this field.</div>
+                          <div className="mt-2 text-xs text-[#A9BBCD]">No airport frequencies cached yet for this field.</div>
                         )}
                       </div>
                     ))}
@@ -3256,36 +3256,36 @@ export default function AdsbLive() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
                 <CardTitle>Divert now short list</CardTitle>
                 <CardDescription>Closest immediate diversion options with acceptable runway, weather, and wind context.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {nearbyDiversionsQuery.isLoading ? (
-                  <div className="text-sm text-muted-foreground">Scoring immediate diversion options...</div>
+                  <div className="text-sm text-[#A9BBCD]">Scoring immediate diversion options...</div>
                 ) : nearbyDiversionsQuery.error ? (
-                  <div className="text-sm text-muted-foreground">Diversion short list unavailable while airport data reloads.</div>
+                  <div className="text-sm text-[#A9BBCD]">Diversion short list unavailable while airport data reloads.</div>
                 ) : immediateDiversions.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm text-[#A9BBCD]">
                     No airport currently meets the immediate-diversion screen. Use the ranked list above for the next-best field.
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {immediateDiversions.map((airport, index) => (
-                      <div key={`immediate-diversion-${airport.icao}-${index}`} className="rounded-lg border p-3">
+                      <div key={`immediate-diversion-${airport.icao}-${index}`} className="rsf-metal-subpanel rounded-lg p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <div className="font-medium">
                               {airport.icao}{airport.name ? ` · ${airport.name}` : ""}
                             </div>
-                            <div className="text-xs text-muted-foreground">
+                            <div className="text-xs text-[#A9BBCD]">
                               {airport.distanceNm.toFixed(1)} NM · {formatBearing(airport.bearingDeg)} · {airport.maxRunwayFt ? `${airport.maxRunwayFt.toLocaleString()} ft` : "--"}
                             </div>
                           </div>
                           {index === 0 ? <Badge>Primary</Badge> : <Badge variant="outline">Alternate</Badge>}
                         </div>
-                        <div className="mt-2 text-xs text-muted-foreground">
+                        <div className="mt-2 text-xs text-[#A9BBCD]">
                           Chosen for {airport.immediateReasons.join(", ")}.
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs">
@@ -3328,18 +3328,18 @@ export default function AdsbLive() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
                 <CardTitle>Active diversion briefing</CardTitle>
                 <CardDescription>Runway, wind, and comm context for the diversion airport you are actively working.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {!selectedDiversion ? (
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm text-[#A9BBCD]">
                     Pick `Direct-to` or `Focus on map` on a diversion candidate to load its active briefing here.
                   </div>
                 ) : selectedDiversionBriefingQuery.isLoading ? (
-                  <div className="text-sm text-muted-foreground">Loading diversion briefing for {selectedDiversion.icao}...</div>
+                  <div className="text-sm text-[#A9BBCD]">Loading diversion briefing for {selectedDiversion.icao}...</div>
                 ) : selectedDiversionBriefingQuery.error ? (
                   <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
@@ -3351,25 +3351,25 @@ export default function AdsbLive() {
                   </Alert>
                 ) : (
                   <div className="space-y-3">
-                    <div className="rounded-lg border p-3">
+                    <div className="rsf-metal-subpanel rounded-lg p-3">
                       <div className="font-medium">
                         {selectedDiversion.icao}{selectedDiversion.name ? ` · ${selectedDiversion.name}` : ""}
                       </div>
-                      <div className="mt-1 text-sm text-muted-foreground">
+                      <div className="mt-1 text-sm text-[#A9BBCD]">
                         {selectedDiversion.distanceNm.toFixed(1)} NM · {formatBearing(selectedDiversion.bearingDeg)}
                         {selectedDiversion.maxRunwayFt ? ` · ${selectedDiversion.maxRunwayFt.toLocaleString()} ft max runway` : ""}
                       </div>
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-lg border bg-muted/30 p-3">
-                        <div className="text-xs text-muted-foreground">Runway in use</div>
+                      <div className="rounded-lg border bg-[#0d1420]/70 p-3">
+                        <div className="text-xs text-[#A9BBCD]">Runway in use</div>
                         <div className="font-semibold">{selectedDiversionBriefingQuery.data?.runwayInUse || "--"}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">
+                        <div className="mt-1 text-xs text-[#A9BBCD]">
                           Advisory runway {selectedDiversionBriefingQuery.data?.advisory?.runway || "--"}
                         </div>
                       </div>
-                      <div className="rounded-lg border bg-muted/30 p-3">
-                        <div className="text-xs text-muted-foreground">Surface wind</div>
+                      <div className="rounded-lg border bg-[#0d1420]/70 p-3">
+                        <div className="text-xs text-[#A9BBCD]">Surface wind</div>
                         <div className="font-semibold">
                           {selectedDiversionBriefingQuery.data?.wind?.direction != null
                             ? `${formatBearing(selectedDiversionBriefingQuery.data.wind.direction)}`
@@ -3378,21 +3378,21 @@ export default function AdsbLive() {
                             ? ` @ ${Math.round(selectedDiversionBriefingQuery.data.wind.speed)} kt`
                             : ""}
                         </div>
-                        <div className="mt-1 text-xs text-muted-foreground">
+                        <div className="mt-1 text-xs text-[#A9BBCD]">
                           Crosswind {selectedDiversionBriefingQuery.data?.advisory?.crosswind != null
                             ? `${Math.round(selectedDiversionBriefingQuery.data.advisory.crosswind)} kt`
                             : "--"}
                         </div>
                       </div>
                     </div>
-                    <div className="rounded-lg border p-3">
-                      <div className="text-xs text-muted-foreground">Best comms</div>
+                    <div className="rsf-metal-subpanel rounded-lg p-3">
+                      <div className="text-xs text-[#A9BBCD]">Best comms</div>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs">
                         {selectedDiversion.frequencySummary.length > 0 ? selectedDiversion.frequencySummary.map((item, index) => (
                           <Badge key={`active-diversion-freq-${selectedDiversion.icao}-${index}`} variant="secondary" className="font-normal">
                             {item.type || item.description || "Freq"} {item.frequencyMhz ? `· ${item.frequencyMhz.toFixed(3)}` : ""}
                           </Badge>
-                        )) : <span className="text-muted-foreground">No airport frequencies cached yet.</span>}
+                        )) : <span className="text-[#A9BBCD]">No airport frequencies cached yet.</span>}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -3414,18 +3414,18 @@ export default function AdsbLive() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
                 <CardTitle>Receiver bridge diagnostics</CardTitle>
                 <CardDescription>Bridge quality, frame coverage, and freshness for local GDL-90 ingest.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {positionSource !== "bridge" ? (
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm text-[#A9BBCD]">
                     Switch `Position source` to `Receiver bridge` to see live bridge diagnostics here.
                   </div>
                 ) : !trackingEnabled ? (
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm text-[#A9BBCD]">
                     Start live tracking to begin polling the local bridge and collecting diagnostics.
                   </div>
                 ) : receiverBridgeQuery.error ? (
@@ -3440,36 +3440,36 @@ export default function AdsbLive() {
                 ) : (
                   <>
                     <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-lg border p-3">
-                        <div className="text-xs text-muted-foreground">Frame quality</div>
+                      <div className="rsf-metal-subpanel rounded-lg p-3">
+                        <div className="text-xs text-[#A9BBCD]">Frame quality</div>
                         <div className="font-semibold">
                           {bridgeDiagnostics.validFrames} valid / {bridgeDiagnostics.totalFrames} frames
                         </div>
-                        <div className="mt-1 text-xs text-muted-foreground">
+                        <div className="mt-1 text-xs text-[#A9BBCD]">
                           {bridgeDiagnostics.crcErrors} CRC errors · {bridgeDiagnostics.rejectedReports} rejected known reports
                         </div>
                       </div>
-                      <div className="rounded-lg border p-3">
-                        <div className="text-xs text-muted-foreground">Tracked traffic</div>
+                      <div className="rsf-metal-subpanel rounded-lg p-3">
+                        <div className="text-xs text-[#A9BBCD]">Tracked traffic</div>
                         <div className="font-semibold">{bridgeDiagnostics.trackedTraffic}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">
+                        <div className="mt-1 text-xs text-[#A9BBCD]">
                           {bridgeDiagnostics.trafficReports} decoded traffic reports
                         </div>
                       </div>
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-                        <div className="text-xs text-muted-foreground">Freshness</div>
-                        <div className="mt-2 space-y-1 text-muted-foreground">
+                      <div className="rounded-lg border bg-[#0d1420]/70 p-3 text-sm">
+                        <div className="text-xs text-[#A9BBCD]">Freshness</div>
+                        <div className="mt-2 space-y-1 text-[#A9BBCD]">
                           <div>Heartbeat: <span className="font-medium text-foreground">{bridgeDiagnostics.lastHeartbeatAge}</span></div>
                           <div>Ownship: <span className="font-medium text-foreground">{bridgeDiagnostics.lastOwnshipAge}</span></div>
                           <div>Traffic: <span className="font-medium text-foreground">{bridgeDiagnostics.lastTrafficAge}</span></div>
                           <div>Geom alt frame: <span className="font-medium text-foreground">{bridgeDiagnostics.lastGeometricAltitudeAge}</span></div>
                         </div>
                       </div>
-                      <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-                        <div className="text-xs text-muted-foreground">Decoded coverage</div>
-                        <div className="mt-2 space-y-1 text-muted-foreground">
+                      <div className="rounded-lg border bg-[#0d1420]/70 p-3 text-sm">
+                        <div className="text-xs text-[#A9BBCD]">Decoded coverage</div>
+                        <div className="mt-2 space-y-1 text-[#A9BBCD]">
                           <div>Heartbeat reports: <span className="font-medium text-foreground">{bridgeDiagnostics.heartbeatReports}</span></div>
                           <div>Ownship reports: <span className="font-medium text-foreground">{bridgeDiagnostics.ownshipReports}</span></div>
                           <div>Geom altitude reports: <span className="font-medium text-foreground">{bridgeDiagnostics.ownshipGeometricAltitudeReports}</span></div>
@@ -3478,8 +3478,8 @@ export default function AdsbLive() {
                       </div>
                     </div>
                     <div className="rounded-lg border p-3 text-sm">
-                      <div className="text-xs text-muted-foreground">Bridge status page</div>
-                      <div className="mt-1 text-muted-foreground">
+                      <div className="text-xs text-[#A9BBCD]">Bridge status page</div>
+                      <div className="mt-1 text-[#A9BBCD]">
                         Open <span className="font-medium text-foreground">http://127.0.0.1:3005/</span> locally to verify the bridge before opening RSF.
                       </div>
                     </div>
@@ -3498,13 +3498,13 @@ export default function AdsbLive() {
                       bridgeDiagnostics.recentCrcFailures.length > 0) ? (
                       <div className="rounded-lg border p-3 text-sm">
                         <div className="font-medium">Recent bridge decode samples</div>
-                        <div className="mt-2 space-y-3 text-muted-foreground">
+                        <div className="mt-2 space-y-3 text-[#A9BBCD]">
                           {bridgeDiagnostics.recentUnsupportedFrames.length > 0 ? (
                             <div>
                               <div className="text-xs font-medium uppercase tracking-wide">Unsupported frames</div>
                               <div className="mt-1 space-y-1">
                                 {bridgeDiagnostics.recentUnsupportedFrames.slice(0, 3).map((item, index) => (
-                                  <div key={`unsupported-${item.timestamp}-${index}`} className="rounded border bg-muted/30 px-2 py-1">
+                                  <div key={`unsupported-${item.timestamp}-${index}`} className="rounded border bg-[#0d1420]/70 px-2 py-1">
                                     <div className="font-medium text-foreground">
                                       {item.messageId || "--"} · {item.label || "Unknown"}
                                     </div>
@@ -3519,7 +3519,7 @@ export default function AdsbLive() {
                               <div className="text-xs font-medium uppercase tracking-wide">Rejected known frames</div>
                               <div className="mt-1 space-y-1">
                                 {bridgeDiagnostics.recentRejectedFrames.slice(0, 3).map((item, index) => (
-                                  <div key={`rejected-${item.timestamp}-${index}`} className="rounded border bg-muted/30 px-2 py-1">
+                                  <div key={`rejected-${item.timestamp}-${index}`} className="rounded border bg-[#0d1420]/70 px-2 py-1">
                                     <div className="font-medium text-foreground">
                                       {item.messageId || "--"} · {item.label || "Known message"}
                                     </div>
@@ -3534,7 +3534,7 @@ export default function AdsbLive() {
                               <div className="text-xs font-medium uppercase tracking-wide">CRC failures</div>
                               <div className="mt-1 space-y-1">
                                 {bridgeDiagnostics.recentCrcFailures.slice(0, 3).map((item, index) => (
-                                  <div key={`crc-${item.timestamp}-${index}`} className="rounded border bg-muted/30 px-2 py-1">
+                                  <div key={`crc-${item.timestamp}-${index}`} className="rounded border bg-[#0d1420]/70 px-2 py-1">
                                     <div className="font-medium text-foreground">
                                       Frame {item.frameLength ?? "--"} bytes
                                     </div>
@@ -3552,23 +3552,23 @@ export default function AdsbLive() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="rsf-card-shell">
               <CardHeader>
                 <CardTitle>Hazard watch</CardTitle>
                 <CardDescription>Nearby restrictions, obstacles, and terrain context around your current position and selected route.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm text-muted-foreground">
-                <div className="rounded-lg border p-3">
+              <CardContent className="space-y-2 text-sm text-[#A9BBCD]">
+                <div className="rsf-metal-subpanel rounded-lg p-3">
                   <div className="font-medium text-foreground">TFR overlay</div>
                   <div>{showTfrOverlay ? `${tfrCount} nearby TFR features loaded.` : "Overlay turned off."}</div>
                   {tfrQuery.error ? <div className="text-red-600">{tfrQuery.error instanceof Error ? tfrQuery.error.message : "TFR load failed."}</div> : null}
                 </div>
-                <div className="rounded-lg border p-3">
+                <div className="rsf-metal-subpanel rounded-lg p-3">
                   <div className="font-medium text-foreground">Special use airspace</div>
                   <div>{showSuaOverlay ? `${suaCount} nearby SUA features loaded.` : "Overlay turned off."}</div>
                   {suaQuery.error ? <div className="text-red-600">{suaQuery.error instanceof Error ? suaQuery.error.message : "SUA load failed."}</div> : null}
                 </div>
-                <div className="rounded-lg border p-3">
+                <div className="rsf-metal-subpanel rounded-lg p-3">
                   <div className="font-medium text-foreground">FAA obstacles</div>
                   <div>{showObstacleOverlay ? `${obstacleCount} nearby obstacles loaded from the FAA Daily DOF.` : "Overlay turned off."}</div>
                   {highestObstacle ? (
@@ -3579,7 +3579,7 @@ export default function AdsbLive() {
                   ) : null}
                   {obstacleQuery.error ? <div className="text-red-600">{obstacleQuery.error instanceof Error ? obstacleQuery.error.message : "Obstacle load failed."}</div> : null}
                 </div>
-                <div className="rounded-lg border p-3">
+                <div className="rsf-metal-subpanel rounded-lg p-3">
                   <div className="font-medium text-foreground">USGS terrain</div>
                   <div>
                     {terrainProfileQuery.data
@@ -3592,7 +3592,7 @@ export default function AdsbLive() {
                     </div>
                   ) : null}
                 </div>
-                <div className="rounded-lg border p-3">
+                <div className="rsf-metal-subpanel rounded-lg p-3">
                   <div className="font-medium text-foreground">Next integrations</div>
                   <div>- Vertical profile visualization and top-of-climb style route context</div>
                   <div>- Terrain labels and corridor hotspot annotations directly on the map</div>

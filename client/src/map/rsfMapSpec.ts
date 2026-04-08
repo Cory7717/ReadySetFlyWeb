@@ -25,10 +25,10 @@ export const RSF_TERRAIN_SURFACE_STYLES = {
   warning: { color: "#dc2626", weight: 20, opacity: 0.22, lineCap: "round" as const },
 } as const;
 
-export const RSF_COCKPIT_SHELL_CLASS = "border-[#1E2D42] bg-[#111820] text-[#E8EDF4]";
+export const RSF_COCKPIT_SHELL_CLASS = "border-[hsl(214_18%_76%_/_0.14)] bg-[linear-gradient(180deg,hsl(220_18%_14%_/_0.98),hsl(220_22%_9%_/_0.99))] text-[#E8EDF4] shadow-[inset_0_1px_0_hsl(0_0%_100%_/_0.07)]";
 export const RSF_COCKPIT_MUTED_TEXT_CLASS = "text-[#7A9BB8]";
-export const RSF_COCKPIT_PANEL_CLASS = "border-[#1E2D42] bg-[#0A0E14] text-[#E8EDF4]";
-export const RSF_COCKPIT_PANEL_ELEVATED_CLASS = "border-[#1E2D42] bg-[#0C121B]/96 text-[#E8EDF4]";
+export const RSF_COCKPIT_PANEL_CLASS = "border-[hsl(214_18%_76%_/_0.12)] bg-[linear-gradient(180deg,hsl(220_18%_12%_/_0.98),hsl(220_22%_8%_/_0.99))] text-[#E8EDF4] shadow-[inset_0_1px_0_hsl(0_0%_100%_/_0.05)]";
+export const RSF_COCKPIT_PANEL_ELEVATED_CLASS = "border-[hsl(214_18%_76%_/_0.13)] bg-[linear-gradient(180deg,hsl(220_18%_15%_/_0.98),hsl(220_20%_10%_/_0.98))] text-[#E8EDF4] shadow-[inset_0_1px_0_hsl(0_0%_100%_/_0.06),0_18px_36px_-26px_hsl(220_44%_2%_/_0.82)]";
 
 export const RSF_PLANNER_MAP_STYLE_OPTIONS: Array<{ value: RsfPlannerMapStyle; label: string; accent: RsfCockpitAccent }> = [
   { value: "standard", label: "Standard", accent: "map" },

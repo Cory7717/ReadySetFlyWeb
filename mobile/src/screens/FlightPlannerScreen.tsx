@@ -411,7 +411,7 @@ type WindsAloftMeta = {
 };
 
 type FlightDeckPanel = 'status' | 'surface' | 'layers' | 'traffic' | 'diversions';
-type FlightDeckView = 'map' | 'vision';
+type FlightDeckView = 'split' | 'map' | 'vision';
 type FlightDeckActionTone = 'default' | 'accent' | 'caution' | 'warning';
 type FlightDeckPhaseStage =
   | 'preflight'
@@ -1420,7 +1420,7 @@ export default function FlightPlannerScreen() {
   const [simulationProgress, setSimulationProgress] = useState(0);
   const [simulationSpeed, setSimulationSpeed] = useState<'1x' | '4x' | '8x'>('4x');
   const [flightDeckPanel, setFlightDeckPanel] = useState<FlightDeckPanel>('status');
-  const [flightDeckView, setFlightDeckView] = useState<FlightDeckView>('map');
+  const [flightDeckView, setFlightDeckView] = useState<FlightDeckView>('split');
   const [flightDeckDrawerOpen, setFlightDeckDrawerOpen] = useState(false);
   const [flightDeckHudExpanded, setFlightDeckHudExpanded] = useState(false);
   const [flightDeckChromeVisible, setFlightDeckChromeVisible] = useState(true);
@@ -4332,7 +4332,20 @@ export default function FlightPlannerScreen() {
   const toggleFlightDeckView = () => {
     pulseFlightDeckChrome();
     setFlightDeckView((current) => {
-      const next = current === 'map' ? 'vision' : 'map';
+      const next = current === 'vision' ? 'split' : 'vision';
+      logDiagnostic('flightDeck', 'view_changed', {
+        view: next,
+        visionMode,
+        ownshipAvailable: Boolean(activeOwnship),
+        pilotGradeAttitude: Boolean(attitudeSourceSummary.pilotGrade),
+      });
+      return next;
+    });
+  };
+  const setFlightDeckViewMode = (next: FlightDeckView) => {
+    pulseFlightDeckChrome(next === 'split');
+    setFlightDeckView((current) => {
+      if (current === next) return current;
       logDiagnostic('flightDeck', 'view_changed', {
         view: next,
         visionMode,
@@ -4401,7 +4414,7 @@ export default function FlightPlannerScreen() {
   }, [activeOwnship, routePoints.length, visionMode]);
 
   useEffect(() => {
-    if (!isFlightDeck || flightDeckView !== 'map' || !tacticalMapRegion) return;
+    if (!isFlightDeck || flightDeckView === 'vision' || !tacticalMapRegion) return;
 
     const signature = [
       flightDeckPhaseSummary.stage,
@@ -4448,7 +4461,7 @@ export default function FlightPlannerScreen() {
     tacticalMapRegion,
   ]);
   useEffect(() => {
-    if (!isFlightDeck || flightDeckView !== 'map' || activeOwnship?.heading == null) return;
+    if (!isFlightDeck || flightDeckView === 'vision' || activeOwnship?.heading == null) return;
     const previousHeading = flightDeckMapHeadingRef.current;
     if (previousHeading != null && Math.abs(normalizeHeadingDelta(activeOwnship.heading - previousHeading)) < 8) {
       return;
@@ -4568,7 +4581,7 @@ export default function FlightPlannerScreen() {
         clearTimeout(flightDeckChromeTimerRef.current);
         flightDeckChromeTimerRef.current = null;
       }
-      setFlightDeckView('map');
+      setFlightDeckView('split');
       setFlightDeckDrawerOpen(false);
       setFlightDeckHudExpanded(false);
       setFlightDeckChromeVisible(true);
@@ -4824,9 +4837,9 @@ export default function FlightPlannerScreen() {
             },
             {
               key: 'vision',
-              label: flightDeckView === 'vision' ? 'Map' : attitudeSourceSummary.pilotGrade ? 'Vision' : 'Vision assist',
+              label: flightDeckView === 'vision' ? 'Split' : attitudeSourceSummary.pilotGrade ? 'Vision' : 'Vision assist',
               value: flightDeckView === 'vision'
-                ? 'Return map'
+                ? 'Dual pane'
                 : attitudeSourceSummary.pilotGrade
                   ? 'Synthetic view'
                   : 'Guidance only',
@@ -6294,6 +6307,7 @@ export default function FlightPlannerScreen() {
   const flightDeckActions = {
     pulseFlightDeckChrome,
     toggleFlightDeckView,
+    setFlightDeckViewMode,
     toggleFlightDeckHud,
     setMapRegion,
     setSelectedDiversionIcao,

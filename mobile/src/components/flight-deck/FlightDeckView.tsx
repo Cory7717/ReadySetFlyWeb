@@ -5,7 +5,7 @@ import MapView, { Marker, Polygon, Polyline, UrlTile, WMSTile } from 'react-nati
 import { Platform } from 'react-native';
 import { PROVIDER_GOOGLE } from 'react-native-maps';
 import { colors, spacing } from '../../styles/theme';
-import type { FlightDeckStateProps, FlightDeckActionsProps } from './FlightDeckViewTypes';
+import type { FlightDeckStateProps, FlightDeckActionsProps, FlightDeckDisplayMode } from './FlightDeckViewTypes';
 
 type FlightDeckViewProps = {
   state: FlightDeckStateProps;
@@ -512,7 +512,45 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
   } = state;
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
-  const compactHeader = isLandscape || flightDeckView === 'vision';
+  const normalizedView =
+    flightDeckView === 'split' || flightDeckView === 'map' || flightDeckView === 'vision'
+      ? flightDeckView
+      : 'split';
+  const isSplitView = normalizedView === 'split';
+  const mapPaneVisible = normalizedView !== 'vision';
+  const visionPaneVisible = normalizedView !== 'map';
+  const mapPanePrimary = normalizedView === 'map';
+  const visionPanePrimary = normalizedView === 'vision';
+  const compactHeader = isLandscape || normalizedView !== 'map';
+  const splitVisionPaneStyle =
+    isSplitView
+      ? (isLandscape
+          ? {
+              position: 'absolute' as const,
+              top: Math.max(insets.top + 92, 104),
+              bottom: spacing.sm,
+              left: spacing.sm,
+              width: Math.max(232, Math.min(width * 0.54, width - 152)),
+              borderRadius: 18,
+              overflow: 'hidden' as const,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.backgroundElevated,
+            }
+          : {
+              position: 'absolute' as const,
+              top: Math.max(insets.top + 112, 124),
+              left: spacing.sm,
+              right: spacing.sm,
+              height: Math.max(248, Math.min(height * 0.42, 320)),
+              borderRadius: 18,
+              overflow: 'hidden' as const,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.backgroundElevated,
+            })
+      : null;
+  const splitPaneLabel = isSplitView ? 'Split View' : mapPanePrimary ? 'Map Full' : 'Vision Full';
   const visionModeLabel = visionMode === 'route' ? 'Route Mode' : 'Free Flight';
   const visionModeDetail =
     visionMode === 'route'
@@ -545,7 +583,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
 
   const {
     pulseFlightDeckChrome = () => {},
-    toggleFlightDeckView = () => {},
+    setFlightDeckViewMode = () => {},
     toggleFlightDeckHud = () => {},
     setMapRegion = () => {},
     setSelectedDiversionIcao = () => {},
@@ -604,519 +642,591 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
       : ownshipSourceSummary?.code === 'GPS'
         ? `GPS ${formatSourceAge(gpsOwnshipAgeMs)}`
         : ownshipSourceSummary?.freshness || 'Awaiting source';
+  const displayModeOptions: Array<{ mode: FlightDeckDisplayMode; label: string }> = [
+    { mode: 'split', label: 'Split' },
+    { mode: 'vision', label: 'Vision' },
+    { mode: 'map', label: 'Map' },
+  ];
+  const showMapOverlayCards = mapPanePrimary && (flightDeckTrafficCardVisible || flightDeckDiversionCardVisible);
+  const showBottomStack = Boolean(flightDeckVisibleAlert || flightDeckChromeVisible || showMapOverlayCards);
+
+  const renderDisplayModeControls = (stacked = false) => (
+    <View
+      style={[
+        styles.flightDeckControlRow,
+        stacked ? { flexWrap: 'wrap', justifyContent: 'flex-end' } : { flexWrap: 'wrap' },
+      ]}
+    >
+      {displayModeOptions.map((option, index) => (
+        <TouchableOpacity
+          key={`flight-deck-display-${option.mode}`}
+          style={[
+            styles.flightDeckChip,
+            normalizedView === option.mode && styles.flightDeckChipActive,
+            index > 0 ? { marginLeft: spacing.xs } : null,
+            stacked && index > 0 ? { marginTop: spacing.xs } : null,
+          ]}
+          onPress={() => setFlightDeckViewMode(option.mode)}
+        >
+          <Text
+            style={[
+              styles.flightDeckChipText,
+              normalizedView === option.mode && styles.flightDeckChipTextActive,
+            ]}
+          >
+            {option.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const renderVisionPane = (containerStyle: any = null) => (
+    <View style={[styles.flightDeckVisionShell, containerStyle]}>
+      {isSplitView ? (
+        <View
+          style={{
+            position: 'absolute',
+            top: spacing.sm,
+            left: spacing.sm,
+            right: spacing.sm,
+            zIndex: 6,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <View style={[styles.flightDeckHeaderMetaChip, styles.flightDeckHeaderMetaChipAccent]}>
+            <Text style={[styles.flightDeckHeaderMetaChipText, styles.flightDeckHeaderMetaChipTextAccent]}>
+              Vision Pane
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.flightDeckMiniChip, styles.flightDeckMiniChipActive]}
+            onPress={() => setFlightDeckViewMode('vision')}
+          >
+            <Text style={[styles.flightDeckMiniChipText, styles.flightDeckMiniChipTextActive]}>Full</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      <View
+        style={{
+          position: 'absolute',
+          inset: 0,
+          transform: [
+            { translateY: visionPitchTranslateY },
+            { rotate: `${visionRollDeg}deg` },
+          ],
+        }}
+      >
+        <View style={styles.flightDeckVisionSky} />
+        <View
+          style={[
+            styles.flightDeckVisionGround,
+            terrainRisk === 'warning'
+              ? styles.flightDeckVisionGroundWarning
+              : terrainRisk === 'caution'
+                ? styles.flightDeckVisionGroundCaution
+                : null,
+          ]}
+        />
+        <View
+          style={[
+            styles.flightDeckVisionHorizon,
+            terrainRisk === 'warning'
+              ? styles.flightDeckVisionHorizonWarning
+              : terrainRisk === 'caution'
+                ? styles.flightDeckVisionHorizonCaution
+                : null,
+          ]}
+        />
+        {visionPitchMarks.map((value) => {
+          const major = Math.abs(value) % 10 === 0;
+          return (
+            <View
+              key={`vision-ladder-${value}`}
+              style={[
+                styles.flightDeckVisionPitchMark,
+                { top: `${50 - value * 2.15}%` },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.flightDeckVisionPitchMarkLabel,
+                  styles.flightDeckVisionPitchMarkLabelLeft,
+                ]}
+              >
+                {Math.abs(value)}
+              </Text>
+              <View
+                style={[
+                  styles.flightDeckVisionPitchMarkWing,
+                  styles.flightDeckVisionPitchMarkWingLeft,
+                  major
+                    ? styles.flightDeckVisionPitchMarkWingMajor
+                    : styles.flightDeckVisionPitchMarkWingMinor,
+                ]}
+              />
+              <View
+                style={[
+                  styles.flightDeckVisionPitchMarkWing,
+                  styles.flightDeckVisionPitchMarkWingRight,
+                  major
+                    ? styles.flightDeckVisionPitchMarkWingMajor
+                    : styles.flightDeckVisionPitchMarkWingMinor,
+                ]}
+              />
+              <Text
+                style={[
+                  styles.flightDeckVisionPitchMarkLabel,
+                  styles.flightDeckVisionPitchMarkLabelRight,
+                ]}
+              >
+                {Math.abs(value)}
+              </Text>
+            </View>
+          );
+        })}
+        {visionRouteGuidance ? (
+          <View
+            style={[
+              styles.flightDeckVisionCenterline,
+              { left: `${visionRouteGuidance.centerlineLeftPct}%` },
+            ]}
+          />
+        ) : null}
+        {visionRouteGuidance?.gates.map((gate: any) => (
+          <View
+            key={gate.key}
+            style={[
+              styles.flightDeckVisionRouteGate,
+              {
+                left: `${gate.leftPct}%`,
+                top: `${gate.topPct}%`,
+                width: `${gate.widthPct}%`,
+                height: `${gate.heightPct}%`,
+              },
+              routeProgress?.offRouteNm && routeProgress.offRouteNm > 1.5
+                ? styles.flightDeckVisionRouteGateCaution
+                : null,
+            ]}
+          />
+        ))}
+        {visionRouteGuidance?.tunnelBands.map((band: any) => (
+          <View
+            key={band.key}
+            style={[
+              styles.flightDeckVisionTunnelBand,
+              {
+                left: `${band.leftPct}%`,
+                top: `${band.topPct}%`,
+                width: `${band.widthPct}%`,
+                height: `${band.heightPct}%`,
+              },
+              visionRouteGuidance.corridorSeverity === 'warning'
+                ? styles.flightDeckVisionTunnelBandWarning
+                : visionRouteGuidance.corridorSeverity === 'caution'
+                  ? styles.flightDeckVisionTunnelBandCaution
+                  : null,
+            ]}
+          />
+        ))}
+        {destinationRunwayCue ? (
+          <>
+            <View
+              style={[
+                styles.flightDeckVisionRunwayCenterline,
+                {
+                  left: `${destinationRunwayCue.centerlineLeftPct}%`,
+                  top: `${destinationRunwayCue.centerlineTopPct}%`,
+                  height: `${destinationRunwayCue.centerlineHeightPct}%`,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.flightDeckVisionRunwayEdge,
+                {
+                  left: `${destinationRunwayCue.leftPct}%`,
+                  top: `${destinationRunwayCue.topPct}%`,
+                  height: `${destinationRunwayCue.heightPct}%`,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.flightDeckVisionRunwayEdge,
+                {
+                  left: `${destinationRunwayCue.leftPct + destinationRunwayCue.widthPct}%`,
+                  top: `${destinationRunwayCue.topPct}%`,
+                  height: `${destinationRunwayCue.heightPct}%`,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.flightDeckVisionRunwayBox,
+                {
+                  left: `${destinationRunwayCue.leftPct}%`,
+                  top: `${destinationRunwayCue.topPct}%`,
+                  width: `${destinationRunwayCue.widthPct}%`,
+                  height: `${destinationRunwayCue.heightPct}%`,
+                },
+              ]}
+            />
+            {[0.22, 0.4, 0.58, 0.76].map((offset, index) => (
+              <View
+                key={`runway-dash-${index}`}
+                style={[
+                  styles.flightDeckVisionRunwayDash,
+                  {
+                    left: `${destinationRunwayCue.centerlineLeftPct}%`,
+                    top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * offset}%`,
+                  },
+                ]}
+              />
+            ))}
+            {[0.28, 0.72].map((offset, index) => (
+              <View
+                key={`runway-stripe-left-${index}`}
+                style={[
+                  styles.flightDeckVisionRunwayThresholdStripe,
+                  {
+                    left: `${destinationRunwayCue.leftPct + destinationRunwayCue.widthPct * offset}%`,
+                    top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * 0.18}%`,
+                  },
+                ]}
+              />
+            ))}
+            {[0.28, 0.72].map((offset, index) => (
+              <View
+                key={`runway-stripe-right-${index}`}
+                style={[
+                  styles.flightDeckVisionRunwayThresholdStripe,
+                  {
+                    left: `${destinationRunwayCue.leftPct + destinationRunwayCue.widthPct * offset}%`,
+                    top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * 0.82}%`,
+                  },
+                ]}
+              />
+            ))}
+            <View
+              style={[
+                styles.flightDeckVisionRunwayThreshold,
+                {
+                  left: `${destinationRunwayCue.leftPct}%`,
+                  top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * 0.5}%`,
+                  width: `${destinationRunwayCue.widthPct}%`,
+                },
+              ]}
+            />
+          </>
+        ) : null}
+        <View style={styles.flightDeckVisionTerrainBand}>
+          {visionTerrainColumns.map((column: any) => (
+            <View
+              key={column.key}
+              style={[
+                styles.flightDeckVisionTerrainColumn,
+                {
+                  left: `${column.leftPct}%`,
+                  height: `${column.heightPct}%`,
+                },
+                column.risk === 'warning'
+                  ? styles.flightDeckVisionTerrainColumnWarning
+                  : column.risk === 'caution'
+                    ? styles.flightDeckVisionTerrainColumnCaution
+                    : styles.flightDeckVisionTerrainColumnNominal,
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+      <View style={styles.flightDeckVisionBankArc}>
+        <View style={styles.flightDeckVisionBankReference} />
+        {flightDeckBankTicks.map((tick: any) => (
+          <View
+            key={`vision-bank-${tick.value}`}
+            style={[
+              styles.flightDeckVisionBankTick,
+              tick.major ? styles.flightDeckVisionBankTickMajor : null,
+              { left: `${tick.leftPct}%` },
+            ]}
+          />
+        ))}
+        <View
+          style={[
+            styles.flightDeckVisionBankPointerActual,
+            { transform: [{ translateX: visionActualBankOffset }] },
+          ]}
+        />
+        <View
+          style={[
+            styles.flightDeckVisionBankPointerCommand,
+            { transform: [{ translateX: visionCommandBankOffset }] },
+          ]}
+        />
+      </View>
+      <View style={styles.flightDeckVisionFlightPathMarker}>
+        <View style={styles.flightDeckVisionFlightPathInner} />
+      </View>
+      <View
+        style={[
+          styles.flightDeckVisionTrackVector,
+          { transform: [{ translateX: visionDirectorCue.lateralOffsetPct * 2.1 }] },
+        ]}
+      />
+      <View
+        style={[
+          styles.flightDeckVisionDirectorHorizontal,
+          visionDirectorCue.mode === 'escape'
+            ? styles.flightDeckVisionDirectorWarning
+            : visionDirectorCue.mode === 'intercept'
+              ? styles.flightDeckVisionDirectorCaution
+              : visionDirectorCue.lateralCaptured
+                ? styles.flightDeckVisionDirectorCaptured
+                : null,
+          { transform: [{ translateX: visionDirectorCue.lateralOffsetPct * 3.2 }] },
+        ]}
+      />
+      <View
+        style={[
+          styles.flightDeckVisionDirectorVertical,
+          visionDirectorCue.mode === 'escape'
+            ? styles.flightDeckVisionDirectorWarning
+            : !visionDirectorCue.verticalCaptured
+              ? styles.flightDeckVisionDirectorCaution
+              : styles.flightDeckVisionDirectorCaptured,
+          { transform: [{ translateY: visionDirectorCue.verticalOffsetPct * 2.1 }] },
+        ]}
+      />
+      <View style={[styles.flightDeckVisionCaptureTag, styles.flightDeckVisionCaptureTagTop]}>
+        <Text style={styles.flightDeckVisionCaptureTagText}>
+          {visionVerticalStateLabel === 'CLB' ? 'CLB' : visionVerticalStateLabel === 'VPTH' ? 'VPTH' : visionVerticalStateLabel === 'VNAV' ? 'VNAV' : 'ALT'}
+        </Text>
+      </View>
+      <View style={[styles.flightDeckVisionCaptureTag, styles.flightDeckVisionCaptureTagBottom]}>
+        <Text style={styles.flightDeckVisionCaptureTagText}>
+          {visionVerticalStateLabel === 'DES' ? 'DES' : visionVerticalStateLabel === 'VPTH' ? 'ARM' : visionVerticalStateLabel === 'VNAV' ? 'PATH' : 'ALT'}
+        </Text>
+      </View>
+      <View style={styles.flightDeckVisionVerticalScale}>
+        <View style={styles.flightDeckVisionVerticalScaleCenter} />
+        <View
+          style={[
+            styles.flightDeckVisionVerticalBug,
+            { transform: [{ translateY: visionVerticalDeviationOffset }] },
+            flightDeckVerticalConstraintSummary.targetAltitudeFt != null
+              ? flightDeckVerticalConstraintSummary.nextConstraintArmed
+                ? styles.flightDeckVisionVerticalBugArmed
+                : styles.flightDeckVisionVerticalBugActive
+              : null,
+          ]}
+        />
+      </View>
+      <View style={styles.flightDeckVisionReadoutLeft}>
+        <Text style={styles.flightDeckVisionLabel}>ALT</Text>
+        <Text style={styles.flightDeckVisionValue}>
+          {activeOwnship?.altitudeFt ? `${Math.round(activeOwnship.altitudeFt)}` : '--'}
+        </Text>
+      </View>
+      <View style={styles.flightDeckVisionReadoutRight}>
+        <Text style={styles.flightDeckVisionLabel}>HDG</Text>
+        <Text style={styles.flightDeckVisionValue}>
+          {activeOwnship?.heading ? `${Math.round(activeOwnship.heading)}` : '--'}
+        </Text>
+      </View>
+      <View style={styles.flightDeckVisionBanner}>
+        <Text style={styles.flightDeckVisionBannerTitle}>{visionModeLabel}</Text>
+        <Text style={styles.flightDeckVisionBannerText}>
+          {visionMode === 'route' ? (visionRouteGuidance?.lateralCue || visionGuidance) : visionModeDetail}
+        </Text>
+        <Text style={styles.flightDeckVisionBannerSupport}>
+          Heading {headingSourceSummary?.code || '--'} - {headingSourceSummary?.label || 'Unavailable'}
+        </Text>
+        <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionGuidance}</Text>
+        <Text style={styles.flightDeckVisionBannerSupport}>{visionDirectorCue.turnCommand}</Text>
+        <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionDirectorCue.verticalCommand}</Text>
+        <Text style={styles.flightDeckVisionBannerSupportMuted}>
+          {flightDeckVerticalPathSummary.modeLabel} - {flightDeckVerticalPathSummary.support}
+        </Text>
+        {!isSplitView ? (
+          <>
+            <Text style={styles.flightDeckVisionBannerSupportMuted}>
+              {flightDeckVerticalAlertSummary.deviationLabel} - {flightDeckVerticalAlertSummary.todLabel}
+            </Text>
+            {flightDeckVerticalConstraintSummary.targetAltitudeFt != null ? (
+              <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                {flightDeckVerticalConstraintSummary.modeLabel} - {flightDeckVerticalConstraintSummary.activeConstraintLabel}
+                {typeof flightDeckVerticalConstraintSummary.activeConstraintDistanceNm === 'number'
+                  ? ` - ${flightDeckVerticalConstraintSummary.activeConstraintDistanceNm.toFixed(1)} NM`
+                  : ''}
+                {' - '}
+                {flightDeckVerticalConstraintSummary.sourceLabel}
+              </Text>
+            ) : null}
+            {flightDeckVerticalConstraintSummary.nextConstraintLabel ? (
+              <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                {flightDeckVerticalConstraintSummary.nextConstraintArmed ? 'Next constraint armed' : 'Next constraint staged'} - {flightDeckVerticalConstraintSummary.nextConstraintLabel}
+              </Text>
+            ) : null}
+            <Text style={styles.flightDeckVisionBannerSupportMuted}>
+              {flightDeckVerticalConstraintSummary.constraintGateCall}
+            </Text>
+            {flightDeckVerticalPathSummary.requiredVsiFpm != null ? (
+              <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                VNAV {Math.abs(flightDeckVerticalPathSummary.requiredVsiFpm)} fpm
+                {flightDeckVerticalPathSummary.targetAltitudeFt != null
+                  ? ` - tgt ${Math.round(flightDeckVerticalPathSummary.targetAltitudeFt)} ft`
+                  : ''}
+              </Text>
+            ) : null}
+            {flightDeckVerticalConstraintSummary.requiredVsiFpm != null ? (
+              <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                PROC VNAV {Math.abs(flightDeckVerticalConstraintSummary.requiredVsiFpm)} fpm
+                {flightDeckVerticalConstraintSummary.targetAltitudeFt != null
+                  ? ` - tgt ${Math.round(flightDeckVerticalConstraintSummary.targetAltitudeFt)} ft`
+                  : ''}
+              </Text>
+            ) : null}
+            {activeAttitude && (typeof activeAttitude.pitchDeg === 'number' || typeof activeAttitude.rollDeg === 'number') ? (
+              <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                Att {typeof activeAttitude.pitchDeg === 'number' ? `${activeAttitude.pitchDeg.toFixed(1)}° pitch` : '--'} / {typeof activeAttitude.rollDeg === 'number' ? `${activeAttitude.rollDeg.toFixed(1)}° bank` : '--'}
+              </Text>
+            ) : null}
+            <Text style={styles.flightDeckVisionBannerSupportMuted}>
+              {attitudeSourceSummary?.pilotGrade ? attitudeSourceSummary.detail : visionReadinessSummary?.detail}
+            </Text>
+          </>
+        ) : null}
+        {terrainEscapeGuidance ? (
+          <Text style={styles.flightDeckVisionBannerAlert}>{terrainEscapeGuidance}</Text>
+        ) : null}
+      </View>
+      <View style={styles.flightDeckVisionGuidanceChip}>
+        <Text style={styles.flightDeckVisionGuidanceText}>{visionGuidance}</Text>
+      </View>
+      {destinationRunwayCue && !isSplitView ? (
+        <View style={styles.flightDeckVisionApproachChip}>
+          <Text style={styles.flightDeckVisionApproachTitle}>Approach</Text>
+          <Text style={styles.flightDeckVisionApproachText}>
+            RWY {destinationRunwayCue.runwayId} - {destinationRunwayCue.distanceLabel}
+          </Text>
+          <Text style={styles.flightDeckVisionApproachMeta}>
+            {Math.abs(destinationRunwayCue.alignmentDeltaDeg) < 4
+              ? 'Aligned on final'
+              : destinationRunwayCue.alignmentDeltaDeg > 0
+                ? `Correct left ${Math.round(Math.abs(destinationRunwayCue.alignmentDeltaDeg))} deg`
+                : `Correct right ${Math.round(Math.abs(destinationRunwayCue.alignmentDeltaDeg))} deg`}
+          </Text>
+        </View>
+      ) : destinationBriefingLoading && !isSplitView ? (
+        <View style={styles.flightDeckVisionApproachChip}>
+          <Text style={styles.flightDeckVisionApproachTitle}>Approach</Text>
+          <Text style={styles.flightDeckVisionApproachText}>Loading runway briefing</Text>
+        </View>
+      ) : null}
+      {visionTrafficCue ? (
+        <View
+          style={{
+            position: 'absolute',
+            left: `${visionTrafficCue.xPct}%`,
+            top: `${visionTrafficCue.yPct}%`,
+          }}
+        >
+          <View
+            style={[
+              styles.flightDeckVisionTrafficVector,
+              {
+                transform: [
+                  { translateX: visionTrafficCue.vectorDxPct },
+                  { translateY: visionTrafficCue.vectorDyPct },
+                ],
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.flightDeckVisionTrafficSymbol,
+              visionTrafficCue.threat === 'immediate'
+                ? styles.flightDeckVisionTrafficSymbolWarning
+                : visionTrafficCue.threat === 'advisory'
+                  ? styles.flightDeckVisionTrafficSymbolCaution
+                  : null,
+            ]}
+          >
+            <Ionicons name="diamond" size={14} color={colors.flightText} />
+          </View>
+        </View>
+      ) : null}
+      {visionObstacleCues.map((cue: any) => (
+        <View
+          key={cue.key}
+          style={[
+            styles.flightDeckVisionObstacleCue,
+            { left: `${cue.xPct}%`, top: `${cue.yPct}%` },
+            cue.risk === 'warning'
+              ? styles.flightDeckVisionObstacleCueWarning
+              : cue.risk === 'caution'
+                ? styles.flightDeckVisionObstacleCueCaution
+                : null,
+          ]}
+        />
+      ))}
+      <View style={styles.flightDeckVisionTelemetryLeft}>
+        <Text style={styles.flightDeckVisionTelemetryLabel}>Terrain</Text>
+        <Text
+          style={[
+            styles.flightDeckVisionTelemetryValue,
+            terrainRisk === 'warning'
+              ? styles.flightDeckVisionTelemetryValueWarning
+              : terrainRisk === 'caution'
+                ? styles.flightDeckVisionTelemetryValueCaution
+                : null,
+          ]}
+        >
+          {terrainClearanceFt != null ? `${Math.round(terrainClearanceFt)} ft clr` : terrainProfileLoading ? 'loading' : '--'}
+        </Text>
+      </View>
+      <View style={styles.flightDeckVisionTelemetryRight}>
+        <Text style={styles.flightDeckVisionTelemetryLabel}>Obstacle</Text>
+        <Text
+          style={[
+            styles.flightDeckVisionTelemetryValue,
+            obstacleRisk === 'warning'
+              ? styles.flightDeckVisionTelemetryValueWarning
+              : obstacleRisk === 'caution'
+                ? styles.flightDeckVisionTelemetryValueCaution
+                : null,
+          ]}
+        >
+          {obstacleClearanceFt != null ? `${Math.round(obstacleClearanceFt)} ft clr` : obstacleScanLoading ? 'loading' : '--'}
+        </Text>
+      </View>
+      {selectedTrafficTarget && !isSplitView ? (
+        <View style={styles.flightDeckVisionTrafficCue}>
+          <Text style={styles.flightDeckVisionTrafficCueTitle}>Traffic</Text>
+          <Text style={styles.flightDeckVisionTrafficCueText}>
+            {selectedTrafficTarget.callsign || 'target'} - {(selectedTrafficTarget.distanceNm ?? 0).toFixed(1)} NM - {formatAltitudeDelta?.(selectedTrafficTarget.altitudeDeltaFt ?? null) ?? '--'}
+          </Text>
+          <Text style={styles.flightDeckVisionTrafficCueMeta}>
+            {visionTrafficCue?.closureText || 'Monitor'} - {visionTrafficCue?.sector || 'sector'} - {visionTrafficCue?.clock || '--'}
+          </Text>
+        </View>
+      ) : null}
+      {!isSplitView ? (
+        <View style={styles.flightDeckVisionManeuverCard}>
+          <Text style={styles.flightDeckVisionManeuverTitle}>Recommended action</Text>
+          <Text style={styles.flightDeckVisionManeuverText}>{visionManeuverRecommendation}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
 
   return (
     <View style={styles.flightDeckContainer}>
       <View style={styles.flightDeckMapShell}>
-        {flightDeckView === 'vision' ? (
-          <View style={styles.flightDeckVisionShell}>
-            <View
-              style={{
-                position: 'absolute',
-                inset: 0,
-                transform: [
-                  { translateY: visionPitchTranslateY },
-                  { rotate: `${visionRollDeg}deg` },
-                ],
-              }}
-            >
-              <View style={styles.flightDeckVisionSky} />
-              <View
-                style={[
-                  styles.flightDeckVisionGround,
-                  terrainRisk === 'warning'
-                    ? styles.flightDeckVisionGroundWarning
-                    : terrainRisk === 'caution'
-                      ? styles.flightDeckVisionGroundCaution
-                      : null,
-                ]}
-              />
-              <View
-                style={[
-                  styles.flightDeckVisionHorizon,
-                  terrainRisk === 'warning'
-                    ? styles.flightDeckVisionHorizonWarning
-                    : terrainRisk === 'caution'
-                      ? styles.flightDeckVisionHorizonCaution
-                      : null,
-                ]}
-              />
-              {visionPitchMarks.map((value) => {
-                const major = Math.abs(value) % 10 === 0;
-                return (
-                  <View
-                    key={`vision-ladder-${value}`}
-                    style={[
-                      styles.flightDeckVisionPitchMark,
-                      { top: `${50 - value * 2.15}%` },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.flightDeckVisionPitchMarkLabel,
-                        styles.flightDeckVisionPitchMarkLabelLeft,
-                      ]}
-                    >
-                      {Math.abs(value)}
-                    </Text>
-                    <View
-                      style={[
-                        styles.flightDeckVisionPitchMarkWing,
-                        styles.flightDeckVisionPitchMarkWingLeft,
-                        major
-                          ? styles.flightDeckVisionPitchMarkWingMajor
-                          : styles.flightDeckVisionPitchMarkWingMinor,
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.flightDeckVisionPitchMarkWing,
-                        styles.flightDeckVisionPitchMarkWingRight,
-                        major
-                          ? styles.flightDeckVisionPitchMarkWingMajor
-                          : styles.flightDeckVisionPitchMarkWingMinor,
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.flightDeckVisionPitchMarkLabel,
-                        styles.flightDeckVisionPitchMarkLabelRight,
-                      ]}
-                    >
-                      {Math.abs(value)}
-                    </Text>
-                  </View>
-                );
-              })}
-              {visionRouteGuidance ? (
-                <View
-                  style={[
-                    styles.flightDeckVisionCenterline,
-                    { left: `${visionRouteGuidance.centerlineLeftPct}%` },
-                  ]}
-                />
-              ) : null}
-              {visionRouteGuidance?.gates.map((gate: any) => (
-                <View
-                  key={gate.key}
-                  style={[
-                    styles.flightDeckVisionRouteGate,
-                    {
-                      left: `${gate.leftPct}%`,
-                      top: `${gate.topPct}%`,
-                      width: `${gate.widthPct}%`,
-                      height: `${gate.heightPct}%`,
-                    },
-                    routeProgress?.offRouteNm && routeProgress.offRouteNm > 1.5
-                      ? styles.flightDeckVisionRouteGateCaution
-                      : null,
-                  ]}
-                />
-              ))}
-              {visionRouteGuidance?.tunnelBands.map((band: any) => (
-                <View
-                  key={band.key}
-                  style={[
-                    styles.flightDeckVisionTunnelBand,
-                    {
-                      left: `${band.leftPct}%`,
-                      top: `${band.topPct}%`,
-                      width: `${band.widthPct}%`,
-                      height: `${band.heightPct}%`,
-                    },
-                    visionRouteGuidance.corridorSeverity === 'warning'
-                      ? styles.flightDeckVisionTunnelBandWarning
-                      : visionRouteGuidance.corridorSeverity === 'caution'
-                        ? styles.flightDeckVisionTunnelBandCaution
-                        : null,
-                  ]}
-                />
-              ))}
-              {destinationRunwayCue ? (
-                <>
-                  <View
-                    style={[
-                      styles.flightDeckVisionRunwayCenterline,
-                      {
-                        left: `${destinationRunwayCue.centerlineLeftPct}%`,
-                        top: `${destinationRunwayCue.centerlineTopPct}%`,
-                        height: `${destinationRunwayCue.centerlineHeightPct}%`,
-                      },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.flightDeckVisionRunwayEdge,
-                      {
-                        left: `${destinationRunwayCue.leftPct}%`,
-                        top: `${destinationRunwayCue.topPct}%`,
-                        height: `${destinationRunwayCue.heightPct}%`,
-                      },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.flightDeckVisionRunwayEdge,
-                      {
-                        left: `${destinationRunwayCue.leftPct + destinationRunwayCue.widthPct}%`,
-                        top: `${destinationRunwayCue.topPct}%`,
-                        height: `${destinationRunwayCue.heightPct}%`,
-                      },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.flightDeckVisionRunwayBox,
-                      {
-                        left: `${destinationRunwayCue.leftPct}%`,
-                        top: `${destinationRunwayCue.topPct}%`,
-                        width: `${destinationRunwayCue.widthPct}%`,
-                        height: `${destinationRunwayCue.heightPct}%`,
-                      },
-                    ]}
-                  />
-                  {[0.22, 0.4, 0.58, 0.76].map((offset, index) => (
-                    <View
-                      key={`runway-dash-${index}`}
-                      style={[
-                        styles.flightDeckVisionRunwayDash,
-                        {
-                          left: `${destinationRunwayCue.centerlineLeftPct}%`,
-                          top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * offset}%`,
-                        },
-                      ]}
-                    />
-                  ))}
-                  {[0.28, 0.72].map((offset, index) => (
-                    <View
-                      key={`runway-stripe-left-${index}`}
-                      style={[
-                        styles.flightDeckVisionRunwayThresholdStripe,
-                        {
-                          left: `${destinationRunwayCue.leftPct + destinationRunwayCue.widthPct * offset}%`,
-                          top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * 0.18}%`,
-                        },
-                      ]}
-                    />
-                  ))}
-                  {[0.28, 0.72].map((offset, index) => (
-                    <View
-                      key={`runway-stripe-right-${index}`}
-                      style={[
-                        styles.flightDeckVisionRunwayThresholdStripe,
-                        {
-                          left: `${destinationRunwayCue.leftPct + destinationRunwayCue.widthPct * offset}%`,
-                          top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * 0.82}%`,
-                        },
-                      ]}
-                    />
-                  ))}
-                  <View
-                    style={[
-                      styles.flightDeckVisionRunwayThreshold,
-                      {
-                        left: `${destinationRunwayCue.leftPct}%`,
-                        top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * 0.5}%`,
-                        width: `${destinationRunwayCue.widthPct}%`,
-                      },
-                    ]}
-                  />
-                </>
-              ) : null}
-              <View style={styles.flightDeckVisionTerrainBand}>
-                {visionTerrainColumns.map((column: any) => (
-                  <View
-                    key={column.key}
-                    style={[
-                      styles.flightDeckVisionTerrainColumn,
-                      {
-                        left: `${column.leftPct}%`,
-                        height: `${column.heightPct}%`,
-                      },
-                      column.risk === 'warning'
-                        ? styles.flightDeckVisionTerrainColumnWarning
-                        : column.risk === 'caution'
-                          ? styles.flightDeckVisionTerrainColumnCaution
-                          : styles.flightDeckVisionTerrainColumnNominal,
-                    ]}
-                  />
-                ))}
-              </View>
-            </View>
-            <View style={styles.flightDeckVisionBankArc}>
-              <View style={styles.flightDeckVisionBankReference} />
-              {flightDeckBankTicks.map((tick: any) => (
-                <View
-                  key={`vision-bank-${tick.value}`}
-                  style={[
-                    styles.flightDeckVisionBankTick,
-                    tick.major ? styles.flightDeckVisionBankTickMajor : null,
-                    { left: `${tick.leftPct}%` },
-                  ]}
-                />
-              ))}
-              <View
-                style={[
-                  styles.flightDeckVisionBankPointerActual,
-                  { transform: [{ translateX: visionActualBankOffset }] },
-                ]}
-              />
-              <View
-                style={[
-                  styles.flightDeckVisionBankPointerCommand,
-                  { transform: [{ translateX: visionCommandBankOffset }] },
-                ]}
-              />
-            </View>
-            <View style={styles.flightDeckVisionFlightPathMarker}>
-              <View style={styles.flightDeckVisionFlightPathInner} />
-            </View>
-            <View
-              style={[
-                styles.flightDeckVisionTrackVector,
-                { transform: [{ translateX: visionDirectorCue.lateralOffsetPct * 2.1 }] },
-              ]}
-            />
-            <View
-              style={[
-                styles.flightDeckVisionDirectorHorizontal,
-                visionDirectorCue.mode === 'escape'
-                  ? styles.flightDeckVisionDirectorWarning
-                  : visionDirectorCue.mode === 'intercept'
-                    ? styles.flightDeckVisionDirectorCaution
-                    : visionDirectorCue.lateralCaptured
-                      ? styles.flightDeckVisionDirectorCaptured
-                      : null,
-                { transform: [{ translateX: visionDirectorCue.lateralOffsetPct * 3.2 }] },
-              ]}
-            />
-            <View
-              style={[
-                styles.flightDeckVisionDirectorVertical,
-                visionDirectorCue.mode === 'escape'
-                  ? styles.flightDeckVisionDirectorWarning
-                  : !visionDirectorCue.verticalCaptured
-                    ? styles.flightDeckVisionDirectorCaution
-                    : styles.flightDeckVisionDirectorCaptured,
-                { transform: [{ translateY: visionDirectorCue.verticalOffsetPct * 2.1 }] },
-              ]}
-            />
-            <View style={[styles.flightDeckVisionCaptureTag, styles.flightDeckVisionCaptureTagTop]}>
-              <Text style={styles.flightDeckVisionCaptureTagText}>
-                {visionVerticalStateLabel === 'CLB' ? 'CLB' : visionVerticalStateLabel === 'VPTH' ? 'VPTH' : visionVerticalStateLabel === 'VNAV' ? 'VNAV' : 'ALT'}
-              </Text>
-            </View>
-            <View style={[styles.flightDeckVisionCaptureTag, styles.flightDeckVisionCaptureTagBottom]}>
-              <Text style={styles.flightDeckVisionCaptureTagText}>
-                {visionVerticalStateLabel === 'DES' ? 'DES' : visionVerticalStateLabel === 'VPTH' ? 'ARM' : visionVerticalStateLabel === 'VNAV' ? 'PATH' : 'ALT'}
-              </Text>
-            </View>
-            <View style={styles.flightDeckVisionVerticalScale}>
-              <View style={styles.flightDeckVisionVerticalScaleCenter} />
-              <View
-                style={[
-                  styles.flightDeckVisionVerticalBug,
-                  { transform: [{ translateY: visionVerticalDeviationOffset }] },
-                  flightDeckVerticalConstraintSummary.targetAltitudeFt != null
-                    ? flightDeckVerticalConstraintSummary.nextConstraintArmed
-                      ? styles.flightDeckVisionVerticalBugArmed
-                      : styles.flightDeckVisionVerticalBugActive
-                    : null,
-                ]}
-              />
-            </View>
-            <View style={styles.flightDeckVisionReadoutLeft}>
-              <Text style={styles.flightDeckVisionLabel}>ALT</Text>
-              <Text style={styles.flightDeckVisionValue}>
-                {activeOwnship?.altitudeFt ? `${Math.round(activeOwnship.altitudeFt)}` : '--'}
-              </Text>
-            </View>
-            <View style={styles.flightDeckVisionReadoutRight}>
-              <Text style={styles.flightDeckVisionLabel}>HDG</Text>
-              <Text style={styles.flightDeckVisionValue}>
-                {activeOwnship?.heading ? `${Math.round(activeOwnship.heading)}` : '--'}
-              </Text>
-            </View>
-            <View style={styles.flightDeckVisionBanner}>
-              <Text style={styles.flightDeckVisionBannerTitle}>{visionModeLabel}</Text>
-              <Text style={styles.flightDeckVisionBannerText}>
-                {visionMode === 'route' ? (visionRouteGuidance?.lateralCue || visionGuidance) : visionModeDetail}
-              </Text>
-              <Text style={styles.flightDeckVisionBannerSupport}>
-                Heading {headingSourceSummary?.code || '--'} - {headingSourceSummary?.label || 'Unavailable'}
-              </Text>
-              <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionGuidance}</Text>
-              <Text style={styles.flightDeckVisionBannerSupport}>{visionDirectorCue.turnCommand}</Text>
-              <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionDirectorCue.verticalCommand}</Text>
-              <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                {flightDeckVerticalPathSummary.modeLabel} - {flightDeckVerticalPathSummary.support}
-              </Text>
-              <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                {flightDeckVerticalAlertSummary.deviationLabel} - {flightDeckVerticalAlertSummary.todLabel}
-              </Text>
-              {flightDeckVerticalConstraintSummary.targetAltitudeFt != null ? (
-                <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                  {flightDeckVerticalConstraintSummary.modeLabel} - {flightDeckVerticalConstraintSummary.activeConstraintLabel}
-                  {typeof flightDeckVerticalConstraintSummary.activeConstraintDistanceNm === 'number'
-                    ? ` - ${flightDeckVerticalConstraintSummary.activeConstraintDistanceNm.toFixed(1)} NM`
-                    : ''}
-                  {' - '}
-                  {flightDeckVerticalConstraintSummary.sourceLabel}
-                </Text>
-              ) : null}
-              {flightDeckVerticalConstraintSummary.nextConstraintLabel ? (
-                <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                  {flightDeckVerticalConstraintSummary.nextConstraintArmed ? 'Next constraint armed' : 'Next constraint staged'} - {flightDeckVerticalConstraintSummary.nextConstraintLabel}
-                </Text>
-              ) : null}
-              <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                {flightDeckVerticalConstraintSummary.constraintGateCall}
-              </Text>
-              {flightDeckVerticalPathSummary.requiredVsiFpm != null ? (
-                <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                  VNAV {Math.abs(flightDeckVerticalPathSummary.requiredVsiFpm)} fpm
-                  {flightDeckVerticalPathSummary.targetAltitudeFt != null
-                    ? ` - tgt ${Math.round(flightDeckVerticalPathSummary.targetAltitudeFt)} ft`
-                    : ''}
-                </Text>
-              ) : null}
-              {flightDeckVerticalConstraintSummary.requiredVsiFpm != null ? (
-                <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                  PROC VNAV {Math.abs(flightDeckVerticalConstraintSummary.requiredVsiFpm)} fpm
-                  {flightDeckVerticalConstraintSummary.targetAltitudeFt != null
-                    ? ` - tgt ${Math.round(flightDeckVerticalConstraintSummary.targetAltitudeFt)} ft`
-                    : ''}
-                </Text>
-              ) : null}
-              {activeAttitude && (typeof activeAttitude.pitchDeg === 'number' || typeof activeAttitude.rollDeg === 'number') ? (
-                <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                  Att {typeof activeAttitude.pitchDeg === 'number' ? `${activeAttitude.pitchDeg.toFixed(1)}° pitch` : '--'} / {typeof activeAttitude.rollDeg === 'number' ? `${activeAttitude.rollDeg.toFixed(1)}° bank` : '--'}
-                </Text>
-              ) : null}
-              <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                {attitudeSourceSummary?.pilotGrade ? attitudeSourceSummary.detail : visionReadinessSummary?.detail}
-              </Text>
-              {terrainEscapeGuidance ? (
-                <Text style={styles.flightDeckVisionBannerAlert}>{terrainEscapeGuidance}</Text>
-              ) : null}
-            </View>
-            <View style={styles.flightDeckVisionGuidanceChip}>
-              <Text style={styles.flightDeckVisionGuidanceText}>{visionGuidance}</Text>
-            </View>
-            {destinationRunwayCue ? (
-              <View style={styles.flightDeckVisionApproachChip}>
-                <Text style={styles.flightDeckVisionApproachTitle}>Approach</Text>
-                <Text style={styles.flightDeckVisionApproachText}>
-                  RWY {destinationRunwayCue.runwayId} - {destinationRunwayCue.distanceLabel}
-                </Text>
-                <Text style={styles.flightDeckVisionApproachMeta}>
-                  {Math.abs(destinationRunwayCue.alignmentDeltaDeg) < 4
-                    ? 'Aligned on final'
-                    : destinationRunwayCue.alignmentDeltaDeg > 0
-                      ? `Correct left ${Math.round(Math.abs(destinationRunwayCue.alignmentDeltaDeg))} deg`
-                      : `Correct right ${Math.round(Math.abs(destinationRunwayCue.alignmentDeltaDeg))} deg`}
-                </Text>
-              </View>
-            ) : destinationBriefingLoading ? (
-              <View style={styles.flightDeckVisionApproachChip}>
-                <Text style={styles.flightDeckVisionApproachTitle}>Approach</Text>
-                <Text style={styles.flightDeckVisionApproachText}>Loading runway briefing</Text>
-              </View>
-            ) : null}
-            {visionTrafficCue ? (
-              <View
-                style={{
-                  position: 'absolute',
-                  left: `${visionTrafficCue.xPct}%`,
-                  top: `${visionTrafficCue.yPct}%`,
-                }}
-              >
-                <View
-                  style={[
-                    styles.flightDeckVisionTrafficVector,
-                    {
-                      transform: [
-                        { translateX: visionTrafficCue.vectorDxPct },
-                        { translateY: visionTrafficCue.vectorDyPct },
-                      ],
-                    },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.flightDeckVisionTrafficSymbol,
-                    visionTrafficCue.threat === 'immediate'
-                      ? styles.flightDeckVisionTrafficSymbolWarning
-                      : visionTrafficCue.threat === 'advisory'
-                        ? styles.flightDeckVisionTrafficSymbolCaution
-                        : null,
-                  ]}
-                >
-                  <Ionicons name="diamond" size={14} color={colors.flightText} />
-                </View>
-              </View>
-            ) : null}
-            {visionObstacleCues.map((cue: any) => (
-              <View
-                key={cue.key}
-                style={[
-                  styles.flightDeckVisionObstacleCue,
-                  { left: `${cue.xPct}%`, top: `${cue.yPct}%` },
-                  cue.risk === 'warning'
-                    ? styles.flightDeckVisionObstacleCueWarning
-                    : cue.risk === 'caution'
-                      ? styles.flightDeckVisionObstacleCueCaution
-                      : null,
-                ]}
-              />
-            ))}
-            <View style={styles.flightDeckVisionTelemetryLeft}>
-              <Text style={styles.flightDeckVisionTelemetryLabel}>Terrain</Text>
-              <Text
-                style={[
-                  styles.flightDeckVisionTelemetryValue,
-                  terrainRisk === 'warning'
-                    ? styles.flightDeckVisionTelemetryValueWarning
-                    : terrainRisk === 'caution'
-                      ? styles.flightDeckVisionTelemetryValueCaution
-                      : null,
-                ]}
-              >
-                {terrainClearanceFt != null ? `${Math.round(terrainClearanceFt)} ft clr` : terrainProfileLoading ? 'loading' : '--'}
-              </Text>
-            </View>
-            <View style={styles.flightDeckVisionTelemetryRight}>
-              <Text style={styles.flightDeckVisionTelemetryLabel}>Obstacle</Text>
-              <Text
-                style={[
-                  styles.flightDeckVisionTelemetryValue,
-                  obstacleRisk === 'warning'
-                    ? styles.flightDeckVisionTelemetryValueWarning
-                    : obstacleRisk === 'caution'
-                      ? styles.flightDeckVisionTelemetryValueCaution
-                      : null,
-                ]}
-              >
-                {obstacleClearanceFt != null ? `${Math.round(obstacleClearanceFt)} ft clr` : obstacleScanLoading ? 'loading' : '--'}
-              </Text>
-            </View>
-            {selectedTrafficTarget ? (
-              <View style={styles.flightDeckVisionTrafficCue}>
-                <Text style={styles.flightDeckVisionTrafficCueTitle}>Traffic</Text>
-                <Text style={styles.flightDeckVisionTrafficCueText}>
-                  {selectedTrafficTarget.callsign || 'target'} - {(selectedTrafficTarget.distanceNm ?? 0).toFixed(1)} NM - {formatAltitudeDelta?.(selectedTrafficTarget.altitudeDeltaFt ?? null) ?? '--'}
-                </Text>
-                <Text style={styles.flightDeckVisionTrafficCueMeta}>
-                  {visionTrafficCue?.closureText || 'Monitor'} - {visionTrafficCue?.sector || 'sector'} - {visionTrafficCue?.clock || '--'}
-                </Text>
-              </View>
-            ) : null}
-            <View style={styles.flightDeckVisionManeuverCard}>
-              <Text style={styles.flightDeckVisionManeuverTitle}>Recommended action</Text>
-              <Text style={styles.flightDeckVisionManeuverText}>{visionManeuverRecommendation}</Text>
-            </View>
-          </View>
-        ) : routePoints.length > 0 || activeOwnship ? (
+        {mapPaneVisible ? (routePoints.length > 0 || activeOwnship ? (
           <MapView
             style={styles.flightDeckMap}
             ref={mapRef}
@@ -1391,12 +1501,18 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           </MapView>
         ) : (
           <View style={styles.flightDeckEmptyMap}>
-            <Text style={styles.flightDeckEmptyTitle}>Build a route in planner first</Text>
-            <Text style={styles.flightDeckEmptyText}>Flight Deck uses the active route from the planner.</Text>
+            <Text style={styles.flightDeckEmptyTitle}>{visionPaneVisible ? 'Map awaiting route or ownship' : 'Build a route in planner first'}</Text>
+            <Text style={styles.flightDeckEmptyText}>
+              {visionPaneVisible
+                ? 'Overhead tracking activates when route legs or ownship are available.'
+                : 'Flight Deck uses the active route from the planner.'}
+            </Text>
           </View>
-        )}
+        )) : null}
 
-        {flightDeckView === 'vision' && !flightDeckChromeVisible && !flightDeckDrawerOpen ? (
+        {visionPaneVisible ? renderVisionPane(splitVisionPaneStyle) : null}
+
+        {visionPanePrimary && !flightDeckChromeVisible && !flightDeckDrawerOpen ? (
           <TouchableOpacity style={styles.flightDeckTapReveal} activeOpacity={1} onPress={() => pulseFlightDeckChrome()} />
         ) : null}
 
@@ -1419,9 +1535,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               <Text style={styles.flightDeckSubtitle}>
                 {routeProgress
                   ? `Leg ${routeProgress.activeLegLabel || routeProgress.nextWaypoint || '--'} - ${routeProgress.remainingLegNm.toFixed(1)} NM leg / ${routeProgress.remainingRouteNm.toFixed(1)} NM route`
-                  : flightDeckView === 'vision'
+                  : visionPanePrimary
                     ? 'Synthetic vision guidance active.'
-                    : 'Map-first tactical cockpit.'}
+                    : isSplitView
+                      ? 'Split cockpit with forward vision and overhead traffic.'
+                      : 'Map-first tactical cockpit.'}
               </Text>
               {routeProgress ? (
                 <Text style={styles.flightDeckSubtitle}>
@@ -1644,28 +1762,31 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                     {ownshipStatusLabel}
                   </Text>
                 </View>
-                <View style={[styles.flightDeckHeaderMetaChip, flightDeckView === 'vision' ? styles.flightDeckHeaderMetaChipAccent : null]}>
+                <View
+                  style={[
+                    styles.flightDeckHeaderMetaChip,
+                    visionPaneVisible ? styles.flightDeckHeaderMetaChipAccent : null,
+                  ]}
+                >
                   <Text
                     style={[
                       styles.flightDeckHeaderMetaChipText,
-                      flightDeckView === 'vision' ? styles.flightDeckHeaderMetaChipTextAccent : null,
+                      visionPaneVisible ? styles.flightDeckHeaderMetaChipTextAccent : null,
                     ]}
                   >
-                    {visionModeLabel}
+                    {visionModeLabel} · {splitPaneLabel}
                   </Text>
                 </View>
                 <Text style={styles.flightDeckHeaderMetaText}>{ownshipFreshnessText}</Text>
               </View>
             </View>
-            <View style={[styles.flightDeckHeaderActions, isLandscape ? { flexDirection: 'column' } : null]}>
-              <TouchableOpacity
-                style={[styles.flightDeckExitButton, flightDeckView === 'vision' && styles.flightDeckExitButtonActive]}
-                onPress={toggleFlightDeckView}
-              >
-                <Text style={styles.flightDeckExitText}>
-                  {flightDeckView === 'vision' ? 'Map' : attitudeSourceSummary?.pilotGrade ? 'Vision' : 'Vision Assist'}
-                </Text>
-              </TouchableOpacity>
+            <View
+              style={[
+                styles.flightDeckHeaderActions,
+                isLandscape ? { flexDirection: 'column', alignItems: 'flex-end' } : null,
+              ]}
+            >
+              {renderDisplayModeControls(true)}
               <TouchableOpacity
                 style={styles.flightDeckExitButton}
                 onPress={() => {
@@ -1686,12 +1807,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           </View>
         ) : null}
 
-        {flightDeckVisibleAlert || flightDeckChromeVisible || (flightDeckView === 'map' && (flightDeckTrafficCardVisible || flightDeckDiversionCardVisible)) ? (
+        {showBottomStack ? (
           <View
             style={[
               styles.flightDeckBottomStack,
               { bottom: flightDeckLowerStackBottom },
-              isLandscape ? { right: spacing.sm, left: undefined, width: Math.min(width * 0.42, 420) } : null,
+              isLandscape
+                ? { right: spacing.sm, left: undefined, width: Math.min(width * (isSplitView ? 0.38 : 0.42), 420) }
+                : null,
             ]}
           >
             {flightDeckVisibleAlert ? (
@@ -1709,7 +1832,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 <Text style={styles.flightDeckAlertText}>{flightDeckVisibleAlert.detail}</Text>
               </View>
             ) : null}
-            {flightDeckView === 'vision' && !attitudeSourceSummary?.pilotGrade ? (
+            {visionPaneVisible && !attitudeSourceSummary?.pilotGrade ? (
               <View style={[styles.flightDeckAlertStrip, styles.flightDeckAlertStripCaution]}>
                 <Text style={styles.flightDeckAlertTitle}>No active attitude source</Text>
                 <Text style={styles.flightDeckAlertText}>
@@ -1717,7 +1840,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 </Text>
               </View>
             ) : null}
-            {flightDeckView === 'vision' && !activeOwnship ? (
+            {visionPaneVisible && !activeOwnship ? (
               <View style={[styles.flightDeckAlertStrip, styles.flightDeckAlertStripAdvisory]}>
                 <Text style={styles.flightDeckAlertTitle}>Ownship unavailable</Text>
                 <Text style={styles.flightDeckAlertText}>
@@ -1726,7 +1849,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               </View>
             ) : null}
 
-            {flightDeckView === 'map' && flightDeckTrafficCardVisible && selectedTrafficTarget ? (
+            {mapPanePrimary && flightDeckTrafficCardVisible && selectedTrafficTarget ? (
               <View
                 style={[
                   styles.flightDeckContextCard,
@@ -1766,7 +1889,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               </View>
             ) : null}
 
-            {flightDeckView === 'map' && flightDeckDiversionCardVisible && selectedDiversion ? (
+            {mapPanePrimary && flightDeckDiversionCardVisible && selectedDiversion ? (
               <View
                 style={[
                   styles.flightDeckContextCard,
@@ -1799,7 +1922,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 </View>
               </View>
             ) : null}
-            {flightDeckView === 'map' && !flightDeckTrafficCardVisible && !flightDeckDiversionCardVisible ? (
+            {mapPanePrimary && !flightDeckTrafficCardVisible && !flightDeckDiversionCardVisible ? (
               <View style={styles.flightDeckMapActionCard}>
                 <View style={styles.flightDeckMapActionHeader}>
                   <Text style={styles.flightDeckMapActionLabel}>{mapTacticalSummary.focusLabel || 'Director'}</Text>
@@ -1831,7 +1954,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 <Text style={styles.flightDeckMapActionRecommendation}>{mapTacticalSummary.recommendation}</Text>
               </View>
             ) : null}
-            {flightDeckView === 'map' && destinationRunwayCue ? (
+            {mapPanePrimary && destinationRunwayCue ? (
               <View style={styles.flightDeckApproachCard}>
                 <View style={styles.flightDeckApproachCardHeader}>
                   <Text style={styles.flightDeckApproachCardEyebrow}>Approach</Text>
@@ -1843,7 +1966,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 </Text>
               </View>
             ) : null}
-            {flightDeckView === 'map' && flightDeckRunwayOpsSummary ? (
+            {mapPanePrimary && flightDeckRunwayOpsSummary ? (
               <View style={styles.flightDeckRunwayOpsCard}>
                 <View style={styles.flightDeckApproachCardHeader}>
                   <Text style={styles.flightDeckApproachCardEyebrow}>Runway Ops</Text>
@@ -1914,12 +2037,16 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           </View>
         ) : null}
 
-      {flightDeckHudExpanded ? (
+        {flightDeckHudExpanded ? (
           <View
             style={[
               styles.flightDeckHudExpandedCard,
               { bottom: Math.max(insets.bottom + 106, 118) },
-              isLandscape ? { left: spacing.sm, right: undefined, width: Math.min(width * 0.42, 420) } : null,
+              isLandscape
+                ? isSplitView
+                  ? { right: spacing.sm, left: undefined, width: Math.min(width * 0.32, 360) }
+                  : { left: spacing.sm, right: undefined, width: Math.min(width * 0.42, 420) }
+                : null,
             ]}
           >
             <View style={styles.flightDeckHudExpandedRow}>
@@ -2249,15 +2376,8 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                     {flightDeckHudExpanded ? 'Collapse HUD' : 'Expand HUD'}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.flightDeckChip, flightDeckView === 'vision' && styles.flightDeckChipActive]}
-                  onPress={toggleFlightDeckView}
-                >
-                  <Text style={[styles.flightDeckChipText, flightDeckView === 'vision' && styles.flightDeckChipTextActive]}>
-                    {flightDeckView === 'vision' ? 'Return to map' : attitudeSourceSummary?.pilotGrade ? 'Open vision' : 'Open vision assist'}
-                  </Text>
-                </TouchableOpacity>
               </View>
+              {renderDisplayModeControls()}
             </View>
           )}
 

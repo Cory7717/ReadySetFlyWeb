@@ -249,6 +249,8 @@ export type SummaryCounts = {
   turbulence: number;
 };
 
+export type FlightDeckDisplayMode = 'split' | 'map' | 'vision';
+
 // ---------------------------------------------------------------------------
 // Execution plan
 // ---------------------------------------------------------------------------
@@ -299,7 +301,7 @@ export interface FlightDeckStateProps {
   visionMode: 'route' | 'free';
 
   // UI state
-  flightDeckView: 'map' | 'vision' | 'surface' | string;
+  flightDeckView: FlightDeckDisplayMode | 'surface' | string;
   flightDeckChromeVisible: boolean;
   flightDeckDrawerOpen: boolean;
   flightDeckPanel: string | null;
@@ -434,6 +436,7 @@ export interface FlightDeckStateProps {
 export interface FlightDeckActionsProps {
   pulseFlightDeckChrome: (keepVisible?: boolean) => void;
   toggleFlightDeckView: () => void;
+  setFlightDeckViewMode: (mode: FlightDeckDisplayMode) => void;
   toggleFlightDeckHud: () => void;
   setMapRegion: (region: Region) => void;
   setSelectedDiversionIcao: (icao: string | null) => void;

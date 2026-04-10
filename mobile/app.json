@@ -22,7 +22,7 @@
       }
     },
     "android": {
-      "package": "com.readysetfly.mobile",
+      "package": "com.readysetfly.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/RSFOpaqueLogo.png",
         "backgroundColor": "#ffffff"

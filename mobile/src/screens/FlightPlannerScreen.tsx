@@ -4430,7 +4430,7 @@ export default function FlightPlannerScreen() {
   }, [activeOwnship, routePoints.length, visionMode]);
 
   useEffect(() => {
-    if (!isFlightDeck || flightDeckView === 'vision' || !tacticalMapRegion) return;
+    if (!isFlightDeck || flightDeckView !== 'map' || !tacticalMapRegion) return;
 
     const signature = [
       flightDeckPhaseSummary.stage,
@@ -4477,7 +4477,7 @@ export default function FlightPlannerScreen() {
     tacticalMapRegion,
   ]);
   useEffect(() => {
-    if (!isFlightDeck || flightDeckView === 'vision' || activeOwnship?.heading == null) return;
+    if (!isFlightDeck || flightDeckView !== 'map' || activeOwnship?.heading == null) return;
     const previousHeading = flightDeckMapHeadingRef.current;
     if (previousHeading != null && Math.abs(normalizeHeadingDelta(activeOwnship.heading - previousHeading)) < 8) {
       return;
@@ -4700,9 +4700,10 @@ export default function FlightPlannerScreen() {
     openFlightDeckPanel('status');
   }, [flightDeckVisibleAlert, obstacleRisk, selectedDiversion?.icao, selectedTrafficTarget, terrainRisk]);
 
+  const flightDeckInstrumentRouteVisible = Boolean(routeProgress?.nextWaypoint && activeOwnship);
   const flightDeckLowerStackBottom = Math.max(
-    insets.bottom + (flightDeckHudExpanded ? 222 : 118),
-    flightDeckHudExpanded ? 234 : 130,
+    insets.bottom + (flightDeckHudExpanded ? (flightDeckInstrumentRouteVisible ? 258 : 222) : (flightDeckInstrumentRouteVisible ? 146 : 118)),
+    flightDeckHudExpanded ? (flightDeckInstrumentRouteVisible ? 270 : 234) : (flightDeckInstrumentRouteVisible ? 158 : 130),
   );
   const flightDeckTrafficCardVisible = Boolean(
     selectedTrafficTarget && (
@@ -7841,6 +7842,35 @@ const styles = StyleSheet.create({
     backgroundColor: colors.flightSurface,
     ...shadow.flightGlass,
   },
+  flightDeckNavDock: {
+    position: 'absolute',
+    zIndex: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  flightDeckNavButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 38,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: 'rgba(9,13,19,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(108,130,156,0.34)',
+    ...shadow.flightGlass,
+  },
+  flightDeckNavButtonText: {
+    marginLeft: 6,
+    color: colors.flightText,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  flightDeckMapPaneFull: {
+    flex: 1,
+  },
   flightDeckMap: { width: '100%', height: '100%', backgroundColor: colors.flightBackground },
   flightDeckVisionShell: {
     width: '100%',
@@ -8992,16 +9022,7 @@ const styles = StyleSheet.create({
     left: spacing.md,
     right: spacing.md,
     bottom: spacing.md,
-    minHeight: 84,
-    borderRadius: 999,
-    backgroundColor: 'rgba(10,14,20,0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(74,159,212,0.2)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    ...shadow.flightGlass,
+    zIndex: 14,
   },
   flightDeckHudExpandedCard: {
     position: 'absolute',

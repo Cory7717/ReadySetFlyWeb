@@ -1,10 +1,13 @@
 ﻿import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useWindowDimensions } from 'react-native';
 import MapView, { Marker, Polygon, Polyline, UrlTile, WMSTile } from 'react-native-maps';
 import { Platform } from 'react-native';
 import { PROVIDER_GOOGLE } from 'react-native-maps';
 import { colors, spacing } from '../../styles/theme';
+import { bearingBetweenPoints } from '../../lib/flightMath';
+import { FlightDeckInstrumentStrip } from './FlightDeckInstrumentStrip';
 import type { FlightDeckStateProps, FlightDeckActionsProps, FlightDeckDisplayMode } from './FlightDeckViewTypes';
 
 type FlightDeckViewProps = {
@@ -23,6 +26,35 @@ function formatSourceAge(ms: number | null | undefined) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}m ${seconds}s`;
+}
+
+function formatDirectionDegrees(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
+  const normalized = ((Math.round(value) % 360) + 360) % 360;
+  return `${normalized.toString().padStart(3, '0')}°`;
+}
+
+function formatAltitudeReadout(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
+  return Math.round(value).toLocaleString();
+}
+
+function formatCompactDurationFromHours(hours: number | null | undefined) {
+  if (typeof hours !== 'number' || !Number.isFinite(hours) || hours <= 0) return '--';
+  const totalMinutes = Math.max(1, Math.round(hours * 60));
+  if (totalMinutes >= 60) {
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${h}h ${m.toString().padStart(2, '0')}m`;
+  }
+  return `${totalMinutes}m`;
+}
+
+function formatVerticalSpeedReadout(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
+  const rounded = Math.round(value);
+  if (rounded === 0) return '0';
+  return `${rounded > 0 ? '+' : ''}${rounded.toLocaleString()}`;
 }
 
 function FlightDeckSurfaceSchematic({ preview, styles }: { preview: any; styles: any }) {
@@ -523,15 +555,20 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
   const mapPanePrimary = normalizedView === 'map';
   const visionPanePrimary = normalizedView === 'vision';
   const compactHeader = isLandscape || normalizedView !== 'map';
+  const splitPaneTop = isLandscape
+    ? Math.max(insets.top + 92, 104)
+    : Math.max(insets.top + 112, 124);
+  const splitVisionPaneWidth = Math.max(232, Math.min(width * 0.54, width - 152));
+  const splitVisionPaneHeight = Math.max(248, Math.min(height * 0.42, 320));
   const splitVisionPaneStyle =
     isSplitView
       ? (isLandscape
           ? {
               position: 'absolute' as const,
-              top: Math.max(insets.top + 92, 104),
+              top: splitPaneTop,
               bottom: spacing.sm,
               left: spacing.sm,
-              width: Math.max(232, Math.min(width * 0.54, width - 152)),
+              width: splitVisionPaneWidth,
               borderRadius: 18,
               overflow: 'hidden' as const,
               borderWidth: 1,
@@ -540,10 +577,38 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
             }
           : {
               position: 'absolute' as const,
-              top: Math.max(insets.top + 112, 124),
+              top: splitPaneTop,
               left: spacing.sm,
               right: spacing.sm,
-              height: Math.max(248, Math.min(height * 0.42, 320)),
+              height: splitVisionPaneHeight,
+              borderRadius: 18,
+              overflow: 'hidden' as const,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.backgroundElevated,
+            })
+      : null;
+  const splitMapPaneStyle =
+    isSplitView
+      ? (isLandscape
+          ? {
+              position: 'absolute' as const,
+              top: splitPaneTop,
+              bottom: spacing.sm,
+              left: spacing.sm + splitVisionPaneWidth + spacing.sm,
+              right: spacing.sm,
+              borderRadius: 18,
+              overflow: 'hidden' as const,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.backgroundElevated,
+            }
+          : {
+              position: 'absolute' as const,
+              top: splitPaneTop + splitVisionPaneHeight + spacing.sm,
+              left: spacing.sm,
+              right: spacing.sm,
+              bottom: spacing.sm,
               borderRadius: 18,
               overflow: 'hidden' as const,
               borderWidth: 1,
@@ -657,6 +722,177 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
       : ownshipSourceSummary?.code === 'GPS'
         ? `GPS ${formatSourceAge(gpsOwnshipAgeMs)}`
         : ownshipSourceSummary?.freshness || 'Awaiting source';
+  const [displayedVerticalSpeedFpm, setDisplayedVerticalSpeedFpm] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (
+      typeof activeVerticalSpeedFpm !== 'number' ||
+      !Number.isFinite(activeVerticalSpeedFpm) ||
+      !activeOwnship ||
+      sourceArbitrationSummary?.tier === 'none'
+    ) {
+      setDisplayedVerticalSpeedFpm(null);
+      return;
+    }
+
+    const bounded = Math.max(-6000, Math.min(6000, activeVerticalSpeedFpm));
+    const debounced = Math.abs(bounded) < 80 ? 0 : bounded;
+    setDisplayedVerticalSpeedFpm((previous) => (
+      previous == null ? debounced : previous * 0.68 + debounced * 0.32
+    ));
+  }, [activeOwnship, activeVerticalSpeedFpm, sourceArbitrationSummary?.tier]);
+
+  const headingDisplayMode = useMemo<'HDG' | 'TRK'>(() => {
+    if (
+      headingSourceSummary?.code === 'AHRS-M' ||
+      headingSourceSummary?.code === 'AHRS-T' ||
+      headingSourceSummary?.code === 'SIM'
+    ) {
+      return 'HDG';
+    }
+    return 'TRK';
+  }, [headingSourceSummary?.code]);
+
+  const nextRoutePoint = useMemo(() => {
+    if (
+      !routeProgress ||
+      typeof routeProgress.legIndex !== 'number' ||
+      routeProgress.legIndex < 0
+    ) {
+      return null;
+    }
+    return routePoints[routeProgress.legIndex + 1] || null;
+  }, [routePoints, routeProgress]);
+
+  const nextWaypointBearingDeg = useMemo(() => {
+    if (!activeOwnship || !nextRoutePoint) return null;
+    return bearingBetweenPoints(
+      { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
+      { latitude: nextRoutePoint.latitude, longitude: nextRoutePoint.longitude },
+    );
+  }, [activeOwnship, nextRoutePoint]);
+
+  const activeLegEteText = useMemo(() => {
+    if (
+      !routeProgress ||
+      typeof routeProgress.remainingLegNm !== 'number' ||
+      typeof activeOwnship?.speedKts !== 'number' ||
+      !Number.isFinite(activeOwnship.speedKts) ||
+      activeOwnship.speedKts <= 20
+    ) {
+      return '--';
+    }
+    return formatCompactDurationFromHours(routeProgress.remainingLegNm / activeOwnship.speedKts);
+  }, [activeOwnship?.speedKts, routeProgress]);
+
+  const routeGuidanceActive = Boolean(
+    visionMode === 'route' &&
+    routeProgress?.nextWaypoint &&
+    activeOwnship &&
+    typeof routeProgress.remainingLegNm === 'number',
+  );
+
+  const instrumentStripPrimaryFields = useMemo(() => {
+    const directionAvailable =
+      typeof activeOwnship?.heading === 'number' && headingSourceSummary?.code !== 'NONE';
+    const directionTone =
+      headingSourceSummary?.code === 'GPS-LIM'
+        ? 'limited'
+        : headingSourceSummary?.code === 'NONE'
+          ? 'warning'
+          : 'default';
+    const sourceLimited =
+      sourceArbitrationSummary?.tier === 'limited' || sourceArbitrationSummary?.tier === 'gps-only';
+
+    return [
+      {
+        label: headingDisplayMode,
+        value: directionAvailable ? formatDirectionDegrees(activeOwnship?.heading ?? null) : '--',
+        tone: directionTone,
+      },
+      {
+        label: 'GS',
+        value:
+          typeof activeOwnship?.speedKts === 'number' && Number.isFinite(activeOwnship.speedKts)
+            ? `${Math.round(activeOwnship.speedKts)}`
+            : '--',
+        tone: sourceLimited ? 'limited' : 'default',
+      },
+      {
+        label: 'ALT',
+        value: formatAltitudeReadout(activeOwnship?.altitudeFt ?? null),
+        tone: sourceLimited ? 'limited' : 'default',
+      },
+      {
+        label: 'VSI',
+        value:
+          sourceArbitrationSummary?.tier === 'none'
+            ? '--'
+            : formatVerticalSpeedReadout(displayedVerticalSpeedFpm),
+        tone: sourceLimited ? 'limited' : 'default',
+      },
+    ] as const;
+  }, [
+    activeOwnship?.altitudeFt,
+    activeOwnship?.heading,
+    activeOwnship?.speedKts,
+    displayedVerticalSpeedFpm,
+    headingDisplayMode,
+    headingSourceSummary?.code,
+    sourceArbitrationSummary?.tier,
+  ]);
+
+  const instrumentStripRouteFields = useMemo(() => {
+    if (!routeGuidanceActive) return null;
+    return [
+      {
+        label: 'NEXT',
+        value: routeProgress?.nextWaypoint || '--',
+      },
+      {
+        label: 'BRG',
+        value: formatDirectionDegrees(nextWaypointBearingDeg),
+      },
+      {
+        label: 'DIST',
+        value:
+          typeof routeProgress?.remainingLegNm === 'number'
+            ? `${routeProgress.remainingLegNm.toFixed(1)} NM`
+            : '--',
+      },
+      {
+        label: 'ETE',
+        value: activeLegEteText,
+      },
+    ] as const;
+  }, [activeLegEteText, nextWaypointBearingDeg, routeGuidanceActive, routeProgress?.nextWaypoint, routeProgress?.remainingLegNm]);
+
+  const instrumentSourceMeta = useMemo(() => ({
+    code: sourceArbitrationSummary?.code || 'NONE',
+    label: sourceArbitrationSummary?.label || 'No valid source',
+    tone:
+      sourceArbitrationSummary?.tier === 'external-valid'
+        ? 'active'
+        : sourceArbitrationSummary?.tier === 'none'
+          ? 'warning'
+          : 'limited',
+  } as const), [sourceArbitrationSummary?.code, sourceArbitrationSummary?.label, sourceArbitrationSummary?.tier]);
+
+  const instrumentModeMeta = useMemo(() => ({
+    code: routeGuidanceActive ? 'ROUTE' : 'FREE',
+    label:
+      routeExecutionSummary?.sequencingSuspended && routeGuidanceActive
+        ? 'Seq Hold'
+        : routeGuidanceActive
+          ? 'Route Active'
+          : 'Free Flight',
+    tone:
+      routeExecutionSummary?.sequencingSuspended && routeGuidanceActive
+        ? 'limited'
+        : routeGuidanceActive
+          ? 'active'
+          : 'default',
+  } as const), [routeExecutionSummary?.sequencingSuspended, routeGuidanceActive]);
   const displayModeOptions: Array<{ mode: FlightDeckDisplayMode; label: string }> = [
     { mode: 'split', label: 'Split' },
     { mode: 'vision', label: 'Vision' },
@@ -695,6 +931,27 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
       ))}
     </View>
   );
+
+  const navigateBackFromFlightDeck = () => {
+    pulseFlightDeckChrome(true);
+    try {
+      navigation.goBack();
+    } catch {
+      navigation.navigate('FlightPlanner', {
+        departure,
+        destination,
+        waypoints,
+        plannedStops,
+        plannedAltitude,
+        cruiseKtas,
+      });
+    }
+  };
+
+  const navigateHomeFromFlightDeck = () => {
+    pulseFlightDeckChrome(true);
+    navigation.navigate('ProfileHome');
+  };
 
   const renderVisionPane = (containerStyle: any = null) => (
     <View style={[styles.flightDeckVisionShell, containerStyle]}>
@@ -1046,9 +1303,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
         </Text>
       </View>
       <View style={styles.flightDeckVisionReadoutRight}>
-        <Text style={styles.flightDeckVisionLabel}>HDG</Text>
+        <Text style={styles.flightDeckVisionLabel}>{headingDisplayMode}</Text>
         <Text style={styles.flightDeckVisionValue}>
-          {activeOwnship?.heading ? `${Math.round(activeOwnship.heading)}` : '--'}
+          {typeof activeOwnship?.heading === 'number' && headingSourceSummary?.code !== 'NONE'
+            ? `${Math.round(activeOwnship.heading)}`
+            : '--'}
         </Text>
       </View>
       <View style={styles.flightDeckVisionBanner}>
@@ -1240,27 +1499,57 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
 
   return (
     <View style={styles.flightDeckContainer}>
+      <View
+        style={[
+          styles.flightDeckNavDock,
+          {
+            top: Math.max(insets.top + spacing.xs, 12),
+            left: spacing.sm,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.flightDeckNavButton}
+          activeOpacity={0.92}
+          onPress={navigateBackFromFlightDeck}
+        >
+          <Ionicons name="arrow-back" size={16} color={colors.flightText} />
+          <Text style={styles.flightDeckNavButtonText}>Back</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.flightDeckNavButton}
+          activeOpacity={0.92}
+          onPress={navigateHomeFromFlightDeck}
+        >
+          <Ionicons name="grid" size={16} color={colors.flightText} />
+          <Text style={styles.flightDeckNavButtonText}>Home</Text>
+        </TouchableOpacity>
+      </View>
       <View style={styles.flightDeckMapShell}>
-        {mapPaneVisible ? (routePoints.length > 0 || activeOwnship ? (
-          <MapView
-            style={styles.flightDeckMap}
-            ref={mapRef}
-            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-            mapType={Platform.OS === 'android' && mapStyle === 'sectional' ? 'none' : 'standard'}
-            rotateEnabled
-            pitchEnabled={false}
-            showsCompass={false}
-            toolbarEnabled={false}
-            initialRegion={{
-              latitude: tacticalMapRegion?.latitude || routePoints[0]?.latitude || activeOwnship?.lat || 39.5,
-              longitude: tacticalMapRegion?.longitude || routePoints[0]?.longitude || activeOwnship?.lon || -98.35,
-              latitudeDelta: tacticalMapRegion?.latitudeDelta || 3,
-              longitudeDelta: tacticalMapRegion?.longitudeDelta || 3,
-            }}
-            onPress={() => pulseFlightDeckChrome()}
-            onPanDrag={() => pulseFlightDeckChrome()}
-            onRegionChangeComplete={(region) => setMapRegion(region)}
-          >
+        {mapPaneVisible ? (
+          <View style={isSplitView ? splitMapPaneStyle : styles.flightDeckMapPaneFull}>
+            {routePoints.length > 0 || activeOwnship ? (
+              <MapView
+                style={styles.flightDeckMap}
+                ref={mapRef}
+                provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+                mapType={Platform.OS === 'android' && mapStyle === 'sectional' ? 'none' : 'standard'}
+                rotateEnabled
+                zoomEnabled
+                scrollEnabled
+                pitchEnabled={false}
+                showsCompass={false}
+                toolbarEnabled={false}
+                initialRegion={{
+                  latitude: tacticalMapRegion?.latitude || routePoints[0]?.latitude || activeOwnship?.lat || 39.5,
+                  longitude: tacticalMapRegion?.longitude || routePoints[0]?.longitude || activeOwnship?.lon || -98.35,
+                  latitudeDelta: tacticalMapRegion?.latitudeDelta || 3,
+                  longitudeDelta: tacticalMapRegion?.longitudeDelta || 3,
+                }}
+                onPress={() => pulseFlightDeckChrome()}
+                onPanDrag={() => pulseFlightDeckChrome()}
+                onRegionChangeComplete={(region) => setMapRegion(region)}
+              >
             {mapStyle === 'sectional' && (
               <WMSTile
                 urlTemplate={FAA_SECTIONAL_WMS_TEMPLATE}
@@ -1513,17 +1802,19 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 </View>
               </Marker>
             ) : null}
-          </MapView>
-        ) : (
-          <View style={styles.flightDeckEmptyMap}>
-            <Text style={styles.flightDeckEmptyTitle}>{visionPaneVisible ? 'Map awaiting route or ownship' : 'Build a route in planner first'}</Text>
-            <Text style={styles.flightDeckEmptyText}>
-              {visionPaneVisible
-                ? 'Overhead tracking activates when route legs or ownship are available.'
-                : 'Flight Deck uses the active route from the planner.'}
-            </Text>
+              </MapView>
+            ) : (
+              <View style={styles.flightDeckEmptyMap}>
+                <Text style={styles.flightDeckEmptyTitle}>{visionPaneVisible ? 'Map awaiting route or ownship' : 'Build a route in planner first'}</Text>
+                <Text style={styles.flightDeckEmptyText}>
+                  {visionPaneVisible
+                    ? 'Overhead tracking activates when route legs or ownship are available.'
+                    : 'Flight Deck uses the active route from the planner.'}
+                </Text>
+              </View>
+            )}
           </View>
-        )) : null}
+        ) : null}
 
         {visionPaneVisible ? renderVisionPane(splitVisionPaneStyle) : null}
 
@@ -2056,7 +2347,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           <View
             style={[
               styles.flightDeckHudExpandedCard,
-              { bottom: Math.max(insets.bottom + 106, 118) },
+              { bottom: Math.max(insets.bottom + (routeGuidanceActive ? 142 : 110), routeGuidanceActive ? 154 : 118) },
               isLandscape
                 ? isSplitView
                   ? { right: spacing.sm, left: undefined, width: Math.min(width * 0.32, 360) }
@@ -2189,63 +2480,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           </View>
         ) : null}
 
-        <TouchableOpacity
+        <FlightDeckInstrumentStrip
           style={[styles.flightDeckHud, { bottom: Math.max(insets.bottom + spacing.sm, 16) }]}
-          activeOpacity={0.92}
+          primaryFields={instrumentStripPrimaryFields.map((field) => ({ ...field }))}
+          routeFields={instrumentStripRouteFields ? instrumentStripRouteFields.map((field) => ({ ...field })) : null}
+          sourceMeta={instrumentSourceMeta}
+          modeMeta={instrumentModeMeta}
           onPress={toggleFlightDeckHud}
-        >
-          <View
-            style={[
-              styles.flightDeckHudSourceChip,
-              ownshipStatusTone === 'active'
-                ? styles.flightDeckHudSourceChipActive
-                : ownshipStatusTone === 'accent'
-                  ? styles.flightDeckHudSourceChipAccent
-                  : ownshipStatusTone === 'warning'
-                    ? styles.flightDeckHudSourceChipWarning
-                    : null,
-            ]}
-          >
-            <Text
-              style={[
-                styles.flightDeckHudSourceChipText,
-                ownshipStatusTone === 'active'
-                  ? styles.flightDeckHudSourceChipTextActive
-                  : ownshipStatusTone === 'accent'
-                    ? styles.flightDeckHudSourceChipTextAccent
-                    : ownshipStatusTone === 'warning'
-                      ? styles.flightDeckHudSourceChipTextWarning
-                      : null,
-              ]}
-            >
-              {ownshipStatusLabel}
-            </Text>
-          </View>
-          <View style={styles.flightDeckHudCell}>
-            <Text style={styles.flightDeckHudLabel}>IAS</Text>
-            <Text style={styles.flightDeckHudValue}>{activeOwnship?.speedKts ? `${activeOwnship.speedKts.toFixed(0)}` : '--'}</Text>
-          </View>
-          <View style={styles.flightDeckHudDivider} />
-          <View style={styles.flightDeckHudCell}>
-            <Text style={styles.flightDeckHudLabel}>ALT</Text>
-            <Text style={styles.flightDeckHudValue}>{activeOwnship?.altitudeFt ? `${activeOwnship.altitudeFt.toFixed(0)}` : '--'}</Text>
-          </View>
-          <View style={styles.flightDeckHudDivider} />
-          <View style={styles.flightDeckHudCell}>
-            <Text style={styles.flightDeckHudLabel}>VSI</Text>
-            <Text style={styles.flightDeckHudValue}>{activeVerticalSpeedFpm ? `${activeVerticalSpeedFpm.toFixed(0)}` : '--'}</Text>
-          </View>
-          <View style={styles.flightDeckHudDivider} />
-          <View style={styles.flightDeckHudCell}>
-            <Text style={styles.flightDeckHudLabel}>HDG</Text>
-            <Text style={styles.flightDeckHudValue}>{activeOwnship?.heading ? `${activeOwnship.heading.toFixed(0)}` : '--'}</Text>
-          </View>
-          <View style={styles.flightDeckHudDivider} />
-          <View style={styles.flightDeckHudCell}>
-            <Text style={styles.flightDeckHudLabel}>ETE</Text>
-            <Text style={styles.flightDeckHudValue}>{routeProgress?.etaText || '--'}</Text>
-          </View>
-        </TouchableOpacity>
+        />
       </View>
 
       {flightDeckDrawerOpen ? (

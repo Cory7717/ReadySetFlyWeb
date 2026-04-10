@@ -1192,10 +1192,6 @@ img.uppy-Dashboard-Item-previewImg {
   }
 }
 
-.scrollbar-hide {
-  scrollbar-width: none;
-}
-
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
@@ -1241,10 +1237,6 @@ img.uppy-Dashboard-Item-previewImg {
 
   .marquee-track:hover {
     animation-play-state: paused;
-  }
-
-  .events-scroll {
-    scrollbar-width: none;
   }
 
   .events-scroll::-webkit-scrollbar {

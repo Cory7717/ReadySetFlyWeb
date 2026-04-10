@@ -47,9 +47,11 @@ import {
 import type { FlightPlan } from "@shared/schema";
 import {
   analyzeFiledRoute,
+  buildFiledRouteStructure,
   filedRouteTokenKindLabel,
   normalizeRouteText,
   parseAirportWaypoints,
+  type FiledRouteStructureSegment,
   type FiledRouteToken,
   type FiledRouteTokenKind,
 } from "@shared/flight-plan-route";
@@ -3643,6 +3645,14 @@ export default function FlightPlanner() {
     recognizedAirportTokens: filedRouteAnalysis.airportTokens,
     unresolvedAirportTokens: [] as string[],
   };
+  const resolvedFiledRouteStructure = useMemo<FiledRouteStructureSegment[]>(
+    () =>
+      buildFiledRouteStructure(resolvedFiledRouteAnalysis.tokens, {
+        departureAirport: form.departure,
+        destinationAirport: form.destination,
+      }),
+    [form.departure, form.destination, resolvedFiledRouteAnalysis.tokens]
+  );
 
   const notamsSummaryQuery = useQuery({
     queryKey: ["/api/notams", primaryIcao],
@@ -5378,6 +5388,14 @@ export default function FlightPlanner() {
   const plannerSubpanelDangerClass = "rounded-[1rem] border border-[#7a3440]/38 bg-[linear-gradient(180deg,rgba(34,15,19,0.98),rgba(17,10,12,0.98))] p-3 text-[#F4CDD3] shadow-[0_18px_38px_-28px_rgba(0,0,0,0.9)]";
   const plannerSelectContentClass = "border-[#5d6f85]/30 bg-[#11161d] text-[#E8EDF4] shadow-[0_22px_44px_-30px_rgba(0,0,0,0.9)]";
   const plannerInsetActionClass = "border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4] hover:bg-[#1a2430]";
+  const jumpToPlannerSection = (sectionId: string, tab?: FlightPlannerTab) => {
+    if (tab) {
+      setActiveTab(tab);
+    }
+    window.requestAnimationFrame(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   return (
     <>
@@ -5511,7 +5529,7 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
       )}
-      <Card className={plannerPanelClass}>
+      <Card id="planner-route-setup" className={plannerPanelClass}>
         <CardContent className="pt-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 2xl:grid-cols-7">
             <div className={plannerMetricClass}>
@@ -5567,6 +5585,24 @@ export default function FlightPlanner() {
         deepLink={plannerAppDeepLink}
         note="Your web plan stays useful for planning and testing. Opening the app is mainly for native cockpit use."
       />
+      {isMobile && (
+        <Card className={plannerPanelClass}>
+          <CardContent className="space-y-3 p-3">
+            <div className="text-sm font-semibold text-[#F5F8FC]">Phone Quick Planner</div>
+            <div className="text-xs text-[#A9BBCD]">
+              Use quick jumps for the dense planner sections. Full planning stays available; this just keeps the phone workflow navigable.
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToPlannerSection("planner-route-setup", "route")}>Route</Button>
+              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToPlannerSection("planner-distance-performance", "route")}>Performance</Button>
+              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => setActiveTab("weather")}>Weather</Button>
+              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => setActiveTab("analysis")}>Analysis</Button>
+              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToPlannerSection("planner-route-map", "route")}>Map</Button>
+              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => setActiveTab("file")}>File & Save</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
         <TabsList
           className={cn(
@@ -6208,6 +6244,46 @@ export default function FlightPlanner() {
                       );
                     })}
                   </div>
+                  {resolvedFiledRouteStructure.length > 0 && (
+                    <div className={cn("space-y-2 p-3", plannerSubpanelMutedClass)}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-medium text-[#E8EDF4]">Procedure-aware route structure</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          Structured for procedure readiness and future nav-data expansion.
+                        </div>
+                      </div>
+                      <div className="grid gap-2">
+                        {resolvedFiledRouteStructure.map((segment, index) => (
+                          <div
+                            key={`${segment.kind}-${segment.startIndex}-${index}`}
+                            className="rounded-[0.95rem] border border-[#5d6f85]/18 bg-[#0f141a]/94 px-3 py-2 text-[#E8EDF4] shadow-[0_14px_28px_-24px_rgba(0,0,0,0.88)]"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="font-medium">{segment.label}</div>
+                              <Badge variant="outline" className="border-[#5d6f85]/30 text-[#B8CBDD]">
+                                {segment.kind === "departure-procedure"
+                                  ? "Departure procedure"
+                                  : segment.kind === "arrival-procedure"
+                                    ? "Arrival procedure"
+                                    : segment.kind === "airway"
+                                      ? "Airway"
+                                      : segment.kind === "origin"
+                                        ? "Origin"
+                                        : segment.kind === "destination"
+                                          ? "Destination"
+                                          : "Enroute"}
+                              </Badge>
+                            </div>
+                            <div className="mt-1 text-xs text-[#D9E4F0]">{segment.tokens.join(" ")}</div>
+                            <div className="mt-1 text-[11px] text-muted-foreground">
+                              {segment.transitionHint ? `Transition ${segment.transitionHint}` : "Transition context pending nav-data resolution."}
+                              {segment.runwayHint ? ` · ${segment.runwayHint}` : ""}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {resolvedFiledRouteAnalysis.airwaySegments.length > 0 && (
                     <div className={cn("space-y-1 text-xs text-[#D9E4F0]", plannerSubpanelMutedClass)}>
                       <div className="font-medium text-[#E8EDF4]">Airway segments recognized</div>
@@ -6429,7 +6505,7 @@ export default function FlightPlanner() {
         title={pressDemo.getStep("distance-performance")?.title ?? "Distance & Performance"}
         body={pressDemo.getStep("distance-performance")?.body ?? ""}
       >
-      <Card className={plannerPanelClass}>
+      <Card id="planner-distance-performance" className={plannerPanelClass}>
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Distance & Performance</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>Review trip distance, time, and fuel after your aircraft selection fills in the planning assumptions above.</CardDescription>

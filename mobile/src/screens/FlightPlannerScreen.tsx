@@ -61,6 +61,7 @@ import {
 } from '../lib/flightMath';
 import type { MobileRouteLeg, MobileRouteNavDataLegPayload, MobileRouteProgressSummary } from '../lib/flightMath';
 import { analyzeFiledRoute, isFiledRouteAnchorKind } from '@shared/flight-plan-route';
+import { getFlightDeckSourceArbitrationState } from '../lib/sourceArbitration';
 import FlightDeckView from '../components/flight-deck/FlightDeckView';
 import FormDateTimeField from '../components/FormDateTimeField';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
@@ -424,10 +425,11 @@ type FlightDeckPhaseStage =
   | 'final'
   | 'taxi-in';
 type RouteExecutionOverride = {
-  mode: 'direct-to-diversion';
+  mode: 'direct-to-diversion' | 'direct-to-route';
   origin: AirportMeta;
   target: AirportMeta;
   activatedAt: number;
+  targetLegIndex?: number | null;
 };
 
 const RECEIVER_OWNSHIP_STALE_MS = 15000;
@@ -1754,6 +1756,18 @@ export default function FlightPlannerScreen() {
       detail: 'Stable synthetic vision guidance is available, but live attitude remains advisory until AHRS is connected.',
     };
   }, [attitudeSourceSummary.pilotGrade, receiverAttitudeFresh, receiverOwnshipFresh]);
+  const sourceArbitrationSummary = useMemo(
+    () =>
+      getFlightDeckSourceArbitrationState({
+        simulationEnabled,
+        receiverOwnshipFresh,
+        receiverAttitudeFresh,
+        gpsOwnshipFresh,
+        receiverHealthy: receiverHealth?.status === 'healthy',
+        deviceMotionActive: false,
+      }),
+    [gpsOwnshipFresh, receiverAttitudeFresh, receiverHealth?.status, receiverOwnshipFresh, simulationEnabled]
+  );
   const receiverStatusSummary = useMemo(() => {
     const status = receiverHealth?.status || 'idle';
     if (status === 'healthy') {
@@ -1815,10 +1829,12 @@ export default function FlightPlannerScreen() {
               ? 'Winds'
               : 'Clouds';
   const flightDeckActiveSession = simulationEnabled || gpsEnabled || trafficEnabled || Boolean(activeOwnship);
+  const directToRouteActive =
+    routeExecutionOverride?.mode === 'direct-to-diversion' || routeExecutionOverride?.mode === 'direct-to-route';
   const activeRoutePoints = useMemo(() => {
-    if (routeExecutionOverride?.mode !== 'direct-to-diversion') return routePoints;
+    if (!directToRouteActive) return routePoints;
     return [routeExecutionOverride.origin, routeExecutionOverride.target];
-  }, [routeExecutionOverride, routePoints]);
+  }, [directToRouteActive, routeExecutionOverride, routePoints]);
   const plannedRouteStructureText = useMemo(() => {
     const dep = departure.trim().toUpperCase();
     const dest = destination.trim().toUpperCase();
@@ -1854,9 +1870,9 @@ export default function FlightPlannerScreen() {
   const activeRouteLegs = useMemo(
     () =>
       buildMobileRouteLegs(activeRoutePoints, {
-        mode: routeExecutionOverride?.mode === 'direct-to-diversion' ? 'direct-to' : 'planned',
+        mode: directToRouteActive ? 'direct-to' : 'planned',
       }),
-    [activeRoutePoints, routeExecutionOverride?.mode]
+    [activeRoutePoints, directToRouteActive]
   );
   const activeLegDefinition = useMemo(
     () => activeRouteLegs[Math.min(activeLegIndex, Math.max(0, activeRouteLegs.length - 1))] || null,
@@ -2669,10 +2685,10 @@ export default function FlightPlannerScreen() {
   }, [departure, departureRunway, destination, destinationRunway, plannedRouteAnalysis, plannedRouteAnchorTokens, plannedAltitudeValue, providerRouteAnchorTokens, providerRouteSearch?.available, providerRouteSearch?.environment, providerRouteSearch?.provider, providerRouteSearch?.route, providerRouteSearch?.warnings, routeSummary?.legs]);
   const activeNavDataLegsByIndex = useMemo(
     () =>
-      routeExecutionOverride?.mode === 'direct-to-diversion'
+      directToRouteActive
         ? {}
         : plannerNavDataSnapshot.navDataLegsByIndex,
-    [plannerNavDataSnapshot.navDataLegsByIndex, routeExecutionOverride?.mode]
+    [directToRouteActive, plannerNavDataSnapshot.navDataLegsByIndex]
   );
   const activeExecutionPlan = useMemo(
     () => buildMobileRouteExecutionPlan(activeRouteLegs, { navDataLegsByIndex: activeNavDataLegsByIndex }),
@@ -3188,7 +3204,7 @@ export default function FlightPlannerScreen() {
           }
         : null;
     return {
-      mode: routeExecutionOverride?.mode === 'direct-to-diversion' ? ('direct-to' as const) : ('planned' as const),
+      mode: directToRouteActive ? ('direct-to' as const) : ('planned' as const),
       sequencingSuspended,
       activeLegIndex: routeProgress.legIndex,
       canSequencePrev: routeProgress.legIndex > 0,
@@ -4160,7 +4176,7 @@ export default function FlightPlannerScreen() {
   }, [activeOwnship?.altitudeFt, flightDeckTargetAltitudeFt, flightDeckVerticalPathSummary.advisoryCall, flightDeckVerticalPathSummary.targetAltitudeFt, flightDeckVerticalPathSummary.verticalErrorFt, obstacleRisk, simulationAltitudeFt, terrainEscapeTargetFt, terrainRisk, trafficConflictGuidance, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
   const mapTacticalSummary = useMemo(() => {
     const modeLabel =
-      routeExecutionOverride?.mode === 'direct-to-diversion'
+      directToRouteActive
         ? 'Direct'
         : activeProcedureCueStackPreview.modeLabel === 'Departure'
           ? 'Departure'
@@ -4261,19 +4277,19 @@ export default function FlightPlannerScreen() {
     () =>
       annotateMobileRouteExecutionPlan(plannerExecutionPlan, {
         activeLegIndex:
-          routeProgress && routeExecutionOverride?.mode !== 'direct-to-diversion'
+          routeProgress && !directToRouteActive
             ? routeProgress.legIndex
             : -1,
         nextLegArmed:
-          routeProgress && routeExecutionOverride?.mode !== 'direct-to-diversion'
+          routeProgress && !directToRouteActive
             ? routeExecutionSummary.nextLegArmed
             : false,
         sequencingSuspended:
-          routeProgress && routeExecutionOverride?.mode !== 'direct-to-diversion'
+          routeProgress && !directToRouteActive
             ? routeExecutionSummary.sequencingSuspended
             : false,
         sequenceGateState:
-          routeProgress && routeExecutionOverride?.mode !== 'direct-to-diversion'
+          routeProgress && !directToRouteActive
             ? (routeExecutionSummary.sequenceGateState as 'open' | 'armed' | 'blocked' | 'hold' | 'manual-open' | undefined)
             : 'blocked',
         procedureChains: plannerProcedureChains,
@@ -4401,7 +4417,7 @@ export default function FlightPlannerScreen() {
     logDiagnostic('maps', 'map_style_changed', {
       style: mapStyle,
       isFlightDeck,
-      sectionalSource: mapStyle === 'sectional' ? 'faa_wms_proxy' : undefined,
+      sectionalSource: mapStyle === 'sectional' ? 'direct_faa_wms' : undefined,
     });
   }, [isFlightDeck, mapStyle]);
 
@@ -4495,28 +4511,28 @@ export default function FlightPlannerScreen() {
       focusMapOnPoint(estimate.lat, estimate.lon, { latitudeDelta: 0.42, longitudeDelta: 0.42 });
     }
   };
+  const buildDirectToOrigin = (fallbackLat: number, fallbackLon: number): AirportMeta =>
+    activeOwnship
+      ? {
+          icao: 'DCT',
+          name: 'Direct-To',
+          latitude: activeOwnship.lat,
+          longitude: activeOwnship.lon,
+        }
+      : routePoints[Math.min(activeLegIndex, Math.max(0, routePoints.length - 1))] || routePoints[0] || {
+          icao: departure.trim().toUpperCase() || 'ORIG',
+          name: 'Origin',
+          latitude: fallbackLat,
+          longitude: fallbackLon,
+        };
   const engageDirectToDiversion = (airport: NearbyDiversionAirport) => {
     setSelectedDiversionIcao(airport.icao);
     openFlightDeckPanel('status');
     setFlightDeckView('map');
     if (typeof airport.lat === 'number' && typeof airport.lon === 'number') {
-      const origin =
-        activeOwnship
-          ? {
-              icao: 'DCT',
-              name: 'Direct-To',
-              latitude: activeOwnship.lat,
-              longitude: activeOwnship.lon,
-            }
-          : routePoints[Math.min(activeLegIndex, Math.max(0, routePoints.length - 1))] || routePoints[0] || {
-              icao: departure.trim().toUpperCase() || 'ORIG',
-              name: 'Origin',
-              latitude: airport.lat,
-              longitude: airport.lon,
-            };
       setRouteExecutionOverride({
         mode: 'direct-to-diversion',
-        origin,
+        origin: buildDirectToOrigin(airport.lat, airport.lon),
         target: {
           icao: airport.icao,
           name: airport.name || airport.icao,
@@ -4533,6 +4549,39 @@ export default function FlightPlannerScreen() {
       setSimulatedVerticalSpeedFpm(-350);
     }
     focusDiversionAirport(airport);
+  };
+  const engageDirectToRouteWaypoint = (targetIndex: number) => {
+    const waypoint = routePoints[targetIndex];
+    if (!waypoint) return;
+    setRouteExecutionOverride({
+      mode: 'direct-to-route',
+      origin: buildDirectToOrigin(waypoint.latitude, waypoint.longitude),
+      target: {
+        icao: waypoint.icao,
+        name: waypoint.name || waypoint.icao,
+        latitude: waypoint.latitude,
+        longitude: waypoint.longitude,
+      },
+      activatedAt: Date.now(),
+      targetLegIndex: Math.max(0, targetIndex - 1),
+    });
+    setActiveLegIndex(0);
+    setSequencingSuspended(false);
+    openFlightDeckPanel('status');
+    setFlightDeckView('map');
+    focusMapOnPoint(waypoint.latitude, waypoint.longitude, { latitudeDelta: 0.34, longitudeDelta: 0.34 });
+  };
+  const activatePlannedLeg = (legIndex: number) => {
+    const boundedLegIndex = Math.min(Math.max(0, legIndex), Math.max(0, routePoints.length - 2));
+    const focusPoint = routePoints[boundedLegIndex + 1] || routePoints[boundedLegIndex] || null;
+    setRouteExecutionOverride(null);
+    setActiveLegIndex(boundedLegIndex);
+    setSequencingSuspended(true);
+    openFlightDeckPanel('status');
+    setFlightDeckView('map');
+    if (focusPoint) {
+      focusMapOnPoint(focusPoint.latitude, focusPoint.longitude, { latitudeDelta: 0.3, longitudeDelta: 0.3 });
+    }
   };
   const resumePlannedRoute = () => {
     setRouteExecutionOverride(null);
@@ -5447,11 +5496,11 @@ export default function FlightPlannerScreen() {
     return 'Build your next route';
   }, [departure, destination]);
   const flightDeckRouteHeadline = useMemo(() => {
-    if (routeExecutionOverride?.mode === 'direct-to-diversion') {
+    if (directToRouteActive) {
       return `Direct ${routeExecutionOverride.target.icao}`;
     }
     return routeHeadline;
-  }, [routeExecutionOverride, routeHeadline]);
+  }, [directToRouteActive, routeExecutionOverride, routeHeadline]);
 
   useEffect(() => {
     if (effectiveProfile) {
@@ -6230,6 +6279,7 @@ export default function FlightPlannerScreen() {
     activeOwnship,
     activeAttitude,
     ownshipSourceSummary,
+    sourceArbitrationSummary,
     headingSourceSummary,
     attitudeSourceSummary,
     visionReadinessSummary,
@@ -6323,6 +6373,8 @@ export default function FlightPlannerScreen() {
     setTrafficFilter,
     focusDiversionAirport,
     engageDirectToDiversion,
+    engageDirectToRouteWaypoint,
+    activatePlannedLeg,
     resumePlannedRoute,
     toggleSequencingSuspend,
     sequencePreviousLeg,

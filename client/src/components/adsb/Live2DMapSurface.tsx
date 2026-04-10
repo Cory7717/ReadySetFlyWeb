@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 import type { FeatureCollection } from "geojson";
 import MapLibreLiveMap, { type MapLibreLiveMapProps } from "@/components/adsb/MapLibreLiveMap";
-import { getRequestedWebMapEngine } from "@/map/engine";
-import type { RsfLiveMapStyle } from "@/map/rsfMapSpec";
+import { getRsfPlannerRenderer, type RsfLiveMapStyle } from "@/map/rsfMapSpec";
 
 export type Live2DMapFocusTarget = { lat: number; lon: number; label: string; nonce: number } | null;
 
@@ -147,9 +146,7 @@ export type Live2DMapSurfaceProps = {
 };
 
 export default function Live2DMapSurface(props: Live2DMapSurfaceProps) {
-  const prefersMapLibre = getRequestedWebMapEngine() === "maplibre";
-
-  if (prefersMapLibre && props.mapStyle !== "sectional") {
+  if (getRsfPlannerRenderer(props.mapStyle) === "maplibre") {
     const mapLibreProps: MapLibreLiveMapProps = props;
     return <MapLibreLiveMap {...mapLibreProps} />;
   }

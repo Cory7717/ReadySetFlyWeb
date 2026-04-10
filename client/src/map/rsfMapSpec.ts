@@ -1,15 +1,46 @@
 import { apiUrl } from "@/lib/api";
+import { getRequestedWebMapEngine, type RsfWebMapEngine } from "@/map/engine";
 
 export type RsfPlannerMapStyle = "standard" | "sectional" | "radar" | "winds" | "clouds" | "globe";
 export type RsfLeafletMapStyle = Exclude<RsfPlannerMapStyle, "globe">;
 export type RsfLiveMapStyle = Exclude<RsfPlannerMapStyle, "winds">;
 export type RsfDemoViewMode = "overhead" | "vision" | "surface";
 export type RsfCockpitAccent = "map" | "vision" | "globe" | "winds";
+export type RsfSectionalSourceKey = "direct-faa-wms" | "proxy-faa-wms";
+export type RsfPlannerRenderer = "leaflet" | "maplibre";
 
 export const RSF_FAA_WMS_DIRECT_URL = "https://sua.faa.gov/geoserver/wms";
 export const RSF_FAA_WMS_URL = apiUrl("/api/tiles/faa/wms");
-export const RSF_SECTIONAL_WMS_TILE_URL =
-  `${RSF_FAA_WMS_URL}?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}`;
+
+export function getRsfSectionalSourceKey(): RsfSectionalSourceKey {
+  const env = import.meta.env as unknown as Record<string, string | undefined>;
+  const raw = String(env.VITE_RSF_SECTIONAL_SOURCE || "direct").trim().toLowerCase();
+  return raw === "proxy" ? "proxy-faa-wms" : "direct-faa-wms";
+}
+
+export function getRsfSectionalSourceBaseUrl(source = getRsfSectionalSourceKey()) {
+  return source === "proxy-faa-wms" ? RSF_FAA_WMS_URL : RSF_FAA_WMS_DIRECT_URL;
+}
+
+export function getRsfSectionalSourceLabel(source = getRsfSectionalSourceKey()) {
+  return source === "proxy-faa-wms" ? "FAA WMS proxy" : "Direct FAA WMS";
+}
+
+export function getRsfSectionalWmsTileUrl(source = getRsfSectionalSourceKey()) {
+  return `${getRsfSectionalSourceBaseUrl(source)}?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}`;
+}
+
+export function getRsfPlannerRenderer(
+  mapStyle: RsfPlannerMapStyle | RsfLiveMapStyle,
+  requestedEngine: RsfWebMapEngine = getRequestedWebMapEngine(),
+): RsfPlannerRenderer {
+  if (requestedEngine !== "maplibre") return "leaflet";
+  if (mapStyle === "winds" || mapStyle === "sectional") return "leaflet";
+  return "maplibre";
+}
+
+export const RSF_SECTIONAL_WMS_TILE_URL = getRsfSectionalWmsTileUrl();
+export const RSF_SECTIONAL_SOURCE_LABEL = getRsfSectionalSourceLabel();
 
 export const RSF_ROUTE_LINE_STYLE = { color: "#2563eb", weight: 3, opacity: 0.78 } as const;
 export const RSF_ROUTE_HALO_LINE_STYLE = { color: "#0ea5e9", weight: 4 } as const;

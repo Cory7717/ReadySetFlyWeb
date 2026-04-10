@@ -419,6 +419,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     activeOwnship,
     activeAttitude,
     ownshipSourceSummary,
+    sourceArbitrationSummary,
     headingSourceSummary,
     attitudeSourceSummary,
     visionReadinessSummary,
@@ -599,6 +600,8 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     setTrafficFilter = () => {},
     focusDiversionAirport = () => {},
     engageDirectToDiversion = () => {},
+    engageDirectToRouteWaypoint = () => {},
+    activatePlannedLeg = () => {},
     resumePlannedRoute = () => {},
     toggleSequencingSuspend = () => {},
     sequencePreviousLeg = () => {},
@@ -615,6 +618,18 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     typeof routeExecutionSummary?.activeLegIndex === 'number'
       ? activeExecutionPlanView[routeExecutionSummary.activeLegIndex + 1] || null
       : null;
+  const routeExecutionControlEntries = activeExecutionPlanView
+    .filter((entry) => entry.status !== 'completed')
+    .slice(0, 4)
+    .map((entry) => ({
+      legIndex: entry.legIndex,
+      targetIndex: entry.legIndex + 1,
+      label: entry.legLabel || `${entry.fromFix} -> ${entry.toFix}`,
+      status: entry.status,
+      actionCue: entry.actionCue,
+      ident: entry.toFix,
+    }));
+  const primaryDiversionOption = selectedDiversion || diversionCandidates[0] || null;
 
   const ownshipStatusLabel =
     ownshipSourceSummary?.code === 'SIM'
@@ -2311,6 +2326,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               <Text style={styles.flightDeckPanelText}>
                 Vision {visionReadinessSummary?.code || '--'} - {visionReadinessSummary?.detail || 'Vision readiness unavailable.'}
               </Text>
+              {sourceArbitrationSummary ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Source trust {sourceArbitrationSummary.code} - {sourceArbitrationSummary.detail}
+                </Text>
+              ) : null}
               <Text style={styles.flightDeckPanelText}>
                 Phase {flightDeckPhaseSummary?.label || 'Preflight'} - {flightDeckPhaseSummary?.detail || 'Phase logic pending.'}
               </Text>
@@ -2849,10 +2869,34 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                   Selected traffic {selectedTrafficTarget.callsign || 'Traffic'} - {(selectedTrafficTarget.distanceNm ?? 0).toFixed(1)} NM - {formatAltitudeDelta?.(selectedTrafficTarget.altitudeDeltaFt ?? null) ?? '--'}
                 </Text>
               ) : null}
-              {selectedDiversion ? (
+              {primaryDiversionOption ? (
                 <Text style={styles.flightDeckPanelText}>
-                  Ready diversion {selectedDiversion.icao} - {selectedDiversion.distanceNm.toFixed(1)} NM
+                  Ready diversion {primaryDiversionOption.icao} - {primaryDiversionOption.distanceNm?.toFixed?.(1) || '--'} NM
                 </Text>
+              ) : null}
+              {routeExecutionControlEntries.length > 0 ? (
+                <View style={{ gap: spacing.xs }}>
+                  <Text style={styles.flightDeckPanelText}>
+                    Route execution: activate a planned leg or go direct to an upcoming route waypoint.
+                  </Text>
+                  {routeExecutionControlEntries.map((entry) => (
+                    <View key={`route-control-${entry.legIndex}`} style={styles.flightDeckListCard}>
+                      <Text style={styles.flightDeckListTitle}>{entry.label}</Text>
+                      <Text style={styles.flightDeckListMeta}>
+                        {entry.status.toUpperCase()} {entry.ident ? `- ${entry.ident}` : ''}
+                      </Text>
+                      <Text style={styles.flightDeckPanelText}>{entry.actionCue}</Text>
+                      <View style={styles.flightDeckControlRow}>
+                        <TouchableOpacity style={styles.flightDeckChip} onPress={() => activatePlannedLeg(entry.legIndex)}>
+                          <Text style={styles.flightDeckChipText}>Activate leg</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.flightDeckChip} onPress={() => engageDirectToRouteWaypoint(entry.targetIndex)}>
+                          <Text style={styles.flightDeckChipText}>Direct-to</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
               ) : null}
               <View style={styles.flightDeckControlRow}>
                 <TouchableOpacity style={styles.flightDeckChip} onPress={toggleSequencingSuspend}>
@@ -2870,12 +2914,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                     <Text style={styles.flightDeckChipText}>Focus traffic</Text>
                   </TouchableOpacity>
                 ) : null}
-                {selectedDiversion ? (
+                {primaryDiversionOption ? (
                   <TouchableOpacity
                     style={[styles.flightDeckChip, styles.flightDeckChipActive]}
-                    onPress={() => engageDirectToDiversion(selectedDiversion)}
+                    onPress={() => engageDirectToDiversion(primaryDiversionOption)}
                   >
-                    <Text style={[styles.flightDeckChipText, styles.flightDeckChipTextActive]}>Direct-to diversion</Text>
+                    <Text style={[styles.flightDeckChipText, styles.flightDeckChipTextActive]}>
+                      {selectedDiversion ? 'Direct-to diversion' : 'Direct-to nearest'}
+                    </Text>
                   </TouchableOpacity>
                 ) : null}
               </View>

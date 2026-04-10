@@ -351,6 +351,12 @@ export interface FlightDeckStateProps {
   activeAttitude: AttitudeData | null;
   activeVerticalSpeedFpm: number | null;
   ownshipSourceSummary: SourceSummary | null;
+  sourceArbitrationSummary: {
+    code: string;
+    label: string;
+    detail: string;
+    tier: string;
+  } | null;
   headingSourceSummary: SourceSummary | null;
   attitudeSourceSummary: SourceSummary | null;
 
@@ -452,6 +458,8 @@ export interface FlightDeckActionsProps {
   setTrafficFilter: (filter: 'all' | 'conflict' | 'above' | 'below') => void;
   focusDiversionAirport: (airport: any) => void;
   engageDirectToDiversion: (airport: any) => void;
+  engageDirectToRouteWaypoint: (targetIndex: number) => void;
+  activatePlannedLeg: (legIndex: number) => void;
   resumePlannedRoute: () => void;
   toggleSequencingSuspend: () => void;
   sequencePreviousLeg: () => void;

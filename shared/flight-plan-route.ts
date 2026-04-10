@@ -23,6 +23,25 @@ export type FiledRouteAirwaySegment = {
   exitToken: string | null;
 };
 
+export type FiledRouteStructureSegmentKind =
+  | "origin"
+  | "departure-procedure"
+  | "airway"
+  | "enroute"
+  | "arrival-procedure"
+  | "destination";
+
+export type FiledRouteStructureSegment = {
+  kind: FiledRouteStructureSegmentKind;
+  label: string;
+  tokens: string[];
+  tokenKinds: FiledRouteTokenKind[];
+  startIndex: number;
+  endIndex: number;
+  transitionHint: string | null;
+  runwayHint: string | null;
+};
+
 export const FILED_ROUTE_DEFAULT_COUNTS: FiledRouteTokenCounts = {
   airport: 0,
   fix: 0,
@@ -177,8 +196,173 @@ export type FiledRouteAnalysis = {
   counts: FiledRouteTokenCounts;
   airportTokens: string[];
   airwaySegments: FiledRouteAirwaySegment[];
+  structure: FiledRouteStructureSegment[];
   warnings: string[];
 };
+
+function deriveProcedureSegmentLabel(
+  kind: FiledRouteStructureSegmentKind,
+  token: string,
+  indexInClass: number,
+) {
+  if (kind === "departure-procedure") {
+    return indexInClass === 0 ? `Departure procedure ${token}` : `Departure transition ${token}`;
+  }
+  if (kind === "arrival-procedure") {
+    return indexInClass === 0 ? `Arrival procedure ${token}` : `Arrival transition ${token}`;
+  }
+  return `Procedure ${token}`;
+}
+
+function deriveTransitionHint(
+  tokens: FiledRouteToken[],
+  startIndex: number,
+  endIndex: number,
+) {
+  const previousAnchor = [...tokens]
+    .slice(0, startIndex)
+    .reverse()
+    .find((token) => isFiledRouteAnchorKind(token.kind));
+  const nextAnchor = tokens
+    .slice(endIndex + 1)
+    .find((token) => isFiledRouteAnchorKind(token.kind));
+
+  if (!previousAnchor && !nextAnchor) return null;
+  if (!previousAnchor) return `Feeds ${nextAnchor?.token || "next anchor"}`;
+  if (!nextAnchor) return `Entered from ${previousAnchor.token}`;
+  return `${previousAnchor.token} -> ${nextAnchor.token}`;
+}
+
+function deriveRunwayHint(token: string) {
+  const runwayMatch = token.match(/RWY?(\d{1,2}[LRC]?)/i);
+  return runwayMatch ? `RWY ${runwayMatch[1].toUpperCase()}` : null;
+}
+
+export function buildFiledRouteStructure(
+  tokens: FiledRouteToken[],
+  options?: { departureAirport?: string | null; destinationAirport?: string | null },
+): FiledRouteStructureSegment[] {
+  if (!tokens.length) return [];
+
+  const departureAirport = options?.departureAirport?.trim().toUpperCase() || null;
+  const destinationAirport = options?.destinationAirport?.trim().toUpperCase() || null;
+  const segments: FiledRouteStructureSegment[] = [];
+  const anchorKinds = new Set<FiledRouteTokenKind>(["airport", "fix", "navaid", "coordinate"]);
+  const lastProcedureIndex = [...tokens].reverse().find((token) => token.kind === "procedure")?.index ?? -1;
+  let procedureIndexInClass = 0;
+  let index = 0;
+
+  while (index < tokens.length) {
+    const token = tokens[index];
+
+    if (token.kind === "airport" && departureAirport && token.token === departureAirport && index === 0) {
+      segments.push({
+        kind: "origin",
+        label: `Origin ${token.token}`,
+        tokens: [token.token],
+        tokenKinds: [token.kind],
+        startIndex: index,
+        endIndex: index,
+        transitionHint: null,
+        runwayHint: null,
+      });
+      index += 1;
+      procedureIndexInClass = 0;
+      continue;
+    }
+
+    if (token.kind === "airport" && destinationAirport && token.token === destinationAirport && index === tokens.length - 1) {
+      segments.push({
+        kind: "destination",
+        label: `Destination ${token.token}`,
+        tokens: [token.token],
+        tokenKinds: [token.kind],
+        startIndex: index,
+        endIndex: index,
+        transitionHint: null,
+        runwayHint: null,
+      });
+      index += 1;
+      procedureIndexInClass = 0;
+      continue;
+    }
+
+    if (token.kind === "procedure") {
+      const kind: FiledRouteStructureSegmentKind =
+        index <= Math.max(1, lastProcedureIndex / 2) ? "departure-procedure" : "arrival-procedure";
+      segments.push({
+        kind,
+        label: deriveProcedureSegmentLabel(kind, token.token, procedureIndexInClass),
+        tokens: [token.token],
+        tokenKinds: [token.kind],
+        startIndex: index,
+        endIndex: index,
+        transitionHint: deriveTransitionHint(tokens, index, index),
+        runwayHint: deriveRunwayHint(token.token),
+      });
+      index += 1;
+      procedureIndexInClass += 1;
+      continue;
+    }
+
+    if (token.kind === "airway") {
+      const airwaySegment = buildFiledRouteAirwaySegments(tokens).find((segment) => segment.index === index);
+      segments.push({
+        kind: "airway",
+        label: `Airway ${token.token}`,
+        tokens: [token.token],
+        tokenKinds: [token.kind],
+        startIndex: index,
+        endIndex: index,
+        transitionHint:
+          airwaySegment?.entryToken || airwaySegment?.exitToken
+            ? `${airwaySegment?.entryToken || "?"} -> ${airwaySegment?.exitToken || "?"}`
+            : null,
+        runwayHint: null,
+      });
+      index += 1;
+      procedureIndexInClass = 0;
+      continue;
+    }
+
+    const startIndex = index;
+    const segmentTokens: FiledRouteToken[] = [];
+    while (
+      index < tokens.length &&
+      (anchorKinds.has(tokens[index].kind) || tokens[index].kind === "direct")
+    ) {
+      segmentTokens.push(tokens[index]);
+      index += 1;
+      if (tokens[index - 1].kind === "direct") {
+        break;
+      }
+    }
+
+    if (!segmentTokens.length) {
+      index += 1;
+      continue;
+    }
+
+    segments.push({
+      kind: "enroute",
+      label:
+        segmentTokens[0].kind === "direct"
+          ? "Direct segment"
+          : segmentTokens.length === 1
+            ? `Enroute ${segmentTokens[0].token}`
+            : `Enroute ${segmentTokens[0].token} -> ${segmentTokens[segmentTokens.length - 1].token}`,
+      tokens: segmentTokens.map((entry) => entry.token),
+      tokenKinds: segmentTokens.map((entry) => entry.kind),
+      startIndex,
+      endIndex: index - 1,
+      transitionHint: deriveTransitionHint(tokens, startIndex, index - 1),
+      runwayHint: null,
+    });
+    procedureIndexInClass = 0;
+  }
+
+  return segments;
+}
 
 export function analyzeFiledRoute(input: string): FiledRouteAnalysis {
   const normalizedRoute = normalizeRouteText(input);
@@ -189,6 +373,7 @@ export function analyzeFiledRoute(input: string): FiledRouteAnalysis {
     counts: countFiledRouteTokens(tokens),
     airportTokens: extractAirportTokensFromFiledRoute(tokens),
     airwaySegments: buildFiledRouteAirwaySegments(tokens),
+    structure: buildFiledRouteStructure(tokens),
     warnings: buildFiledRouteWarnings(tokens),
   };
 }

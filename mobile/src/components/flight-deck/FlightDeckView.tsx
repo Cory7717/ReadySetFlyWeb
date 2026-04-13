@@ -1,14 +1,17 @@
 ﻿import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useWindowDimensions } from 'react-native';
 import MapView, { Marker, Polygon, Polyline, UrlTile, WMSTile } from 'react-native-maps';
 import { Platform } from 'react-native';
 import { PROVIDER_GOOGLE } from 'react-native-maps';
 import { colors, spacing } from '../../styles/theme';
 import { bearingBetweenPoints } from '../../lib/flightMath';
 import { FlightDeckInstrumentStrip } from './FlightDeckInstrumentStrip';
-import type { FlightDeckStateProps, FlightDeckActionsProps, FlightDeckDisplayMode } from './FlightDeckViewTypes';
+import {
+  getFlightDeckDisplayModeOptions,
+  sanitizeFlightDeckDisplayMode,
+} from './flightDeckLayout';
+import type { FlightDeckStateProps, FlightDeckActionsProps } from './FlightDeckViewTypes';
 
 type FlightDeckViewProps = {
   state: FlightDeckStateProps;
@@ -519,10 +522,13 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     flightDeckDiversionCardVisible,
     flightDeckActionButtons = [],
     flightDeckHudExpanded,
+    flightDeckFocusMode,
+    flightDeckPhoneRecommendationVisible,
     activeVerticalSpeedFpm,
     immediateTrafficCount,
     routeRiskLabel,
     flightDeckPanel,
+    flightDeckLayoutProfile,
     simulationEnabled,
     gpsEnabled,
     trafficEnabled,
@@ -540,21 +546,24 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     selectedDiversionBriefing,
     flightDeckCommandBankDeg = 0,
     flightDeckBankTicks = [],
+    mapOrientationMode,
     trafficFilter,
     formatAltitudeDelta,
   } = state;
-  const { width, height } = useWindowDimensions();
-  const isLandscape = width > height;
-  const normalizedView =
-    flightDeckView === 'split' || flightDeckView === 'map' || flightDeckView === 'vision'
-      ? flightDeckView
-      : 'split';
+  const width = flightDeckLayoutProfile.width;
+  const height = flightDeckLayoutProfile.height;
+  const isLandscape = flightDeckLayoutProfile.isLandscape;
+  const compactDevice = flightDeckLayoutProfile.useCompactChrome;
+  const focusModeActive = flightDeckFocusMode;
+  const normalizedView = sanitizeFlightDeckDisplayMode(flightDeckView, flightDeckLayoutProfile);
   const isSplitView = normalizedView === 'split';
   const mapPaneVisible = normalizedView !== 'vision';
   const visionPaneVisible = normalizedView !== 'map';
   const mapPanePrimary = normalizedView === 'map';
   const visionPanePrimary = normalizedView === 'vision';
-  const compactHeader = isLandscape || normalizedView !== 'map';
+  const compactHeader = compactDevice || isLandscape || normalizedView !== 'map';
+  const showCompactTopBar = flightDeckChromeVisible && (compactDevice || focusModeActive);
+  const showExpandedHeader = flightDeckChromeVisible && !compactDevice && !focusModeActive;
   const splitPaneTop = isLandscape
     ? Math.max(insets.top + 92, 104)
     : Math.max(insets.top + 112, 124);
@@ -616,6 +625,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               backgroundColor: colors.backgroundElevated,
             })
       : null;
+  const displayModeOptions = getFlightDeckDisplayModeOptions(flightDeckLayoutProfile);
   const splitPaneLabel = isSplitView ? 'Split View' : mapPanePrimary ? 'Map Full' : 'Vision Full';
   const visionModeLabel = visionMode === 'route' ? 'Route Mode' : 'Free Flight';
   const visionModeDetail =
@@ -651,6 +661,8 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     pulseFlightDeckChrome = () => {},
     setFlightDeckViewMode = () => {},
     toggleFlightDeckHud = () => {},
+    toggleFlightDeckFocusMode = () => {},
+    dismissPhoneRecommendation = () => {},
     setMapRegion = () => {},
     setSelectedDiversionIcao = () => {},
     setSelectedTrafficId = () => {},
@@ -662,6 +674,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     setSimulationSpeed = () => {},
     setSimulationConflictEnabled = () => {},
     setMapStyle = () => {},
+    setMapOrientationMode = () => {},
     setTrafficFilter = () => {},
     focusDiversionAirport = () => {},
     engageDirectToDiversion = () => {},
@@ -893,13 +906,54 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           ? 'active'
           : 'default',
   } as const), [routeExecutionSummary?.sequencingSuspended, routeGuidanceActive]);
-  const displayModeOptions: Array<{ mode: FlightDeckDisplayMode; label: string }> = [
-    { mode: 'split', label: 'Split' },
-    { mode: 'vision', label: 'Vision' },
-    { mode: 'map', label: 'Map' },
-  ];
-  const showMapOverlayCards = mapPanePrimary && (flightDeckTrafficCardVisible || flightDeckDiversionCardVisible);
-  const showBottomStack = Boolean(flightDeckVisibleAlert || flightDeckChromeVisible || showMapOverlayCards);
+  const showMapOverlayCards =
+    mapPanePrimary &&
+    !compactDevice &&
+    !focusModeActive &&
+    (flightDeckTrafficCardVisible || flightDeckDiversionCardVisible);
+  const showCompactTacticalCard =
+    mapPanePrimary &&
+    !showMapOverlayCards &&
+    !flightDeckDrawerOpen &&
+    flightDeckChromeVisible &&
+    (!compactDevice || !focusModeActive);
+  const shouldShowAlertStrip = Boolean(
+    flightDeckVisibleAlert &&
+      (!focusModeActive ||
+        flightDeckVisibleAlert.severity === 'warning' ||
+        flightDeckVisibleAlert.severity === 'caution')
+  );
+  const showVisionAssistAlert = Boolean(visionPaneVisible && !attitudeSourceSummary?.pilotGrade);
+  const showVisionOwnshipAlert = Boolean(visionPaneVisible && !activeOwnship);
+  const showBottomStack = Boolean(
+    shouldShowAlertStrip ||
+      showVisionAssistAlert ||
+      showVisionOwnshipAlert ||
+      showMapOverlayCards ||
+      showCompactTacticalCard
+  );
+  const compactQuickActions =
+    compactDevice && focusModeActive
+      ? flightDeckActionButtons.slice(0, Math.min(flightDeckActionButtons.length, 3))
+      : flightDeckActionButtons;
+  const showQuickRail = Boolean(
+    flightDeckChromeVisible &&
+      !flightDeckDrawerOpen &&
+      (!focusModeActive ||
+        selectedTrafficTarget?.threatLevel === 'immediate' ||
+        terrainRisk === 'warning' ||
+        obstacleRisk === 'warning')
+  );
+  const mapOrientationLabel =
+    mapOrientationMode === 'north-up'
+      ? 'North Up'
+      : mapOrientationMode === 'heading-up'
+        ? 'Heading Up'
+        : 'Track Up';
+  const compactStatusText =
+    routeProgress?.nextWaypoint
+      ? `${routeProgress.nextWaypoint} · ${typeof routeProgress.remainingLegNm === 'number' ? `${routeProgress.remainingLegNm.toFixed(1)} NM` : '--'}`
+      : mapTacticalSummary.heading;
 
   const renderDisplayModeControls = (stacked = false) => (
     <View
@@ -929,6 +983,91 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           </Text>
         </TouchableOpacity>
       ))}
+    </View>
+  );
+
+  const renderCompactTopBar = () => (
+    <View
+      style={[
+        styles.flightDeckHeader,
+        {
+          paddingTop: Math.max(insets.top + 50, 58),
+          paddingHorizontal: spacing.sm,
+          paddingBottom: spacing.sm,
+        },
+      ]}
+    >
+      <View style={[styles.flightDeckHeaderCard, { padding: spacing.sm }]}>
+        <View style={styles.flightDeckPanelRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.flightDeckEyebrow}>
+              {flightDeckLayoutProfile.deviceClass === 'tablet' ? 'FULL DECK' : 'PHONE MODE'}
+            </Text>
+            <Text style={styles.flightDeckTitle} numberOfLines={1}>
+              {routeHeadline}
+            </Text>
+            <Text style={styles.flightDeckSubtitle} numberOfLines={2}>
+              {compactStatusText}
+            </Text>
+          </View>
+          <View style={{ alignItems: 'flex-end', gap: spacing.xs }}>
+            <TouchableOpacity
+              style={styles.flightDeckExitButton}
+              onPress={() => {
+                pulseFlightDeckChrome(true);
+                setFlightDeckDrawerOpen(true);
+                setFlightDeckPanel('layers');
+              }}
+            >
+              <Text style={styles.flightDeckExitText}>Controls</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.flightDeckExitButton, focusModeActive ? styles.flightDeckExitButtonActive : null]}
+              onPress={toggleFlightDeckFocusMode}
+            >
+              <Text style={styles.flightDeckExitText}>{focusModeActive ? 'Full' : 'Focus'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={[styles.flightDeckHeaderMetaRow, { marginTop: spacing.xs }]}>
+          <View style={styles.flightDeckHeaderMetaChip}>
+            <Text style={styles.flightDeckHeaderMetaChipText}>
+              {ownshipSourceSummary?.code || 'PREFLT'}
+            </Text>
+          </View>
+          <View style={styles.flightDeckHeaderMetaChip}>
+            <Text style={styles.flightDeckHeaderMetaChipText}>
+              {mapOrientationLabel}
+            </Text>
+          </View>
+          <View style={styles.flightDeckHeaderMetaChip}>
+            <Text style={styles.flightDeckHeaderMetaChipText}>
+              {splitPaneLabel}
+            </Text>
+          </View>
+        </View>
+        {renderDisplayModeControls()}
+        {flightDeckPhoneRecommendationVisible ? (
+          <View
+            style={[
+              styles.flightDeckAlertStrip,
+              styles.flightDeckAlertStripAdvisory,
+              { marginTop: spacing.sm, paddingRight: 44 },
+            ]}
+          >
+            <Text style={styles.flightDeckAlertTitle}>Tablet visibility note</Text>
+            <Text style={styles.flightDeckAlertText}>
+              For best in-flight visibility, a 7-inch or larger tablet is recommended.
+            </Text>
+            <TouchableOpacity
+              style={{ position: 'absolute', top: 10, right: 10, padding: 4 }}
+              onPress={dismissPhoneRecommendation}
+            >
+              <Ionicons name="close" size={16} color={colors.flightTextMuted} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 
@@ -1310,77 +1449,79 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
             : '--'}
         </Text>
       </View>
-      <View style={styles.flightDeckVisionBanner}>
-        <Text style={styles.flightDeckVisionBannerTitle}>{visionModeLabel}</Text>
-        <Text style={styles.flightDeckVisionBannerText}>
-          {visionMode === 'route' ? (visionRouteGuidance?.lateralCue || visionGuidance) : visionModeDetail}
-        </Text>
-        <Text style={styles.flightDeckVisionBannerSupport}>
-          Heading {headingSourceSummary?.code || '--'} - {headingSourceSummary?.label || 'Unavailable'}
-        </Text>
-        <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionGuidance}</Text>
-        <Text style={styles.flightDeckVisionBannerSupport}>{visionDirectorCue.turnCommand}</Text>
-        <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionDirectorCue.verticalCommand}</Text>
-        <Text style={styles.flightDeckVisionBannerSupportMuted}>
-          {flightDeckVerticalPathSummary.modeLabel} - {flightDeckVerticalPathSummary.support}
-        </Text>
-        {!isSplitView ? (
-          <>
-            <Text style={styles.flightDeckVisionBannerSupportMuted}>
-              {flightDeckVerticalAlertSummary.deviationLabel} - {flightDeckVerticalAlertSummary.todLabel}
-            </Text>
-            {flightDeckVerticalConstraintSummary.targetAltitudeFt != null ? (
+      {!focusModeActive ? (
+        <View style={styles.flightDeckVisionBanner}>
+          <Text style={styles.flightDeckVisionBannerTitle}>{visionModeLabel}</Text>
+          <Text style={styles.flightDeckVisionBannerText}>
+            {visionMode === 'route' ? (visionRouteGuidance?.lateralCue || visionGuidance) : visionModeDetail}
+          </Text>
+          <Text style={styles.flightDeckVisionBannerSupport}>
+            Heading {headingSourceSummary?.code || '--'} - {headingSourceSummary?.label || 'Unavailable'}
+          </Text>
+          <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionGuidance}</Text>
+          <Text style={styles.flightDeckVisionBannerSupport}>{visionDirectorCue.turnCommand}</Text>
+          <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionDirectorCue.verticalCommand}</Text>
+          <Text style={styles.flightDeckVisionBannerSupportMuted}>
+            {flightDeckVerticalPathSummary.modeLabel} - {flightDeckVerticalPathSummary.support}
+          </Text>
+          {!isSplitView ? (
+            <>
               <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                {flightDeckVerticalConstraintSummary.modeLabel} - {flightDeckVerticalConstraintSummary.activeConstraintLabel}
-                {typeof flightDeckVerticalConstraintSummary.activeConstraintDistanceNm === 'number'
-                  ? ` - ${flightDeckVerticalConstraintSummary.activeConstraintDistanceNm.toFixed(1)} NM`
-                  : ''}
-                {' - '}
-                {flightDeckVerticalConstraintSummary.sourceLabel}
+                {flightDeckVerticalAlertSummary.deviationLabel} - {flightDeckVerticalAlertSummary.todLabel}
               </Text>
-            ) : null}
-            {flightDeckVerticalConstraintSummary.nextConstraintLabel ? (
+              {flightDeckVerticalConstraintSummary.targetAltitudeFt != null ? (
+                <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                  {flightDeckVerticalConstraintSummary.modeLabel} - {flightDeckVerticalConstraintSummary.activeConstraintLabel}
+                  {typeof flightDeckVerticalConstraintSummary.activeConstraintDistanceNm === 'number'
+                    ? ` - ${flightDeckVerticalConstraintSummary.activeConstraintDistanceNm.toFixed(1)} NM`
+                    : ''}
+                  {' - '}
+                  {flightDeckVerticalConstraintSummary.sourceLabel}
+                </Text>
+              ) : null}
+              {flightDeckVerticalConstraintSummary.nextConstraintLabel ? (
+                <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                  {flightDeckVerticalConstraintSummary.nextConstraintArmed ? 'Next constraint armed' : 'Next constraint staged'} - {flightDeckVerticalConstraintSummary.nextConstraintLabel}
+                </Text>
+              ) : null}
               <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                {flightDeckVerticalConstraintSummary.nextConstraintArmed ? 'Next constraint armed' : 'Next constraint staged'} - {flightDeckVerticalConstraintSummary.nextConstraintLabel}
+                {flightDeckVerticalConstraintSummary.constraintGateCall}
               </Text>
-            ) : null}
-            <Text style={styles.flightDeckVisionBannerSupportMuted}>
-              {flightDeckVerticalConstraintSummary.constraintGateCall}
-            </Text>
-            {flightDeckVerticalPathSummary.requiredVsiFpm != null ? (
+              {flightDeckVerticalPathSummary.requiredVsiFpm != null ? (
+                <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                  VNAV {Math.abs(flightDeckVerticalPathSummary.requiredVsiFpm)} fpm
+                  {flightDeckVerticalPathSummary.targetAltitudeFt != null
+                    ? ` - tgt ${Math.round(flightDeckVerticalPathSummary.targetAltitudeFt)} ft`
+                    : ''}
+                </Text>
+              ) : null}
+              {flightDeckVerticalConstraintSummary.requiredVsiFpm != null ? (
+                <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                  PROC VNAV {Math.abs(flightDeckVerticalConstraintSummary.requiredVsiFpm)} fpm
+                  {flightDeckVerticalConstraintSummary.targetAltitudeFt != null
+                    ? ` - tgt ${Math.round(flightDeckVerticalConstraintSummary.targetAltitudeFt)} ft`
+                    : ''}
+                </Text>
+              ) : null}
+              {activeAttitude && (typeof activeAttitude.pitchDeg === 'number' || typeof activeAttitude.rollDeg === 'number') ? (
+                <Text style={styles.flightDeckVisionBannerSupportMuted}>
+                  Att {typeof activeAttitude.pitchDeg === 'number' ? `${activeAttitude.pitchDeg.toFixed(1)}° pitch` : '--'} / {typeof activeAttitude.rollDeg === 'number' ? `${activeAttitude.rollDeg.toFixed(1)}° bank` : '--'}
+                </Text>
+              ) : null}
               <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                VNAV {Math.abs(flightDeckVerticalPathSummary.requiredVsiFpm)} fpm
-                {flightDeckVerticalPathSummary.targetAltitudeFt != null
-                  ? ` - tgt ${Math.round(flightDeckVerticalPathSummary.targetAltitudeFt)} ft`
-                  : ''}
+                {attitudeSourceSummary?.pilotGrade ? attitudeSourceSummary.detail : visionReadinessSummary?.detail}
               </Text>
-            ) : null}
-            {flightDeckVerticalConstraintSummary.requiredVsiFpm != null ? (
-              <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                PROC VNAV {Math.abs(flightDeckVerticalConstraintSummary.requiredVsiFpm)} fpm
-                {flightDeckVerticalConstraintSummary.targetAltitudeFt != null
-                  ? ` - tgt ${Math.round(flightDeckVerticalConstraintSummary.targetAltitudeFt)} ft`
-                  : ''}
-              </Text>
-            ) : null}
-            {activeAttitude && (typeof activeAttitude.pitchDeg === 'number' || typeof activeAttitude.rollDeg === 'number') ? (
-              <Text style={styles.flightDeckVisionBannerSupportMuted}>
-                Att {typeof activeAttitude.pitchDeg === 'number' ? `${activeAttitude.pitchDeg.toFixed(1)}° pitch` : '--'} / {typeof activeAttitude.rollDeg === 'number' ? `${activeAttitude.rollDeg.toFixed(1)}° bank` : '--'}
-              </Text>
-            ) : null}
-            <Text style={styles.flightDeckVisionBannerSupportMuted}>
-              {attitudeSourceSummary?.pilotGrade ? attitudeSourceSummary.detail : visionReadinessSummary?.detail}
-            </Text>
-          </>
-        ) : null}
-        {terrainEscapeGuidance ? (
-          <Text style={styles.flightDeckVisionBannerAlert}>{terrainEscapeGuidance}</Text>
-        ) : null}
-      </View>
+            </>
+          ) : null}
+          {terrainEscapeGuidance ? (
+            <Text style={styles.flightDeckVisionBannerAlert}>{terrainEscapeGuidance}</Text>
+          ) : null}
+        </View>
+      ) : null}
       <View style={styles.flightDeckVisionGuidanceChip}>
         <Text style={styles.flightDeckVisionGuidanceText}>{visionGuidance}</Text>
       </View>
-      {destinationRunwayCue && !isSplitView ? (
+      {destinationRunwayCue && !isSplitView && !focusModeActive ? (
         <View style={styles.flightDeckVisionApproachChip}>
           <Text style={styles.flightDeckVisionApproachTitle}>Approach</Text>
           <Text style={styles.flightDeckVisionApproachText}>
@@ -1394,7 +1535,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 : `Correct right ${Math.round(Math.abs(destinationRunwayCue.alignmentDeltaDeg))} deg`}
           </Text>
         </View>
-      ) : destinationBriefingLoading && !isSplitView ? (
+      ) : destinationBriefingLoading && !isSplitView && !focusModeActive ? (
         <View style={styles.flightDeckVisionApproachChip}>
           <Text style={styles.flightDeckVisionApproachTitle}>Approach</Text>
           <Text style={styles.flightDeckVisionApproachText}>Loading runway briefing</Text>
@@ -1477,7 +1618,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           {obstacleClearanceFt != null ? `${Math.round(obstacleClearanceFt)} ft clr` : obstacleScanLoading ? 'loading' : '--'}
         </Text>
       </View>
-      {selectedTrafficTarget && !isSplitView ? (
+      {selectedTrafficTarget && !isSplitView && !focusModeActive ? (
         <View style={styles.flightDeckVisionTrafficCue}>
           <Text style={styles.flightDeckVisionTrafficCueTitle}>Traffic</Text>
           <Text style={styles.flightDeckVisionTrafficCueText}>
@@ -1488,7 +1629,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           </Text>
         </View>
       ) : null}
-      {!isSplitView ? (
+      {!isSplitView && !focusModeActive ? (
         <View style={styles.flightDeckVisionManeuverCard}>
           <Text style={styles.flightDeckVisionManeuverTitle}>Recommended action</Text>
           <Text style={styles.flightDeckVisionManeuverText}>{visionManeuverRecommendation}</Text>
@@ -1822,7 +1963,9 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           <TouchableOpacity style={styles.flightDeckTapReveal} activeOpacity={1} onPress={() => pulseFlightDeckChrome()} />
         ) : null}
 
-        {flightDeckChromeVisible ? (
+        {showCompactTopBar ? renderCompactTopBar() : null}
+
+        {showExpandedHeader ? (
           <View
             style={[
               styles.flightDeckHeader,
@@ -2123,19 +2266,19 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 : null,
             ]}
           >
-            {flightDeckVisibleAlert ? (
+            {shouldShowAlertStrip ? (
               <View
                 style={[
                   styles.flightDeckAlertStrip,
-                  flightDeckVisibleAlert.severity === 'warning'
+                  flightDeckVisibleAlert?.severity === 'warning'
                     ? styles.flightDeckAlertStripWarning
-                    : flightDeckVisibleAlert.severity === 'caution'
+                    : flightDeckVisibleAlert?.severity === 'caution'
                       ? styles.flightDeckAlertStripCaution
                       : styles.flightDeckAlertStripAdvisory,
                 ]}
               >
-                <Text style={styles.flightDeckAlertTitle}>{flightDeckVisibleAlert.title}</Text>
-                <Text style={styles.flightDeckAlertText}>{flightDeckVisibleAlert.detail}</Text>
+                <Text style={styles.flightDeckAlertTitle}>{flightDeckVisibleAlert?.title}</Text>
+                <Text style={styles.flightDeckAlertText}>{flightDeckVisibleAlert?.detail}</Text>
               </View>
             ) : null}
             {visionPaneVisible && !attitudeSourceSummary?.pilotGrade ? (
@@ -2155,7 +2298,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               </View>
             ) : null}
 
-            {mapPanePrimary && flightDeckTrafficCardVisible && selectedTrafficTarget ? (
+            {showMapOverlayCards && flightDeckTrafficCardVisible && selectedTrafficTarget ? (
               <View
                 style={[
                   styles.flightDeckContextCard,
@@ -2195,7 +2338,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               </View>
             ) : null}
 
-            {mapPanePrimary && flightDeckDiversionCardVisible && selectedDiversion ? (
+            {showMapOverlayCards && flightDeckDiversionCardVisible && selectedDiversion ? (
               <View
                 style={[
                   styles.flightDeckContextCard,
@@ -2228,7 +2371,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 </View>
               </View>
             ) : null}
-            {mapPanePrimary && !flightDeckTrafficCardVisible && !flightDeckDiversionCardVisible ? (
+            {showCompactTacticalCard ? (
               <View style={styles.flightDeckMapActionCard}>
                 <View style={styles.flightDeckMapActionHeader}>
                   <Text style={styles.flightDeckMapActionLabel}>{mapTacticalSummary.focusLabel || 'Director'}</Text>
@@ -2260,7 +2403,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 <Text style={styles.flightDeckMapActionRecommendation}>{mapTacticalSummary.recommendation}</Text>
               </View>
             ) : null}
-            {mapPanePrimary && destinationRunwayCue ? (
+            {mapPanePrimary && destinationRunwayCue && !compactDevice && !focusModeActive ? (
               <View style={styles.flightDeckApproachCard}>
                 <View style={styles.flightDeckApproachCardHeader}>
                   <Text style={styles.flightDeckApproachCardEyebrow}>Approach</Text>
@@ -2272,7 +2415,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 </Text>
               </View>
             ) : null}
-            {mapPanePrimary && flightDeckRunwayOpsSummary ? (
+            {mapPanePrimary && flightDeckRunwayOpsSummary && !compactDevice && !focusModeActive ? (
               <View style={styles.flightDeckRunwayOpsCard}>
                 <View style={styles.flightDeckApproachCardHeader}>
                   <Text style={styles.flightDeckApproachCardEyebrow}>Runway Ops</Text>
@@ -2308,9 +2451,9 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               </View>
             ) : null}
 
-            {flightDeckChromeVisible && !flightDeckDrawerOpen ? (
+            {showQuickRail ? (
               <View style={styles.flightDeckQuickRail}>
-                {flightDeckActionButtons.map((action: any) => (
+                {compactQuickActions.map((action: any) => (
                   <TouchableOpacity
                     key={action.key}
                     style={[
@@ -2495,6 +2638,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           style={[
             styles.flightDeckSheet,
             { bottom: Math.max(insets.bottom + 110, 122) },
+            compactDevice ? { maxHeight: '62%' } : null,
             isLandscape
               ? {
                   left: undefined,
@@ -3195,6 +3339,39 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           {flightDeckPanel === 'layers' && (
             <View style={styles.flightDeckPanel}>
               <Text style={styles.flightDeckPanelTitle}>Layer Controls</Text>
+              <Text style={styles.flightDeckPanelText}>
+                {flightDeckLayoutProfile.deviceClass === 'tablet'
+                  ? 'Tablet layout keeps more tactical context visible at once.'
+                  : 'Phone Mode defaults to reduced chrome so ownship, traffic, and route remain clear.'}
+              </Text>
+              <View style={styles.flightDeckControlRow}>
+                <TouchableOpacity
+                  style={[styles.flightDeckChip, focusModeActive && styles.flightDeckChipActive]}
+                  onPress={toggleFlightDeckFocusMode}
+                >
+                  <Text style={[styles.flightDeckChipText, focusModeActive && styles.flightDeckChipTextActive]}>
+                    {focusModeActive ? 'Focus on' : 'Focus off'}
+                  </Text>
+                </TouchableOpacity>
+                <View style={[styles.flightDeckChip, flightDeckLayoutProfile.allowSplitView && styles.flightDeckChipActive]}>
+                  <Text style={[styles.flightDeckChipText, flightDeckLayoutProfile.allowSplitView && styles.flightDeckChipTextActive]}>
+                    {flightDeckLayoutProfile.allowSplitView ? 'Split available' : 'Split hidden'}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.flightDeckControlRow}>
+                {(['track-up', 'heading-up', 'north-up'] as const).map((value) => (
+                  <TouchableOpacity
+                    key={`deck-orientation-${value}`}
+                    style={[styles.flightDeckChip, mapOrientationMode === value && styles.flightDeckChipActive]}
+                    onPress={() => setMapOrientationMode(value)}
+                  >
+                    <Text style={[styles.flightDeckChipText, mapOrientationMode === value && styles.flightDeckChipTextActive]}>
+                      {value === 'track-up' ? 'Track Up' : value === 'heading-up' ? 'Heading Up' : 'North Up'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
               <View style={styles.flightDeckControlRow}>
                 {(['standard', 'sectional', 'terrain', 'radar', 'winds', 'clouds'] as const).map((value) => (
                   <TouchableOpacity

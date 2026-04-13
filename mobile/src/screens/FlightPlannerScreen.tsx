@@ -7,11 +7,13 @@
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import MapView, { Callout, Marker, Polyline, PROVIDER_GOOGLE, UrlTile, WMSTile } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -63,6 +65,13 @@ import type { MobileRouteLeg, MobileRouteNavDataLegPayload, MobileRouteProgressS
 import { analyzeFiledRoute, isFiledRouteAnchorKind } from '@shared/flight-plan-route';
 import { getFlightDeckSourceArbitrationState } from '../lib/sourceArbitration';
 import FlightDeckView from '../components/flight-deck/FlightDeckView';
+import {
+  getFlightDeckLayoutProfile,
+  getMapOrientationHeading,
+  sanitizeFlightDeckDisplayMode,
+  type FlightDeckDisplayMode,
+  type FlightDeckMapOrientationMode,
+} from '../components/flight-deck/flightDeckLayout';
 import FormDateTimeField from '../components/FormDateTimeField';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { diagnosticsEnabled, logDiagnostic, warnDiagnostic } from '../utils/diagnostics';
@@ -88,6 +97,7 @@ type AircraftType = {
 
 const FAA_SECTIONAL_WMS_TEMPLATE =
   'https://sua.faa.gov/geoserver/wms?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:900913&bbox={minX},{minY},{maxX},{maxY}&width={width}&height={height}';
+const FLIGHT_DECK_PHONE_RECOMMENDATION_KEY = 'flight_deck_phone_recommendation_dismissed_at';
 
 type AircraftProfile = {
   id: string;
@@ -412,7 +422,7 @@ type WindsAloftMeta = {
 };
 
 type FlightDeckPanel = 'status' | 'surface' | 'layers' | 'traffic' | 'diversions';
-type FlightDeckView = 'split' | 'map' | 'vision';
+type FlightDeckView = FlightDeckDisplayMode;
 type FlightDeckActionTone = 'default' | 'accent' | 'caution' | 'warning';
 type FlightDeckPhaseStage =
   | 'preflight'
@@ -1368,8 +1378,13 @@ export default function FlightPlannerScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const { isAuthenticated, user } = useIsAuthenticated();
   const isFlightDeck = route.name === 'FlightDeck' || route.params?.mode === 'flight';
+  const flightDeckLayoutProfile = useMemo(
+    () => getFlightDeckLayoutProfile({ width: screenWidth, height: screenHeight }),
+    [screenHeight, screenWidth]
+  );
   const [departure, setDeparture] = useState('KJFK');
   const [destination, setDestination] = useState('KBOS');
   const [waypoints, setWaypoints] = useState('');
@@ -1422,13 +1437,16 @@ export default function FlightPlannerScreen() {
   const [simulationProgress, setSimulationProgress] = useState(0);
   const [simulationSpeed, setSimulationSpeed] = useState<'1x' | '4x' | '8x'>('4x');
   const [flightDeckPanel, setFlightDeckPanel] = useState<FlightDeckPanel>('status');
-  const [flightDeckView, setFlightDeckView] = useState<FlightDeckView>('split');
+  const [flightDeckView, setFlightDeckView] = useState<FlightDeckView>(flightDeckLayoutProfile.defaultDisplayMode);
   const [flightDeckDrawerOpen, setFlightDeckDrawerOpen] = useState(false);
   const [flightDeckHudExpanded, setFlightDeckHudExpanded] = useState(false);
   const [flightDeckChromeVisible, setFlightDeckChromeVisible] = useState(true);
+  const [flightDeckFocusMode, setFlightDeckFocusMode] = useState(flightDeckLayoutProfile.defaultFocusMode);
+  const [flightDeckPhoneRecommendationVisible, setFlightDeckPhoneRecommendationVisible] = useState(false);
   const [flightDeckInteractionTick, setFlightDeckInteractionTick] = useState(0);
   const [flightDeckAdvisoriesMuted, setFlightDeckAdvisoriesMuted] = useState(false);
   const [flightDeckTargetAltitudeFt, setFlightDeckTargetAltitudeFt] = useState<number | null>(null);
+  const [mapOrientationMode, setMapOrientationMode] = useState<FlightDeckMapOrientationMode>('track-up');
   const [trafficResolutionBias, setTrafficResolutionBias] = useState<'left' | 'right' | null>(null);
   const [selectedTrafficId, setSelectedTrafficId] = useState<string | null>(null);
   const [simulationConflictEnabled, setSimulationConflictEnabled] = useState(false);
@@ -1441,6 +1459,10 @@ export default function FlightPlannerScreen() {
   const flightDeckAutoPanelRef = useRef<string | null>(null);
   const flightDeckMapFocusSignatureRef = useRef<string | null>(null);
   const flightDeckMapHeadingRef = useRef<number | null>(null);
+  const flightDeckManualViewRef = useRef(false);
+  const flightDeckFocusModeTouchedRef = useRef(false);
+  const flightDeckWasActiveRef = useRef(false);
+  const flightDeckLastLayoutSignatureRef = useRef<string | null>(null);
   const lastDiversionFetchRef = useRef<PositionFetchSnapshot | null>(null);
   const lastObstacleFetchRef = useRef<PositionFetchSnapshot | null>(null);
   const [aircraftPerformanceState, dispatchAircraftPerformance] = useReducer(
@@ -4345,35 +4367,53 @@ export default function FlightPlannerScreen() {
     setFlightDeckPanel(panel);
     setFlightDeckDrawerOpen(true);
   };
-  const toggleFlightDeckView = () => {
-    pulseFlightDeckChrome();
+  const commitFlightDeckViewMode = (
+    next: FlightDeckView,
+    options: { preserveChrome?: boolean; userInitiated?: boolean } = {}
+  ) => {
+    const sanitizedNext = sanitizeFlightDeckDisplayMode(next, flightDeckLayoutProfile);
+    pulseFlightDeckChrome(options.preserveChrome ?? sanitizedNext === 'split');
+    if (options.userInitiated !== false) {
+      flightDeckManualViewRef.current = true;
+    }
     setFlightDeckView((current) => {
-      const next = current === 'vision' ? 'split' : 'vision';
+      const currentSanitized = sanitizeFlightDeckDisplayMode(current, flightDeckLayoutProfile);
+      if (currentSanitized === sanitizedNext) return currentSanitized;
       logDiagnostic('flightDeck', 'view_changed', {
-        view: next,
+        view: sanitizedNext,
         visionMode,
         ownshipAvailable: Boolean(activeOwnship),
         pilotGradeAttitude: Boolean(attitudeSourceSummary.pilotGrade),
+        splitAllowed: flightDeckLayoutProfile.allowSplitView,
+        deviceClass: flightDeckLayoutProfile.deviceClass,
       });
-      return next;
+      return sanitizedNext;
     });
   };
+  const toggleFlightDeckView = () => {
+    const next =
+      flightDeckView === 'vision'
+        ? flightDeckLayoutProfile.allowSplitView
+          ? 'split'
+          : 'map'
+        : 'vision';
+    commitFlightDeckViewMode(next);
+  };
   const setFlightDeckViewMode = (next: FlightDeckView) => {
-    pulseFlightDeckChrome(next === 'split');
-    setFlightDeckView((current) => {
-      if (current === next) return current;
-      logDiagnostic('flightDeck', 'view_changed', {
-        view: next,
-        visionMode,
-        ownshipAvailable: Boolean(activeOwnship),
-        pilotGradeAttitude: Boolean(attitudeSourceSummary.pilotGrade),
-      });
-      return next;
-    });
+    commitFlightDeckViewMode(next);
   };
   const toggleFlightDeckHud = () => {
     pulseFlightDeckChrome(true);
     setFlightDeckHudExpanded((prev) => !prev);
+  };
+  const toggleFlightDeckFocusMode = () => {
+    flightDeckFocusModeTouchedRef.current = true;
+    pulseFlightDeckChrome(true);
+    setFlightDeckFocusMode((prev) => !prev);
+  };
+  const dismissPhoneRecommendation = () => {
+    setFlightDeckPhoneRecommendationVisible(false);
+    AsyncStorage.setItem(FLIGHT_DECK_PHONE_RECOMMENDATION_KEY, String(Date.now())).catch(() => undefined);
   };
   const focusMapOnPoint = (
     latitude: number,
@@ -4396,10 +4436,12 @@ export default function FlightPlannerScreen() {
       return;
     }
 
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE)
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.ALL_BUT_UPSIDE_DOWN)
       .then(() => {
         logDiagnostic('flightDeck', 'orientation_lock', {
-          lock: 'landscape',
+          lock: 'all_but_upside_down',
+          deviceClass: flightDeckLayoutProfile.deviceClass,
+          allowSplitView: flightDeckLayoutProfile.allowSplitView,
         });
       })
       .catch((error) => {
@@ -4411,7 +4453,65 @@ export default function FlightPlannerScreen() {
     return () => {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
     };
-  }, [isFlightDeck]);
+  }, [flightDeckLayoutProfile.allowSplitView, flightDeckLayoutProfile.deviceClass, isFlightDeck]);
+
+  useEffect(() => {
+    if (!isFlightDeck) {
+      flightDeckWasActiveRef.current = false;
+      flightDeckLastLayoutSignatureRef.current = null;
+      flightDeckManualViewRef.current = false;
+      flightDeckFocusModeTouchedRef.current = false;
+      setFlightDeckPhoneRecommendationVisible(false);
+      return;
+    }
+
+    const enteringFlightDeck = !flightDeckWasActiveRef.current;
+    const layoutChanged = flightDeckLastLayoutSignatureRef.current !== flightDeckLayoutProfile.signature;
+
+    flightDeckWasActiveRef.current = true;
+    flightDeckLastLayoutSignatureRef.current = flightDeckLayoutProfile.signature;
+
+    setFlightDeckView((current) => {
+      const sanitizedCurrent = sanitizeFlightDeckDisplayMode(current, flightDeckLayoutProfile);
+      if (enteringFlightDeck) {
+        return flightDeckLayoutProfile.defaultDisplayMode;
+      }
+      if (current !== sanitizedCurrent) {
+        return sanitizedCurrent;
+      }
+      if (layoutChanged && !flightDeckManualViewRef.current) {
+        return flightDeckLayoutProfile.defaultDisplayMode;
+      }
+      return current;
+    });
+
+    if (enteringFlightDeck || (layoutChanged && !flightDeckFocusModeTouchedRef.current)) {
+      setFlightDeckFocusMode(flightDeckLayoutProfile.defaultFocusMode);
+    }
+  }, [flightDeckLayoutProfile, isFlightDeck]);
+
+  useEffect(() => {
+    if (!isFlightDeck || !flightDeckLayoutProfile.showTabletRecommendation) {
+      setFlightDeckPhoneRecommendationVisible(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    AsyncStorage.getItem(FLIGHT_DECK_PHONE_RECOMMENDATION_KEY)
+      .then((storedAt) => {
+        if (cancelled) return;
+        setFlightDeckPhoneRecommendationVisible(!storedAt);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFlightDeckPhoneRecommendationVisible(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [flightDeckLayoutProfile.showTabletRecommendation, isFlightDeck]);
 
   useEffect(() => {
     logDiagnostic('maps', 'map_style_changed', {
@@ -4430,13 +4530,15 @@ export default function FlightPlannerScreen() {
   }, [activeOwnship, routePoints.length, visionMode]);
 
   useEffect(() => {
-    if (!isFlightDeck || flightDeckView !== 'map' || !tacticalMapRegion) return;
+    const mapPaneVisible = flightDeckView !== 'vision';
+    if (!isFlightDeck || !mapPaneVisible || !tacticalMapRegion) return;
 
     const signature = [
       flightDeckPhaseSummary.stage,
       routeProgress?.legIndex ?? -1,
       selectedTrafficTarget?.id || 'none',
       selectedDiversion?.icao || 'none',
+      mapOrientationMode,
     ].join(':');
 
     const stageChanged = flightDeckMapFocusSignatureRef.current !== signature;
@@ -4449,15 +4551,21 @@ export default function FlightPlannerScreen() {
     if (!stageChanged && !ownshipOutsideWindow) return;
 
     flightDeckMapFocusSignatureRef.current = signature;
-    if (activeOwnship?.heading != null) {
-      flightDeckMapHeadingRef.current = activeOwnship.heading;
+    if (activeOwnship) {
+      const heading = getMapOrientationHeading({
+        orientationMode: mapOrientationMode,
+        trackHeadingDeg: activeOwnship.heading,
+        attitudeHeadingDeg: activeAttitude?.headingDeg,
+        speedKts: activeOwnship.speedKts,
+      });
+      flightDeckMapHeadingRef.current = heading;
       mapRef.current?.animateCamera(
         {
           center: {
             latitude: tacticalMapRegion.latitude,
             longitude: tacticalMapRegion.longitude,
           },
-          heading: activeOwnship.heading,
+          heading,
           pitch: 0,
         },
         { duration: 450 },
@@ -4471,36 +4579,45 @@ export default function FlightPlannerScreen() {
     flightDeckView,
     isFlightDeck,
     mapRegion,
+    mapOrientationMode,
     routeProgress?.legIndex,
     selectedDiversion?.icao,
     selectedTrafficTarget?.id,
     tacticalMapRegion,
+    activeAttitude?.headingDeg,
   ]);
   useEffect(() => {
-    if (!isFlightDeck || flightDeckView !== 'map' || activeOwnship?.heading == null) return;
+    const mapPaneVisible = flightDeckView !== 'vision';
+    if (!isFlightDeck || !mapPaneVisible || !activeOwnship) return;
+    const nextHeading = getMapOrientationHeading({
+      orientationMode: mapOrientationMode,
+      trackHeadingDeg: activeOwnship.heading,
+      attitudeHeadingDeg: activeAttitude?.headingDeg,
+      speedKts: activeOwnship.speedKts,
+    });
     const previousHeading = flightDeckMapHeadingRef.current;
-    if (previousHeading != null && Math.abs(normalizeHeadingDelta(activeOwnship.heading - previousHeading)) < 8) {
+    if (previousHeading != null && Math.abs(normalizeHeadingDelta(nextHeading - previousHeading)) < 8) {
       return;
     }
-    flightDeckMapHeadingRef.current = activeOwnship.heading;
+    flightDeckMapHeadingRef.current = nextHeading;
     mapRef.current?.animateCamera(
       {
-        heading: activeOwnship.heading,
+        heading: nextHeading,
         pitch: 0,
       },
       { duration: 260 },
     );
-  }, [activeOwnship?.heading, flightDeckView, isFlightDeck]);
+  }, [activeAttitude?.headingDeg, activeOwnship, flightDeckView, isFlightDeck, mapOrientationMode]);
   const focusTrafficTarget = (target: RankedTrafficTarget) => {
     setSelectedTrafficId(target.id);
     openFlightDeckPanel('traffic');
-    setFlightDeckView('map');
+    commitFlightDeckViewMode('map', { preserveChrome: true, userInitiated: false });
     focusMapOnPoint(target.lat, target.lon, { latitudeDelta: 0.32, longitudeDelta: 0.32 });
   };
   const focusDiversionAirport = (airport: NearbyDiversionAirport) => {
     setSelectedDiversionIcao(airport.icao);
     openFlightDeckPanel('diversions');
-    setFlightDeckView('map');
+    commitFlightDeckViewMode('map', { preserveChrome: true, userInitiated: false });
     if (typeof airport.lat === 'number' && typeof airport.lon === 'number') {
       focusMapOnPoint(airport.lat, airport.lon, { latitudeDelta: 0.36, longitudeDelta: 0.36 });
     } else if (activeOwnship) {
@@ -4528,7 +4645,7 @@ export default function FlightPlannerScreen() {
   const engageDirectToDiversion = (airport: NearbyDiversionAirport) => {
     setSelectedDiversionIcao(airport.icao);
     openFlightDeckPanel('status');
-    setFlightDeckView('map');
+    commitFlightDeckViewMode('map', { preserveChrome: true, userInitiated: false });
     if (typeof airport.lat === 'number' && typeof airport.lon === 'number') {
       setRouteExecutionOverride({
         mode: 'direct-to-diversion',
@@ -4568,7 +4685,7 @@ export default function FlightPlannerScreen() {
     setActiveLegIndex(0);
     setSequencingSuspended(false);
     openFlightDeckPanel('status');
-    setFlightDeckView('map');
+    commitFlightDeckViewMode('map', { preserveChrome: true, userInitiated: false });
     focusMapOnPoint(waypoint.latitude, waypoint.longitude, { latitudeDelta: 0.34, longitudeDelta: 0.34 });
   };
   const activatePlannedLeg = (legIndex: number) => {
@@ -4578,7 +4695,7 @@ export default function FlightPlannerScreen() {
     setActiveLegIndex(boundedLegIndex);
     setSequencingSuspended(true);
     openFlightDeckPanel('status');
-    setFlightDeckView('map');
+    commitFlightDeckViewMode('map', { preserveChrome: true, userInitiated: false });
     if (focusPoint) {
       focusMapOnPoint(focusPoint.latitude, focusPoint.longitude, { latitudeDelta: 0.3, longitudeDelta: 0.3 });
     }
@@ -4588,7 +4705,7 @@ export default function FlightPlannerScreen() {
     setActiveLegIndex(Math.min(plannedRouteRejoinProgress?.legIndex ?? 0, Math.max(0, routePoints.length - 2)));
     setSequencingSuspended(false);
     openFlightDeckPanel('status');
-    setFlightDeckView('map');
+    commitFlightDeckViewMode('map', { preserveChrome: true, userInitiated: false });
   };
   const toggleSequencingSuspend = () => {
     setSequencingSuspended((prev) => !prev);
@@ -4630,15 +4747,17 @@ export default function FlightPlannerScreen() {
         clearTimeout(flightDeckChromeTimerRef.current);
         flightDeckChromeTimerRef.current = null;
       }
-      setFlightDeckView('split');
+      setFlightDeckView(flightDeckLayoutProfile.defaultDisplayMode);
       setFlightDeckDrawerOpen(false);
       setFlightDeckHudExpanded(false);
       setFlightDeckChromeVisible(true);
+      setFlightDeckFocusMode(flightDeckLayoutProfile.defaultFocusMode);
+      setMapOrientationMode('track-up');
       setFlightDeckTargetAltitudeFt(null);
       setTrafficResolutionBias(null);
       return;
     }
-  }, [activeOwnship, flightDeckView, isFlightDeck]);
+  }, [flightDeckLayoutProfile.defaultDisplayMode, flightDeckLayoutProfile.defaultFocusMode, isFlightDeck]);
 
   useEffect(() => {
     if (selectedTrafficTarget?.threatLevel !== 'immediate' && trafficResolutionBias) {
@@ -4887,9 +5006,18 @@ export default function FlightPlannerScreen() {
             },
             {
               key: 'vision',
-              label: flightDeckView === 'vision' ? 'Split' : attitudeSourceSummary.pilotGrade ? 'Vision' : 'Vision assist',
+              label:
+                flightDeckView === 'vision'
+                  ? flightDeckLayoutProfile.allowSplitView
+                    ? 'Split'
+                    : 'Map'
+                  : attitudeSourceSummary.pilotGrade
+                    ? 'Vision'
+                    : 'Vision assist',
               value: flightDeckView === 'vision'
-                ? 'Dual pane'
+                ? flightDeckLayoutProfile.allowSplitView
+                  ? 'Dual pane'
+                  : 'Map view'
                 : attitudeSourceSummary.pilotGrade
                   ? 'Synthetic view'
                   : 'Guidance only',
@@ -5916,9 +6044,15 @@ export default function FlightPlannerScreen() {
   }, [isFlightDeck, mapStyle]);
 
   useEffect(() => {
-    if (!isFlightDeck || flightDeckView !== 'map' || !activeOwnship || !mapRef.current) return;
+    const mapPaneVisible = flightDeckView !== 'vision';
+    if (!isFlightDeck || !mapPaneVisible || !activeOwnship || !mapRef.current) return;
     const speedKts = activeOwnship.speedKts ?? simulationCruiseKts;
-    const heading = typeof activeOwnship.heading === 'number' && speedKts >= 25 ? activeOwnship.heading : 0;
+    const heading = getMapOrientationHeading({
+      orientationMode: mapOrientationMode,
+      trackHeadingDeg: activeOwnship.heading,
+      attitudeHeadingDeg: activeAttitude?.headingDeg,
+      speedKts,
+    });
     const zoom = speedKts >= 170 ? 10.8 : speedKts >= 125 ? 11.4 : speedKts >= 85 ? 12.1 : 12.9;
     mapRef.current.animateCamera(
       {
@@ -5932,7 +6066,17 @@ export default function FlightPlannerScreen() {
       },
       { duration: 450 },
     );
-  }, [activeOwnship?.heading, activeOwnship?.lat, activeOwnship?.lon, activeOwnship?.speedKts, flightDeckView, isFlightDeck, simulationCruiseKts]);
+  }, [
+    activeAttitude?.headingDeg,
+    activeOwnship?.heading,
+    activeOwnship?.lat,
+    activeOwnship?.lon,
+    activeOwnship?.speedKts,
+    flightDeckView,
+    isFlightDeck,
+    mapOrientationMode,
+    simulationCruiseKts,
+  ]);
   const flightDeckSurfacePreview = useMemo<FlightDeckSurfacePreview | null>(() => {
     const departureSurface = flightPhase === 'departure';
     const airport = departureSurface ? activeRoutePoints[0] : activeRoutePoints[activeRoutePoints.length - 1];
@@ -6330,10 +6474,13 @@ export default function FlightPlannerScreen() {
     flightDeckDiversionCardVisible,
     flightDeckActionButtons,
     flightDeckHudExpanded,
+    flightDeckFocusMode,
+    flightDeckPhoneRecommendationVisible,
     activeVerticalSpeedFpm,
     immediateTrafficCount,
     routeRiskLabel,
     flightDeckPanel,
+    flightDeckLayoutProfile,
     simulationEnabled,
     gpsEnabled,
     trafficEnabled,
@@ -6351,6 +6498,7 @@ export default function FlightPlannerScreen() {
     selectedDiversionBriefing,
     flightDeckCommandBankDeg,
     flightDeckBankTicks,
+    mapOrientationMode,
     trafficFilter,
     formatAltitudeDelta,
   };
@@ -6360,6 +6508,8 @@ export default function FlightPlannerScreen() {
     toggleFlightDeckView,
     setFlightDeckViewMode,
     toggleFlightDeckHud,
+    toggleFlightDeckFocusMode,
+    dismissPhoneRecommendation,
     setMapRegion,
     setSelectedDiversionIcao,
     setSelectedTrafficId,
@@ -6371,6 +6521,7 @@ export default function FlightPlannerScreen() {
     setSimulationSpeed,
     setSimulationConflictEnabled,
     setMapStyle,
+    setMapOrientationMode,
     setTrafficFilter,
     focusDiversionAirport,
     engageDirectToDiversion,

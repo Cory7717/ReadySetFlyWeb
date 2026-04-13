@@ -2,6 +2,11 @@ import type { MutableRefObject } from 'react';
 import type { Region } from 'react-native-maps';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import type { MobileRouteExecutionPlanViewEntry } from '../../lib/flightMath';
+import type {
+  FlightDeckDisplayMode,
+  FlightDeckLayoutProfile,
+  FlightDeckMapOrientationMode,
+} from './flightDeckLayout';
 
 // ---------------------------------------------------------------------------
 // Shared primitives
@@ -249,8 +254,6 @@ export type SummaryCounts = {
   turbulence: number;
 };
 
-export type FlightDeckDisplayMode = 'split' | 'map' | 'vision';
-
 // ---------------------------------------------------------------------------
 // Execution plan
 // ---------------------------------------------------------------------------
@@ -306,6 +309,8 @@ export interface FlightDeckStateProps {
   flightDeckDrawerOpen: boolean;
   flightDeckPanel: string | null;
   flightDeckHudExpanded: boolean;
+  flightDeckFocusMode: boolean;
+  flightDeckPhoneRecommendationVisible: boolean;
   flightDeckLowerStackBottom: number;
   flightDeckTrafficCardVisible: boolean;
   flightDeckDiversionCardVisible: boolean;
@@ -316,6 +321,7 @@ export interface FlightDeckStateProps {
   flightDeckBankTicks: BankTick[];
   flightDeckSurfacePreview: SurfacePreview;
   flightDeckRunwayOpsSummary: any | null;
+  flightDeckLayoutProfile: FlightDeckLayoutProfile;
 
   // Terrain
   terrainRisk: string | null;
@@ -380,6 +386,7 @@ export interface FlightDeckStateProps {
   mapTacticalSummary: MapTacticalSummary;
   mapOverlayProfile: MapOverlayProfile;
   mapRunwayFocusSummary: MapRunwayFocusSummary;
+  mapOrientationMode: FlightDeckMapOrientationMode;
 
   // Weather overlay
   showCloudsGlobal: boolean;
@@ -444,6 +451,8 @@ export interface FlightDeckActionsProps {
   toggleFlightDeckView: () => void;
   setFlightDeckViewMode: (mode: FlightDeckDisplayMode) => void;
   toggleFlightDeckHud: () => void;
+  toggleFlightDeckFocusMode: () => void;
+  dismissPhoneRecommendation: () => void;
   setMapRegion: (region: Region) => void;
   setSelectedDiversionIcao: (icao: string | null) => void;
   setSelectedTrafficId: (id: string | null) => void;
@@ -455,6 +464,7 @@ export interface FlightDeckActionsProps {
   setSimulationSpeed: (speed: '1x' | '4x' | '8x') => void;
   setSimulationConflictEnabled: (enabled: boolean) => void;
   setMapStyle: (style: 'standard' | 'winds' | 'terrain' | 'sectional' | 'radar' | 'clouds') => void;
+  setMapOrientationMode: (mode: FlightDeckMapOrientationMode) => void;
   setTrafficFilter: (filter: 'all' | 'conflict' | 'above' | 'below') => void;
   focusDiversionAirport: (airport: any) => void;
   engageDirectToDiversion: (airport: any) => void;

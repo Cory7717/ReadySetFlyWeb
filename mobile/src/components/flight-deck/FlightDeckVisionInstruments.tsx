@@ -120,26 +120,89 @@ const FlightDeckDirectionIndicator = memo(function FlightDeckDirectionIndicator(
   directionDeg,
 }: DirectionIndicatorProps) {
   const normalized = directionDeg != null && Number.isFinite(directionDeg) ? normalizeHeading(directionDeg) : null;
-  const headingTicks = useMemo(() => {
-    if (normalized == null) return ['---', '---', '---', '---', '---'];
-    return [-20, -10, 0, 10, 20].map((offset) =>
-      formatHeading(normalized + offset),
-    );
-  }, [normalized]);
+  const compassTicks = useMemo(
+    () =>
+      new Array(36).fill(null).map((_, index) => {
+        const angleDeg = index * 10;
+        const radians = (angleDeg - 90) * (Math.PI / 180);
+        const outerRadius = compact ? 54 : 62;
+        const innerRadius = index % 3 === 0 ? outerRadius - 13 : outerRadius - 8;
+        const labelRadius = outerRadius - 23;
+        const label =
+          angleDeg === 0
+            ? 'N'
+            : angleDeg === 90
+              ? 'E'
+              : angleDeg === 180
+                ? 'S'
+                : angleDeg === 270
+                  ? 'W'
+                  : index % 3 === 0
+                    ? `${angleDeg / 10}`
+                    : null;
+        return {
+          key: `compass-${angleDeg}`,
+          major: index % 3 === 0,
+          tickX: Math.cos(radians) * innerRadius,
+          tickY: Math.sin(radians) * innerRadius,
+          labelX: Math.cos(radians) * labelRadius,
+          labelY: Math.sin(radians) * labelRadius,
+          angleDeg,
+          label,
+        };
+      }),
+    [compact],
+  );
 
   return (
     <View style={[localStyles.directionShell, compact ? localStyles.directionShellCompact : null]}>
-      <Text style={localStyles.directionMode}>{modeLabel}</Text>
-      <Text style={localStyles.directionValue}>{formatHeading(normalized)}</Text>
-      <View style={localStyles.directionRibbon}>
-        {headingTicks.map((tick, index) => (
-          <View key={`${tick}-${index}`} style={localStyles.directionTickWrap}>
-            <View style={[localStyles.directionTick, index === 2 ? localStyles.directionTickActive : null]} />
-            <Text style={[localStyles.directionTickText, index === 2 ? localStyles.directionTickTextActive : null]}>
-              {tick}
-            </Text>
-          </View>
+      <View style={localStyles.directionTopRow}>
+        <Text style={localStyles.directionMode}>{modeLabel}</Text>
+        <Text style={localStyles.directionSmallValue}>{formatHeading(normalized)}°</Text>
+      </View>
+      <View style={[localStyles.directionDial, compact ? localStyles.directionDialCompact : null]}>
+        <View style={localStyles.directionDialRing} />
+        {compassTicks.map((tick) => (
+          <View
+            key={tick.key}
+            style={[
+              localStyles.directionDialTick,
+              tick.major ? localStyles.directionDialTickMajor : null,
+              {
+                left: '50%',
+                top: '50%',
+                transform: [
+                  { translateX: tick.tickX - (tick.major ? 7 : 5) },
+                  { translateY: tick.tickY },
+                  { rotate: `${tick.angleDeg}deg` },
+                ],
+              },
+            ]}
+          />
         ))}
+        {compassTicks.map((tick) =>
+          tick.label ? (
+            <Text
+              key={`${tick.key}-label`}
+              style={[
+                localStyles.directionDialLabel,
+                tick.major ? localStyles.directionDialLabelMajor : null,
+                {
+                  left: '50%',
+                  top: '50%',
+                  transform: [{ translateX: tick.labelX - 7 }, { translateY: tick.labelY - 7 }],
+                },
+              ]}
+            >
+              {tick.label}
+            </Text>
+          ) : null
+        )}
+        <View style={localStyles.directionDialPointer} />
+        <View style={localStyles.directionCenterCore}>
+          <Text style={localStyles.directionCenterValue}>{formatHeading(normalized)}</Text>
+          <Text style={localStyles.directionCenterLabel}>COURSE</Text>
+        </View>
       </View>
     </View>
   );
@@ -269,23 +332,31 @@ export const FlightDeckVisionInstruments = memo(function FlightDeckVisionInstrum
 const localStyles = StyleSheet.create({
   directionShell: {
     position: 'absolute',
-    top: spacing.md,
-    left: '22%',
-    right: '22%',
+    left: '50%',
+    bottom: 74,
+    width: 164,
+    marginLeft: -82,
     borderRadius: radius.lg,
-    backgroundColor: 'rgba(9,13,19,0.78)',
+    backgroundColor: 'rgba(7,11,18,0.88)',
     borderWidth: 1,
-    borderColor: 'rgba(102,127,156,0.34)',
-    paddingHorizontal: spacing.md,
+    borderColor: 'rgba(102,127,156,0.3)',
+    paddingHorizontal: 10,
     paddingTop: 8,
     paddingBottom: 10,
     alignItems: 'center',
     ...shadow.flightGlass,
   },
   directionShellCompact: {
-    left: '18%',
-    right: '18%',
-    top: 58,
+    width: 138,
+    marginLeft: -69,
+    bottom: 58,
+  },
+  directionTopRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
   directionMode: {
     color: colors.flightTextMuted,
@@ -294,59 +365,104 @@ const localStyles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
-  directionValue: {
-    color: colors.flightText,
-    fontSize: 28,
+  directionSmallValue: {
+    color: colors.flightAccent,
+    fontSize: 12,
     fontWeight: '700',
-    marginTop: 2,
   },
-  directionRibbon: {
-    marginTop: 8,
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  directionTickWrap: {
+  directionDial: {
+    width: 126,
+    height: 126,
     alignItems: 'center',
-    flex: 1,
+    justifyContent: 'center',
   },
-  directionTick: {
-    width: 1,
-    height: 10,
+  directionDialCompact: {
+    width: 108,
+    height: 108,
+  },
+  directionDialRing: {
+    position: 'absolute',
+    inset: 6,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: 'rgba(61,87,117,0.88)',
+    backgroundColor: 'rgba(5,9,14,0.8)',
+  },
+  directionDialTick: {
+    position: 'absolute',
+    width: 10,
+    height: 1.5,
+    borderRadius: 999,
     backgroundColor: 'rgba(232,237,244,0.38)',
-    marginBottom: 4,
   },
-  directionTickActive: {
-    height: 14,
-    backgroundColor: colors.flightAccent,
+  directionDialTickMajor: {
+    width: 14,
+    backgroundColor: 'rgba(232,237,244,0.72)',
   },
-  directionTickText: {
+  directionDialLabel: {
+    position: 'absolute',
     color: colors.flightTextMuted,
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '600',
   },
-  directionTickTextActive: {
+  directionDialLabelMajor: {
     color: colors.flightText,
     fontWeight: '700',
+  },
+  directionDialPointer: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: 2,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderBottomWidth: 12,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: colors.flightAccent,
+  },
+  directionCenterCore: {
+    width: 72,
+    height: 48,
+    borderRadius: 18,
+    backgroundColor: 'rgba(9,13,19,0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(102,127,156,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  directionCenterValue: {
+    color: colors.flightText,
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+  },
+  directionCenterLabel: {
+    marginTop: 2,
+    color: colors.flightTextMuted,
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   tapeShell: {
     position: 'absolute',
     top: 110,
-    bottom: 126,
-    width: 76,
+    bottom: 136,
+    width: 82,
     borderRadius: radius.lg,
-    backgroundColor: 'rgba(9,13,19,0.62)',
+    backgroundColor: 'rgba(7,11,18,0.74)',
     borderWidth: 1,
-    borderColor: 'rgba(102,127,156,0.26)',
+    borderColor: 'rgba(102,127,156,0.3)',
     paddingHorizontal: 8,
     paddingTop: 8,
     paddingBottom: 10,
   },
   tapeShellCompact: {
     top: 116,
-    bottom: 112,
-    width: 68,
+    bottom: 114,
+    width: 70,
   },
   tapeLeft: {
     left: spacing.sm,
@@ -358,7 +474,7 @@ const localStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   tapeLabel: {
     color: colors.flightTextMuted,
@@ -374,14 +490,19 @@ const localStyles = StyleSheet.create({
   },
   tapeWindow: {
     flex: 1,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(4,7,12,0.78)',
     justifyContent: 'center',
     position: 'relative',
+    overflow: 'hidden',
+    paddingVertical: 10,
   },
   tapeTickRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginVertical: 6,
+    marginVertical: 4,
+    paddingHorizontal: 6,
   },
   tapeTick: {
     width: 14,
@@ -404,22 +525,22 @@ const localStyles = StyleSheet.create({
   },
   tapeCurrentValue: {
     position: 'absolute',
-    left: 18,
-    right: 0,
+    left: 6,
+    right: 6,
     top: '50%',
     marginTop: -18,
     borderRadius: radius.md,
-    backgroundColor: 'rgba(12,18,26,0.92)',
+    backgroundColor: 'rgba(12,18,26,0.98)',
     borderWidth: 1,
-    borderColor: 'rgba(200,146,42,0.4)',
+    borderColor: 'rgba(200,146,42,0.58)',
     paddingVertical: 6,
     paddingHorizontal: 8,
   },
   tapeCurrentValueText: {
     color: colors.flightText,
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '700',
-    textAlign: 'right',
+    textAlign: 'center',
   },
   tapeBug: {
     position: 'absolute',
@@ -445,7 +566,7 @@ const localStyles = StyleSheet.create({
     right: 90,
     bottom: 18,
     borderRadius: radius.lg,
-    backgroundColor: 'rgba(9,13,19,0.7)',
+    backgroundColor: 'rgba(7,11,18,0.88)',
     borderWidth: 1,
     borderColor: 'rgba(102,127,156,0.3)',
     paddingHorizontal: spacing.md,
@@ -476,7 +597,7 @@ const localStyles = StyleSheet.create({
     fontWeight: '600',
   },
   terrainBandChart: {
-    height: 44,
+    height: 30,
     marginTop: 8,
     flexDirection: 'row',
     alignItems: 'flex-end',

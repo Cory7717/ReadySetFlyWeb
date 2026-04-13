@@ -564,7 +564,6 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
   const visionPaneVisible = normalizedView !== 'map';
   const mapPanePrimary = normalizedView === 'map';
   const visionPanePrimary = normalizedView === 'vision';
-  const compactHeader = compactDevice || isLandscape || normalizedView !== 'map';
   const showCompactTopBar = flightDeckChromeVisible && (compactDevice || focusModeActive);
   const showExpandedHeader = flightDeckChromeVisible && !compactDevice && !focusModeActive;
   const splitPaneTop = isLandscape
@@ -581,11 +580,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               bottom: spacing.sm,
               left: spacing.sm,
               width: splitVisionPaneWidth,
-              borderRadius: 18,
+              borderRadius: 22,
               overflow: 'hidden' as const,
               borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.backgroundElevated,
+              borderColor: 'rgba(84,104,128,0.36)',
+              backgroundColor: colors.flightSurface,
             }
           : {
               position: 'absolute' as const,
@@ -593,11 +592,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               left: spacing.sm,
               right: spacing.sm,
               height: splitVisionPaneHeight,
-              borderRadius: 18,
+              borderRadius: 22,
               overflow: 'hidden' as const,
               borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.backgroundElevated,
+              borderColor: 'rgba(84,104,128,0.36)',
+              backgroundColor: colors.flightSurface,
             })
       : null;
   const splitMapPaneStyle =
@@ -609,11 +608,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               bottom: spacing.sm,
               left: spacing.sm + splitVisionPaneWidth + spacing.sm,
               right: spacing.sm,
-              borderRadius: 18,
+              borderRadius: 22,
               overflow: 'hidden' as const,
               borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.backgroundElevated,
+              borderColor: 'rgba(84,104,128,0.36)',
+              backgroundColor: colors.flightSurface,
             }
           : {
               position: 'absolute' as const,
@@ -621,11 +620,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               left: spacing.sm,
               right: spacing.sm,
               bottom: spacing.sm,
-              borderRadius: 18,
+              borderRadius: 22,
               overflow: 'hidden' as const,
               borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.backgroundElevated,
+              borderColor: 'rgba(84,104,128,0.36)',
+              backgroundColor: colors.flightSurface,
             })
       : null;
   const displayModeOptions = getFlightDeckDisplayModeOptions(flightDeckLayoutProfile);
@@ -961,6 +960,76 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     routeProgress?.nextWaypoint
       ? `${routeProgress.nextWaypoint} · ${typeof routeProgress.remainingLegNm === 'number' ? `${routeProgress.remainingLegNm.toFixed(1)} NM` : '--'}`
       : mapTacticalSummary.heading;
+  const routeDistanceChip =
+    typeof routeProgress?.remainingRouteNm === 'number' && Number.isFinite(routeProgress.remainingRouteNm)
+      ? `${routeProgress.remainingRouteNm.toFixed(1)} NM`
+      : '--';
+  const routeEteChip = routeProgress?.etaText || activeLegEteText;
+  const headerStatusDetail =
+    routeExecutionSummary?.mode === 'direct-to'
+      ? 'Direct-To'
+      : routeExecutionSummary?.sequencingSuspended
+        ? 'SEQ HOLD'
+        : flightDeckSessionState || 'READY';
+  const headerExecutionChip =
+    routeExecutionSummary?.activeExecutionSegment?.label ||
+    routeExecutionSummary?.sequencingLabel ||
+    flightDeckPhaseSummary?.label ||
+    'ENROUTE';
+  const headerSubtitle =
+    routeProgress?.nextWaypoint
+      ? `${routeExecutionSummary?.activeLegLabel || routeProgress.nextWaypoint} active • Next ${routeExecutionSummary?.nextLegLabel || routeProgress.nextWaypoint || '--'}`
+      : flightDeckPhaseSummary?.detail || 'Awaiting active route and ownship.';
+  const headerAltitudeChip =
+    flightDeckTargetAltitudeFt != null
+      ? `${Math.round(flightDeckTargetAltitudeFt)}T`
+      : activeOwnship?.altitudeFt != null
+        ? `${Math.round(activeOwnship.altitudeFt)}T`
+        : null;
+  const mapOrientationChipValue =
+    typeof activeOwnship?.trackDeg === 'number'
+      ? `${formatDirectionDegrees(activeOwnship.trackDeg)} ${mapOrientationMode === 'heading-up' ? 'HDG-UP' : mapOrientationMode === 'north-up' ? 'NORTH-UP' : 'TRK-UP'}`
+      : `${mapOrientationLabel.toUpperCase()}`;
+  const advisoryTrafficTarget = selectedTrafficTarget || topTrafficTarget || null;
+  const showMapControlStack = Boolean(mapPaneVisible && flightDeckChromeVisible && !flightDeckDrawerOpen);
+  const headerModeButtons = [
+    { key: 'map', label: 'Map', active: normalizedView === 'map', onPress: () => setFlightDeckViewMode('map') },
+    ...(flightDeckLayoutProfile.allowSplitView
+      ? [{ key: 'split', label: 'Split', active: normalizedView === 'split', onPress: () => setFlightDeckViewMode('split') }]
+      : []),
+    { key: 'vision', label: 'Vision', active: normalizedView === 'vision', onPress: () => setFlightDeckViewMode('vision') },
+    {
+      key: 'control',
+      label: 'Control',
+      active: flightDeckDrawerOpen,
+      onPress: () => {
+        pulseFlightDeckChrome(true);
+        setFlightDeckDrawerOpen(true);
+        setFlightDeckPanel('layers');
+      },
+    },
+  ];
+  const mapWaypointMarkers = useMemo(() => {
+    if (!routePoints.length) return [];
+    return routePoints
+      .map((point: any, index) => {
+        const ident = point?.icao || point?.ident || point?.name || null;
+        if (!ident) return null;
+        const isDestination = index === routePoints.length - 1;
+        const isNext =
+          typeof routeProgress?.legIndex === 'number' &&
+          index === Math.min(routeProgress.legIndex + 1, routePoints.length - 1);
+        if (!isDestination && !isNext) return null;
+        return {
+          key: `map-waypoint-${ident}-${index}`,
+          coordinate: { latitude: point.latitude, longitude: point.longitude },
+          title: ident,
+          subtitle: isDestination ? 'DEST' : 'NEXT',
+          tone: isDestination ? 'destination' : 'next',
+        };
+      })
+      .filter(Boolean);
+  }, [routePoints, routeProgress?.legIndex]);
 
   const renderDisplayModeControls = (stacked = false) => (
     <View
@@ -992,6 +1061,108 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
       ))}
     </View>
   );
+
+  const renderHeaderModeControls = () => (
+    <View style={styles.flightDeckModeCluster}>
+      {headerModeButtons.map((button) => (
+        <TouchableOpacity
+          key={`flight-deck-header-mode-${button.key}`}
+          style={[
+            styles.flightDeckModeButton,
+            button.active ? styles.flightDeckModeButtonActive : null,
+          ]}
+          activeOpacity={0.92}
+          onPress={button.onPress}
+        >
+          <Text
+            style={[
+              styles.flightDeckModeButtonText,
+              button.active ? styles.flightDeckModeButtonTextActive : null,
+            ]}
+          >
+            {button.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const renderMapControlStack = () => (
+    <View style={styles.flightDeckMapControlStack}>
+      <TouchableOpacity
+        style={styles.flightDeckMapControlButton}
+        activeOpacity={0.92}
+        onPress={() => {
+          pulseFlightDeckChrome(true);
+          setFlightDeckDrawerOpen(true);
+          setFlightDeckPanel('layers');
+        }}
+      >
+        <Ionicons name="layers" size={18} color={colors.flightText} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.flightDeckMapControlButton}
+        activeOpacity={0.92}
+        onPress={() => setMapOrientationMode(mapOrientationMode === 'track-up' ? 'heading-up' : mapOrientationMode === 'heading-up' ? 'north-up' : 'track-up')}
+      >
+        <Ionicons name="compass" size={18} color={colors.flightText} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.flightDeckMapControlButton}
+        activeOpacity={0.92}
+        onPress={() => {
+          pulseFlightDeckChrome(true);
+          setFlightDeckDrawerOpen(true);
+          setFlightDeckPanel('traffic');
+        }}
+      >
+        <Ionicons name="radio" size={18} color={colors.flightText} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.flightDeckMapControlButton}
+        activeOpacity={0.92}
+        onPress={toggleFlightDeckFocusMode}
+      >
+        <Ionicons name={focusModeActive ? 'expand' : 'scan'} size={18} color={colors.flightText} />
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderTrafficAdvisoryStrip = () => {
+    if (!advisoryTrafficTarget || !mapPaneVisible || focusModeActive) return null;
+    const nearbyCount = Math.max(visibleTrafficTargets.length, immediateTrafficCount || 0);
+    const trafficToneStyle =
+      advisoryTrafficTarget.threatLevel === 'immediate'
+        ? styles.flightDeckTrafficStripWarning
+        : advisoryTrafficTarget.threatLevel === 'advisory'
+          ? styles.flightDeckTrafficStripCaution
+          : null;
+    return (
+      <View style={[styles.flightDeckTrafficStrip, trafficToneStyle]}>
+        <View style={styles.flightDeckTrafficStripMain}>
+          <Text style={styles.flightDeckTrafficStripTitle}>
+            Traffic Advisory <Text style={styles.flightDeckTrafficStripCallsign}>{advisoryTrafficTarget.callsign || 'Traffic'}</Text>
+          </Text>
+          <Text style={styles.flightDeckTrafficStripMeta}>
+            {selectedTrafficTrend?.closureText || advisoryTrafficTarget.threatLevel || 'Monitor'} • {nearbyCount} nearby
+            {typeof advisoryTrafficTarget.altitudeDeltaFt === 'number' ? ` • ${formatAltitudeDelta?.(advisoryTrafficTarget.altitudeDeltaFt) ?? '--'}` : ''}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.flightDeckTrafficStripAction}
+          activeOpacity={0.92}
+          onPress={() => {
+            pulseFlightDeckChrome(true);
+            setSelectedTrafficId(advisoryTrafficTarget.id);
+            setFlightDeckDrawerOpen(true);
+            setFlightDeckPanel('traffic');
+          }}
+        >
+          <Text style={styles.flightDeckTrafficStripActionText}>Monitor</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   const renderCompactTopBar = () => (
     <View
@@ -1146,6 +1317,8 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
         }}
       >
         <View style={styles.flightDeckVisionSky} />
+        <View style={styles.flightDeckVisionSkyGlow} />
+        <View style={styles.flightDeckVisionSkyBand} />
         <View
           style={[
             styles.flightDeckVisionGround,
@@ -1156,6 +1329,8 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 : null,
           ]}
         />
+        <View style={styles.flightDeckVisionGroundFar} />
+        <View style={styles.flightDeckVisionGroundNear} />
         <View
           style={[
             styles.flightDeckVisionHorizon,
@@ -1392,6 +1567,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
             { transform: [{ translateX: visionCommandBankOffset }] },
           ]}
         />
+      </View>
+      <View style={styles.flightDeckVisionReferenceWings}>
+        <View style={styles.flightDeckVisionReferenceWingLeft} />
+        <View style={styles.flightDeckVisionReferenceCenter} />
+        <View style={styles.flightDeckVisionReferenceWingRight} />
       </View>
       <View style={styles.flightDeckVisionFlightPathMarker}>
         <View style={styles.flightDeckVisionFlightPathInner} />
@@ -1668,32 +1848,34 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
 
   return (
     <View style={styles.flightDeckContainer}>
-      <View
-        style={[
-          styles.flightDeckNavDock,
-          {
-            top: Math.max(insets.top + spacing.xs, 12),
-            left: spacing.sm,
-          },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.flightDeckNavButton}
-          activeOpacity={0.92}
-          onPress={navigateBackFromFlightDeck}
+      {compactDevice ? (
+        <View
+          style={[
+            styles.flightDeckNavDock,
+            {
+              top: Math.max(insets.top + spacing.xs, 12),
+              left: spacing.sm,
+            },
+          ]}
         >
-          <Ionicons name="arrow-back" size={16} color={colors.flightText} />
-          <Text style={styles.flightDeckNavButtonText}>Back</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.flightDeckNavButton}
-          activeOpacity={0.92}
-          onPress={navigateHomeFromFlightDeck}
-        >
-          <Ionicons name="grid" size={16} color={colors.flightText} />
-          <Text style={styles.flightDeckNavButtonText}>Home</Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={styles.flightDeckNavButton}
+            activeOpacity={0.92}
+            onPress={navigateBackFromFlightDeck}
+          >
+            <Ionicons name="arrow-back" size={16} color={colors.flightText} />
+            <Text style={styles.flightDeckNavButtonText}>Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.flightDeckNavButton}
+            activeOpacity={0.92}
+            onPress={navigateHomeFromFlightDeck}
+          >
+            <Ionicons name="grid" size={16} color={colors.flightText} />
+            <Text style={styles.flightDeckNavButtonText}>Home</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       <View style={styles.flightDeckMapShell}>
         {mapPaneVisible ? (
           <View style={isSplitView ? splitMapPaneStyle : styles.flightDeckMapPaneFull}>
@@ -1793,26 +1975,62 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               </>
             )}
             {mapRouteDisplay.upcoming?.length > 1 ? (
-              <Polyline
-                coordinates={mapRouteDisplay.upcoming.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
-                strokeColor={`rgba(200,146,42,${mapOverlayProfile.upcomingLegOpacity})`}
-                strokeWidth={mapOverlayProfile.upcomingLegWidth}
-              />
+              <>
+                <Polyline
+                  coordinates={mapRouteDisplay.upcoming.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
+                  strokeColor="rgba(12,18,26,0.52)"
+                  strokeWidth={mapOverlayProfile.upcomingLegWidth + 2}
+                />
+                <Polyline
+                  coordinates={mapRouteDisplay.upcoming.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
+                  strokeColor={`rgba(200,146,42,${mapOverlayProfile.upcomingLegOpacity})`}
+                  strokeWidth={mapOverlayProfile.upcomingLegWidth}
+                />
+              </>
             ) : null}
             {mapRouteDisplay.completed?.length > 1 ? (
-              <Polyline
-                coordinates={mapRouteDisplay.completed.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
-                strokeColor="rgba(0,212,160,0.88)"
-                strokeWidth={mapOverlayProfile.completedLegWidth}
-              />
+              <>
+                <Polyline
+                  coordinates={mapRouteDisplay.completed.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
+                  strokeColor="rgba(8,16,24,0.64)"
+                  strokeWidth={mapOverlayProfile.completedLegWidth + 2}
+                />
+                <Polyline
+                  coordinates={mapRouteDisplay.completed.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
+                  strokeColor="rgba(0,212,160,0.88)"
+                  strokeWidth={mapOverlayProfile.completedLegWidth}
+                />
+              </>
             ) : null}
             {mapRouteDisplay.activeLeg?.length > 1 ? (
-              <Polyline
-                coordinates={mapRouteDisplay.activeLeg.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
-                strokeColor={colors.flightAccent}
-                strokeWidth={mapOverlayProfile.activeLegWidth}
-              />
+              <>
+                <Polyline
+                  coordinates={mapRouteDisplay.activeLeg.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
+                  strokeColor="rgba(8,16,24,0.72)"
+                  strokeWidth={mapOverlayProfile.activeLegWidth + 3}
+                />
+                <Polyline
+                  coordinates={mapRouteDisplay.activeLeg.map((point: any) => ({ latitude: point.latitude, longitude: point.longitude }))}
+                  strokeColor={colors.flightAccent}
+                  strokeWidth={mapOverlayProfile.activeLegWidth}
+                />
+              </>
             ) : null}
+            {mapWaypointMarkers.map((marker: any) => (
+              <Marker key={marker.key} coordinate={marker.coordinate} anchor={{ x: 0.5, y: 1 }}>
+                <View
+                  style={[
+                    styles.flightDeckWaypointMarker,
+                    marker.tone === 'destination'
+                      ? styles.flightDeckWaypointMarkerDestination
+                      : styles.flightDeckWaypointMarkerNext,
+                  ]}
+                >
+                  <Text style={styles.flightDeckWaypointMarkerEyebrow}>{marker.subtitle}</Text>
+                  <Text style={styles.flightDeckWaypointMarkerTitle}>{marker.title}</Text>
+                </View>
+              </Marker>
+            ))}
             {activeRunwayOverlay ? (
               <>
                 {mapRunwayFocusSummary.emphasize ? (
@@ -1968,7 +2186,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                     activeOwnship.heading ? { transform: [{ rotate: `${activeOwnship.heading}deg` }] } : null,
                   ]}
                 >
-                  <Ionicons name="navigate" size={20} color={colors.flightBackground} />
+                  <Ionicons name="airplane" size={19} color={colors.flightBackground} />
                 </View>
               </Marker>
             ) : null}
@@ -1983,6 +2201,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 </Text>
               </View>
             )}
+            <View style={styles.flightDeckMapStatusPill}>
+              <Text style={styles.flightDeckMapStatusPillText}>{mapOrientationChipValue}</Text>
+            </View>
+            {showMapControlStack ? renderMapControlStack() : null}
+            {renderTrafficAdvisoryStrip()}
           </View>
         ) : null}
 
@@ -2008,211 +2231,46 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 isLandscape ? { flex: 0, width: Math.min(width * 0.56, 560) } : null,
               ]}
             >
-              <Text style={styles.flightDeckEyebrow}>{flightDeckSessionState}</Text>
-              <Text style={styles.flightDeckTitle}>{routeHeadline}</Text>
-              <Text style={styles.flightDeckSubtitle}>
-                {routeProgress
-                  ? `Leg ${routeProgress.activeLegLabel || routeProgress.nextWaypoint || '--'} - ${routeProgress.remainingLegNm.toFixed(1)} NM leg / ${routeProgress.remainingRouteNm.toFixed(1)} NM route`
-                  : visionPanePrimary
-                    ? 'Synthetic vision guidance active.'
-                    : isSplitView
-                      ? 'Split cockpit with forward vision and overhead traffic.'
-                      : 'Map-first tactical cockpit.'}
-              </Text>
-              {routeProgress ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Next {routeExecutionSummary?.nextLegLabel || routeProgress.nextLegLabel || routeProgress.nextWaypoint || '--'} - Dest {routeProgress.destinationWaypoint || '--'} - {routeExecutionSummary?.sequencingLabel || 'Sequencing'}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.mode === 'direct-to' ? (
-                <Text style={styles.flightDeckSubtitle}>Execution mode Direct-To diversion override is active. Planned route remains staged in planner.</Text>
-              ) : null}
-              {routeExecutionSummary?.sequencingSuspended ? (
-                <Text style={styles.flightDeckSubtitle}>Leg sequencing is suspended. The active leg will stay locked until you resume sequencing.</Text>
-              ) : null}
-              {!compactHeader ? (
-                <>
-              {routeExecutionSummary?.sequencingDetail ? (
-                <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.sequencingDetail}</Text>
-              ) : null}
-              {routeExecutionSummary?.activeLegAnnunciation ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  {routeExecutionSummary.activeLegAnnunciation} Â· {routeExecutionSummary.activeLegGuidanceMode || 'track'} guidance Â· {routeExecutionSummary.activeLegProfile || 'enroute'} Â· {routeExecutionSummary.lateralExecutionState || 'intercept'}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeExecutionSegment?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Segment {routeExecutionSummary.activeExecutionSegment.label}
-                  {routeExecutionSummary?.nextExecutionSegment?.label ? ` Â· Next ${routeExecutionSummary.nextExecutionSegment.label}` : ''}{activeExecutionPlanEntry?.actionCue ? ` Â· ${activeExecutionPlanEntry.actionCue}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeExecutionTransition?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Transition model {routeExecutionSummary.activeExecutionTransition.label}
-                  {routeExecutionSummary?.nextExecutionTransition?.label ? ` Â· Next ${routeExecutionSummary.nextExecutionTransition.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureContext?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Navigation context {routeExecutionSummary.activeProcedureContext.label}
-                  {routeExecutionSummary?.nextProcedureContext?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureContext.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureHandoff?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Handoff model {routeExecutionSummary.activeProcedureHandoff.label}
-                  {routeExecutionSummary?.nextProcedureHandoff?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureHandoff.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureEntryRole?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Procedure role {routeExecutionSummary.activeProcedureEntryRole.label}
-                  {routeExecutionSummary?.nextProcedureEntryRole?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureEntryRole.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureEntryDescriptor?.positionLabel ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Procedure entry {routeExecutionSummary.activeProcedureEntryDescriptor.positionLabel}
-                  {routeExecutionSummary?.nextProcedureEntryDescriptor?.positionLabel ? ` Â· Next ${routeExecutionSummary.nextProcedureEntryDescriptor.positionLabel}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureEntryTransitionBehavior?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Entry transition {routeExecutionSummary.activeProcedureEntryTransitionBehavior.label}
-                  {routeExecutionSummary?.nextProcedureEntryTransitionBehavior?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureEntryTransitionBehavior.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.verticalConstraintCall ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Vertical constraint {routeExecutionSummary.verticalConstraintCall}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureTransitionTable?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Transition table {routeExecutionSummary.activeProcedureTransitionTable.label}
-                  {routeExecutionSummary?.nextProcedureTransitionTable?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureTransitionTable.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureSegmentTemplate?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Segment template {routeExecutionSummary.activeProcedureSegmentTemplate.label}
-                  {routeExecutionSummary?.nextProcedureSegmentTemplate?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureSegmentTemplate.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureSegmentClass?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Segment class {routeExecutionSummary.activeProcedureSegmentClass.label}
-                  {routeExecutionSummary?.nextProcedureSegmentClass?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureSegmentClass.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureLegAdapter?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Leg adapter {routeExecutionSummary.activeProcedureLegAdapter.label}
-                  {routeExecutionSummary?.nextProcedureLegAdapter?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureLegAdapter.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureLegFamily?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Leg family {routeExecutionSummary.activeProcedureLegFamily.label}
-                  {routeExecutionSummary?.nextProcedureLegFamily?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureLegFamily.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureLegParserTarget?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Parser target {routeExecutionSummary.activeProcedureLegParserTarget.label}
-                  {routeExecutionSummary?.nextProcedureLegParserTarget?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureLegParserTarget.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureLegIngestionContract?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Ingestion contract {routeExecutionSummary.activeProcedureLegIngestionContract.label}
-                  {routeExecutionSummary?.nextProcedureLegIngestionContract?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureLegIngestionContract.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeParsedLegPayload?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Parsed payload {routeExecutionSummary.activeParsedLegPayload.label} Â· {routeExecutionSummary.activeParsedLegPayload.source}
-                  {routeExecutionSummary?.nextParsedLegPayload?.label ? ` Â· Next ${routeExecutionSummary.nextParsedLegPayload.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureRoleCueProfile?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Role cues {routeExecutionSummary.activeProcedureRoleCueProfile.label}
-                  {routeExecutionSummary?.nextProcedureRoleCueProfile?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureRoleCueProfile.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureRoleExecutionPolicy?.sequencingModel ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Role sequencing {routeExecutionSummary.activeProcedureRoleExecutionPolicy.sequencingModel}
-                  {routeExecutionSummary?.nextProcedureRoleExecutionPolicy?.sequencingModel ? ` Â· Next ${routeExecutionSummary.nextProcedureRoleExecutionPolicy.sequencingModel}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureChain?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Procedure chain {routeExecutionSummary.activeProcedureChain.label}
-                  {routeExecutionSummary?.nextProcedureChain?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureChain.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureChainBehavior?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Chain behavior {routeExecutionSummary.activeProcedureChainBehavior.label}
-                  {routeExecutionSummary?.nextProcedureChainBehavior?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureChainBehavior.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureTemplate?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Procedure template {routeExecutionSummary.activeProcedureTemplate.label}
-                  {routeExecutionSummary?.nextProcedureTemplate?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureTemplate.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureExecutionProfile?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Execution profile {routeExecutionSummary.activeProcedureExecutionProfile.label}
-                  {routeExecutionSummary?.nextProcedureExecutionProfile?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureExecutionProfile.label}` : ''}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.activeProcedureCueStack?.label ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Cue stack {routeExecutionSummary.activeProcedureCueStack.label}
-                  {routeExecutionSummary?.nextProcedureCueStack?.label ? ` Â· Next ${routeExecutionSummary.nextProcedureCueStack.label}` : ''}
-                </Text>
-              ) : null}
-              {nextExecutionPlanEntry?.status === 'armed' ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  Execution plan {nextExecutionPlanEntry.legLabel} Â· {nextExecutionPlanEntry.actionCue}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.sequenceGateCall ? (
-                <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.sequenceGateCall}</Text>
-              ) : null}
-              {routeExecutionSummary?.transitionCall ? (
-                <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.transitionCall}</Text>
-              ) : null}
-              {routeExecutionSummary?.nextActionCall ? (
-                <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.nextActionCall}</Text>
-              ) : null}
-              {routeExecutionSummary?.nextLegArmed ? (
-                <Text style={styles.flightDeckSubtitle}>
-                  {routeExecutionSummary?.manualAdvanceRequired
-                    ? routeExecutionSummary?.activeProcedureCueStack?.nextLegManagedLabel || 'Next leg is staged. Manual advance remains required.'
-                    : routeExecutionSummary?.activeProcedureCueStack?.nextLegAutoLabel || 'Next leg is armed for sequencing.'}
-                </Text>
-              ) : null}
-              {routeExecutionSummary?.turnAnticipationState && routeExecutionSummary.turnAnticipationState !== 'idle' ? (
-                <Text style={styles.flightDeckSubtitle}>{routeExecutionSummary.turnAnticipationCall}</Text>
-              ) : null}
-                </>
-              ) : null}
-              <Text style={styles.flightDeckSubtitle}>
-                Phase {flightDeckPhaseSummary?.label || 'Preflight'} - {flightDeckPhaseSummary?.detail || 'Awaiting active route and ownship.'}
-              </Text>
-              <Text style={styles.flightDeckSubtitle}>
-                {ownshipSourceSummary?.label || 'No ownship'} - {ownshipSourceSummary?.detail || 'Tracking source unavailable.'}
-              </Text>
-              <Text style={styles.flightDeckSubtitle}>
-                Heading {headingSourceSummary?.code || '--'} - Vision {visionReadinessSummary?.code || '--'} - Receiver {receiverStatusSummary?.code || '--'}
-              </Text>
-              <View style={styles.flightDeckHeaderMetaRow}>
+              <View style={styles.flightDeckHeaderTopRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.flightDeckTitle}>{routeHeadline}</Text>
+                  <View style={styles.flightDeckBrandRow}>
+                    <Text style={styles.flightDeckSubtitleStrong}>Ready Set Fly</Text>
+                    <View style={styles.flightDeckBrandDot} />
+                    <Text style={styles.flightDeckSubtitle}>{headerSubtitle}</Text>
+                  </View>
+                </View>
+                {renderHeaderModeControls()}
+              </View>
+              <View style={styles.flightDeckRouteMetricRow}>
+                <View style={[styles.flightDeckHeaderMetaChip, styles.flightDeckHeaderMetaChipActive]}>
+                  <Text style={[styles.flightDeckHeaderMetaChipText, styles.flightDeckHeaderMetaChipTextActive]}>
+                    {routeDistanceChip}
+                  </Text>
+                </View>
+                <View style={styles.flightDeckHeaderMetaChip}>
+                  <Text style={styles.flightDeckHeaderMetaChipText}>ETE {routeEteChip || '--'}</Text>
+                </View>
+                <View style={[styles.flightDeckHeaderMetaChip, styles.flightDeckHeaderMetaChipAccent]}>
+                  <Text style={[styles.flightDeckHeaderMetaChipText, styles.flightDeckHeaderMetaChipTextAccent]}>
+                    {headerStatusDetail}
+                  </Text>
+                </View>
+                <View style={styles.flightDeckHeaderMetaChip}>
+                  <Text style={styles.flightDeckHeaderMetaChipText}>{headerExecutionChip}</Text>
+                </View>
+                {mapStyle === 'sectional' ? (
+                  <View style={styles.flightDeckHeaderMetaChip}>
+                    <Text style={styles.flightDeckHeaderMetaChipText}>VFR SECT</Text>
+                  </View>
+                ) : null}
+                {headerAltitudeChip ? (
+                  <View style={styles.flightDeckHeaderMetaChip}>
+                    <Text style={styles.flightDeckHeaderMetaChipText}>{headerAltitudeChip}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={styles.flightDeckHeaderStatusRow}>
                 <View
                   style={[
                     styles.flightDeckHeaderMetaChip,
@@ -2243,20 +2301,26 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 <View
                   style={[
                     styles.flightDeckHeaderMetaChip,
-                    visionPaneVisible ? styles.flightDeckHeaderMetaChipAccent : null,
+                    isSplitView ? styles.flightDeckHeaderMetaChipAccent : null,
                   ]}
                 >
                   <Text
                     style={[
                       styles.flightDeckHeaderMetaChipText,
-                      visionPaneVisible ? styles.flightDeckHeaderMetaChipTextAccent : null,
+                      isSplitView ? styles.flightDeckHeaderMetaChipTextAccent : null,
                     ]}
                   >
-                    {visionModeLabel} · {splitPaneLabel}
+                    {splitPaneLabel}
                   </Text>
+                </View>
+                <View style={styles.flightDeckHeaderMetaChip}>
+                  <Text style={styles.flightDeckHeaderMetaChipText}>{mapOrientationLabel}</Text>
                 </View>
                 <Text style={styles.flightDeckHeaderMetaText}>{ownshipFreshnessText}</Text>
               </View>
+              <Text style={styles.flightDeckSubtitle}>
+                {routeExecutionSummary?.verticalConstraintCall || mapTacticalSummary.verticalConstraintCall}
+              </Text>
             </View>
             <View
               style={[
@@ -2264,7 +2328,16 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 isLandscape ? { flexDirection: 'column', alignItems: 'flex-end' } : null,
               ]}
             >
-              {renderDisplayModeControls(true)}
+              <TouchableOpacity
+                style={styles.flightDeckExitButton}
+                onPress={() => {
+                  pulseFlightDeckChrome(true);
+                  setFlightDeckDrawerOpen(true);
+                  setFlightDeckPanel('status');
+                }}
+              >
+                <Text style={styles.flightDeckExitText}>Status</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.flightDeckExitButton}
                 onPress={() => {

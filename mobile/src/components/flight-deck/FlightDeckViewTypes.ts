@@ -387,6 +387,7 @@ export interface FlightDeckStateProps {
   mapOverlayProfile: MapOverlayProfile;
   mapRunwayFocusSummary: MapRunwayFocusSummary;
   mapOrientationMode: FlightDeckMapOrientationMode;
+  mapProviderKeyConfigured: boolean;
 
   // Weather overlay
   showCloudsGlobal: boolean;

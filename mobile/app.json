@@ -38,10 +38,14 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "POST_NOTIFICATIONS",
+        "ACCESS_WIFI_STATE",
+        "ACCESS_COURSE_LOCATION",
+        "CHANGE_WIFI_STATE",
         "CAMERA",
         "BLUETOOTH",
         "BLUETOOTH_CONNECT",
-        "BLUETOOTH_SCAN"
+        "BLUETOOTH_SCAN",
+        "INTERNET"
       ],
       "blockedPermissions": [
         "android.permission.ACTIVITY_RECOGNITION"

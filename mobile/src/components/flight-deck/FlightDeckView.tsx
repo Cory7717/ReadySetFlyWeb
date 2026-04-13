@@ -1,16 +1,21 @@
 ﻿import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker, Polygon, Polyline, UrlTile, WMSTile } from 'react-native-maps';
+import MapView, { Marker, Polygon, Polyline, UrlTile } from 'react-native-maps';
 import { Platform } from 'react-native';
 import { PROVIDER_GOOGLE } from 'react-native-maps';
 import { colors, spacing } from '../../styles/theme';
 import { bearingBetweenPoints } from '../../lib/flightMath';
 import { FlightDeckInstrumentStrip } from './FlightDeckInstrumentStrip';
+import { FlightDeckVisionInstruments } from './FlightDeckVisionInstruments';
 import {
   getFlightDeckDisplayModeOptions,
   sanitizeFlightDeckDisplayMode,
 } from './flightDeckLayout';
+import {
+  getFallbackFlightDeckSectionalSource,
+  getPrimaryFlightDeckSectionalSource,
+} from './flightDeckMapTiles';
 import type { FlightDeckStateProps, FlightDeckActionsProps } from './FlightDeckViewTypes';
 
 type FlightDeckViewProps = {
@@ -18,9 +23,6 @@ type FlightDeckViewProps = {
   actions: FlightDeckActionsProps;
   styles: Record<string, any>;
 };
-
-const FAA_SECTIONAL_WMS_TEMPLATE =
-  'https://sua.faa.gov/geoserver/wms?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:900913&bbox={minX},{minY},{maxX},{maxY}&width={width}&height={height}';
 
 function formatSourceAge(ms: number | null | undefined) {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '--';
@@ -515,6 +517,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     },
     mapRunwayFocusSummary = { emphasize: false, label: 'Route corridor' },
     tacticalMapRegion,
+    mapProviderKeyConfigured,
     flightDeckTargetAltitudeFt,
     flightDeckVisibleAlert,
     flightDeckLowerStackBottom,
@@ -950,6 +953,10 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
       : mapOrientationMode === 'heading-up'
         ? 'Heading Up'
         : 'Track Up';
+  const sectionalPrimarySource = getPrimaryFlightDeckSectionalSource();
+  const sectionalFallbackSource = getFallbackFlightDeckSectionalSource();
+  const showSectionalFallbackBanner =
+    mapStyle === 'sectional' && Platform.OS === 'android' && !mapProviderKeyConfigured;
   const compactStatusText =
     routeProgress?.nextWaypoint
       ? `${routeProgress.nextWaypoint} · ${typeof routeProgress.remainingLegNm === 'number' ? `${routeProgress.remainingLegNm.toFixed(1)} NM` : '--'}`
@@ -1065,6 +1072,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
             >
               <Ionicons name="close" size={16} color={colors.flightTextMuted} />
             </TouchableOpacity>
+          </View>
+        ) : null}
+        {showSectionalFallbackBanner ? (
+          <View style={[styles.flightDeckAlertStrip, styles.flightDeckAlertStripCaution, { marginTop: spacing.sm }]}>
+            <Text style={styles.flightDeckAlertTitle}>Sectional degraded</Text>
+            <Text style={styles.flightDeckAlertText}>
+              Google Maps SDK key was not detected in this build. Standard basemap remains active and the legacy {sectionalFallbackSource.label.toLowerCase()} path remains available for recovery work.
+            </Text>
           </View>
         ) : null}
       </View>
@@ -1449,6 +1464,19 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
             : '--'}
         </Text>
       </View>
+      <FlightDeckVisionInstruments
+        compact={compactDevice || isSplitView}
+        speedKts={typeof activeOwnship?.speedKts === 'number' ? activeOwnship.speedKts : null}
+        altitudeFt={typeof activeOwnship?.altitudeFt === 'number' ? activeOwnship.altitudeFt : null}
+        targetAltitudeFt={flightDeckTargetAltitudeFt ?? flightDeckVerticalConstraintSummary.targetAltitudeFt ?? flightDeckVerticalPathSummary.targetAltitudeFt}
+        directionModeLabel={headingDisplayMode}
+        directionDeg={typeof activeOwnship?.heading === 'number' ? activeOwnship.heading : null}
+        terrainProfile={terrainProfile}
+        terrainRisk={terrainRisk}
+        terrainClearanceFt={terrainClearanceFt}
+        obstacleClearanceFt={obstacleClearanceFt}
+        terrainBandBottomOffset={focusModeActive ? 14 : isSplitView ? 82 : 150}
+      />
       {!focusModeActive ? (
         <View style={styles.flightDeckVisionBanner}>
           <Text style={styles.flightDeckVisionBannerTitle}>{visionModeLabel}</Text>
@@ -1674,7 +1702,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 style={styles.flightDeckMap}
                 ref={mapRef}
                 provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-                mapType={Platform.OS === 'android' && mapStyle === 'sectional' ? 'none' : 'standard'}
+                mapType="standard"
                 rotateEnabled
                 zoomEnabled
                 scrollEnabled
@@ -1691,17 +1719,18 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 onPanDrag={() => pulseFlightDeckChrome()}
                 onRegionChangeComplete={(region) => setMapRegion(region)}
               >
-            {mapStyle === 'sectional' && (
-              <WMSTile
-                urlTemplate={FAA_SECTIONAL_WMS_TEMPLATE}
-                maximumZ={12}
-                maximumNativeZ={12}
-                minimumZ={2}
+            {mapStyle === 'sectional' ? (
+              <UrlTile
+                key={`flight-sectional-${sectionalPrimarySource.id}`}
+                urlTemplate={sectionalPrimarySource.urlTemplate}
+                maximumZ={sectionalPrimarySource.maximumZ}
+                maximumNativeZ={sectionalPrimarySource.maximumNativeZ}
+                minimumZ={sectionalPrimarySource.minimumZ}
                 tileSize={256}
-                opacity={1}
-                zIndex={600}
+                opacity={sectionalPrimarySource.opacity}
+                zIndex={580}
               />
-            )}
+            ) : null}
             {mapStyle === 'terrain' && (
               <UrlTile
                 urlTemplate="https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}"
@@ -2281,6 +2310,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 <Text style={styles.flightDeckAlertText}>{flightDeckVisibleAlert?.detail}</Text>
               </View>
             ) : null}
+            {showSectionalFallbackBanner ? (
+              <View style={[styles.flightDeckAlertStrip, styles.flightDeckAlertStripCaution]}>
+                <Text style={styles.flightDeckAlertTitle}>Sectional overlay degraded</Text>
+                <Text style={styles.flightDeckAlertText}>
+                  Map SDK key is not confirmed for this Android build. RSF is keeping the standard basemap visible behind the chart layer while retaining the {sectionalFallbackSource.label.toLowerCase()} fallback path.
+                </Text>
+              </View>
+            ) : null}
             {visionPaneVisible && !attitudeSourceSummary?.pilotGrade ? (
               <View style={[styles.flightDeckAlertStrip, styles.flightDeckAlertStripCaution]}>
                 <Text style={styles.flightDeckAlertTitle}>No active attitude source</Text>
@@ -2629,6 +2666,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           routeFields={instrumentStripRouteFields ? instrumentStripRouteFields.map((field) => ({ ...field })) : null}
           sourceMeta={instrumentSourceMeta}
           modeMeta={instrumentModeMeta}
+          compact={compactDevice}
           onPress={toggleFlightDeckHud}
         />
       </View>
@@ -3344,6 +3382,12 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                   ? 'Tablet layout keeps more tactical context visible at once.'
                   : 'Phone Mode defaults to reduced chrome so ownship, traffic, and route remain clear.'}
               </Text>
+              {mapStyle === 'sectional' ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Sectional source {sectionalPrimarySource.label}
+                  {showSectionalFallbackBanner ? ` - fallback readiness ${sectionalFallbackSource.label}` : ''}
+                </Text>
+              ) : null}
               <View style={styles.flightDeckControlRow}>
                 <TouchableOpacity
                   style={[styles.flightDeckChip, focusModeActive && styles.flightDeckChipActive]}

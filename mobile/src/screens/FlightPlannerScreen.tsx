@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import MapView, { Callout, Marker, Polyline, PROVIDER_GOOGLE, UrlTile, WMSTile } from 'react-native-maps';
+import MapView, { Callout, Marker, Polyline, PROVIDER_GOOGLE, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -72,6 +72,10 @@ import {
   type FlightDeckDisplayMode,
   type FlightDeckMapOrientationMode,
 } from '../components/flight-deck/flightDeckLayout';
+import {
+  getFallbackFlightDeckSectionalSource,
+  getPrimaryFlightDeckSectionalSource,
+} from '../components/flight-deck/flightDeckMapTiles';
 import FormDateTimeField from '../components/FormDateTimeField';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { diagnosticsEnabled, logDiagnostic, warnDiagnostic } from '../utils/diagnostics';
@@ -95,9 +99,8 @@ type AircraftType = {
   maxGrossWeightLb: number;
 };
 
-const FAA_SECTIONAL_WMS_TEMPLATE =
-  'https://sua.faa.gov/geoserver/wms?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:900913&bbox={minX},{minY},{maxX},{maxY}&width={width}&height={height}';
 const FLIGHT_DECK_PHONE_RECOMMENDATION_KEY = 'flight_deck_phone_recommendation_dismissed_at';
+const FLIGHT_DECK_MAP_ORIENTATION_KEY = 'flight_deck_map_orientation_mode';
 
 type AircraftProfile = {
   id: string;
@@ -1385,6 +1388,8 @@ export default function FlightPlannerScreen() {
     () => getFlightDeckLayoutProfile({ width: screenWidth, height: screenHeight }),
     [screenHeight, screenWidth]
   );
+  const plannerSectionalPrimarySource = useMemo(() => getPrimaryFlightDeckSectionalSource(), []);
+  const plannerSectionalFallbackSource = useMemo(() => getFallbackFlightDeckSectionalSource(), []);
   const [departure, setDeparture] = useState('KJFK');
   const [destination, setDestination] = useState('KBOS');
   const [waypoints, setWaypoints] = useState('');
@@ -1576,6 +1581,7 @@ export default function FlightPlannerScreen() {
     ?.googleMaps;
   const plannerMapUsesGoogleProvider = Platform.OS === 'android';
   const plannerMapKeyConfigured = !plannerMapUsesGoogleProvider || Boolean(mapConfig?.androidApiKeyConfigured);
+  const plannerSectionalOverlayDegraded = mapStyle === 'sectional' && plannerMapUsesGoogleProvider && !plannerMapKeyConfigured;
   const showPlannerMapDiagnostics =
     diagnosticsEnabled() || plannerMapRenderTimedOut || (plannerMapUsesGoogleProvider && !plannerMapKeyConfigured);
   useEffect(() => {
@@ -4514,12 +4520,33 @@ export default function FlightPlannerScreen() {
   }, [flightDeckLayoutProfile.showTabletRecommendation, isFlightDeck]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    AsyncStorage.getItem(FLIGHT_DECK_MAP_ORIENTATION_KEY)
+      .then((storedValue) => {
+        if (cancelled) return;
+        if (storedValue === 'track-up' || storedValue === 'heading-up' || storedValue === 'north-up') {
+          setMapOrientationMode(storedValue);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(FLIGHT_DECK_MAP_ORIENTATION_KEY, mapOrientationMode).catch(() => undefined);
+  }, [mapOrientationMode]);
+
+  useEffect(() => {
     logDiagnostic('maps', 'map_style_changed', {
       style: mapStyle,
       isFlightDeck,
-      sectionalSource: mapStyle === 'sectional' ? 'direct_faa_wms' : undefined,
+      sectionalSource: mapStyle === 'sectional' ? plannerSectionalPrimarySource.id : undefined,
     });
-  }, [isFlightDeck, mapStyle]);
+  }, [isFlightDeck, mapStyle, plannerSectionalPrimarySource.id]);
 
   useEffect(() => {
     logDiagnostic('flightDeck', 'vision_mode_changed', {
@@ -6040,8 +6067,10 @@ export default function FlightPlannerScreen() {
 
   useEffect(() => {
     if (!isFlightDeck || mapStyle !== 'standard') return;
-    setMapStyle('sectional');
-  }, [isFlightDeck, mapStyle]);
+    if (flightDeckLayoutProfile.deviceClass === 'tablet' && flightDeckLayoutProfile.isLandscape) {
+      setMapStyle('sectional');
+    }
+  }, [flightDeckLayoutProfile.deviceClass, flightDeckLayoutProfile.isLandscape, isFlightDeck, mapStyle]);
 
   useEffect(() => {
     const mapPaneVisible = flightDeckView !== 'vision';
@@ -6467,6 +6496,7 @@ export default function FlightPlannerScreen() {
     mapOverlayProfile,
     mapRunwayFocusSummary,
     tacticalMapRegion,
+    mapProviderKeyConfigured: plannerMapKeyConfigured,
     flightDeckTargetAltitudeFt,
     flightDeckVisibleAlert,
     flightDeckLowerStackBottom,
@@ -7061,7 +7091,7 @@ export default function FlightPlannerScreen() {
             style={styles.map}
             ref={mapRef}
             provider={plannerMapUsesGoogleProvider ? PROVIDER_GOOGLE : undefined}
-            mapType={Platform.OS === 'android' && mapStyle === 'sectional' ? 'none' : 'standard'}
+            mapType="standard"
             initialRegion={{
               latitude: routePoints[0].latitude,
               longitude: routePoints[0].longitude,
@@ -7086,17 +7116,18 @@ export default function FlightPlannerScreen() {
             }}
             onRegionChangeComplete={(region) => setMapRegion(region)}
           >
-            {mapStyle === 'sectional' && (
-              <WMSTile
-                urlTemplate={FAA_SECTIONAL_WMS_TEMPLATE}
-                maximumZ={12}
-                maximumNativeZ={12}
-                minimumZ={2}
+            {mapStyle === 'sectional' ? (
+              <UrlTile
+                key={`planner-sectional-${plannerSectionalPrimarySource.id}`}
+                urlTemplate={plannerSectionalPrimarySource.urlTemplate}
+                maximumZ={plannerSectionalPrimarySource.maximumZ}
+                maximumNativeZ={plannerSectionalPrimarySource.maximumNativeZ}
+                minimumZ={plannerSectionalPrimarySource.minimumZ}
                 tileSize={256}
-                opacity={1}
-                zIndex={600}
+                opacity={plannerSectionalPrimarySource.opacity}
+                zIndex={580}
               />
-            )}
+            ) : null}
             {mapStyle === 'terrain' && (
               <UrlTile
                 urlTemplate="https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}"
@@ -7229,10 +7260,17 @@ export default function FlightPlannerScreen() {
         )}
         {mapStyle === 'sectional' && (
           <Text style={styles.helperText}>
-            FAA sectional charts now render across the route view; chart detail sharpens as you zoom in (US-only).
+            FAA sectional charts now use the ArcGIS cached tile service; chart detail sharpens as you zoom in (US-only).
           </Text>
         )}
-        <Text style={styles.helperText}>Sectional tiles provided by FAA/Aeronautical Information Services.</Text>
+        <Text style={styles.helperText}>
+          Sectional tiles provided by FAA/Aeronautical Information Services via {plannerSectionalPrimarySource.label}.
+        </Text>
+        {plannerSectionalOverlayDegraded ? (
+          <Text style={styles.helperText}>
+            Map SDK key was not detected for this Android build. Standard basemap remains visible behind the chart overlay while the legacy {plannerSectionalFallbackSource.label.toLowerCase()} path is retained for recovery.
+          </Text>
+        ) : null}
         {showPlannerMapDiagnostics && (
           <View style={styles.mapDiagnosticCard}>
             <Text style={styles.mapDiagnosticTitle}>Map diagnostics</Text>
@@ -7249,7 +7287,7 @@ export default function FlightPlannerScreen() {
             ) : null}
             {plannerMapRenderTimedOut ? (
               <Text style={styles.mapDiagnosticWarning}>
-                If layout is ready but the map never becomes ready, check Google Maps SDK enablement, Android app restriction package `com.readysetfly.mobile`, and matching SHA-1/SHA-256 fingerprints.
+                If layout is ready but the map never becomes ready, check Google Maps SDK enablement, Android app restriction package `com.readysetfly.app`, and matching SHA-1/SHA-256 fingerprints.
               </Text>
             ) : null}
           </View>

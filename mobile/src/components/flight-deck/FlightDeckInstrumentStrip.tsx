@@ -22,6 +22,7 @@ type FlightDeckInstrumentStripProps = {
   routeFields?: FlightDeckInstrumentField[] | null;
   sourceMeta: FlightDeckInstrumentMeta;
   modeMeta: FlightDeckInstrumentMeta;
+  compact?: boolean;
   onPress?: () => void;
 };
 
@@ -60,6 +61,7 @@ function FlightDeckInstrumentStripComponent({
   routeFields,
   sourceMeta,
   modeMeta,
+  compact = false,
   onPress,
 }: FlightDeckInstrumentStripProps) {
   const sourceTone = getToneStyles(sourceMeta.tone);
@@ -68,7 +70,7 @@ function FlightDeckInstrumentStripComponent({
   return (
     <TouchableOpacity
       activeOpacity={0.92}
-      style={[localStyles.container, style]}
+      style={[localStyles.container, compact ? localStyles.containerCompact : null, style]}
       onPress={onPress}
     >
       <View style={localStyles.metaRow}>
@@ -84,12 +86,14 @@ function FlightDeckInstrumentStripComponent({
             </Text>
           </View>
         </View>
-        <Text style={localStyles.detailHint} numberOfLines={1}>
-          Tap for details
-        </Text>
+        {!compact ? (
+          <Text style={localStyles.detailHint} numberOfLines={1}>
+            Tap for details
+          </Text>
+        ) : null}
       </View>
 
-      <View style={localStyles.primaryRow}>
+      <View style={[localStyles.primaryRow, compact ? localStyles.primaryRowCompact : null]}>
         {primaryFields.map((field, index) => {
           const tone = getToneStyles(field.tone);
           return (
@@ -115,7 +119,7 @@ function FlightDeckInstrumentStripComponent({
       </View>
 
       {routeFields?.length ? (
-        <View style={localStyles.routeRow}>
+        <View style={[localStyles.routeRow, compact ? localStyles.routeRowCompact : null]}>
           {routeFields.map((field, index) => {
             const tone = getToneStyles(field.tone);
             return (
@@ -158,6 +162,12 @@ const localStyles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 12,
     ...shadow.flightGlass,
+  },
+  containerCompact: {
+    borderRadius: 20,
+    paddingHorizontal: spacing.sm,
+    paddingTop: 8,
+    paddingBottom: 10,
   },
   metaRow: {
     flexDirection: 'row',
@@ -216,6 +226,9 @@ const localStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
   },
+  primaryRowCompact: {
+    gap: 0,
+  },
   metricCell: {
     flex: 1,
     minWidth: 0,
@@ -255,6 +268,10 @@ const localStyles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: 'rgba(61, 90, 120, 0.48)',
+  },
+  routeRowCompact: {
+    marginTop: 8,
+    paddingTop: 8,
   },
   routeMetricCell: {
     flex: 1,

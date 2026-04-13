@@ -30,7 +30,7 @@
     },
     "android": {
       "package": "com.readysetfly.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/RSFOpaqueLogo.png",
         "backgroundColor": "#ffffff"

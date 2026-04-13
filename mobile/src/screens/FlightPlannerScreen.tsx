@@ -4442,10 +4442,10 @@ export default function FlightPlannerScreen() {
       return;
     }
 
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.ALL_BUT_UPSIDE_DOWN)
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.ALL)
       .then(() => {
         logDiagnostic('flightDeck', 'orientation_lock', {
-          lock: 'all_but_upside_down',
+          lock: 'all',
           deviceClass: flightDeckLayoutProfile.deviceClass,
           allowSplitView: flightDeckLayoutProfile.allowSplitView,
         });

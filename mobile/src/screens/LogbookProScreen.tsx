@@ -10,6 +10,7 @@ import { membershipPlanOptions, membershipTierInfo, type MembershipInterval, typ
 import {
   getCurrentOfferingSafe,
   getCustomerInfoSafe,
+  getPurchasesRuntimeStatus,
   purchasePackageSafe,
   restorePurchasesSafe,
   selectOfferingPackage,
@@ -54,6 +55,9 @@ export default function LogbookProScreen({ navigation }: any) {
   const [offeringAvailable, setOfferingAvailable] = useState(false);
   const [purchaseReady, setPurchaseReady] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [purchaseStatusMessage, setPurchaseStatusMessage] = useState<string | null>(() => getPurchasesRuntimeStatus().message);
+  const [canMakeRealPurchases, setCanMakeRealPurchases] = useState(() => getPurchasesRuntimeStatus().canMakeRealPurchases);
+  const [matchedPackageLabel, setMatchedPackageLabel] = useState<string | null>(null);
   const entitlements = (user as any)?.entitlements;
   const hasAccess = entitlements?.tier ? entitlements.tier !== 'free' : user?.logbookProStatus === 'active';
   const membershipStatus = (user as any)?.membershipStatus;
@@ -98,6 +102,16 @@ export default function LogbookProScreen({ navigation }: any) {
   useEffect(() => {
     let cancelled = false;
     const loadPurchases = async () => {
+      const runtimeStatus = getPurchasesRuntimeStatus();
+      if (cancelled) return;
+      setPurchaseStatusMessage(runtimeStatus.message);
+      setCanMakeRealPurchases(runtimeStatus.canMakeRealPurchases);
+      if (!runtimeStatus.enabled) {
+        setOfferingAvailable(false);
+        setPurchaseReady(false);
+        setMatchedPackageLabel(null);
+        return;
+      }
       try {
         const [offering, customerInfo] = await Promise.all([
           getCurrentOfferingSafe(),
@@ -107,6 +121,17 @@ export default function LogbookProScreen({ navigation }: any) {
         const selectedPackage = selectOfferingPackage(offering, selectedTier, selectedInterval);
         setOfferingAvailable(Boolean(offering));
         setPurchaseReady(Boolean(selectedPackage));
+        setMatchedPackageLabel(
+          selectedPackage ? `${selectedPackage.identifier} / ${selectedPackage.product.identifier}` : null
+        );
+        setPurchaseStatusMessage(
+          runtimeStatus.message ||
+            (!offering
+              ? 'RevenueCat is configured, but the current offering is empty for this build.'
+              : !selectedPackage
+                ? 'RevenueCat offering loaded, but no package matched the selected tier and billing interval.'
+                : null)
+        );
         if (!hasAccess && customerInfo?.entitlements?.active) {
           // RevenueCat is configured and the store account already has active entitlements.
           // The backend sync layer will still be the source of truth; this is only a UI hint.
@@ -115,6 +140,8 @@ export default function LogbookProScreen({ navigation }: any) {
         if (cancelled) return;
         setOfferingAvailable(false);
         setPurchaseReady(false);
+        setMatchedPackageLabel(null);
+        setPurchaseStatusMessage('RevenueCat could not load offerings for this build right now.');
       }
     };
     loadPurchases();
@@ -444,23 +471,32 @@ export default function LogbookProScreen({ navigation }: any) {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.primaryButton, (!purchaseReady || !isAuthenticated || loading) && styles.primaryButtonDisabled]}
+          style={[styles.primaryButton, (!purchaseReady || !isAuthenticated || loading || !canMakeRealPurchases) && styles.primaryButtonDisabled]}
           onPress={handleStartInAppSubscription}
-          disabled={!purchaseReady || !isAuthenticated || loading}
+          disabled={!purchaseReady || !isAuthenticated || loading || !canMakeRealPurchases}
         >
           <Text style={styles.primaryButtonText}>
             {loading ? 'Starting subscription...' : 'Subscribe in app'}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleRestorePurchases} disabled={restoring}>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={handleRestorePurchases}
+          disabled={restoring || !canMakeRealPurchases}
+        >
           <Text style={styles.secondaryButtonText}>
             {restoring ? 'Restoring...' : 'Restore purchases'}
           </Text>
         </TouchableOpacity>
-        {!offeringAvailable ? (
+        {purchaseStatusMessage ? <Text style={styles.statusText}>{purchaseStatusMessage}</Text> : null}
+        {!purchaseStatusMessage && !offeringAvailable ? (
           <Text style={styles.statusText}>RevenueCat offerings are not configured for this app build yet.</Text>
-        ) : !purchaseReady ? (
+        ) : null}
+        {!purchaseStatusMessage && offeringAvailable && !purchaseReady ? (
           <Text style={styles.statusText}>No in-app package matched the selected tier/interval yet.</Text>
+        ) : null}
+        {matchedPackageLabel ? (
+          <Text style={styles.statusText}>Matched package: {matchedPackageLabel}</Text>
         ) : null}
       </View>
 

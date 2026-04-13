@@ -30,7 +30,7 @@
     },
     "android": {
       "package": "com.readysetfly.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/RSFOpaqueLogo.png",
         "backgroundColor": "#ffffff"
@@ -39,8 +39,8 @@
         "ACCESS_FINE_LOCATION",
         "POST_NOTIFICATIONS",
         "ACCESS_WIFI_STATE",
-        "ACCESS_COURSE_LOCATION",
-        "CHANGE_WIFI_STATE",
+        "ACCESS_COARSE_LOCATION",
+        "CHANGE",
         "CAMERA",
         "BLUETOOTH",
         "BLUETOOTH_CONNECT",

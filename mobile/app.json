@@ -16,6 +16,13 @@
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Ready Set Fly connects to nearby ADS-B receivers to show live traffic.",
         "NSLocationWhenInUseUsageDescription": "Ready Set Fly uses your location to show live flight stats and nearby airports.",
+        
+        "NSCameraUsageDescription": "Ready Set Fly uses the camera so you can capture profile photos and upload aircraft, ID, and certification documents.",
+        "NSPhotoLibraryUsageDescription": "Ready Set Fly uses your photo library so you can upload profile photos, aircraft images, and verification documents.",
+
+        "NSBluetoothAlwaysUsageDescription": "Ready Set Fly uses Bluetooth to connect to nearby aviation devices such as ADS-B receivers for live traffic data.",
+        "NSBluetoothPeripheralUsageDescription": "Ready Set Fly uses Bluetooth to communicate with nearby aviation hardware devices.",
+
         "NSBonjourServices": [
           "_gdl90._udp"
         ]
@@ -29,11 +36,15 @@
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "CAMERA",
+        "BLUETOOTH",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN"
       ],
       "blockedPermissions": [
-    "android.permission.ACTIVITY_RECOGNITION"
-  ],
+        "android.permission.ACTIVITY_RECOGNITION"
+      ],
       "config": {
         "googleMaps": {
           "apiKey": "$GOOGLE_MAPS_API_KEY"

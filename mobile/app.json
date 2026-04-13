@@ -31,6 +31,9 @@
         "ACCESS_FINE_LOCATION",
         "POST_NOTIFICATIONS"
       ],
+      "blockedPermissions": [
+    "android.permission.ACTIVITY_RECOGNITION"
+  ],
       "config": {
         "googleMaps": {
           "apiKey": "$GOOGLE_MAPS_API_KEY"
@@ -38,7 +41,7 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/RSFOpaqueLogo.png"
     },
     "scheme": "readysetfly",
     "extra": {

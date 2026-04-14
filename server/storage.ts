@@ -45,10 +45,6 @@ import {
   type InsertJobApplication,
   type PromoAlert,
   type InsertPromoAlert,
-  type HkDailyMetric,
-  type InsertHkDailyMetric,
-  type HkAttendantMetric,
-  type InsertHkAttendantMetric,
   type WithdrawalRequest,
   type InsertWithdrawalRequest,
   type RefreshToken,
@@ -175,9 +171,6 @@ import {
   bannerAdOrders,
   jobApplications,
   promoAlerts,
-  hkDailyMetrics,
-  hkAttendantMetrics,
-  hkRoomsSoldImports,
   promoCodes,
   promoCodeUsages,
   partnerRedirects,
@@ -566,36 +559,6 @@ export interface IStorage {
   createExpense(expense: InsertExpense): Promise<Expense>;
   updateExpense(id: string, updates: Partial<Expense>): Promise<Expense | undefined>;
 
-  // Housekeeping metrics
-  getHkDailyMetrics(startDate: string, endDate: string, property?: string | null): Promise<HkDailyMetric[]>;
-  getHkDailyMetricsForDates(property: string, dates: string[]): Promise<HkDailyMetric[]>;
-  upsertHkDailyMetric(metric: InsertHkDailyMetric & { createdBy?: string | null }): Promise<HkDailyMetric>;
-  upsertHkDailyMetricFields(metric: {
-    metricDate: string;
-    property: string;
-    roomsSold?: number | null;
-    totalDailyHours?: string | null;
-    roomRevenueDaily?: string | null;
-    roomRevenueMtd?: string | null;
-    occupiedRooms?: number | null;
-    notes?: string | null;
-    roomsSoldImported?: boolean | null;
-    roomsSoldImportedAt?: Date | null;
-    createdBy?: string | null;
-  }): Promise<HkDailyMetric>;
-  createHkRoomsSoldImport(importRecord: {
-    uploadedBy?: string | null;
-    filenames: string[];
-    parsedCount: number;
-    updatedCount: number;
-    skippedCount: number;
-    conflictCount: number;
-    details: any;
-  }): Promise<void>;
-  getHkAttendantMetrics(startDate: string, endDate: string, property?: string | null): Promise<HkAttendantMetric[]>;
-  upsertHkAttendantMetric(metric: InsertHkAttendantMetric & { createdBy?: string | null }): Promise<HkAttendantMetric>;
-  listHkProperties(): Promise<string[]>;
-  
   // Promo Codes
   getAllPromoCodes(): Promise<PromoCode[]>;
   getActivePromoCodes(context: "banner-ad" | "marketplace" | "all"): Promise<PromoCode[]>;
@@ -3246,147 +3209,6 @@ export class DatabaseStorage implements IStorage {
   async deleteExpense(id: string): Promise<boolean> {
     const result = await db.delete(expenses).where(eq(expenses.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
-  }
-
-  // Housekeeping metrics
-  async getHkDailyMetrics(startDate: string, endDate: string, property?: string | null): Promise<HkDailyMetric[]> {
-    const filters = [gte(hkDailyMetrics.metricDate, startDate), lte(hkDailyMetrics.metricDate, endDate)];
-    if (property) {
-      filters.push(eq(hkDailyMetrics.property, property));
-    }
-    return await db
-      .select()
-      .from(hkDailyMetrics)
-      .where(and(...filters))
-      .orderBy(asc(hkDailyMetrics.metricDate));
-  }
-
-  async getHkDailyMetricsForDates(property: string, dates: string[]): Promise<HkDailyMetric[]> {
-    if (!dates.length) return [];
-    return await db
-      .select()
-      .from(hkDailyMetrics)
-      .where(and(eq(hkDailyMetrics.property, property), inArray(hkDailyMetrics.metricDate, dates)));
-  }
-
-  async upsertHkDailyMetric(metric: InsertHkDailyMetric & { createdBy?: string | null }): Promise<HkDailyMetric> {
-    const metricDate = toRequiredDateOnly(metric.metricDate, "metricDate");
-    const payload = {
-      ...metric,
-      metricDate,
-      updatedAt: new Date(),
-    };
-    const [saved] = await db
-      .insert(hkDailyMetrics)
-      .values(payload)
-      .onConflictDoUpdate({
-        target: [hkDailyMetrics.metricDate, hkDailyMetrics.property],
-        set: payload,
-      })
-      .returning();
-    return saved;
-  }
-
-  async upsertHkDailyMetricFields(metric: {
-    metricDate: string;
-    property: string;
-    roomsSold?: number | null;
-    totalDailyHours?: string | null;
-    roomRevenueDaily?: string | null;
-    roomRevenueMtd?: string | null;
-    occupiedRooms?: number | null;
-    notes?: string | null;
-    roomsSoldImported?: boolean | null;
-    roomsSoldImportedAt?: Date | null;
-    createdBy?: string | null;
-  }): Promise<HkDailyMetric> {
-    const { metricDate, property, ...fields } = metric;
-    const payload = {
-      metricDate,
-      property,
-      ...fields,
-      updatedAt: new Date(),
-    };
-    const updates: Record<string, any> = { updatedAt: payload.updatedAt };
-    (Object.keys(fields) as Array<keyof typeof fields>).forEach((key) => {
-      if (fields[key] !== undefined) {
-        updates[key] = fields[key];
-      }
-    });
-    const [saved] = await db
-      .insert(hkDailyMetrics)
-      .values(payload)
-      .onConflictDoUpdate({
-        target: [hkDailyMetrics.metricDate, hkDailyMetrics.property],
-        set: updates,
-      })
-      .returning();
-    return saved;
-  }
-
-  async createHkRoomsSoldImport(importRecord: {
-    uploadedBy?: string | null;
-    filenames: string[];
-    parsedCount: number;
-    updatedCount: number;
-    skippedCount: number;
-    conflictCount: number;
-    details: any;
-  }): Promise<void> {
-    await db.insert(hkRoomsSoldImports).values({
-      uploadedBy: importRecord.uploadedBy ?? null,
-      filenames: importRecord.filenames,
-      parsedCount: importRecord.parsedCount,
-      updatedCount: importRecord.updatedCount,
-      skippedCount: importRecord.skippedCount,
-      conflictCount: importRecord.conflictCount,
-      details: importRecord.details,
-    });
-  }
-
-  async getHkAttendantMetrics(startDate: string, endDate: string, property?: string | null): Promise<HkAttendantMetric[]> {
-    const filters = [gte(hkAttendantMetrics.metricDate, startDate), lte(hkAttendantMetrics.metricDate, endDate)];
-    if (property) {
-      filters.push(eq(hkAttendantMetrics.property, property));
-    }
-    return await db
-      .select()
-      .from(hkAttendantMetrics)
-      .where(and(...filters))
-      .orderBy(asc(hkAttendantMetrics.metricDate), asc(hkAttendantMetrics.attendantName));
-  }
-
-  async upsertHkAttendantMetric(metric: InsertHkAttendantMetric & { createdBy?: string | null }): Promise<HkAttendantMetric> {
-    const metricDate = toRequiredDateOnly(metric.metricDate, "metricDate");
-    const payload = {
-      ...metric,
-      metricDate,
-      updatedAt: new Date(),
-    };
-    const [saved] = await db
-      .insert(hkAttendantMetrics)
-      .values(payload)
-      .onConflictDoUpdate({
-        target: [hkAttendantMetrics.metricDate, hkAttendantMetrics.property, hkAttendantMetrics.attendantName],
-        set: payload,
-      })
-      .returning();
-    return saved;
-  }
-
-  async listHkProperties(): Promise<string[]> {
-    const daily = await db
-      .select({ property: hkDailyMetrics.property })
-      .from(hkDailyMetrics)
-      .groupBy(hkDailyMetrics.property);
-    const attendants = await db
-      .select({ property: hkAttendantMetrics.property })
-      .from(hkAttendantMetrics)
-      .groupBy(hkAttendantMetrics.property);
-    const combined = [...daily, ...attendants]
-      .map((row) => row.property)
-      .filter((property): property is string => Boolean(property));
-    return Array.from(new Set(combined)).sort((a, b) => a.localeCompare(b));
   }
 
   // Promo Codes

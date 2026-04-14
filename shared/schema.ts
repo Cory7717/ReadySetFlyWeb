@@ -89,7 +89,7 @@ export const personalFinanceRsfCategories = [
 ] as const;
 export const withdrawalStatuses = ["pending", "processing", "completed", "failed", "cancelled"] as const;
 export const approachPlateTypes = ["IAP", "SID", "STAR", "AIRPORT", "OTHER"] as const;
-export const adminRoles = ["operations", "finance", "sales", "support", "content", "housekeeping"] as const;
+export const adminRoles = ["operations", "finance", "sales", "support", "content"] as const;
 
 // Session storage table for web and OAuth-backed authentication
 export const sessions = pgTable(
@@ -985,78 +985,6 @@ export const personalFinanceBudgets = pgTable("personal_finance_budgets", {
   uniqueIndex("idx_personal_finance_budgets_unique").on(table.month, table.category, table.owner),
   index("idx_personal_finance_budgets_month").on(table.month),
   index("idx_personal_finance_budgets_owner").on(table.owner),
-]);
-
-// Housekeeping metrics (daily and attendant rollups)
-export const hkDailyMetrics = pgTable("hk_daily_metrics", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  metricDate: date("metric_date").notNull(),
-  property: text("property").notNull(),
-  occupiedRooms: integer("occupied_rooms").default(0),
-  roomsSold: integer("rooms_sold"),
-  totalDailyHours: decimal("total_daily_hours", { precision: 6, scale: 2 }),
-  roomsSoldImported: boolean("rooms_sold_imported").default(false),
-  roomsSoldImportedAt: timestamp("rooms_sold_imported_at"),
-  roomRevenueDaily: decimal("room_revenue_daily", { precision: 12, scale: 2 }),
-  roomRevenueMtd: decimal("room_revenue_mtd", { precision: 12, scale: 2 }),
-  checkouts: integer("checkouts").default(0),
-  stayovers: integer("stayovers").default(0),
-  roomsCleaned: integer("rooms_cleaned").default(0),
-  paidHours: decimal("paid_hours", { precision: 6, scale: 2 }).default("0.00"),
-  lunchMinutes: integer("lunch_minutes").default(0),
-  productiveHours: decimal("productive_hours", { precision: 6, scale: 2 }).default("0.00"),
-  attendantsWorking: integer("attendants_working").default(0),
-  lateCheckouts: integer("late_checkouts").default(0),
-  inspections: integer("inspections").default(0),
-  recleans: integer("recleans").default(0),
-  dndRooms: integer("dnd_rooms").default(0),
-  oooRooms: integer("ooo_rooms").default(0),
-  notes: text("notes"),
-  createdBy: varchar("created_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  uniqueIndex("idx_hk_daily_unique").on(table.metricDate, table.property),
-  index("idx_hk_daily_date").on(table.metricDate),
-  index("idx_hk_daily_property").on(table.property),
-]);
-
-export const hkRoomsSoldImports = pgTable("hk_rooms_sold_imports", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  uploadedAt: timestamp("uploaded_at").defaultNow(),
-  uploadedBy: varchar("uploaded_by").references(() => users.id),
-  filenames: jsonb("filenames"),
-  parsedCount: integer("parsed_count").default(0),
-  updatedCount: integer("updated_count").default(0),
-  skippedCount: integer("skipped_count").default(0),
-  conflictCount: integer("conflict_count").default(0),
-  details: jsonb("details"),
-});
-
-export const hkAttendantMetrics = pgTable("hk_attendant_metrics", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  metricDate: date("metric_date").notNull(),
-  property: text("property").notNull(),
-  attendantName: text("attendant_name").notNull(),
-  checkoutsCleaned: integer("checkouts_cleaned").default(0),
-  stayoversCleaned: integer("stayovers_cleaned").default(0),
-  roomsCleaned: integer("rooms_cleaned").default(0),
-  paidHours: decimal("paid_hours", { precision: 6, scale: 2 }).default("0.00"),
-  lunchMinutes: integer("lunch_minutes").default(0),
-  productiveHours: decimal("productive_hours", { precision: 6, scale: 2 }).default("0.00"),
-  deepCleans: integer("deep_cleans").default(0),
-  recleans: integer("recleans").default(0),
-  inspections: integer("inspections").default(0),
-  lateCheckouts: integer("late_checkouts").default(0),
-  notes: text("notes"),
-  createdBy: varchar("created_by").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  uniqueIndex("idx_hk_attendant_unique").on(table.metricDate, table.property, table.attendantName),
-  index("idx_hk_attendant_date").on(table.metricDate),
-  index("idx_hk_attendant_property").on(table.property),
-  index("idx_hk_attendant_name").on(table.attendantName),
 ]);
 
 // Admin Notifications (for threshold alerts)
@@ -2973,70 +2901,6 @@ export const insertPersonalFinanceBudgetSchema = createInsertSchema(personalFina
   budgetAmount: z.string().regex(/^\d+(\.\d{1,2})?$/),
 });
 
-const hkCountSchema = z.coerce.number().int().min(0).default(0);
-const hkOptionalCountSchema = z.preprocess(
-  (value) => (value === "" || value === null || value === undefined ? null : value),
-  z.coerce.number().int().min(0).nullable()
-);
-const hkDecimalSchema = z.preprocess(
-  (value) => (value === "" || value === null || value === undefined ? "0" : value),
-  z.string().regex(/^\d+(\.\d{1,2})?$/)
-);
-const hkOptionalDecimalSchema = z.preprocess(
-  (value) => (value === "" || value === null || value === undefined ? null : value),
-  z.string().regex(/^\d+(\.\d{1,2})?$/).nullable()
-);
-
-export const insertHkDailyMetricSchema = createInsertSchema(hkDailyMetrics).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  createdBy: true,
-}).extend({
-  metricDate: z.string().min(1, "Metric date is required"),
-  property: z.string().min(1, "Property is required"),
-  occupiedRooms: hkCountSchema,
-  roomsSold: hkOptionalCountSchema.optional(),
-  totalDailyHours: hkOptionalDecimalSchema.optional(),
-  roomRevenueDaily: hkOptionalDecimalSchema.optional(),
-  roomRevenueMtd: hkOptionalDecimalSchema.optional(),
-  checkouts: hkCountSchema,
-  stayovers: hkCountSchema,
-  roomsCleaned: hkCountSchema,
-  paidHours: hkDecimalSchema,
-  lunchMinutes: hkCountSchema,
-  productiveHours: hkDecimalSchema,
-  attendantsWorking: hkCountSchema,
-  lateCheckouts: hkCountSchema,
-  inspections: hkCountSchema,
-  recleans: hkCountSchema,
-  dndRooms: hkCountSchema,
-  oooRooms: hkCountSchema,
-  notes: z.string().optional(),
-});
-
-export const insertHkAttendantMetricSchema = createInsertSchema(hkAttendantMetrics).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  createdBy: true,
-}).extend({
-  metricDate: z.string().min(1, "Metric date is required"),
-  property: z.string().min(1, "Property is required"),
-  attendantName: z.string().min(1, "Attendant name is required"),
-  checkoutsCleaned: hkCountSchema,
-  stayoversCleaned: hkCountSchema,
-  roomsCleaned: hkCountSchema,
-  paidHours: hkDecimalSchema,
-  lunchMinutes: hkCountSchema,
-  productiveHours: hkDecimalSchema,
-  deepCleans: hkCountSchema,
-  recleans: hkCountSchema,
-  inspections: hkCountSchema,
-  lateCheckouts: hkCountSchema,
-  notes: z.string().optional(),
-});
-
 export const insertAdminNotificationSchema = createInsertSchema(adminNotifications).omit({
   id: true,
   createdAt: true,
@@ -3246,13 +3110,6 @@ export type PersonalFinanceEntry = typeof personalFinanceEntries.$inferSelect;
 export type InsertPersonalFinanceEntry = z.infer<typeof insertPersonalFinanceEntrySchema>;
 export type PersonalFinanceBudget = typeof personalFinanceBudgets.$inferSelect;
 export type InsertPersonalFinanceBudget = z.infer<typeof insertPersonalFinanceBudgetSchema>;
-
-export type HkDailyMetric = typeof hkDailyMetrics.$inferSelect;
-export type InsertHkDailyMetric = z.infer<typeof insertHkDailyMetricSchema>;
-export type HkRoomsSoldImport = typeof hkRoomsSoldImports.$inferSelect;
-
-export type HkAttendantMetric = typeof hkAttendantMetrics.$inferSelect;
-export type InsertHkAttendantMetric = z.infer<typeof insertHkAttendantMetricSchema>;
 
 export type AdminNotification = typeof adminNotifications.$inferSelect;
 export type InsertAdminNotification = z.infer<typeof insertAdminNotificationSchema>;

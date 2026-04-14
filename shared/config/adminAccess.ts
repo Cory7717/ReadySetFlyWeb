@@ -11,11 +11,10 @@ export const ADMIN_PERMISSIONS = [
   "withdrawals",
   "notifications",
   "banners",
-  "hk-metrics",
 ] as const;
 
 export type AdminPermission = typeof ADMIN_PERMISSIONS[number];
-export type AdminRole = "operations" | "finance" | "sales" | "support" | "content" | "housekeeping";
+export type AdminRole = "operations" | "finance" | "sales" | "support" | "content";
 
 export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
   operations: "Operations",
@@ -23,7 +22,6 @@ export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
   sales: "Sales",
   support: "Support",
   content: "Content",
-  housekeeping: "Housekeeping",
 };
 
 export const ADMIN_ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
@@ -32,7 +30,6 @@ export const ADMIN_ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
   sales: ["crm", "promo", "promo-codes", "banners"],
   support: ["users", "verifications", "notifications"],
   content: ["aircraft", "marketplace", "stale", "banners"],
-  housekeeping: ["hk-metrics"],
 };
 
 export function normalizeAdminPermissions(role?: AdminRole | null, permissions?: string[] | null) {

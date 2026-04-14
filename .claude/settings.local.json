@@ -14,7 +14,8 @@
       "Bash(/c/Python312/python fix_tsc2448.py)",
       "Bash(echo \"exit: $?\")",
       "Read(//c/tmp/**)",
-      "Bash(ls /c/Users/carme/ReadySetFlyWeb/ReadySetFly/mobile/src/components/flight-deck/FlightDeckViewTypes*)"
+      "Bash(ls /c/Users/carme/ReadySetFlyWeb/ReadySetFly/mobile/src/components/flight-deck/FlightDeckViewTypes*)",
+      "Bash(eas build:*)"
     ]
   }
 }

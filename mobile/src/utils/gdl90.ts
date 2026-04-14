@@ -47,6 +47,10 @@ export type ReceiverHealth = {
   lastTrafficAt: number | null;
   lastHeartbeatAt: number | null;
   lastHeartbeat: HeartbeatReport | null;
+  ownshipFresh: boolean;
+  attitudeFresh: boolean;
+  trafficFresh: boolean;
+  heartbeatFresh: boolean;
   warnings: string[];
 };
 
@@ -233,11 +237,15 @@ export function createGdl90Listener(
   const emitHealth = () => {
     if (!onHealth) return;
     const now = Date.now();
+    const ownshipFresh = Boolean(lastOwnshipAt && now - lastOwnshipAt <= RECEIVER_STALE_MS);
+    const attitudeFresh = Boolean(lastAttitudeAt && now - lastAttitudeAt <= RECEIVER_STALE_MS);
+    const trafficFresh = Boolean(lastTrafficAt && now - lastTrafficAt <= RECEIVER_STALE_MS);
+    const heartbeatFresh = Boolean(lastHeartbeatAt && now - lastHeartbeatAt <= RECEIVER_STALE_MS);
     let status: ReceiverHealth['status'] = 'idle';
     if (lastFrameAt) {
       if (now - lastFrameAt > RECEIVER_STALE_MS) {
         status = 'stale';
-      } else if (lastOwnshipAt && now - lastOwnshipAt <= RECEIVER_STALE_MS) {
+      } else if (ownshipFresh) {
         status = 'healthy';
       } else {
         status = 'traffic-only';
@@ -246,7 +254,9 @@ export function createGdl90Listener(
     const warnings: string[] = [];
     if (status === 'stale') warnings.push('Receiver data has gone stale.');
     if (status === 'traffic-only') warnings.push('Traffic is arriving, but no fresh ownship report is available.');
+    if (ownshipFresh && !attitudeFresh) warnings.push('Ownship is current, but no fresh attitude source is available.');
     if (!lastHeartbeatAt) warnings.push('No GDL-90 heartbeat has been seen yet.');
+    if (lastHeartbeatAt && !heartbeatFresh) warnings.push('Receiver heartbeat is stale.');
     onHealth({
       status,
       staleMs: RECEIVER_STALE_MS,
@@ -256,6 +266,10 @@ export function createGdl90Listener(
       lastTrafficAt,
       lastHeartbeatAt,
       lastHeartbeat,
+      ownshipFresh,
+      attitudeFresh,
+      trafficFresh,
+      heartbeatFresh,
       warnings,
     });
   };

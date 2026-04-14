@@ -456,6 +456,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     activeOwnship,
     activeAttitude,
     ownshipSourceSummary,
+    flightDeckTrustSummary,
     sourceArbitrationSummary,
     headingSourceSummary,
     attitudeSourceSummary,
@@ -491,8 +492,10 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     departureFrequenciesLoading,
     destinationFrequenciesLoading,
     flightDeckSurfacePreview,
+    flightDeckSurfaceOpsSummary,
     flightDeckRunwayOpsSummary,
     selectedDiversionBestComm,
+    flightDeckDiversionDecisionSummary,
     selectedTrafficTrend,
     mapTacticalSummary = {
       modeLabel: 'Track',
@@ -542,6 +545,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     summaryCounts = { winds: 0, notams: 0, pireps: 0, convective: 0, icing: 0, turbulence: 0 },
     topTrafficTarget,
     trafficPanelTargets = [],
+    flightDeckTrafficSummary,
     diversionPanelAirports = [],
     terrainProfile,
     obstacleScan,
@@ -551,6 +555,8 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     flightDeckBankTicks = [],
     mapOrientationMode,
     trafficFilter,
+    flightDeckPhaseAssistantSummary,
+    flightDeckTacticalSummary,
     formatAltitudeDelta,
   } = state;
   const width = flightDeckLayoutProfile.width;
@@ -662,6 +668,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
   const {
     pulseFlightDeckChrome = () => {},
     setFlightDeckViewMode = () => {},
+    toggleTrafficReceiver = () => {},
     toggleFlightDeckHud = () => {},
     toggleFlightDeckFocusMode = () => {},
     dismissPhoneRecommendation = () => {},
@@ -710,6 +717,80 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
       ident: entry.toFix,
     }));
   const primaryDiversionOption = selectedDiversion || diversionCandidates[0] || null;
+  const headerChipToneStyle = (tone?: string | null) => (
+    tone === 'active'
+      ? styles.flightDeckHeaderMetaChipActive
+      : tone === 'warning'
+      ? styles.flightDeckHeaderMetaChipWarning
+      : tone === 'caution' || tone === 'accent'
+        ? styles.flightDeckHeaderMetaChipAccent
+        : tone === 'advisory' || tone === 'limited'
+          ? styles.flightDeckHeaderMetaChipActive
+          : null
+  );
+  const headerChipToneTextStyle = (tone?: string | null) => (
+    tone === 'active'
+      ? styles.flightDeckHeaderMetaChipTextActive
+      : tone === 'warning'
+      ? styles.flightDeckHeaderMetaChipTextWarning
+      : tone === 'caution' || tone === 'accent'
+        ? styles.flightDeckHeaderMetaChipTextAccent
+        : tone === 'advisory' || tone === 'limited'
+          ? styles.flightDeckHeaderMetaChipTextActive
+          : null
+  );
+  const contextToneStyle = (tone?: string | null) => (
+    tone === 'warning'
+      ? styles.flightDeckContextCardWarning
+      : tone === 'caution'
+        ? styles.flightDeckContextCardCaution
+        : tone === 'accent' || tone === 'advisory' || tone === 'limited'
+          ? styles.flightDeckContextCardAccent
+          : null
+  );
+  const openAdsbControls = (autoConnect = false) => {
+    pulseFlightDeckChrome(true);
+    if (autoConnect) {
+      toggleTrafficReceiver();
+    }
+    setFlightDeckDrawerOpen(true);
+    setFlightDeckPanel('status');
+  };
+  const renderAdsbConnectionIndicator = (compact = false) => (
+    <TouchableOpacity
+      style={[
+        styles.flightDeckAdsbIndicator,
+        compact ? styles.flightDeckAdsbIndicatorCompact : null,
+        receiverStatusSummary?.tone === 'active'
+          ? styles.flightDeckAdsbIndicatorConnected
+          : receiverStatusSummary?.tone === 'caution'
+            ? styles.flightDeckAdsbIndicatorTrafficOnly
+            : styles.flightDeckAdsbIndicatorDisconnected,
+      ]}
+      activeOpacity={0.94}
+      onPress={() => openAdsbControls(!trafficEnabled)}
+    >
+      <View
+        style={[
+          styles.flightDeckAdsbIndicatorDot,
+          receiverStatusSummary?.tone === 'active'
+            ? styles.flightDeckAdsbIndicatorDotConnected
+            : receiverStatusSummary?.tone === 'caution'
+              ? styles.flightDeckAdsbIndicatorDotTrafficOnly
+              : styles.flightDeckAdsbIndicatorDotDisconnected,
+        ]}
+      />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.flightDeckAdsbIndicatorTitle}>{receiverStatusSummary?.label || 'No Connection'}</Text>
+        {!compact ? (
+          <Text style={styles.flightDeckAdsbIndicatorText} numberOfLines={1}>
+            {receiverStatusSummary?.detail || 'ADS-B receiver is not connected.'}
+          </Text>
+        ) : null}
+      </View>
+      <Text style={styles.flightDeckAdsbIndicatorAction}>{receiverStatusSummary?.actionLabel || 'ADS-B'}</Text>
+    </TouchableOpacity>
+  );
 
   const ownshipStatusLabel =
     ownshipSourceSummary?.code === 'SIM'
@@ -1108,13 +1189,16 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
         <Ionicons name="compass" size={18} color={colors.flightText} />
       </TouchableOpacity>
       <TouchableOpacity
-        style={styles.flightDeckMapControlButton}
+        style={[
+          styles.flightDeckMapControlButton,
+          receiverStatusSummary?.tone === 'active'
+            ? styles.flightDeckMapControlButtonConnected
+            : receiverStatusSummary?.tone === 'caution'
+              ? styles.flightDeckMapControlButtonTrafficOnly
+              : styles.flightDeckMapControlButtonDisconnected,
+        ]}
         activeOpacity={0.92}
-        onPress={() => {
-          pulseFlightDeckChrome(true);
-          setFlightDeckDrawerOpen(true);
-          setFlightDeckPanel('traffic');
-        }}
+        onPress={() => openAdsbControls(!trafficEnabled)}
       >
         <Ionicons name="radio" size={18} color={colors.flightText} />
       </TouchableOpacity>
@@ -1131,6 +1215,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
   const renderTrafficAdvisoryStrip = () => {
     if (!advisoryTrafficTarget || !mapPaneVisible || focusModeActive) return null;
     const nearbyCount = Math.max(visibleTrafficTargets.length, immediateTrafficCount || 0);
+    const advisoryPresentation = mapTrafficPresentation.find((item: any) => item.id === advisoryTrafficTarget.id);
     const trafficToneStyle =
       advisoryTrafficTarget.threatLevel === 'immediate'
         ? styles.flightDeckTrafficStripWarning
@@ -1144,7 +1229,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
             Traffic Advisory <Text style={styles.flightDeckTrafficStripCallsign}>{advisoryTrafficTarget.callsign || 'Traffic'}</Text>
           </Text>
           <Text style={styles.flightDeckTrafficStripMeta}>
-            {selectedTrafficTrend?.closureText || advisoryTrafficTarget.threatLevel || 'Monitor'} • {nearbyCount} nearby
+            {advisoryPresentation?.threatLabel || advisoryTrafficTarget.threatLevel || 'Monitor'} • {advisoryPresentation?.clockLabel || selectedTrafficTrend?.clockLabel || '12 o\'clock'} • {selectedTrafficTrend?.closureText || advisoryTrafficTarget.threatLevel || 'Monitor'} • {nearbyCount} nearby
             {typeof advisoryTrafficTarget.altitudeDeltaFt === 'number' ? ` • ${formatAltitudeDelta?.(advisoryTrafficTarget.altitudeDeltaFt) ?? '--'}` : ''}
           </Text>
         </View>
@@ -1208,22 +1293,23 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           </View>
         </View>
         <View style={[styles.flightDeckHeaderMetaRow, { marginTop: spacing.xs }]}>
-          <View style={styles.flightDeckHeaderMetaChip}>
-            <Text style={styles.flightDeckHeaderMetaChipText}>
+          <View style={[styles.flightDeckHeaderMetaChip, headerChipToneStyle(flightDeckTrustSummary?.tone)]}>
+            <Text style={[styles.flightDeckHeaderMetaChipText, headerChipToneTextStyle(flightDeckTrustSummary?.tone)]}>
               {ownshipSourceSummary?.code || 'PREFLT'}
             </Text>
           </View>
           <View style={styles.flightDeckHeaderMetaChip}>
             <Text style={styles.flightDeckHeaderMetaChipText}>
-              {mapOrientationLabel}
+              {flightDeckTrustSummary?.label || mapOrientationLabel}
             </Text>
           </View>
-          <View style={styles.flightDeckHeaderMetaChip}>
-            <Text style={styles.flightDeckHeaderMetaChipText}>
-              {splitPaneLabel}
+          <View style={[styles.flightDeckHeaderMetaChip, headerChipToneStyle(flightDeckTrafficSummary?.tone)]}>
+            <Text style={[styles.flightDeckHeaderMetaChipText, headerChipToneTextStyle(flightDeckTrafficSummary?.tone)]}>
+              {flightDeckTrafficSummary?.filterLabel || splitPaneLabel}
             </Text>
           </View>
         </View>
+        <View style={{ marginTop: spacing.xs }}>{renderAdsbConnectionIndicator(true)}</View>
         {renderDisplayModeControls()}
         {flightDeckPhoneRecommendationVisible ? (
           <View
@@ -2137,7 +2223,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                     pulseFlightDeckChrome();
                     setSelectedTrafficId(target.id);
                   }}
-                  description={`${target.distanceNm.toFixed(1)} NM${target.altitudeFt ? ` - ${target.altitudeFt} ft` : ''}`}
+                  description={`${target.distanceNm.toFixed(1)} NM${trafficPresentation?.clockLabel ? ` - ${trafficPresentation.clockLabel}` : ''}${trafficPresentation?.closureText ? ` - ${trafficPresentation.closureText}` : ''}${target.altitudeFt ? ` - ${target.altitudeFt} ft` : ''}`}
                 >
                   <View style={styles.flightTrafficMarkerWrap}>
                     {selectedTrafficTarget?.id === target.id || target.threatLevel === 'immediate' ? (
@@ -2274,28 +2360,16 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 <View
                   style={[
                     styles.flightDeckHeaderMetaChip,
-                    ownshipStatusTone === 'active'
-                      ? styles.flightDeckHeaderMetaChipActive
-                      : ownshipStatusTone === 'accent'
-                        ? styles.flightDeckHeaderMetaChipAccent
-                        : ownshipStatusTone === 'warning'
-                          ? styles.flightDeckHeaderMetaChipWarning
-                          : null,
+                    headerChipToneStyle(flightDeckTrustSummary?.tone || ownshipStatusTone),
                   ]}
                 >
                   <Text
                     style={[
                       styles.flightDeckHeaderMetaChipText,
-                      ownshipStatusTone === 'active'
-                        ? styles.flightDeckHeaderMetaChipTextActive
-                        : ownshipStatusTone === 'accent'
-                          ? styles.flightDeckHeaderMetaChipTextAccent
-                          : ownshipStatusTone === 'warning'
-                            ? styles.flightDeckHeaderMetaChipTextWarning
-                            : null,
+                      headerChipToneTextStyle(flightDeckTrustSummary?.tone || ownshipStatusTone),
                     ]}
                   >
-                    {ownshipStatusLabel}
+                    {flightDeckTrustSummary?.label || ownshipStatusLabel}
                   </Text>
                 </View>
                 <View
@@ -2313,14 +2387,29 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                     {splitPaneLabel}
                   </Text>
                 </View>
+                <View style={[styles.flightDeckHeaderMetaChip, headerChipToneStyle(flightDeckTrafficSummary?.tone)]}>
+                  <Text style={[styles.flightDeckHeaderMetaChipText, headerChipToneTextStyle(flightDeckTrafficSummary?.tone)]}>
+                    {flightDeckTrafficSummary?.label || mapOrientationLabel}
+                  </Text>
+                </View>
                 <View style={styles.flightDeckHeaderMetaChip}>
                   <Text style={styles.flightDeckHeaderMetaChipText}>{mapOrientationLabel}</Text>
                 </View>
+                {flightDeckTrustSummary?.degradedModes?.[0] ? (
+                  <View style={[styles.flightDeckHeaderMetaChip, headerChipToneStyle(flightDeckTrustSummary.degradedModes[0].tone)]}>
+                    <Text style={[styles.flightDeckHeaderMetaChipText, headerChipToneTextStyle(flightDeckTrustSummary.degradedModes[0].tone)]}>
+                      {flightDeckTrustSummary.degradedModes[0].label}
+                    </Text>
+                  </View>
+                ) : null}
                 <Text style={styles.flightDeckHeaderMetaText}>{ownshipFreshnessText}</Text>
               </View>
               <Text style={styles.flightDeckSubtitle}>
-                {routeExecutionSummary?.verticalConstraintCall || mapTacticalSummary.verticalConstraintCall}
+                {flightDeckPhaseAssistantSummary?.detail || routeExecutionSummary?.verticalConstraintCall || mapTacticalSummary.verticalConstraintCall}
               </Text>
+              <View style={{ marginTop: spacing.xs, alignSelf: 'flex-start', width: Math.min(width * 0.42, 360) }}>
+                {renderAdsbConnectionIndicator()}
+              </View>
             </View>
             <View
               style={[
@@ -2328,6 +2417,12 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 isLandscape ? { flexDirection: 'column', alignItems: 'flex-end' } : null,
               ]}
             >
+              <TouchableOpacity
+                style={styles.flightDeckExitButton}
+                onPress={() => openAdsbControls(!trafficEnabled)}
+              >
+                <Text style={styles.flightDeckExitText}>{receiverStatusSummary?.actionLabel || 'ADS-B'}</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.flightDeckExitButton}
                 onPress={() => {
@@ -2465,8 +2560,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                   {selectedDiversion.icao} - {selectedDiversion.distanceNm.toFixed(1)} NM - {Math.round(selectedDiversion.bearingDeg)} deg
                 </Text>
                 <Text style={styles.flightDeckContextCardText}>
-                  {selectedDiversionRunwaySummary}
-                  {selectedDiversionBestComm?.frequencyMhz ? ` - ${selectedDiversionBestComm.frequencyMhz.toFixed(3)}` : ''}
+                  {flightDeckDiversionDecisionSummary?.detail || selectedDiversionRunwaySummary}
                 </Text>
                 <View style={styles.flightDeckContextCardActions}>
                   <TouchableOpacity style={styles.flightDeckMiniChip} onPress={() => focusDiversionAirport(selectedDiversion)}>
@@ -2476,24 +2570,26 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                     style={[styles.flightDeckMiniChip, styles.flightDeckMiniChipActive]}
                     onPress={() => engageDirectToDiversion(selectedDiversion)}
                   >
-                    <Text style={[styles.flightDeckMiniChipText, styles.flightDeckMiniChipTextActive]}>Direct-to</Text>
+                    <Text style={[styles.flightDeckMiniChipText, styles.flightDeckMiniChipTextActive]}>
+                      {flightDeckDiversionDecisionSummary?.actionLabel || 'Direct-to'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
             ) : null}
             {showCompactTacticalCard ? (
-              <View style={styles.flightDeckMapActionCard}>
+              <View style={[styles.flightDeckMapActionCard, contextToneStyle(flightDeckTacticalSummary?.tone)]}>
                 <View style={styles.flightDeckMapActionHeader}>
-                  <Text style={styles.flightDeckMapActionLabel}>{mapTacticalSummary.focusLabel || 'Director'}</Text>
+                  <Text style={styles.flightDeckMapActionLabel}>{flightDeckTacticalSummary?.title || mapTacticalSummary.focusLabel || 'Director'}</Text>
                   <Text style={styles.flightDeckMapActionMode}>{mapTacticalSummary.modeLabel}</Text>
                 </View>
-                <Text style={styles.flightDeckMapActionText}>{mapTacticalSummary.heading}</Text>
+                <Text style={styles.flightDeckMapActionText}>{flightDeckTacticalSummary?.detail || mapTacticalSummary.heading}</Text>
                 <Text style={styles.flightDeckMapActionSubtext}>
-                  {mapTacticalSummary.vertical}
+                  {flightDeckPhaseAssistantSummary?.label || mapTacticalSummary.vertical}
                   {flightDeckTargetAltitudeFt ? ` - bug ${flightDeckTargetAltitudeFt} ft` : ''}
                 </Text>
                 <Text style={styles.flightDeckMapActionSubtext}>
-                  {mapTacticalSummary.verticalSupport}
+                  {flightDeckPhaseAssistantSummary?.support || mapTacticalSummary.verticalSupport}
                   {flightDeckVerticalPathSummary.distanceToTodNm != null && flightDeckVerticalPathSummary.distanceToTodNm > 0
                     ? ` - TOD ${flightDeckVerticalPathSummary.distanceToTodNm.toFixed(1)} NM`
                     : ''}
@@ -2510,7 +2606,9 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                   {mapTacticalSummary.rangeLabel ? ` - ${mapTacticalSummary.rangeLabel}` : ''}
                 </Text>
                 <Text style={styles.flightDeckMapActionSubtext}>{mapOverlayProfile.label}</Text>
-                <Text style={styles.flightDeckMapActionRecommendation}>{mapTacticalSummary.recommendation}</Text>
+                <Text style={styles.flightDeckMapActionRecommendation}>
+                  {flightDeckPhaseAssistantSummary?.actionLabel || flightDeckTacticalSummary?.support || mapTacticalSummary.recommendation}
+                </Text>
               </View>
             ) : null}
             {mapPanePrimary && destinationRunwayCue && !compactDevice && !focusModeActive ? (
@@ -2811,6 +2909,22 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 <Text style={styles.flightDeckBadge}>{flightDeckSessionState || 'PREFLIGHT'}</Text>
               </View>
               <Text style={styles.flightDeckPanelText}>
+                ADS-B {receiverStatusSummary?.label || 'No Connection'} - {receiverStatusSummary?.detail || 'Receiver status unavailable.'}
+              </Text>
+              <View style={styles.flightDeckControlRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.flightDeckChip,
+                    trafficEnabled && styles.flightDeckChipActive,
+                  ]}
+                  onPress={toggleTrafficReceiver}
+                >
+                  <Text style={[styles.flightDeckChipText, trafficEnabled && styles.flightDeckChipTextActive]}>
+                    {trafficEnabled ? 'Disconnect ADS-B' : 'Connect ADS-B'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.flightDeckPanelText}>
                 Source {ownshipSourceSummary?.code || '--'} - {ownshipSourceSummary?.detail || 'Tracking source unavailable.'}
               </Text>
               <Text style={styles.flightDeckPanelText}>Freshness {ownshipFreshnessText}</Text>
@@ -2826,6 +2940,16 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               {sourceArbitrationSummary ? (
                 <Text style={styles.flightDeckPanelText}>
                   Source trust {sourceArbitrationSummary.code} - {sourceArbitrationSummary.detail}
+                </Text>
+              ) : null}
+              {flightDeckTrustSummary ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Trust state {flightDeckTrustSummary.label} - {flightDeckTrustSummary.detail}
+                </Text>
+              ) : null}
+              {flightDeckTrustSummary?.degradedModes?.length ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Degraded modes {flightDeckTrustSummary.degradedModes.map((mode: any) => mode.label).join(' - ')}
                 </Text>
               ) : null}
               <Text style={styles.flightDeckPanelText}>
@@ -2860,6 +2984,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               {receiverOwnshipFresh === false ? (
                 <Text style={styles.flightDeckPanelText}>
                   Receiver ownship is stale.{gpsOwnshipFresh ? ' GPS fallback is active.' : ' No live fallback is active.'}
+                </Text>
+              ) : null}
+              {flightDeckTacticalSummary ? (
+                <Text style={styles.flightDeckPanelText}>
+                  RSF Assist {flightDeckTacticalSummary.title} - {flightDeckTacticalSummary.detail}
                 </Text>
               ) : null}
               <View style={styles.flightDeckControlRow}>
@@ -2903,6 +3032,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               <FlightDeckSurfaceMap preview={flightDeckSurfacePreview} styles={styles} />
               <View style={styles.flightDeckPanel}>
                 <Text style={styles.flightDeckPanelTitle}>Runway Ops</Text>
+                {flightDeckSurfaceOpsSummary ? (
+                  <>
+                    <Text style={styles.flightDeckPanelText}>
+                      {flightDeckSurfaceOpsSummary.title} - {flightDeckSurfaceOpsSummary.detail}
+                    </Text>
+                    <Text style={styles.flightDeckPanelText}>{flightDeckSurfaceOpsSummary.recoveryLabel}</Text>
+                  </>
+                ) : null}
                 {flightDeckRunwayOpsSummary ? (
                   <>
                     <Text style={styles.flightDeckPanelText}>
@@ -3294,6 +3431,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           {flightDeckPanel === 'status' && (
             <View style={styles.flightDeckPanel}>
               <Text style={styles.flightDeckPanelTitle}>Director State</Text>
+              {flightDeckPhaseAssistantSummary ? (
+                <>
+                  <Text style={styles.flightDeckPanelText}>
+                    {flightDeckPhaseAssistantSummary.label} - {flightDeckPhaseAssistantSummary.detail}
+                  </Text>
+                  <Text style={styles.flightDeckPanelText}>{flightDeckPhaseAssistantSummary.actionLabel}</Text>
+                </>
+              ) : null}
               <Text style={styles.flightDeckPanelText}>
                 Mode {mapTacticalSummary.modeLabel} / {visionDirectorCue.turnCommand}
               </Text>
@@ -3340,6 +3485,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           {flightDeckPanel === 'status' && (
             <View style={styles.flightDeckPanel}>
               <Text style={styles.flightDeckPanelTitle}>Operational Snapshot</Text>
+              {flightDeckTacticalSummary ? (
+                <Text style={styles.flightDeckPanelText}>
+                  {flightDeckTacticalSummary.title} - {flightDeckTacticalSummary.detail}
+                </Text>
+              ) : null}
               <Text style={styles.flightDeckPanelText}>Route risk {routeRiskLabel}.</Text>
               <Text style={styles.flightDeckPanelText}>
                 Weather counts: winds {summaryCounts.winds} - NOTAMs {summaryCounts.notams} - PIREPs {summaryCounts.pireps}
@@ -3361,6 +3511,16 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           {flightDeckPanel === 'status' && (
             <View style={styles.flightDeckPanel}>
               <Text style={styles.flightDeckPanelTitle}>Quick Actions</Text>
+              {flightDeckDiversionDecisionSummary ? (
+                <Text style={styles.flightDeckPanelText}>
+                  {flightDeckDiversionDecisionSummary.title} - {flightDeckDiversionDecisionSummary.detail}
+                </Text>
+              ) : null}
+              {flightDeckTrafficSummary ? (
+                <Text style={styles.flightDeckPanelText}>
+                  {flightDeckTrafficSummary.label} - {flightDeckTrafficSummary.detail}
+                </Text>
+              ) : null}
               {selectedTrafficTarget ? (
                 <Text style={styles.flightDeckPanelText}>
                   Selected traffic {selectedTrafficTarget.callsign || 'Traffic'} - {(selectedTrafficTarget.distanceNm ?? 0).toFixed(1)} NM - {formatAltitudeDelta?.(selectedTrafficTarget.altitudeDeltaFt ?? null) ?? '--'}
@@ -3503,14 +3663,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 ))}
               </View>
               <View style={styles.flightDeckControlRow}>
-                {(['all', 'conflict', 'above', 'below'] as const).map((value) => (
+                {(['all', 'monitor', 'advisory', 'immediate', 'above', 'below'] as const).map((value) => (
                   <TouchableOpacity
                     key={`deck-filter-${value}`}
                     style={[styles.flightDeckChip, trafficFilter === value && styles.flightDeckChipActive]}
                     onPress={() => setTrafficFilter(value)}
                   >
                     <Text style={[styles.flightDeckChipText, trafficFilter === value && styles.flightDeckChipTextActive]}>
-                      {value === 'all' ? 'All traffic' : value === 'conflict' ? 'Conflict' : value === 'above' ? 'Above' : 'Below'}
+                      {value === 'all' ? 'All traffic' : value === 'monitor' ? 'Monitor' : value === 'advisory' ? 'Advisory' : value === 'immediate' ? 'Immediate' : value === 'above' ? 'Above' : 'Below'}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -3554,36 +3714,39 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               {trafficPanelTargets.length === 0 ? (
                 <Text style={styles.flightDeckPanelText}>No traffic targets in the current filter band.</Text>
               ) : (
-                trafficPanelTargets.map((target: any) => (
-                  <TouchableOpacity
-                    key={`deck-traffic-${target.id}`}
-                    style={[styles.flightDeckListCard, selectedTrafficTarget?.id === target.id && styles.flightDeckListCardActive]}
-                    onPress={() => focusTrafficTarget(target)}
-                    activeOpacity={0.92}
-                  >
-                    <Text style={styles.flightDeckListTitle}>{target.callsign || 'Traffic target'}</Text>
-                    <Text style={styles.flightDeckListMeta}>
-                      {target.threatLevel === 'immediate' ? 'Immediate' : target.threatLevel === 'advisory' ? 'Advisory' : 'Monitor'} / score {target.threatScore}
-                    </Text>
-                    <Text style={styles.flightDeckPanelText}>
-                      {(target.distanceNm ?? 0).toFixed(1)} NM - {formatAltitudeDelta?.(target.altitudeDeltaFt ?? null) ?? '--'}
-                      {typeof target.altitudeFt === 'number' ? ` - ${Math.round(target.altitudeFt)} ft` : ''}
-                    </Text>
-                    <View style={styles.flightDeckControlRow}>
-                      <TouchableOpacity style={styles.flightDeckChip} onPress={() => focusTrafficTarget(target)}>
-                        <Text style={styles.flightDeckChipText}>Focus on map</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.flightDeckChip, selectedTrafficTarget?.id === target.id && styles.flightDeckChipActive]}
-                        onPress={() => setSelectedTrafficId(target.id)}
-                      >
-                        <Text style={[styles.flightDeckChipText, selectedTrafficTarget?.id === target.id && styles.flightDeckChipTextActive]}>
-                          {selectedTrafficTarget?.id === target.id ? 'Selected' : 'Select'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </TouchableOpacity>
-                ))
+                trafficPanelTargets.map((target: any) => {
+                  const trafficPresentation = mapTrafficPresentation.find((item: any) => item.id === target.id);
+                  return (
+                    <TouchableOpacity
+                      key={`deck-traffic-${target.id}`}
+                      style={[styles.flightDeckListCard, selectedTrafficTarget?.id === target.id && styles.flightDeckListCardActive]}
+                      onPress={() => focusTrafficTarget(target)}
+                      activeOpacity={0.92}
+                    >
+                      <Text style={styles.flightDeckListTitle}>{target.callsign || 'Traffic target'}</Text>
+                      <Text style={styles.flightDeckListMeta}>
+                        {trafficPresentation?.threatLabel || (target.threatLevel === 'immediate' ? 'Immediate' : target.threatLevel === 'advisory' ? 'Advisory' : 'Monitor')} / score {target.threatScore}
+                      </Text>
+                      <Text style={styles.flightDeckPanelText}>
+                        {(target.distanceNm ?? 0).toFixed(1)} NM - {trafficPresentation?.clockLabel || '12 o\'clock'} - {trafficPresentation?.closureText || 'Monitor'} - {formatAltitudeDelta?.(target.altitudeDeltaFt ?? null) ?? '--'}
+                        {typeof target.altitudeFt === 'number' ? ` - ${Math.round(target.altitudeFt)} ft` : ''}
+                      </Text>
+                      <View style={styles.flightDeckControlRow}>
+                        <TouchableOpacity style={styles.flightDeckChip} onPress={() => focusTrafficTarget(target)}>
+                          <Text style={styles.flightDeckChipText}>Focus on map</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.flightDeckChip, selectedTrafficTarget?.id === target.id && styles.flightDeckChipActive]}
+                          onPress={() => setSelectedTrafficId(target.id)}
+                        >
+                          <Text style={[styles.flightDeckChipText, selectedTrafficTarget?.id === target.id && styles.flightDeckChipTextActive]}>
+                            {selectedTrafficTarget?.id === target.id ? 'Selected' : 'Select'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
               )}
             </View>
           ) : null}

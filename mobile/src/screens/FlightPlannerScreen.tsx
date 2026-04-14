@@ -60,6 +60,7 @@ import {
   normalizeHeadingDelta,
   offsetLatLonByNm,
   rankTrafficTargets,
+  relativeClockPosition,
 } from '../lib/flightMath';
 import type { MobileRouteLeg, MobileRouteNavDataLegPayload, MobileRouteProgressSummary } from '../lib/flightMath';
 import { analyzeFiledRoute, isFiledRouteAnchorKind } from '@shared/flight-plan-route';
@@ -72,6 +73,14 @@ import {
   type FlightDeckDisplayMode,
   type FlightDeckMapOrientationMode,
 } from '../components/flight-deck/flightDeckLayout';
+import type {
+  FlightDeckDiversionDecisionSummary,
+  FlightDeckPhaseAssistantSummary,
+  FlightDeckSurfaceOpsSummary,
+  FlightDeckTacticalSummary,
+  FlightDeckTrafficSummary,
+  FlightDeckTrustSummary,
+} from '../components/flight-deck/FlightDeckViewTypes';
 import {
   getFallbackFlightDeckSectionalSource,
   getPrimaryFlightDeckSectionalSource,
@@ -379,6 +388,7 @@ type TrafficTrend = {
   distanceRateNmPerMin: number | null;
   bearingRateDegPerMin: number | null;
   closureText: string;
+  clockLabel: string;
 };
 
 type PositionFetchSnapshot = {
@@ -1428,7 +1438,7 @@ export default function FlightPlannerScreen() {
   const [receiverOwnship, setReceiverOwnship] = useState<OwnshipData | null>(null);
   const [receiverAttitude, setReceiverAttitude] = useState<ReceiverAttitudeData | null>(null);
   const [receiverHealth, setReceiverHealth] = useState<ReceiverHealth | null>(null);
-  const [trafficFilter, setTrafficFilter] = useState<'all' | 'conflict' | 'above' | 'below'>('all');
+  const [trafficFilter, setTrafficFilter] = useState<'all' | 'monitor' | 'advisory' | 'immediate' | 'above' | 'below'>('all');
   const [trafficStatus, setTrafficStatus] = useState<'idle' | 'listening' | 'error'>('idle');
   const [trafficError, setTrafficError] = useState<string | null>(null);
   const trafficListenerRef = useState<{ stop?: () => void }>(() => ({}))[0];
@@ -1797,30 +1807,146 @@ export default function FlightPlannerScreen() {
     [gpsOwnshipFresh, receiverAttitudeFresh, receiverHealth?.status, receiverOwnshipFresh, simulationEnabled]
   );
   const receiverStatusSummary = useMemo(() => {
-    const status = receiverHealth?.status || 'idle';
-    if (status === 'healthy') {
+    const ownshipFresh = Boolean(receiverHealth?.ownshipFresh || receiverOwnshipFresh);
+    const trafficFresh = Boolean(receiverHealth?.trafficFresh);
+    if (ownshipFresh && trafficFresh) {
       return {
-        code: 'HEALTHY',
-        detail: 'Heartbeat and ownship are current.',
+        code: 'CONNECTED',
+        label: 'Connected',
+        detail: 'Ownship and live traffic data are flowing.',
+        tone: 'active',
+        actionLabel: 'ADS-B',
       };
     }
-    if (status === 'traffic-only') {
+    if (trafficFresh) {
       return {
         code: 'TRFC',
+        label: 'Traffic-Only',
         detail: 'Traffic is live, but ownship is not current.',
+        tone: 'caution',
+        actionLabel: 'ADS-B',
       };
     }
-    if (status === 'stale') {
+    if (receiverHealth?.status === 'stale') {
       return {
-        code: 'STALE',
-        detail: 'Receiver frames have gone stale.',
+        code: 'NO-CONN',
+        label: 'No Connection',
+        detail: 'ADS-B receiver data has gone stale.',
+        tone: 'warning',
+        actionLabel: trafficEnabled ? 'ADS-B' : 'Connect ADS-B',
       };
     }
     return {
-      code: 'IDLE',
-      detail: trafficEnabled ? 'Waiting for first receiver frames.' : 'Receiver listener is off.',
+      code: 'NO-CONN',
+      label: 'No Connection',
+      detail: trafficEnabled ? 'Waiting for live ADS-B data.' : 'ADS-B listener is off.',
+      tone: 'warning',
+      actionLabel: trafficEnabled ? 'ADS-B' : 'Connect ADS-B',
     };
-  }, [receiverHealth?.status, trafficEnabled]);
+  }, [receiverHealth?.ownshipFresh, receiverHealth?.status, receiverHealth?.trafficFresh, receiverOwnshipFresh, trafficEnabled]);
+  const flightDeckTrustSummary = useMemo<FlightDeckTrustSummary>(() => {
+    const degradedModes: Array<{ code: string; label: string; detail: string; tone: 'accent' | 'advisory' | 'caution' | 'warning' | 'limited' }> = [];
+    if (simulationEnabled) {
+      degradedModes.push({
+        code: 'SIM',
+        label: 'Sim mode active',
+        detail: 'Simulation playback is driving ownship and attitude.',
+        tone: 'accent',
+      });
+    }
+    if (receiverHealth?.status === 'stale') {
+      degradedModes.push({
+        code: 'RXR',
+        label: 'Receiver stale',
+        detail: 'Receiver frames are stale and no longer trusted as current.',
+        tone: 'warning',
+      });
+    } else if (receiverHealth?.status === 'traffic-only') {
+      degradedModes.push({
+        code: 'TRFC',
+        label: 'Traffic-only receiver',
+        detail: 'Traffic is arriving, but the receiver ownship stream is not current.',
+        tone: 'caution',
+      });
+    }
+    if (!receiverAttitudeFresh && (receiverOwnshipFresh || receiverHealth?.ownshipFresh)) {
+      degradedModes.push({
+        code: 'AHRS',
+        label: 'No fresh attitude',
+        detail: 'AHRS attitude is not current, so vision remains guidance-backed instead of full attitude-backed.',
+        tone: 'caution',
+      });
+    }
+    if (sourceArbitrationSummary?.tier === 'gps-only') {
+      degradedModes.push({
+        code: 'GPS',
+        label: 'GPS-only ownship',
+        detail: 'Device GPS is carrying ownship and route follow without receiver ownship.',
+        tone: 'limited',
+      });
+    }
+    if (plannerSectionalOverlayDegraded) {
+      degradedModes.push({
+        code: 'MAP',
+        label: 'Map fallback active',
+        detail: 'Sectional chart is layered over the standard basemap because the Android map provider key is not confirmed.',
+        tone: 'advisory',
+      });
+    }
+
+    const highestTone: 'default' | 'accent' | 'advisory' | 'caution' | 'warning' | 'limited' =
+      degradedModes.some((mode) => mode.tone === 'warning')
+        ? 'warning'
+        : degradedModes.some((mode) => mode.tone === 'caution')
+          ? 'caution'
+          : degradedModes.some((mode) => mode.tone === 'limited')
+            ? 'limited'
+            : degradedModes.some((mode) => mode.tone === 'advisory')
+              ? 'advisory'
+              : simulationEnabled
+                ? 'accent'
+                : 'default';
+
+    const label =
+      highestTone === 'warning'
+        ? 'Degraded guidance'
+        : highestTone === 'caution'
+          ? 'Limited confidence'
+          : highestTone === 'limited'
+            ? 'GPS-backed'
+            : highestTone === 'advisory'
+              ? 'Provider fallback'
+              : simulationEnabled
+                ? 'Simulation trusted'
+                : 'Primary source valid';
+
+    const detail =
+      degradedModes.length > 0
+        ? degradedModes[0].detail
+        : sourceArbitrationSummary?.detail || ownshipSourceSummary.detail || 'Receiver, GPS, and map source checks are nominal.';
+
+    return {
+      label,
+      detail,
+      tone: highestTone,
+      sourceLabel: ownshipSourceSummary.label || sourceArbitrationSummary?.label || 'Awaiting source',
+      freshnessLabel: ownshipSourceSummary.freshness || 'Awaiting source',
+      degradedModes,
+    };
+  }, [
+    ownshipSourceSummary.detail,
+    ownshipSourceSummary.freshness,
+    ownshipSourceSummary.label,
+    plannerSectionalOverlayDegraded,
+    receiverAttitudeFresh,
+    receiverHealth?.ownshipFresh,
+    receiverHealth?.status,
+    receiverOwnshipFresh,
+    simulationEnabled,
+    sourceArbitrationSummary?.detail,
+    sourceArbitrationSummary?.label,
+    sourceArbitrationSummary?.tier,
+  ]);
   const activeVerticalSpeedFpm = simulationEnabled ? simulatedVerticalSpeedFpm : verticalSpeedFpm;
   const activeTrafficTargets = simulationEnabled ? simulatedTrafficTargets : trafficTargets;
   const activeAttitude = simulationEnabled && simulatedGpsData
@@ -2104,8 +2230,14 @@ export default function FlightPlannerScreen() {
   );
   const visibleTrafficTargets = useMemo(() => {
     if (trafficFilter === 'all') return rankedTrafficTargets;
-    if (trafficFilter === 'conflict') {
-      return rankedTrafficTargets.filter((target) => target.threatLevel !== 'monitor');
+    if (trafficFilter === 'monitor') {
+      return rankedTrafficTargets.filter((target) => target.threatLevel === 'monitor');
+    }
+    if (trafficFilter === 'advisory') {
+      return rankedTrafficTargets.filter((target) => target.threatLevel === 'advisory');
+    }
+    if (trafficFilter === 'immediate') {
+      return rankedTrafficTargets.filter((target) => target.threatLevel === 'immediate');
     }
     if (trafficFilter === 'above') {
       return rankedTrafficTargets.filter((target) => (target.altitudeDeltaFt ?? 0) > 0);
@@ -2119,6 +2251,10 @@ export default function FlightPlannerScreen() {
   const selectedDiversion = useMemo(
     () => diversionCandidates.find((airport) => airport.icao === selectedDiversionIcao) || null,
     [diversionCandidates, selectedDiversionIcao]
+  );
+  const primaryDiversionOption = useMemo(
+    () => selectedDiversion || diversionCandidates[0] || null,
+    [diversionCandidates, selectedDiversion]
   );
   const selectedDiversionBestComm = useMemo(
     () => pickBestDiversionFrequency(selectedDiversion),
@@ -2349,6 +2485,13 @@ export default function FlightPlannerScreen() {
             ? `${target.altitudeDeltaFt >= 0 ? '+' : ''}${Math.round(target.altitudeDeltaFt)}`
             : '--',
         closureText: trend?.closureText || 'Monitor',
+        clockLabel: trend?.clockLabel || relativeClockPosition(normalizeHeadingDelta(bearingDeg - (activeOwnship.heading ?? 0))),
+        threatLabel:
+          target.threatLevel === 'immediate'
+            ? 'Immediate'
+            : target.threatLevel === 'advisory'
+              ? 'Advisory'
+              : 'Monitor',
         vector: [
           { latitude: target.lat, longitude: target.lon },
           { latitude: vectorEnd.lat, longitude: vectorEnd.lon },
@@ -3654,6 +3797,54 @@ export default function FlightPlannerScreen() {
     () => (selectedTrafficTarget ? trafficTrendMap[selectedTrafficTarget.id] || null : null),
     [selectedTrafficTarget, trafficTrendMap]
   );
+  const flightDeckTrafficSummary = useMemo<FlightDeckTrafficSummary>(() => {
+    const filterLabel =
+      trafficFilter === 'immediate'
+        ? 'Immediate'
+        : trafficFilter === 'advisory'
+          ? 'Advisory'
+          : trafficFilter === 'monitor'
+            ? 'Monitor'
+            : trafficFilter === 'above'
+              ? 'Above'
+              : trafficFilter === 'below'
+                ? 'Below'
+                : 'All';
+    if (!topTrafficTarget) {
+      return {
+        label: trafficEnabled ? 'Traffic monitored' : 'Traffic off',
+        detail: trafficEnabled
+          ? `No ${filterLabel.toLowerCase()} traffic target is currently driving the deck.`
+          : 'Enable ADS-B traffic to surface tactical targets.',
+        filterLabel,
+        targetLabel: null,
+        tone: 'default' as const,
+        nearbyCount: visibleTrafficTargets.length,
+        immediateCount: immediateTrafficCount,
+      };
+    }
+    const targetLabel = selectedTrafficTrend?.clockLabel || relativeClockPosition(0);
+    const tone: 'default' | 'accent' | 'advisory' | 'caution' | 'warning' | 'limited' =
+      topTrafficTarget.threatLevel === 'immediate'
+        ? 'warning'
+        : topTrafficTarget.threatLevel === 'advisory'
+          ? 'caution'
+          : 'advisory';
+    return {
+      label:
+        topTrafficTarget.threatLevel === 'immediate'
+          ? 'Immediate traffic'
+          : topTrafficTarget.threatLevel === 'advisory'
+            ? 'Traffic advisory'
+            : 'Traffic monitor',
+      detail: `${topTrafficTarget.callsign || 'Traffic'} ${targetLabel} ${selectedTrafficTrend?.closureText || 'Monitor'}${typeof topTrafficTarget.distanceNm === 'number' ? ` ${topTrafficTarget.distanceNm.toFixed(1)} NM` : ''}${typeof topTrafficTarget.altitudeDeltaFt === 'number' ? ` ${topTrafficTarget.altitudeDeltaFt >= 0 ? '+' : ''}${Math.round(topTrafficTarget.altitudeDeltaFt)} ft` : ''}.`,
+      filterLabel,
+      targetLabel,
+      tone,
+      nearbyCount: visibleTrafficTargets.length,
+      immediateCount: immediateTrafficCount,
+    };
+  }, [immediateTrafficCount, selectedTrafficTrend?.clockLabel, selectedTrafficTrend?.closureText, topTrafficTarget, trafficEnabled, trafficFilter, visibleTrafficTargets.length]);
   const selectedDiversionRunwaySummary = useMemo(() => {
     if (selectedDiversionBriefingLoading) return 'Loading runway briefing';
     if (selectedDiversionBriefing?.advisory) {
@@ -3688,6 +3879,7 @@ export default function FlightPlannerScreen() {
         { latitude: target.lat, longitude: target.lon },
       );
       const bearingDelta = normalizeHeadingDelta(bearingToTraffic - (activeOwnship.heading ?? 0));
+      const clockLabel = relativeClockPosition(bearingDelta);
       const previous = trafficSnapshotRef.current[target.id];
       let distanceRateNmPerMin: number | null = null;
       let bearingRateDegPerMin: number | null = null;
@@ -3710,6 +3902,7 @@ export default function FlightPlannerScreen() {
         distanceRateNmPerMin,
         bearingRateDegPerMin,
         closureText,
+        clockLabel,
       };
       nextSnapshots[target.id] = {
         distanceNm: target.distanceNm,
@@ -4640,6 +4833,75 @@ export default function FlightPlannerScreen() {
     openFlightDeckPanel('traffic');
     commitFlightDeckViewMode('map', { preserveChrome: true, userInitiated: false });
     focusMapOnPoint(target.lat, target.lon, { latitudeDelta: 0.32, longitudeDelta: 0.32 });
+  };
+  const stopTrafficReceiver = () => {
+    trafficListenerRef.stop?.();
+    trafficListenerRef.stop = undefined;
+    setTrafficEnabled(false);
+    setTrafficStatus('idle');
+    setTrafficTargets([]);
+    setReceiverOwnship(null);
+    setReceiverAttitude(null);
+    setReceiverHealth(null);
+  };
+  const startTrafficReceiver = () => {
+    setTrafficEnabled(true);
+    setTrafficError(null);
+    setTrafficStatus('listening');
+    const port = Math.max(1, Math.min(65535, Number(trafficPort) || 4000));
+    const listener = createGdl90Listener(
+      port,
+      (target) => {
+        setTrafficTargets((prev) => {
+          const next = prev.filter((t) => Date.now() - t.updatedAt < 2 * 60 * 1000);
+          const existingIndex = next.findIndex((t) => t.id === target.id);
+          if (existingIndex >= 0) {
+            next[existingIndex] = target;
+            return [...next];
+          }
+          return [...next, target];
+        });
+      },
+      (ownship: OwnshipReport) => {
+        setReceiverOwnship({
+          lat: ownship.lat,
+          lon: ownship.lon,
+          altitudeFt: ownship.altitudeFt,
+          speedKts: ownship.speedKts,
+          heading: ownship.headingDeg,
+          updatedAt: ownship.updatedAt,
+          source: 'receiver',
+        });
+      },
+      (attitude: AttitudeReport) => {
+        setReceiverAttitude({
+          pitchDeg: attitude.pitchDeg,
+          rollDeg: attitude.rollDeg,
+          headingDeg: attitude.headingDeg,
+          headingReference: attitude.headingReference,
+          indicatedAirspeedKts: attitude.indicatedAirspeedKts,
+          trueAirspeedKts: attitude.trueAirspeedKts,
+          updatedAt: attitude.updatedAt,
+          source: 'receiver',
+        });
+      },
+      (err) => {
+        setTrafficStatus('error');
+        setTrafficError(String(err));
+      },
+      (health) => {
+        setReceiverHealth(health);
+      }
+    );
+    trafficListenerRef.stop = listener.stop;
+    listener.start();
+  };
+  const toggleTrafficReceiver = () => {
+    if (trafficEnabled) {
+      stopTrafficReceiver();
+      return;
+    }
+    startTrafficReceiver();
   };
   const focusDiversionAirport = (airport: NearbyDiversionAirport) => {
     setSelectedDiversionIcao(airport.icao);
@@ -6301,6 +6563,59 @@ export default function FlightPlannerScreen() {
     routeProgress,
     departureSurfaceGeometryLoading,
   ]);
+  const flightDeckSurfaceOpsSummary = useMemo<FlightDeckSurfaceOpsSummary>(() => {
+    if (!flightDeckSurfacePreview) return null;
+    const routeDistances =
+      flightDeckSurfacePreview.geoUpcomingRoute?.length
+        ? flightDeckSurfacePreview.geoUpcomingRoute.map((point) =>
+            getDistanceNmFromLatLon(
+              { lat: flightDeckSurfacePreview.geoOwnship.lat, lon: flightDeckSurfacePreview.geoOwnship.lon },
+              { lat: point.lat, lon: point.lon },
+            ),
+          )
+        : [];
+    const nearestRouteNm =
+      routeDistances.length > 0 ? routeDistances.reduce((best, value) => Math.min(best, value), Number.POSITIVE_INFINITY) : null;
+    const offRouteSurface = typeof nearestRouteNm === 'number' && Number.isFinite(nearestRouteNm) && nearestRouteNm > 0.06;
+
+    if (flightDeckSurfacePreview.holdShortActive) {
+      return {
+        title: 'Hold short active',
+        detail: `Approaching runway ${flightDeckSurfacePreview.runwayId}. ${flightDeckSurfacePreview.clearanceLabel}`,
+        recoveryLabel: 'Hold position until tower release.',
+        tone: 'warning' as const,
+      };
+    }
+    if (flightDeckSurfacePreview.runwayOccupied) {
+      return {
+        title: 'Runway occupancy',
+        detail: flightDeckSurfacePreview.clearanceLabel,
+        recoveryLabel: flightDeckSurfacePreview.mode === 'arrival' ? 'Exit the runway, then rejoin taxi guidance.' : 'Confirm takeoff clearance before continuing.',
+        tone: 'caution' as const,
+      };
+    }
+    if (offRouteSurface) {
+      return {
+        title: 'Taxi route divergence',
+        detail: `Ownship is ${nearestRouteNm?.toFixed(2)} NM from the staged taxi path near ${flightDeckSurfacePreview.activeTaxiway || 'the active taxiway'}.`,
+        recoveryLabel: flightDeckSurfacePreview.upcomingTaxiways?.[0]
+          ? `Recover toward ${flightDeckSurfacePreview.upcomingTaxiways[0]} and resume progressive taxi guidance.`
+          : 'Recover to the highlighted taxi path and verify the next turn.',
+        tone: 'caution' as const,
+      };
+    }
+    return {
+      title: 'Surface guidance',
+      detail: flightDeckSurfacePreview.nextActionCall,
+      recoveryLabel:
+        typeof flightDeckSurfacePreview.nextTurnDistanceNm === 'number'
+          ? `Next turn in ${flightDeckSurfacePreview.nextTurnDistanceNm.toFixed(2)} NM.`
+          : flightDeckSurfacePreview.upcomingTaxiways?.length
+            ? `Upcoming ${flightDeckSurfacePreview.upcomingTaxiways.join(' -> ')}.`
+            : flightDeckSurfacePreview.support,
+      tone: 'accent' as const,
+    };
+  }, [flightDeckSurfacePreview]);
   const flightDeckRunwayOpsSummary = useMemo<FlightDeckRunwayOpsSummary | null>(() => {
     const departureSurface = flightPhase === 'departure';
     const airport = departureSurface ? activeRoutePoints[0] : activeRoutePoints[activeRoutePoints.length - 1];
@@ -6335,6 +6650,170 @@ export default function FlightPlannerScreen() {
       sourceLabel: briefing?.advisory || briefing?.runwayInUse ? 'briefing live' : 'runway staged',
     };
   }, [activeRoutePoints, departureBriefing, departureFrequencies, departureRunway, destinationBriefing, destinationFrequencies, destinationRunway, flightDeckPhaseSummary.stage, flightPhase]);
+  const flightDeckPhaseAssistantSummary = useMemo<FlightDeckPhaseAssistantSummary>(() => {
+    if (flightDeckPhaseSummary.stage === 'taxi-out' || flightDeckPhaseSummary.stage === 'taxi-in') {
+      return {
+        label: flightDeckPhaseSummary.label || 'Surface',
+        detail: flightDeckSurfaceOpsSummary?.title || flightDeckSurfacePreview?.progressCall || 'Surface guidance active.',
+        support: flightDeckSurfacePreview?.clearanceLabel || flightDeckSurfacePreview?.support || flightDeckPhaseSummary.detail || 'Taxi guidance is active.',
+        actionLabel: flightDeckSurfaceOpsSummary?.recoveryLabel || flightDeckSurfacePreview?.nextActionCall || 'Follow the active taxi path.',
+        tone: (flightDeckSurfaceOpsSummary?.tone || 'accent') as 'default' | 'accent' | 'advisory' | 'caution' | 'warning' | 'limited',
+      };
+    }
+    if (routeExecutionSummary?.mode === 'direct-to') {
+      return {
+        label: 'Direct-to active',
+        detail: routeExecutionSummary.nextActionCall || 'Direct-to override is driving the active leg.',
+        support: routeExecutionSummary.sequencingDetail || 'Resume the planned route when ready.',
+        actionLabel: routeExecutionSummary.nextLegLabel ? `Rejoin after ${routeExecutionSummary.nextLegLabel}` : 'Resume planned route when workload allows.',
+        tone: 'accent' as const,
+      };
+    }
+    if (routeExecutionSummary?.sequencingSuspended) {
+      return {
+        label: 'Sequencing hold',
+        detail: routeExecutionSummary.sequencingDetail || 'Automatic sequencing is suspended.',
+        support: routeExecutionSummary.sequenceGateCall || 'Managed hold is active.',
+        actionLabel: routeExecutionSummary.manualAdvanceRequired ? 'Advance the next leg when cleared.' : 'Resume sequencing when the rejoin is established.',
+        tone: 'caution' as const,
+      };
+    }
+    if (flightDeckVerticalAlertSummary.severity && flightDeckVerticalAlertSummary.title) {
+      return {
+        label: flightDeckVerticalAlertSummary.title,
+        detail: flightDeckVerticalAlertSummary.detail || flightDeckVerticalPathSummary.advisoryCall,
+        support: flightDeckVerticalPathSummary.support,
+        actionLabel: flightDeckVerticalPathSummary.recommendation,
+        tone:
+          flightDeckVerticalAlertSummary.severity === 'warning'
+            ? 'warning'
+            : flightDeckVerticalAlertSummary.severity === 'caution'
+              ? 'caution'
+              : 'advisory',
+      };
+    }
+    return {
+      label: flightDeckPhaseSummary.label || 'Enroute',
+      detail: mapTacticalSummary.heading,
+      support: routeExecutionSummary?.sequencingDetail || flightDeckPhaseSummary.detail || mapTacticalSummary.support || 'Awaiting active route guidance.',
+      actionLabel: mapTacticalSummary.recommendation,
+      tone: 'default' as const,
+    };
+  }, [
+    flightDeckPhaseSummary.detail,
+    flightDeckPhaseSummary.label,
+    flightDeckPhaseSummary.stage,
+    flightDeckSurfaceOpsSummary?.recoveryLabel,
+    flightDeckSurfaceOpsSummary?.title,
+    flightDeckSurfaceOpsSummary?.tone,
+    flightDeckSurfacePreview?.clearanceLabel,
+    flightDeckSurfacePreview?.nextActionCall,
+    flightDeckSurfacePreview?.progressCall,
+    flightDeckSurfacePreview?.support,
+    flightDeckVerticalAlertSummary.detail,
+    flightDeckVerticalAlertSummary.severity,
+    flightDeckVerticalAlertSummary.title,
+    flightDeckVerticalPathSummary.advisoryCall,
+    flightDeckVerticalPathSummary.recommendation,
+    flightDeckVerticalPathSummary.support,
+    mapTacticalSummary.heading,
+    mapTacticalSummary.recommendation,
+    mapTacticalSummary.support,
+    routeExecutionSummary?.manualAdvanceRequired,
+    routeExecutionSummary?.mode,
+    routeExecutionSummary?.nextActionCall,
+    routeExecutionSummary?.nextLegLabel,
+    routeExecutionSummary?.sequenceGateCall,
+    routeExecutionSummary?.sequencingDetail,
+    routeExecutionSummary?.sequencingSuspended,
+  ]);
+  const flightDeckDiversionDecisionSummary = useMemo<FlightDeckDiversionDecisionSummary>(() => {
+    const airport = selectedDiversion || primaryDiversionOption;
+    if (!airport) return null;
+    const bestComm =
+      selectedDiversion?.icao === airport.icao ? selectedDiversionBestComm : pickBestDiversionFrequency(airport);
+    const cautionWeather = ['IFR', 'LIFR'].includes((airport.flightCategory || '').toUpperCase());
+    const commLabel = bestComm?.type || bestComm?.description || null;
+    return {
+      title: `${airport.icao} diversion`,
+      detail: `${airport.distanceNm?.toFixed?.(1) || '--'} NM${airport.bearingDeg != null ? ` • ${Math.round(airport.bearingDeg)}°` : ''}${selectedDiversionRunwaySummary ? ` • ${selectedDiversionRunwaySummary}` : airport.maxRunwayFt ? ` • ${airport.maxRunwayFt.toLocaleString()} ft` : ''}${bestComm?.frequencyMhz ? ` • ${bestComm.frequencyMhz.toFixed(3)}` : ''}`,
+      actionLabel: commLabel ? `Best comm ${commLabel}` : 'Direct-to ready',
+      tone: cautionWeather ? 'caution' as const : 'accent' as const,
+    };
+  }, [primaryDiversionOption, selectedDiversion, selectedDiversionBestComm, selectedDiversionRunwaySummary]);
+  const flightDeckTacticalSummary = useMemo<FlightDeckTacticalSummary>(() => {
+    if (flightDeckTrustSummary.tone === 'warning' || flightDeckTrustSummary.tone === 'caution') {
+      return {
+        title: flightDeckTrustSummary.label,
+        detail: flightDeckTrustSummary.detail,
+        support: flightDeckTrustSummary.degradedModes.map((mode) => mode.label).join(' • '),
+        tone: flightDeckTrustSummary.tone,
+      };
+    }
+    if (topTrafficTarget?.threatLevel === 'immediate' && flightDeckTrafficSummary) {
+      return {
+        title: flightDeckTrafficSummary.label,
+        detail: flightDeckTrafficSummary.detail,
+        support: `${flightDeckTrafficSummary.immediateCount} immediate • ${flightDeckTrafficSummary.nearbyCount} displayed`,
+        tone: 'warning' as const,
+      };
+    }
+    if (terrainRisk === 'warning' || obstacleRisk === 'warning') {
+      return {
+        title: 'Terrain escape',
+        detail: terrainEscapeGuidance || 'Immediate terrain or obstacle clearance action is required.',
+        support: flightDeckVerticalPathSummary.advisoryCall,
+        tone: 'warning' as const,
+      };
+    }
+    if (terrainRisk === 'caution' || obstacleRisk === 'caution') {
+      return {
+        title: 'Terrain monitor',
+        detail: terrainEscapeGuidance || 'Terrain or obstacle margin is tightening ahead.',
+        support: flightDeckVerticalPathSummary.support,
+        tone: 'caution' as const,
+      };
+    }
+    if (flightDeckVerticalAlertSummary.severity && flightDeckVerticalAlertSummary.title) {
+      return {
+        title: flightDeckVerticalAlertSummary.title,
+        detail: flightDeckVerticalAlertSummary.detail || flightDeckVerticalPathSummary.recommendation,
+        support: flightDeckVerticalAlertSummary.todLabel,
+        tone:
+          flightDeckVerticalAlertSummary.severity === 'warning'
+            ? 'warning'
+            : flightDeckVerticalAlertSummary.severity === 'caution'
+              ? 'caution'
+              : 'advisory',
+      };
+    }
+    return {
+      title: 'RSF Assist',
+      detail: flightDeckPhaseAssistantSummary.actionLabel,
+      support: flightDeckPhaseAssistantSummary.support,
+      tone: flightDeckPhaseAssistantSummary.tone === 'default' ? 'accent' : flightDeckPhaseAssistantSummary.tone,
+    };
+  }, [
+    flightDeckPhaseAssistantSummary.actionLabel,
+    flightDeckPhaseAssistantSummary.support,
+    flightDeckPhaseAssistantSummary.tone,
+    flightDeckTrafficSummary,
+    flightDeckTrustSummary.degradedModes,
+    flightDeckTrustSummary.detail,
+    flightDeckTrustSummary.label,
+    flightDeckTrustSummary.tone,
+    flightDeckVerticalAlertSummary.detail,
+    flightDeckVerticalAlertSummary.severity,
+    flightDeckVerticalAlertSummary.title,
+    flightDeckVerticalAlertSummary.todLabel,
+    flightDeckVerticalPathSummary.advisoryCall,
+    flightDeckVerticalPathSummary.recommendation,
+    flightDeckVerticalPathSummary.support,
+    obstacleRisk,
+    terrainEscapeGuidance,
+    terrainRisk,
+    topTrafficTarget?.threatLevel,
+  ]);
 
   useEffect(() => {
     if (!activeRoutePoints.length && !hasPrimaryIcao) return;
@@ -6453,6 +6932,7 @@ export default function FlightPlannerScreen() {
     activeOwnship,
     activeAttitude,
     ownshipSourceSummary,
+    flightDeckTrustSummary,
     sourceArbitrationSummary,
     headingSourceSummary,
     attitudeSourceSummary,
@@ -6489,8 +6969,10 @@ export default function FlightPlannerScreen() {
     departureFrequenciesLoading,
     destinationFrequenciesLoading,
     flightDeckSurfacePreview,
+    flightDeckSurfaceOpsSummary,
     flightDeckRunwayOpsSummary,
     selectedDiversionBestComm,
+    flightDeckDiversionDecisionSummary,
     selectedTrafficTrend,
     mapTacticalSummary,
     mapOverlayProfile,
@@ -6521,6 +7003,7 @@ export default function FlightPlannerScreen() {
     summaryCounts,
     topTrafficTarget,
     trafficPanelTargets,
+    flightDeckTrafficSummary,
     diversionPanelAirports,
     terrainProfile,
     obstacleScan,
@@ -6530,6 +7013,8 @@ export default function FlightPlannerScreen() {
     flightDeckBankTicks,
     mapOrientationMode,
     trafficFilter,
+    flightDeckPhaseAssistantSummary,
+    flightDeckTacticalSummary,
     formatAltitudeDelta,
   };
 
@@ -6537,6 +7022,7 @@ export default function FlightPlannerScreen() {
     pulseFlightDeckChrome,
     toggleFlightDeckView,
     setFlightDeckViewMode,
+    toggleTrafficReceiver,
     toggleFlightDeckHud,
     toggleFlightDeckFocusMode,
     dismissPhoneRecommendation,
@@ -6889,68 +7375,7 @@ export default function FlightPlannerScreen() {
           </View>
           <TouchableOpacity
             style={[styles.mapToggleButton, trafficEnabled && styles.mapToggleActive]}
-            onPress={() => {
-              const enabled = !trafficEnabled;
-              setTrafficEnabled(enabled);
-              if (!enabled) {
-                trafficListenerRef.stop?.();
-                setTrafficStatus('idle');
-                setTrafficTargets([]);
-                setReceiverOwnship(null);
-                setReceiverAttitude(null);
-                setReceiverHealth(null);
-                return;
-              }
-              setTrafficError(null);
-              setTrafficStatus('listening');
-              const port = Math.max(1, Math.min(65535, Number(trafficPort) || 4000));
-              const listener = createGdl90Listener(
-                port,
-                (target) => {
-                  setTrafficTargets((prev) => {
-                    const next = prev.filter((t) => Date.now() - t.updatedAt < 2 * 60 * 1000);
-                    const existingIndex = next.findIndex((t) => t.id === target.id);
-                    if (existingIndex >= 0) {
-                      next[existingIndex] = target;
-                      return [...next];
-                    }
-                    return [...next, target];
-                  });
-                },
-                (ownship: OwnshipReport) => {
-                  setReceiverOwnship({
-                    lat: ownship.lat,
-                    lon: ownship.lon,
-                    altitudeFt: ownship.altitudeFt,
-                    speedKts: ownship.speedKts,
-                    heading: ownship.headingDeg,
-                    updatedAt: ownship.updatedAt,
-                    source: 'receiver',
-                  });
-                },
-                (attitude: AttitudeReport) => {
-                  setReceiverAttitude({
-                    pitchDeg: attitude.pitchDeg,
-                    rollDeg: attitude.rollDeg,
-                    headingDeg: attitude.headingDeg,
-                    headingReference: attitude.headingReference,
-                    indicatedAirspeedKts: attitude.indicatedAirspeedKts,
-                    trueAirspeedKts: attitude.trueAirspeedKts,
-                    updatedAt: attitude.updatedAt,
-                    source: 'receiver',
-                  });
-                },
-                (err) => {
-                  setTrafficStatus('error');
-                  setTrafficError(String(err));
-                },
-                (health) => {
-                  setReceiverHealth(health);
-                }
-              );
-              trafficListenerRef.stop = listener.stop;
-              listener.start();
-            }}
+            onPress={toggleTrafficReceiver}
           >
             <Text style={styles.mapToggleText}>{trafficEnabled ? 'On' : 'Off'}</Text>
           </TouchableOpacity>
@@ -6968,14 +7393,16 @@ export default function FlightPlannerScreen() {
         <View style={styles.altitudeRow}>
           {[
             ['all', 'All'],
-            ['conflict', 'Conflict'],
+            ['monitor', 'Monitor'],
+            ['advisory', 'Advisory'],
+            ['immediate', 'Immediate'],
             ['above', 'Above'],
             ['below', 'Below'],
           ].map(([value, label]) => (
             <TouchableOpacity
               key={value}
               style={[styles.altitudeButton, trafficFilter === value && styles.altitudeButtonActive]}
-              onPress={() => setTrafficFilter(value as 'all' | 'conflict' | 'above' | 'below')}
+              onPress={() => setTrafficFilter(value as 'all' | 'monitor' | 'advisory' | 'immediate' | 'above' | 'below')}
             >
               <Text style={[styles.altitudeText, trafficFilter === value && styles.altitudeTextActive]}>{label}</Text>
             </TouchableOpacity>
@@ -8164,6 +8591,75 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...shadow.flightGlass,
+  },
+  flightDeckMapControlButtonConnected: {
+    borderColor: 'rgba(43,171,111,0.92)',
+    backgroundColor: 'rgba(9,36,24,0.96)',
+  },
+  flightDeckMapControlButtonTrafficOnly: {
+    borderColor: 'rgba(210,164,56,0.92)',
+    backgroundColor: 'rgba(43,32,8,0.96)',
+  },
+  flightDeckMapControlButtonDisconnected: {
+    borderColor: 'rgba(196,82,82,0.92)',
+    backgroundColor: 'rgba(42,14,18,0.96)',
+  },
+  flightDeckAdsbIndicator: {
+    minHeight: 40,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    ...shadow.flightGlass,
+  },
+  flightDeckAdsbIndicatorCompact: {
+    minHeight: 34,
+    paddingVertical: 6,
+  },
+  flightDeckAdsbIndicatorConnected: {
+    backgroundColor: 'rgba(9,36,24,0.92)',
+    borderColor: 'rgba(43,171,111,0.72)',
+  },
+  flightDeckAdsbIndicatorTrafficOnly: {
+    backgroundColor: 'rgba(43,32,8,0.92)',
+    borderColor: 'rgba(210,164,56,0.72)',
+  },
+  flightDeckAdsbIndicatorDisconnected: {
+    backgroundColor: 'rgba(42,14,18,0.92)',
+    borderColor: 'rgba(196,82,82,0.72)',
+  },
+  flightDeckAdsbIndicatorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  flightDeckAdsbIndicatorDotConnected: {
+    backgroundColor: '#2bab6f',
+  },
+  flightDeckAdsbIndicatorDotTrafficOnly: {
+    backgroundColor: '#d2a438',
+  },
+  flightDeckAdsbIndicatorDotDisconnected: {
+    backgroundColor: '#d35a5a',
+  },
+  flightDeckAdsbIndicatorTitle: {
+    color: colors.flightText,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  flightDeckAdsbIndicatorText: {
+    color: colors.flightTextMuted,
+    fontSize: 10,
+    marginTop: 1,
+  },
+  flightDeckAdsbIndicatorAction: {
+    color: colors.flightText,
+    fontSize: 10,
+    fontWeight: '700',
   },
   flightDeckWaypointMarker: {
     minWidth: 54,

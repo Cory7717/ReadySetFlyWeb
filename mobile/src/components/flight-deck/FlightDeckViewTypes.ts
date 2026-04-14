@@ -39,6 +39,63 @@ export type SourceSummary = {
   pilotGrade?: string | boolean | null;
 };
 
+export type FlightDeckTone = 'default' | 'accent' | 'advisory' | 'caution' | 'warning' | 'limited';
+
+export type FlightDeckStatusChip = {
+  code?: string | null;
+  label: string;
+  detail?: string | null;
+  tone?: FlightDeckTone | null;
+};
+
+export type FlightDeckTrustSummary = {
+  label: string;
+  detail: string;
+  tone: FlightDeckTone;
+  sourceLabel: string;
+  freshnessLabel: string;
+  degradedModes: FlightDeckStatusChip[];
+};
+
+export type FlightDeckTrafficSummary = {
+  label: string;
+  detail: string;
+  filterLabel: string;
+  targetLabel?: string | null;
+  tone: FlightDeckTone;
+  nearbyCount: number;
+  immediateCount: number;
+};
+
+export type FlightDeckPhaseAssistantSummary = {
+  label: string;
+  detail: string;
+  support: string;
+  actionLabel: string;
+  tone: FlightDeckTone;
+};
+
+export type FlightDeckTacticalSummary = {
+  title: string;
+  detail: string;
+  support?: string | null;
+  tone: FlightDeckTone;
+};
+
+export type FlightDeckDiversionDecisionSummary = {
+  title: string;
+  detail: string;
+  actionLabel: string;
+  tone: FlightDeckTone;
+} | null;
+
+export type FlightDeckSurfaceOpsSummary = {
+  title: string;
+  detail: string;
+  recoveryLabel: string;
+  tone: FlightDeckTone;
+} | null;
+
 // ---------------------------------------------------------------------------
 // Map / route display
 // ---------------------------------------------------------------------------
@@ -56,6 +113,8 @@ export type TrafficPresentation = {
   altitudeFt?: number | null;
   altitudeLabel?: string | null;
   closureText?: string | null;
+  clockLabel?: string | null;
+  threatLabel?: string | null;
   callsign?: string | null;
   trackDeg?: number | null;
   groundSpeedKts?: number | null;
@@ -186,8 +245,11 @@ export type BankTick = {
 export type SurfacePoint = { x: number; y: number };
 
 export type SurfacePreview = {
+  airportIcao?: string | null;
   headline: string;
   runwayId: string;
+  runwayHeadingDeg?: number | null;
+  progressPct?: number | null;
   holdShortActive: boolean;
   runwayOccupied: boolean;
   route: SurfacePoint[];
@@ -200,6 +262,18 @@ export type SurfacePreview = {
   runwayMeta: string;
   support: string;
   clearanceLabel: string;
+  geoOwnship?: { lat: number; lon: number; headingDeg?: number | null } | null;
+  geoRoute?: Array<{ lat: number; lon: number; headingDeg?: number | null }> | null;
+  geoCompletedRoute?: Array<{ lat: number; lon: number; headingDeg?: number | null }> | null;
+  geoUpcomingRoute?: Array<{ lat: number; lon: number; headingDeg?: number | null }> | null;
+  geoRunwayCenterline?: Array<{ lat: number; lon: number; headingDeg?: number | null }> | null;
+  geoRunwayBar?: Array<{ lat: number; lon: number; headingDeg?: number | null }> | null;
+  activeTaxiway?: string | null;
+  upcomingTaxiways?: string[] | null;
+  progressCall?: string | null;
+  nextActionCall?: string | null;
+  cameraModeLabel?: string | null;
+  nextTurnDistanceNm?: number | null;
   mode?: string | null;
   surfaceRegion?: Region | null;
   surfaceFeatures?: Array<{
@@ -320,6 +394,7 @@ export interface FlightDeckStateProps {
   flightDeckCommandBankDeg: number;
   flightDeckBankTicks: BankTick[];
   flightDeckSurfacePreview: SurfacePreview;
+  flightDeckSurfaceOpsSummary: FlightDeckSurfaceOpsSummary;
   flightDeckRunwayOpsSummary: any | null;
   flightDeckLayoutProfile: FlightDeckLayoutProfile;
 
@@ -357,6 +432,7 @@ export interface FlightDeckStateProps {
   activeAttitude: AttitudeData | null;
   activeVerticalSpeedFpm: number | null;
   ownshipSourceSummary: SourceSummary | null;
+  flightDeckTrustSummary: FlightDeckTrustSummary | null;
   sourceArbitrationSummary: {
     code: string;
     label: string;
@@ -403,6 +479,7 @@ export interface FlightDeckStateProps {
   selectedDiversion: any | null;
   selectedDiversionRunwaySummary: any | null;
   selectedDiversionBestComm: any | null;
+  flightDeckDiversionDecisionSummary: FlightDeckDiversionDecisionSummary;
   selectedDiversionBriefingLoading: boolean;
   selectedDiversionBriefing: any | null;
   diversionPanelAirports: DiversionCandidate[];
@@ -424,9 +501,14 @@ export interface FlightDeckStateProps {
   selectedTrafficTrend: any | null;
   topTrafficTarget: TrafficTarget | null;
   trafficPanelTargets: TrafficTarget[];
+  flightDeckTrafficSummary: FlightDeckTrafficSummary | null;
   immediateTrafficCount: number;
   trafficEnabled: boolean;
-  trafficFilter: string | null;
+  trafficFilter: 'all' | 'monitor' | 'advisory' | 'immediate' | 'above' | 'below' | null;
+
+  // Integrated assistance
+  flightDeckPhaseAssistantSummary: FlightDeckPhaseAssistantSummary | null;
+  flightDeckTacticalSummary: FlightDeckTacticalSummary | null;
 
   // Simulation
   simulationEnabled: boolean;
@@ -451,6 +533,7 @@ export interface FlightDeckActionsProps {
   pulseFlightDeckChrome: (keepVisible?: boolean) => void;
   toggleFlightDeckView: () => void;
   setFlightDeckViewMode: (mode: FlightDeckDisplayMode) => void;
+  toggleTrafficReceiver: () => void;
   toggleFlightDeckHud: () => void;
   toggleFlightDeckFocusMode: () => void;
   dismissPhoneRecommendation: () => void;
@@ -466,7 +549,7 @@ export interface FlightDeckActionsProps {
   setSimulationConflictEnabled: (enabled: boolean) => void;
   setMapStyle: (style: 'standard' | 'winds' | 'terrain' | 'sectional' | 'radar' | 'clouds') => void;
   setMapOrientationMode: (mode: FlightDeckMapOrientationMode) => void;
-  setTrafficFilter: (filter: 'all' | 'conflict' | 'above' | 'below') => void;
+  setTrafficFilter: (filter: 'all' | 'monitor' | 'advisory' | 'immediate' | 'above' | 'below') => void;
   focusDiversionAirport: (airport: any) => void;
   engageDirectToDiversion: (airport: any) => void;
   engageDirectToRouteWaypoint: (targetIndex: number) => void;

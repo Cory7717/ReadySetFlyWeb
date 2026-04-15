@@ -129,7 +129,8 @@ const teamProfiles = [
     role: "Creator / Writer",
     name: "Cory Armer",
     imagePath: CORY_BIO_IMAGE_PATH,
-    imageClassName: "object-[center_18%] scale-[1.24]",
+    imageClassName: "object-[center_10%] scale-[1.34] sm:scale-[1.4]",
+    imageHoverClassName: "group-hover:scale-[1.38] sm:group-hover:scale-[1.44]",
     teaser:
       "Creator of Noise & Fury and founder of RSF, with the core operating and creative context behind the project.",
     paragraphs: [
@@ -428,31 +429,31 @@ export default function NoiseAndFuryPage() {
             </p>
           </div>
 
-          <div className="mt-8 grid gap-4 lg:grid-cols-3">
+          <div className="mt-8 grid gap-5 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
             {teamProfiles.map((profile) => {
               return (
                 <div
                   key={profile.name}
-                  className="group h-full rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-6 text-left transition hover:border-[#B88A50]/55 hover:bg-[linear-gradient(180deg,rgba(22,17,13,0.98)_0%,rgba(10,10,11,1)_100%)]"
+                  className="group h-full rounded-[26px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-5 text-left transition hover:border-[#B88A50]/55 hover:bg-[linear-gradient(180deg,rgba(22,17,13,0.98)_0%,rgba(10,10,11,1)_100%)] sm:rounded-[30px] sm:p-6"
                 >
                   <div className="overflow-hidden rounded-[22px] border border-white/10 bg-black/20 shadow-[0_22px_40px_rgba(0,0,0,0.24)]">
                     <img
                       src={profile.imagePath}
                       alt={`${profile.name} profile`}
-                      className={`h-64 w-full object-cover transition duration-500 group-hover:scale-[1.02] ${profile.imageClassName ?? "object-center"}`}
+                      className={`h-56 w-full object-cover transition duration-500 sm:h-64 ${profile.imageHoverClassName ?? "group-hover:scale-[1.02]"} ${profile.imageClassName ?? "object-center"}`}
                     />
                   </div>
 
                   <div className="flex items-start justify-between gap-4">
                     <div className="pt-5">
                       <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">{profile.role}</div>
-                      <div className="mt-3 font-display text-3xl font-semibold tracking-[-0.05em] text-white">{profile.name}</div>
+                      <div className="mt-3 font-display text-[2rem] font-semibold tracking-[-0.05em] text-white sm:text-3xl">{profile.name}</div>
                     </div>
                   </div>
 
-                  <div className="mt-4 text-sm leading-7 text-[#D3C6BA]">{profile.teaser}</div>
+                  <div className="mt-4 text-sm leading-6 text-[#D3C6BA] sm:leading-7">{profile.teaser}</div>
 
-                  <div className="mt-5 space-y-4 border-t border-white/10 pt-5 text-sm leading-7 text-[#EFE3D7]">
+                  <div className="mt-5 space-y-4 border-t border-white/10 pt-5 text-sm leading-6 text-[#EFE3D7] sm:leading-7">
                     {profile.paragraphs.map((paragraph) => (
                       <p key={paragraph}>{paragraph}</p>
                     ))}

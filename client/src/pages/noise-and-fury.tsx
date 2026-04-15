@@ -23,7 +23,7 @@ const highlightStats = [
   { value: "8", label: "Prestige episodes", detail: "Season one mapped end-to-end" },
   { value: "7 of 8", label: "Scripts written", detail: "Series bible and scripts already underway" },
   { value: "2", label: "WGA registrations", detail: "Scripts and series bible registered" },
-  { value: "$50K", label: "Packaging target", detail: "Designed to move the project into market" },
+  { value: "Open", label: "Strategic round", detail: "Packaging with pilot-financing flexibility" },
 ];
 
 const episodeRun = [
@@ -129,6 +129,7 @@ const teamProfiles = [
     role: "Creator / Writer",
     name: "Cory Armer",
     imagePath: CORY_BIO_IMAGE_PATH,
+    imageClassName: "object-[center_18%] scale-[1.24]",
     teaser:
       "Creator of Noise & Fury and founder of RSF, with the core operating and creative context behind the project.",
     paragraphs: [
@@ -201,7 +202,7 @@ export default function NoiseAndFuryPage() {
       lastName: "",
       email: "",
       subject: "Noise & Fury investor inquiry",
-      message: "I am interested in discussing the Noise & Fury packaging round, investor materials, and next steps.",
+      message: "I am interested in discussing the Noise & Fury strategic round, investor materials, pilot-financing path, and next steps.",
     },
   });
 
@@ -222,7 +223,7 @@ export default function NoiseAndFuryPage() {
         lastName: "",
         email: "",
         subject: "Noise & Fury investor inquiry",
-        message: "I am interested in discussing the Noise & Fury packaging round, investor materials, and next steps.",
+        message: "I am interested in discussing the Noise & Fury strategic round, investor materials, pilot-financing path, and next steps.",
       });
     },
     onError: (error: Error) => {
@@ -280,8 +281,8 @@ export default function NoiseAndFuryPage() {
                     <div className="mt-2 text-base font-semibold text-white">Cory Armer and Cesar R. Ramirez</div>
                   </div>
                   <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur">
-                    <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">Packaging Round</div>
-                    <div className="mt-2 text-base font-semibold text-white">$50,000 target</div>
+                    <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">Strategic Round</div>
+                    <div className="mt-2 text-base font-semibold text-white">Open for packaging and pilot financing</div>
                   </div>
                 </div>
 
@@ -337,20 +338,23 @@ export default function NoiseAndFuryPage() {
                 audiences and premium-drama buyers.
               </p>
               <p>
-                The package already carries serious development momentum, and the current round is built to
-                support showrunner outreach, executive producer conversations, legal refinement, and buyer-
-                facing materials that help the project move with credibility.
+                The package already carries meaningful momentum, with well-known showrunners and senior producing
+                voices expressing real interest in attaching at the right level. This round is structured to
+                support high-level packaging, legal refinement, premium buyer-facing materials, and to preserve
+                the option to finance a pilot or presentation asset internally if that becomes the strongest path
+                to market. For a project like this, the right attachment matters more than a fast attachment.
               </p>
             </div>
           </div>
 
           <div className="grid gap-4">
             <div className="rounded-[28px] border border-[#8E6B3B]/18 bg-black/45 p-6">
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#C59A5E]">Packaging Round</div>
-              <div className="mt-3 text-4xl font-semibold tracking-[-0.05em] text-white">$50,000</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#C59A5E]">Strategic Round</div>
+              <div className="mt-3 text-4xl font-semibold tracking-[-0.05em] text-white">Packaging + Pilot Flexibility</div>
               <div className="mt-2 text-sm leading-7 text-[#CFC2B5]">
-                The current raise supports packaging, clearances, legal work, materials, and the meetings
-                needed to move the series into higher-level conversations.
+                This raise is designed to position Noise & Fury from strength: secure the right creative
+                attachments, complete market-ready packaging, and preserve the ability to self-finance a pilot
+                or presentation asset if that creates the strongest leverage with buyers.
               </div>
             </div>
             <div className="rounded-[28px] border border-[#8E6B3B]/18 bg-black/45 p-6">
@@ -421,7 +425,7 @@ export default function NoiseAndFuryPage() {
               The team shaping the package.
             </h2>
             <p className="mt-4 text-base leading-8 text-[#CEC1B5] sm:text-lg">
-              Click into each profile to reveal the full bio. Cory opens by default because he carries the core creator and founder context behind the project.
+              Click each profile to reveal the teams full bio. 
             </p>
           </div>
 
@@ -439,7 +443,7 @@ export default function NoiseAndFuryPage() {
                     <img
                       src={profile.imagePath}
                       alt={`${profile.name} profile`}
-                      className="h-64 w-full object-cover object-center transition duration-500 group-hover:scale-[1.02]"
+                      className={`h-64 w-full object-cover transition duration-500 group-hover:scale-[1.02] ${profile.imageClassName ?? "object-center"}`}
                     />
                   </div>
 

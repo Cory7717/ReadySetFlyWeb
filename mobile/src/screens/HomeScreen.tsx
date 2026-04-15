@@ -1,8 +1,13 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, Image } from 'react-native';
+import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+
+const ACTIVE_FLIGHT_KEY = 'rsf_active_flight_v1';
+const ACTIVE_FLIGHT_MAX_AGE_MS = 8 * 60 * 60 * 1000; // 8 hours
 
 const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
 const LOGO_IMAGE = require('../../assets/logo.png');
@@ -53,6 +58,15 @@ function RailCard({ icon, title, subtitle, onPress }: RailCardProps) {
   );
 }
 
+type ActiveFlight = {
+  departure: string | null;
+  destination: string | null;
+  waypoints: string | null;
+  plannedAltitude: string | null;
+  cruiseKtas: string | null;
+  savedAt: number;
+};
+
 export default function HomeScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { isAuthenticated, user, isLoading } = useIsAuthenticated();
@@ -60,6 +74,47 @@ export default function HomeScreen({ navigation }: any) {
   const membershipTier = entitlements?.tier || 'free';
   const membershipLabel =
     membershipTier === 'pro_plus' ? 'Pro+' : membershipTier === 'pro' ? 'Pro' : 'Free';
+
+  const [activeFlight, setActiveFlight] = useState<ActiveFlight | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem(ACTIVE_FLIGHT_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const parsed = JSON.parse(raw) as ActiveFlight;
+          const age = Date.now() - (parsed.savedAt || 0);
+          if (age < ACTIVE_FLIGHT_MAX_AGE_MS) {
+            setActiveFlight(parsed);
+          } else {
+            AsyncStorage.removeItem(ACTIVE_FLIGHT_KEY).catch(() => undefined);
+          }
+        } catch {
+          // ignore malformed
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const resumeActiveFlight = () => {
+    if (!activeFlight) return;
+    navigation.navigate('Profile', {
+      screen: 'FlightDeck',
+      params: {
+        departure: activeFlight.departure ?? undefined,
+        destination: activeFlight.destination ?? undefined,
+        waypoints: activeFlight.waypoints ?? undefined,
+        plannedAltitude: activeFlight.plannedAltitude ?? undefined,
+        cruiseKtas: activeFlight.cruiseKtas ?? undefined,
+        mode: 'flight',
+      },
+    });
+  };
+
+  const dismissActiveFlight = () => {
+    setActiveFlight(null);
+    AsyncStorage.removeItem(ACTIVE_FLIGHT_KEY).catch(() => undefined);
+  };
 
   const handleLogin = () => {
     navigation.navigate('Profile', { screen: 'Auth' });
@@ -142,10 +197,36 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       </ImageBackground>
 
+      {activeFlight ? (
+        <View style={styles.resumeCard}>
+          <View style={styles.resumeCardLeft}>
+            <View style={styles.resumeIconWrap}>
+              <Ionicons name="radio-outline" size={18} color="#fff" />
+            </View>
+            <View style={styles.resumeText}>
+              <Text style={styles.resumeTitle}>Active Flight</Text>
+              <Text style={styles.resumeSubtitle} numberOfLines={1}>
+                {activeFlight.departure && activeFlight.destination
+                  ? `${activeFlight.departure} to ${activeFlight.destination}`
+                  : activeFlight.departure || activeFlight.destination || 'No route loaded'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.resumeActions}>
+            <TouchableOpacity style={styles.resumeButton} onPress={resumeActiveFlight} activeOpacity={0.85}>
+              <Text style={styles.resumeButtonText}>Return to Deck</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.resumeDismiss} onPress={dismissActiveFlight} activeOpacity={0.85}>
+              <Ionicons name="close" size={16} color={colors.textSoft} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Mission Control</Text>
-          <Text style={styles.sectionSubtitle}>The fastest way into RSF’s core workflows.</Text>
+          <Text style={styles.sectionSubtitle}>The fastest way into RSF's core workflows.</Text>
         </View>
         <View style={styles.shortcutGrid}>
           <ShortcutCard
@@ -565,5 +646,64 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '800',
+  },
+  resumeCard: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    ...shadow.card,
+  },
+  resumeCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  resumeIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+  resumeText: {
+    flex: 1,
+  },
+  resumeTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#E8EDF4',
+    letterSpacing: 0.3,
+  },
+  resumeSubtitle: {
+    fontSize: 12,
+    color: 'rgba(232,237,244,0.7)',
+    marginTop: 2,
+  },
+  resumeActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  resumeButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.md,
+  },
+  resumeButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  resumeDismiss: {
+    padding: 6,
   },
 });

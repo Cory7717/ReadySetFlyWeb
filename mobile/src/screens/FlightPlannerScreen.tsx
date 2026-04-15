@@ -110,6 +110,7 @@ type AircraftType = {
 
 const FLIGHT_DECK_PHONE_RECOMMENDATION_KEY = 'flight_deck_phone_recommendation_dismissed_at';
 const FLIGHT_DECK_MAP_ORIENTATION_KEY = 'flight_deck_map_orientation_mode';
+const ACTIVE_FLIGHT_KEY = 'rsf_active_flight_v1';
 
 type AircraftProfile = {
   id: string;
@@ -1836,12 +1837,21 @@ export default function FlightPlannerScreen() {
         actionLabel: trafficEnabled ? 'ADS-B' : 'Connect ADS-B',
       };
     }
+    if (trafficEnabled) {
+      return {
+        code: 'SRCH',
+        label: 'Searching',
+        detail: 'Listening for GDL-90 data. Connect your device to your receiver\'s WiFi first.',
+        tone: 'caution',
+        actionLabel: 'ADS-B',
+      };
+    }
     return {
       code: 'NO-CONN',
-      label: 'No Connection',
-      detail: trafficEnabled ? 'Waiting for live ADS-B data.' : 'ADS-B listener is off.',
+      label: 'Not Connected',
+      detail: 'ADS-B receiver is off. Connect a Stratux, Sentry, or compatible receiver.',
       tone: 'warning',
-      actionLabel: trafficEnabled ? 'ADS-B' : 'Connect ADS-B',
+      actionLabel: 'Connect ADS-B',
     };
   }, [receiverHealth?.ownshipFresh, receiverHealth?.status, receiverHealth?.trafficFresh, receiverOwnshipFresh, trafficEnabled]);
   const flightDeckTrustSummary = useMemo<FlightDeckTrustSummary>(() => {
@@ -4733,6 +4743,21 @@ export default function FlightPlannerScreen() {
     AsyncStorage.setItem(FLIGHT_DECK_MAP_ORIENTATION_KEY, mapOrientationMode).catch(() => undefined);
   }, [mapOrientationMode]);
 
+  // Persist active flight state so the home screen can offer "Resume Active Flight"
+  useEffect(() => {
+    if (!isFlightDeck) return;
+    if (!departure && !destination) return;
+    const state = {
+      departure: departure || null,
+      destination: destination || null,
+      waypoints: waypoints || null,
+      plannedAltitude: plannedAltitude || null,
+      cruiseKtas: cruiseKtas || null,
+      savedAt: Date.now(),
+    };
+    AsyncStorage.setItem(ACTIVE_FLIGHT_KEY, JSON.stringify(state)).catch(() => undefined);
+  }, [isFlightDeck, departure, destination, waypoints, plannedAltitude, cruiseKtas]);
+
   useEffect(() => {
     logDiagnostic('maps', 'map_style_changed', {
       style: mapStyle,
@@ -7049,6 +7074,9 @@ export default function FlightPlannerScreen() {
     sequenceNextLeg,
     focusTrafficTarget,
     setAlternate,
+    clearActiveFlight: () => {
+      AsyncStorage.removeItem(ACTIVE_FLIGHT_KEY).catch(() => undefined);
+    },
   };
 
   if (isFlightDeck) {
@@ -7131,7 +7159,7 @@ export default function FlightPlannerScreen() {
               mode: 'flight',
             })}
           >
-            <Text style={styles.heroSecondaryActionText}>Open Flight Deck</Text>
+            <Text style={styles.heroSecondaryActionText}>Fly This Plan</Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.heroHelperText}>
@@ -8552,6 +8580,57 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+  },
+  flightDeckNavButtonSm: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: 'rgba(9,13,19,0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(108,130,156,0.34)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.flightGlass,
+  },
+  flightDeckCompactBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 32,
+  },
+  flightDeckCompactStatusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 28,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(9,13,19,0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(108,130,156,0.34)',
+    ...shadow.flightGlass,
+  },
+  flightDeckCompactStatusChipText: {
+    color: colors.flightTextMuted,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  flightDeckCompactModeBtn: {
+    height: 28,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(9,13,19,0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(108,130,156,0.34)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.flightGlass,
+  },
+  flightDeckCompactModeBtnText: {
+    color: colors.flightTextMuted,
+    fontSize: 11,
+    fontWeight: '600',
   },
   flightDeckMapPaneFull: {
     flex: 1,

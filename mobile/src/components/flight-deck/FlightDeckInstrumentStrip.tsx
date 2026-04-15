@@ -73,14 +73,14 @@ function FlightDeckInstrumentStripComponent({
       style={[localStyles.container, compact ? localStyles.containerCompact : null, style]}
       onPress={onPress}
     >
-      <View style={localStyles.metaRow}>
+      <View style={[localStyles.metaRow, compact ? localStyles.metaRowCompact : null]}>
         <View style={localStyles.metaChips}>
-          <View style={[localStyles.metaChip, sourceTone.chip]}>
+          <View style={[localStyles.metaChip, compact ? localStyles.metaChipCompact : null, sourceTone.chip]}>
             <Text style={[localStyles.metaChipText, sourceTone.chipText]} numberOfLines={1}>
               {sourceMeta.code}
             </Text>
           </View>
-          <View style={[localStyles.metaChip, modeTone.chip]}>
+          <View style={[localStyles.metaChip, compact ? localStyles.metaChipCompact : null, modeTone.chip]}>
             <Text style={[localStyles.metaChipText, modeTone.chipText]} numberOfLines={1}>
               {modeMeta.label}
             </Text>
@@ -101,12 +101,13 @@ function FlightDeckInstrumentStripComponent({
               key={`flight-deck-primary-${field.label}-${index}`}
               style={[
                 localStyles.metricCell,
+                compact ? localStyles.metricCellCompact : null,
                 index > 0 ? localStyles.metricCellSeparated : null,
               ]}
             >
-              <Text style={localStyles.metricLabel}>{field.label}</Text>
+              <Text style={[localStyles.metricLabel, compact ? localStyles.metricLabelCompact : null]}>{field.label}</Text>
               <Text
-                style={[localStyles.metricValue, tone.value]}
+                style={[localStyles.metricValue, compact ? localStyles.metricValueCompact : null, tone.value]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.85}
@@ -118,8 +119,8 @@ function FlightDeckInstrumentStripComponent({
         })}
       </View>
 
-      {routeFields?.length ? (
-        <View style={[localStyles.routeRow, compact ? localStyles.routeRowCompact : null]}>
+      {!compact && routeFields?.length ? (
+        <View style={localStyles.routeRow}>
           {routeFields.map((field, index) => {
             const tone = getToneStyles(field.tone);
             return (
@@ -166,14 +167,17 @@ const localStyles = StyleSheet.create({
   containerCompact: {
     borderRadius: 12,
     paddingHorizontal: 6,
-    paddingTop: 7,
-    paddingBottom: 7,
+    paddingTop: 5,
+    paddingBottom: 5,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
+  },
+  metaRowCompact: {
+    marginBottom: 4,
   },
   metaChips: {
     flexDirection: 'row',
@@ -188,6 +192,11 @@ const localStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.flightBorder,
     marginRight: spacing.xs,
+  },
+  metaChipCompact: {
+    minHeight: 18,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   metaChipActive: {
     backgroundColor: 'rgba(74,159,212,0.18)',
@@ -239,6 +248,11 @@ const localStyles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: 'rgba(16, 23, 33, 0.92)',
   },
+  metricCellCompact: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
   metricCellSeparated: {
     marginLeft: 6,
   },
@@ -249,11 +263,19 @@ const localStyles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
+  metricLabelCompact: {
+    fontSize: 8,
+    letterSpacing: 0.8,
+  },
   metricValue: {
     color: colors.flightText,
     fontSize: 18,
     fontWeight: '700',
     marginTop: 4,
+  },
+  metricValueCompact: {
+    fontSize: 14,
+    marginTop: 2,
   },
   metricValueActive: {
     color: colors.flightAdvisory,

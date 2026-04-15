@@ -560,4 +560,5 @@ export interface FlightDeckActionsProps {
   sequenceNextLeg: () => void;
   focusTrafficTarget: (target: any) => void;
   setAlternate: (icao: string) => void;
+  clearActiveFlight?: () => void;
 }

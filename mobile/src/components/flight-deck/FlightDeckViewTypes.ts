@@ -504,6 +504,9 @@ export interface FlightDeckStateProps {
   flightDeckTrafficSummary: FlightDeckTrafficSummary | null;
   immediateTrafficCount: number;
   trafficEnabled: boolean;
+  trafficPort?: string | null;
+  trafficStatus?: 'idle' | 'listening' | 'error' | string | null;
+  trafficError?: string | null;
   trafficFilter: 'all' | 'monitor' | 'advisory' | 'immediate' | 'above' | 'below' | null;
 
   // Integrated assistance

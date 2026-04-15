@@ -538,6 +538,9 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     simulationEnabled,
     gpsEnabled,
     trafficEnabled,
+    trafficPort,
+    trafficStatus,
+    trafficError,
     isSuperAdmin,
     simulationProgress,
     simulationSpeed,
@@ -2832,7 +2835,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               <View style={styles.flightDeckPanelRow}>
                 <View>
                   <Text style={styles.flightDeckPanelTitle}>ADS-B Receiver</Text>
-                  <Text style={styles.flightDeckPanelSubtitle}>GDL-90 · UDP port 4000</Text>
+                  <Text style={styles.flightDeckPanelSubtitle}>GDL-90 · UDP port {trafficPort || '4000'}</Text>
                 </View>
                 <Text style={styles.flightDeckBadge}>{flightDeckSessionState || 'PREFLT'}</Text>
               </View>
@@ -2844,7 +2847,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                     styles.flightDeckAdsbStatusDot,
                     receiverStatusSummary?.tone === 'active'
                       ? styles.flightDeckAdsbIndicatorDotConnected
-                      : receiverStatusSummary?.tone === 'caution' || receiverStatusSummary?.tone === 'limited'
+                      : receiverStatusSummary?.tone === 'caution'
                         ? styles.flightDeckAdsbIndicatorDotTrafficOnly
                         : styles.flightDeckAdsbIndicatorDotDisconnected,
                   ]}
@@ -2929,6 +2932,18 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                   </Text>
                 </TouchableOpacity>
               </View>
+              <Text style={styles.flightDeckPanelText}>
+                Listener {trafficStatus === 'error' ? 'error' : trafficEnabled ? 'armed' : 'off'} on UDP {trafficPort || '4000'}.
+              </Text>
+              <Text style={styles.flightDeckPanelText}>
+                Active source {ownshipSourceSummary?.label || 'No ownship'} / heading {headingSourceSummary?.code || 'NONE'} / attitude {attitudeSourceSummary?.code || 'NONE'}.
+              </Text>
+              {trafficError ? (
+                <Text style={styles.flightDeckPanelText}>Receiver error {trafficError}</Text>
+              ) : null}
+              {receiverHealth?.warnings?.length ? (
+                <Text style={styles.flightDeckPanelText}>Receiver note {receiverHealth.warnings[0]}</Text>
+              ) : null}
 
               {/* ── Source diagnostics ──────────────────────────────── */}
               <View style={[styles.flightDeckMetaDivider, { marginTop: spacing.md }]} />
@@ -3792,4 +3807,3 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     </View>
   );
 }
-

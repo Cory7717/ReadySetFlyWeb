@@ -1817,7 +1817,7 @@ export default function FlightPlannerScreen() {
     if (ownshipFresh && trafficFresh && attitudeFresh) {
       return {
         code: 'FULL',
-        label: 'Full — Ownship + Traffic + AHRS',
+        label: 'Connected',
         detail: 'Ownship, live traffic, and attitude data are all flowing.',
         tone: 'active',
         actionLabel: 'ADS-B',
@@ -1826,7 +1826,7 @@ export default function FlightPlannerScreen() {
     if (ownshipFresh && trafficFresh) {
       return {
         code: 'CONNECTED',
-        label: 'Ownship + Traffic',
+        label: 'Connected',
         detail: 'Ownship and live traffic data are flowing.',
         tone: 'active',
         actionLabel: 'ADS-B',
@@ -1835,7 +1835,7 @@ export default function FlightPlannerScreen() {
     if (trafficFresh) {
       return {
         code: 'TRFC',
-        label: 'Traffic Only',
+        label: 'Traffic-Only',
         detail: 'Traffic data is live. No ownship position from receiver.',
         tone: 'caution',
         actionLabel: 'ADS-B',
@@ -1844,31 +1844,31 @@ export default function FlightPlannerScreen() {
     if (receiverHealth?.status === 'stale') {
       return {
         code: 'LOST',
-        label: 'Connection Lost',
+        label: 'No Connection',
         detail: hadData
           ? 'Receiver data stopped. Check your WiFi connection to the receiver.'
           : 'No GDL-90 data received. Verify WiFi is connected to receiver.',
         tone: 'warning',
-        actionLabel: 'ADS-B',
+        actionLabel: 'Connect ADS-B',
       } as const;
     }
     if (trafficEnabled) {
       return {
         code: 'SRCH',
-        label: 'Searching',
-        detail: 'Listening on UDP port 4000 for GDL-90 data. Connect device WiFi to receiver.',
-        tone: 'limited',
-        actionLabel: 'ADS-B',
+        label: 'No Connection',
+        detail: `Listening on UDP port ${trafficPort || '4000'} for GDL-90 data. Connect device WiFi to receiver.`,
+        tone: 'warning',
+        actionLabel: 'Connect ADS-B',
       } as const;
     }
     return {
       code: 'NO-CONN',
-      label: 'Not Connected',
+      label: 'No Connection',
       detail: 'No receiver active. Connect device WiFi to a GDL-90 source, then tap Start Listening.',
       tone: 'warning',
-      actionLabel: 'ADS-B',
+      actionLabel: 'Connect ADS-B',
     } as const;
-  }, [receiverHealth?.ownshipFresh, receiverHealth?.attitudeFresh, receiverHealth?.status, receiverHealth?.trafficFresh, receiverHealth?.lastFrameAt, receiverOwnshipFresh, trafficEnabled]);
+  }, [receiverHealth?.ownshipFresh, receiverHealth?.attitudeFresh, receiverHealth?.status, receiverHealth?.trafficFresh, receiverHealth?.lastFrameAt, receiverOwnshipFresh, trafficEnabled, trafficPort]);
   const flightDeckTrustSummary = useMemo<FlightDeckTrustSummary>(() => {
     const degradedModes: Array<{ code: string; label: string; detail: string; tone: 'accent' | 'advisory' | 'caution' | 'warning' | 'limited' }> = [];
     if (simulationEnabled) {
@@ -1918,6 +1918,22 @@ export default function FlightPlannerScreen() {
         tone: 'advisory',
       });
     }
+    if (plannerMapRenderTimedOut) {
+      degradedModes.push({
+        code: 'NET',
+        label: 'Map data delayed',
+        detail: 'The map engine did not become ready in time. Core nav continues while network-backed map data recovers.',
+        tone: 'caution',
+      });
+    }
+    if (summaryError || diversionError) {
+      degradedModes.push({
+        code: 'DATA',
+        label: 'Network-backed data offline',
+        detail: summaryError || diversionError || 'Weather or diversion services are temporarily unavailable. Core route guidance continues.',
+        tone: 'advisory',
+      });
+    }
 
     const highestTone: 'default' | 'accent' | 'advisory' | 'caution' | 'warning' | 'limited' =
       degradedModes.some((mode) => mode.tone === 'warning')
@@ -1963,14 +1979,17 @@ export default function FlightPlannerScreen() {
     ownshipSourceSummary.freshness,
     ownshipSourceSummary.label,
     plannerSectionalOverlayDegraded,
+    plannerMapRenderTimedOut,
     receiverAttitudeFresh,
     receiverHealth?.ownshipFresh,
     receiverHealth?.status,
     receiverOwnshipFresh,
+    summaryError,
     simulationEnabled,
     sourceArbitrationSummary?.detail,
     sourceArbitrationSummary?.label,
     sourceArbitrationSummary?.tier,
+    diversionError,
   ]);
   const activeVerticalSpeedFpm = simulationEnabled ? simulatedVerticalSpeedFpm : verticalSpeedFpm;
   const activeTrafficTargets = simulationEnabled ? simulatedTrafficTargets : trafficTargets;
@@ -4168,53 +4187,6 @@ export default function FlightPlannerScreen() {
     terrainClearanceFt,
     terrainRisk,
   ]);
-  const flightDeckVisibleAlert = useMemo(() => {
-    if (selectedTrafficTarget?.threatLevel === 'immediate') {
-      return {
-        severity: 'warning' as const,
-        title: 'Immediate traffic',
-        detail: `${selectedTrafficTarget.callsign || 'Traffic'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM Â· ${formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}`,
-      };
-    }
-    if (terrainRisk === 'warning') {
-      return {
-        severity: 'warning' as const,
-        title: 'Terrain warning',
-        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft${terrainAlertThresholds.closingFast ? ' - terrain rising quickly' : ''}`,
-      };
-    }
-    if (obstacleRisk === 'warning') {
-      return {
-        severity: 'warning' as const,
-        title: 'Obstacle warning',
-        detail: `Nearby obstacle clearance ${Math.round(obstacleClearanceFt || 0)} ft${obstacleAlertThresholds.closingFast ? ' - closure increasing' : ''}`,
-      };
-    }
-    if (flightDeckAdvisoriesMuted) {
-      return null;
-    }
-    if (flightDeckVerticalAlertSummary.severity && flightDeckVerticalAlertSummary.title && flightDeckVerticalAlertSummary.detail) {
-      return {
-        severity: flightDeckVerticalAlertSummary.severity,
-        title: flightDeckVerticalAlertSummary.title,
-        detail: flightDeckVerticalAlertSummary.detail,
-      };
-    }
-    return activeFlightAlert;
-  }, [
-    activeFlightAlert,
-    flightDeckAdvisoriesMuted,
-    flightDeckVerticalAlertSummary.detail,
-    flightDeckVerticalAlertSummary.severity,
-    flightDeckVerticalAlertSummary.title,
-    obstacleAlertThresholds.closingFast,
-    obstacleClearanceFt,
-    obstacleRisk,
-    selectedTrafficTarget,
-    terrainAlertThresholds.closingFast,
-    terrainClearanceFt,
-    terrainRisk,
-  ]);
   const visionGuidance = useMemo(() => {
     if (selectedTrafficTarget?.threatLevel === 'immediate') {
       return `Traffic ${selectedTrafficTarget.callsign || 'target'} ahead`;
@@ -5144,47 +5116,6 @@ export default function FlightPlannerScreen() {
       }
     };
   }, [flightDeckActiveSession, flightDeckDrawerOpen, flightDeckHudExpanded, flightDeckInteractionTick, isFlightDeck]);
-
-  useEffect(() => {
-    const alertKey = flightDeckVisibleAlert
-      ? `${flightDeckVisibleAlert.severity}:${flightDeckVisibleAlert.title}:${selectedTrafficTarget?.id || terrainRisk}:${selectedDiversion?.icao || obstacleRisk}`
-      : null;
-    if (!alertKey) {
-      flightDeckAutoPanelRef.current = null;
-      return;
-    }
-    const alertSeverity = flightDeckVisibleAlert?.severity;
-    if (alertSeverity !== 'warning' || flightDeckAutoPanelRef.current === alertKey) {
-      return;
-    }
-    flightDeckAutoPanelRef.current = alertKey;
-    if (selectedTrafficTarget?.threatLevel === 'immediate') {
-      openFlightDeckPanel('traffic');
-      return;
-    }
-    openFlightDeckPanel('status');
-  }, [flightDeckVisibleAlert, obstacleRisk, selectedDiversion?.icao, selectedTrafficTarget, terrainRisk]);
-
-  const flightDeckInstrumentRouteVisible = Boolean(routeProgress?.nextWaypoint && activeOwnship);
-  const flightDeckLowerStackBottom = Math.max(
-    insets.bottom + (flightDeckHudExpanded ? (flightDeckInstrumentRouteVisible ? 258 : 222) : (flightDeckInstrumentRouteVisible ? 146 : 118)),
-    flightDeckHudExpanded ? (flightDeckInstrumentRouteVisible ? 270 : 234) : (flightDeckInstrumentRouteVisible ? 158 : 130),
-  );
-  const flightDeckTrafficCardVisible = Boolean(
-    selectedTrafficTarget && (
-      selectedTrafficTarget.threatLevel !== 'monitor' ||
-      flightDeckPanel === 'traffic' ||
-      Boolean(flightDeckVisibleAlert)
-    )
-  );
-  const flightDeckDiversionCardVisible = Boolean(
-    selectedDiversion && (
-      !flightDeckTrafficCardVisible ||
-      flightDeckPanel === 'diversions' ||
-      terrainRisk !== 'nominal' ||
-      obstacleRisk !== 'nominal'
-    )
-  );
   const flightDeckActionButtons: Array<{
     key: string;
     label: string;
@@ -6634,6 +6565,7 @@ export default function FlightPlannerScreen() {
     const nearestRouteNm =
       routeDistances.length > 0 ? routeDistances.reduce((best, value) => Math.min(best, value), Number.POSITIVE_INFINITY) : null;
     const offRouteSurface = typeof nearestRouteNm === 'number' && Number.isFinite(nearestRouteNm) && nearestRouteNm > 0.06;
+    const severeTaxiDeviation = typeof nearestRouteNm === 'number' && Number.isFinite(nearestRouteNm) && nearestRouteNm > 0.12;
 
     if (flightDeckSurfacePreview.holdShortActive) {
       return {
@@ -6653,12 +6585,14 @@ export default function FlightPlannerScreen() {
     }
     if (offRouteSurface) {
       return {
-        title: 'Taxi route divergence',
+        title: severeTaxiDeviation ? 'Taxi route lost' : 'Taxi route divergence',
         detail: `Ownship is ${nearestRouteNm?.toFixed(2)} NM from the staged taxi path near ${flightDeckSurfacePreview.activeTaxiway || 'the active taxiway'}.`,
         recoveryLabel: flightDeckSurfacePreview.upcomingTaxiways?.[0]
-          ? `Recover toward ${flightDeckSurfacePreview.upcomingTaxiways[0]} and resume progressive taxi guidance.`
-          : 'Recover to the highlighted taxi path and verify the next turn.',
-        tone: 'caution' as const,
+          ? `${severeTaxiDeviation ? 'Slow or stop, verify position, then recover toward' : 'Recover toward'} ${flightDeckSurfacePreview.upcomingTaxiways[0]} and resume progressive taxi guidance.`
+          : severeTaxiDeviation
+            ? 'Slow or stop, verify airport position, then recover to the highlighted taxi path.'
+            : 'Recover to the highlighted taxi path and verify the next turn.',
+        tone: severeTaxiDeviation ? 'warning' as const : 'caution' as const,
       };
     }
     return {
@@ -6715,6 +6649,23 @@ export default function FlightPlannerScreen() {
         support: flightDeckSurfacePreview?.clearanceLabel || flightDeckSurfacePreview?.support || flightDeckPhaseSummary.detail || 'Taxi guidance is active.',
         actionLabel: flightDeckSurfaceOpsSummary?.recoveryLabel || flightDeckSurfacePreview?.nextActionCall || 'Follow the active taxi path.',
         tone: (flightDeckSurfaceOpsSummary?.tone || 'accent') as 'default' | 'accent' | 'advisory' | 'caution' | 'warning' | 'limited',
+      };
+    }
+    if (routeProgress?.sequencingState === 'reintercept' || (routeProgress?.offRouteNm ?? 0) > 1.2) {
+      return {
+        label: 'Route rejoin',
+        detail:
+          routeExecutionSummary?.sequencingDetail ||
+          `Off-route ${routeProgress?.offRouteNm?.toFixed?.(1) || '--'} NM. Rejoin the active leg before sequencing resumes.`,
+        support:
+          visionRouteGuidance?.lateralCue ||
+          routeExecutionSummary?.sequenceGateCall ||
+          'Sequencing remains held until the active course is recaptured.',
+        actionLabel:
+          routeProgress?.crossTrackNm != null
+            ? `Cross-track ${routeProgress.crossTrackNm.toFixed(1)} NM. Follow the intercept cue and confirm the next leg before advancing.`
+            : 'Follow the intercept cue and confirm the next leg before advancing.',
+        tone: 'caution' as const,
       };
     }
     if (routeExecutionSummary?.mode === 'direct-to') {
@@ -6776,6 +6727,9 @@ export default function FlightPlannerScreen() {
     mapTacticalSummary.heading,
     mapTacticalSummary.recommendation,
     mapTacticalSummary.support,
+    routeProgress?.crossTrackNm,
+    routeProgress?.offRouteNm,
+    routeProgress?.sequencingState,
     routeExecutionSummary?.manualAdvanceRequired,
     routeExecutionSummary?.mode,
     routeExecutionSummary?.nextActionCall,
@@ -6783,6 +6737,7 @@ export default function FlightPlannerScreen() {
     routeExecutionSummary?.sequenceGateCall,
     routeExecutionSummary?.sequencingDetail,
     routeExecutionSummary?.sequencingSuspended,
+    visionRouteGuidance?.lateralCue,
   ]);
   const flightDeckDiversionDecisionSummary = useMemo<FlightDeckDiversionDecisionSummary>(() => {
     const airport = selectedDiversion || primaryDiversionOption;
@@ -6871,6 +6826,159 @@ export default function FlightPlannerScreen() {
     terrainRisk,
     topTrafficTarget?.threatLevel,
   ]);
+  const flightDeckVisibleAlert = useMemo(() => {
+    if (selectedTrafficTarget?.threatLevel === 'immediate') {
+      return {
+        severity: 'warning' as const,
+        title: 'Immediate traffic',
+        detail: `${selectedTrafficTarget.callsign || 'Traffic'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM Â· ${formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}`,
+      };
+    }
+    if (terrainRisk === 'warning') {
+      return {
+        severity: 'warning' as const,
+        title: 'Terrain warning',
+        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft${terrainAlertThresholds.closingFast ? ' - terrain rising quickly' : ''}`,
+      };
+    }
+    if (obstacleRisk === 'warning') {
+      return {
+        severity: 'warning' as const,
+        title: 'Obstacle warning',
+        detail: `Nearby obstacle clearance ${Math.round(obstacleClearanceFt || 0)} ft${obstacleAlertThresholds.closingFast ? ' - closure increasing' : ''}`,
+      };
+    }
+    if (
+      (flightDeckSurfaceOpsSummary?.title === 'Taxi route lost' || flightDeckSurfaceOpsSummary?.title === 'Taxi route divergence') &&
+      flightDeckSurfaceOpsSummary?.recoveryLabel
+    ) {
+      return {
+        severity: flightDeckSurfaceOpsSummary.tone === 'warning' ? 'warning' as const : 'caution' as const,
+        title: flightDeckSurfaceOpsSummary.title,
+        detail: flightDeckSurfaceOpsSummary.recoveryLabel,
+      };
+    }
+    if (trafficEnabled && (receiverStatusSummary?.code === 'LOST' || receiverStatusSummary?.code === 'NO-CONN' || receiverStatusSummary?.code === 'SRCH')) {
+      return {
+        severity: 'caution' as const,
+        title: 'ADS-B unavailable',
+        detail: receiverStatusSummary.detail,
+      };
+    }
+    if (receiverStatusSummary?.code === 'TRFC') {
+      return {
+        severity: 'caution' as const,
+        title: 'Traffic-only receiver',
+        detail: 'Traffic is live, but ownship is not coming from the receiver. Verify GPS fallback before relying on tactical range or sequencing.',
+      };
+    }
+    if (!receiverAttitudeFresh && (receiverOwnshipFresh || receiverHealth?.ownshipFresh)) {
+      return {
+        severity: 'caution' as const,
+        title: 'Attitude source lost',
+        detail: attitudeSourceSummary.detail || 'Synthetic vision remains guidance-backed until fresh AHRS returns.',
+      };
+    }
+    if (routeProgress?.sequencingState === 'reintercept' || (routeProgress?.offRouteNm ?? 0) > 1.2) {
+      return {
+        severity: 'caution' as const,
+        title: 'Route rejoin',
+        detail: visionRouteGuidance?.lateralCue || routeExecutionSummary?.sequencingDetail || 'Rejoin the active course before sequencing resumes.',
+      };
+    }
+    if (summaryError || diversionError || plannerMapRenderTimedOut) {
+      return {
+        severity: 'info' as const,
+        title: 'Network-backed data degraded',
+        detail:
+          summaryError ||
+          diversionError ||
+          (plannerMapRenderTimedOut
+            ? 'Map data is delayed. Core route guidance continues while network-backed layers recover.'
+            : 'Network-backed data is temporarily unavailable.'),
+      };
+    }
+    if (flightDeckAdvisoriesMuted) {
+      return null;
+    }
+    if (flightDeckVerticalAlertSummary.severity && flightDeckVerticalAlertSummary.title && flightDeckVerticalAlertSummary.detail) {
+      return {
+        severity: flightDeckVerticalAlertSummary.severity,
+        title: flightDeckVerticalAlertSummary.title,
+        detail: flightDeckVerticalAlertSummary.detail,
+      };
+    }
+    return activeFlightAlert;
+  }, [
+    activeFlightAlert,
+    attitudeSourceSummary.detail,
+    diversionError,
+    flightDeckAdvisoriesMuted,
+    flightDeckSurfaceOpsSummary?.recoveryLabel,
+    flightDeckSurfaceOpsSummary?.title,
+    flightDeckSurfaceOpsSummary?.tone,
+    flightDeckVerticalAlertSummary.detail,
+    flightDeckVerticalAlertSummary.severity,
+    flightDeckVerticalAlertSummary.title,
+    obstacleAlertThresholds.closingFast,
+    obstacleClearanceFt,
+    obstacleRisk,
+    plannerMapRenderTimedOut,
+    receiverAttitudeFresh,
+    receiverHealth?.ownshipFresh,
+    receiverOwnshipFresh,
+    receiverStatusSummary?.code,
+    receiverStatusSummary?.detail,
+    routeExecutionSummary?.sequencingDetail,
+    routeProgress?.offRouteNm,
+    routeProgress?.sequencingState,
+    selectedTrafficTarget,
+    summaryError,
+    terrainAlertThresholds.closingFast,
+    terrainClearanceFt,
+    terrainRisk,
+    trafficEnabled,
+    visionRouteGuidance?.lateralCue,
+  ]);
+  useEffect(() => {
+    const alertKey = flightDeckVisibleAlert
+      ? `${flightDeckVisibleAlert.severity}:${flightDeckVisibleAlert.title}:${selectedTrafficTarget?.id || terrainRisk}:${selectedDiversion?.icao || obstacleRisk}`
+      : null;
+    if (!alertKey) {
+      flightDeckAutoPanelRef.current = null;
+      return;
+    }
+    const alertSeverity = flightDeckVisibleAlert?.severity;
+    if (alertSeverity !== 'warning' || flightDeckAutoPanelRef.current === alertKey) {
+      return;
+    }
+    flightDeckAutoPanelRef.current = alertKey;
+    if (selectedTrafficTarget?.threatLevel === 'immediate') {
+      openFlightDeckPanel('traffic');
+      return;
+    }
+    openFlightDeckPanel('status');
+  }, [flightDeckVisibleAlert, obstacleRisk, selectedDiversion?.icao, selectedTrafficTarget, terrainRisk]);
+  const flightDeckInstrumentRouteVisible = Boolean(routeProgress?.nextWaypoint && activeOwnship);
+  const flightDeckLowerStackBottom = Math.max(
+    insets.bottom + (flightDeckHudExpanded ? (flightDeckInstrumentRouteVisible ? 258 : 222) : (flightDeckInstrumentRouteVisible ? 146 : 118)),
+    flightDeckHudExpanded ? (flightDeckInstrumentRouteVisible ? 270 : 234) : (flightDeckInstrumentRouteVisible ? 158 : 130),
+  );
+  const flightDeckTrafficCardVisible = Boolean(
+    selectedTrafficTarget && (
+      selectedTrafficTarget.threatLevel !== 'monitor' ||
+      flightDeckPanel === 'traffic' ||
+      Boolean(flightDeckVisibleAlert)
+    )
+  );
+  const flightDeckDiversionCardVisible = Boolean(
+    selectedDiversion && (
+      !flightDeckTrafficCardVisible ||
+      flightDeckPanel === 'diversions' ||
+      terrainRisk !== 'nominal' ||
+      obstacleRisk !== 'nominal'
+    )
+  );
 
   useEffect(() => {
     if (!activeRoutePoints.length && !hasPrimaryIcao) return;
@@ -7053,6 +7161,9 @@ export default function FlightPlannerScreen() {
     simulationEnabled,
     gpsEnabled,
     trafficEnabled,
+    trafficPort,
+    trafficStatus,
+    trafficError,
     isSuperAdmin,
     simulationProgress,
     simulationSpeed,

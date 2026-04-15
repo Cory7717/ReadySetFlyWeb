@@ -188,7 +188,6 @@ function excerpt(text: string, max = 172) {
 
 export default function NoiseAndFuryPage() {
   const { toast } = useToast();
-  const [openBioName, setOpenBioName] = useState("Cory Armer");
   const [openEpisodeTitle, setOpenEpisodeTitle] = useState('"We Die Young"');
 
   useEffect(() => {
@@ -425,18 +424,15 @@ export default function NoiseAndFuryPage() {
               The team shaping the package.
             </h2>
             <p className="mt-4 text-base leading-8 text-[#CEC1B5] sm:text-lg">
-              Click each profile to reveal the teams full bio. 
+              The full team bios are presented here so the creative and producing package reads clearly at a glance.
             </p>
           </div>
 
           <div className="mt-8 grid gap-4 lg:grid-cols-3">
             {teamProfiles.map((profile) => {
-              const isOpen = openBioName === profile.name;
               return (
-                <button
+                <div
                   key={profile.name}
-                  type="button"
-                  onClick={() => setOpenBioName(isOpen ? "Cory Armer" : profile.name)}
                   className="group h-full rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-6 text-left transition hover:border-[#B88A50]/55 hover:bg-[linear-gradient(180deg,rgba(22,17,13,0.98)_0%,rgba(10,10,11,1)_100%)]"
                 >
                   <div className="overflow-hidden rounded-[22px] border border-white/10 bg-black/20 shadow-[0_22px_40px_rgba(0,0,0,0.24)]">
@@ -452,19 +448,16 @@ export default function NoiseAndFuryPage() {
                       <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">{profile.role}</div>
                       <div className="mt-3 font-display text-3xl font-semibold tracking-[-0.05em] text-white">{profile.name}</div>
                     </div>
-                    <ChevronDown className={`mt-6 h-5 w-5 shrink-0 text-[#D3A869] transition-transform ${isOpen ? "rotate-180" : "rotate-0"}`} />
                   </div>
 
                   <div className="mt-4 text-sm leading-7 text-[#D3C6BA]">{profile.teaser}</div>
 
-                  {isOpen ? (
-                    <div className="mt-5 space-y-4 border-t border-white/10 pt-5 text-sm leading-7 text-[#EFE3D7]">
-                      {profile.paragraphs.map((paragraph) => (
-                        <p key={paragraph}>{paragraph}</p>
-                      ))}
-                    </div>
-                  ) : null}
-                </button>
+                  <div className="mt-5 space-y-4 border-t border-white/10 pt-5 text-sm leading-7 text-[#EFE3D7]">
+                    {profile.paragraphs.map((paragraph) => (
+                      <p key={paragraph}>{paragraph}</p>
+                    ))}
+                  </div>
+                </div>
               );
             })}
           </div>

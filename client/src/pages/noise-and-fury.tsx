@@ -271,18 +271,14 @@ export default function NoiseAndFuryPage() {
                   </p>
                 </div>
 
-                <div className="grid gap-3 pt-2 sm:grid-cols-3">
-                  <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur">
-                    <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">Created By</div>
-                    <div className="mt-2 text-base font-semibold text-white">Cory Armer and Cesar R. Ramirez</div>
+                <div className="grid gap-3 pt-2 sm:grid-cols-2">
+                  <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur sm:min-h-[112px]">
+                    <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">CREATED AND WRITTEN BY</div>
+                    <div className="mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Cory Armer and Cesar R. Ramirez</div>
                   </div>
-                  <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur">
-                    <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">Written By</div>
-                    <div className="mt-2 text-base font-semibold text-white">Cory Armer and Cesar R. Ramirez</div>
-                  </div>
-                  <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur">
-                    <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">Strategic Round</div>
-                    <div className="mt-2 text-base font-semibold text-white">Open for packaging and pilot financing</div>
+                  <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur sm:min-h-[112px]">
+                    <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">STRATEGIC FUNDING ROUND</div>
+                    <div className="mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Open for packaging and pilot financing</div>
                   </div>
                 </div>
 
@@ -513,12 +509,6 @@ export default function NoiseAndFuryPage() {
               Inquiries are sent directly to coryarmer@gmail.com and copied to ceo@marcmovies.com so both sides can respond quickly to investor and packaging interest.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button asChild className="bg-[#D3A869] text-[#141414] hover:bg-[#deb980]">
-                <a href={PDF_PATH} target="_blank" rel="noopener noreferrer" onClick={() => trackDownload("noise_fury_contact_download_pdf", PDF_PATH)}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Download PDF
-                </a>
-              </Button>
               <Button asChild variant="outline" className="border-white/15 bg-black/35 text-white hover:bg-black/50">
                 <a href="mailto:coryarmer@gmail.com?cc=ceo@marcmovies.com&subject=Noise%20%26%20Fury%20Investor%20Inquiry">
                   <ExternalLink className="mr-2 h-4 w-4" />

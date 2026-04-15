@@ -191,6 +191,13 @@ export default function NoiseAndFuryPage() {
   const { toast } = useToast();
   const [openEpisodeTitle, setOpenEpisodeTitle] = useState('"We Die Young"');
 
+  function scrollToSection(sectionId: string) {
+    const section = document.getElementById(sectionId);
+    if (!section) return;
+    const top = section.getBoundingClientRect().top + window.scrollY - 88;
+    window.scrollTo({ top, behavior: "smooth" });
+  }
+
   useEffect(() => {
     trackEvent("noise_fury_investor_page_view", { page: "/noiseandfury" });
   }, []);
@@ -294,12 +301,32 @@ export default function NoiseAndFuryPage() {
                       Download investor overview
                     </a>
                   </Button>
-                  <Button asChild size="lg" variant="outline" className="border-white/15 bg-black/35 text-white hover:bg-black/50">
-                    <a href="#investor-contact">
-                      <Mail className="mr-2 h-4 w-4" />
-                      Contact us
-                    </a>
+                  <Button size="lg" variant="outline" className="border-white/15 bg-black/35 text-white hover:bg-black/50" onClick={() => scrollToSection("investor-contact")}>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Contact us
                   </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-3 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-white/10 bg-black/20 text-[#E9DED2] hover:border-[#B88A50]/45 hover:bg-black/35"
+                    onClick={() => scrollToSection("team-section")}
+                  >
+                    Meet the Creative Team
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-white/10 bg-black/20 text-[#E9DED2] hover:border-[#B88A50]/45 hover:bg-black/35"
+                    onClick={() => scrollToSection("season-overview")}
+                  >
+                    About the Season
+                  </Button>
+                  <div className="flex items-center text-xs uppercase tracking-[0.24em] text-[#A79278]">
+                    For investor and strategic partner conversations
+                  </div>
                 </div>
               </div>
             </div>
@@ -366,14 +393,57 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section className="mt-16">
+        <section className="mt-16 scroll-mt-24">
+          <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(17,14,12,0.94)_0%,rgba(8,8,9,0.98)_100%)] p-7 shadow-[0_18px_60px_rgba(0,0,0,0.22)] sm:p-9">
+            <div className="mx-auto max-w-4xl text-center">
+              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">How Participation Works</div>
+              <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
+                A premium introduction designed to move qualified interest into direct conversation.
+              </h2>
+              <p className="mt-4 text-base leading-8 text-[#CEC1B5] sm:text-lg">
+                Noise & Fury is in an early strategic development round. This page is intended to open serious investor
+                and strategic partner discussions around financing, packaging, and the project&apos;s next stage of
+                development momentum.
+              </p>
+            </div>
+
+            <div className="mt-8 grid gap-4 lg:grid-cols-3">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-5">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">1. Initial Inquiry</div>
+                <div className="mt-3 text-lg font-semibold text-white">Start with the materials and a direct outreach.</div>
+                <div className="mt-3 text-sm leading-7 text-[#D8CCC0]">
+                  Review the investor overview, then connect through the inquiry form or direct email if there is serious
+                  interest in the project&apos;s strategic round and broader packaging path.
+                </div>
+              </div>
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-5">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">2. Direct Discussion</div>
+                <div className="mt-3 text-lg font-semibold text-white">Continue the conversation privately with the team.</div>
+                <div className="mt-3 text-sm leading-7 text-[#D8CCC0]">
+                  Qualified interest moves into direct conversations covering packaging progress, development needs,
+                  strategic fit, and the structure of the opportunity at the appropriate level of detail.
+                </div>
+              </div>
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-5">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">3. Next-Step Alignment</div>
+                <div className="mt-3 text-lg font-semibold text-white">Participation details are handled through private agreements.</div>
+                <div className="mt-3 text-sm leading-7 text-[#D8CCC0]">
+                  This page is not a public offering portal. It is a premium first step for serious project discussions,
+                  with specific participation details handled directly once mutual alignment and interest are established.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="season-overview" className="mt-16 scroll-mt-24">
           <div className="mx-auto max-w-3xl text-center">
-            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Season One Run</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Season One Overview</div>
             <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
               Eight episodes. One emotional descent.
             </h2>
             <p className="mt-4 text-base leading-8 text-[#CEC1B5] sm:text-lg">
-              Click into each episode to reveal the packaging summary and the turning point that drives the hour.
+              An episode-by-episode view of the season architecture, emotional engine, and the turning points that define the buyer-facing shape of the story.
             </p>
           </div>
 
@@ -414,7 +484,7 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section className="mt-16">
+        <section id="team-section" className="mt-16 scroll-mt-24">
           <div className="mx-auto max-w-3xl text-center">
             <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Writer and Producer Bios</div>
             <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
@@ -501,13 +571,19 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section id="investor-contact" className="mt-16 grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
+        <section id="investor-contact" className="mt-16 grid gap-8 scroll-mt-24 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="space-y-6 rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
             <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Investor Contact</div>
-            <h3 className="font-display text-4xl font-semibold tracking-[-0.05em] text-white">Request the full package and start a conversation.</h3>
+            <h3 className="font-display text-4xl font-semibold tracking-[-0.05em] text-white">Request the full package and continue the conversation.</h3>
             <p className="text-base leading-8 text-[#D3C6BA]">
-              Inquiries are sent directly to coryarmer@gmail.com and copied to ceo@marcmovies.com so both sides can respond quickly to investor and packaging interest.
+              Inquiries are sent directly to coryarmer@gmail.com and copied to ceo@marcmovies.com so the team can respond quickly to investor and strategic partner interest tied to financing, packaging, and development conversations.
             </p>
+            <p className="text-sm leading-7 text-[#BCAEA0]">
+              This page is intended for serious project discussions. Participation details, package materials, and next-step conversations are handled directly after inquiry.
+            </p>
+            <div className="rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-4 text-sm leading-7 text-[#E7DACD]">
+              Connect with the team to request the full package, discuss strategic fit, and continue the conversation around the round, active packaging momentum, and buyer-facing readiness.
+            </div>
             <div className="flex flex-wrap gap-3">
               <Button asChild variant="outline" className="border-white/15 bg-black/35 text-white hover:bg-black/50">
                 <a href="mailto:coryarmer@gmail.com?cc=ceo@marcmovies.com&subject=Noise%20%26%20Fury%20Investor%20Inquiry">

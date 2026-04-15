@@ -694,6 +694,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
     focusTrafficTarget = () => {},
     setAlternate = () => {},
     clearActiveFlight,
+    openWiFiSettings,
   } = actions;
 
   const activeExecutionPlanEntry =
@@ -747,11 +748,8 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           ? styles.flightDeckContextCardAccent
           : null
   );
-  const openAdsbControls = (autoConnect = false) => {
+  const openAdsbControls = () => {
     pulseFlightDeckChrome(true);
-    if (autoConnect) {
-      toggleTrafficReceiver();
-    }
     setFlightDeckDrawerOpen(true);
     setFlightDeckPanel('status');
   };
@@ -767,7 +765,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
             : styles.flightDeckAdsbIndicatorDisconnected,
       ]}
       activeOpacity={0.94}
-      onPress={() => openAdsbControls(!trafficEnabled)}
+      onPress={() => openAdsbControls()}
     >
       <View
         style={[
@@ -1197,7 +1195,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               : styles.flightDeckMapControlButtonDisconnected,
         ]}
         activeOpacity={0.92}
-        onPress={() => openAdsbControls(!trafficEnabled)}
+        onPress={() => openAdsbControls()}
       >
         <Ionicons name="radio" size={18} color={colors.flightText} />
       </TouchableOpacity>
@@ -1268,7 +1266,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.flightDeckCompactStatusChip, headerChipToneStyle(flightDeckTrustSummary?.tone)]}
-          onPress={() => openAdsbControls(false)}
+          onPress={() => openAdsbControls()}
         >
           <View
             style={[
@@ -2370,7 +2368,7 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
             >
               <TouchableOpacity
                 style={styles.flightDeckExitButton}
-                onPress={() => openAdsbControls(!trafficEnabled)}
+                onPress={() => openAdsbControls()}
               >
                 <Text style={styles.flightDeckExitText}>{receiverStatusSummary?.actionLabel || 'ADS-B'}</Text>
               </TouchableOpacity>
@@ -2830,109 +2828,131 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
           </View>
           {flightDeckPanel === 'status' && (
             <View style={styles.flightDeckPanel}>
+              {/* ── ADS-B Receiver section ─────────────────────────── */}
               <View style={styles.flightDeckPanelRow}>
                 <View>
-                  <Text style={styles.flightDeckPanelTitle}>Flight Controls</Text>
-                  <Text style={styles.flightDeckPanelText}>Receiver, GPS fallback, and sim controls.</Text>
+                  <Text style={styles.flightDeckPanelTitle}>ADS-B Receiver</Text>
+                  <Text style={styles.flightDeckPanelSubtitle}>GDL-90 · UDP port 4000</Text>
                 </View>
-                <Text style={styles.flightDeckBadge}>{flightDeckSessionState || 'PREFLIGHT'}</Text>
+                <Text style={styles.flightDeckBadge}>{flightDeckSessionState || 'PREFLT'}</Text>
               </View>
-              <Text style={styles.flightDeckPanelText}>
-                ADS-B: {receiverStatusSummary?.label || 'Not Connected'} — {receiverStatusSummary?.detail || 'Receiver is off.'}
-              </Text>
-              {receiverStatusSummary?.code === 'NO-CONN' || receiverStatusSummary?.code === 'SRCH' ? (
-                <Text style={styles.flightDeckPanelText}>
-                  To use ADS-B, connect your device WiFi to a compatible receiver (Stratux, Sentry, Garmin GDL, etc.), then tap Connect.
-                </Text>
+
+              {/* Status row */}
+              <View style={styles.flightDeckAdsbStatusRow}>
+                <View
+                  style={[
+                    styles.flightDeckAdsbStatusDot,
+                    receiverStatusSummary?.tone === 'active'
+                      ? styles.flightDeckAdsbIndicatorDotConnected
+                      : receiverStatusSummary?.tone === 'caution' || receiverStatusSummary?.tone === 'limited'
+                        ? styles.flightDeckAdsbIndicatorDotTrafficOnly
+                        : styles.flightDeckAdsbIndicatorDotDisconnected,
+                  ]}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.flightDeckAdsbStatusLabel}>
+                    {receiverStatusSummary?.label || 'Not Connected'}
+                  </Text>
+                  <Text style={styles.flightDeckAdsbStatusDetail}>
+                    {receiverStatusSummary?.detail || 'No receiver active.'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Data streams — only show when receiving something */}
+              {(receiverStatusSummary?.code === 'CONNECTED' || receiverStatusSummary?.code === 'FULL' || receiverStatusSummary?.code === 'TRFC') ? (
+                <View style={styles.flightDeckAdsbStreamRow}>
+                  {[
+                    { label: 'Ownship', active: Boolean(receiverHealth?.ownshipFresh) },
+                    { label: 'Traffic', active: Boolean(receiverHealth?.trafficFresh) },
+                    { label: 'AHRS', active: Boolean(receiverHealth?.attitudeFresh) },
+                  ].map((stream) => (
+                    <View
+                      key={stream.label}
+                      style={[
+                        styles.flightDeckAdsbStreamChip,
+                        stream.active ? styles.flightDeckAdsbStreamChipActive : null,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.flightDeckAdsbStreamChipText,
+                          stream.active ? styles.flightDeckAdsbStreamChipTextActive : null,
+                        ]}
+                      >
+                        {stream.label}
+                      </Text>
+                    </View>
+                  ))}
+                  {receiverHealth?.lastFrameAt ? (
+                    <Text style={styles.flightDeckAdsbLastPacket}>
+                      Last packet {Math.round((Date.now() - receiverHealth.lastFrameAt) / 1000)}s ago
+                    </Text>
+                  ) : null}
+                </View>
               ) : null}
-              <View style={styles.flightDeckControlRow}>
+
+              {/* WiFi guidance — show when not connected or lost */}
+              {(receiverStatusSummary?.code === 'NO-CONN' || receiverStatusSummary?.code === 'SRCH' || receiverStatusSummary?.code === 'LOST') ? (
+                <View style={styles.flightDeckAdsbGuideCard}>
+                  <Text style={styles.flightDeckAdsbGuideTitle}>How to connect</Text>
+                  <Text style={styles.flightDeckAdsbGuideStep}>
+                    1. Power on your ADS-B receiver (Stratux, Sentry, Garmin GDL, etc.)
+                  </Text>
+                  <Text style={styles.flightDeckAdsbGuideStep}>
+                    2. Go to device Wi-Fi settings and connect to the receiver's network
+                  </Text>
+                  <Text style={styles.flightDeckAdsbGuideStep}>
+                    3. Return here — RSF will detect data automatically
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.flightDeckAdsbWifiButton}
+                    onPress={() => openWiFiSettings?.()}
+                  >
+                    <Ionicons name="wifi" size={15} color={colors.flightText} style={{ marginRight: 6 }} />
+                    <Text style={styles.flightDeckAdsbWifiButtonText}>Open Wi-Fi Settings</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              {/* Start / Stop listener */}
+              <View style={[styles.flightDeckControlRow, { marginTop: spacing.sm }]}>
                 <TouchableOpacity
                   style={[
                     styles.flightDeckChip,
-                    receiverStatusSummary?.tone === 'active' && styles.flightDeckChipActive,
+                    trafficEnabled ? styles.flightDeckChipActive : null,
                   ]}
                   onPress={toggleTrafficReceiver}
                 >
-                  <Text style={[styles.flightDeckChipText, receiverStatusSummary?.tone === 'active' && styles.flightDeckChipTextActive]}>
-                    {receiverStatusSummary?.code === 'CONNECTED' || receiverStatusSummary?.code === 'TRFC'
-                      ? 'Disconnect'
-                      : receiverStatusSummary?.code === 'SRCH'
-                        ? 'Stop Searching'
-                        : 'Connect ADS-B'}
+                  <Text style={[styles.flightDeckChipText, trafficEnabled ? styles.flightDeckChipTextActive : null]}>
+                    {trafficEnabled ? 'Stop Listening' : 'Start Listening'}
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              {/* ── Source diagnostics ──────────────────────────────── */}
+              <View style={[styles.flightDeckMetaDivider, { marginTop: spacing.md }]} />
+              <Text style={styles.flightDeckPanelTitle}>Source Diagnostics</Text>
               <Text style={styles.flightDeckPanelText}>
-                Source {ownshipSourceSummary?.code || '--'} - {ownshipSourceSummary?.detail || 'Tracking source unavailable.'}
-              </Text>
-              <Text style={styles.flightDeckPanelText}>Freshness {ownshipFreshnessText}</Text>
-              <Text style={styles.flightDeckPanelText}>
-                Heading {headingSourceSummary?.code || '--'} - {headingSourceSummary?.detail || 'No heading source.'}
-              </Text>
-              <Text style={styles.flightDeckPanelText}>
-                Attitude {attitudeSourceSummary?.code || '--'} - {attitudeSourceSummary?.detail || 'Attitude source unavailable.'}
+                Position {ownshipSourceSummary?.code || '--'} — {ownshipSourceSummary?.detail || 'No source active.'}
               </Text>
               <Text style={styles.flightDeckPanelText}>
-                Vision {visionReadinessSummary?.code || '--'} - {visionReadinessSummary?.detail || 'Vision readiness unavailable.'}
-              </Text>
-              {sourceArbitrationSummary ? (
-                <Text style={styles.flightDeckPanelText}>
-                  Source trust {sourceArbitrationSummary.code} - {sourceArbitrationSummary.detail}
-                </Text>
-              ) : null}
-              {flightDeckTrustSummary ? (
-                <Text style={styles.flightDeckPanelText}>
-                  Trust state {flightDeckTrustSummary.label} - {flightDeckTrustSummary.detail}
-                </Text>
-              ) : null}
-              {flightDeckTrustSummary?.degradedModes?.length ? (
-                <Text style={styles.flightDeckPanelText}>
-                  Degraded modes {flightDeckTrustSummary.degradedModes.map((mode: any) => mode.label).join(' - ')}
-                </Text>
-              ) : null}
-              <Text style={styles.flightDeckPanelText}>
-                Phase {flightDeckPhaseSummary?.label || 'Preflight'} - {flightDeckPhaseSummary?.detail || 'Phase logic pending.'}
+                Heading {headingSourceSummary?.code || '--'} — {headingSourceSummary?.detail || 'No heading source.'}
               </Text>
               <Text style={styles.flightDeckPanelText}>
-                Receiver {receiverStatusSummary?.code || '--'} - {receiverStatusSummary?.detail || 'No receiver health summary.'}
+                Attitude {attitudeSourceSummary?.code || '--'} — {attitudeSourceSummary?.detail || 'No attitude source.'}
               </Text>
               <Text style={styles.flightDeckPanelText}>
-                Nav data {routeExecutionSummary?.navDataSourceSummary?.code || '--'} - {routeExecutionSummary?.navDataSourceSummary?.detail || 'No route-structure or nav-data source active.'}
+                Vision {visionReadinessSummary?.code || '--'} — {visionReadinessSummary?.detail || 'Vision readiness unavailable.'}
               </Text>
-              {typeof routeExecutionSummary?.navDataCoveragePct === 'number' ? (
-                <Text style={styles.flightDeckPanelText}>
-                  Coverage {routeExecutionSummary.navDataCoveragePct}% - {routeExecutionSummary.navDataStructuredLegCount || 0} structured legs
-                  {typeof routeExecutionSummary?.navDataBriefingLegCount === 'number' && routeExecutionSummary.navDataBriefingLegCount > 0
-                    ? ` - ${routeExecutionSummary.navDataBriefingLegCount} briefing-backed legs`
-                    : ''}
-                  {typeof routeExecutionSummary?.navDataProviderLegCount === 'number' && routeExecutionSummary.navDataProviderLegCount > 0
-                    ? ` - ${routeExecutionSummary.navDataProviderLegCount} provider legs`
-                    : ''}
-                  {typeof routeExecutionSummary?.navDataAirwaySegmentCount === 'number' && routeExecutionSummary.navDataAirwaySegmentCount > 0
-                    ? ` - ${routeExecutionSummary.navDataAirwaySegmentCount} airway segments tracked`
-                    : ''}
-                </Text>
+              {gpsOwnshipFresh ? (
+                <Text style={styles.flightDeckPanelText}>GPS fallback active</Text>
               ) : null}
-              {routeExecutionSummary?.navDataWarnings?.length ? (
-                <Text style={styles.flightDeckPanelText}>Nav note {routeExecutionSummary.navDataWarnings[0]}</Text>
-              ) : null}
-              {receiverHealth?.warnings?.length ? (
-                <Text style={styles.flightDeckPanelText}>Receiver note {receiverHealth.warnings[0]}</Text>
-              ) : null}
-              {receiverOwnshipFresh === false ? (
-                <Text style={styles.flightDeckPanelText}>
-                  Receiver ownship is stale.{gpsOwnshipFresh ? ' GPS fallback is active.' : ' No live fallback is active.'}
-                </Text>
-              ) : null}
-              {flightDeckTacticalSummary ? (
-                <Text style={styles.flightDeckPanelText}>
-                  RSF Assist {flightDeckTacticalSummary.title} - {flightDeckTacticalSummary.detail}
-                </Text>
-              ) : null}
+
+              {/* ── System controls ─────────────────────────────────── */}
+              <View style={[styles.flightDeckMetaDivider, { marginTop: spacing.md }]} />
+              <Text style={styles.flightDeckPanelTitle}>System</Text>
               <View style={styles.flightDeckControlRow}>
-                <TouchableOpacity style={[styles.flightDeckChip, trafficEnabled && styles.flightDeckChipActive]} onPress={() => setTrafficEnabled(!trafficEnabled)}>
-                  <Text style={[styles.flightDeckChipText, trafficEnabled && styles.flightDeckChipTextActive]}>Traffic</Text>
-                </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.flightDeckChip, gpsEnabled && styles.flightDeckChipActive]}
                   onPress={() => setGpsEnabled(!gpsEnabled)}
@@ -2940,18 +2960,6 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 >
                   <Text style={[styles.flightDeckChipText, gpsEnabled && styles.flightDeckChipTextActive]}>GPS</Text>
                 </TouchableOpacity>
-                {isSuperAdmin ? (
-                  <TouchableOpacity style={[styles.flightDeckChip, simulationEnabled && styles.flightDeckChipActive]} onPress={() => setSimulationEnabled(!simulationEnabled)}>
-                    <Text style={[styles.flightDeckChipText, simulationEnabled && styles.flightDeckChipTextActive]}>Sim</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-              {isSuperAdmin && simulationEnabled ? (
-                <Text style={styles.flightDeckPanelText}>
-                  {Math.round((simulationProgress ?? 0) * 100)}% complete at {simulationSpeed}.
-                </Text>
-              ) : null}
-              <View style={styles.flightDeckControlRow}>
                 <TouchableOpacity
                   style={[styles.flightDeckChip, flightDeckHudExpanded && styles.flightDeckChipActive]}
                   onPress={toggleFlightDeckHud}
@@ -2960,8 +2968,22 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                     {flightDeckHudExpanded ? 'Collapse HUD' : 'Expand HUD'}
                   </Text>
                 </TouchableOpacity>
+                {isSuperAdmin ? (
+                  <TouchableOpacity
+                    style={[styles.flightDeckChip, simulationEnabled && styles.flightDeckChipActive]}
+                    onPress={() => setSimulationEnabled(!simulationEnabled)}
+                  >
+                    <Text style={[styles.flightDeckChipText, simulationEnabled && styles.flightDeckChipTextActive]}>Sim</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
-              <View style={styles.flightDeckControlRow}>
+              {isSuperAdmin && simulationEnabled ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Sim {Math.round((simulationProgress ?? 0) * 100)}% at {simulationSpeed}
+                </Text>
+              ) : null}
+              {renderDisplayModeControls()}
+              <View style={[styles.flightDeckControlRow, { marginTop: spacing.sm }]}>
                 <TouchableOpacity
                   style={styles.flightDeckChip}
                   onPress={() => {
@@ -2972,7 +2994,6 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                   <Text style={styles.flightDeckChipText}>End Flight</Text>
                 </TouchableOpacity>
               </View>
-              {renderDisplayModeControls()}
             </View>
           )}
 

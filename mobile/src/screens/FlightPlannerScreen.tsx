@@ -1,6 +1,7 @@
 ﻿import {
   ActivityIndicator,
   Alert,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -1810,50 +1811,64 @@ export default function FlightPlannerScreen() {
   const receiverStatusSummary = useMemo(() => {
     const ownshipFresh = Boolean(receiverHealth?.ownshipFresh || receiverOwnshipFresh);
     const trafficFresh = Boolean(receiverHealth?.trafficFresh);
+    const attitudeFresh = Boolean(receiverHealth?.attitudeFresh);
+    const hadData = Boolean(receiverHealth?.lastFrameAt);
+
+    if (ownshipFresh && trafficFresh && attitudeFresh) {
+      return {
+        code: 'FULL',
+        label: 'Full — Ownship + Traffic + AHRS',
+        detail: 'Ownship, live traffic, and attitude data are all flowing.',
+        tone: 'active',
+        actionLabel: 'ADS-B',
+      } as const;
+    }
     if (ownshipFresh && trafficFresh) {
       return {
         code: 'CONNECTED',
-        label: 'Connected',
+        label: 'Ownship + Traffic',
         detail: 'Ownship and live traffic data are flowing.',
         tone: 'active',
         actionLabel: 'ADS-B',
-      };
+      } as const;
     }
     if (trafficFresh) {
       return {
         code: 'TRFC',
-        label: 'Traffic-Only',
-        detail: 'Traffic is live, but ownship is not current.',
+        label: 'Traffic Only',
+        detail: 'Traffic data is live. No ownship position from receiver.',
         tone: 'caution',
         actionLabel: 'ADS-B',
-      };
+      } as const;
     }
     if (receiverHealth?.status === 'stale') {
       return {
-        code: 'NO-CONN',
-        label: 'No Connection',
-        detail: 'ADS-B receiver data has gone stale.',
+        code: 'LOST',
+        label: 'Connection Lost',
+        detail: hadData
+          ? 'Receiver data stopped. Check your WiFi connection to the receiver.'
+          : 'No GDL-90 data received. Verify WiFi is connected to receiver.',
         tone: 'warning',
-        actionLabel: trafficEnabled ? 'ADS-B' : 'Connect ADS-B',
-      };
+        actionLabel: 'ADS-B',
+      } as const;
     }
     if (trafficEnabled) {
       return {
         code: 'SRCH',
         label: 'Searching',
-        detail: 'Listening for GDL-90 data. Connect your device to your receiver\'s WiFi first.',
-        tone: 'caution',
+        detail: 'Listening on UDP port 4000 for GDL-90 data. Connect device WiFi to receiver.',
+        tone: 'limited',
         actionLabel: 'ADS-B',
-      };
+      } as const;
     }
     return {
       code: 'NO-CONN',
       label: 'Not Connected',
-      detail: 'ADS-B receiver is off. Connect a Stratux, Sentry, or compatible receiver.',
+      detail: 'No receiver active. Connect device WiFi to a GDL-90 source, then tap Start Listening.',
       tone: 'warning',
-      actionLabel: 'Connect ADS-B',
-    };
-  }, [receiverHealth?.ownshipFresh, receiverHealth?.status, receiverHealth?.trafficFresh, receiverOwnshipFresh, trafficEnabled]);
+      actionLabel: 'ADS-B',
+    } as const;
+  }, [receiverHealth?.ownshipFresh, receiverHealth?.attitudeFresh, receiverHealth?.status, receiverHealth?.trafficFresh, receiverHealth?.lastFrameAt, receiverOwnshipFresh, trafficEnabled]);
   const flightDeckTrustSummary = useMemo<FlightDeckTrustSummary>(() => {
     const degradedModes: Array<{ code: string; label: string; detail: string; tone: 'accent' | 'advisory' | 'caution' | 'warning' | 'limited' }> = [];
     if (simulationEnabled) {
@@ -4928,6 +4943,23 @@ export default function FlightPlannerScreen() {
     }
     startTrafficReceiver();
   };
+  const openWiFiSettings = () => {
+    const url = Platform.OS === 'ios' ? 'App-Prefs:WIFI' : 'android.settings.WIFI_SETTINGS';
+    Linking.canOpenURL(url)
+      .then((supported) => {
+        if (supported) return Linking.openURL(url);
+        // Fall back to generic settings
+        const fallback = Platform.OS === 'ios' ? 'app-settings:' : 'android.settings.SETTINGS';
+        return Linking.openURL(fallback);
+      })
+      .catch(() => {
+        Alert.alert(
+          'Open WiFi Settings',
+          'Go to Settings \u203a Wi-Fi and connect to your ADS-B receiver network (e.g. Stratux, Sentry, GDL 50).',
+          [{ text: 'OK' }]
+        );
+      });
+  };
   const focusDiversionAirport = (airport: NearbyDiversionAirport) => {
     setSelectedDiversionIcao(airport.icao);
     openFlightDeckPanel('diversions');
@@ -7077,6 +7109,7 @@ export default function FlightPlannerScreen() {
     clearActiveFlight: () => {
       AsyncStorage.removeItem(ACTIVE_FLIGHT_KEY).catch(() => undefined);
     },
+    openWiFiSettings,
   };
 
   if (isFlightDeck) {
@@ -10296,11 +10329,130 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 4,
   },
+  flightDeckPanelSubtitle: {
+    color: colors.flightTextMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginTop: 1,
+  },
   flightDeckPanelText: {
     color: colors.flightTextMuted,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 4,
+  },
+  flightDeckMetaDivider: {
+    height: 1,
+    backgroundColor: 'rgba(61,90,120,0.38)',
+    marginBottom: spacing.sm,
+  },
+  // ADS-B connection panel
+  flightDeckAdsbStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: 12,
+    backgroundColor: 'rgba(14,20,30,0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(61,90,120,0.42)',
+  },
+  flightDeckAdsbStatusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 3,
+  },
+  flightDeckAdsbStatusLabel: {
+    color: colors.flightText,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  flightDeckAdsbStatusDetail: {
+    color: colors.flightTextMuted,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  flightDeckAdsbStreamRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  flightDeckAdsbStreamChip: {
+    height: 24,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(17,24,32,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(61,90,120,0.42)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flightDeckAdsbStreamChipActive: {
+    backgroundColor: 'rgba(43,171,111,0.14)',
+    borderColor: 'rgba(43,171,111,0.52)',
+  },
+  flightDeckAdsbStreamChipText: {
+    color: colors.flightTextMuted,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  flightDeckAdsbStreamChipTextActive: {
+    color: '#2bab6f',
+  },
+  flightDeckAdsbLastPacket: {
+    color: colors.flightTextMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: spacing.xs,
+  },
+  flightDeckAdsbGuideCard: {
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: 12,
+    backgroundColor: 'rgba(9,13,19,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(61,90,120,0.38)',
+    gap: 6,
+  },
+  flightDeckAdsbGuideTitle: {
+    color: colors.flightText,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  flightDeckAdsbGuideStep: {
+    color: colors.flightTextMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  flightDeckAdsbWifiButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: spacing.xs,
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: 'rgba(74,159,212,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(74,159,212,0.46)',
+  },
+  flightDeckAdsbWifiButtonText: {
+    color: colors.flightAdvisory || colors.flightText,
+    fontSize: 13,
+    fontWeight: '700',
   },
   flightDeckBadge: {
     color: colors.flightAccent,

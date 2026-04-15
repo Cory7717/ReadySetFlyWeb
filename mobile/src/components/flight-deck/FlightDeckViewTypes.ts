@@ -561,4 +561,5 @@ export interface FlightDeckActionsProps {
   focusTrafficTarget: (target: any) => void;
   setAlternate: (icao: string) => void;
   clearActiveFlight?: () => void;
+  openWiFiSettings?: () => void;
 }

@@ -15,6 +15,9 @@ import { ChevronDown, Download, ExternalLink, Mail, Shield } from "lucide-react"
 const PDF_PATH = "/downloads/noise-and-fury-investor-v2.pdf";
 const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero.jpg";
 const MARC_LOGO_PATH = "/downloads/marc-production-logo.jpg";
+const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
+const CESAR_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cesar.jpg";
+const SCOTT_BIO_IMAGE_PATH = "/downloads/noise-and-fury-scott.jpg";
 
 const highlightStats = [
   { value: "8", label: "Prestige episodes", detail: "Season one mapped end-to-end" },
@@ -125,6 +128,7 @@ const teamProfiles = [
   {
     role: "Creator / Writer",
     name: "Cory Armer",
+    imagePath: CORY_BIO_IMAGE_PATH,
     teaser:
       "Creator of Noise & Fury and founder of RSF, with the core operating and creative context behind the project.",
     paragraphs: [
@@ -136,20 +140,28 @@ const teamProfiles = [
   },
   {
     role: "Producer / Co-Creator & Writer",
-    name: "Cesar Rameriz",
+    name: "Cesar R. Ramirez",
+    imagePath: CESAR_BIO_IMAGE_PATH,
     teaser:
-      "Producer, co-creator, and writer shaping the dramatic world, with Road to Juarez among his credits.",
+      "Producer, co-creator, and writer with a cross-functional background spanning production, operations, and development.",
     paragraphs: [
-      "Producer, co-creator, and writer helping shape the series concept, long-form dramatic world, and season architecture. His body of work includes Road to Juarez.",
+      "Cesar R. Ramirez is a seasoned producer, consultant, and development executive with more than two decades of experience across entertainment, operations, construction, and product development. His work combines creative instincts, strategic planning, and practical execution, making him a key force in shaping projects from concept through delivery.",
+      "At Marc Production Enterprises in Austin, he has helped develop and produce projects including Road to Juarez, Critical Thinking, Sno Cone Stand Inc., and The LookOut Creek, while also supporting current titles in development such as Ladies Forbidden G.O.L.F. and Crossed Love. His work has included producing, acting, directing support, and hands-on project assembly across multiple stages of production.",
+      "Ramirez has collaborated with notable industry talent including Scott Rosenfelt, Sean McNamara, and John Leguizamo. He specializes in identifying strong material, refining projects in development, coordinating talent and production teams, securing resources, and helping guide films toward distribution and audience readiness.",
+      "Outside film production, he has held senior roles in operations, product development, and international sales, including leadership positions at Skintiva, Robusto International Corporation, and International Space Optics. That operating discipline continues to inform his producing work, giving him a grounded, solutions-first approach to building ambitious projects.",
     ],
   },
   {
     role: "Producer",
     name: "Scott Rosenfelt",
+    imagePath: SCOTT_BIO_IMAGE_PATH,
     teaser:
-      "Attached producer bringing proven feature credibility and experienced packaging guidance.",
+      "Veteran producer and writer bringing major feature credibility, market trust, and experienced packaging guidance.",
     paragraphs: [
-      "Attached producer whose credits include Home Alone and Russkies. Brings proven market credibility and experienced guidance as the project moves toward packaging and buyer-facing conversations.",
+      "Scott Rosenfelt is one of Hollywood's most accomplished independent producers, with a body of work that includes Home Alone, Mystic Pizza, Teen Wolf, Smoke Signals, and Extremities. His producing career spans commercially successful studio films, acclaimed independent features, documentaries, and television projects, giving him rare credibility on both the creative and market sides of development.",
+      "Recent and current work includes the series SellBlock, the feature Bukinawa, and upcoming projects such as Lips Like Sugar, Sinta Ko, Empress Wu, Choices, and Under The Boards. He also produced Critical Thinking, directed by and starring John Leguizamo, which was selected for SXSW and went on to a successful release and streaming run.",
+      "Rosenfelt was also producer and writer on The Jade Pendant and wrote, produced, and directed the pilot Main Street. Through ShadowCatcher Entertainment, which he co-founded, he produced the Sundance-winning Smoke Signals, one of the landmark independent films of its era.",
+      "In addition to his production work, Rosenfelt has written, directed, taught, and lectured widely. He is a member of the Directors Guild of America, the Writers Guild of America, and the Academy of Motion Picture Arts and Sciences, and is a graduate of NYU's Tisch School of the Arts.",
     ],
   },
 ];
@@ -261,11 +273,11 @@ export default function NoiseAndFuryPage() {
                 <div className="grid gap-3 pt-2 sm:grid-cols-3">
                   <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur">
                     <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">Created By</div>
-                    <div className="mt-2 text-base font-semibold text-white">Cory Armer and Cesar Rameriz</div>
+                    <div className="mt-2 text-base font-semibold text-white">Cory Armer and Cesar R. Ramirez</div>
                   </div>
                   <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur">
                     <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">Written By</div>
-                    <div className="mt-2 text-base font-semibold text-white">Cory Armer and Cesar Rameriz</div>
+                    <div className="mt-2 text-base font-semibold text-white">Cory Armer and Cesar R. Ramirez</div>
                   </div>
                   <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur">
                     <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">Packaging Round</div>
@@ -423,12 +435,20 @@ export default function NoiseAndFuryPage() {
                   onClick={() => setOpenBioName(isOpen ? "Cory Armer" : profile.name)}
                   className="group h-full rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-6 text-left transition hover:border-[#B88A50]/55 hover:bg-[linear-gradient(180deg,rgba(22,17,13,0.98)_0%,rgba(10,10,11,1)_100%)]"
                 >
+                  <div className="overflow-hidden rounded-[22px] border border-white/10 bg-black/20 shadow-[0_22px_40px_rgba(0,0,0,0.24)]">
+                    <img
+                      src={profile.imagePath}
+                      alt={`${profile.name} profile`}
+                      className="h-64 w-full object-cover object-center transition duration-500 group-hover:scale-[1.02]"
+                    />
+                  </div>
+
                   <div className="flex items-start justify-between gap-4">
-                    <div>
+                    <div className="pt-5">
                       <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">{profile.role}</div>
                       <div className="mt-3 font-display text-3xl font-semibold tracking-[-0.05em] text-white">{profile.name}</div>
                     </div>
-                    <ChevronDown className={`mt-1 h-5 w-5 shrink-0 text-[#D3A869] transition-transform ${isOpen ? "rotate-180" : "rotate-0"}`} />
+                    <ChevronDown className={`mt-6 h-5 w-5 shrink-0 text-[#D3A869] transition-transform ${isOpen ? "rotate-180" : "rotate-0"}`} />
                   </div>
 
                   <div className="mt-4 text-sm leading-7 text-[#D3C6BA]">{profile.teaser}</div>

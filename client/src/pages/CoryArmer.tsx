@@ -317,8 +317,7 @@ export default function CoryArmer() {
                 <button
                   type="button"
                   className="ca-timeline-trigger"
-                  aria-expanded={expandedState}
-                  aria-controls={`experience-${index}`}
+                  {...{ "aria-expanded": expandedState, "aria-controls": `experience-${index}` }}
                   onClick={() => toggleExperience(experienceKey)}
                 >
                   <div className="ca-date">{item.date}</div>

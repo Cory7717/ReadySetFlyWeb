@@ -3,6 +3,8 @@ import "./CoryArmer.css";
 
 const RESUME_PATH = "/assets/coryarmer_resume.pdf";
 const PROFILE_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
+const CONTACT_EMAIL = "coryarmer@gmail.com";
+const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Cory Armer - Professional Inquiry")}`;
 
 const pillars = [
   {
@@ -102,6 +104,17 @@ const timeline = [
       "Built operational discipline across teams by standardizing expectations, improving accountability, and tightening daily execution.",
       "Led through turnaround and stabilization needs while maintaining guest experience and property-level financial focus.",
     ],
+  },
+];
+
+const timelineGroups = [
+  {
+    heading: "Ventures & Creative Development",
+    items: timeline.slice(0, 2),
+  },
+  {
+    heading: "Professional Operations & Leadership",
+    items: timeline.slice(2),
   },
 ];
 
@@ -229,6 +242,10 @@ export default function CoryArmer() {
     document.getElementById("contact")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const openEmailClient = () => {
+    window.location.href = CONTACT_MAILTO;
+  };
+
   const toggleExperience = (key: string) => {
     setOpenExperienceKeys((current) =>
       current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
@@ -306,42 +323,50 @@ export default function CoryArmer() {
       <section className="ca-section ca-reveal">
         <div className="ca-section-label">FLIGHT LOG</div>
         <h2 className="ca-section-heading">Professional Experience</h2>
-        <div className="ca-timeline">
-          {timeline.map((item, index) => {
-            const experienceKey = `${item.company}-${item.date}`;
-            const isOpen = openExperienceKeys.includes(experienceKey);
-            const expandedState = isOpen ? "true" : "false";
+        <div className="ca-timeline-layout">
+          {timelineGroups.map((group, groupIndex) => (
+            <div className="ca-timeline-column" key={group.heading}>
+              <div className="ca-timeline-group-heading">{group.heading}</div>
+              <div className="ca-timeline">
+                {group.items.map((item, itemIndex) => {
+                  const experienceKey = `${item.company}-${item.date}`;
+                  const timelineIndex = groupIndex * 10 + itemIndex;
+                  const isOpen = openExperienceKeys.includes(experienceKey);
+                  const expandedState = isOpen ? "true" : "false";
 
-            return (
-              <article className={`ca-timeline-entry ca-dot-${item.accent} ${isOpen ? "ca-entry-open" : ""}`} key={experienceKey} style={{ animationDelay: `${index * 80}ms` }}>
-                <button
-                  type="button"
-                  className="ca-timeline-trigger"
-                  {...{ "aria-expanded": expandedState, "aria-controls": `experience-${index}` }}
-                  onClick={() => toggleExperience(experienceKey)}
-                >
-                  <div className="ca-date">{item.date}</div>
-                  <div className="ca-timeline-heading-row">
-                    <h3>{item.company}</h3>
-                    <span className="ca-expand-indicator" aria-hidden="true">{isOpen ? "-" : "+"}</span>
-                  </div>
-                  <div className="ca-role">{item.role}</div>
-                  <p>{item.detail}</p>
-                </button>
+                  return (
+                    <article className={`ca-timeline-entry ca-dot-${item.accent} ${isOpen ? "ca-entry-open" : ""}`} key={experienceKey} style={{ animationDelay: `${timelineIndex * 80}ms` }}>
+                      <button
+                        type="button"
+                        className="ca-timeline-trigger"
+                        {...{ "aria-expanded": expandedState, "aria-controls": `experience-${timelineIndex}` }}
+                        onClick={() => toggleExperience(experienceKey)}
+                      >
+                        <div className="ca-date">{item.date}</div>
+                        <div className="ca-timeline-heading-row">
+                          <h3>{item.company}</h3>
+                          <span className="ca-expand-indicator" aria-hidden="true">{isOpen ? "-" : "+"}</span>
+                        </div>
+                        <div className="ca-role">{item.role}</div>
+                        <p>{item.detail}</p>
+                      </button>
 
-                {isOpen ? (
-                  <div id={`experience-${index}`} className="ca-experience-details">
-                    <div className="ca-experience-label">Expanded experience</div>
-                    <ul>
-                      {item.expanded.map((detail) => (
-                        <li key={detail}>{detail}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
+                      {isOpen ? (
+                        <div id={`experience-${timelineIndex}`} className="ca-experience-details">
+                          <div className="ca-experience-label">Expanded experience</div>
+                          <ul>
+                            {item.expanded.map((detail) => (
+                              <li key={detail}>{detail}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -370,11 +395,11 @@ export default function CoryArmer() {
           Open to senior business development and operations leadership roles in aviation technology, hospitality tech, media &amp;
           entertainment, or growth-stage companies.
         </p>
-        <a className="ca-email-button" href="mailto:coryarmer@gmail.com">
+        <button className="ca-email-button" type="button" onClick={openEmailClient}>
           EMAIL CORY
-        </a>
+        </button>
         <div className="ca-contact-links">
-          <span>coryarmer@gmail.com</span>
+          <a href={CONTACT_MAILTO}>{CONTACT_EMAIL}</a>
           <a href="https://www.linkedin.com/in/cory-armer" target="_blank" rel="noopener">
             linkedin.com/in/cory-armer
           </a>

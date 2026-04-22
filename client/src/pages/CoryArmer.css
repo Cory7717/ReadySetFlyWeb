@@ -356,11 +356,32 @@
   letter-spacing: 0.18em;
 }
 
+.ca-timeline-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.ca-timeline-column {
+  position: relative;
+}
+
+.ca-timeline-group-heading {
+  min-height: 44px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(30, 58, 95, 0.8);
+  color: var(--ca-amber);
+  font-family: "DM Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
 .ca-timeline {
   position: relative;
   display: grid;
   gap: 18px;
-  max-width: 920px;
   padding-left: 34px;
 }
 
@@ -647,6 +668,11 @@
   .ca-skills .ca-panel:last-child {
     grid-column: 1 / -1;
   }
+
+  .ca-timeline-layout {
+    grid-template-columns: 1fr;
+    gap: 34px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -700,7 +726,7 @@
     padding-left: 24px;
   }
 
-  .ca-timeline-entry {
+  .ca-timeline-trigger {
     padding: 18px;
   }
 

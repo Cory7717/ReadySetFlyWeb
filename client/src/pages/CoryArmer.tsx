@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import "./CoryArmer.css?inline";
+import "./CoryArmer.css";
 
 const RESUME_PATH = "/assets/coryarmer_resume.pdf";
 const PROFILE_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";

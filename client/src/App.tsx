@@ -81,6 +81,7 @@ import FlyingClubsPage from "@/pages/flying-clubs";
 import FlyingClubDetailPage from "@/pages/flying-club-detail";
 import InvestorDeck, { INVESTOR_DECK_SHARE_PATH } from "@/pages/investor-deck";
 import NoiseAndFuryPage from "@/pages/noise-and-fury";
+import CoryArmer from "@/pages/CoryArmer";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -230,6 +231,7 @@ function Router() {
       <Route path="/investor-deck" component={InvestorDeck} />
       <Route path={INVESTOR_DECK_SHARE_PATH} component={InvestorDeck} />
       <Route path="/noiseandfury" component={NoiseAndFuryPage} />
+      <Route path="/coryarmer" component={CoryArmer} />
       <Route path="/404" component={NotFound} />
       
       {/* Protected routes - require authentication */}
@@ -352,6 +354,8 @@ function AppShell() {
   const { isAuthenticated } = useAuth();
   const [location] = useLocation();
   const isNoiseAndFuryPage = location.startsWith("/noiseandfury");
+  const isCoryArmerPage = location.startsWith("/coryarmer");
+  const isStandalonePage = isNoiseAndFuryPage || isCoryArmerPage;
   useEffect(() => {
     setAuthState(isAuthenticated);
     if (!isAuthenticated && isSoftAuthEnabled()) {
@@ -363,20 +367,20 @@ function AppShell() {
     <ThemeProvider defaultTheme="light">
       <TooltipProvider>
         <div className="min-h-screen bg-background flex flex-col">
-          {!isNoiseAndFuryPage && <Header />}
-          {!isNoiseAndFuryPage && <FreeAccountValueBar />}
+          {!isStandalonePage && <Header />}
+          {!isStandalonePage && <FreeAccountValueBar />}
           <div className="flex-1">
             <AnalyticsTracker />
             <ScrollToTopOnRoute />
             <Router />
           </div>
-          {!isNoiseAndFuryPage && <Footer />}
+          {!isStandalonePage && <Footer />}
         </div>
-        {!isNoiseAndFuryPage && <AuthGateModal />}
-        {!isNoiseAndFuryPage && <AiWeatherTranslatorAnnouncement />}
-        {!isNoiseAndFuryPage && <MembershipGrantAnnouncement />}
-        {!isNoiseAndFuryPage && <SignupNudgeBanner />}
-        {!isNoiseAndFuryPage && <ScrollToTopButton />}
+        {!isStandalonePage && <AuthGateModal />}
+        {!isStandalonePage && <AiWeatherTranslatorAnnouncement />}
+        {!isStandalonePage && <MembershipGrantAnnouncement />}
+        {!isStandalonePage && <SignupNudgeBanner />}
+        {!isStandalonePage && <ScrollToTopButton />}
         <Toaster />
       </TooltipProvider>
     </ThemeProvider>

@@ -6,6 +6,22 @@ const PROFILE_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
 const CONTACT_EMAIL = "coryarmer@gmail.com";
 const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Cory Armer - Professional Inquiry")}`;
 
+type ContactFormState = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  subject: string;
+  message: string;
+};
+
+const initialContactForm: ContactFormState = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  subject: "Professional inquiry",
+  message: "",
+};
+
 const pillars = [
   {
     label: "PILLAR 01",
@@ -23,7 +39,7 @@ const pillars = [
     icon: "plane",
     heading: "Founder, Ready Set Fly",
     body:
-      "Full-stack SaaS for general aviation pilots built across React, React Native, Node.js, and modern cloud tooling. Pre-seed raise in market with commercial launch targeting Q2 2026.",
+      "Built RSF as both a full-stack general aviation SaaS platform and an operating business, spanning product architecture, LLC setup, budgets, P&L modeling, marketing outreach, client relations, and launch planning.",
     stat: "2020",
     statLabel: "FOUNDED",
   },
@@ -46,11 +62,12 @@ const timeline = [
     date: "2020-Present",
     accent: "teal",
     detail:
-      "Built RSF from concept into a full-stack aviation platform spanning planning, mobile flight tools, marketplace workflows, and investor-ready SaaS infrastructure.",
+      "Built RSF from concept into a full-stack aviation platform and early-stage company spanning product, finance, go-to-market, client development, and investor-ready operating infrastructure.",
     expanded: [
       "Translated real pilot workflow gaps into product requirements across planning, mobile flight tools, marketplace operations, subscriptions, payments, and account systems.",
-      "Built and coordinated the product roadmap across web, mobile, backend, investor materials, release readiness, and go-to-market priorities.",
-      "Balanced technical execution with business development, customer discovery, fundraising preparation, and strategic partnership conversations.",
+      "Created the business foundation around the product, including LLC setup, budget planning, P&L modeling, pricing assumptions, operating forecasts, and investor-facing financial materials.",
+      "Built and coordinated the product roadmap across web, mobile, backend, investor materials, release readiness, marketing outreach, and go-to-market priorities.",
+      "Balanced technical execution with business development, customer discovery, client relations, fundraising preparation, and strategic partnership conversations.",
     ],
   },
   {
@@ -191,6 +208,9 @@ function Icon({ type }: { type: string }) {
 
 export default function CoryArmer() {
   const [openExperienceKeys, setOpenExperienceKeys] = useState<string[]>([]);
+  const [contactForm, setContactForm] = useState<ContactFormState>(initialContactForm);
+  const [contactStatus, setContactStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [contactError, setContactError] = useState("");
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -242,14 +262,40 @@ export default function CoryArmer() {
     document.getElementById("contact")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const openEmailClient = () => {
-    window.location.href = CONTACT_MAILTO;
-  };
-
   const toggleExperience = (key: string) => {
     setOpenExperienceKeys((current) =>
       current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
     );
+  };
+
+  const updateContactField = (field: keyof ContactFormState, value: string) => {
+    setContactForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const submitContactForm = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setContactStatus("sending");
+    setContactError("");
+
+    try {
+      const response = await fetch("/api/coryarmer/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(contactForm),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || "Unable to send message. Please try again.");
+      }
+
+      setContactStatus("sent");
+      setContactForm(initialContactForm);
+    } catch (error) {
+      setContactStatus("error");
+      setContactError(error instanceof Error ? error.message : "Unable to send message. Please try again.");
+    }
   };
 
   return (
@@ -395,10 +441,69 @@ export default function CoryArmer() {
           Open to senior business development and operations leadership roles in aviation technology, hospitality tech, media &amp;
           entertainment, or growth-stage companies.
         </p>
-        <button className="ca-email-button" type="button" onClick={openEmailClient}>
-          EMAIL CORY
-        </button>
+        <form className="ca-contact-form" onSubmit={submitContactForm}>
+          <div className="ca-contact-grid">
+            <label>
+              <span>First Name</span>
+              <input
+                required
+                value={contactForm.firstName}
+                onChange={(event) => updateContactField("firstName", event.target.value)}
+                placeholder="Jane"
+              />
+            </label>
+            <label>
+              <span>Last Name</span>
+              <input
+                required
+                value={contactForm.lastName}
+                onChange={(event) => updateContactField("lastName", event.target.value)}
+                placeholder="Doe"
+              />
+            </label>
+          </div>
+          <label>
+            <span>Email</span>
+            <input
+              required
+              type="email"
+              value={contactForm.email}
+              onChange={(event) => updateContactField("email", event.target.value)}
+              placeholder="jane@company.com"
+            />
+          </label>
+          <label>
+            <span>Subject</span>
+            <input
+              required
+              value={contactForm.subject}
+              onChange={(event) => updateContactField("subject", event.target.value)}
+              placeholder="Professional inquiry"
+            />
+          </label>
+          <label>
+            <span>Message</span>
+            <textarea
+              required
+              minLength={10}
+              rows={5}
+              value={contactForm.message}
+              onChange={(event) => updateContactField("message", event.target.value)}
+              placeholder="Share the role, opportunity, or conversation you would like to discuss."
+            />
+          </label>
+          <button className="ca-email-button" type="submit" disabled={contactStatus === "sending"}>
+            {contactStatus === "sending" ? "SENDING..." : "SEND REQUEST"}
+          </button>
+          {contactStatus === "sent" ? (
+            <div className="ca-form-status ca-form-success">Message sent. Cory will follow up directly.</div>
+          ) : null}
+          {contactStatus === "error" ? (
+            <div className="ca-form-status ca-form-error">{contactError}</div>
+          ) : null}
+        </form>
         <div className="ca-contact-links">
+          <span>Prefer direct email?</span>
           <a href={CONTACT_MAILTO}>{CONTACT_EMAIL}</a>
           <a href="https://www.linkedin.com/in/cory-armer" target="_blank" rel="noopener">
             linkedin.com/in/cory-armer

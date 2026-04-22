@@ -597,6 +597,96 @@
   padding: 0 30px;
 }
 
+.ca-email-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.ca-contact-form {
+  display: grid;
+  gap: 14px;
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.ca-contact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ca-contact-form label {
+  display: grid;
+  gap: 8px;
+}
+
+.ca-contact-form label span {
+  color: var(--ca-text-dim);
+  font-family: "DM Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.ca-contact-form input,
+.ca-contact-form textarea {
+  width: 100%;
+  border: 1px solid rgba(30, 58, 95, 0.88);
+  border-radius: 0;
+  background: rgba(7, 11, 16, 0.58);
+  color: var(--ca-text);
+  font-family: "DM Mono", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 13px 14px;
+  outline: none;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.ca-contact-form textarea {
+  resize: vertical;
+  min-height: 140px;
+}
+
+.ca-contact-form input::placeholder,
+.ca-contact-form textarea::placeholder {
+  color: rgba(122, 155, 181, 0.54);
+}
+
+.ca-contact-form input:focus,
+.ca-contact-form textarea:focus {
+  border-color: rgba(0, 194, 199, 0.72);
+  background: rgba(7, 11, 16, 0.78);
+  box-shadow: var(--ca-glow-teal);
+}
+
+.ca-contact-form .ca-email-button {
+  justify-self: center;
+  margin-top: 4px;
+}
+
+.ca-form-status {
+  border: 1px solid rgba(30, 58, 95, 0.88);
+  padding: 12px 14px;
+  text-align: center;
+  font-family: "DM Mono", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ca-form-success {
+  border-color: rgba(0, 194, 199, 0.44);
+  color: var(--ca-teal);
+  background: rgba(0, 194, 199, 0.06);
+}
+
+.ca-form-error {
+  border-color: rgba(245, 166, 35, 0.48);
+  color: var(--ca-amber);
+  background: rgba(245, 166, 35, 0.06);
+}
+
 .ca-contact-links {
   display: grid;
   gap: 8px;
@@ -710,6 +800,10 @@
 
   .ca-pillars,
   .ca-skills {
+    grid-template-columns: 1fr;
+  }
+
+  .ca-contact-grid {
     grid-template-columns: 1fr;
   }
 

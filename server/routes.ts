@@ -6844,6 +6844,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/coryarmer/contact", contactFormRateLimiter, async (req, res) => {
+    try {
+      const contactFormSchema = z.object({
+        firstName: z.string().min(1, "First name is required").max(100),
+        lastName: z.string().min(1, "Last name is required").max(100),
+        email: z.string().email("Valid email is required").max(255),
+        subject: z.string().min(1, "Subject is required").max(200),
+        message: z.string().min(10, "Message must be at least 10 characters").max(2000),
+      });
+
+      const validationResult = contactFormSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Invalid form data",
+          details: validationResult.error.errors,
+        });
+      }
+
+      const data = validationResult.data;
+      const ip = req.ip || req.connection.remoteAddress || "unknown";
+
+      const submission = await storage.createContactSubmission({
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        subject: `[Cory Armer] ${data.subject}`,
+        message: data.message,
+        ipAddress: ip,
+      });
+
+      sendContactFormEmail({
+        ...data,
+        subject: `[Cory Armer] ${data.subject}`,
+        recipientEmail: "coryarmer@gmail.com",
+        brandName: "Cory Armer",
+        headerTitle: "Cory Armer Professional Inquiry",
+        headerSubtitle: "New message from readysetfly.us/coryarmer",
+        headerColor: "#0D1520",
+        messageAccentColor: "#00C2C7",
+        footerText: "Cory Armer - Professional Contact",
+      })
+        .then(async () => {
+          await storage.updateContactSubmissionEmailStatus(submission.id, true);
+        })
+        .catch((error) => {
+          console.error(`Failed to send Cory Armer contact email for submission ${submission.id}:`, error);
+        });
+
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Cory Armer contact form error:", error);
+      return res.status(500).json({ error: "Failed to process professional inquiry" });
+    }
+  });
+
   app.post("/api/investor/confidentiality-accept", contactFormRateLimiter, async (req: any, res) => {
     try {
       const acceptanceSchema = z.object({

@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import "./CoryArmer.css";
+import { useEffect, useState } from "react";
+import "./CoryArmer.css?inline";
 
 const RESUME_PATH = "/assets/coryarmer_resume.pdf";
 const PROFILE_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
@@ -11,7 +11,7 @@ const pillars = [
     icon: "ops",
     heading: "Operations & Leadership",
     body:
-      "15+ years across multi-property hospitality operations, P&L ownership, revenue strategy, team development, owner relations, and Marriott, IHG, and Hyatt branded assets.",
+      "15+ years leading branded hospitality operations across Marriott, IHG, and Hyatt assets, with multi-property responsibility, P&L ownership, revenue strategy, owner relations, and team development.",
     stat: "15+",
     statLabel: "YRS EXPERIENCE",
   },
@@ -45,6 +45,11 @@ const timeline = [
     accent: "teal",
     detail:
       "Built RSF from concept into a full-stack aviation platform spanning planning, mobile flight tools, marketplace workflows, and investor-ready SaaS infrastructure.",
+    expanded: [
+      "Translated real pilot workflow gaps into product requirements across planning, mobile flight tools, marketplace operations, subscriptions, payments, and account systems.",
+      "Built and coordinated the product roadmap across web, mobile, backend, investor materials, release readiness, and go-to-market priorities.",
+      "Balanced technical execution with business development, customer discovery, fundraising preparation, and strategic partnership conversations.",
+    ],
   },
   {
     role: "Creator & Lead Writer",
@@ -53,6 +58,11 @@ const timeline = [
     accent: "gold",
     detail:
       "Created and developed a WGA-registered prestige television series with season architecture, scripts, investor materials, and producer attachment momentum.",
+    expanded: [
+      "Developed the original creative concept, season structure, series bible, episode architecture, scripts, and investor-facing materials.",
+      "Positioned the project for serious packaging conversations with emphasis on creative quality, market credibility, and the right producing attachments.",
+      "Managed the project like a professional IP asset, connecting writing, development, investor presentation, and industry outreach.",
+    ],
   },
   {
     role: "General Manager",
@@ -61,6 +71,11 @@ const timeline = [
     accent: "amber",
     detail:
       "Led property operations, commercial execution, guest experience, team development, budget controls, and owner-facing performance management.",
+    expanded: [
+      "Directed daily hotel operations across staffing, service standards, revenue execution, expense discipline, and guest satisfaction.",
+      "Partnered with ownership and commercial stakeholders on performance, forecasting, operational priorities, and market positioning.",
+      "Led team development, accountability systems, and property-level execution through high-pressure operating environments.",
+    ],
   },
   {
     role: "Dual General Manager",
@@ -69,14 +84,24 @@ const timeline = [
     accent: "amber",
     detail:
       "Managed dual branded assets with responsibility for operations, sales alignment, labor strategy, revenue performance, and cross-property leadership.",
+    expanded: [
+      "Oversaw two branded properties simultaneously, aligning operating standards, leadership cadence, staffing plans, and commercial priorities.",
+      "Managed cross-property communication between sales, operations, ownership, and brand expectations.",
+      "Drove performance through revenue awareness, cost control, process consistency, and manager development across both assets.",
+    ],
   },
   {
     role: "Area General Manager",
     company: "Holiday Inn Express / Days Inn / Best Western",
-    date: "2013-2016",
+    date: "2013-2018",
     accent: "amber",
     detail:
       "Oversaw multi-property hotel operations with direct accountability for team performance, owner relations, cost control, and operational recovery.",
+    expanded: [
+      "Managed multi-property operations across varied brand environments with responsibility for staffing, service recovery, cost controls, and owner communication.",
+      "Built operational discipline across teams by standardizing expectations, improving accountability, and tightening daily execution.",
+      "Led through turnaround and stabilization needs while maintaining guest experience and property-level financial focus.",
+    ],
   },
 ];
 
@@ -152,6 +177,8 @@ function Icon({ type }: { type: string }) {
 }
 
 export default function CoryArmer() {
+  const [openExperienceKeys, setOpenExperienceKeys] = useState<string[]>([]);
+
   useEffect(() => {
     const previousTitle = document.title;
     document.title = "Cory Armer - Operations Leader | Founder | Creator";
@@ -202,20 +229,27 @@ export default function CoryArmer() {
     document.getElementById("contact")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const toggleExperience = (key: string) => {
+    setOpenExperienceKeys((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    );
+  };
+
   return (
     <main className="cory-armer-page">
       <div className="ca-scanlines" aria-hidden="true" />
 
       <section className="ca-hero">
         <div className="ca-hero-copy ca-reveal">
-          <div className="ca-kicker">PILOT ID // CORY ARMER // KAUS</div>
+          <div className="ca-kicker">COMMAND PROFILE // CORY ARMER // KAUS</div>
           <h1>CORY ARMER</h1>
-          <div className="ca-title-line">SENIOR OPS & BIZ DEV LEADER // FOUNDER, READY SET FLY // CREATOR, NOISE & FURY</div>
+          <div className="ca-title-line">EXECUTIVE OPS & BIZ DEV LEADER // FOUNDER, READY SET FLY // CREATOR, NOISE & FURY</div>
           <div className="ca-rule" />
           <p>
-            15+ years of P&amp;L ownership and multi-property operations leadership. Founder of Ready Set Fly - a full-stack general aviation
-            SaaS platform built from scratch, now in pre-seed raise with commercial launch targeting Q2 2026. Creator of Noise &amp; Fury: The
-            Last Great Rock Era, a WGA-registered prestige TV series with a producer attached.
+            Senior operations and business development leader with 15+ years leading branded hospitality assets, multi-property teams, P&amp;L
+            performance, revenue strategy, owner relations, and operational execution. Founder of Ready Set Fly, built from concept into a real
+            full-stack general aviation platform, and creator of Noise &amp; Fury, a WGA-registered prestige series with producer attachment momentum.
+            My work sits at the intersection of disciplined operations, entrepreneurial execution, product building, and creative leadership.
           </p>
           <div className="ca-hero-actions">
             <a className="ca-button ca-button-primary" href={RESUME_PATH} download>
@@ -234,8 +268,8 @@ export default function CoryArmer() {
           <div className="ca-portrait-frame">
             <img src={PROFILE_IMAGE_PATH} alt="Cory Armer" />
             <div className="ca-portrait-readout">
-              <span>READY SET FLY</span>
-              <strong>FOUNDER // OPERATOR // BUILDER</strong>
+              <span>READY SET FLY // NOISE & FURY</span>
+              <strong>OPERATOR // FOUNDER // CREATIVE LEAD</strong>
             </div>
           </div>
         </div>
@@ -273,14 +307,42 @@ export default function CoryArmer() {
         <div className="ca-section-label">FLIGHT LOG</div>
         <h2 className="ca-section-heading">Professional Experience</h2>
         <div className="ca-timeline">
-          {timeline.map((item, index) => (
-            <article className={`ca-timeline-entry ca-dot-${item.accent} ca-reveal`} key={`${item.company}-${item.date}`} style={{ animationDelay: `${index * 80}ms` }}>
-              <div className="ca-date">{item.date}</div>
-              <h3>{item.company}</h3>
-              <div className="ca-role">{item.role}</div>
-              <p>{item.detail}</p>
-            </article>
-          ))}
+          {timeline.map((item, index) => {
+            const experienceKey = `${item.company}-${item.date}`;
+            const isOpen = openExperienceKeys.includes(experienceKey);
+            const expandedState = isOpen ? "true" : "false";
+
+            return (
+              <article className={`ca-timeline-entry ca-dot-${item.accent} ca-reveal ${isOpen ? "ca-entry-open" : ""}`} key={experienceKey} style={{ animationDelay: `${index * 80}ms` }}>
+                <button
+                  type="button"
+                  className="ca-timeline-trigger"
+                  aria-expanded={expandedState}
+                  aria-controls={`experience-${index}`}
+                  onClick={() => toggleExperience(experienceKey)}
+                >
+                  <div className="ca-date">{item.date}</div>
+                  <div className="ca-timeline-heading-row">
+                    <h3>{item.company}</h3>
+                    <span className="ca-expand-indicator" aria-hidden="true">{isOpen ? "-" : "+"}</span>
+                  </div>
+                  <div className="ca-role">{item.role}</div>
+                  <p>{item.detail}</p>
+                </button>
+
+                {isOpen ? (
+                  <div id={`experience-${index}`} className="ca-experience-details">
+                    <div className="ca-experience-label">Expanded experience</div>
+                    <ul>
+                      {item.expanded.map((detail) => (
+                        <li key={detail}>{detail}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
         </div>
       </section>
 
@@ -314,7 +376,7 @@ export default function CoryArmer() {
         </a>
         <div className="ca-contact-links">
           <span>coryarmer@gmail.com</span>
-          <a href="https://www.linkedin.com/in/cory-armer" target="_blank" rel="noreferrer">
+          <a href="https://www.linkedin.com/in/cory-armer" target="_blank" rel="noopener">
             linkedin.com/in/cory-armer
           </a>
         </div>

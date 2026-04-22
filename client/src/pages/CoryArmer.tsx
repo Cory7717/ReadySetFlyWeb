@@ -313,7 +313,7 @@ export default function CoryArmer() {
             const expandedState = isOpen ? "true" : "false";
 
             return (
-              <article className={`ca-timeline-entry ca-dot-${item.accent} ca-reveal ${isOpen ? "ca-entry-open" : ""}`} key={experienceKey} style={{ animationDelay: `${index * 80}ms` }}>
+              <article className={`ca-timeline-entry ca-dot-${item.accent} ${isOpen ? "ca-entry-open" : ""}`} key={experienceKey} style={{ animationDelay: `${index * 80}ms` }}>
                 <button
                   type="button"
                   className="ca-timeline-trigger"

@@ -34,8 +34,14 @@ async function throwIfResNotOk(res: Response) {
     const text = (await res.text()) || res.statusText;
     const contentType = res.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
+      let payload: unknown = null;
       try {
-        const payload = JSON.parse(text);
+        payload = JSON.parse(text);
+      } catch {
+        payload = null;
+      }
+
+      if (payload) {
         const validationMessages =
           payload && typeof payload === "object" && "validation" in payload
             ? collectValidationMessages((payload as Record<string, unknown>).validation)
@@ -48,12 +54,10 @@ async function throwIfResNotOk(res: Response) {
           ? (validationMessages.length > 0
               ? `${errorField.trim()} ${validationMessages.join(" ")}`
               : errorField.trim())
-          : validationMessages.length > 0
-            ? validationMessages.join(" ")
-            : JSON.stringify(payload);
+            : validationMessages.length > 0
+              ? validationMessages.join(" ")
+              : JSON.stringify(payload);
         throw new Error(message || res.statusText);
-      } catch {
-        // Fall through to raw text handling if JSON parsing fails.
       }
     }
 

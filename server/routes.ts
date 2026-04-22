@@ -1786,6 +1786,12 @@ const tfrCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_STALE_MAX_AGE_MINUTES = Number(process.env.TFR_STALE_MAX_AGE_MINUTES || 12 * 60);
 const TFR_STALE_MAX_AGE_MS = Math.max(30, TFR_STALE_MAX_AGE_MINUTES) * 60 * 1000;
 let tfrLastSuccess: { data: any; fetchedAt: number } | null = null;
+let tfrPayloadBuildPromise: Promise<{ payload: any; staleHint: boolean }> | null = null;
+const boundedEnvNumber = (value: string | undefined, fallback: number, min: number, max: number) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+};
 const SUA_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const suaCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_ARCGIS_PROXY_URL = (process.env.TFR_ARCGIS_PROXY_URL || "").trim();
@@ -1795,6 +1801,14 @@ const TFR_ARCGIS_URLS = TFR_ARCGIS_URLS_ENV
   : [];
 const TFR_WFS_ENABLED = String(process.env.TFR_WFS_ENABLED || "true").toLowerCase() === "true";
 const TFR_WFS_URL = (process.env.TFR_WFS_URL || "https://sua.faa.gov/geoserver/wfs").trim();
+const TFR_WFS_TIMEOUT_MS = boundedEnvNumber(process.env.TFR_WFS_TIMEOUT_MS, 3000, 1000, 10000);
+const TFR_ARCGIS_TIMEOUT_MS = boundedEnvNumber(process.env.TFR_ARCGIS_TIMEOUT_MS, 3500, 1000, 10000);
+const TFR_ARCGIS_MAX_ATTEMPTS = boundedEnvNumber(
+  process.env.TFR_ARCGIS_MAX_ATTEMPTS,
+  TFR_ARCGIS_PROXY_URL ? 4 : 6,
+  1,
+  20,
+);
 const FAA_WMS_URL = (process.env.FAA_WMS_URL || "https://sua.faa.gov/geoserver/wms").trim();
 const SUA_ARCGIS_URL = (process.env.SUA_ARCGIS_URL || "https://coast.noaa.gov/arcgis/rest/services/Hosted/MilitarySpecialUseAirspace/FeatureServer/0/query").trim();
 const NOTAM_SOURCE = (process.env.NOTAM_SOURCE || "http").trim().toLowerCase();
@@ -2267,6 +2281,9 @@ async function fetchArcGisTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
     for (const format of formatOrder) {
       const params = new URLSearchParams({ ...paramsBase, f: format });
       for (const variant of headerVariants) {
+        if (attempts.length >= TFR_ARCGIS_MAX_ATTEMPTS) {
+          return { data: null, error: `${lastError} (${lastUrl})`, attempts };
+        }
         const url = `${baseUrl}?${params.toString()}`;
         lastUrl = url;
         try {
@@ -2275,7 +2292,7 @@ async function fetchArcGisTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
             {
               headers: variant.headers,
             },
-            8000
+            TFR_ARCGIS_TIMEOUT_MS
           );
           if (!response.ok) {
             const errorText = await response.text().catch(() => "");
@@ -2424,7 +2441,7 @@ async function fetchSuaWfsTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
           "Accept": "application/json",
         },
       },
-      10000
+      TFR_WFS_TIMEOUT_MS
     );
 
     if (!response.ok) {
@@ -16463,7 +16480,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       if (!payload) {
         try {
-          const result = await buildPayload();
+          const resultPromise = tfrPayloadBuildPromise ?? buildPayload().finally(() => {
+            tfrPayloadBuildPromise = null;
+          });
+          tfrPayloadBuildPromise = resultPromise;
+          const result = await resultPromise;
           payload = result.payload;
           stale = result.staleHint;
           const ttl =

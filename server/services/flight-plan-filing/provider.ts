@@ -2,10 +2,13 @@ import crypto from "crypto";
 import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
 import { extractFilingProviderPlanId, extractFilingVersionStamp } from "@shared/flight-plan-filing";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 
 const LAB_REST_BASE_URL = "https://ffspelabs.leidos.com/Website2/rest/";
 const PRODUCTION_REST_BASE_URL = "https://www.lmfsweb.afss.com/Website/rest/";
 const DEFAULT_USER_AGENT = "ReadySetFly Flight Service Interface";
+const DEFAULT_LEIDOS_REQUEST_TIMEOUT_MS = 25000;
 
 type LeidosEnvironment = "lab" | "production";
 
@@ -77,6 +80,89 @@ type LeidosFlightServiceConfig = {
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getLeidosRequestTimeoutMs = () => {
+  const parsed = Number(process.env.LEIDOS_FLIGHT_SERVICE_REQUEST_TIMEOUT_MS || DEFAULT_LEIDOS_REQUEST_TIMEOUT_MS);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_LEIDOS_REQUEST_TIMEOUT_MS;
+  return Math.min(Math.max(Math.round(parsed), 5000), 29000);
+};
+
+const isLeidosTimeoutLikeError = (error: any) => {
+  const message = String(error?.message || "");
+  const causeCode = String(error?.cause?.code || error?.code || "");
+  const causeMessage = String(error?.cause?.message || "");
+  return (
+    error?.name === "TimeoutError" ||
+    causeCode === "UND_ERR_CONNECT_TIMEOUT" ||
+    /connect timeout|timed out|timeout|fetch failed|socket hang up/i.test(message) ||
+    /connect timeout|timed out|timeout/i.test(causeMessage)
+  );
+};
+
+const fetchLeidosUrl = async (
+  urlString: string,
+  options: {
+    method: "GET" | "POST";
+    headers: Record<string, string>;
+    body?: string;
+  },
+  timeoutMs = getLeidosRequestTimeoutMs(),
+): Promise<Response> => {
+  const url = new URL(urlString);
+  const bodyBuffer = options.body != null ? Buffer.from(options.body) : null;
+  const headers: Record<string, string> = { ...options.headers };
+  if (bodyBuffer && !Object.keys(headers).some((key) => key.toLowerCase() === "content-length")) {
+    headers["Content-Length"] = String(bodyBuffer.byteLength);
+  }
+
+  return await new Promise<Response>((resolve, reject) => {
+    let settled = false;
+    const transport = url.protocol === "http:" ? httpRequest : httpsRequest;
+    const req = transport(
+      url,
+      {
+        method: options.method,
+        headers,
+      },
+      (incoming) => {
+        const chunks: Buffer[] = [];
+        incoming.on("data", (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        incoming.on("end", () => {
+          if (settled) return;
+          settled = true;
+          const responseHeaders = new Headers();
+          Object.entries(incoming.headers).forEach(([key, value]) => {
+            if (Array.isArray(value)) {
+              value.forEach((entry) => responseHeaders.append(key, entry));
+            } else if (value != null) {
+              responseHeaders.set(key, String(value));
+            }
+          });
+          resolve(new Response(new Uint8Array(Buffer.concat(chunks)), {
+            status: incoming.statusCode || 500,
+            statusText: incoming.statusMessage,
+            headers: responseHeaders,
+          }));
+        });
+      },
+    );
+
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`Leidos request timed out after ${timeoutMs}ms`));
+    });
+    req.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
+    if (bodyBuffer) {
+      req.write(bodyBuffer);
+    }
+    req.end();
+  });
+};
 
 const parseMetadataRetryDelays = (value?: string | null) => {
   const parsed = String(value || "")
@@ -595,7 +681,7 @@ const retrieveLeidosPlanMetadataByProviderPlanId = async (
   const basic = Buffer.from(`${config.username}:${config.password}`).toString('base64');
   let response: Response;
   try {
-    response = await fetch(url.toString(), {
+    response = await fetchLeidosUrl(url.toString(), {
       method: 'GET',
       headers: {
         Authorization: `Basic ${basic}`,
@@ -879,7 +965,7 @@ export const searchLeidosRoute = async ({
   const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
   let response: Response;
   try {
-    response = await fetch(url.toString(), {
+    response = await fetchLeidosUrl(url.toString(), {
       method: "GET",
       headers: {
         Authorization: `Basic ${basic}`,
@@ -888,9 +974,7 @@ export const searchLeidosRoute = async ({
       },
     });
   } catch (error: any) {
-    const code = String(error?.cause?.code || error?.code || "");
-    const message = String(error?.message || "");
-    if (code === "UND_ERR_CONNECT_TIMEOUT" || /connect timeout|timed out|fetch failed/i.test(message)) {
+    if (isLeidosTimeoutLikeError(error)) {
       throw new Error("Leidos route assist timed out in the lab. Flight Service did not respond in time, so route suggestions are temporarily unavailable.");
     }
     throw error;
@@ -1157,9 +1241,8 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
     const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
     let response: Response;
     try {
-      response = await fetch(requestUrl, {
+      response = await fetchLeidosUrl(requestUrl, {
         method: "POST",
-        redirect: "manual",
         headers: {
           Authorization: `Basic ${basic}`,
           Accept: "application/json, text/plain, */*",
@@ -1169,25 +1252,24 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         body: requestBody.toString(),
       });
     } catch (error: any) {
-      const message = String(error?.message || "");
-      const causeCode = String(error?.cause?.code || "");
-      const causeMessage = String(error?.cause?.message || "");
-      const timeoutLike =
-        error?.name === "TimeoutError" ||
-        causeCode === "UND_ERR_CONNECT_TIMEOUT" ||
-        /connect timeout|timed out|fetch failed/i.test(message) ||
-        /connect timeout|timed out/i.test(causeMessage);
-
-      if (timeoutLike) {
-        throw new Error(
-          `Leidos ${action.toUpperCase()} request timed out before Flight Service responded. ` +
-          "Leidos is taking longer than usual to respond. Wait a few minutes, then try again."
-        );
-      }
-
-      throw new Error(
-        `Leidos ${action.toUpperCase()} request failed before Flight Service responded. ` +
-        `${message || "Network request failed."}`
+      const message = String(error?.message || "Network request failed.");
+      const reason = isLeidosTimeoutLikeError(error)
+        ? `Leidos did not answer the ${action.toUpperCase()} request before RSF's provider timeout, so RSF kept it staged. Wait a few minutes, then try again.`
+        : `RSF could not reach Leidos for the ${action.toUpperCase()} request (${message}), so RSF kept it staged instead of dropping it.`;
+      return buildStagedFallbackResult(
+        plan,
+        action,
+        validation,
+        reason,
+        {
+          providerPlanId: plan.filingProviderPlanId || null,
+          rawExtras: {
+            requestUrl,
+            requestPayload: Object.fromEntries(requestBody.entries()),
+            providerError: message,
+            providerTimeout: isLeidosTimeoutLikeError(error),
+          },
+        },
       );
     }
 

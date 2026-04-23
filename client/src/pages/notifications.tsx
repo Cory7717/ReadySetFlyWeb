@@ -20,7 +20,11 @@ function formatDisplayDate(value?: string | null) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString();
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function isFlightPlanNotification(type?: string) {
+  return /^(flight_plan_|provider_sync)/.test(type || "");
 }
 
 export default function NotificationsPage() {
@@ -49,7 +53,7 @@ export default function NotificationsPage() {
             <Bell className="h-5 w-5 text-primary" />
             Notifications
           </CardTitle>
-          <CardDescription>RSF Pro alerts and account updates.</CardDescription>
+          <CardDescription>Flight updates, provider changes, and account alerts.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -74,11 +78,14 @@ export default function NotificationsPage() {
                   </div>
                   <p className="text-sm text-muted-foreground">{notification.message}</p>
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <div>Due: {formatDisplayDate(notification.referenceDate || null)}</div>
+                    {!isFlightPlanNotification(notification.type) && notification.referenceDate && (
+                      <div>Due: {formatDisplayDate(notification.referenceDate)}</div>
+                    )}
                     {!notification.isRead && (
                       <Button
                         size="sm"
                         variant="ghost"
+                        className="ml-auto"
                         onClick={() => markReadMutation.mutate(notification.id)}
                         disabled={markReadMutation.isPending}
                       >

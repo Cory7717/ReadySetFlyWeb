@@ -5122,9 +5122,18 @@ export default function FlightPlanner() {
         setEditingPlan(result.plan);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
+      const live = Boolean(result?.live);
+      const actionTitles: Record<string, string> = {
+        file: live ? "Flight plan filed" : "Filing staged",
+        amend: live ? "Amendment submitted" : "Amendment staged",
+        activate: live ? "Flight plan activated" : "Activation staged",
+        cancel: live ? "Flight plan cancelled" : "Cancellation staged",
+        close: live ? "Flight plan closed" : "Closure staged",
+      };
       toast({
-        title: `${variables.action[0].toUpperCase()}${variables.action.slice(1)} ${result?.live ? "submitted" : "staged"}`,
-        description: result?.message || "The provider handoff was recorded.",
+        title: actionTitles[variables.action] ?? (live ? "Request submitted" : "Request staged"),
+        description: result?.message || (live ? "The provider accepted your request." : "The request was staged and will be sent when provider is ready."),
       });
     },
     onError: (error: any) => {
@@ -5153,9 +5162,17 @@ export default function FlightPlanner() {
         setDraftPlanId(result.plan.id);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
+      const routeChanged = Boolean(
+        (result?.plan as any)?.filingProviderSnapshot &&
+        typeof (result?.plan as any).filingProviderSnapshot === "object" &&
+        (result?.plan as any).filingProviderSnapshot?.route?.changedByProvider
+      );
       toast({
-        title: result?.versionStamp ? "Provider sync refreshed" : "Provider sync checked",
-        description: result?.message || "RSF refreshed the Leidos provider state.",
+        title: routeChanged ? "Provider updated your route" : (result?.versionStamp ? "Provider sync complete" : "Provider sync checked"),
+        description: routeChanged
+          ? "The provider returned a different effective route. See Provider Updates for details."
+          : result?.message || "RSF checked the latest state from Leidos.",
       });
     },
     onError: (error: any) => {
@@ -7772,8 +7789,8 @@ export default function FlightPlanner() {
           {isGuest && (
             <div className={cn(plannerSubpanelMutedClass, "border-dashed p-4 text-sm text-[#A9BBCD]")}>
               {guestFlightPlanFileLimitReached
-                ? "Guest filing limit reached. Create a free RSF account to save plans, keep filing through RSF, and manage lifecycle actions."
-                : `Guest access includes ${guestFlightPlanFilesRemaining} remaining direct ${guestFlightPlanFilesRemaining === 1 ? "flight plan filing" : "flight plan filings"} before a free RSF account is required. Amend, cancel, activate, and close actions still require a saved account plan.`}
+                ? "Guest filing limit reached. Create a free account to save plans, keep filing, and receive real-time provider updates and route change notifications."
+                : `You have ${guestFlightPlanFilesRemaining} free ${guestFlightPlanFilesRemaining === 1 ? "filing" : "filings"} remaining as a guest. Create a free account to save plans, manage lifecycle actions, and get notified when the provider changes your route.`}
             </div>
           )}
           {hasCurrentSavedPlan ? (

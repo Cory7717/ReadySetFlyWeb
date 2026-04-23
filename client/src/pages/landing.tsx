@@ -1667,6 +1667,10 @@ export default function Landing() {
                   Explore the Ecosystem
                 </Button>
               </div>
+              <p className="text-sm text-[#9aafcc] leading-relaxed">
+                Pilots are already using RSF to plan, file, and track flights in one place.{" "}
+                <span className="text-[#c0d0e8]">Free to use. No account required to start planning.</span>
+              </p>
               <div className="flex flex-wrap items-center gap-3 text-xs text-[#A8B8CC]">
                 <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141a22] text-[#d2dbe8]">US-only</Badge>
                 <span className="tracking-[0.16em] text-[#8fa6c8]">Plan. File. Fly. Follow.</span>
@@ -1727,7 +1731,7 @@ export default function Landing() {
                       RSF Welcomes CPA Members
                     </div>
                     <div className="max-w-2xl text-sm leading-6 text-[#CCD7E5]">
-                      Join our growing family of aviators, from student pilots to ATP, and unlock the CPA member offer directly inside the RSF operations stack.
+                      Aircraft owners and pilots from student to ATP are already flying with RSF. CPA members unlock an exclusive offer directly inside the RSF operations stack.
                     </div>
                   </div>
                   {cpaOffer ? (

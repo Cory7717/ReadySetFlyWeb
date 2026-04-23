@@ -11,7 +11,7 @@ import { cancelAuthGate, completeAuthGate, subscribeAuthGate } from "@/utils/aut
 
 const POPUP_NAME = "rsf_auth_popup";
 
-const authGateMessages: Record<string, { title: string; description: string }> = {
+const authGateMessages: Record<string, { title: string; description: string; cta?: string }> = {
   save_flight_plan: {
     title: "Create a free account to save this plan",
     description: "Save your route, fuel notes, and departure timing so you can return to it from any device.",
@@ -25,8 +25,9 @@ const authGateMessages: Record<string, { title: string; description: string }> =
     description: "RSF Pro connects planner workflow to your digital logbook, currency, and training history.",
   },
   file_flight_plan: {
-    title: "Create a free account to keep filing through RSF",
-    description: "Guest access includes two direct flight plan submissions. Sign in to save plans, keep filing, and manage filing lifecycle actions in RSF.",
+    title: "Create a free account to file and track your flights",
+    description: "Save your plans, access them from any device, and receive real-time updates when the provider changes your route or returns new filing information.",
+    cta: "Create free account",
   },
 };
 
@@ -97,12 +98,20 @@ export function AuthGateModal() {
   const handleCancel = () => {
     cancelAuthGate(actionName ?? undefined);
     setOpen(false);
-    toast({
-      title: "Create a free account to save and access it anywhere.",
-    });
+    if (actionName === "file_flight_plan") {
+      toast({
+        title: "Create a free account to file and track your flights",
+        description: "You can keep planning. Create a free account when you're ready to file.",
+      });
+    } else {
+      toast({
+        title: "Create a free account to save and access it anywhere.",
+      });
+    }
   };
 
   const message = actionName ? authGateMessages[actionName] : undefined;
+  const isFilingGate = actionName === "file_flight_plan";
 
   return (
     <AlertDialog open={open} onOpenChange={(next) => !next && handleCancel()}>
@@ -114,10 +123,10 @@ export function AuthGateModal() {
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={waiting}>Maybe later</AlertDialogCancel>
+          <AlertDialogCancel disabled={waiting}>{isFilingGate ? "Continue planning" : "Maybe later"}</AlertDialogCancel>
           <AlertDialogAction onClick={handleContinue} disabled={waiting}>
             <LogIn className="h-4 w-4 mr-2" />
-            Continue with Google
+            {message?.cta ?? "Continue with Google"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

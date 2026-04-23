@@ -20796,12 +20796,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           close: "Flight plan closed",
         };
         const planLabel = plan.title || `${plan.departure} to ${plan.destination}`;
+        const dep = plan.departure ? ` (${plan.departure}` : "";
+        const dest = plan.destination ? ` → ${plan.destination})` : (dep ? ")" : "");
+        const legs = dep && dest ? `${dep}${dest}` : "";
         const actionMessages: Record<string, string> = {
-          file: `"${planLabel}" has been filed with the provider.`,
-          amend: `Amendment accepted for "${planLabel}".`,
-          cancel: `"${planLabel}" has been cancelled.`,
-          activate: `"${planLabel}" is now activated.`,
-          close: `"${planLabel}" has been closed.`,
+          file: `Your flight plan${legs} has been filed with Leidos Flight Service. Track updates and provider changes from this notification center.`,
+          amend: `Your amendment for "${planLabel}"${legs} was accepted by the provider. Check Provider Updates for the effective route.`,
+          cancel: `Your flight plan${legs} has been cancelled with the provider.`,
+          activate: `Your VFR flight plan${legs} is now activated. Safe flight!`,
+          close: `Your VFR flight plan${legs} has been closed.`,
         };
         const today = new Date();
         storage.upsertUserNotification({
@@ -20895,10 +20898,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         storage.upsertUserNotification({
           userId,
           type: `provider_sync:${plan.id}`,
-          title: routeChangedByProvider ? "Provider updated your route" : "Provider sync complete",
+          title: routeChangedByProvider ? "Route updated by provider" : "Provider sync complete",
           message: routeChangedByProvider
-            ? `Provider returned an updated route for "${planLabel}". Effective route: ${providerRoute || "see provider sync details"}.`
-            : `Provider sync completed for "${planLabel}".`,
+            ? `Your filed route for "${planLabel}" was adjusted by the provider. Effective route: ${providerRoute || "see Provider Updates for details"}.`
+            : `Provider sync completed for "${planLabel}". Your plan is current with the Leidos record.`,
           referenceDate: today as any,
           channels: ["in_app"],
           isRead: false,

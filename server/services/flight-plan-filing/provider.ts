@@ -752,12 +752,21 @@ const buildProviderMessages = ({
       /reject|error|failed|denied/i.test(normalized) ? "error" :
       /warn|missing|required|needs|action/i.test(normalized) ? "warning" :
       action === "sync" ? "info" : "success";
+    const actionLabels: Record<string, string> = {
+      file: "Flight plan filed",
+      amend: "Amendment accepted",
+      cancel: "Cancellation confirmed",
+      activate: "Activation confirmed",
+      close: "Closure confirmed",
+    };
     const title =
       action === "sync"
-        ? "Provider sync update"
-        : severity === "success"
-          ? `Flight ${action}d successfully`
-          : `Provider ${severity}`;
+        ? severity === "warning" ? "Provider notice — review recommended"
+          : severity === "error" ? "Provider returned an error — action may be needed"
+          : "Provider sync update"
+        : severity === "error" ? "Provider returned an error — action may be needed"
+        : severity === "warning" ? "Provider notice — action may be needed"
+        : actionLabels[action] ?? "Provider request accepted";
     return {
       id: buildFilingEventId(source, action, providerPlanId, title, details, String(index)),
       timestamp: new Date().toISOString(),

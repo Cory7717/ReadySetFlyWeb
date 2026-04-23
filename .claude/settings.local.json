@@ -15,7 +15,8 @@
       "Bash(echo \"exit: $?\")",
       "Read(//c/tmp/**)",
       "Bash(ls /c/Users/carme/ReadySetFlyWeb/ReadySetFly/mobile/src/components/flight-deck/FlightDeckViewTypes*)",
-      "Bash(eas build:*)"
+      "Bash(eas build:*)",
+      "Bash(grep -E \"\\\\.\\(prisma|ts\\)$\")"
     ]
   }
 }

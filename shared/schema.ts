@@ -139,7 +139,8 @@ export const users = pgTable("users", {
   
   // Additional user fields
   phone: text("phone"),
-  
+  homeBase: text("home_base"),
+
   // Pilot information
   certifications: text("certifications").array().notNull().default(sql`ARRAY[]::text[]`),
   totalFlightHours: integer("total_flight_hours").default(0),

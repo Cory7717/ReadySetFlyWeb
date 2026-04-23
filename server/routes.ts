@@ -13707,6 +13707,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     "firstName",
     "lastName",
     "phone",
+    "homeBase",
     "totalFlightHours",
     "certifications",
     "aircraftTypesFlown",
@@ -20786,6 +20787,35 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         ...statusTimestamps,
       } as any);
 
+      if (providerResult.live) {
+        const actionTitles: Record<string, string> = {
+          file: "Flight plan filed",
+          amend: "Amendment accepted",
+          cancel: "Cancellation confirmed",
+          activate: "Flight plan activated",
+          close: "Flight plan closed",
+        };
+        const planLabel = plan.title || `${plan.departure} to ${plan.destination}`;
+        const actionMessages: Record<string, string> = {
+          file: `"${planLabel}" has been filed with the provider.`,
+          amend: `Amendment accepted for "${planLabel}".`,
+          cancel: `"${planLabel}" has been cancelled.`,
+          activate: `"${planLabel}" is now activated.`,
+          close: `"${planLabel}" has been closed.`,
+        };
+        const today = new Date();
+        storage.upsertUserNotification({
+          userId,
+          type: `flight_plan_${action}:${plan.id}`,
+          title: actionTitles[action] || "Flight plan updated",
+          message: actionMessages[action] || providerResult.message,
+          referenceDate: today as any,
+          channels: ["in_app"],
+          isRead: false,
+          meta: { planId: plan.id, planTitle: plan.title, action, providerPlanId: providerResult.providerPlanId } as any,
+        }).catch((err) => console.warn("Failed to create filing notification:", err));
+      }
+
       res.json({
         ...providerResult,
         plan: updated,
@@ -20855,6 +20885,32 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         filingProviderMessages: nextProviderMessages as any,
         filingRaw: nextRaw as any,
       } as any);
+
+      const routeChangedByProvider = Boolean(syncResult.providerSnapshot?.route?.changedByProvider);
+      const hasProviderMessages = syncResult.providerMessages.length > 0;
+      if (routeChangedByProvider || hasProviderMessages) {
+        const planLabel = plan.title || `${plan.departure} to ${plan.destination}`;
+        const providerRoute = (syncResult.providerSnapshot?.route as any)?.providerRoute ?? null;
+        const today = new Date();
+        storage.upsertUserNotification({
+          userId,
+          type: `provider_sync:${plan.id}`,
+          title: routeChangedByProvider ? "Provider updated your route" : "Provider sync complete",
+          message: routeChangedByProvider
+            ? `Provider returned an updated route for "${planLabel}". Effective route: ${providerRoute || "see provider sync details"}.`
+            : `Provider sync completed for "${planLabel}".`,
+          referenceDate: today as any,
+          channels: ["in_app"],
+          isRead: false,
+          meta: {
+            planId: plan.id,
+            planTitle: plan.title,
+            providerPlanId: syncResult.providerPlanId,
+            changedByProvider: routeChangedByProvider,
+            providerRoute,
+          } as any,
+        }).catch((err) => console.warn("Failed to create sync notification:", err));
+      }
 
       res.json({
         ok: true,

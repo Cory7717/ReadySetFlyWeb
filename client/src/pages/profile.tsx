@@ -41,6 +41,7 @@ const profileUpdateSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   phone: z.string().optional(),
+  homeBase: z.string().optional(),
   totalFlightHours: z.coerce.number().min(0).optional(),
   certifications: z.array(z.string()),
   profilePicture: z.any().optional(),
@@ -94,6 +95,7 @@ export default function Profile() {
       firstName: "",
       lastName: "",
       phone: "",
+      homeBase: "",
       totalFlightHours: 0,
       certifications: [],
     },
@@ -106,6 +108,7 @@ export default function Profile() {
         firstName: user.firstName || "",
         lastName: user.lastName || "",
         phone: user.phone || "",
+        homeBase: (user as any).homeBase || "",
         totalFlightHours: user.totalFlightHours || 0,
         certifications: user.certifications || [],
       });
@@ -176,10 +179,11 @@ export default function Profile() {
   });
 
   const onSubmit = (data: ProfileUpdateForm) => {
-    const updates: Partial<User> = {
+    const updates: Partial<User> & { homeBase?: string } = {
       firstName: data.firstName,
       lastName: data.lastName,
       phone: data.phone,
+      homeBase: data.homeBase,
       totalFlightHours: data.totalFlightHours,
       certifications: data.certifications,
     };
@@ -327,6 +331,20 @@ export default function Profile() {
                                 <FormLabel>Phone Number</FormLabel>
                                 <FormControl>
                                   <Input {...field} placeholder="+1 (555) 123-4567" data-testid="input-edit-phone" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="homeBase"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Home Base Airport</FormLabel>
+                                <FormControl>
+                                  <Input {...field} placeholder="KXYZ" data-testid="input-edit-home-base" />
                                 </FormControl>
                                 <FormMessage />
                               </FormItem>

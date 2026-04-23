@@ -1,5 +1,6 @@
 ﻿
 import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
+import { Bell } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -7857,6 +7858,28 @@ export default function FlightPlanner() {
                 >
                   Download filing summary
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={cn(
+                    "relative",
+                    summarizeProviderUpdates(currentSavedPlan!).count > 0 && summarizeProviderUpdates(currentSavedPlan!).latestSeverity === "error" && "border-red-400/50 text-red-200",
+                    summarizeProviderUpdates(currentSavedPlan!).count > 0 && summarizeProviderUpdates(currentSavedPlan!).latestSeverity === "warning" && "border-amber-400/50 text-amber-200",
+                    summarizeProviderUpdates(currentSavedPlan!).count > 0 && summarizeProviderUpdates(currentSavedPlan!).latestSeverity === "success" && "border-emerald-400/50 text-emerald-200",
+                    summarizeProviderUpdates(currentSavedPlan!).count > 0 && summarizeProviderUpdates(currentSavedPlan!).latestSeverity === "info" && "border-blue-400/50 text-blue-200",
+                  )}
+                  onClick={() => setProviderUpdatesPlan(currentSavedPlan!)}
+                  aria-label="Provider updates"
+                  title="Provider updates"
+                >
+                  <Bell className="h-4 w-4 mr-1" />
+                  {summarizeProviderUpdates(currentSavedPlan!).count > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+                      {summarizeProviderUpdates(currentSavedPlan!).count}
+                    </span>
+                  ) : null}
+                  Updates
+                </Button>
               </div>
               {!currentSavedPlanCanAmend && (
                 <div className="text-xs text-muted-foreground">
@@ -8168,14 +8191,23 @@ export default function FlightPlanner() {
                     size="sm"
                     variant="outline"
                     className={cn(
+                      "relative",
                       summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "error" && "border-red-400/50 text-red-200",
                       summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "warning" && "border-amber-400/50 text-amber-200",
                       summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "success" && "border-emerald-400/50 text-emerald-200",
                       summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "info" && "border-blue-400/50 text-blue-200",
                     )}
                     onClick={() => setProviderUpdatesPlan(plan)}
+                    aria-label="Provider updates"
+                    title="Provider updates"
                   >
-                    Provider updates{summarizeProviderUpdates(plan).count > 0 ? ` (${summarizeProviderUpdates(plan).count})` : ""}
+                    <Bell className="h-4 w-4 mr-1" />
+                    {summarizeProviderUpdates(plan).count > 0 ? (
+                      <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+                        {summarizeProviderUpdates(plan).count}
+                      </span>
+                    ) : null}
+                    Provider updates
                   </Button>
                   {(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
                     <>
@@ -8216,7 +8248,7 @@ export default function FlightPlanner() {
                 <div className="text-xs text-muted-foreground">
                   The visible trip date is your local plan date. ICAO DOF, normalized route text, and provider-returned changes are tracked separately below.
                 </div>
-                <FilingProviderWorkspace plan={plan} />
+                <FilingProviderWorkspace plan={plan} pilotPhone={(user as any)?.phone ?? null} pilotHomeBase={(user as any)?.homeBase ?? null} />
                 {Array.isArray(plan.filingActionHistory) && plan.filingActionHistory.length > 0 && (
                   <div className={cn("p-3", plannerSubpanelClass)}>
                     <div className="mb-2 font-semibold">Filing history</div>

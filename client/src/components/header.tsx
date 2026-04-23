@@ -341,7 +341,7 @@ export function Header() {
           {/* Right side actions */}
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 relative z-20 order-2 sm:order-3 ml-auto">
             {user && (
-              <Link href="/notifications" className="hidden sm:flex" data-testid="link-notifications">
+              <Link href="/notifications" className="flex" data-testid="link-notifications">
                 <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications" aria-label="Notifications">
                   <Bell className="h-5 w-5" />
                   {unreadCount > 0 && (

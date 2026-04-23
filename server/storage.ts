@@ -741,6 +741,7 @@ export interface IStorage {
   getUnreadUserNotifications(userId: string): Promise<UserNotification[]>;
   getUserNotificationByTypeAndDate(userId: string, type: string, referenceDate: Date | null): Promise<UserNotification | undefined>;
   createUserNotification(notification: InsertUserNotification & { userId: string }): Promise<UserNotification>;
+  upsertUserNotification(notification: InsertUserNotification & { userId: string }): Promise<UserNotification>;
   markUserNotificationRead(id: string, userId: string): Promise<UserNotification | undefined>;
 
   // Push Tokens
@@ -4544,6 +4545,24 @@ export class DatabaseStorage implements IStorage {
   async createUserNotification(notification: InsertUserNotification & { userId: string }): Promise<UserNotification> {
     const [created] = await db.insert(userNotifications).values(notification).returning();
     return created;
+  }
+
+  async upsertUserNotification(notification: InsertUserNotification & { userId: string }): Promise<UserNotification> {
+    const [result] = await db
+      .insert(userNotifications)
+      .values(notification)
+      .onConflictDoUpdate({
+        target: [userNotifications.userId, userNotifications.type, userNotifications.referenceDate],
+        set: {
+          title: notification.title,
+          message: notification.message,
+          isRead: false,
+          meta: (notification.meta ?? null) as any,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
   }
 
   async markUserNotificationRead(id: string, userId: string): Promise<UserNotification | undefined> {

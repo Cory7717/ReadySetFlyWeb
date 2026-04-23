@@ -54,7 +54,7 @@ const severityTone: Record<ProviderMessage["severity"], string> = {
 
 const valueTone = (changed: boolean) => (changed ? "text-amber-200" : "text-foreground");
 
-export function FilingProviderWorkspace({ plan }: { plan: FlightPlan }) {
+export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { plan: FlightPlan; pilotPhone?: string | null; pilotHomeBase?: string | null }) {
   const payload = readPayload(plan);
   const providerSnapshot = readProviderSnapshot(plan);
   const payloadRoute = asRecord(payload.route);
@@ -85,6 +85,22 @@ export function FilingProviderWorkspace({ plan }: { plan: FlightPlan }) {
             <div className="text-xs text-muted-foreground">Internal remarks</div>
             <div className="font-medium break-words">{plan.filingRemarks || plan.notes || "—"}</div>
           </div>
+          {(pilotPhone || pilotHomeBase) && (
+            <div className="mt-1 space-y-1 border-t border-border/40 pt-2">
+              {pilotPhone && (
+                <div>
+                  <div className="text-xs text-muted-foreground">Pilot phone</div>
+                  <div className="font-medium">{pilotPhone}</div>
+                </div>
+              )}
+              {pilotHomeBase && (
+                <div>
+                  <div className="text-xs text-muted-foreground">Home base</div>
+                  <div className="font-medium">{pilotHomeBase}</div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

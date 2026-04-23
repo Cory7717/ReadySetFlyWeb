@@ -1,0 +1,191 @@
+import { Badge } from "@/components/ui/badge";
+import type { FlightPlan } from "@shared/schema";
+
+type ProviderMessage = {
+  id: string;
+  timestamp: string;
+  severity: "info" | "success" | "warning" | "error";
+  title: string;
+  details: string;
+  providerPlanId?: string | null;
+};
+
+const asRecord = (value: unknown) =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+
+const asString = (value: unknown) => {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim();
+  return normalized || null;
+};
+
+const formatDateTime = (value: unknown) => {
+  const text = asString(value);
+  if (!text) return "—";
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return text;
+  return parsed.toLocaleString();
+};
+
+const readPayload = (plan: FlightPlan) => asRecord((plan as Record<string, unknown>).filingPayload);
+const readProviderSnapshot = (plan: FlightPlan) => asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+export const readProviderMessages = (plan: FlightPlan): ProviderMessage[] =>
+  Array.isArray((plan as Record<string, unknown>).filingProviderMessages)
+    ? (plan as Record<string, unknown>).filingProviderMessages as ProviderMessage[]
+    : [];
+
+export const summarizeProviderUpdates = (plan: FlightPlan) => {
+  const messages = readProviderMessages(plan);
+  const latest = messages[0] || null;
+  return {
+    count: messages.length,
+    latestSeverity: latest?.severity || "info",
+  };
+};
+
+const severityTone: Record<ProviderMessage["severity"], string> = {
+  info: "border-blue-400/40 bg-blue-950/30 text-blue-200",
+  success: "border-emerald-400/40 bg-emerald-950/30 text-emerald-200",
+  warning: "border-amber-400/40 bg-amber-950/30 text-amber-200",
+  error: "border-red-400/40 bg-red-950/30 text-red-200",
+};
+
+const valueTone = (changed: boolean) => (changed ? "text-amber-200" : "text-foreground");
+
+export function FilingProviderWorkspace({ plan }: { plan: FlightPlan }) {
+  const payload = readPayload(plan);
+  const providerSnapshot = readProviderSnapshot(plan);
+  const payloadRoute = asRecord(payload.route);
+  const providerRoute = asRecord(providerSnapshot.route);
+  const localRoute = asString(plan.route);
+  const transmittedRoute = asString(payloadRoute.normalizedTransmittedRoute);
+  const effectiveRoute = asString(providerRoute.providerRoute);
+  const fieldDiffs = Array.isArray(providerSnapshot.fieldDiffs) ? providerSnapshot.fieldDiffs as Array<Record<string, unknown>> : [];
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      <section className="rounded-lg border p-3">
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Local Plan</div>
+        <div className="mt-3 space-y-3 text-sm">
+          <div>
+            <div className="text-xs text-muted-foreground">User-entered route</div>
+            <div className="font-medium break-words">{localRoute || "—"}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Planned departure</div>
+            <div className="font-medium">{formatDateTime(plan.plannedDepartureAt)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Local other info</div>
+            <div className="font-medium break-words">{plan.filingOtherInfo || "—"}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Internal remarks</div>
+            <div className="font-medium break-words">{plan.filingRemarks || plan.notes || "—"}</div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-lg border p-3">
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Filed Payload Summary</div>
+        <div className="mt-3 space-y-3 text-sm">
+          <div>
+            <div className="text-xs text-muted-foreground">Filed / normalized route</div>
+            <div className={`font-medium break-words ${valueTone(localRoute !== transmittedRoute && Boolean(transmittedRoute))}`}>
+              {transmittedRoute || "Not transmitted yet"}
+            </div>
+            {localRoute && transmittedRoute && localRoute !== transmittedRoute && (
+              <div className="mt-1 text-[11px] text-amber-200">Normalized by RSF for provider filing</div>
+            )}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">ICAO DOF</div>
+            <div className={`font-medium ${valueTone(Boolean(payload.dofInjected))}`}>{asString(payload.dof) || "—"}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Filed Other Info</div>
+            <div className="font-medium break-words">{asString(payload.otherInfo) || "—"}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Payload built</div>
+            <div className="font-medium">{formatDateTime(payload.builtAt)}</div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-lg border p-3">
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Provider Sync / Effective Plan</div>
+        <div className="mt-3 space-y-3 text-sm">
+          <div>
+            <div className="text-xs text-muted-foreground">Provider-updated route</div>
+            <div className={`font-medium break-words ${valueTone(Boolean(effectiveRoute && transmittedRoute && effectiveRoute !== transmittedRoute))}`}>
+              {effectiveRoute || "No provider route returned yet"}
+            </div>
+            {effectiveRoute && transmittedRoute && effectiveRoute !== transmittedRoute && (
+              <div className="mt-1 text-[11px] text-amber-200">Updated by provider</div>
+            )}
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <div className="text-xs text-muted-foreground">Provider status</div>
+              <div className="font-medium">{asString(providerSnapshot.providerStatus) || plan.filingStatus || "—"}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">ARTCC state</div>
+              <div className="font-medium">{asString(providerSnapshot.artccState) || "—"}</div>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Provider sync</div>
+            <div className="font-medium">{formatDateTime(providerSnapshot.syncedAt || plan.filingLastProviderSyncAt)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Provider reference</div>
+            <div className="font-medium break-all">{asString(providerSnapshot.providerReferenceId) || plan.filingProviderPlanId || "—"}</div>
+          </div>
+          {fieldDiffs.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">Detected differences</div>
+              <div className="flex flex-wrap gap-2">
+                {fieldDiffs
+                  .filter((entry) => Boolean(entry.changedForTransmission || entry.changedByProvider))
+                  .map((entry, index) => (
+                    <Badge key={`${entry.field || "diff"}-${index}`} variant="secondary">
+                      {String(entry.field || "field")}
+                    </Badge>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function FilingProviderUpdatesList({ plan }: { plan: FlightPlan }) {
+  const messages = readProviderMessages(plan);
+
+  if (messages.length === 0) {
+    return <div className="text-sm text-muted-foreground">No provider updates recorded for this plan yet.</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {messages.map((message) => (
+        <div key={message.id} className={`rounded-lg border p-3 ${severityTone[message.severity] || severityTone.info}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="font-medium">{message.title}</div>
+            <div className="text-xs opacity-80">{formatDateTime(message.timestamp)}</div>
+          </div>
+          <div className="mt-2 text-sm break-words">{message.details}</div>
+          {message.providerPlanId && (
+            <div className="mt-2 text-[11px] opacity-80">Provider reference: {message.providerPlanId}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}

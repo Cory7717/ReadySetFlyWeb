@@ -4486,18 +4486,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertUserSettings(userId: string, updates: InsertUserSettings): Promise<UserSettings> {
+    const sanitizedUpdates = {
+      ...updates,
+      flightServiceProfile:
+        updates.flightServiceProfile && typeof updates.flightServiceProfile === "object" && !Array.isArray(updates.flightServiceProfile)
+          ? updates.flightServiceProfile as Record<string, unknown>
+          : null,
+    };
     const existing = await this.getUserSettings(userId);
     if (existing) {
       const [settings] = await db
         .update(userSettings)
-        .set({ ...updates, updatedAt: new Date() })
+        .set({ ...sanitizedUpdates, updatedAt: new Date() })
         .where(eq(userSettings.userId, userId))
         .returning();
       return settings;
     }
     const [settings] = await db
       .insert(userSettings)
-      .values({ ...updates, userId })
+      .values({ ...sanitizedUpdates, userId })
       .returning();
     return settings;
   }

@@ -1,0 +1,12 @@
+{
+  "flightIdentifier": "ABC123",
+  "versionStamp": "20260423130500002",
+  "state": "PROPOSED",
+  "route": "DCT KBPG DCT KSRR DCT KINW DCT",
+  "expectedRoute": "DCT KBPG DCT TCC DCT KINW DCT",
+  "artccState": "ROGERED",
+  "artccInfo": "Expected route available",
+  "returnStatus": true,
+  "returnMessage": ["ATC route change available"],
+  "returnCodedMessage": []
+}

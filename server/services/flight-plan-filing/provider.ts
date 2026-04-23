@@ -1,6 +1,18 @@
 import crypto from "crypto";
 import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
 import { extractFilingProviderPlanId, extractFilingVersionStamp } from "@shared/flight-plan-filing";
+import {
+  buildFilingEventId,
+  buildFilingFieldDiffs,
+  buildOtherInfoWithDof,
+  formatOperationalDateKey,
+  mergeProviderMessages,
+  normalizeRouteForProvider,
+  toDisplayString,
+  type FilingPayloadSnapshot,
+  type FilingProviderMessage,
+  type FilingProviderSnapshot,
+} from "@shared/flight-plan-filing-workflow";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -23,6 +35,9 @@ export type FilingServiceResult = {
   providerUrl: string;
   providerPlanId: string;
   raw: Record<string, unknown>;
+  payloadSnapshot?: FilingPayloadSnapshot | null;
+  providerSnapshot?: FilingProviderSnapshot | null;
+  providerMessages?: FilingProviderMessage[];
 };
 
 export type FilingValidationResult = {
@@ -261,6 +276,11 @@ export const getLeidosFlightServicePlanDebug = (plan: FlightPlan) => {
     filingProvider: plan.filingProvider,
     providerPlanId: plan.filingProviderPlanId || null,
     versionStamp: extractVersionStamp(plan),
+    filingPayload: getRecord((plan as Record<string, unknown>).filingPayload),
+    filingProviderSnapshot: getRecord((plan as Record<string, unknown>).filingProviderSnapshot),
+    filingProviderMessages: Array.isArray((plan as Record<string, unknown>).filingProviderMessages)
+      ? (plan as Record<string, unknown>).filingProviderMessages
+      : [],
     configuredPaths: {
       ...config.actionPaths,
       retrieve: config.retrievePath,
@@ -505,6 +525,111 @@ const getPlannerStateRecord = (plan: FlightPlan) => {
     : null;
 };
 
+const getPlannerTimeZone = (plan: FlightPlan) => {
+  const plannerState = getPlannerStateRecord(plan);
+  const departureTimeZone =
+    plannerState && typeof plannerState.departureTimeZone === "string"
+      ? plannerState.departureTimeZone.trim()
+      : "";
+  return departureTimeZone || "UTC";
+};
+
+const getRecord = (value: unknown) =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+
+const findNestedString = (input: unknown, candidateKeys: string[], maxDepth = 8): string | null => {
+  const record = getRecord(input);
+  if (!record) return null;
+  const normalizedCandidates = new Set(candidateKeys.map((key) => key.toLowerCase().replace(/[^a-z0-9]/g, "")));
+  const queue: Array<{ value: unknown; depth: number }> = [{ value: record, depth: 0 }];
+  const visited = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+    const { value, depth } = current;
+    if (!value || typeof value !== "object" || visited.has(value) || depth > maxDepth) continue;
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => queue.push({ value: item, depth: depth + 1 }));
+      continue;
+    }
+
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (normalizedCandidates.has(normalizedKey)) {
+        const match = toDisplayString(child);
+        if (match) return match;
+      }
+      if (child && typeof child === "object") {
+        queue.push({ value: child, depth: depth + 1 });
+      }
+    }
+  }
+
+  return null;
+};
+
+const findNestedStringArray = (input: unknown, candidateKeys: string[], maxDepth = 8) => {
+  const values = new Set<string>();
+  const record = getRecord(input);
+  if (!record) return [] as string[];
+  const normalizedCandidates = new Set(candidateKeys.map((key) => key.toLowerCase().replace(/[^a-z0-9]/g, "")));
+  const queue: Array<{ value: unknown; depth: number }> = [{ value: record, depth: 0 }];
+  const visited = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+    const { value, depth } = current;
+    if (!value || typeof value !== "object" || visited.has(value) || depth > maxDepth) continue;
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        const text = toDisplayString(item);
+        if (text) values.add(text);
+        if (item && typeof item === "object") {
+          queue.push({ value: item, depth: depth + 1 });
+        }
+      });
+      continue;
+    }
+
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (normalizedCandidates.has(normalizedKey)) {
+        if (Array.isArray(child)) {
+          child.forEach((item) => {
+            const text = toDisplayString(item);
+            if (text) values.add(text);
+          });
+        } else {
+          const text = toDisplayString(child);
+          if (text) values.add(text);
+        }
+      }
+      if (child && typeof child === "object") {
+        queue.push({ value: child, depth: depth + 1 });
+      }
+    }
+  }
+
+  return Array.from(values);
+};
+
+const redactPayloadForLog = (payload: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(payload).map(([key, value]) => {
+      if (["pilotData", "pilotInCommandExtended"].includes(key)) return [key, "[redacted]"];
+      if (["remarks", "suppRemarksExtended"].includes(key) && value) return [key, "[redacted]"];
+      return [key, value];
+    }),
+  );
+
 const normalizeLeidosEquipmentCode = (value?: string | null) => {
   const normalized = String(value || "")
     .trim()
@@ -593,8 +718,162 @@ const getLeidosWakeTurbulence = (plan: FlightPlan, config: LeidosFlightServiceCo
     normalizeWakeTurbulenceCategory(config.wakeTurbulence);
 };
 
+const buildProviderMessages = ({
+  action,
+  providerPlanId,
+  response,
+  metadataResponse,
+  source,
+}: {
+  action: FlightPlanFilingAction | "sync";
+  providerPlanId?: string | null;
+  response?: Record<string, unknown> | null;
+  metadataResponse?: Record<string, unknown> | null;
+  source: "provider" | "sync";
+}) => {
+  const responseMessages = response ? extractLeidosResponseMessages(response) : [];
+  const metadataMessages = metadataResponse
+    ? findNestedStringArray(metadataResponse, [
+      "returnMessage",
+      "returnCodedMessage",
+      "lastTransmittedMessage",
+      "lastReceivedMessage",
+      "messages",
+      "notices",
+      "warnings",
+      "errors",
+      "artccInfo",
+    ])
+    : [];
+  const merged = Array.from(new Set([...responseMessages, ...metadataMessages])).filter(Boolean);
+  return merged.map<FilingProviderMessage>((details, index) => {
+    const normalized = String(details || "").toLowerCase();
+    const severity =
+      /reject|error|failed|denied/i.test(normalized) ? "error" :
+      /warn|missing|required|needs|action/i.test(normalized) ? "warning" :
+      action === "sync" ? "info" : "success";
+    const title =
+      action === "sync"
+        ? "Provider sync update"
+        : severity === "success"
+          ? `Flight ${action}d successfully`
+          : `Provider ${severity}`;
+    return {
+      id: buildFilingEventId(source, action, providerPlanId, title, details, String(index)),
+      timestamp: new Date().toISOString(),
+      severity,
+      title,
+      details,
+      source,
+      action,
+      provider: "Leidos Flight Service",
+      providerPlanId: providerPlanId || null,
+      raw: response ?? metadataResponse ?? null,
+    };
+  });
+};
+
+const buildProviderSnapshot = ({
+  providerPlanId,
+  versionStamp,
+  payloadSnapshot,
+  response,
+  metadataResponse,
+  syncedAt,
+}: {
+  providerPlanId: string | null;
+  versionStamp: string | null;
+  payloadSnapshot: FilingPayloadSnapshot | null;
+  response?: Record<string, unknown> | null;
+  metadataResponse?: Record<string, unknown> | null;
+  syncedAt: string;
+}): FilingProviderSnapshot => {
+  const source = metadataResponse || response || {};
+  const providerRoute = findNestedString(source, [
+    "route",
+    "expectedRoute",
+    "expected_route",
+    "currentRoute",
+    "routeString",
+    "routeText",
+  ]);
+  const providerStatus = findNestedString(source, [
+    "state",
+    "status",
+    "flightPlanStatus",
+    "flightState",
+  ]);
+  const artccState = findNestedString(source, ["artccState", "artcc_status"]);
+  const artccInfo = findNestedString(source, ["artccInfo", "artcc_info"]);
+  const providerReferenceId = findNestedString(source, [
+    "transactionId",
+    "referenceId",
+    "messageId",
+    "trackingId",
+  ]);
+  const providerOtherInfo = findNestedString(source, ["otherInfo", "other_info"]);
+  const notices = Array.from(
+    new Set([
+      ...extractLeidosResponseMessages(response || {}),
+      ...findNestedStringArray(source, [
+        "lastTransmittedMessage",
+        "lastReceivedMessage",
+        "warnings",
+        "notices",
+        "errors",
+        "artccInfo",
+      ]),
+    ]),
+  ).filter(Boolean);
+  const route = {
+    localEnteredRoute: payloadSnapshot?.route.localEnteredRoute || null,
+    normalizedTransmittedRoute: payloadSnapshot?.route.normalizedTransmittedRoute || null,
+    providerRoute: providerRoute || null,
+    changedForTransmission: Boolean(payloadSnapshot?.route.changedForTransmission),
+    changedByProvider: Boolean(
+      providerRoute &&
+      payloadSnapshot?.route.normalizedTransmittedRoute &&
+      providerRoute !== payloadSnapshot.route.normalizedTransmittedRoute
+    ),
+    normalizationNotes: payloadSnapshot?.route.normalizationNotes || [],
+  };
+
+  return {
+    provider: "Leidos Flight Service",
+    syncedAt,
+    providerPlanId,
+    providerReferenceId,
+    versionStamp,
+    providerStatus,
+    artccState,
+    artccInfo,
+    route,
+    notices,
+    timestamps: {
+      syncedAt,
+      filedAt: syncedAt,
+      acknowledgedAt: artccState ? syncedAt : null,
+    },
+    fieldDiffs: buildFilingFieldDiffs({
+      localRoute: route.localEnteredRoute,
+      transmittedRoute: route.normalizedTransmittedRoute,
+      providerRoute: route.providerRoute,
+      localOtherInfo: null,
+      transmittedOtherInfo: payloadSnapshot?.otherInfo || null,
+      providerOtherInfo,
+      dof: payloadSnapshot?.dof || null,
+    }),
+  };
+};
+
 const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingAction, config: LeidosFlightServiceConfig) => {
   const params = new URLSearchParams();
+  const routeNormalization = normalizeRouteForProvider(plan.route);
+  const otherInfoResult = buildOtherInfoWithDof({
+    existingOtherInfo: plan.filingOtherInfo || config.otherInfo,
+    plannedDepartureAt: plan.plannedDepartureAt,
+    operationalTimeZone: getPlannerTimeZone(plan),
+  });
 
   const append = (key: string, value: unknown) => {
     if (value === null || value === undefined) return;
@@ -618,7 +897,7 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("aircraftType", getLeidosAircraftTypeCode(plan));
     append("wakeTurbulence", getLeidosWakeTurbulence(plan, config));
     append("aircraftEquipment", normalizeLeidosEquipmentCode(plan.filingEquipment));
-    append("route", plan.route || "DCT");
+    append("route", routeNormalization.normalizedRoute || "DCT");
     append("remarks", plan.filingRemarks || plan.notes);
     append("fuelOnBoard", minutesToIsoDuration(plan.filingEnduranceMinutes));
     append("pilotData", plan.filingPilotName);
@@ -628,21 +907,58 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("surveillanceEquipment", plan.filingSurveillanceEquipment || config.surveillanceEquipment);
     append("pilotInCommandExtended", plan.filingPilotName);
     append("suppRemarksExtended", plan.filingRemarks || plan.notes);
-    append("otherInfo", plan.filingOtherInfo || config.otherInfo);
+    append("otherInfo", otherInfoResult.otherInfo);
     appendLeidosAltitudeFields(params, plan.filingPlannedAltitudeFt);
     if (action === "amend") {
       append("versionStamp", extractVersionStamp(plan));
     }
-    return params;
+    const transmittedFields = Object.fromEntries(params.entries());
+    const payloadSnapshot: FilingPayloadSnapshot = {
+      provider: "Leidos Flight Service",
+      action,
+      builtAt: new Date().toISOString(),
+      departureInstant: formatDepartureInstant(plan.plannedDepartureAt),
+      departureOperationalDate: plan.plannedDepartureAt
+        ? formatOperationalDateKey(plan.plannedDepartureAt, getPlannerTimeZone(plan))
+        : null,
+      dof: otherInfoResult.dof,
+      dofInjected: otherInfoResult.injected,
+      route: {
+        localEnteredRoute: routeNormalization.localEnteredRoute,
+        normalizedTransmittedRoute: routeNormalization.normalizedRoute,
+        providerRoute: null,
+        changedForTransmission: routeNormalization.changed,
+        changedByProvider: false,
+        normalizationNotes: routeNormalization.notes,
+      },
+      otherInfo: otherInfoResult.otherInfo,
+      transmittedFields,
+    };
+    return {
+      params,
+      payloadSnapshot,
+      routeNormalization,
+      otherInfoResult,
+    };
   }
 
   if (action === "activate") {
     append("actualDepartureInstant", formatDepartureInstant(plan.plannedDepartureAt) || new Date().toISOString());
     append("versionStamp", extractVersionStamp(plan));
-    return params;
+    return {
+      params,
+      payloadSnapshot: null,
+      routeNormalization,
+      otherInfoResult,
+    };
   }
 
-  return params;
+  return {
+    params,
+    payloadSnapshot: null,
+    routeNormalization,
+    otherInfoResult,
+  };
 };
 
 const parseProviderResponse = async (response: Response) => {
@@ -741,15 +1057,44 @@ export const syncLeidosPlanMetadata = async (plan: FlightPlan) => {
       providerPlanId: null,
       versionStamp: null,
       metadataResponse: null as Record<string, unknown> | null,
+      providerSnapshot: null as FilingProviderSnapshot | null,
+      providerMessages: [] as FilingProviderMessage[],
       message: "This plan does not have a Leidos flight identifier yet.",
     };
   }
 
   const retrieval = await retrieveLeidosPlanMetadataWithVersionStamp(providerPlanId, config);
+  const existingPayload = getRecord((plan as Record<string, unknown>).filingPayload) as FilingPayloadSnapshot | null;
+  const providerSnapshot = buildProviderSnapshot({
+    providerPlanId,
+    versionStamp: retrieval.versionStamp,
+    payloadSnapshot: existingPayload,
+    metadataResponse: retrieval.metadataResponse,
+    syncedAt: new Date().toISOString(),
+  });
+  const providerMessages = buildProviderMessages({
+    action: "sync",
+    providerPlanId,
+    metadataResponse: retrieval.metadataResponse,
+    source: "sync",
+  });
+  console.info(JSON.stringify({
+    event: "leidos_sync_pulled",
+    planId: plan.id,
+    providerPlanId,
+    versionStamp: retrieval.versionStamp,
+    providerStatus: providerSnapshot.providerStatus,
+    artccState: providerSnapshot.artccState,
+    routeProvider: providerSnapshot.route.providerRoute,
+    routeChangedByProvider: providerSnapshot.route.changedByProvider,
+    notices: providerSnapshot.notices,
+  }));
   return {
     providerPlanId,
     versionStamp: retrieval.versionStamp,
     metadataResponse: retrieval.metadataResponse,
+    providerSnapshot,
+    providerMessages,
     message: retrieval.versionStamp
       ? "RSF refreshed the Leidos provider sync and recovered the current amend token."
       : "RSF refreshed the Leidos provider sync, but the amend token is still not available yet.",
@@ -1008,6 +1353,9 @@ const buildStagedFallbackResult = (
   reason: string,
   options?: {
     providerPlanId?: string | null;
+    payloadSnapshot?: FilingPayloadSnapshot | null;
+    providerSnapshot?: FilingProviderSnapshot | null;
+    providerMessages?: FilingProviderMessage[];
     rawExtras?: Record<string, unknown>;
   },
 ): FilingServiceResult => ({
@@ -1020,6 +1368,9 @@ const buildStagedFallbackResult = (
   warnings: validation.warnings,
   providerUrl: getProviderUrl(),
   providerPlanId: String(options?.providerPlanId || "").trim() || buildProviderPlanId(plan, action),
+  payloadSnapshot: options?.payloadSnapshot ?? null,
+  providerSnapshot: options?.providerSnapshot ?? null,
+  providerMessages: options?.providerMessages ?? [],
   raw: {
     action,
     planId: plan.id,
@@ -1055,6 +1406,7 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   const warnings: string[] = [];
   const rules = normalizeFlightRules(plan.filingFlightRules);
   const lifecycleStatus = String(plan.filingStatus || "").toLowerCase();
+  const routeNormalization = normalizeRouteForProvider(plan.route);
 
   if (!plan.departure) errors.push("Departure airport is required.");
   if (!plan.destination) errors.push("Destination airport is required.");
@@ -1074,8 +1426,11 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     errors.push("Planned departure time is required before staging this action.");
   }
 
-  if (rules === "IFR" && !plan.route) {
+  if (rules === "IFR" && !routeNormalization.normalizedRoute) {
     errors.push("IFR flight plans require a route before staging.");
+  }
+  if ((action === "file" || action === "amend") && plan.route && !routeNormalization.hasValidToken) {
+    errors.push("Route must contain at least one valid airport, fix, navaid, airway, or procedure token before filing.");
   }
 
   if ((action === "activate" || action === "close") && rules !== "VFR") {
@@ -1125,9 +1480,10 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     warnings.push("Consider adding an alternate before filing IFR.");
   }
 
-  if (!plan.route && rules === "VFR") {
+  if (!routeNormalization.normalizedRoute && rules === "VFR") {
     warnings.push("VFR filing can proceed direct, but adding route detail improves the handoff packet.");
   }
+  warnings.push(...routeNormalization.notes.filter((note) => !warnings.includes(note)));
 
   if (!plan.filingRemarks && !plan.notes) {
     warnings.push("No filing remarks or notes are attached to this plan.");
@@ -1237,8 +1593,31 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
     }
 
     const requestUrl = resolveActionPath(config.baseUrl, actionPath, effectivePlan);
-    const requestBody = buildLeidosActionPayload(effectivePlan, action, config);
+    const payloadContext = buildLeidosActionPayload(effectivePlan, action, config);
+    const requestBody = payloadContext.params;
     const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
+    const requestPayloadRecord = Object.fromEntries(requestBody.entries());
+    if (payloadContext.payloadSnapshot) {
+      console.info(JSON.stringify({
+        event: "leidos_payload_built",
+        action,
+        planId: plan.id,
+        providerPlanId: effectivePlan.filingProviderPlanId || null,
+        dofInjected: payloadContext.payloadSnapshot.dofInjected,
+        dof: payloadContext.payloadSnapshot.dof,
+        routeChanged: payloadContext.payloadSnapshot.route.changedForTransmission,
+        routeLocal: payloadContext.payloadSnapshot.route.localEnteredRoute,
+        routeTransmitted: payloadContext.payloadSnapshot.route.normalizedTransmittedRoute,
+        payload: redactPayloadForLog(payloadContext.payloadSnapshot.transmittedFields),
+      }));
+    }
+    console.info(JSON.stringify({
+      event: "leidos_payload_sent",
+      action,
+      planId: plan.id,
+      providerPlanId: effectivePlan.filingProviderPlanId || null,
+      requestUrl,
+    }));
     let response: Response;
     try {
       response = await fetchLeidosUrl(requestUrl, {
@@ -1263,9 +1642,10 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         reason,
         {
           providerPlanId: plan.filingProviderPlanId || null,
+          payloadSnapshot: payloadContext.payloadSnapshot,
           rawExtras: {
             requestUrl,
-            requestPayload: Object.fromEntries(requestBody.entries()),
+            requestPayload: requestPayloadRecord,
             providerError: message,
             providerTimeout: isLeidosTimeoutLikeError(error),
           },
@@ -1305,9 +1685,16 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
           : `Leidos returned an unsuccessful ${action.toUpperCase()} response without a usable flight identifier.`,
         {
           providerPlanId: plan.filingProviderPlanId || null,
+          payloadSnapshot: payloadContext.payloadSnapshot,
+          providerMessages: buildProviderMessages({
+            action,
+            providerPlanId: plan.filingProviderPlanId || null,
+            response: parsedResponse,
+            source: "provider",
+          }),
           rawExtras: {
             requestUrl,
-            requestPayload: Object.fromEntries(requestBody.entries()),
+            requestPayload: requestPayloadRecord,
             response: parsedResponse,
             responseMessages,
             returnStatus: providerReturnStatus,
@@ -1365,9 +1752,16 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
           : "Leidos accepted the FILE response over HTTP but did not return a usable flightIdentifier, so RSF kept the record staged.",
         {
           providerPlanId: null,
+          payloadSnapshot: payloadContext.payloadSnapshot,
+          providerMessages: buildProviderMessages({
+            action,
+            providerPlanId: null,
+            response: parsedResponse,
+            source: "provider",
+          }),
           rawExtras: {
             requestUrl,
-            requestPayload: Object.fromEntries(requestBody.entries()),
+            requestPayload: requestPayloadRecord,
             response: parsedResponse,
             responseMessages,
             returnStatus: providerReturnStatus,
@@ -1375,6 +1769,34 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         },
       );
     }
+
+    const providerSnapshot = buildProviderSnapshot({
+      providerPlanId,
+      versionStamp,
+      payloadSnapshot: payloadContext.payloadSnapshot,
+      response: parsedResponse,
+      metadataResponse,
+      syncedAt: new Date().toISOString(),
+    });
+    const providerMessages = buildProviderMessages({
+      action,
+      providerPlanId,
+      response: parsedResponse,
+      metadataResponse,
+      source: "provider",
+    });
+    console.info(JSON.stringify({
+      event: "leidos_response_received",
+      action,
+      planId: plan.id,
+      providerPlanId,
+      versionStamp,
+      providerStatus: providerSnapshot.providerStatus,
+      artccState: providerSnapshot.artccState,
+      routeProvider: providerSnapshot.route.providerRoute,
+      routeChangedByProvider: providerSnapshot.route.changedByProvider,
+      notices: providerSnapshot.notices,
+    }));
 
     return {
       live: true,
@@ -1386,9 +1808,12 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       warnings: validation.warnings,
       providerUrl: requestUrl,
       providerPlanId,
+      payloadSnapshot: payloadContext.payloadSnapshot,
+      providerSnapshot,
+      providerMessages,
       raw: {
         requestUrl,
-        requestPayload: Object.fromEntries(requestBody.entries()),
+        requestPayload: requestPayloadRecord,
         providerPlanId,
         versionStamp,
         metadataResponse,

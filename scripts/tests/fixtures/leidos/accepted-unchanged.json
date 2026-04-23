@@ -1,0 +1,9 @@
+{
+  "flightIdentifier": "ABC123",
+  "versionStamp": "20260423130000001",
+  "state": "PROPOSED",
+  "route": "DCT KBPG DCT KSRR DCT KINW DCT",
+  "returnStatus": true,
+  "returnMessage": ["Flight filed successfully"],
+  "returnCodedMessage": []
+}

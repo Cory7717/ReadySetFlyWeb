@@ -1,0 +1,8 @@
+{
+  "flightIdentifier": "ABC123",
+  "versionStamp": "20260423131500004",
+  "state": "PROPOSED",
+  "returnStatus": false,
+  "returnMessage": ["Route formatting rejected"],
+  "returnCodedMessage": ["Missing DCT formatting between route points"]
+}

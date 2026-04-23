@@ -59,6 +59,11 @@ import { extractFilingVersionStamp } from "@shared/flight-plan-filing";
 import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
+import {
+  FilingProviderUpdatesList,
+  FilingProviderWorkspace,
+  summarizeProviderUpdates,
+} from "@/components/flight-planner/FilingProviderWorkspace";
 import { OpenInAppBanner } from "@/components/OpenInAppBanner";
 import { PageShell } from "@/components/layout/PageShell";
 import { RsfModeToggle } from "@/components/map/RsfModeToggle";
@@ -225,6 +230,8 @@ const buildPlannerStateSnapshot = ({
   selectedTypeIcao,
   selectedTypeMaxGrossWeightLb,
   selectedProfileMaxGrossWeightLb,
+  departureTimeZone,
+  destinationTimeZone,
   customProfile,
 }: {
   selectedProfileId: string;
@@ -232,6 +239,8 @@ const buildPlannerStateSnapshot = ({
   selectedTypeIcao: string | null;
   selectedTypeMaxGrossWeightLb: number | null;
   selectedProfileMaxGrossWeightLb: number | null;
+  departureTimeZone: string | null;
+  destinationTimeZone: string | null;
   customProfile: {
     name: string;
     cruiseKtasOverride: string;
@@ -245,6 +254,8 @@ const buildPlannerStateSnapshot = ({
   selectedTypeIcao,
   selectedTypeMaxGrossWeightLb,
   selectedProfileMaxGrossWeightLb,
+  departureTimeZone,
+  destinationTimeZone,
   customProfile,
 });
 
@@ -682,6 +693,15 @@ type FilingPreviewResponse = {
   errors: string[];
   warnings: string[];
   nextSteps: string[];
+  preview?: {
+    localRoute?: string | null;
+    transmittedRoute?: string | null;
+    routeChanged?: boolean;
+    dof?: string | null;
+    dofInjected?: boolean;
+    localOtherInfo?: string | null;
+    transmittedOtherInfo?: string | null;
+  };
   packet: Record<string, unknown>;
 };
 
@@ -1360,6 +1380,7 @@ export default function FlightPlanner() {
   const [draftPlanId, setDraftPlanId] = useState<string | null>(null);
   const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<FlightPlan | null>(null);
   const [showFilingPayload, setShowFilingPayload] = useState(false);
+  const [providerUpdatesPlan, setProviderUpdatesPlan] = useState<FlightPlan | null>(null);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
   const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string } | null>(null);
   const [scratchPadOpen, setScratchPadOpen] = useState(false);
@@ -1711,7 +1732,7 @@ export default function FlightPlanner() {
         [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
         user?.email ||
         "",
-      remarks: current.remarks || "RSF filing handoff preview",
+      remarks: current.remarks || "RSF internal filing preview",
     }));
   }, [form.tailNumber, user?.firstName, user?.lastName, user?.email]);
 
@@ -2893,8 +2914,10 @@ export default function FlightPlanner() {
     alternate: form.alternate.trim().toUpperCase() || null,
     plannedDepartureLocal: form.plannedDepartureAt || null,
     plannedDepartureUtc: form.plannedDepartureAt ? toUtcIso(form.plannedDepartureAt, departureTimeZone) : null,
+    departureTimeZone,
     plannedArrivalLocal: form.plannedArrivalAt || null,
     plannedArrivalUtc: form.plannedArrivalAt ? toUtcIso(form.plannedArrivalAt, destinationTimeZone) : null,
+    destinationTimeZone,
     trueAirspeedKtas: Math.round(planningCruise),
     plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
     estimatedEnrouteMinutes: eteMinutes || null,
@@ -4508,6 +4531,14 @@ export default function FlightPlanner() {
   };
 
   const downloadFilingSummary = (plan: FlightPlan) => {
+    const payload = ((plan as Record<string, unknown>).filingPayload && typeof (plan as Record<string, unknown>).filingPayload === "object")
+      ? (plan as Record<string, unknown>).filingPayload as Record<string, any>
+      : null;
+    const providerSnapshot = ((plan as Record<string, unknown>).filingProviderSnapshot && typeof (plan as Record<string, unknown>).filingProviderSnapshot === "object")
+      ? (plan as Record<string, unknown>).filingProviderSnapshot as Record<string, any>
+      : null;
+    const payloadRoute = payload?.route && typeof payload.route === "object" ? payload.route as Record<string, any> : null;
+    const providerRoute = providerSnapshot?.route && typeof providerSnapshot.route === "object" ? providerSnapshot.route as Record<string, any> : null;
     const formatDateTime = (value?: string | Date | null) => {
       if (!value) return "—";
       const parsed = new Date(value);
@@ -4663,14 +4694,16 @@ export default function FlightPlanner() {
           </div>
         </div>
         <div class="panel">
-          <h2>Filed Route</h2>
-          <div class="cell">
-            <div class="label">Enroute String</div>
-            <div class="value route">${escapeHtml(plan.route || "—")}</div>
-          </div>
-          <div class="grid" style="margin-top:14px;">
-            <div class="cell"><div class="label">Other ICAO Info</div><div class="value">${escapeHtml(plan.filingOtherInfo || "—")}</div></div>
-            <div class="cell"><div class="label">Filing Remarks</div><div class="value">${escapeHtml(plan.filingRemarks || plan.notes || "—")}</div></div>
+          <h2>Route and ICAO Fields</h2>
+          <div class="grid">
+            <div class="cell"><div class="label">User-entered Route</div><div class="value route">${escapeHtml(plan.route || "—")}</div></div>
+            <div class="cell"><div class="label">Filed / Normalized Route</div><div class="value route">${escapeHtml(String(payloadRoute?.normalizedTransmittedRoute || "—"))}</div></div>
+            <div class="cell"><div class="label">Provider Effective Route</div><div class="value route">${escapeHtml(String(providerRoute?.providerRoute || "—"))}</div></div>
+            <div class="cell"><div class="label">ICAO DOF</div><div class="value">${escapeHtml(String(payload?.dof || "—"))}</div></div>
+            <div class="cell"><div class="label">Local Other Info</div><div class="value">${escapeHtml(plan.filingOtherInfo || "—")}</div></div>
+            <div class="cell"><div class="label">Transmitted Other Info</div><div class="value">${escapeHtml(String(payload?.otherInfo || "—"))}</div></div>
+            <div class="cell"><div class="label">Provider Status</div><div class="value">${escapeHtml(String(providerSnapshot?.providerStatus || providerSnapshot?.artccState || "—"))}</div></div>
+            <div class="cell"><div class="label">Internal Remarks</div><div class="value">${escapeHtml(plan.filingRemarks || plan.notes || "—")}</div></div>
           </div>
         </div>
         <div class="panel">
@@ -4689,7 +4722,7 @@ export default function FlightPlanner() {
       <div class="footer">
         Generated by Ready Set Fly.<br />
         Flight planning and filing workflow may still be under testing. Verify operational status and official provider acceptance before relying on any submission.
-        <div class="print-note">This summary is intended as a filing receipt and reference copy. The official plan state remains in Ready Set Fly and the connected filing provider.</div>
+        <div class="print-note">This summary separates local RSF plan data from the transmitted provider payload and the latest provider sync. Internal preview text and notes are not automatically transmitted to ATC unless they map to an actual filing field.</div>
       </div>
     </div>
   </body>
@@ -4809,6 +4842,8 @@ export default function FlightPlanner() {
             selectedTypeIcao: selectedType?.icaoType?.trim() || null,
             selectedTypeMaxGrossWeightLb: selectedType?.max_gross_weight_lb_effective ?? null,
             selectedProfileMaxGrossWeightLb: selectedProfile?.max_gross_weight_lb_effective ?? null,
+            departureTimeZone,
+            destinationTimeZone,
             customProfile,
           }),
           plannedDepartureAt: form.plannedDepartureAt
@@ -4884,6 +4919,8 @@ export default function FlightPlanner() {
           selectedTypeIcao: selectedType?.icaoType?.trim() || null,
           selectedTypeMaxGrossWeightLb: selectedType?.max_gross_weight_lb_effective ?? null,
           selectedProfileMaxGrossWeightLb: selectedProfile?.max_gross_weight_lb_effective ?? null,
+          departureTimeZone,
+          destinationTimeZone,
           customProfile,
         }),
         plannedDepartureAt: form.plannedDepartureAt
@@ -8030,9 +8067,9 @@ export default function FlightPlanner() {
                     </Button>
                   </div>
                 </div>
-                <div className="grid gap-2 md:grid-cols-3 text-sm">
+                <div className="grid gap-2 md:grid-cols-4 text-sm">
                   <div>
-                    <div className="text-muted-foreground">Route</div>
+                    <div className="text-muted-foreground">User-entered route</div>
                     <div>{plan.route || "-"}</div>
                   </div>
                   <div>
@@ -8042,6 +8079,10 @@ export default function FlightPlanner() {
                   <div>
                     <div className="text-muted-foreground">Arrival</div>
                     <div>{plan.plannedArrivalAt ? new Date(plan.plannedArrivalAt).toLocaleString() : "-"}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Filed live</div>
+                    <div>{plan.filingIsLive ? "Yes" : "No"}</div>
                   </div>
                 </div>
                 <div className="grid gap-2 md:grid-cols-4 text-sm">
@@ -8054,8 +8095,8 @@ export default function FlightPlanner() {
                     <div>{plan.filingProvider || "Leidos Flight Service"}</div>
                   </div>
                   <div>
-                    <div className="text-muted-foreground">Live filing</div>
-                    <div>{plan.filingIsLive ? "Enabled" : "Disabled"}</div>
+                    <div className="text-muted-foreground">Provider reference</div>
+                    <div>{plan.filingProviderPlanId || "-"}</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground">Last sync</div>
@@ -8123,6 +8164,19 @@ export default function FlightPlanner() {
                   >
                     {filingSyncMutation.isPending ? "Refreshing sync..." : "Refresh provider sync"}
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className={cn(
+                      summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "error" && "border-red-400/50 text-red-200",
+                      summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "warning" && "border-amber-400/50 text-amber-200",
+                      summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "success" && "border-emerald-400/50 text-emerald-200",
+                      summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "info" && "border-blue-400/50 text-blue-200",
+                    )}
+                    onClick={() => setProviderUpdatesPlan(plan)}
+                  >
+                    Provider updates{summarizeProviderUpdates(plan).count > 0 ? ` (${summarizeProviderUpdates(plan).count})` : ""}
+                  </Button>
                   {(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
                     <>
                       <Button
@@ -8160,8 +8214,9 @@ export default function FlightPlanner() {
                   </Button>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Filing requests submit live when the Leidos environment is fully configured. If a required live path is still missing, RSF keeps the request staged instead of dropping it.
+                  The visible trip date is your local plan date. ICAO DOF, normalized route text, and provider-returned changes are tracked separately below.
                 </div>
+                <FilingProviderWorkspace plan={plan} />
                 {Array.isArray(plan.filingActionHistory) && plan.filingActionHistory.length > 0 && (
                   <div className={cn("p-3", plannerSubpanelClass)}>
                     <div className="mb-2 font-semibold">Filing history</div>
@@ -8885,9 +8940,9 @@ export default function FlightPlanner() {
       >
         <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Auto-file Handoff Preview</DialogTitle>
+            <DialogTitle>Filing Preview (RSF Internal)</DialogTitle>
             <DialogDescription>
-              RSF validates and stages the filing packet, but official filing still completes through Flight Service until live handoff is enabled.
+              RSF validates the local plan and shows the provider payload preview here. Not everything in this preview is transmitted to ATC; ICAO Other Info and route formatting are shown separately below.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 text-sm">
@@ -8961,8 +9016,42 @@ export default function FlightPlanner() {
                     ))}
                   </ol>
                 </div>
+                {filingPreview.preview && (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border p-3">
+                      <div className="mb-2 font-semibold">Route handling</div>
+                      <div className="space-y-2 text-xs text-muted-foreground">
+                        <div>
+                          <div className="uppercase tracking-[0.14em]">User-entered route</div>
+                          <div className="mt-1 text-sm text-foreground break-words">{filingPreview.preview.localRoute || "—"}</div>
+                        </div>
+                        <div>
+                          <div className="uppercase tracking-[0.14em]">Filed / normalized route</div>
+                          <div className="mt-1 text-sm text-foreground break-words">{filingPreview.preview.transmittedRoute || "—"}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <div className="mb-2 font-semibold">ICAO Item 18</div>
+                      <div className="space-y-2 text-xs text-muted-foreground">
+                        <div>
+                          <div className="uppercase tracking-[0.14em]">Local Other Info</div>
+                          <div className="mt-1 text-sm text-foreground break-words">{filingPreview.preview.localOtherInfo || "—"}</div>
+                        </div>
+                        <div>
+                          <div className="uppercase tracking-[0.14em]">Transmitted Other Info</div>
+                          <div className="mt-1 text-sm text-foreground break-words">{filingPreview.preview.transmittedOtherInfo || "—"}</div>
+                        </div>
+                        <div>
+                          <div className="uppercase tracking-[0.14em]">ICAO DOF</div>
+                          <div className="mt-1 text-sm text-foreground">{filingPreview.preview.dof || "—"}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="rounded-lg border bg-muted/40 p-3">
-                  <div className="mb-2 font-semibold">Staged filing payload</div>
+                  <div className="mb-2 font-semibold">Provider payload preview</div>
                   <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap break-words text-xs">
                     {JSON.stringify(filingPreview.packet, null, 2)}
                   </pre>
@@ -8985,6 +9074,22 @@ export default function FlightPlanner() {
               <div className="text-muted-foreground">Building filing preview...</div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(providerUpdatesPlan)}
+        onOpenChange={(open) => {
+          if (!open) setProviderUpdatesPlan(null);
+        }}
+      >
+        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Provider Updates</DialogTitle>
+            <DialogDescription>
+              Flight Service provider events are shown in reverse chronological order. Use Refresh provider sync after a filing action if you need the latest effective route or ARTCC state.
+            </DialogDescription>
+          </DialogHeader>
+          {providerUpdatesPlan ? <FilingProviderUpdatesList plan={providerUpdatesPlan} /> : null}
         </DialogContent>
       </Dialog>
       {scratchPadOpen && (

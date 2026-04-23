@@ -61,6 +61,13 @@ import {
 } from "./services/flight-plan-filing/provider";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import { analyzeFiledRoute } from "@shared/flight-plan-route";
+import {
+  buildFilingEventId,
+  buildOtherInfoWithDof,
+  mergeProviderMessages,
+  normalizeRouteForProvider,
+  type FilingProviderMessage,
+} from "@shared/flight-plan-filing-workflow";
 import { buildWeeklyDigestProfile, type WeeklyDigestSegment } from "./weeklyEmailPersonalization";
 import {
   fetchMetar,
@@ -20120,6 +20127,41 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   });
 
   // Flight Planner (Logbook Pro)
+  const asRecord = (value: unknown) =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+
+  const mergeProviderSnapshot = (existingSnapshot: unknown, incomingSnapshot: unknown) => {
+    const existing = asRecord(existingSnapshot);
+    const incoming = asRecord(incomingSnapshot);
+    return {
+      ...existing,
+      ...incoming,
+      route: {
+        ...asRecord(existing.route),
+        ...asRecord(incoming.route),
+      },
+      timestamps: {
+        ...asRecord(existing.timestamps),
+        ...asRecord(incoming.timestamps),
+      },
+      fieldDiffs: Array.isArray(incoming.fieldDiffs)
+        ? incoming.fieldDiffs
+        : Array.isArray(existing.fieldDiffs)
+          ? existing.fieldDiffs
+          : [],
+      notices: Array.isArray(incoming.notices)
+        ? incoming.notices
+        : Array.isArray(existing.notices)
+          ? existing.notices
+          : [],
+    };
+  };
+
+  const appendPlanProviderMessages = (existingMessages: unknown, incomingMessages: FilingProviderMessage[] | undefined) =>
+    mergeProviderMessages(existingMessages, incomingMessages || []);
+
   const filingPreviewSchema = z.object({
     live: z.literal(false).optional(),
     provider: z.string().optional(),
@@ -20130,8 +20172,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     alternate: z.string().trim().optional().nullable(),
     plannedDepartureLocal: z.string().trim().optional().nullable(),
     plannedDepartureUtc: z.string().trim().optional().nullable(),
+    departureTimeZone: z.string().trim().optional().nullable(),
     plannedArrivalLocal: z.string().trim().optional().nullable(),
     plannedArrivalUtc: z.string().trim().optional().nullable(),
+    destinationTimeZone: z.string().trim().optional().nullable(),
     trueAirspeedKtas: z.coerce.number().nullable().optional(),
     plannedAltitudeFt: z.union([z.string(), z.number()]).optional().nullable(),
     estimatedEnrouteMinutes: z.coerce.number().nullable().optional(),
@@ -20261,6 +20305,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const notificationTitle = isAlert
           ? `Flight Alert${alertType ? `: ${alertType}` : ""}`
           : `Flight Plan Change${changeType ? `: ${changeType}` : ""}`;
+        const providerMessage: FilingProviderMessage = {
+          id: buildFilingEventId("webhook", flightIdentifier, notificationTitle, extractedMessage, payload.notificationTimestamp ?? payload.timestamp),
+          timestamp: String(payload.notificationTimestamp || payload.timestamp || new Date().toISOString()),
+          severity: isAlert ? "warning" : "info",
+          title: notificationTitle,
+          details: extractedMessage,
+          source: "webhook",
+          provider: "Leidos Flight Service",
+          providerPlanId: flightIdentifier,
+          providerReferenceId: String(payload.messageId || payload.referenceId || "").trim() || null,
+          raw: payload,
+        };
 
         // STEP 3 — Create in-app notification.
         await storage.createUserNotification({
@@ -20294,6 +20350,34 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             ),
           });
         }
+
+        const syncResult = await syncLeidosPlanMetadata(matchedPlan as any).catch(() => null);
+        const mergedSnapshot = syncResult?.providerSnapshot
+          ? mergeProviderSnapshot((matchedPlan as Record<string, unknown>).filingProviderSnapshot, syncResult.providerSnapshot)
+          : asRecord((matchedPlan as Record<string, unknown>).filingProviderSnapshot);
+        const mergedMessages = appendPlanProviderMessages(
+          (matchedPlan as Record<string, unknown>).filingProviderMessages,
+          [providerMessage, ...(syncResult?.providerMessages || [])],
+        );
+        const currentRaw =
+          matchedPlan.filingRaw && typeof matchedPlan.filingRaw === "object" && !Array.isArray(matchedPlan.filingRaw)
+            ? matchedPlan.filingRaw as Record<string, unknown>
+            : {};
+
+        await storage.updateFlightPlan(matchedPlan.id, {
+          filingLastProviderSyncAt: new Date(),
+          filingProviderSnapshot: Object.keys(mergedSnapshot || {}).length > 0 ? mergedSnapshot as any : null,
+          filingProviderMessages: mergedMessages as any,
+          filingRaw: syncResult
+            ? {
+              ...currentRaw,
+              providerPlanId: syncResult.providerPlanId ?? currentRaw.providerPlanId ?? null,
+              versionStamp: syncResult.versionStamp ?? currentRaw.versionStamp ?? null,
+              metadataResponse: syncResult.metadataResponse ?? currentRaw.metadataResponse ?? null,
+              retrievedAt: new Date().toISOString(),
+            } as any
+            : matchedPlan.filingRaw,
+        } as any);
       } catch (innerError) {
         console.error(JSON.stringify({
           event: "leidos_push_error",
@@ -20325,6 +20409,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const packet = result.data;
       const flightRules = (packet.flightRules || "VFR").toUpperCase();
+      const routeNormalization = normalizeRouteForProvider(packet.route);
+      const dofPreview = buildOtherInfoWithDof({
+        existingOtherInfo: packet.otherInfo,
+        plannedDepartureAt: packet.plannedDepartureUtc,
+        operationalTimeZone: packet.departureTimeZone || undefined,
+      });
       const errors: string[] = [];
       const warnings: string[] = [];
       if (!packet.departure) errors.push("Departure airport is required.");
@@ -20333,7 +20423,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!packet.aircraftType) errors.push("Aircraft type is required.");
       if (!packet.pilotName) errors.push("Pilot in command name is required.");
       if (!packet.soulsOnBoard) errors.push("Souls on board must be entered.");
-      if (flightRules === "IFR" && !packet.route) {
+      if (flightRules === "IFR" && !routeNormalization.normalizedRoute) {
         errors.push("IFR filing requires a route before handoff.");
       }
       if (!packet.plannedDepartureUtc) {
@@ -20345,16 +20435,25 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (flightRules === "IFR" && !packet.alternate) {
         warnings.push("Consider adding an alternate before filing IFR.");
       }
-      if (flightRules !== "IFR" && !packet.route) {
+      if (flightRules !== "IFR" && !routeNormalization.normalizedRoute) {
         warnings.push("VFR handoff can proceed direct, but route detail improves the filing packet.");
       }
+      warnings.push(...routeNormalization.notes);
       if (!packet.equipment) {
         warnings.push("Equipment code is blank. Verify equipment capability before filing.");
+      }
+      if (packet.route && !routeNormalization.hasValidToken) {
+        errors.push("Route must contain at least one valid airport, fix, navaid, airway, or procedure token.");
       }
 
       const normalizedPacket = {
         ...packet,
         flightRules,
+        route: routeNormalization.localEnteredRoute,
+        normalizedRoute: routeNormalization.normalizedRoute,
+        otherInfo: dofPreview.otherInfo,
+        dof: dofPreview.dof,
+        dofInjected: dofPreview.injected,
         provider: "flight-service-handoff-staged",
       };
       const providerDiagnostics = getLeidosFlightServiceDiagnostics();
@@ -20390,6 +20489,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         errors,
         warnings,
         nextSteps,
+        preview: {
+          localRoute: routeNormalization.localEnteredRoute,
+          transmittedRoute: routeNormalization.normalizedRoute,
+          routeChanged: routeNormalization.changed,
+          dof: dofPreview.dof,
+          dofInjected: dofPreview.injected,
+          localOtherInfo: packet.otherInfo || null,
+          transmittedOtherInfo: dofPreview.otherInfo,
+        },
         packet: normalizedPacket,
       });
     } catch (error) {
@@ -20532,6 +20640,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         cancelledAt: null,
         closedAt: null,
         filingLastProviderSyncAt: null,
+        filingPayload: null,
+        filingProviderSnapshot: null,
+        filingProviderMessages: [],
         filingRaw: null,
         filingActionHistory: [],
         notes: packet.remarks || null,
@@ -20651,6 +20762,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const nextProviderPlanId = preserveExistingLifecycleState
         ? providerResult.providerPlanId || plan.filingProviderPlanId
         : providerResult.providerPlanId;
+      const nextFilingPayload = providerResult.payloadSnapshot ?? asRecord((plan as Record<string, unknown>).filingPayload);
+      const nextProviderSnapshot = providerResult.providerSnapshot
+        ? mergeProviderSnapshot((plan as Record<string, unknown>).filingProviderSnapshot, providerResult.providerSnapshot)
+        : asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+      const nextProviderMessages = appendPlanProviderMessages(
+        (plan as Record<string, unknown>).filingProviderMessages,
+        providerResult.providerMessages,
+      );
 
       const updated = await storage.updateFlightPlan(plan.id, {
         filingProvider: "leidos_flight_service",
@@ -20659,6 +20778,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         filingPendingAction: providerResult.live ? null : action,
         filingIsLive: nextFilingIsLive,
         filingLastProviderSyncAt: now,
+        filingPayload: Object.keys(nextFilingPayload || {}).length > 0 ? nextFilingPayload as any : null,
+        filingProviderSnapshot: Object.keys(nextProviderSnapshot || {}).length > 0 ? nextProviderSnapshot as any : null,
+        filingProviderMessages: nextProviderMessages as any,
         filingRaw: nextFilingRaw,
         filingActionHistory: [...currentHistory, historyEntry],
         ...statusTimestamps,
@@ -20709,10 +20831,28 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         metadataResponse: syncResult.metadataResponse ?? currentRaw.metadataResponse ?? null,
         retrievedAt: now.toISOString(),
       };
+      const existingProviderSnapshot = (plan as Record<string, unknown>).filingProviderSnapshot;
+      const nextProviderSnapshot = syncResult.providerSnapshot
+        ? mergeProviderSnapshot(existingProviderSnapshot, syncResult.providerSnapshot)
+        : asRecord(existingProviderSnapshot);
+      const nextProviderMessages = appendPlanProviderMessages(
+        (plan as Record<string, unknown>).filingProviderMessages,
+        syncResult.providerMessages,
+      );
+
+      console.info(JSON.stringify({
+        event: "leidos_sync_persisted",
+        planId: plan.id,
+        providerPlanId: syncResult.providerPlanId ?? plan.filingProviderPlanId,
+        versionStamp: syncResult.versionStamp,
+        notices: syncResult.providerSnapshot?.notices ?? [],
+      }));
 
       const updated = await storage.updateFlightPlan(plan.id, {
         filingProviderPlanId: syncResult.providerPlanId ?? plan.filingProviderPlanId,
         filingLastProviderSyncAt: now,
+        filingProviderSnapshot: Object.keys(nextProviderSnapshot || {}).length > 0 ? nextProviderSnapshot as any : null,
+        filingProviderMessages: nextProviderMessages as any,
         filingRaw: nextRaw as any,
       } as any);
 

@@ -1,0 +1,72 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  buildFilingFieldDiffs,
+  buildOtherInfoWithDof,
+  formatIcaoDof,
+  normalizeRouteForProvider,
+} from "../../shared/flight-plan-filing-workflow";
+
+test("same-day filing does not inject DOF", () => {
+  const result = buildOtherInfoWithDof({
+    existingOtherInfo: "PBN/A1B2 RMK/LOCAL",
+    plannedDepartureAt: "2026-04-23T15:30:00.000Z",
+    operationalTimeZone: "UTC",
+    now: new Date("2026-04-23T12:00:00.000Z"),
+  });
+
+  assert.equal(result.injected, false);
+  assert.equal(result.dof, null);
+  assert.equal(result.otherInfo, "PBN/A1B2 RMK/LOCAL");
+});
+
+test("future-dated filing injects DOF in ICAO format", () => {
+  const result = buildOtherInfoWithDof({
+    existingOtherInfo: "PBN/A1B2",
+    plannedDepartureAt: "2026-04-26T15:30:00.000Z",
+    operationalTimeZone: "UTC",
+    now: new Date("2026-04-23T12:00:00.000Z"),
+  });
+
+  assert.equal(formatIcaoDof("2026-04-26T15:30:00.000Z"), "260426");
+  assert.equal(result.injected, true);
+  assert.equal(result.dof, "260426");
+  assert.equal(result.otherInfo, "PBN/A1B2 DOF/260426");
+});
+
+test("standard airport-only route normalizes with DCT wrappers", () => {
+  const normalized = normalizeRouteForProvider("KBPG KSRR KINW");
+  assert.equal(normalized.localEnteredRoute, "KBPG KSRR KINW");
+  assert.equal(normalized.normalizedRoute, "DCT KBPG DCT KSRR DCT KINW DCT");
+  assert.equal(normalized.changed, true);
+  assert.equal(normalized.hasValidToken, true);
+});
+
+test("already normalized route stays stable", () => {
+  const normalized = normalizeRouteForProvider("DCT KBPG DCT KSRR DCT KINW DCT");
+  assert.equal(normalized.normalizedRoute, "DCT KBPG DCT KSRR DCT KINW DCT");
+  assert.equal(normalized.changed, false);
+});
+
+test("malformed route input does not count as valid", () => {
+  const normalized = normalizeRouteForProvider("DCT DCT");
+  assert.equal(normalized.normalizedRoute, "DCT");
+  assert.equal(normalized.hasValidToken, false);
+});
+
+test("provider route change diff is detected", () => {
+  const diffs = buildFilingFieldDiffs({
+    localRoute: "KBPG KSRR KINW",
+    transmittedRoute: "DCT KBPG DCT KSRR DCT KINW DCT",
+    providerRoute: "DCT KBPG DCT TCC DCT KINW DCT",
+    localOtherInfo: "PBN/A1B2",
+    transmittedOtherInfo: "PBN/A1B2 DOF/260426",
+    providerOtherInfo: "PBN/A1B2 DOF/260426",
+    dof: "260426",
+  });
+
+  const routeDiff = diffs.find((entry) => entry.field === "route");
+  assert.ok(routeDiff);
+  assert.equal(routeDiff?.changedForTransmission, true);
+  assert.equal(routeDiff?.changedByProvider, true);
+});

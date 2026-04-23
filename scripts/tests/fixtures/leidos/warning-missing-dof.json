@@ -1,0 +1,8 @@
+{
+  "flightIdentifier": "ABC123",
+  "versionStamp": "20260423131000003",
+  "state": "PROPOSED",
+  "returnStatus": false,
+  "returnMessage": ["Missing required field in ICAO Other Info"],
+  "returnCodedMessage": ["DOF/YYMMDD required for future-dated flight"]
+}

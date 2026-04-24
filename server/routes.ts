@@ -162,6 +162,26 @@ const normalizePartnerMemberNumber = (value: string) =>
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
 
+const FLEXIBLE_PARTNER_IDENTIFIER_SLUGS = new Set(["abs-2mo-pro-plus"]);
+
+const allowsFlexiblePartnerIdentifier = (slugOrOffer?: string | { slug?: string | null } | null) => {
+  const slug =
+    typeof slugOrOffer === "string"
+      ? slugOrOffer
+      : typeof slugOrOffer?.slug === "string"
+        ? slugOrOffer.slug
+        : "";
+  return FLEXIBLE_PARTNER_IDENTIFIER_SLUGS.has(normalizeMembershipOfferSlug(slug));
+};
+
+const buildFlexiblePartnerIdentifier = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const normalized = normalizePartnerMemberNumber(trimmed);
+  if (normalized) return `SELFATTEST:${normalized}`;
+  return `SELFATTEST:${Buffer.from(trimmed.toLowerCase(), "utf8").toString("base64url")}`;
+};
+
 const AIRCRAFT_VERIFICATION_DOC_FIELDS = new Set([
   "insuranceDoc",
   "annualInspectionDoc",
@@ -8590,8 +8610,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const signMembershipPartnerClaimToken = (payload: {
     offerId: string;
     slug: string;
-    memberId: string;
+    memberId?: string;
     normalizedMemberNumber: string;
+    inputMode?: "roster" | "self_attest";
+    selfAttestedValue?: string;
   }) =>
     jwt.sign(
       {
@@ -8608,8 +8630,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type?: string;
         offerId: string;
         slug: string;
-        memberId: string;
+        memberId?: string;
         normalizedMemberNumber: string;
+        inputMode?: "roster" | "self_attest";
+        selfAttestedValue?: string;
       };
     } catch {
       return null;
@@ -8664,6 +8688,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: offer.description,
         tier: offer.tier,
         durationDays: offer.durationDays,
+        acceptsFlexibleIdentifier: allowsFlexiblePartnerIdentifier(offer),
+        memberInputLabel: allowsFlexiblePartnerIdentifier(offer) ? "Member number or email" : "Member number",
+        memberInputHint: allowsFlexiblePartnerIdentifier(offer)
+          ? "ABS rollout mode: member number, email address, and entries with spaces or dashes are accepted."
+          : "Spaces and dashes are ignored during verification.",
       });
     } catch (error) {
       console.error("Failed to load membership partner offer:", error);
@@ -8679,9 +8708,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const slug = normalizeMembershipOfferSlug(parsed.data.slug);
-      const normalizedMemberNumber = normalizePartnerMemberNumber(parsed.data.memberNumber);
-      if (!normalizedMemberNumber) {
-        return res.status(400).json({ error: "Member number is required" });
+      const rawMemberInput = parsed.data.memberNumber.trim();
+      const normalizedMemberNumber = normalizePartnerMemberNumber(rawMemberInput);
+      if (!rawMemberInput) {
+        return res.status(400).json({ error: "Member number or email is required" });
       }
 
       const offer = await storage.getMembershipPartnerOfferBySlug(slug);
@@ -8689,21 +8719,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Offer not found" });
       }
 
-      const member = await storage.getMembershipPartnerOfferMemberByNumber(offer.id, normalizedMemberNumber);
-      if (!member) {
+      const member = normalizedMemberNumber
+        ? await storage.getMembershipPartnerOfferMemberByNumber(offer.id, normalizedMemberNumber)
+        : undefined;
+
+      let claimToken = "";
+      if (member) {
+        if (member.redeemedAt) {
+          return res.status(409).json({ error: "That member number has already been redeemed" });
+        }
+
+        claimToken = signMembershipPartnerClaimToken({
+          offerId: offer.id,
+          slug: offer.slug,
+          memberId: member.id,
+          normalizedMemberNumber,
+          inputMode: "roster",
+        });
+      } else if (allowsFlexiblePartnerIdentifier(offer)) {
+        claimToken = signMembershipPartnerClaimToken({
+          offerId: offer.id,
+          slug: offer.slug,
+          normalizedMemberNumber: buildFlexiblePartnerIdentifier(rawMemberInput),
+          inputMode: "self_attest",
+          selfAttestedValue: rawMemberInput,
+        });
+      } else {
         return res.status(400).json({ error: "Member number not recognized for this offer" });
       }
-
-      if (member.redeemedAt) {
-        return res.status(409).json({ error: "That member number has already been redeemed" });
-      }
-
-      const claimToken = signMembershipPartnerClaimToken({
-        offerId: offer.id,
-        slug: offer.slug,
-        memberId: member.id,
-        normalizedMemberNumber,
-      });
 
       res.json({
         success: true,
@@ -8715,6 +8758,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           slug: offer.slug,
           tier: offer.tier,
           durationDays: offer.durationDays,
+          acceptsFlexibleIdentifier: allowsFlexiblePartnerIdentifier(offer),
         },
       });
     } catch (error) {
@@ -8738,6 +8782,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let slug = "";
       let normalizedMemberNumber = "";
       let tokenMemberId = "";
+      let claimInputMode: "roster" | "self_attest" = "roster";
+      let selfAttestedValue = "";
       if (parsed.data.claimToken) {
         const claim = verifyMembershipPartnerClaimToken(parsed.data.claimToken);
         if (!claim || claim.type !== "membership_partner_offer_claim") {
@@ -8745,14 +8791,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         slug = normalizeMembershipOfferSlug(claim.slug);
         normalizedMemberNumber = claim.normalizedMemberNumber;
-        tokenMemberId = claim.memberId;
+        tokenMemberId = claim.memberId || "";
+        claimInputMode = claim.inputMode === "self_attest" ? "self_attest" : "roster";
+        selfAttestedValue = claim.selfAttestedValue?.trim() || "";
       } else {
         slug = normalizeMembershipOfferSlug(parsed.data.slug || "");
+        selfAttestedValue = parsed.data.memberNumber?.trim() || "";
         normalizedMemberNumber = normalizePartnerMemberNumber(parsed.data.memberNumber || "");
       }
 
-      if (!slug || !normalizedMemberNumber) {
-        return res.status(400).json({ error: "Offer and member number are required" });
+      if (!slug || (!normalizedMemberNumber && !selfAttestedValue)) {
+        return res.status(400).json({ error: "Offer and member number or email are required" });
       }
 
       const offer = await storage.getMembershipPartnerOfferBySlug(slug);
@@ -8760,15 +8809,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Offer not found" });
       }
 
-      const member = await storage.getMembershipPartnerOfferMemberByNumber(offer.id, normalizedMemberNumber);
-      if (!member) {
+      const member = normalizedMemberNumber
+        ? await storage.getMembershipPartnerOfferMemberByNumber(offer.id, normalizedMemberNumber)
+        : undefined;
+      const canUseFlexibleIdentifier = allowsFlexiblePartnerIdentifier(offer);
+      const isSelfAttestedClaim = claimInputMode === "self_attest";
+      if (!member && !(canUseFlexibleIdentifier && (selfAttestedValue || isSelfAttestedClaim))) {
         return res.status(400).json({ error: "Member number not recognized for this offer" });
       }
-      if (tokenMemberId && member.id !== tokenMemberId) {
+      if (member && tokenMemberId && member.id !== tokenMemberId) {
         return res.status(400).json({ error: "This partner offer claim does not match the member record" });
       }
 
-      if (member.redeemedByUserId && member.redeemedByUserId !== userId) {
+      if (member?.redeemedByUserId && member.redeemedByUserId !== userId) {
         return res.status(409).json({ error: "That member number has already been redeemed" });
       }
 
@@ -8798,14 +8851,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resolvedEndsAt = currentGrantEndsAt;
       }
 
-      if (!member.redeemedByUserId) {
+      if (member && !member.redeemedByUserId) {
         const redeemed = await storage.redeemMembershipPartnerOfferMember(member.id, userId);
         if (!redeemed) {
           return res.status(409).json({ error: "That member number has already been redeemed" });
         }
       }
 
-      const reason = `${offer.partnerName} member offer: ${offer.name} (${member.memberNumber})`;
+      const identifierForReason = member?.memberNumber || selfAttestedValue || normalizedMemberNumber;
+      const reason = `${offer.partnerName} member offer: ${offer.name} (${identifierForReason})`;
       const updated = await storage.updateUser(userId, {
         membershipGrantTier: resolvedTier,
         membershipGrantEndsAt: resolvedEndsAt,
@@ -8828,6 +8882,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           grantEndsAt: resolvedEndsAt.toISOString(),
           offerSlug: offer.slug,
           partnerName: offer.partnerName,
+          partnerIdentifier: identifierForReason,
+          partnerIdentifierMode: member ? "roster" : "self_attest",
         },
       });
 

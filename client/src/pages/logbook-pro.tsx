@@ -23,6 +23,9 @@ type MembershipPartnerOfferDetails = {
   description?: string | null;
   tier: "pro" | "pro_plus";
   durationDays: number;
+  acceptsFlexibleIdentifier?: boolean;
+  memberInputLabel?: string;
+  memberInputHint?: string;
 };
 
 export default function LogbookProPage() {
@@ -367,20 +370,29 @@ export default function LogbookProPage() {
                       </div>
                       <div className="rounded-[1rem] border border-primary/12 bg-white/70 p-4">
                         <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Redemption</div>
-                        <div className="mt-2 text-sm font-semibold text-slate-900">One member number per account</div>
+                        <div className="mt-2 text-sm font-semibold text-slate-900">
+                          {partnerOffer.acceptsFlexibleIdentifier ? "Member number or email accepted" : "One member number per account"}
+                        </div>
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="partner-member-number">Member number</Label>
+                      <Label htmlFor="partner-member-number">{partnerOffer.memberInputLabel || "Member number"}</Label>
                       <Input
                         id="partner-member-number"
                         value={partnerMemberNumber}
                         onChange={(event) => setPartnerMemberNumber(event.target.value)}
-                        placeholder={`Enter your ${partnerOffer.partnerName} member number`}
+                        placeholder={
+                          partnerOffer.acceptsFlexibleIdentifier
+                            ? `Enter your ${partnerOffer.partnerName} member number or email`
+                            : `Enter your ${partnerOffer.partnerName} member number`
+                        }
                         data-testid="input-partner-member-number"
                         disabled={Boolean(claimToken) || redeemPartnerOfferMutation.isPending}
                       />
+                      <div className="text-xs text-[#8FA6C0]">
+                        {partnerOffer.memberInputHint || "Spaces and dashes are ignored during verification."}
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap gap-3">

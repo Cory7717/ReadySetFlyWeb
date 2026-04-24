@@ -57,6 +57,7 @@ export type FilingProviderSnapshot = {
   providerStatus: string | null;
   artccState: string | null;
   artccInfo: string | null;
+  beaconCode: string | null;
   route: FilingRouteSnapshot;
   notices: string[];
   timestamps: Record<string, string | null>;

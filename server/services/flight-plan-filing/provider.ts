@@ -814,6 +814,17 @@ const buildProviderSnapshot = ({
   ]);
   const artccState = findNestedString(source, ["artccState", "artcc_status"]);
   const artccInfo = findNestedString(source, ["artccInfo", "artcc_info"]);
+  const beaconCode = findNestedString(source, [
+    "beaconCode",
+    "beacon_code",
+    "squawk",
+    "transponder",
+    "transponderCode",
+    "assignedBeacon",
+    "assignedCode",
+    "discreteCode",
+    "beacon",
+  ]);
   const providerReferenceId = findNestedString(source, [
     "transactionId",
     "referenceId",
@@ -856,6 +867,7 @@ const buildProviderSnapshot = ({
     providerStatus,
     artccState,
     artccInfo,
+    beaconCode,
     route,
     notices,
     timestamps: {
@@ -873,6 +885,26 @@ const buildProviderSnapshot = ({
       dof: payloadSnapshot?.dof || null,
     }),
   };
+};
+
+const injectZzzzSupplementals = (
+  otherInfo: string | null,
+  { departureName, destinationName, alternateName }: {
+    departureName?: string | null;
+    destinationName?: string | null;
+    alternateName?: string | null;
+  },
+): string | null => {
+  let base = String(otherInfo || "").trim();
+  if (departureName) base = base.replace(/(?:^|\s)DEP\/\S*/gi, " ").replace(/\s+/g, " ").trim();
+  if (destinationName) base = base.replace(/(?:^|\s)DEST\/\S*/gi, " ").replace(/\s+/g, " ").trim();
+  if (alternateName) base = base.replace(/(?:^|\s)ALTN\/\S*/gi, " ").replace(/\s+/g, " ").trim();
+  const supplementals: string[] = [];
+  if (departureName) supplementals.push(`DEP/${departureName.trim().replace(/\s+/g, "_").toUpperCase()}`);
+  if (destinationName) supplementals.push(`DEST/${destinationName.trim().replace(/\s+/g, "_").toUpperCase()}`);
+  if (alternateName) supplementals.push(`ALTN/${alternateName.trim().replace(/\s+/g, "_").toUpperCase()}`);
+  const merged = [base, ...supplementals].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  return merged || null;
 };
 
 const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingAction, config: LeidosFlightServiceConfig) => {
@@ -916,7 +948,12 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("surveillanceEquipment", plan.filingSurveillanceEquipment || config.surveillanceEquipment);
     append("pilotInCommandExtended", plan.filingPilotName);
     append("suppRemarksExtended", plan.filingRemarks || plan.notes);
-    append("otherInfo", otherInfoResult.otherInfo);
+    const mergedOtherInfo = injectZzzzSupplementals(otherInfoResult.otherInfo, {
+      departureName: plan.departure?.toUpperCase() === "ZZZZ" ? plan.filingDepartureName : null,
+      destinationName: plan.destination?.toUpperCase() === "ZZZZ" ? plan.filingDestinationName : null,
+      alternateName: plan.alternate?.toUpperCase() === "ZZZZ" ? plan.filingAlternateName : null,
+    });
+    append("otherInfo", mergedOtherInfo);
     appendLeidosAltitudeFields(params, plan.filingPlannedAltitudeFt);
     if (action === "amend") {
       append("versionStamp", extractVersionStamp(plan));
@@ -940,12 +977,25 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
         changedByProvider: false,
         normalizationNotes: routeNormalization.notes,
       },
-      otherInfo: otherInfoResult.otherInfo,
+      otherInfo: mergedOtherInfo,
       transmittedFields,
     };
     return {
       params,
       payloadSnapshot,
+      routeNormalization,
+      otherInfoResult,
+    };
+  }
+
+  if (action === "cancel" || action === "close") {
+    append("versionStamp", extractVersionStamp(plan));
+    if (action === "close" && plan.filingCloseLocation) {
+      append("closeDestinationInfo", plan.filingCloseLocation);
+    }
+    return {
+      params,
+      payloadSnapshot: null,
       routeNormalization,
       otherInfoResult,
     };
@@ -1418,7 +1468,16 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   const routeNormalization = normalizeRouteForProvider(plan.route);
 
   if (!plan.departure) errors.push("Departure airport is required.");
+  if (plan.departure?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend") && !plan.filingDepartureName) {
+    errors.push("Departure is ZZZZ — enter the actual departure location name.");
+  }
   if (!plan.destination) errors.push("Destination airport is required.");
+  if (plan.destination?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend") && !plan.filingDestinationName) {
+    errors.push("Destination is ZZZZ — enter the actual destination location name.");
+  }
+  if (plan.alternate?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend") && !plan.filingAlternateName) {
+    errors.push("Alternate is ZZZZ — enter the actual alternate location name.");
+  }
   if (!plan.tailNumber) errors.push("Aircraft ID / tail number is required.");
   if (!plan.aircraftType) errors.push("Aircraft type is required.");
   if ((action === "file" || action === "amend") && !plan.filingTrueAirspeedKtas) {
@@ -1473,8 +1532,8 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     errors.push("Only an active VFR flight plan can be closed.");
   }
 
-  if (action === "close" && isFlightPlanCloseOverdue(plan.plannedArrivalAt)) {
-    errors.push("This VFR flight plan appears overdue. Leidos requires closeDestinationInfo for overdue closes, and RSF does not collect that field yet.");
+  if (action === "close" && isFlightPlanCloseOverdue(plan.plannedArrivalAt) && !plan.filingCloseLocation) {
+    errors.push("This VFR flight plan appears overdue. Enter your actual close location so Leidos can process the overdue close.");
   }
 
   if (action === "cancel" && ["cancelled", "closed"].includes((plan.filingStatus || "").toLowerCase())) {

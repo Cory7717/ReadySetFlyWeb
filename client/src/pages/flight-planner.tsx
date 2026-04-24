@@ -286,9 +286,11 @@ const canClosePlan = (plan: FlightPlan | null | undefined) =>
     plan &&
     String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
     normalizedClientFilingStatus(plan) === "activated" &&
-    hasLiveProviderPlan(plan) &&
-    !isFlightPlanCloseOverdue(plan.plannedArrivalAt),
+    hasLiveProviderPlan(plan),
   );
+
+const isPlanOverdueForClose = (plan: FlightPlan | null | undefined) =>
+  Boolean(plan && isFlightPlanCloseOverdue(plan.plannedArrivalAt));
 
 const canCancelPlan = (plan: FlightPlan | null | undefined) =>
   Boolean(
@@ -1380,6 +1382,8 @@ export default function FlightPlanner() {
   } | null>(null);
   const [draftPlanId, setDraftPlanId] = useState<string | null>(null);
   const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<FlightPlan | null>(null);
+  const [overdueClosePlan, setOverdueClosePlan] = useState<FlightPlan | null>(null);
+  const [overdueCloseLocation, setOverdueCloseLocation] = useState("");
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [providerUpdatesPlan, setProviderUpdatesPlan] = useState<FlightPlan | null>(null);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
@@ -1648,6 +1652,9 @@ export default function FlightPlanner() {
     typeOfFlight: "G",
     surveillanceEquipment: "N",
     otherInfo: "",
+    departureName: "",
+    destinationName: "",
+    alternateName: "",
   });
   const [checklist, setChecklist] = useState(checklistDefaults);
   const [departureSuggestions, setDepartureSuggestions] = useState<AirportSearchResult[]>([]);
@@ -4427,6 +4434,9 @@ export default function FlightPlanner() {
         typeOfFlight: "G",
         surveillanceEquipment: "N",
         otherInfo: "",
+        departureName: "",
+        destinationName: "",
+        alternateName: "",
       });
     };
 
@@ -4833,6 +4843,9 @@ export default function FlightPlanner() {
           filingTypeOfFlight: filingDraft.typeOfFlight.trim() || null,
           filingSurveillanceEquipment: filingDraft.surveillanceEquipment.trim() || null,
           filingOtherInfo: filingDraft.otherInfo.trim() || null,
+          filingDepartureName: filingDraft.departureName.trim() || null,
+          filingDestinationName: filingDraft.destinationName.trim() || null,
+          filingAlternateName: filingDraft.alternateName.trim() || null,
           filingTrueAirspeedKtas: Math.round(planningCruise) || null,
           filingPlannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
           filingEstimatedEnrouteMinutes: Math.round(eteMinutes) || null,
@@ -4910,6 +4923,9 @@ export default function FlightPlanner() {
         filingTypeOfFlight: filingDraft.typeOfFlight.trim() || null,
         filingSurveillanceEquipment: filingDraft.surveillanceEquipment.trim() || null,
         filingOtherInfo: filingDraft.otherInfo.trim() || null,
+        filingDepartureName: filingDraft.departureName.trim() || null,
+        filingDestinationName: filingDraft.destinationName.trim() || null,
+        filingAlternateName: filingDraft.alternateName.trim() || null,
         filingTrueAirspeedKtas: Math.round(planningCruise) || null,
         filingPlannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
         filingEstimatedEnrouteMinutes: Math.round(eteMinutes) || null,
@@ -5109,8 +5125,10 @@ export default function FlightPlanner() {
   const currentDraftCanAmend = !draftAmendAvailabilityMessage;
 
   const filingActionMutation = useMutation({
-    mutationFn: async ({ planId, action }: { planId: string; action: "file" | "amend" | "activate" | "cancel" | "close" }) => {
-      const res = await apiRequest("POST", `/api/flight-plans/${planId}/filing-action`, { action });
+    mutationFn: async ({ planId, action, closeLocation }: { planId: string; action: "file" | "amend" | "activate" | "cancel" | "close"; closeLocation?: string | null }) => {
+      const body: Record<string, unknown> = { action };
+      if (closeLocation) body.closeLocation = closeLocation;
+      const res = await apiRequest("POST", `/api/flight-plans/${planId}/filing-action`, body);
       return res.json();
     },
     onSuccess: (result: any, variables) => {
@@ -5338,6 +5356,9 @@ export default function FlightPlanner() {
       typeOfFlight: editingPlan.filingTypeOfFlight || current.typeOfFlight,
       surveillanceEquipment: editingPlan.filingSurveillanceEquipment || current.surveillanceEquipment,
       otherInfo: editingPlan.filingOtherInfo || current.otherInfo,
+      departureName: editingPlan.filingDepartureName || current.departureName,
+      destinationName: editingPlan.filingDestinationName || current.destinationName,
+      alternateName: editingPlan.filingAlternateName || current.alternateName,
     }));
     const normalizedSavedRoute = normalizeRouteText(editingPlan.route || "");
     const savedRouteTokens = normalizedSavedRoute ? normalizedSavedRoute.split(/\s+/) : [];
@@ -7683,6 +7704,36 @@ export default function FlightPlanner() {
                     placeholder="PBN/... NAV/... DAT/... SUR/..."
                   />
                 </div>
+                {form.departure.trim().toUpperCase() === "ZZZZ" && (
+                  <div className="space-y-2">
+                    <Label>Departure Location Name <span className="text-amber-400 text-xs">(ZZZZ required)</span></Label>
+                    <Input
+                      value={filingDraft.departureName}
+                      onChange={(e) => setFilingDraft((current) => ({ ...current, departureName: e.target.value }))}
+                      placeholder="Northwood Private Airstrip"
+                    />
+                  </div>
+                )}
+                {form.destination.trim().toUpperCase() === "ZZZZ" && (
+                  <div className="space-y-2">
+                    <Label>Destination Location Name <span className="text-amber-400 text-xs">(ZZZZ required)</span></Label>
+                    <Input
+                      value={filingDraft.destinationName}
+                      onChange={(e) => setFilingDraft((current) => ({ ...current, destinationName: e.target.value }))}
+                      placeholder="Crystal Lakes Airport"
+                    />
+                  </div>
+                )}
+                {form.alternate.trim().toUpperCase() === "ZZZZ" && (
+                  <div className="space-y-2">
+                    <Label>Alternate Location Name <span className="text-amber-400 text-xs">(ZZZZ required)</span></Label>
+                    <Input
+                      value={filingDraft.alternateName}
+                      onChange={(e) => setFilingDraft((current) => ({ ...current, alternateName: e.target.value }))}
+                      placeholder="Ridgeview Grass Strip"
+                    />
+                  </div>
+                )}
               </div>
             </div>
             <div className={cn("space-y-4 p-4", plannerSubpanelClass)}>
@@ -7853,7 +7904,14 @@ export default function FlightPlanner() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "close" })}
+                      onClick={() => {
+                        if (isPlanOverdueForClose(currentSavedPlan)) {
+                          setOverdueClosePlan(currentSavedPlan);
+                          setOverdueCloseLocation("");
+                        } else {
+                          filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "close" });
+                        }
+                      }}
                       disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !currentSavedPlanCanClose}
                     >
                       Close
@@ -7903,9 +7961,9 @@ export default function FlightPlanner() {
                   {getAmendAvailabilityMessage(currentSavedPlan)}
                 </div>
               )}
-              {currentSavedPlan && isFlightPlanCloseOverdue(currentSavedPlan.plannedArrivalAt) && normalizedClientFilingStatus(currentSavedPlan) === "activated" && (
-                <div className="text-xs text-muted-foreground">
-                  Overdue VFR closes need additional Leidos destination-close data that RSF does not collect yet. Close this one directly with Flight Service until that field is implemented.
+              {isPlanOverdueForClose(currentSavedPlan) && normalizedClientFilingStatus(currentSavedPlan) === "activated" && (
+                <div className="text-xs text-amber-400/80">
+                  This plan is overdue — you'll be asked for your actual close location before submitting to Leidos.
                 </div>
               )}
             </div>
@@ -8073,7 +8131,28 @@ export default function FlightPlanner() {
                   </Button>
                 )}
               </div>
-              {savedPlansView.map((plan) => (
+              {(() => {
+                const statusBucket = (p: FlightPlan) => {
+                  const s = normalizedClientFilingStatus(p);
+                  if (s === "activated") return isPlanOverdueForClose(p) ? "overdue" : "active";
+                  if (s === "filed") return "filed";
+                  if (s === "cancelled" || s === "closed") return "done";
+                  return "draft";
+                };
+                const bucketOrder = ["active", "overdue", "filed", "draft", "done"] as const;
+                const bucketLabel: Record<string, string> = {
+                  active: "Active",
+                  overdue: "Overdue",
+                  filed: "Filed / Proposed",
+                  draft: "Staged / Draft",
+                  done: "Closed / Cancelled",
+                };
+                const grouped = bucketOrder
+                  .map((k) => ({ k, plans: savedPlansView.filter((p) => statusBucket(p) === k) }))
+                  .filter((g) => g.plans.length > 0);
+                return grouped.flatMap(({ k, plans }, gi) => [
+                  <div key={`group-hdr-${k}`} className={cn("text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground", gi > 0 && "pt-2 border-t border-border/30")}>{bucketLabel[k]}</div>,
+                  ...plans.map((plan) => (
               <div key={plan.id} className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
@@ -8239,7 +8318,14 @@ export default function FlightPlanner() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "close" })}
+                        onClick={() => {
+                          if (isPlanOverdueForClose(plan)) {
+                            setOverdueClosePlan(plan);
+                            setOverdueCloseLocation("");
+                          } else {
+                            filingActionMutation.mutate({ planId: plan.id, action: "close" });
+                          }
+                        }}
                         disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !canClosePlan(plan)}
                       >
                         Close
@@ -8300,7 +8386,9 @@ export default function FlightPlanner() {
                   <div className="text-sm text-muted-foreground">Notes: {plan.notes}</div>
                 )}
               </div>
-              ))}
+                  ))
+                ]);
+              })()}
             </div>
           )}
         </CardContent>
@@ -9382,6 +9470,41 @@ export default function FlightPlanner() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    <Dialog open={Boolean(overdueClosePlan)} onOpenChange={(open) => { if (!open) { setOverdueClosePlan(null); setOverdueCloseLocation(""); } }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Close overdue VFR flight plan</DialogTitle>
+          <DialogDescription>
+            This flight plan is past its planned arrival time. Leidos requires your actual close location for overdue closures.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <Label htmlFor="overdue-close-location">Actual close location</Label>
+          <Input
+            id="overdue-close-location"
+            placeholder="e.g. KMHV, CRYSTAL LAKES AIRPORT"
+            value={overdueCloseLocation}
+            onChange={(e) => setOverdueCloseLocation(e.target.value)}
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => { setOverdueClosePlan(null); setOverdueCloseLocation(""); }}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!overdueCloseLocation.trim() || filingActionMutation.isPending}
+            onClick={() => {
+              if (!overdueClosePlan || !overdueCloseLocation.trim()) return;
+              filingActionMutation.mutate({ planId: overdueClosePlan.id, action: "close", closeLocation: overdueCloseLocation.trim() });
+              setOverdueClosePlan(null);
+              setOverdueCloseLocation("");
+            }}
+          >
+            {filingActionMutation.isPending ? "Closing..." : "Close flight plan"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }

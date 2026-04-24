@@ -4308,7 +4308,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const entitlements = getEntitlementsForUser(user);
       res.json({ ...user, entitlements });
-    } catch (error) {
+    } catch (error: any) {
+      // Postgres error 42703 = "undefined_column" — column exists in schema but not in DB.
+      // This means a migration hasn't been applied yet. Log a clear message.
+      const pgCode = error?.code || error?.cause?.code || "";
+      if (pgCode === "42703") {
+        console.error(
+          "[SCHEMA MISMATCH] /api/auth/user failed because a column referenced in the Drizzle schema does not exist in the live database.\n" +
+          "Run:  psql \"$DATABASE_URL\" -f migrations/0068_add_user_home_base_and_filing_zzzz_fields.sql\n" +
+          "Column detail:", error?.message || error,
+        );
+        return res.status(503).json({ message: "Database schema migration required — contact the site administrator." });
+      }
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
     }
@@ -20198,6 +20209,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   const filingLifecycleActionSchema = z.object({
     action: z.enum(flightPlanFilingActions),
+    closeLocation: z.string().trim().optional().nullable(),
   });
 
   app.get("/api/admin/leidos-flight-service/status", isAuthenticated, isSuperAdmin, async (_req, res) => {
@@ -20713,12 +20725,17 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       const action = parsed.data.action as FlightPlanFilingAction;
+      const closeLocation = parsed.data.closeLocation || null;
       const flightRules = (plan.filingFlightRules || "VFR").toUpperCase();
       if ((action === "activate" || action === "close") && flightRules !== "VFR") {
         return res.status(400).json({ error: `${action} is only available for VFR flight plans.` });
       }
 
-      const validation = validateFlightPlanForAction(plan, action);
+      const effectivePlanForAction = closeLocation
+        ? { ...plan, filingCloseLocation: closeLocation } as typeof plan
+        : plan;
+
+      const validation = validateFlightPlanForAction(effectivePlanForAction, action);
       if (!validation.ready) {
         return res.status(400).json({
           error: "Flight plan is not ready for this action.",
@@ -20726,7 +20743,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         });
       }
 
-      const providerResult = await flightPlanFilingProvider.stageAction(plan, action);
+      const providerResult = await flightPlanFilingProvider.stageAction(effectivePlanForAction, action);
       const currentHistory = Array.isArray(plan.filingActionHistory) ? plan.filingActionHistory : [];
       const now = new Date();
       const historyEntry = {
@@ -20944,7 +20961,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       let plans = await storage.getFlightPlansByUser(userId);
       res.json(plans);
-    } catch (error) {
+    } catch (error: any) {
+      const pgCode = error?.code || error?.cause?.code || "";
+      if (pgCode === "42703") {
+        console.error(
+          "[SCHEMA MISMATCH] /api/flight-plans failed — missing column in DB. Run migration 0068.\nDetail:", error?.message || error,
+        );
+        return res.status(503).json({ error: "Database schema migration required." });
+      }
       console.error("Failed to fetch flight plans:", error);
       res.status(500).json({ error: "Failed to fetch flight plans" });
     }

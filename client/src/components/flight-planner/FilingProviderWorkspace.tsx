@@ -153,6 +153,12 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
               <div className="font-medium">{asString(providerSnapshot.artccState) || "—"}</div>
             </div>
           </div>
+          {asString(providerSnapshot.beaconCode) && (
+            <div>
+              <div className="text-xs text-muted-foreground">Beacon code / assigned squawk</div>
+              <div className="font-medium font-mono">{asString(providerSnapshot.beaconCode)}</div>
+            </div>
+          )}
           <div>
             <div className="text-xs text-muted-foreground">Provider sync</div>
             <div className="font-medium">{formatDateTime(providerSnapshot.syncedAt || plan.filingLastProviderSyncAt)}</div>

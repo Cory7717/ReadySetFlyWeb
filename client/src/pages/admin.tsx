@@ -202,12 +202,12 @@ type CrmCampaignPreview = {
 
 const MEMBERSHIP_OFFER_PRESETS = {
   cpa: {
-    name: "CPA 3 Months Free RSF Pro+",
+    name: "CPA 2 Months Free RSF Pro+",
     partnerName: "Cessna Pilots Association",
     slug: "cpa-3mo-pro-plus",
     tier: "pro_plus" as const,
-    durationDays: "90",
-    description: "Exclusive Cessna Pilots Association member offer for 3 months of RSF Pro+.",
+    durationDays: "60",
+    description: "Exclusive Cessna Pilots Association member offer for 2 months of RSF Pro+.",
   },
   abs: {
     name: "ABS 2 Months Free RSF Pro+",

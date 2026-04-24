@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { Link } from "wouter";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { trackEvent } from "@/lib/analytics";
@@ -9,7 +8,7 @@ import { SponsoredRightRail } from "@/components/banners/SponsoredRightRail";
 import { useAuth } from "@/hooks/useAuth";
 import { canUseInternalPreview } from "@/lib/internal-preview";
 import { PageShell } from "@/components/layout/PageShell";
-import { BookOpenCheck, ClipboardList, GraduationCap, Plane, Radar, Route } from "lucide-react";
+import { BookOpenCheck, ClipboardList, GraduationCap, Route } from "lucide-react";
 
 type ToolCard = {
   title: string;
@@ -75,61 +74,65 @@ export default function StudentHub() {
       description="Start flying with tools-first guidance. Build confidence, plan your timeline, and connect with training providers."
       actions={
         <>
-            <NextStepCTA label="Find a Flight School" type="flight-school" />
-            <NextStepCTA label="Book a Discovery Flight" type="flight-school" tags={["discovery-flight"]} />
-            <Button
-              variant="outline"
-              onClick={() => {
-                trackEvent("student_cta_click", { label: "Open Flight Planner", target: "/flight-planner" });
-              }}
-              asChild
-            >
-              <Link href="/flight-planner">Open Flight Planner</Link>
-            </Button>
-            <Badge variant="outline">Free tools for new pilots</Badge>
+          <NextStepCTA label="Find a Flight School" type="flight-school" />
+          <NextStepCTA label="Book a Discovery Flight" type="flight-school" tags={["discovery-flight"]} />
+          <Button
+            variant="outline"
+            onClick={() => trackEvent("student_cta_click", { label: "Open Flight Planner", target: "/flight-planner" })}
+            asChild
+          >
+            <Link href="/flight-planner">Open Flight Planner</Link>
+          </Button>
+          <Badge variant="outline">Free tools for new pilots</Badge>
         </>
       }
       contentClassName="space-y-8"
     >
-      <section>
-        <div className="mb-6 grid gap-4 xl:grid-cols-[1.1fr_0.9fr_340px]">
-          <div className="rounded-[1.15rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] p-5 shadow-[var(--shadow-rsf-panel)]">
+      <section className="space-y-6">
+        {/* Hero panel + summary cards + ad rail */}
+        <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr_340px]">
+
+          {/* Hero CTA panel */}
+          <div className="rsf-card-shell p-5">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-primary">
               <GraduationCap className="h-4 w-4" />
               Student Pilot Starter
             </div>
-            <h2 className="text-2xl font-semibold">Start with the tools that matter first</h2>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              If you are just getting started, map your training path, estimate total cost, and build your first practice route before you move deeper into the rest of the hub.
+            <h2 className="text-xl font-semibold text-[#F5F8FC]">Start with the tools that matter first</h2>
+            <p className="mt-2 text-sm text-[#A9BBCD]">
+              If you are just getting started, map your training path, estimate total cost, and build
+              your first practice route before you move deeper into the rest of the hub.
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <Button asChild className="w-full">
+              <Button asChild className="rsf-metal-button-primary w-full">
                 <Link href="/student/wizard">Start your path</Link>
               </Button>
-              <Button asChild variant="outline" className="w-full">
+              <Button asChild variant="outline" className="w-full border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4] hover:bg-[#1a2430]">
                 <Link href="/student/cost">Estimate training cost</Link>
               </Button>
-              <Button asChild variant="outline" className="w-full">
+              <Button asChild variant="outline" className="w-full border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4] hover:bg-[#1a2430]">
                 <Link href="/flight-planner">Build a route</Link>
               </Button>
             </div>
           </div>
 
+          {/* Three summary tiles */}
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
             {[
               { icon: Route, title: "Map your path", text: "Use the wizard and roadmap to understand what comes next." },
               { icon: ClipboardList, title: "Track progress", text: "Keep hours, lessons, study goals, and milestones organized." },
               { icon: BookOpenCheck, title: "Practice on the ground", text: "Build confidence with weather, VOR, panel, and checklist tools." },
             ].map((item) => (
-              <div key={item.title} className="rounded-[1rem] border border-white/10 bg-white/75 p-4 shadow-[var(--shadow-rsf-soft)]">
-                <div className="flex items-center gap-2 text-sm font-semibold">
+              <div key={item.title} className="rsf-metal-subpanel rounded-[1rem] p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[#F5F8FC]">
                   <item.icon className="h-4 w-4 text-primary" />
                   {item.title}
                 </div>
-                <p className="mt-2 text-sm text-muted-foreground">{item.text}</p>
+                <p className="mt-2 text-sm text-[#A9BBCD]">{item.text}</p>
               </div>
             ))}
           </div>
+
           <SponsoredRightRail
             placement="student-hub"
             infoTestId="button-banner-ad-info-student-hub"
@@ -137,67 +140,69 @@ export default function StudentHub() {
           />
         </div>
 
-        {!isAuthenticated ? (
-          <Card className="mb-6 border-primary/20 bg-primary/5">
-            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+        {/* Auth prompt */}
+        {!isAuthenticated && (
+          <div className="rsf-metal-subpanel rounded-[1.1rem] p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
-                <div className="text-sm font-semibold">Create a free account to keep training momentum</div>
-                <p className="text-sm text-muted-foreground">
+                <div className="text-sm font-semibold text-[#F5F8FC]">Create a free account to keep training momentum</div>
+                <p className="text-sm text-[#A9BBCD]">
                   Save student progress, return to your training tools later, and connect with schools or instructors when you are ready.
                 </p>
               </div>
-              <div className="flex flex-col gap-2 sm:w-auto">
-                <Button asChild onClick={() => trackEvent("student_cta_click", { label: "Create Free Account", target: "/register" })}>
-                  <Link href="/register">Create Free Account</Link>
+              <div className="flex shrink-0 flex-col gap-2">
+                <Button asChild className="rsf-metal-button-primary" onClick={() => trackEvent("student_cta_click", { label: "Create Free Account", target: "/register" })}>
+                  <Link href="/register">Create free account</Link>
                 </Button>
-                <Button variant="outline" asChild onClick={() => trackEvent("student_cta_click", { label: "Sign In", target: "/login" })}>
-                  <Link href="/login">Sign In</Link>
+                <Button variant="outline" asChild className="border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4] hover:bg-[#1a2430]" onClick={() => trackEvent("student_cta_click", { label: "Sign In", target: "/login" })}>
+                  <Link href="/login">Sign in</Link>
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        ) : null}
-        <div className="space-y-6">
+            </div>
+          </div>
+        )}
+
+        {/* Tool sections */}
+        <div className="space-y-8">
           {studentSections.map((section) => (
             <div key={section.title} className="space-y-3">
-              <div className="space-y-1">
-                <h2 className="text-2xl font-semibold">{section.title}</h2>
-                <p className="text-sm text-muted-foreground">{section.description}</p>
+              <div className="space-y-0.5">
+                <h2 className="text-base font-semibold text-[#F5F8FC]">{section.title}</h2>
+                <p className="text-sm text-[#A9BBCD]">{section.description}</p>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {section.cards.map((tool) => (
-                  (() => {
-                    const isPreviewCard = Boolean(tool.comingSoon && canPreviewInternal);
-                    const isLockedCard = Boolean(tool.comingSoon && !canPreviewInternal);
-
-                    return (
-                      <Card
-                        key={tool.href}
-                        className={isLockedCard ? "border-dashed bg-muted/40 text-muted-foreground opacity-70" : "hover-elevate"}
-                      >
-                        <CardHeader>
-                          <CardTitle className="flex items-center gap-2">
-                            {tool.title}
-                            {isPreviewCard ? <Badge variant="outline">Internal Preview</Badge> : null}
-                            {isLockedCard ? <Badge variant="secondary">Coming soon</Badge> : null}
-                          </CardTitle>
-                          <CardDescription>{tool.description}</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          {isLockedCard ? (
-                            <Button variant="outline" className="w-full" disabled aria-disabled>
-                              Coming soon
-                            </Button>
-                          ) : (
-                            <Button asChild variant="outline" className="w-full">
-                              <Link href={tool.href}>{isPreviewCard ? "Open Internal Preview" : tool.cta}</Link>
-                            </Button>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })()
-                ))}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {section.cards.map((tool) => {
+                  const isPreviewCard = Boolean(tool.comingSoon && canPreviewInternal);
+                  const isLockedCard = Boolean(tool.comingSoon && !canPreviewInternal);
+                  return (
+                    <div
+                      key={tool.href}
+                      className={[
+                        "rsf-metal-panel rounded-[1.1rem] p-4 flex flex-col gap-3",
+                        !isLockedCard && "rsf-metal-panel-interactive",
+                        isLockedCard && "opacity-50",
+                      ].filter(Boolean).join(" ")}
+                    >
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-[#F5F8FC]">
+                          {tool.title}
+                          {isPreviewCard && <Badge variant="outline" className="border-[#5c74a3]/40 bg-[#141b28] text-[#9fc0ff] text-[10px]">Preview</Badge>}
+                          {isLockedCard && <Badge variant="secondary" className="border-[#5b6e87]/35 bg-[#131923] text-[#9db8d8] text-[10px]">Soon</Badge>}
+                        </div>
+                        <p className="text-xs text-[#A9BBCD]">{tool.description}</p>
+                      </div>
+                      {isLockedCard ? (
+                        <Button variant="outline" className="w-full border-[#5d6f85]/20 bg-[#0f141a] text-[#708299]" disabled>
+                          Coming soon
+                        </Button>
+                      ) : (
+                        <Button asChild variant="outline" className="w-full border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4] hover:bg-[#1a2430]">
+                          <Link href={tool.href}>{isPreviewCard ? "Open preview" : tool.cta}</Link>
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}

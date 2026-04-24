@@ -8634,12 +8634,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const members = await storage.getMembershipPartnerOfferMembers(offer.id);
     const redeemedCount = members.filter((member) => !!member.redeemedAt).length;
     const baseUrl = getPublicFrontendBaseUrl();
+    const sharePath = `/logbook/pro?offer=${encodeURIComponent(offer.slug)}`;
+    const signupPath = `/register?redirect=${encodeURIComponent(sharePath)}`;
     return {
       ...offer,
       totalMembers: members.length,
       redeemedCount,
       availableMembers: Math.max(0, members.length - redeemedCount),
-      shareUrl: `${baseUrl}/logbook/pro?offer=${encodeURIComponent(offer.slug)}`,
+      shareUrl: `${baseUrl}${sharePath}`,
+      signupUrl: `${baseUrl}${signupPath}`,
     };
   };
 

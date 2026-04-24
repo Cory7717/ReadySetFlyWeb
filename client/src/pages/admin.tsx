@@ -200,6 +200,25 @@ type CrmCampaignPreview = {
   }>;
 };
 
+const MEMBERSHIP_OFFER_PRESETS = {
+  cpa: {
+    name: "CPA 3 Months Free RSF Pro+",
+    partnerName: "Cessna Pilots Association",
+    slug: "cpa-3mo-pro-plus",
+    tier: "pro_plus" as const,
+    durationDays: "90",
+    description: "Exclusive Cessna Pilots Association member offer for 3 months of RSF Pro+.",
+  },
+  abs: {
+    name: "ABS 2 Months Free RSF Pro+",
+    partnerName: "American Bonanza Society",
+    slug: "abs-2mo-pro-plus",
+    tier: "pro_plus" as const,
+    durationDays: "60",
+    description: "Exclusive American Bonanza Society member offer for 2 months of RSF Pro+.",
+  },
+};
+
 const WEEKLY_EMAIL_SEGMENTS = [
   "flight_planning",
   "marketplace",
@@ -267,6 +286,7 @@ type MembershipPartnerOfferSummary = {
   redeemedCount: number;
   availableMembers: number;
   shareUrl: string;
+  signupUrl: string;
   createdAt?: string | Date | null;
 };
 
@@ -501,12 +521,12 @@ export default function AdminDashboard() {
   const [promoCodeDialogOpen, setPromoCodeDialogOpen] = useState(false);
   const [editingPromoCode, setEditingPromoCode] = useState<PromoCode | null>(null);
   const [promoCodeSearch, setPromoCodeSearch] = useState("");
-  const [membershipOfferName, setMembershipOfferName] = useState("");
-  const [membershipOfferPartnerName, setMembershipOfferPartnerName] = useState("Cessna Pilots Association");
-  const [membershipOfferSlug, setMembershipOfferSlug] = useState("cpa-3mo-pro-plus");
-  const [membershipOfferTier, setMembershipOfferTier] = useState<"pro" | "pro_plus">("pro_plus");
-  const [membershipOfferDurationDays, setMembershipOfferDurationDays] = useState("90");
-  const [membershipOfferDescription, setMembershipOfferDescription] = useState("Exclusive Cessna Pilots Association member offer for 3 months of RSF Pro+.");
+  const [membershipOfferName, setMembershipOfferName] = useState(MEMBERSHIP_OFFER_PRESETS.cpa.name);
+  const [membershipOfferPartnerName, setMembershipOfferPartnerName] = useState(MEMBERSHIP_OFFER_PRESETS.cpa.partnerName);
+  const [membershipOfferSlug, setMembershipOfferSlug] = useState(MEMBERSHIP_OFFER_PRESETS.cpa.slug);
+  const [membershipOfferTier, setMembershipOfferTier] = useState<"pro" | "pro_plus">(MEMBERSHIP_OFFER_PRESETS.cpa.tier);
+  const [membershipOfferDurationDays, setMembershipOfferDurationDays] = useState(MEMBERSHIP_OFFER_PRESETS.cpa.durationDays);
+  const [membershipOfferDescription, setMembershipOfferDescription] = useState(MEMBERSHIP_OFFER_PRESETS.cpa.description);
   const [membershipOfferMemberNumbersByOffer, setMembershipOfferMemberNumbersByOffer] = useState<Record<string, string>>({});
   
   // Banner ads state
@@ -518,6 +538,16 @@ export default function AdminDashboard() {
   // Banner ad orders state
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<BannerAdOrder | null>(null);
+
+  const loadMembershipOfferPreset = (preset: keyof typeof MEMBERSHIP_OFFER_PRESETS) => {
+    const config = MEMBERSHIP_OFFER_PRESETS[preset];
+    setMembershipOfferName(config.name);
+    setMembershipOfferPartnerName(config.partnerName);
+    setMembershipOfferSlug(config.slug);
+    setMembershipOfferTier(config.tier);
+    setMembershipOfferDurationDays(config.durationDays);
+    setMembershipOfferDescription(config.description);
+  };
   const [selectedTier, setSelectedTier] = useState<BannerAdTier>("3months");
   const [orderImageUrl, setOrderImageUrl] = useState<string>("");
   const [orderVideoUrl, setOrderVideoUrl] = useState<string>("");
@@ -1647,12 +1677,7 @@ export default function AdminDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/membership-partner-offers"] });
-      setMembershipOfferName("");
-      setMembershipOfferPartnerName("Cessna Pilots Association");
-      setMembershipOfferSlug("cpa-3mo-pro-plus");
-      setMembershipOfferTier("pro_plus");
-      setMembershipOfferDurationDays("90");
-      setMembershipOfferDescription("Exclusive Cessna Pilots Association member offer for 3 months of RSF Pro+.");
+      loadMembershipOfferPreset("cpa");
       toast({ title: "Partner membership offer created" });
     },
     onError: (error: Error) => {
@@ -4201,10 +4226,27 @@ export default function AdminDashboard() {
                 <CardHeader>
                   <CardTitle>Partner Membership Offers</CardTitle>
                   <CardDescription>
-                    Create controlled RSF Pro / Pro+ offers for partner organizations and gate redemption by member number. This is the right path for the CPA 3-month Pro+ rollout.
+                    Create controlled RSF Pro / Pro+ offers for partner organizations and gate redemption by member number. Use this for CPA, ABS, and similar member-only partner rollouts.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => loadMembershipOfferPreset("cpa")}
+                    >
+                      Load CPA preset
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => loadMembershipOfferPreset("abs")}
+                    >
+                      Load ABS preset
+                    </Button>
+                  </div>
+
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="membership-offer-name">Offer name</Label>
@@ -4277,7 +4319,7 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="rounded-md border bg-muted/10 p-3 text-xs text-muted-foreground">
-                    Create the public CPA offer first. After it exists, add CPA member numbers on that specific offer card below. On the public offer page, members enter their own member number before continuing to free account signup.
+                    Create the public partner offer first. After it exists, add the partner member numbers on that specific offer card below. Members can open the offer page directly, or you can send the direct signup link so account creation returns them to that offer flow.
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -4344,7 +4386,18 @@ export default function AdminDashboard() {
                                 }}
                                 data-testid={`button-copy-membership-offer-${offer.id}`}
                               >
-                                Copy share link
+                                Copy offer link
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={async () => {
+                                  await navigator.clipboard.writeText(offer.signupUrl);
+                                  toast({ title: "Signup link copied", description: offer.signupUrl });
+                                }}
+                                data-testid={`button-copy-membership-offer-signup-${offer.id}`}
+                              >
+                                Copy signup link
                               </Button>
                               <Button
                                 type="button"
@@ -4383,7 +4436,8 @@ export default function AdminDashboard() {
                           </div>
 
                           <div className="mt-3 break-all rounded-md border bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
-                            {offer.shareUrl}
+                            <div><span className="font-medium text-foreground">Offer page:</span> {offer.shareUrl}</div>
+                            <div className="mt-2"><span className="font-medium text-foreground">Direct create-account link:</span> {offer.signupUrl}</div>
                           </div>
 
                           <div className="mt-4 space-y-2 rounded-md border bg-muted/10 p-3">
@@ -4421,7 +4475,7 @@ export default function AdminDashboard() {
                                 Add member numbers
                               </Button>
                               <div className="text-xs text-muted-foreground">
-                                Create the public offer first, then load the CPA roster here as it becomes available.
+                                Create the public offer first, then load the partner roster here as it becomes available.
                               </div>
                             </div>
                           </div>

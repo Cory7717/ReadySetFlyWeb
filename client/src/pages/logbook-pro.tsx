@@ -377,7 +377,7 @@ export default function LogbookProPage() {
                         id="partner-member-number"
                         value={partnerMemberNumber}
                         onChange={(event) => setPartnerMemberNumber(event.target.value)}
-                        placeholder="Enter your CPA member number"
+                        placeholder={`Enter your ${partnerOffer.partnerName} member number`}
                         data-testid="input-partner-member-number"
                         disabled={Boolean(claimToken) || redeemPartnerOfferMutation.isPending}
                       />
@@ -391,7 +391,7 @@ export default function LogbookProPage() {
                             disabled={validatePartnerOfferMutation.isPending || !partnerMemberNumber.trim()}
                             data-testid="button-redeem-partner-offer"
                           >
-                            {validatePartnerOfferMutation.isPending ? "Checking..." : "Continue to free signup"}
+                            {validatePartnerOfferMutation.isPending ? "Checking..." : "Continue to free account"}
                           </Button>
                           <Button asChild variant="outline">
                             <a

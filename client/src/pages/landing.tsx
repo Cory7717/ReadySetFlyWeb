@@ -78,6 +78,8 @@ interface MembershipPartnerOfferPublic {
   durationDays: number;
 }
 
+const LANDING_PARTNER_OFFER_SLUGS = ["cpa-3mo-pro-plus", "abs-2mo-pro-plus"] as const;
+
 type LandingModuleId = "conditions" | "cfi" | "partner" | "events";
 type MobileTab = LandingMobileTab;
 
@@ -119,12 +121,17 @@ export default function Landing() {
       return response.json();
     },
   });
-  const { data: cpaOffer } = useQuery<MembershipPartnerOfferPublic | null>({
-    queryKey: ["/api/membership-partner-offers", "cpa-3mo-pro-plus", "landing"],
+  const { data: partnerOffers = [] } = useQuery<MembershipPartnerOfferPublic[]>({
+    queryKey: ["/api/membership-partner-offers", "landing", ...LANDING_PARTNER_OFFER_SLUGS],
     queryFn: async () => {
-      const response = await fetch(apiUrl("/api/membership-partner-offers/cpa-3mo-pro-plus"));
-      if (!response.ok) return null;
-      return response.json();
+      const responses = await Promise.all(
+        LANDING_PARTNER_OFFER_SLUGS.map(async (slug) => {
+          const response = await fetch(apiUrl(`/api/membership-partner-offers/${slug}`));
+          if (!response.ok) return null;
+          return (await response.json()) as MembershipPartnerOfferPublic;
+        })
+      );
+      return responses.filter((offer): offer is MembershipPartnerOfferPublic => Boolean(offer));
     },
     staleTime: 1000 * 60 * 10,
   });
@@ -1728,38 +1735,53 @@ export default function Landing() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-2">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#a8bedf]">
-                      RSF Welcomes CPA Members
+                      RSF Partner Membership Offers
                     </div>
                     <div className="max-w-2xl text-sm leading-6 text-[#CCD7E5]">
-                      Aircraft owners and pilots from student to ATP are already flying with RSF. CPA members unlock an exclusive offer directly inside the RSF operations stack.
+                      Aircraft owners and pilots from student to ATP are already flying with RSF. Partner organizations can route members into a free RSF account and unlock time-limited RSF Pro+ access through a dedicated offer flow.
                     </div>
                   </div>
-                  {cpaOffer ? (
+                  {partnerOffers.length > 0 ? (
                     <Badge className="border border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff] hover:bg-[#141d29]">
-                      {cpaOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
+                      {partnerOffers.length} active member offer{partnerOffers.length === 1 ? "" : "s"}
                     </Badge>
                   ) : null}
                 </div>
-                {cpaOffer ? (
-                  <div className={`${metallicSubpanelClass} rounded-[1rem] p-5`}>
-                    <div className="flex flex-wrap items-center gap-2 mb-3">
-                      <Badge className="border border-[#5d6f85]/35 bg-[#151b23] text-[#dbe6f6] hover:bg-[#151b23]">CPA Exclusive</Badge>
-                      <Badge className="border border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff] hover:bg-[#141d29]">
-                        {cpaOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
-                      </Badge>
-                    </div>
-                    <h3 className="text-lg font-semibold text-[#F5F8FC] mb-2">
-                      {cpaOffer.durationDays / 30} months free for {cpaOffer.partnerName} members
-                    </h3>
-                    <p className="text-sm text-[#CCD7E5] mb-4">Claim the partner offer and keep planning, filing, and flight follow-through inside one connected RSF workflow.</p>
-                    <Button asChild className={`w-full sm:w-auto ${metallicPrimaryButtonClass}`}>
-                      <Link
-                        href={`/logbook/pro?offer=${encodeURIComponent(cpaOffer.slug)}`}
-                        onClick={() => trackEvent("cta_click", { label: "landing_social_proof_cpa", target: `/logbook/pro?offer=${cpaOffer.slug}` })}
-                      >
-                        Claim CPA offer
-                      </Link>
-                    </Button>
+                {partnerOffers.length > 0 ? (
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    {partnerOffers.map((offer) => {
+                      const offerHref = `/logbook/pro?offer=${encodeURIComponent(offer.slug)}`;
+                      const partnerShortLabel =
+                        offer.slug.startsWith("cpa-")
+                          ? "CPA Exclusive"
+                          : offer.slug.startsWith("abs-")
+                            ? "ABS Exclusive"
+                            : "Partner Exclusive";
+                      return (
+                        <div key={offer.id} className={`${metallicSubpanelClass} rounded-[1rem] p-5`}>
+                          <div className="mb-3 flex flex-wrap items-center gap-2">
+                            <Badge className="border border-[#5d6f85]/35 bg-[#151b23] text-[#dbe6f6] hover:bg-[#151b23]">{partnerShortLabel}</Badge>
+                            <Badge className="border border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff] hover:bg-[#141d29]">
+                              {offer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
+                            </Badge>
+                          </div>
+                          <h3 className="mb-2 text-lg font-semibold text-[#F5F8FC]">
+                            {offer.durationDays / 30} months free for {offer.partnerName} members
+                          </h3>
+                          <p className="mb-4 text-sm text-[#CCD7E5]">
+                            {offer.description?.trim() || "Claim the partner offer and keep planning, filing, and flight follow-through inside one connected RSF workflow."}
+                          </p>
+                          <Button asChild className={`w-full sm:w-auto ${metallicPrimaryButtonClass}`}>
+                            <Link
+                              href={offerHref}
+                              onClick={() => trackEvent("cta_click", { label: `landing_partner_offer_${offer.slug}`, target: offerHref })}
+                            >
+                              Claim {offer.slug.startsWith("abs-") ? "ABS" : offer.slug.startsWith("cpa-") ? "CPA" : "partner"} offer
+                            </Link>
+                          </Button>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
               </CardContent>

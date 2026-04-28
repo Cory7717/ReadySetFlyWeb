@@ -1503,7 +1503,7 @@ const loadAdminUserDirectory = async (userIds?: string[]): Promise<AdminUserDire
   const aircraftCounts = db
     .select({
       userId: aircraftListings.ownerId,
-      count: sql<number>`count(*)::int`.as("count"),
+      aircraftCount: sql<number>`count(*)::int`.as("aircraft_count"),
     })
     .from(aircraftListings)
     .groupBy(aircraftListings.ownerId)
@@ -1512,7 +1512,7 @@ const loadAdminUserDirectory = async (userIds?: string[]): Promise<AdminUserDire
   const marketplaceCounts = db
     .select({
       userId: marketplaceListings.userId,
-      count: sql<number>`count(*)::int`.as("count"),
+      marketplaceCount: sql<number>`count(*)::int`.as("marketplace_count"),
     })
     .from(marketplaceListings)
     .groupBy(marketplaceListings.userId)
@@ -1542,8 +1542,8 @@ const loadAdminUserDirectory = async (userIds?: string[]): Promise<AdminUserDire
       weeklyEmailOptOutAt: users.weeklyEmailOptOutAt,
       weeklyEmailOptIn: users.weeklyEmailOptIn,
       emailVerified: users.emailVerified,
-      aircraftCount: sql<number>`coalesce(${aircraftCounts.count}, 0)::int`,
-      marketplaceCount: sql<number>`coalesce(${marketplaceCounts.count}, 0)::int`,
+      aircraftCount: sql<number>`coalesce(${aircraftCounts.aircraftCount}, 0)::int`,
+      marketplaceCount: sql<number>`coalesce(${marketplaceCounts.marketplaceCount}, 0)::int`,
       hasCfiProfile: sql<boolean>`case when ${cfiUsers.userId} is not null then true else false end`,
     })
     .from(users)

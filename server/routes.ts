@@ -1494,7 +1494,12 @@ const buildAdminUserSummary = (row: AdminUserDirectoryRow) => {
   };
 };
 
-const loadAdminUserDirectory = async (): Promise<AdminUserDirectoryRow[]> => {
+const loadAdminUserDirectory = async (userIds?: string[]): Promise<AdminUserDirectoryRow[]> => {
+  const normalizedUserIds = (userIds || []).map((id) => id.trim()).filter(Boolean);
+  if (userIds && normalizedUserIds.length === 0) {
+    return [];
+  }
+
   const aircraftCounts = db
     .select({
       userId: aircraftListings.ownerId,
@@ -1521,7 +1526,7 @@ const loadAdminUserDirectory = async (): Promise<AdminUserDirectoryRow[]> => {
     .groupBy(cfiProfiles.userId)
     .as("admin_user_cfi_profiles");
 
-  const rows = await db
+  let query = db
     .select({
       id: users.id,
       email: users.email,
@@ -1546,12 +1551,46 @@ const loadAdminUserDirectory = async (): Promise<AdminUserDirectoryRow[]> => {
     .leftJoin(marketplaceCounts, eq(marketplaceCounts.userId, users.id))
     .leftJoin(cfiUsers, eq(cfiUsers.userId, users.id));
 
+  if (normalizedUserIds.length > 0) {
+    query = query.where(inArray(users.id, normalizedUserIds)) as typeof query;
+  }
+
+  const rows = await query;
+
   return rows.map((row) => ({
     ...row,
     aircraftCount: Number(row.aircraftCount || 0),
     marketplaceCount: Number(row.marketplaceCount || 0),
     hasCfiProfile: Boolean(row.hasCfiProfile),
   }));
+};
+
+const loadAdminUserDirectoryForFilters = async (rawFilters?: AdminUserFilterInput) => {
+  const filters = normalizeAdminUserFilters(rawFilters);
+  const search = filters.search.trim();
+
+  if (!search) {
+    const directory = await loadAdminUserDirectory();
+    return {
+      directory,
+      filteredRows: applyAdminUserFilters(directory, filters),
+    };
+  }
+
+  const matchedUsers = await storage.searchUsers(search);
+  const matchedIds = matchedUsers.map((user) => user.id);
+  if (matchedIds.length === 0) {
+    return {
+      directory: [] as AdminUserDirectoryRow[],
+      filteredRows: [] as AdminUserDirectoryRow[],
+    };
+  }
+
+  const directory = await loadAdminUserDirectory(matchedIds);
+  return {
+    directory,
+    filteredRows: applyAdminUserFilters(directory, { ...filters, search: "" }),
+  };
 };
 
 const resolveAdminEmailAudience = (rows: AdminUserDirectoryRow[], request: AdminAudienceRequest) => {
@@ -10735,11 +10774,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: parsed.error.format() });
       }
 
-      const directory = await loadAdminUserDirectory();
-      const rows = applyAdminUserFilters(directory, parsed.data);
+      const { filteredRows } = await loadAdminUserDirectoryForFilters(parsed.data);
       res.json({
-        totalMatched: rows.length,
-        rows: rows.map(buildAdminUserSummary),
+        totalMatched: filteredRows.length,
+        rows: filteredRows.map(buildAdminUserSummary),
       });
     } catch (error) {
       console.error("Failed to load admin user table:", error);
@@ -10754,7 +10792,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: parsed.error.format() });
       }
 
-      const directory = await loadAdminUserDirectory();
+      const { directory } = await loadAdminUserDirectoryForFilters(parsed.data);
       const audienceRows = resolveAdminEmailAudience(directory, parsed.data);
       const seenEmails = new Set<string>();
       const sampleRecipients: Array<{ id: string; email: string; firstName: string | null; lastName: string | null }> = [];
@@ -10853,7 +10891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: parsed.error.format() });
       }
 
-      const directory = await loadAdminUserDirectory();
+      const { directory } = await loadAdminUserDirectoryForFilters(parsed.data);
       const audienceRows = resolveAdminEmailAudience(directory, parsed.data);
       const dedupedRecipients: Array<AdminUserDirectoryRow & { normalizedEmail: string }> = [];
       const failedEmails: Array<{ email: string; error: string }> = [];

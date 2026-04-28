@@ -1274,7 +1274,6 @@ type AdminUserDirectoryRow = {
   membershipEndsAt: Date | null;
   membershipGrantTier: string | null;
   membershipGrantEndsAt: Date | null;
-  marketingEmailOptOutAt: Date | null;
   weeklyEmailOptOutAt: Date | null;
   weeklyEmailOptIn: boolean | null;
   emailVerified: boolean | null;
@@ -1370,7 +1369,6 @@ const hasPaidOrGrantedAccess = (row: AdminUserDirectoryRow) => resolveEffectiveM
 const isAdminUserActive = (row: AdminUserDirectoryRow) => !row.isSuspended;
 
 const isMarketingSubscribed = (row: AdminUserDirectoryRow) =>
-  !row.marketingEmailOptOutAt &&
   !row.weeklyEmailOptOutAt &&
   row.weeklyEmailOptIn !== false;
 
@@ -1427,15 +1425,22 @@ const applyAdminUserFilters = (rows: AdminUserDirectoryRow[], rawFilters?: Admin
 
   const filtered = rows.filter((row) => {
     if (filters.search) {
+      const isIdLookup = searchLower.startsWith("id:");
+      const idLookup = isIdLookup ? searchLower.slice(3).trim() : "";
       const haystack = [
         row.firstName || "",
         row.lastName || "",
         row.email || "",
+        row.id,
         `${row.firstName || ""} ${row.lastName || ""}`.trim(),
       ]
         .join(" ")
         .toLowerCase();
-      if (!haystack.includes(searchLower)) return false;
+      if (isIdLookup) {
+        if (!idLookup || !row.id.toLowerCase().includes(idLookup)) return false;
+      } else if (!haystack.includes(searchLower)) {
+        return false;
+      }
     }
 
     if (joinedFrom) {
@@ -1529,7 +1534,6 @@ const loadAdminUserDirectory = async (): Promise<AdminUserDirectoryRow[]> => {
       membershipEndsAt: users.membershipEndsAt,
       membershipGrantTier: users.membershipGrantTier,
       membershipGrantEndsAt: users.membershipGrantEndsAt,
-      marketingEmailOptOutAt: users.marketingEmailOptOutAt,
       weeklyEmailOptOutAt: users.weeklyEmailOptOutAt,
       weeklyEmailOptIn: users.weeklyEmailOptIn,
       emailVerified: users.emailVerified,

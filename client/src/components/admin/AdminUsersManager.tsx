@@ -9,7 +9,16 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
@@ -85,6 +94,12 @@ function buildQueryString(filters: Record<string, string>) {
   return params.toString();
 }
 
+function formatTier(tier: AdminUserSummary["effectiveMembershipTier"]) {
+  if (tier === "pro_plus") return "RSF Pro+";
+  if (tier === "pro") return "RSF Pro";
+  return "Free";
+}
+
 export function AdminUsersManager() {
   const { toast } = useToast();
   const { user: adminUser } = useAuth();
@@ -134,10 +149,15 @@ export function AdminUsersManager() {
       aircraftOwner,
       sortBy,
       sortDirection,
-    ]
+    ],
   );
 
-  const { data, isLoading, isFetching } = useQuery<AdminUsersTableResponse>({
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error: usersTableError,
+  } = useQuery<AdminUsersTableResponse>({
     queryKey: ["/api/admin/users/table", filters],
     queryFn: async () => {
       const queryString = buildQueryString(filters);
@@ -147,14 +167,15 @@ export function AdminUsersManager() {
     },
   });
 
-  const selectedIdsStable = useMemo(
-    () => [...selectedUserIds].sort(),
-    [selectedUserIds]
-  );
+  const selectedIdsStable = useMemo(() => [...selectedUserIds].sort(), [selectedUserIds]);
 
-  const { data: audiencePreview, isLoading: previewLoading, refetch: refetchAudiencePreview } = useQuery<MarketingAudiencePreview>({
+  const {
+    data: audiencePreview,
+    isLoading: previewLoading,
+    error: audiencePreviewError,
+    refetch: refetchAudiencePreview,
+  } = useQuery<MarketingAudiencePreview>({
     queryKey: ["/api/admin/users/marketing-email/preview", emailAudience, filters, selectedIdsStable],
-    enabled: true,
     queryFn: async () => {
       const res = await apiRequest("POST", "/api/admin/users/marketing-email/preview", {
         ...filters,
@@ -224,7 +245,7 @@ export function AdminUsersManager() {
 
   const toggleUserSelection = (userId: string, checked: boolean) => {
     setSelectedUserIds((current) =>
-      checked ? Array.from(new Set([...current, userId])) : current.filter((id) => id !== userId)
+      checked ? Array.from(new Set([...current, userId])) : current.filter((id) => id !== userId),
     );
   };
 
@@ -262,9 +283,9 @@ export function AdminUsersManager() {
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Users</CardTitle>
+              <CardTitle>User Directory</CardTitle>
               <CardDescription>
-                Filter by join date, profile state, subscription access, and ownership footprint. Existing user detail actions stay available from each row.
+                Search by name, email, or `id:` lookup, then filter by join date, subscription access, and ownership footprint. Click any row to open the existing user detail view.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -276,10 +297,7 @@ export function AdminUsersManager() {
               >
                 Email selected users{selectedCount > 0 ? ` (${selectedCount})` : ""}
               </Button>
-              <Button
-                type="button"
-                onClick={() => setEmailAudience("all_active")}
-              >
+              <Button type="button" onClick={() => setEmailAudience("all_active")}>
                 Email all active users
               </Button>
             </div>
@@ -288,14 +306,14 @@ export function AdminUsersManager() {
         <CardContent className="space-y-6">
           <div className="grid gap-4 lg:grid-cols-4">
             <div className="space-y-2 lg:col-span-2">
-              <Label htmlFor="admin-user-search">Search name or email</Label>
+              <Label htmlFor="admin-user-search">Search name, email, or user ID</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="admin-user-search"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search name or email"
+                  placeholder="Search name, email, or id:uuid"
                   className="pl-9"
                 />
               </div>
@@ -334,11 +352,21 @@ export function AdminUsersManager() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="joined-from">Joined from</Label>
-                <Input id="joined-from" type="date" value={joinedFrom} onChange={(event) => setJoinedFrom(event.target.value)} />
+                <Input
+                  id="joined-from"
+                  type="date"
+                  value={joinedFrom}
+                  onChange={(event) => setJoinedFrom(event.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="joined-to">Joined to</Label>
-                <Input id="joined-to" type="date" value={joinedTo} onChange={(event) => setJoinedTo(event.target.value)} />
+                <Input
+                  id="joined-to"
+                  type="date"
+                  value={joinedTo}
+                  onChange={(event) => setJoinedTo(event.target.value)}
+                />
               </div>
             </div>
           ) : null}
@@ -347,7 +375,9 @@ export function AdminUsersManager() {
             <div className="space-y-2">
               <Label>Marketing status</Label>
               <Select value={marketingStatus} onValueChange={setMarketingStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="subscribed">Subscribed</SelectItem>
@@ -358,7 +388,9 @@ export function AdminUsersManager() {
             <div className="space-y-2">
               <Label>Subscription tier</Label>
               <Select value={subscriptionTier} onValueChange={setSubscriptionTier}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="free">Free</SelectItem>
@@ -370,7 +402,9 @@ export function AdminUsersManager() {
             <div className="space-y-2">
               <Label>CFI profile</Label>
               <Select value={cfiProfile} onValueChange={setCfiProfile}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="with">Has CFI profile</SelectItem>
@@ -381,7 +415,9 @@ export function AdminUsersManager() {
             <div className="space-y-2">
               <Label>Aircraft owner</Label>
               <Select value={aircraftOwner} onValueChange={setAircraftOwner}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="with">Has aircraft</SelectItem>
@@ -392,7 +428,9 @@ export function AdminUsersManager() {
             <div className="space-y-2">
               <Label>Sort by</Label>
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="createdAt">Date joined</SelectItem>
                   <SelectItem value="lastName">Last name</SelectItem>
@@ -405,7 +443,9 @@ export function AdminUsersManager() {
             <div className="space-y-2">
               <Label>Direction</Label>
               <Select value={sortDirection} onValueChange={setSortDirection}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="desc">Descending</SelectItem>
                   <SelectItem value="asc">Ascending</SelectItem>
@@ -416,16 +456,29 @@ export function AdminUsersManager() {
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-muted-foreground">
-              {isLoading ? "Loading users..." : `Showing ${rows.length} of ${data?.totalMatched || 0} matching users`}
+              {isLoading ? "Loading users..." : `Showing ${rows.length} matching user${rows.length === 1 ? "" : "s"}`}
               {isFetching && !isLoading ? " • refreshing" : ""}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={resetFilters}>Reset filters</Button>
-              <Button type="button" variant="outline" onClick={() => setSelectedUserIds([])} disabled={selectedCount === 0}>
+              <Button type="button" variant="outline" onClick={resetFilters}>
+                Reset filters
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSelectedUserIds([])}
+                disabled={selectedCount === 0}
+              >
                 Clear selection
               </Button>
             </div>
           </div>
+
+          {usersTableError ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              Could not load users. {usersTableError instanceof Error ? usersTableError.message : "Please try again."}
+            </div>
+          ) : null}
 
           <div className="rounded-md border">
             <div className="overflow-x-auto">
@@ -459,17 +512,17 @@ export function AdminUsersManager() {
                         />
                       </td>
                       <td className="px-3 py-3">
-                        <button
-                          type="button"
-                          className="text-left"
-                          onClick={() => openUser(row.id)}
-                        >
-                          <div className="font-medium">{[row.firstName, row.lastName].filter(Boolean).join(" ") || "Unnamed user"}</div>
+                        <button type="button" className="text-left" onClick={() => openUser(row.id)}>
+                          <div className="font-medium">
+                            {[row.firstName, row.lastName].filter(Boolean).join(" ") || "Unnamed user"}
+                          </div>
                           <div className="text-xs text-muted-foreground">{row.id}</div>
                         </button>
                       </td>
                       <td className="px-3 py-3">{row.email || "—"}</td>
-                      <td className="px-3 py-3">{row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—"}</td>
+                      <td className="px-3 py-3">
+                        {row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—"}
+                      </td>
                       <td className="px-3 py-3">
                         <div className="flex flex-wrap gap-1">
                           <Badge variant={row.isSuspended ? "destructive" : "secondary"}>
@@ -479,13 +532,7 @@ export function AdminUsersManager() {
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <Badge variant="outline">
-                          {row.effectiveMembershipTier === "pro_plus"
-                            ? "RSF Pro+"
-                            : row.effectiveMembershipTier === "pro"
-                              ? "RSF Pro"
-                              : "Free"}
-                        </Badge>
+                        <Badge variant="outline">{formatTier(row.effectiveMembershipTier)}</Badge>
                       </td>
                       <td className="px-3 py-3">{row.hasCfiProfile ? "Yes" : "No"}</td>
                       <td className="px-3 py-3">{row.aircraftCount}</td>
@@ -544,11 +591,20 @@ export function AdminUsersManager() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Recipients</Label>
-                <Select value={emailAudience} onValueChange={(value) => setEmailAudience(value as (typeof EMAIL_AUDIENCE_OPTIONS)[number]["value"])}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={emailAudience}
+                  onValueChange={(value) =>
+                    setEmailAudience(value as (typeof EMAIL_AUDIENCE_OPTIONS)[number]["value"])
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {EMAIL_AUDIENCE_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -561,14 +617,37 @@ export function AdminUsersManager() {
                 </div>
                 {previewLoading ? (
                   <div className="mt-3 text-sm text-muted-foreground">Loading audience...</div>
+                ) : audiencePreviewError ? (
+                  <div className="mt-3 text-sm text-destructive">
+                    Could not load audience preview.{" "}
+                    {audiencePreviewError instanceof Error ? audiencePreviewError.message : ""}
+                  </div>
                 ) : audiencePreview ? (
                   <div className="mt-3 space-y-2 text-sm">
-                    <div className="flex items-center justify-between"><span>Matched</span><span>{audiencePreview.totalMatched}</span></div>
-                    <div className="flex items-center justify-between font-medium"><span>Eligible</span><span>{audiencePreview.eligibleCount}</span></div>
-                    <div className="flex items-center justify-between"><span>Missing email</span><span>{audiencePreview.skippedMissingEmail}</span></div>
-                    <div className="flex items-center justify-between"><span>Invalid email</span><span>{audiencePreview.skippedInvalidEmail}</span></div>
-                    <div className="flex items-center justify-between"><span>Opted out</span><span>{audiencePreview.skippedOptedOut}</span></div>
-                    <div className="flex items-center justify-between"><span>Duplicates</span><span>{audiencePreview.skippedDuplicates}</span></div>
+                    <div className="flex items-center justify-between">
+                      <span>Matched</span>
+                      <span>{audiencePreview.totalMatched}</span>
+                    </div>
+                    <div className="flex items-center justify-between font-medium">
+                      <span>Eligible</span>
+                      <span>{audiencePreview.eligibleCount}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Missing email</span>
+                      <span>{audiencePreview.skippedMissingEmail}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Invalid email</span>
+                      <span>{audiencePreview.skippedInvalidEmail}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Opted out</span>
+                      <span>{audiencePreview.skippedOptedOut}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Duplicates</span>
+                      <span>{audiencePreview.skippedDuplicates}</span>
+                    </div>
                   </div>
                 ) : (
                   <div className="mt-3 text-sm text-muted-foreground">Audience preview unavailable.</div>
@@ -581,7 +660,9 @@ export function AdminUsersManager() {
                   <div className="max-h-64 overflow-y-auto">
                     {audiencePreview.sampleRecipients.map((recipient) => (
                       <div key={recipient.id} className="border-b px-4 py-3 text-sm last:border-b-0">
-                        <div className="font-medium">{[recipient.firstName, recipient.lastName].filter(Boolean).join(" ") || recipient.email}</div>
+                        <div className="font-medium">
+                          {[recipient.firstName, recipient.lastName].filter(Boolean).join(" ") || recipient.email}
+                        </div>
                         <div className="text-muted-foreground">{recipient.email}</div>
                       </div>
                     ))}
@@ -610,7 +691,7 @@ export function AdminUsersManager() {
                   placeholder={"Hi there,\n\nHere is what is new in Ready Set Fly...\n\nThanks,\nCory"}
                 />
                 <div className="text-xs text-muted-foreground">
-                  This sends from the existing RSF email configuration. It will skip invalid, duplicate, or opted-out recipients.
+                  This sends from the existing RSF email configuration. It skips invalid, duplicate, or opted-out recipients automatically.
                 </div>
               </div>
 
@@ -634,13 +715,15 @@ export function AdminUsersManager() {
           <AlertDialogHeader>
             <AlertDialogTitle>Send marketing email?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will send the current message to {audiencePreview?.eligibleCount || 0} eligible recipient{(audiencePreview?.eligibleCount || 0) === 1 ? "" : "s"}.
-              Missing, invalid, duplicate, and opted-out emails will be skipped automatically.
+              This will send the current message to {audiencePreview?.eligibleCount || 0} eligible recipient
+              {(audiencePreview?.eligibleCount || 0) === 1 ? "" : "s"}. Missing, invalid, duplicate, and opted-out emails are skipped automatically.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="rounded-md border bg-muted/20 p-3 text-sm">
             <div className="font-medium">{emailSubject.trim() || "No subject"}</div>
-            <div className="mt-2 whitespace-pre-wrap text-muted-foreground">{emailBody.trim() || "No body"}</div>
+            <div className="mt-2 whitespace-pre-wrap text-muted-foreground">
+              {emailBody.trim() || "No body"}
+            </div>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>

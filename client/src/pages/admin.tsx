@@ -2,12 +2,11 @@ import { useDeferredValue, useEffect, useState, useMemo, Fragment, useRef } from
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, Download, X, Rocket, Tag, ChevronDown, ChevronRight, Wallet } from "lucide-react";
+import { Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, Download, X, Rocket, Tag, ChevronDown, ChevronRight, Wallet } from "lucide-react";
 import { endOfMonth, format, parse, parseISO, startOfMonth, eachDayOfInterval, isSameMonth, startOfISOWeek, endOfISOWeek, getISOWeek, getISOWeekYear } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -26,7 +25,6 @@ import { crmSalesEmailTemplateTypes, crmWeeklyReportStatuses, insertCrmLeadSchem
 import { ADMIN_ROLE_LABELS, ADMIN_ROLE_PERMISSIONS, type AdminRole, type AdminPermission } from "@shared/config/adminAccess";
 import { BANNER_AD_TIERS, calculateBannerAdPricing, type BannerAdTier } from "@shared/config/bannerPricing";
 import { validatePromoCode, calculatePromoDiscount } from "@shared/config/promoCodes";
-import { AdminUserModal } from "@/components/admin-user-modal";
 import { AdminUsersManager } from "@/components/admin/AdminUsersManager";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import PersonalFinance from "@/pages/admin/PersonalFinance";
@@ -415,15 +413,12 @@ export default function AdminDashboard() {
     (adminRole ? ADMIN_ROLE_PERMISSIONS[adminRole]?.includes(permission) : false) ||
     adminPermissions.includes(permission);
 
-  const [userSearch, setUserSearch] = useState("");
   const [activeTab, setActiveTab] = useState("analytics");
   const [featureUsageRange, setFeatureUsageRange] = useState("7");
   const [featureEngagementOpen, setFeatureEngagementOpen] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState<VerificationSubmission | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [rejectionNotes, setRejectionNotes] = useState("");
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [userModalOpen, setUserModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<AdminRole>("operations");
 
@@ -699,17 +694,6 @@ export default function AdminDashboard() {
     if (!Number.isFinite(diff) || diff < 0) return null;
     return Math.max(1, Math.ceil(diff / dayMs));
   };
-
-  const trimmedUserSearch = userSearch.trim();
-  const deferredUserSearch = useDeferredValue(trimmedUserSearch);
-  const userSearchAllowsLookup =
-    deferredUserSearch.includes("@") || deferredUserSearch.toLowerCase().startsWith("id:");
-
-  // User search query
-  const { data: users = [], isLoading: usersLoading } = useQuery<User[]>({
-    queryKey: [`/api/admin/users?q=${encodeURIComponent(deferredUserSearch)}`],
-    enabled: activeTab === "users" && (deferredUserSearch.length >= 2 || userSearchAllowsLookup),
-  });
 
   // Aircraft listings query
   const { data: aircraftListings = [], isLoading: aircraftLoading } = useQuery<AircraftListing[]>({
@@ -2650,7 +2634,8 @@ export default function AdminDashboard() {
     } else {
       createLeadMutation.mutate(data);
     }
-  };
+  };
+
   const handleNumberInput =
     (onChange: (value: number) => void) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -2989,7 +2974,8 @@ export default function AdminDashboard() {
               <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
               <span>Analytics</span>
             </TabsTrigger>
-          )}
+          )}
+
           {canAccess("crm") && (
             <TabsTrigger value="crm" data-testid="tab-crm" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
               <Briefcase className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
@@ -3540,7 +3526,8 @@ export default function AdminDashboard() {
           )}
         </TabsContent>
 
-        {/* HK Metrics Tab */}
+        {/* HK Metrics Tab */}
+
         {/* CRM Tab - Sales & Marketing */}
         <TabsContent value="crm" className="space-y-6">
           <Card>
@@ -4491,107 +4478,6 @@ export default function AdminDashboard() {
 
           <AdminUsersManager />
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Search Users</CardTitle>
-              <CardDescription>Search by name, email, or use `id:` for direct ID lookup. Single-character broad email matches are intentionally blocked.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-2 mb-6">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search name, email, or id:uuid"
-                    value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
-                    className="pl-10"
-                    data-testid="input-user-search"
-                  />
-                </div>
-              </div>
-
-              {usersLoading && (
-                <div className="text-center py-8 text-muted-foreground">
-                  Searching...
-                </div>
-              )}
-
-              {!usersLoading && trimmedUserSearch.length > 0 && trimmedUserSearch.length < 2 && !trimmedUserSearch.includes("@") && !trimmedUserSearch.toLowerCase().startsWith("id:") && (
-                <div className="text-center py-8 text-muted-foreground">
-                  Enter at least 2 characters for name search, or search by full email / `id:`.
-                </div>
-              )}
-
-              {!usersLoading && deferredUserSearch && (deferredUserSearch.length >= 2 || userSearchAllowsLookup) && users.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  No users found matching "{deferredUserSearch}"
-                </div>
-              )}
-
-              {!usersLoading && users.length > 0 && (
-                <div className="space-y-3">
-                  <div className="text-sm text-muted-foreground">
-                    Showing {users.length} ranked result{users.length === 1 ? "" : "s"}
-                  </div>
-                  {users.map((user) => (
-                    <Card 
-                      key={user.id} 
-                      data-testid={`card-user-${user.id}`}
-                      className="hover-elevate cursor-pointer transition-all"
-                      onClick={() => {
-                        setSelectedUserId(user.id);
-                        setUserModalOpen(true);
-                      }}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-4">
-                          <Avatar>
-                            <AvatarImage src={user.profileImageUrl || undefined} />
-                            <AvatarFallback>
-                              {user.firstName?.[0]}{user.lastName?.[0]}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1">
-                            <div className="font-semibold text-foreground">
-                              {user.firstName} {user.lastName}
-                              {user.isAdmin && (
-                                <Badge className="ml-2" variant="default">
-                                  Admin
-                                </Badge>
-                              )}
-                              {user.isVerified && (
-                                <Badge className="ml-2" variant="secondary">
-                                  Verified
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="text-sm text-muted-foreground">{user.email}</div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              ID: {user.id} • Joined: {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"} • Flight Hours: {user.totalFlightHours}
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              Verified:{" "}
-                              {user.emailVerified ? "Email ✓" : "Email —"} •{" "}
-                              {user.phoneVerified ? "Phone ✓" : "Phone —"} •{" "}
-                              {user.identityVerified ? "Identity ✓" : "Identity —"} •{" "}
-                              {user.paymentVerified ? "Payment ✓" : "Payment —"} •{" "}
-                              {user.isVerified ? "Approved ✓" : "Approved —"}
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-
-              {!userSearch && (
-                <div className="text-center py-8 text-muted-foreground">
-                  Enter a name, full email, or `id:` lookup to find users
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* Aircraft Listings Tab */}
@@ -9953,15 +9839,6 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Admin User Management Modal */}
-      <AdminUserModal
-        userId={selectedUserId}
-        open={userModalOpen}
-        onOpenChange={(open) => {
-          setUserModalOpen(open);
-          if (!open) setSelectedUserId(null);
-        }}
-      />
     </div>
   );
 }

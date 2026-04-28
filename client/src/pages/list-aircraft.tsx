@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -103,6 +103,7 @@ export default function ListAircraft() {
   const pressDemo = usePressDemo(LIST_AIRCRAFT_PRESS_STEPS);
   const [submissionKey] = useState(() => globalThis.crypto?.randomUUID?.() ?? `submission-${Date.now()}`);
   const [showVerificationNotice, setShowVerificationNotice] = useState(false);
+  const formViewedFiredRef = useRef(false);
   const [uploadingVerificationDocs, setUploadingVerificationDocs] = useState(false);
   const verificationNoticeKey = "rsf-verification-owner-v1";
 
@@ -111,8 +112,15 @@ export default function ListAircraft() {
   const aircraftId = isEditMode ? params?.id : null;
 
   useEffect(() => {
-    trackEvent("rental_listing_start", { mode: isEditMode ? "edit" : "create" });
-  }, [isEditMode]);
+    trackEvent("rental_listing_start", {
+      mode: isEditMode ? "edit" : "create",
+      userId: user?.id ?? undefined,
+    });
+    if (import.meta.env.DEV) {
+      console.log(`Rental listing started (${isEditMode ? "edit" : "create"})`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally fires once on mount — mode cannot change without a route change
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -140,6 +148,22 @@ export default function ListAircraft() {
     },
     enabled: !!aircraftId && isEditMode,
   });
+
+  // Fire rental_listing_form_viewed only when the form is actually visible.
+  // Create mode: fires immediately on mount.
+  // Edit mode: fires once existing aircraft data has loaded (not during the loading spinner).
+  useEffect(() => {
+    if (formViewedFiredRef.current) return;
+    if (isEditMode && (loadingAircraft || !existingAircraft)) return;
+    formViewedFiredRef.current = true;
+    trackEvent("rental_listing_form_viewed", {
+      mode: isEditMode ? "edit" : "create",
+      userId: user?.id ?? undefined,
+    });
+    if (import.meta.env.DEV) {
+      console.log(`Rental listing form viewed (${isEditMode ? "edit" : "create"})`);
+    }
+  }, [isEditMode, loadingAircraft, existingAircraft, user]);
 
   const [imageFiles, setImageFiles] = useState<string[]>([]);
   const [selectedCertifications, setSelectedCertifications] = useState<string[]>(["PPL"]);
@@ -313,7 +337,7 @@ export default function ListAircraft() {
       const response = await apiRequest(method, endpoint, listingPayload);
       return { data: response, hasVerificationDocs };
     },
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/aircraft"] });
       if (aircraftId) {
         queryClient.invalidateQueries({ queryKey: ["/api/aircraft", aircraftId] });
@@ -323,6 +347,14 @@ export default function ListAircraft() {
         trackEvent("rental_listing_update", { listing_id: aircraftId });
       } else {
         trackEvent("generate_lead", { lead_type: "rental_listing" });
+        trackEvent("rental_listing_submitted", {
+          userId: user?.id ?? undefined,
+          aircraftType: variables.listingPayload.category ?? undefined,
+          location: variables.listingPayload.location ?? undefined,
+        });
+        if (import.meta.env.DEV) {
+          console.log("Rental listing submitted successfully");
+        }
       }
       
       // Show different message based on whether verification docs were uploaded

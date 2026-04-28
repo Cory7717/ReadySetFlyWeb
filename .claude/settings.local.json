@@ -17,7 +17,8 @@
       "Bash(ls /c/Users/carme/ReadySetFlyWeb/ReadySetFly/mobile/src/components/flight-deck/FlightDeckViewTypes*)",
       "Bash(eas build:*)",
       "Bash(grep -E \"\\\\.\\(prisma|ts\\)$\")",
-      "Bash(npx drizzle-kit *)"
+      "Bash(npx drizzle-kit *)",
+      "Bash(xargs grep *)"
     ]
   }
 }

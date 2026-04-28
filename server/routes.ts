@@ -10441,25 +10441,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const submissionData = JSON.parse(req.body.submissionData || '{}');
         const type = req.body.type || 'renter_identity';
         
-        // In production, upload files to cloud storage (S3, Replit Object Storage, etc.)
-        // For now, create placeholder URLs
+        // Build documentUrls using the actual paths multer wrote to disk.
+        // file.path comes from diskStorage as e.g. "uploads/documents/medicalCertificateFile-123.pdf"
+        // Stored with a leading slash so the document-serving endpoint can resolve it.
         const documentUrls: string[] = [];
-        
-        if (files.governmentIdFront) {
-          documentUrls.push(`/uploads/id-front-${userId}-${Date.now()}.jpg`);
-        }
-        if (files.governmentIdBack) {
-          documentUrls.push(`/uploads/id-back-${userId}-${Date.now()}.jpg`);
-        }
-        if (files.medicalCertificateFile) {
-          documentUrls.push(`/uploads/medical-cert-${userId}-${Date.now()}.pdf`);
-        }
-        if (files.pilotLicenseFile) {
-          documentUrls.push(`/uploads/pilot-license-${userId}-${Date.now()}.pdf`);
-        }
-        if (files.pilotCertificatePhoto) {
-          documentUrls.push(`/uploads/pilot-cert-${userId}-${Date.now()}.jpg`);
-        }
+        const toStoragePath = (f: Express.Multer.File) =>
+          ("/" + f.path.replace(/\\/g, "/")).replace(/\/\//g, "/");
+
+        if (files.governmentIdFront?.[0])    documentUrls.push(toStoragePath(files.governmentIdFront[0]));
+        if (files.governmentIdBack?.[0])     documentUrls.push(toStoragePath(files.governmentIdBack[0]));
+        if (files.medicalCertificateFile?.[0]) documentUrls.push(toStoragePath(files.medicalCertificateFile[0]));
+        if (files.pilotLicenseFile?.[0])     documentUrls.push(toStoragePath(files.pilotLicenseFile[0]));
+        if (files.pilotCertificatePhoto?.[0]) documentUrls.push(toStoragePath(files.pilotCertificatePhoto[0]));
 
         const medicalCertExpiresAt =
           req.body.medicalCertExpiresAt && !Number.isNaN(Date.parse(req.body.medicalCertExpiresAt))
@@ -10490,7 +10483,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           expirationNotificationSent: false,
           lastNotificationSentAt: null,
         });
-        
+
+        // Notify admins so the review queue stays visible
+        const applicantName = [submissionData.legalFirstName, submissionData.legalLastName]
+          .filter(Boolean).join(" ") || "A user";
+        const typeLabel = type === "renter_identity" ? "renter identity" : "owner/aircraft";
+        await storage.createAdminNotification({
+          type: "verification_pending",
+          title: "New Verification Submission",
+          message: `${applicantName} submitted a ${typeLabel} verification (submission ${submission.id}). Review required.`,
+          isRead: false,
+          isActionable: true,
+        }).catch((err) => {
+          // Non-fatal — submission is already saved; just log the notification failure
+          console.error("[VERIFICATION] Failed to create admin notification:", err);
+        });
+
         res.json(submission);
       } catch (error: any) {
         console.error("Verification submission error:", error);

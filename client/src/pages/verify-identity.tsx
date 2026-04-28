@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/analytics";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +62,12 @@ export default function VerifyIdentity() {
     pilot?: string;
   }>({});
 
+  // Analytics
+  const startedRef = useRef(false);
+  useEffect(() => {
+    trackEvent("verification_page_viewed", { userId: user?.id });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const steps: { id: VerificationStep; title: string; icon: any }[] = [
     { id: "identity", title: "Identity", icon: Shield },
     { id: "documents", title: "Documents", icon: Upload },
@@ -85,7 +92,9 @@ export default function VerifyIdentity() {
       }
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, formData) => {
+      trackEvent("verification_submitted", { userId: user?.id });
+      if (import.meta.env.DEV) console.log("[verification] submitted successfully");
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({
         title: "Verification Submitted",
@@ -94,6 +103,8 @@ export default function VerifyIdentity() {
       setLocation("/profile");
     },
     onError: (error: any) => {
+      trackEvent("verification_submit_failed", { userId: user?.id, error: error.message });
+      if (import.meta.env.DEV) console.log("[verification] submission failed:", error.message);
       toast({
         title: "Submission Failed",
         description: error.message || "Failed to submit verification",
@@ -106,6 +117,11 @@ export default function VerifyIdentity() {
     setFormData((prev) => ({ ...prev, [field]: file }));
 
     if (!file) return;
+
+    // Track each document selection as an upload event (upload to server happens on final submit)
+    trackEvent("verification_document_uploaded", { userId: user?.id, documentType: field });
+    if (import.meta.env.DEV) console.log(`[verification] document selected: ${field}`);
+
     if (field !== "governmentIdFront" && field !== "governmentIdBack" && field !== "pilotCertificatePhoto") return;
 
     const reader = new FileReader();
@@ -125,6 +141,12 @@ export default function VerifyIdentity() {
           variant: "destructive",
         });
         return;
+      }
+      // Fire once — when the user commits to beginning the verification flow
+      if (!startedRef.current) {
+        startedRef.current = true;
+        trackEvent("verification_started", { userId: user?.id });
+        if (import.meta.env.DEV) console.log("[verification] started");
       }
       setCurrentStep("documents");
       return;

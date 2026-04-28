@@ -9,7 +9,7 @@ import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Upload, X, ShieldAlert, Sparkles } from "lucide-react";
+import { Upload, X, ShieldAlert, Sparkles, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
 import type { AircraftListing } from "@shared/schema";
@@ -104,8 +104,18 @@ export default function ListAircraft() {
   const [submissionKey] = useState(() => globalThis.crypto?.randomUUID?.() ?? `submission-${Date.now()}`);
   const [showVerificationNotice, setShowVerificationNotice] = useState(false);
   const formViewedFiredRef = useRef(false);
-  const [uploadingVerificationDocs, setUploadingVerificationDocs] = useState(false);
   const verificationNoticeKey = "rsf-verification-owner-v1";
+
+  type DocUploadStatus = {
+    status: "idle" | "uploading" | "uploaded" | "error";
+    storagePath?: string;
+    fileName?: string;
+    error?: string;
+  };
+  const [docUploadState, setDocUploadState] = useState<{
+    insuranceDoc: DocUploadStatus;
+    annualInspectionDoc: DocUploadStatus;
+  }>({ insuranceDoc: { status: "idle" }, annualInspectionDoc: { status: "idle" } });
 
   // Check if we're in edit mode
   const [isEditMode, params] = useRoute("/edit-aircraft/:id");
@@ -167,13 +177,20 @@ export default function ListAircraft() {
 
   const [imageFiles, setImageFiles] = useState<string[]>([]);
   const [selectedCertifications, setSelectedCertifications] = useState<string[]>(["PPL"]);
-  const [verificationDocs, setVerificationDocs] = useState<{
-    insuranceDoc: File | null;
-    annualInspectionDoc: File | null;
-  }>({
-    insuranceDoc: null,
-    annualInspectionDoc: null,
-  });
+
+  // Warn user before navigating away if docs are uploaded but form not yet submitted
+  useEffect(() => {
+    const hasUploaded =
+      docUploadState.insuranceDoc.status === "uploaded" ||
+      docUploadState.annualInspectionDoc.status === "uploaded";
+    if (!hasUploaded) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [docUploadState.insuranceDoc.status, docUploadState.annualInspectionDoc.status]);
 
   // Aircraft image upload handlers
   // NOTE: These handlers are ONLY for public aircraft photos
@@ -352,6 +369,12 @@ export default function ListAircraft() {
           aircraftType: variables.listingPayload.category ?? undefined,
           location: variables.listingPayload.location ?? undefined,
         });
+        if (result.hasVerificationDocs) {
+          trackEvent("verification_submitted", { userId: user?.id ?? undefined });
+          if (import.meta.env.DEV) {
+            console.log("verification_submitted: aircraft listing with docs confirmed in DB");
+          }
+        }
         if (import.meta.env.DEV) {
           console.log("Rental listing submitted successfully");
         }
@@ -506,6 +529,33 @@ export default function ListAircraft() {
     return storagePath;
   };
 
+  const handleDocFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    fieldName: "insuranceDoc" | "annualInspectionDoc",
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setDocUploadState(prev => ({ ...prev, [fieldName]: { status: "uploading", fileName: file.name } }));
+    try {
+      const storagePath = await uploadVerificationDocument(file, fieldName);
+      setDocUploadState(prev => ({ ...prev, [fieldName]: { status: "uploaded", storagePath, fileName: file.name } }));
+      trackEvent("verification_document_uploaded", { documentType: fieldName });
+      if (import.meta.env.DEV) {
+        console.log(`verification_document_uploaded: ${fieldName} → ${storagePath}`);
+      }
+    } catch (error: any) {
+      setDocUploadState(prev => ({
+        ...prev,
+        [fieldName]: { status: "error", fileName: file.name, error: error?.message || "Upload failed" },
+      }));
+      toast({
+        title: "Upload failed",
+        description: error?.message || `Failed to upload ${fieldName === "insuranceDoc" ? "insurance certificate" : "annual inspection certificate"}`,
+        variant: "destructive",
+      });
+    }
+  };
+
   const onSubmit = async (data: ListingFormData) => {
     if (import.meta.env.DEV) {
       console.log("Form submitted with data:", data);
@@ -515,12 +565,25 @@ export default function ListAircraft() {
     // Note: Backend middleware enforces verification requirement
     // Frontend check removed to avoid UX issues with cached user data
     
-    // Check if verification documents are provided
-    const hasVerificationDocs = Object.values(verificationDocs).some(doc => doc !== null);
-    
-    // Use actual uploaded image URLs from cloud storage
+    const hasVerificationDocs =
+      docUploadState.insuranceDoc.status === "uploaded" ||
+      docUploadState.annualInspectionDoc.status === "uploaded";
+
+    const anyUploading =
+      docUploadState.insuranceDoc.status === "uploading" ||
+      docUploadState.annualInspectionDoc.status === "uploading";
+
+    if (anyUploading) {
+      toast({
+        title: "Upload in progress",
+        description: "Please wait for document uploads to finish before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const { avionics, ...rest } = data;
-    const listingPayload = {
+    const listingPayload: any = {
       ...rest,
       avionicsSuite: avionics || null,
       requiredCertifications: selectedCertifications,
@@ -528,36 +591,14 @@ export default function ListAircraft() {
       submissionKey: isEditMode ? undefined : submissionKey,
     };
 
-    try {
-      if (hasVerificationDocs) {
-        setUploadingVerificationDocs(true);
-        const [insuranceDocUrl, annualInspectionDocUrl] = await Promise.all([
-          verificationDocs.insuranceDoc
-            ? uploadVerificationDocument(verificationDocs.insuranceDoc, "insuranceDoc")
-            : Promise.resolve<string | null>(null),
-          verificationDocs.annualInspectionDoc
-            ? uploadVerificationDocument(verificationDocs.annualInspectionDoc, "annualInspectionDoc")
-            : Promise.resolve<string | null>(null),
-        ]);
-
-        if (insuranceDocUrl) {
-          (listingPayload as any).insuranceDocUrl = insuranceDocUrl;
-        }
-        if (annualInspectionDocUrl) {
-          (listingPayload as any).annualInspectionDocUrl = annualInspectionDocUrl;
-        }
-      }
-
-      createListingMutation.mutate({ listingPayload, hasVerificationDocs });
-    } catch (error: any) {
-      toast({
-        title: "Document upload failed",
-        description: error?.message || "Failed to upload verification documents.",
-        variant: "destructive",
-      });
-    } finally {
-      setUploadingVerificationDocs(false);
+    if (docUploadState.insuranceDoc.storagePath) {
+      listingPayload.insuranceDocUrl = docUploadState.insuranceDoc.storagePath;
     }
+    if (docUploadState.annualInspectionDoc.storagePath) {
+      listingPayload.annualInspectionDocUrl = docUploadState.annualInspectionDoc.storagePath;
+    }
+
+    createListingMutation.mutate({ listingPayload, hasVerificationDocs });
   };
 
   const certifications = ["PPL", "IR", "CPL", "Multi-Engine", "ATP"];
@@ -999,15 +1040,28 @@ export default function ListAircraft() {
                   <Input
                     type="file"
                     accept="image/*,.pdf"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) setVerificationDocs(prev => ({ ...prev, insuranceDoc: file }));
-                    }}
+                    onChange={(e) => handleDocFileChange(e, "insuranceDoc")}
+                    disabled={docUploadState.insuranceDoc.status === "uploading"}
                     data-testid="input-insurance-doc"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Upload aircraft insurance certificate
-                  </p>
+                  {docUploadState.insuranceDoc.status === "uploading" && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Uploading {docUploadState.insuranceDoc.fileName}...
+                    </p>
+                  )}
+                  {docUploadState.insuranceDoc.status === "uploaded" && (
+                    <p className="text-xs text-green-600 flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" /> Document uploaded successfully — {docUploadState.insuranceDoc.fileName}
+                    </p>
+                  )}
+                  {docUploadState.insuranceDoc.status === "error" && (
+                    <p className="text-xs text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" /> {docUploadState.insuranceDoc.error}
+                    </p>
+                  )}
+                  {docUploadState.insuranceDoc.status === "idle" && (
+                    <p className="text-xs text-muted-foreground">Upload aircraft insurance certificate</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -1043,15 +1097,28 @@ export default function ListAircraft() {
                   <Input
                     type="file"
                     accept="image/*,.pdf"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) setVerificationDocs(prev => ({ ...prev, annualInspectionDoc: file }));
-                    }}
+                    onChange={(e) => handleDocFileChange(e, "annualInspectionDoc")}
+                    disabled={docUploadState.annualInspectionDoc.status === "uploading"}
                     data-testid="input-annual-doc"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Upload annual inspection certificate
-                  </p>
+                  {docUploadState.annualInspectionDoc.status === "uploading" && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Uploading {docUploadState.annualInspectionDoc.fileName}...
+                    </p>
+                  )}
+                  {docUploadState.annualInspectionDoc.status === "uploaded" && (
+                    <p className="text-xs text-green-600 flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" /> Document uploaded successfully — {docUploadState.annualInspectionDoc.fileName}
+                    </p>
+                  )}
+                  {docUploadState.annualInspectionDoc.status === "error" && (
+                    <p className="text-xs text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" /> {docUploadState.annualInspectionDoc.error}
+                    </p>
+                  )}
+                  {docUploadState.annualInspectionDoc.status === "idle" && (
+                    <p className="text-xs text-muted-foreground">Upload annual inspection certificate</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1109,19 +1176,38 @@ export default function ListAircraft() {
               body={pressDemo.getStep("submit")?.body ?? ""}
             >
             <div className="flex gap-4">
-              <Button 
-                type="submit" 
-                size="lg" 
-                className="flex-1 bg-accent text-accent-foreground hover:bg-accent" 
-                disabled={createListingMutation.isPending || uploadingVerificationDocs || (isEditMode && loadingAircraft)}
-                data-testid="button-submit-listing"
-              >
-                {uploadingVerificationDocs
-                  ? "Uploading documents..."
-                  : createListingMutation.isPending 
-                  ? (isEditMode ? "Updating..." : "Listing...") 
-                  : (isEditMode ? "Update Aircraft" : "List Aircraft")}
-              </Button>
+              {(() => {
+                const anyUploading =
+                  docUploadState.insuranceDoc.status === "uploading" ||
+                  docUploadState.annualInspectionDoc.status === "uploading";
+                const anyUploaded =
+                  docUploadState.insuranceDoc.status === "uploaded" ||
+                  docUploadState.annualInspectionDoc.status === "uploaded";
+                let label: string;
+                if (anyUploading) {
+                  label = "Uploading documents...";
+                } else if (createListingMutation.isPending) {
+                  label = isEditMode ? "Updating..." : "Submitting for Review...";
+                } else if (isEditMode) {
+                  label = "Update Aircraft";
+                } else if (anyUploaded) {
+                  label = "Submit Listing for Review";
+                } else {
+                  label = "List Aircraft";
+                }
+                return (
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="flex-1 bg-accent text-accent-foreground hover:bg-accent"
+                    disabled={createListingMutation.isPending || anyUploading || (isEditMode && loadingAircraft)}
+                    data-testid="button-submit-listing"
+                  >
+                    {anyUploading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    {label}
+                  </Button>
+                );
+              })()}
               <Button 
                 type="button" 
                 variant="outline" 

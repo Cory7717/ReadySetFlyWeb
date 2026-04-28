@@ -1503,7 +1503,7 @@ const loadAdminUserDirectory = async (userIds?: string[]): Promise<AdminUserDire
   const aircraftCounts = db
     .select({
       userId: aircraftListings.ownerId,
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`count(*)::int`.as("count"),
     })
     .from(aircraftListings)
     .groupBy(aircraftListings.ownerId)
@@ -1512,7 +1512,7 @@ const loadAdminUserDirectory = async (userIds?: string[]): Promise<AdminUserDire
   const marketplaceCounts = db
     .select({
       userId: marketplaceListings.userId,
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`count(*)::int`.as("count"),
     })
     .from(marketplaceListings)
     .groupBy(marketplaceListings.userId)

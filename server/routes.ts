@@ -24,7 +24,7 @@ import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfIS
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
-import { getCrmLeadSalesEmailHtml, getCrmLeadSalesEmailSubject, getCrmLeadSalesEmailText, getCrmPlatformOverviewEmailHtml, getCrmPlatformOverviewEmailSubject, getCrmPlatformOverviewEmailText, sendBannerAdvertiserContactEmail, sendContactFormEmail, sendMarketplaceListingContactEmail, sendMembershipGrantEmail } from "./email-templates";
+import { getCrmLeadSalesEmailHtml, getCrmLeadSalesEmailSubject, getCrmLeadSalesEmailText, getCrmPlatformOverviewEmailHtml, getCrmPlatformOverviewEmailSubject, getCrmPlatformOverviewEmailText, sendBannerAdvertiserContactEmail, sendContactFormEmail, sendMarketplaceListingContactEmail, sendMembershipGrantEmail, sendUserMarketingEmail } from "./email-templates";
 import { ADMIN_PERMISSIONS, ADMIN_ROLE_PERMISSIONS, normalizeAdminPermissions, type AdminPermission, type AdminRole } from "@shared/config/adminAccess";
 import { canSendEmail, logger as crmLogger } from "./crmEmailSuppression";
 import { buildCrmLeadTemplateCsv, buildCrmLeadTemplateXlsx, findCrmLeadImportDuplicates, mapImportedCrmLeadRows, mergeImportedLeadData, parseCrmLeadImportFile } from "./crmLeadImport";
@@ -1225,6 +1225,356 @@ const requirePromoAdmin = requireAdminPermission("promo");
 const requirePromoCodesAdmin = requireAdminPermission("promo-codes");
 const requireNotificationsAdmin = requireAdminPermission("notifications");
 const requireBannersAdmin = requireAdminPermission("banners");
+
+type AdminUserSortField =
+  | "createdAt"
+  | "firstName"
+  | "lastName"
+  | "email"
+  | "membershipTier";
+
+type AdminUserAudience =
+  | "all_active"
+  | "recently_joined"
+  | "free_users"
+  | "rsf_pro"
+  | "rsf_pro_plus"
+  | "without_subscription"
+  | "selected_users"
+  | "filtered_results";
+
+type AdminUserFilterInput = {
+  search?: string;
+  joinedPreset?: "all" | "today" | "last7" | "last30" | "custom";
+  joinedFrom?: string | null;
+  joinedTo?: string | null;
+  accountStatus?: "all" | "active" | "inactive";
+  marketingStatus?: "all" | "subscribed" | "unsubscribed";
+  subscriptionTier?: "all" | "free" | "pro" | "pro_plus";
+  cfiProfile?: "all" | "with" | "without";
+  aircraftOwner?: "all" | "with" | "without";
+  sortBy?: AdminUserSortField;
+  sortDirection?: "asc" | "desc";
+};
+
+type AdminAudienceRequest = AdminUserFilterInput & {
+  audience?: AdminUserAudience;
+  selectedUserIds?: string[];
+};
+
+type AdminUserDirectoryRow = {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  createdAt: Date | null;
+  isSuspended: boolean | null;
+  membershipTier: string | null;
+  membershipStatus: string | null;
+  membershipEndsAt: Date | null;
+  membershipGrantTier: string | null;
+  membershipGrantEndsAt: Date | null;
+  marketingEmailOptOutAt: Date | null;
+  weeklyEmailOptOutAt: Date | null;
+  weeklyEmailOptIn: boolean | null;
+  emailVerified: boolean | null;
+  aircraftCount: number;
+  marketplaceCount: number;
+  hasCfiProfile: boolean;
+};
+
+const adminUserFiltersSchema = z.object({
+  search: z.string().optional(),
+  joinedPreset: z.enum(["all", "today", "last7", "last30", "custom"]).optional(),
+  joinedFrom: z.string().optional().nullable(),
+  joinedTo: z.string().optional().nullable(),
+  accountStatus: z.enum(["all", "active", "inactive"]).optional(),
+  marketingStatus: z.enum(["all", "subscribed", "unsubscribed"]).optional(),
+  subscriptionTier: z.enum(["all", "free", "pro", "pro_plus"]).optional(),
+  cfiProfile: z.enum(["all", "with", "without"]).optional(),
+  aircraftOwner: z.enum(["all", "with", "without"]).optional(),
+  sortBy: z.enum(["createdAt", "firstName", "lastName", "email", "membershipTier"]).optional(),
+  sortDirection: z.enum(["asc", "desc"]).optional(),
+});
+
+const adminAudienceRequestSchema = adminUserFiltersSchema.extend({
+  audience: z.enum([
+    "all_active",
+    "recently_joined",
+    "free_users",
+    "rsf_pro",
+    "rsf_pro_plus",
+    "without_subscription",
+    "selected_users",
+    "filtered_results",
+  ]).optional(),
+  selectedUserIds: z.array(z.string()).optional(),
+});
+
+const normalizeAdminUserFilters = (input?: AdminUserFilterInput) => ({
+  search: input?.search?.trim() || "",
+  joinedPreset: input?.joinedPreset || "all",
+  joinedFrom: input?.joinedFrom?.trim() || "",
+  joinedTo: input?.joinedTo?.trim() || "",
+  accountStatus: input?.accountStatus || "all",
+  marketingStatus: input?.marketingStatus || "all",
+  subscriptionTier: input?.subscriptionTier || "all",
+  cfiProfile: input?.cfiProfile || "all",
+  aircraftOwner: input?.aircraftOwner || "all",
+  sortBy: input?.sortBy || "createdAt",
+  sortDirection: input?.sortDirection || "desc",
+});
+
+const parseAdminDateInput = (value?: string | null) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const startOfDayLocal = (value: Date) => {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
+
+const endOfDayLocal = (value: Date) => {
+  const date = new Date(value);
+  date.setHours(23, 59, 59, 999);
+  return date;
+};
+
+const membershipTierRank = (value?: string | null) =>
+  value === "pro_plus" ? 2 : value === "pro" ? 1 : 0;
+
+const resolveEffectiveMembershipTier = (row: AdminUserDirectoryRow) => {
+  const now = new Date();
+  const baseTier = row.membershipTier === "pro_plus" || row.membershipTier === "pro" ? row.membershipTier : "free";
+  const membershipActive =
+    membershipTierRank(baseTier) > 0 &&
+    (row.membershipStatus === "active" ||
+      row.membershipStatus === "trialing" ||
+      (!!row.membershipEndsAt && new Date(row.membershipEndsAt) > now));
+  const grantTier = row.membershipGrantTier === "pro_plus" || row.membershipGrantTier === "pro" ? row.membershipGrantTier : null;
+  const grantActive = !!grantTier && !!row.membershipGrantEndsAt && new Date(row.membershipGrantEndsAt) > now;
+
+  if (membershipActive && grantActive) {
+    return membershipTierRank(grantTier) > membershipTierRank(baseTier) ? grantTier! : baseTier;
+  }
+  if (grantActive && grantTier) return grantTier;
+  if (membershipActive) return baseTier;
+  return "free";
+};
+
+const hasPaidOrGrantedAccess = (row: AdminUserDirectoryRow) => resolveEffectiveMembershipTier(row) !== "free";
+
+const isAdminUserActive = (row: AdminUserDirectoryRow) => !row.isSuspended;
+
+const isMarketingSubscribed = (row: AdminUserDirectoryRow) =>
+  !row.marketingEmailOptOutAt &&
+  !row.weeklyEmailOptOutAt &&
+  row.weeklyEmailOptIn !== false;
+
+const isValidRecipientEmail = (email?: string | null) =>
+  !!email && z.string().email().safeParse(email).success;
+
+const sortAdminUserRows = (rows: AdminUserDirectoryRow[], sortBy: AdminUserSortField, direction: "asc" | "desc") => {
+  const factor = direction === "asc" ? 1 : -1;
+  rows.sort((a, b) => {
+    const createdCompare =
+      ((a.createdAt ? new Date(a.createdAt).getTime() : 0) - (b.createdAt ? new Date(b.createdAt).getTime() : 0)) * factor;
+    if (sortBy === "createdAt") return createdCompare;
+
+    const getValue = (row: AdminUserDirectoryRow) => {
+      switch (sortBy) {
+        case "firstName":
+          return (row.firstName || "").toLowerCase();
+        case "lastName":
+          return (row.lastName || "").toLowerCase();
+        case "email":
+          return (row.email || "").toLowerCase();
+        case "membershipTier":
+          return resolveEffectiveMembershipTier(row);
+        default:
+          return "";
+      }
+    };
+    const aValue = getValue(a);
+    const bValue = getValue(b);
+    if (aValue < bValue) return -1 * factor;
+    if (aValue > bValue) return 1 * factor;
+    return createdCompare || (a.id < b.id ? -1 : 1);
+  });
+  return rows;
+};
+
+const applyAdminUserFilters = (rows: AdminUserDirectoryRow[], rawFilters?: AdminUserFilterInput) => {
+  const filters = normalizeAdminUserFilters(rawFilters);
+  const now = new Date();
+  const todayStart = startOfDayLocal(now);
+  const joinedFrom =
+    filters.joinedPreset === "today"
+      ? todayStart
+      : filters.joinedPreset === "last7"
+        ? startOfDayLocal(new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000))
+        : filters.joinedPreset === "last30"
+          ? startOfDayLocal(new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000))
+          : filters.joinedPreset === "custom"
+            ? parseAdminDateInput(filters.joinedFrom)
+            : null;
+  const joinedTo =
+    filters.joinedPreset === "custom" ? parseAdminDateInput(filters.joinedTo) : null;
+  const searchLower = filters.search.toLowerCase();
+
+  const filtered = rows.filter((row) => {
+    if (filters.search) {
+      const haystack = [
+        row.firstName || "",
+        row.lastName || "",
+        row.email || "",
+        `${row.firstName || ""} ${row.lastName || ""}`.trim(),
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(searchLower)) return false;
+    }
+
+    if (joinedFrom) {
+      const created = row.createdAt ? new Date(row.createdAt) : null;
+      if (!created || created < startOfDayLocal(joinedFrom)) return false;
+    }
+    if (joinedTo) {
+      const created = row.createdAt ? new Date(row.createdAt) : null;
+      if (!created || created > endOfDayLocal(joinedTo)) return false;
+    }
+
+    if (filters.accountStatus === "active" && !isAdminUserActive(row)) return false;
+    if (filters.accountStatus === "inactive" && isAdminUserActive(row)) return false;
+
+    if (filters.marketingStatus === "subscribed" && !isMarketingSubscribed(row)) return false;
+    if (filters.marketingStatus === "unsubscribed" && isMarketingSubscribed(row)) return false;
+
+    if (filters.subscriptionTier !== "all" && resolveEffectiveMembershipTier(row) !== filters.subscriptionTier) {
+      return false;
+    }
+
+    if (filters.cfiProfile === "with" && !row.hasCfiProfile) return false;
+    if (filters.cfiProfile === "without" && row.hasCfiProfile) return false;
+
+    if (filters.aircraftOwner === "with" && row.aircraftCount <= 0) return false;
+    if (filters.aircraftOwner === "without" && row.aircraftCount > 0) return false;
+
+    return true;
+  });
+
+  return sortAdminUserRows(filtered, filters.sortBy, filters.sortDirection);
+};
+
+const buildAdminUserSummary = (row: AdminUserDirectoryRow) => {
+  const effectiveMembershipTier = resolveEffectiveMembershipTier(row);
+  return {
+    id: row.id,
+    email: row.email,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    createdAt: row.createdAt,
+    isSuspended: row.isSuspended,
+    membershipTier: row.membershipTier,
+    membershipStatus: row.membershipStatus,
+    effectiveMembershipTier,
+    marketingSubscribed: isMarketingSubscribed(row),
+    emailVerified: row.emailVerified,
+    hasCfiProfile: row.hasCfiProfile,
+    aircraftCount: row.aircraftCount,
+    marketplaceCount: row.marketplaceCount,
+  };
+};
+
+const loadAdminUserDirectory = async (): Promise<AdminUserDirectoryRow[]> => {
+  const aircraftCounts = db
+    .select({
+      userId: aircraftListings.ownerId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(aircraftListings)
+    .groupBy(aircraftListings.ownerId)
+    .as("admin_user_aircraft_counts");
+
+  const marketplaceCounts = db
+    .select({
+      userId: marketplaceListings.userId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(marketplaceListings)
+    .groupBy(marketplaceListings.userId)
+    .as("admin_user_marketplace_counts");
+
+  const cfiUsers = db
+    .select({
+      userId: cfiProfiles.userId,
+    })
+    .from(cfiProfiles)
+    .groupBy(cfiProfiles.userId)
+    .as("admin_user_cfi_profiles");
+
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      createdAt: users.createdAt,
+      isSuspended: users.isSuspended,
+      membershipTier: users.membershipTier,
+      membershipStatus: users.membershipStatus,
+      membershipEndsAt: users.membershipEndsAt,
+      membershipGrantTier: users.membershipGrantTier,
+      membershipGrantEndsAt: users.membershipGrantEndsAt,
+      marketingEmailOptOutAt: users.marketingEmailOptOutAt,
+      weeklyEmailOptOutAt: users.weeklyEmailOptOutAt,
+      weeklyEmailOptIn: users.weeklyEmailOptIn,
+      emailVerified: users.emailVerified,
+      aircraftCount: sql<number>`coalesce(${aircraftCounts.count}, 0)::int`,
+      marketplaceCount: sql<number>`coalesce(${marketplaceCounts.count}, 0)::int`,
+      hasCfiProfile: sql<boolean>`case when ${cfiUsers.userId} is not null then true else false end`,
+    })
+    .from(users)
+    .leftJoin(aircraftCounts, eq(aircraftCounts.userId, users.id))
+    .leftJoin(marketplaceCounts, eq(marketplaceCounts.userId, users.id))
+    .leftJoin(cfiUsers, eq(cfiUsers.userId, users.id));
+
+  return rows.map((row) => ({
+    ...row,
+    aircraftCount: Number(row.aircraftCount || 0),
+    marketplaceCount: Number(row.marketplaceCount || 0),
+    hasCfiProfile: Boolean(row.hasCfiProfile),
+  }));
+};
+
+const resolveAdminEmailAudience = (rows: AdminUserDirectoryRow[], request: AdminAudienceRequest) => {
+  const audience = request.audience || "all_active";
+  const filteredRows = applyAdminUserFilters(rows, request);
+  const selectedIds = new Set((request.selectedUserIds || []).map((id) => id.trim()).filter(Boolean));
+
+  switch (audience) {
+    case "selected_users":
+      return rows.filter((row) => selectedIds.has(row.id));
+    case "recently_joined":
+      return applyAdminUserFilters(rows, { ...request, joinedPreset: "last30", accountStatus: "active" });
+    case "free_users":
+      return rows.filter((row) => isAdminUserActive(row) && row.membershipTier === "free");
+    case "rsf_pro":
+      return rows.filter((row) => isAdminUserActive(row) && resolveEffectiveMembershipTier(row) === "pro");
+    case "rsf_pro_plus":
+      return rows.filter((row) => isAdminUserActive(row) && resolveEffectiveMembershipTier(row) === "pro_plus");
+    case "without_subscription":
+      return rows.filter((row) => isAdminUserActive(row) && !hasPaidOrGrantedAccess(row));
+    case "filtered_results":
+      return filteredRows;
+    case "all_active":
+    default:
+      return rows.filter((row) => isAdminUserActive(row));
+  }
+};
 
 const SAMPLE_MARKETPLACE_LISTINGS = [
   {
@@ -10374,6 +10724,219 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin routes
+  app.get("/api/admin/users/table", isAuthenticated, requireUsersAdmin, async (req, res) => {
+    try {
+      const parsed = adminUserFiltersSchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.format() });
+      }
+
+      const directory = await loadAdminUserDirectory();
+      const rows = applyAdminUserFilters(directory, parsed.data);
+      res.json({
+        totalMatched: rows.length,
+        rows: rows.map(buildAdminUserSummary),
+      });
+    } catch (error) {
+      console.error("Failed to load admin user table:", error);
+      res.status(500).json({ error: "Failed to load admin users" });
+    }
+  });
+
+  app.post("/api/admin/users/marketing-email/preview", isAuthenticated, isSuperAdmin, async (req: any, res) => {
+    try {
+      const parsed = adminAudienceRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.format() });
+      }
+
+      const directory = await loadAdminUserDirectory();
+      const audienceRows = resolveAdminEmailAudience(directory, parsed.data);
+      const seenEmails = new Set<string>();
+      const sampleRecipients: Array<{ id: string; email: string; firstName: string | null; lastName: string | null }> = [];
+      let skippedMissingEmail = 0;
+      let skippedInvalidEmail = 0;
+      let skippedOptedOut = 0;
+      let skippedDuplicates = 0;
+      let eligibleCount = 0;
+
+      for (const row of audienceRows) {
+        if (!row.email) {
+          skippedMissingEmail += 1;
+          continue;
+        }
+        if (!isValidRecipientEmail(row.email)) {
+          skippedInvalidEmail += 1;
+          continue;
+        }
+        if (!isMarketingSubscribed(row)) {
+          skippedOptedOut += 1;
+          continue;
+        }
+        const normalizedEmail = row.email.trim().toLowerCase();
+        if (seenEmails.has(normalizedEmail)) {
+          skippedDuplicates += 1;
+          continue;
+        }
+        seenEmails.add(normalizedEmail);
+        eligibleCount += 1;
+        if (sampleRecipients.length < 12) {
+          sampleRecipients.push({
+            id: row.id,
+            email: row.email,
+            firstName: row.firstName,
+            lastName: row.lastName,
+          });
+        }
+      }
+
+      res.json({
+        audience: parsed.data.audience || "all_active",
+        totalMatched: audienceRows.length,
+        eligibleCount,
+        skippedMissingEmail,
+        skippedInvalidEmail,
+        skippedOptedOut,
+        skippedDuplicates,
+        sampleRecipients,
+      });
+    } catch (error) {
+      console.error("Failed to preview marketing email audience:", error);
+      res.status(500).json({ error: "Failed to preview audience" });
+    }
+  });
+
+  app.post("/api/admin/users/marketing-email/test", isAuthenticated, isSuperAdmin, async (req: any, res) => {
+    try {
+      const requesterId = req.user?.claims?.sub || req.session?.userId;
+      if (!requesterId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const requester = await storage.getUser(String(requesterId));
+      if (!requester?.email) {
+        return res.status(400).json({ error: "Current admin email is not available" });
+      }
+
+      const parsed = z.object({
+        subject: z.string().trim().min(3).max(180),
+        body: z.string().trim().min(10).max(12000),
+      }).safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.format() });
+      }
+
+      await sendUserMarketingEmail({
+        to: requester.email,
+        subject: `[Preview] ${parsed.data.subject}`,
+        body: parsed.data.body,
+        firstName: requester.firstName,
+      });
+
+      res.json({ success: true, email: requester.email });
+    } catch (error) {
+      console.error("Failed to send marketing email preview:", error);
+      res.status(500).json({ error: "Failed to send preview email" });
+    }
+  });
+
+  app.post("/api/admin/users/marketing-email/send", isAuthenticated, isSuperAdmin, async (req: any, res) => {
+    try {
+      const parsed = adminAudienceRequestSchema.extend({
+        subject: z.string().trim().min(3).max(180),
+        body: z.string().trim().min(10).max(12000),
+      }).safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.format() });
+      }
+
+      const directory = await loadAdminUserDirectory();
+      const audienceRows = resolveAdminEmailAudience(directory, parsed.data);
+      const dedupedRecipients: Array<AdminUserDirectoryRow & { normalizedEmail: string }> = [];
+      const failedEmails: Array<{ email: string; error: string }> = [];
+      const skipped: Array<{ email?: string | null; reason: string }> = [];
+      const seenEmails = new Set<string>();
+
+      for (const row of audienceRows) {
+        if (!row.email) {
+          skipped.push({ reason: "missing_email" });
+          continue;
+        }
+        if (!isValidRecipientEmail(row.email)) {
+          skipped.push({ email: row.email, reason: "invalid_email" });
+          continue;
+        }
+        if (!isMarketingSubscribed(row)) {
+          skipped.push({ email: row.email, reason: "opted_out" });
+          continue;
+        }
+        const normalizedEmail = row.email.trim().toLowerCase();
+        if (seenEmails.has(normalizedEmail)) {
+          skipped.push({ email: row.email, reason: "duplicate_email" });
+          continue;
+        }
+        seenEmails.add(normalizedEmail);
+        dedupedRecipients.push({ ...row, normalizedEmail });
+      }
+
+      let sent = 0;
+      const batchSize = 25;
+      for (let index = 0; index < dedupedRecipients.length; index += batchSize) {
+        const batch = dedupedRecipients.slice(index, index + batchSize);
+        const results = await Promise.allSettled(
+          batch.map((recipient) =>
+            sendUserMarketingEmail({
+              to: recipient.email!,
+              subject: parsed.data.subject,
+              body: parsed.data.body,
+              firstName: recipient.firstName,
+            })
+          )
+        );
+
+        results.forEach((result, batchIndex) => {
+          const recipient = batch[batchIndex];
+          if (result.status === "fulfilled") {
+            sent += 1;
+            console.info("marketing_email_sent", {
+              userId: recipient.id,
+              email: recipient.email,
+              audience: parsed.data.audience || "all_active",
+            });
+            return;
+          }
+          const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+          failedEmails.push({ email: recipient.email!, error: message });
+          console.error("marketing_email_failed", {
+            userId: recipient.id,
+            email: recipient.email,
+            audience: parsed.data.audience || "all_active",
+            error: message,
+          });
+        });
+
+        if (index + batchSize < dedupedRecipients.length) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+
+      res.json({
+        audience: parsed.data.audience || "all_active",
+        totalIntendedRecipients: audienceRows.length,
+        totalSent: sent,
+        totalSkipped: skipped.length,
+        skippedBreakdown: skipped.reduce<Record<string, number>>((acc, entry) => {
+          acc[entry.reason] = (acc[entry.reason] || 0) + 1;
+          return acc;
+        }, {}),
+        failedCount: failedEmails.length,
+        failedEmails,
+      });
+    } catch (error) {
+      console.error("Failed to send marketing emails:", error);
+      res.status(500).json({ error: "Failed to send marketing emails" });
+    }
+  });
+
   app.get("/api/admin/users", isAuthenticated, requireUsersAdmin, async (req, res) => {
     try {
       const query = ((req.query.q as string) || "").trim();

@@ -361,8 +361,8 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
 
             if (result.isNew && result.user.email) {
               try {
-                const { sendWelcomeEmail } = await import("./email-templates");
-                await sendWelcomeEmail({
+                const { sendFounderWelcomeEmail } = await import("./email-templates");
+                await sendFounderWelcomeEmail({
                   email: result.user.email,
                   firstName: result.user.firstName,
                 });

@@ -798,6 +798,159 @@ Founder, Ready Set Fly ✈️
   }
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderEmailParagraphs(body: string) {
+  return body
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => `<p style="margin: 0 0 16px 0;">${escapeHtml(block).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+export async function sendFounderWelcomeEmail(data: {
+  email: string;
+  firstName?: string | null;
+}) {
+  const { getUncachableResendClient } = await import("./resendClient");
+  const { client: resend, fromEmail } = await getUncachableResendClient();
+  const firstName = data.firstName || "there";
+  const appUrl = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+  const plansUrl = `${appUrl}/subscriptions`;
+  const dashboardUrl = `${appUrl}/dashboard`;
+
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px; }
+    .card { background: white; border-radius: 12px; padding: 28px; border: 1px solid #e5e7eb; }
+    .cta { display: inline-block; background: #1e40af; color: #fff !important; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+    .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Welcome to <strong>Ready Set Fly</strong></h1>
+      <p>Hi ${escapeHtml(firstName)},</p>
+      <p>Thanks for signing up for Ready Set Fly.</p>
+      <p>RSF is being built to bring more of general aviation into one place - flight planning, weather tools, aircraft marketplaces, training resources, logbook tools, CFI and flight school discovery, and more.</p>
+      <p>You can start using RSF for free, but if you want access to more advanced tools, history, saved features, and expanded functionality, you can also check out RSF Pro and RSF Pro+.</p>
+      <div style="text-align:center; margin: 24px 0;">
+        <a class="cta" href="${appUrl}">Start exploring</a>
+      </div>
+      <p><strong>View plans:</strong><br><a href="${plansUrl}">${plansUrl}</a></p>
+      <p><strong>Open your dashboard:</strong><br><a href="${dashboardUrl}">${dashboardUrl}</a></p>
+      <p>Thanks again for being part of RSF as it grows.</p>
+      <p><strong>Cory</strong><br>Founder, Ready Set Fly</p>
+    </div>
+    <div class="footer">Ready Set Fly</div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const textBody = `
+Welcome to Ready Set Fly
+
+Hi ${firstName},
+
+Thanks for signing up for Ready Set Fly.
+
+RSF is being built to bring more of general aviation into one place - flight planning, weather tools, aircraft marketplaces, training resources, logbook tools, CFI and flight school discovery, and more.
+
+You can start using RSF for free, but if you want access to more advanced tools, history, saved features, and expanded functionality, you can also check out RSF Pro and RSF Pro+.
+
+View plans:
+${plansUrl}
+
+Start exploring:
+${appUrl}
+
+Open your dashboard:
+${dashboardUrl}
+
+Thanks again for being part of RSF as it grows.
+
+Cory
+Founder, Ready Set Fly
+  `.trim();
+
+  try {
+    await resend.emails.send({
+      from: fromEmail,
+      to: data.email,
+      subject: "Welcome to Ready Set Fly",
+      html: htmlBody,
+      text: textBody,
+    });
+  } catch (error) {
+    console.error("Failed to send founder welcome email:", error);
+  }
+}
+
+export async function sendUserMarketingEmail(data: {
+  to: string;
+  subject: string;
+  body: string;
+  firstName?: string | null;
+}) {
+  const { getUncachableResendClient } = await import("./resendClient");
+  const { client: resend, fromEmail } = await getUncachableResendClient();
+  const appUrl = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+  const greetingName = data.firstName?.trim() || "there";
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a; background: #f8fafc; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px; }
+    .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 30px; }
+    .footer { color: #64748b; font-size: 12px; margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <p style="margin: 0 0 16px 0;">Hi ${escapeHtml(greetingName)},</p>
+      ${renderEmailParagraphs(data.body)}
+      <p style="margin: 20px 0 0 0;">Cory<br>Ready Set Fly</p>
+    </div>
+    <div class="footer">
+      Ready Set Fly<br>
+      <a href="${appUrl}">${appUrl}</a>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const text = `Hi ${greetingName},\n\n${data.body.trim()}\n\nCory\nReady Set Fly\n${appUrl}`.trim();
+
+  await resend.emails.send({
+    from: fromEmail,
+    to: data.to,
+    subject: data.subject,
+    html,
+    text,
+  });
+}
+
 export async function sendMembershipGrantEmail(data: {
   email: string;
   firstName?: string | null;

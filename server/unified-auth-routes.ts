@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { IStorage } from './storage';
 import { generateAccessToken, generateRefreshToken, verifyAccessToken } from './jwt';
 import { getUncachableResendClient } from './resendClient';
-import { sendWelcomeEmail } from './email-templates';
+import { sendFounderWelcomeEmail } from './email-templates';
 import { maybeSyncLogbookProSubscription } from './paypal-subscription-sync';
 import { getEntitlementsForUser, resolveMembershipFromStoreSignals } from './membership';
 
@@ -214,7 +214,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
             </div>
           `,
         });
-        await sendWelcomeEmail({ email, firstName });
+        await sendFounderWelcomeEmail({ email, firstName });
       } catch (emailError) {
         console.error('Failed to send verification email:', emailError);
         // Don't fail registration if email sending fails
@@ -353,7 +353,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
 
       // Send welcome email (no verification flow for mobile)
       try {
-        await sendWelcomeEmail({ email, firstName });
+        await sendFounderWelcomeEmail({ email, firstName });
       } catch (emailError) {
         console.error('Failed to send welcome email:', emailError);
       }

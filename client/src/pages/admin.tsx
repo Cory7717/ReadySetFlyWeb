@@ -27,6 +27,7 @@ import { ADMIN_ROLE_LABELS, ADMIN_ROLE_PERMISSIONS, type AdminRole, type AdminPe
 import { BANNER_AD_TIERS, calculateBannerAdPricing, type BannerAdTier } from "@shared/config/bannerPricing";
 import { validatePromoCode, calculatePromoDiscount } from "@shared/config/promoCodes";
 import { AdminUserModal } from "@/components/admin-user-modal";
+import { AdminUsersManager } from "@/components/admin/AdminUsersManager";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import PersonalFinance from "@/pages/admin/PersonalFinance";
 import type { UploadResult } from "@uppy/core";
@@ -4487,6 +4488,8 @@ export default function AdminDashboard() {
               </Card>
             </>
           )}
+
+          <AdminUsersManager />
 
           <Card>
             <CardHeader>

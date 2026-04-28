@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Search, Users } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -122,10 +122,15 @@ export function AdminUsersManager() {
   const [emailBody, setEmailBody] = useState("");
   const [confirmSendOpen, setConfirmSendOpen] = useState(false);
   const [lastSendResult, setLastSendResult] = useState<MarketingSendResult | null>(null);
+  const trimmedSearch = search.trim();
+  const deferredSearch = useDeferredValue(trimmedSearch);
+  const searchAllowsLookup =
+    deferredSearch.includes("@") || deferredSearch.toLowerCase().startsWith("id:");
+  const shouldLoadDirectory = deferredSearch.length >= 2 || searchAllowsLookup;
 
   const filters = useMemo(
     () => ({
-      search,
+      search: deferredSearch,
       joinedPreset,
       joinedFrom,
       joinedTo,
@@ -138,7 +143,7 @@ export function AdminUsersManager() {
       sortDirection,
     }),
     [
-      search,
+      deferredSearch,
       joinedPreset,
       joinedFrom,
       joinedTo,
@@ -159,6 +164,7 @@ export function AdminUsersManager() {
     error: usersTableError,
   } = useQuery<AdminUsersTableResponse>({
     queryKey: ["/api/admin/users/table", filters],
+    enabled: shouldLoadDirectory,
     queryFn: async () => {
       const queryString = buildQueryString(filters);
       const url = queryString ? `/api/admin/users/table?${queryString}` : "/api/admin/users/table";
@@ -283,9 +289,9 @@ export function AdminUsersManager() {
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>User Directory</CardTitle>
+              <CardTitle>Users</CardTitle>
               <CardDescription>
-                Search by name, email, or `id:` lookup, then filter by join date, subscription access, and ownership footprint. Click any row to open the existing user detail view.
+                Search by name, email, or `id:` lookup, then filter the matched users by join date, subscription access, and ownership footprint. Click any row to open the existing user detail view.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -456,8 +462,14 @@ export function AdminUsersManager() {
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-muted-foreground">
-              {isLoading ? "Loading users..." : `Showing ${rows.length} matching user${rows.length === 1 ? "" : "s"}`}
-              {isFetching && !isLoading ? " • refreshing" : ""}
+              {!trimmedSearch
+                ? "Enter a name, full email, or `id:` lookup to find users"
+                : !shouldLoadDirectory
+                  ? "Enter at least 2 characters for name search, or search by full email / `id:`."
+                  : isLoading
+                    ? "Loading users..."
+                    : `Showing ${rows.length} matching user${rows.length === 1 ? "" : "s"}`}
+              {shouldLoadDirectory && isFetching && !isLoading ? " • refreshing" : ""}
             </div>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" onClick={resetFilters}>
@@ -474,7 +486,7 @@ export function AdminUsersManager() {
             </div>
           </div>
 
-          {usersTableError ? (
+          {shouldLoadDirectory && usersTableError ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               Could not load users. {usersTableError instanceof Error ? usersTableError.message : "Please try again."}
             </div>
@@ -503,6 +515,20 @@ export function AdminUsersManager() {
                   </tr>
                 </thead>
                 <tbody>
+                  {!trimmedSearch ? (
+                    <tr>
+                      <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
+                        Enter a name, full email, or `id:` lookup to find users.
+                      </td>
+                    </tr>
+                  ) : null}
+                  {trimmedSearch && !shouldLoadDirectory ? (
+                    <tr>
+                      <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
+                        Enter at least 2 characters for name search, or search by full email / `id:`.
+                      </td>
+                    </tr>
+                  ) : null}
                   {rows.map((row) => (
                     <tr key={row.id} className="border-t hover:bg-muted/20">
                       <td className="px-3 py-3">
@@ -544,10 +570,10 @@ export function AdminUsersManager() {
                       </td>
                     </tr>
                   ))}
-                  {!isLoading && rows.length === 0 ? (
+                  {trimmedSearch && shouldLoadDirectory && !isLoading && rows.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
-                        No users match the current filters.
+                        No users found matching "{trimmedSearch}".
                       </td>
                     </tr>
                   ) : null}

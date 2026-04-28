@@ -977,6 +977,21 @@ export default function AdminDashboard() {
     enabled: activeTab === "withdrawals",
   });
 
+  // Retry a failed withdrawal via admin endpoint
+  const retryWithdrawalMutation = useMutation({
+    mutationFn: async (withdrawalId: string) => {
+      const response = await apiRequest("POST", `/api/admin/withdrawals/${withdrawalId}/process`, {});
+      if (!response.ok) {
+        const body = await response.json();
+        throw new Error(body.error || "Failed to retry payout");
+      }
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
+    },
+  });
+
   // Admin Notifications query
   const { data: adminNotifications = [], isLoading: notificationsLoading } = useQuery<AdminNotification[]>({
     queryKey: ["/api/admin/notifications"],
@@ -5370,7 +5385,7 @@ export default function AdminDashboard() {
           <Card>
             <CardHeader>
               <CardTitle data-testid="heading-withdrawal-requests">Owner Payouts Dashboard</CardTitle>
-              <CardDescription>Monitor and track all automated payouts to aircraft owners</CardDescription>
+              <CardDescription>Monitor owner payout requests and retry failed payouts</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Search and Filter Controls */}
@@ -5391,6 +5406,7 @@ export default function AdminDashboard() {
                     <SelectItem value="all">All Statuses</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
                     <SelectItem value="processing">Processing</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="failed">Failed</SelectItem>
                   </SelectContent>
                 </Select>
@@ -5482,16 +5498,30 @@ export default function AdminDashboard() {
                             )}
                           </div>
                         </div>
-                        <div className="text-right text-sm text-muted-foreground">
-                          <p>Automated Payout</p>
+                        <div className="flex flex-col items-end gap-2 text-sm text-muted-foreground shrink-0">
                           {withdrawal.status === "completed" && (
                             <p className="text-green-600 font-medium">✓ Sent</p>
                           )}
-                          {withdrawal.status === "failed" && (
-                            <p className="text-red-600 font-medium">✗ Failed</p>
-                          )}
                           {withdrawal.status === "processing" && (
                             <p className="text-blue-600 font-medium">⟳ Processing</p>
+                          )}
+                          {withdrawal.status === "pending" && (
+                            <p className="text-amber-600 font-medium">⏳ Pending</p>
+                          )}
+                          {withdrawal.status === "failed" && (
+                            <>
+                              <p className="text-red-600 font-medium">✗ Failed</p>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-red-400/40 text-red-600 hover:bg-red-50"
+                                disabled={retryWithdrawalMutation.isPending}
+                                onClick={() => retryWithdrawalMutation.mutate(withdrawal.id)}
+                                data-testid={`button-retry-withdrawal-${withdrawal.id}`}
+                              >
+                                {retryWithdrawalMutation.isPending ? "Retrying..." : "Retry Payout"}
+                              </Button>
+                            </>
                           )}
                         </div>
                       </div>

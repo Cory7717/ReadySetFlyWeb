@@ -125,9 +125,16 @@ export default function Dashboard() {
     .filter(r => r.payoutCompleted)
     .reduce((sum, r) => sum + parseFloat(r.ownerPayout), 0);
 
-  const pendingPayouts = completedRentals
-    .filter(r => !r.payoutCompleted)
+  const now = new Date();
+  // Rental payouts that are completed but in the hold period (not yet creditable)
+  const heldPayouts = completedRentals
+    .filter(r => !r.payoutCompleted && r.payoutAvailableAt && new Date(r.payoutAvailableAt) > now)
     .reduce((sum, r) => sum + parseFloat(r.ownerPayout), 0);
+  // Rental payouts whose hold has expired but balance hasn't been released/withdrawn yet
+  const availablePayouts = completedRentals
+    .filter(r => !r.payoutCompleted && (!r.payoutAvailableAt || new Date(r.payoutAvailableAt) <= now))
+    .reduce((sum, r) => sum + parseFloat(r.ownerPayout), 0);
+  const pendingPayouts = heldPayouts + availablePayouts;
 
   const activeListings = userAircraft.filter(a => a.isListed).length;
   const activeRentals = activeRentalsArray.length;
@@ -239,9 +246,19 @@ export default function Dashboard() {
               <div className="text-2xl font-bold" data-testid="text-pending-payouts">
                 ${pendingPayouts.toFixed(2)}
               </div>
-              <p className="text-xs text-muted-foreground">
-                From {completedRentals.filter(r => !r.payoutCompleted).length} completed rentals
-              </p>
+              {heldPayouts > 0 && availablePayouts > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  ${availablePayouts.toFixed(2)} available · ${heldPayouts.toFixed(2)} on hold
+                </p>
+              ) : heldPayouts > 0 ? (
+                <p className="text-xs text-amber-600">
+                  ${heldPayouts.toFixed(2)} in hold period
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  From {completedRentals.filter(r => !r.payoutCompleted).length} completed rentals
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -865,8 +882,10 @@ export default function Dashboard() {
                             <TableCell>
                               {rental.payoutCompleted ? (
                                 <Badge className="bg-chart-2 text-white">Completed</Badge>
+                              ) : rental.payoutAvailableAt && new Date(rental.payoutAvailableAt) > now ? (
+                                <Badge variant="outline" className="border-amber-500/50 text-amber-600">On Hold</Badge>
                               ) : (
-                                <Badge variant="outline">Pending</Badge>
+                                <Badge variant="outline" className="border-green-500/50 text-green-600">Available</Badge>
                               )}
                             </TableCell>
                           </TableRow>

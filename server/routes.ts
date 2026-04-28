@@ -81,6 +81,10 @@ import {
   buildEmptyStub,
 } from "./services/aviation-weather";
 
+// Rental payout hold period — earnings credited to owner balance only after this many hours.
+// Env override supported but defaults to 24h so production works without any new env var.
+const RENTAL_PAYOUT_HOLD_HOURS = parseInt(process.env.RENTAL_PAYOUT_HOLD_HOURS || "24", 10);
+
 // Initialize OpenAI client with fallback to standard OpenAI if Replit integration vars are missing
 const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 // Prefer AI_INTEGRATIONS_OPENAI_BASE_URL if valid, otherwise OPENAI_BASE_URL, and only apply when it looks like a URL
@@ -9895,18 +9899,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Rental cannot be completed before the scheduled end date" });
       }
 
-      if (!rental.payoutCompleted) {
-        const ownerPayoutAmount = parseFloat(rental.ownerPayout || "0");
-        if (ownerPayoutAmount > 0) {
-          await storage.addToUserBalance(rental.ownerId, ownerPayoutAmount);
-          logDebug(`[RENTAL COMPLETE] Credited $${ownerPayoutAmount} to owner ${rental.ownerId} for rental ${rental.id}`);
-        }
-      }
+      // Place owner payout on hold — balance is NOT credited yet.
+      // releaseAvailableRentalPayouts() credits it once the hold window elapses.
+      const payoutAvailableAt = new Date(Date.now() + RENTAL_PAYOUT_HOLD_HOURS * 60 * 60 * 1000);
 
       const updatedRental = await storage.updateRental(req.params.id, {
         status: "completed",
-        payoutCompleted: true,
+        payoutAvailableAt,
+        // payoutCompleted remains false until the hold expires and the balance is released
       });
+
+      logDebug(`[RENTAL COMPLETE] Rental ${rental.id} payout of $${rental.ownerPayout} for owner ${rental.ownerId} on hold until ${payoutAvailableAt.toISOString()}`);
 
       res.json(updatedRental);
     } catch (error: any) {
@@ -10687,8 +10690,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/balance", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      // Release any rental payouts whose hold has expired before reading balance
+      await storage.releaseAvailableRentalPayouts(userId);
       const balance = await storage.getUserBalance(userId);
-      res.json({ balance });
+      const { heldBalance, nextAvailableAt } = await storage.getHeldRentalPayouts(userId);
+      res.json({ balance, heldBalance, nextAvailableAt });
     } catch (error) {
       console.error("Error fetching user balance:", error);
       res.status(500).json({ error: "Failed to fetch balance" });
@@ -10710,9 +10716,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Valid PayPal email is required" });
       }
 
-      // Check if user has sufficient balance
+      // Release any held payouts whose hold has expired, then check available balance
+      await storage.releaseAvailableRentalPayouts(userId);
       const userBalance = parseFloat(await storage.getUserBalance(userId));
       if (userBalance < parsedAmount) {
+        const { heldBalance } = await storage.getHeldRentalPayouts(userId);
+        if (parseFloat(heldBalance) > 0) {
+          return res.status(400).json({
+            error: "Some rental earnings are still in the payout hold period and will be available soon. Please try again later or reduce the withdrawal amount.",
+            heldBalance,
+          });
+        }
         return res.status(400).json({ error: "Insufficient balance" });
       }
 

@@ -224,7 +224,7 @@ import {
   partnerToolMetrics,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray, isNull, arrayOverlaps } from "drizzle-orm";
+import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray, isNull, isNotNull, arrayOverlaps } from "drizzle-orm";
 import { buildCrmEmailResubscribeUpdate, buildCrmEmailUnsubscribeUpdate, canSendEmail, preserveLeadEmailSuppression } from "./crmEmailSuppression";
 
 function normalizeDateOnly(value: string | Date | null | undefined): string | undefined {
@@ -643,6 +643,11 @@ export interface IStorage {
   getUserBalance(userId: string): Promise<string>; // Returns balance as string (e.g., "125.50")
   addToUserBalance(userId: string, amount: number): Promise<User | undefined>; // Add earnings
   deductFromUserBalance(userId: string, amount: number): Promise<User | undefined>; // Deduct for withdrawal
+  // Release any rental payouts whose hold period has expired, crediting them to the owner's balance.
+  // Safe to call on every balance read — idempotent (payoutCompleted guards double-credit).
+  releaseAvailableRentalPayouts(userId: string): Promise<void>;
+  // Returns the total amount still on hold plus the soonest release time for display purposes.
+  getHeldRentalPayouts(userId: string): Promise<{ heldBalance: string; nextAvailableAt: Date | null }>;
   createWithdrawalRequest(request: InsertWithdrawalRequest): Promise<WithdrawalRequest>;
   getWithdrawalRequest(id: string): Promise<WithdrawalRequest | undefined>;
   getWithdrawalRequestsByUser(userId: string): Promise<WithdrawalRequest[]>;
@@ -4958,6 +4963,65 @@ export class DatabaseStorage implements IStorage {
     }
     
     return updatedUser;
+  }
+
+  async releaseAvailableRentalPayouts(userId: string): Promise<void> {
+    const now = new Date();
+    // Find completed rentals whose hold has expired (or had no hold) but balance not yet credited
+    const releasable = await db
+      .select()
+      .from(rentals)
+      .where(
+        and(
+          eq(rentals.ownerId, userId),
+          eq(rentals.status, "completed"),
+          eq(rentals.payoutCompleted, false),
+          or(
+            isNull(rentals.payoutAvailableAt),
+            lte(rentals.payoutAvailableAt, now)
+          )
+        )
+      );
+
+    for (const rental of releasable) {
+      const amount = parseFloat(rental.ownerPayout || "0");
+      if (amount > 0) {
+        await this.addToUserBalance(userId, amount);
+      }
+      await db
+        .update(rentals)
+        .set({ payoutCompleted: true, updatedAt: new Date() })
+        .where(eq(rentals.id, rental.id));
+    }
+  }
+
+  async getHeldRentalPayouts(userId: string): Promise<{ heldBalance: string; nextAvailableAt: Date | null }> {
+    const now = new Date();
+    const held = await db
+      .select()
+      .from(rentals)
+      .where(
+        and(
+          eq(rentals.ownerId, userId),
+          eq(rentals.status, "completed"),
+          eq(rentals.payoutCompleted, false),
+          isNotNull(rentals.payoutAvailableAt),
+          gte(rentals.payoutAvailableAt, now)
+        )
+      );
+
+    const heldBalance = held
+      .reduce((sum, r) => sum + parseFloat(r.ownerPayout || "0"), 0)
+      .toFixed(2);
+
+    const nextAvailableAt = held.length > 0
+      ? held.reduce<Date>((earliest, r) => {
+          const t = r.payoutAvailableAt!;
+          return t < earliest ? t : earliest;
+        }, held[0].payoutAvailableAt!)
+      : null;
+
+    return { heldBalance, nextAvailableAt };
   }
 
   async createWithdrawalRequest(insertRequest: InsertWithdrawalRequest): Promise<WithdrawalRequest> {

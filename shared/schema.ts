@@ -579,7 +579,9 @@ export const rentals = pgTable("rentals", {
   // Payment
   isPaid: boolean("is_paid").default(false),
   payoutCompleted: boolean("payout_completed").default(false),
-  
+  // Hold period: earnings are not withdrawable until this timestamp passes (null = immediately available)
+  payoutAvailableAt: timestamp("payout_available_at"),
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

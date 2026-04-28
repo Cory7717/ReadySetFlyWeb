@@ -7,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { DollarSign, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { DollarSign, Clock, CheckCircle, XCircle, AlertCircle, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface WithdrawalRequest {
   id: string;
@@ -24,14 +25,20 @@ interface WithdrawalRequest {
   failureReason?: string;
 }
 
+interface BalanceData {
+  balance: string;
+  heldBalance: string;
+  nextAvailableAt: string | null;
+}
+
 export default function OwnerWithdrawals() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [paypalEmail, setPaypalEmail] = useState(user?.paypalEmail || "");
   const [withdrawalAmount, setWithdrawalAmount] = useState("");
 
-  // Fetch user balance
-  const { data: balanceData, isLoading: balanceLoading } = useQuery<{ balance: string }>({
+  // Fetch user balance (triggers hold release server-side)
+  const { data: balanceData, isLoading: balanceLoading } = useQuery<BalanceData>({
     queryKey: ["/api/balance"],
     enabled: !!user
   });
@@ -68,6 +75,10 @@ export default function OwnerWithdrawals() {
   const requestWithdrawalMutation = useMutation({
     mutationFn: async (data: { amount: string; paypalEmail: string }) => {
       const response = await apiRequest("POST", "/api/withdrawals", data);
+      if (!response.ok) {
+        const body = await response.json();
+        throw new Error(body.error || "Failed to request withdrawal");
+      }
       return await response.json();
     },
     onSuccess: () => {
@@ -102,7 +113,7 @@ export default function OwnerWithdrawals() {
 
   const handleRequestWithdrawal = () => {
     const amount = parseFloat(withdrawalAmount);
-    const currentBalance = parseFloat(balanceData?.balance || "0");
+    const availableBalance = parseFloat(balanceData?.balance || "0");
 
     if (isNaN(amount) || amount <= 0) {
       toast({
@@ -113,10 +124,13 @@ export default function OwnerWithdrawals() {
       return;
     }
 
-    if (amount > currentBalance) {
+    if (amount > availableBalance) {
+      const heldAmount = parseFloat(balanceData?.heldBalance || "0");
       toast({
-        title: "Insufficient Balance",
-        description: "Withdrawal amount exceeds your available balance",
+        title: "Insufficient Available Balance",
+        description: heldAmount > 0
+          ? `$${heldAmount.toFixed(2)} is still in the hold period. Try again once it's released.`
+          : "Withdrawal amount exceeds your available balance",
         variant: "destructive"
       });
       return;
@@ -160,7 +174,9 @@ export default function OwnerWithdrawals() {
     );
   }
 
-  const currentBalance = parseFloat(balanceData?.balance || "0");
+  const availableBalance = parseFloat(balanceData?.balance || "0");
+  const heldBalance = parseFloat(balanceData?.heldBalance || "0");
+  const nextAvailableAt = balanceData?.nextAvailableAt ? new Date(balanceData.nextAvailableAt) : null;
 
   return (
     <div className="container mx-auto p-6 max-w-5xl space-y-6">
@@ -169,23 +185,69 @@ export default function OwnerWithdrawals() {
         <p className="text-muted-foreground">Manage your rental earnings and request withdrawals</p>
       </div>
 
-      {/* Current Balance Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2" data-testid="heading-balance">
-            <DollarSign className="w-5 h-5" />
-            Available Balance
-          </CardTitle>
-          <CardDescription>Your current balance available for withdrawal</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {balanceLoading ? (
-            <p className="text-muted-foreground">Loading balance...</p>
-          ) : (
-            <div className="text-4xl font-bold" data-testid="text-balance">${currentBalance.toFixed(2)}</div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Balance Cards */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {/* Available Balance */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2" data-testid="heading-balance">
+              <DollarSign className="w-5 h-5" />
+              Available Balance
+            </CardTitle>
+            <CardDescription>Ready to withdraw to PayPal</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {balanceLoading ? (
+              <p className="text-muted-foreground">Loading...</p>
+            ) : (
+              <div className="text-4xl font-bold" data-testid="text-balance">
+                ${availableBalance.toFixed(2)}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Pending Hold Balance */}
+        <Card className={heldBalance > 0 ? "border-amber-500/40" : ""}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-600" data-testid="heading-held-balance">
+              <Lock className="w-5 h-5" />
+              Pending Release
+            </CardTitle>
+            <CardDescription>Rental earnings still in hold period</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {balanceLoading ? (
+              <p className="text-muted-foreground">Loading...</p>
+            ) : (
+              <div>
+                <div className="text-4xl font-bold text-amber-600" data-testid="text-held-balance">
+                  ${heldBalance.toFixed(2)}
+                </div>
+                {nextAvailableAt && (
+                  <p className="mt-1 text-sm text-muted-foreground flex items-center gap-1" data-testid="text-next-available">
+                    <Clock className="w-3 h-3" />
+                    Next release: {nextAvailableAt.toLocaleString()}
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Hold period notice */}
+      {heldBalance > 0 && (
+        <Alert className="border-amber-500/40 bg-amber-50 dark:bg-amber-950/20">
+          <Clock className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800 dark:text-amber-200">
+            <span className="font-medium">${heldBalance.toFixed(2)}</span> in rental earnings is in the payout hold period.
+            {nextAvailableAt && (
+              <> It will be available for withdrawal on <span className="font-medium">{nextAvailableAt.toLocaleString()}</span>.</>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* PayPal Email Setup */}
       <Card>
@@ -237,7 +299,7 @@ export default function OwnerWithdrawals() {
                   type="number"
                   step="0.01"
                   min="0"
-                  max={currentBalance}
+                  max={availableBalance}
                   placeholder="0.00"
                   value={withdrawalAmount}
                   onChange={(e) => setWithdrawalAmount(e.target.value)}
@@ -247,7 +309,7 @@ export default function OwnerWithdrawals() {
               </div>
               <Button
                 onClick={handleRequestWithdrawal}
-                disabled={requestWithdrawalMutation.isPending || currentBalance <= 0}
+                disabled={requestWithdrawalMutation.isPending || availableBalance <= 0}
                 data-testid="button-request-withdrawal"
               >
                 {requestWithdrawalMutation.isPending ? "Requesting..." : "Request Withdrawal"}
@@ -257,6 +319,7 @@ export default function OwnerWithdrawals() {
           <div className="bg-muted p-4 rounded-md space-y-2">
             <p className="text-sm font-medium">Important Information</p>
             <ul className="text-sm text-muted-foreground space-y-1">
+              <li>• Rental earnings become available for withdrawal after a short hold period</li>
               <li>• Withdrawals are processed instantly via PayPal Business/Commerce Payouts</li>
               <li>• PayPal Business/Commerce charges approximately 2% per payout (deducted from platform funds)</li>
               <li>• Funds typically arrive in your PayPal Business/Commerce account within minutes</li>

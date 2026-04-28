@@ -7631,9 +7631,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const buildWeeklyEngagementAudience = async (options?: {
     activeWindowDays?: number;
     cooldownDays?: number;
+    templateOverride?: WeeklyDigestSegment;
   }) => {
     const activeWindowDays = Math.max(7, Math.min(Number(options?.activeWindowDays) || 30, 90));
     const cooldownDays = Math.max(0, Math.min(Number(options?.cooldownDays) || 7, 30));
+    const templateOverride = options?.templateOverride;
     const weeklyCutoff = cooldownDays > 0
       ? new Date(Date.now() - cooldownDays * 24 * 60 * 60 * 1000)
       : null;
@@ -7707,6 +7709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const digestProfile = buildWeeklyDigestProfile({
         user,
         events: eventsByUserId.get(user.id) || [],
+        segmentOverride: templateOverride,
       });
 
       eligibleRecipients.push({ user, firstName, digestProfile });
@@ -7736,6 +7739,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const sendWeeklyEngagementEmails = async (options?: {
     activeWindowDays?: number;
     cooldownDays?: number;
+    templateOverride?: WeeklyDigestSegment;
   }) => {
     const audience = await buildWeeklyEngagementAudience(options);
     const { getWeeklyEngagementEmailHtml, getWeeklyEngagementEmailText } = await import("./email-templates");
@@ -7785,6 +7789,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     return {
       success: true,
+      templateChoice: options?.templateOverride || "auto_personalized",
       activeWindowDays: audience.activeWindowDays,
       cooldownDays: audience.cooldownDays,
       totalCandidates: audience.totalCandidates,
@@ -7817,7 +7822,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activeWindowDays = Number(req.body?.activeWindowDays) || 30;
       const cooldownDays = Number(req.body?.cooldownDays) || 7;
       const testEmail = typeof req.body?.testEmail === "string" ? req.body.testEmail.trim() : "";
-      const testSegment = typeof req.body?.testSegment === "string" ? req.body.testSegment as WeeklyDigestSegment : "platform_overview";
+      const allowedTemplateSegments: WeeklyDigestSegment[] = [
+        "flight_planning",
+        "marketplace",
+        "training",
+        "logbook",
+      ];
+      const templateChoice = typeof req.body?.templateChoice === "string"
+        ? req.body.templateChoice.trim()
+        : "auto_personalized";
+      const testTemplateChoice = typeof req.body?.testTemplateChoice === "string"
+        ? req.body.testTemplateChoice.trim()
+        : templateChoice;
+      const forcedTemplate = allowedTemplateSegments.includes(templateChoice as WeeklyDigestSegment)
+        ? templateChoice as WeeklyDigestSegment
+        : undefined;
+      const forcedTestTemplate = allowedTemplateSegments.includes(testTemplateChoice as WeeklyDigestSegment)
+        ? testTemplateChoice as WeeklyDigestSegment
+        : forcedTemplate;
 
       if (mode === "test") {
         if (!testEmail) {
@@ -7830,12 +7852,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
         const digestProfile = buildWeeklyDigestProfile({
           user: {
-            createdAt: new Date(),
+            createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000),
             firstName: "Pilot",
             email: testEmail,
           },
           events: [],
-          segmentOverride: testSegment,
+          segmentOverride: forcedTestTemplate,
         });
 
         await client.emails.send({
@@ -7864,18 +7886,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           success: true,
           mode: "test",
           sentTo: testEmail,
+          templateChoice: forcedTestTemplate || "auto_personalized",
           segment: digestProfile.segment,
         });
       }
 
       if (mode === "send") {
-        return res.json(await sendWeeklyEngagementEmails({ activeWindowDays, cooldownDays }));
+        return res.json(await sendWeeklyEngagementEmails({
+          activeWindowDays,
+          cooldownDays,
+          templateOverride: forcedTemplate,
+        }));
       }
 
-      const audience = await buildWeeklyEngagementAudience({ activeWindowDays, cooldownDays });
+      const audience = await buildWeeklyEngagementAudience({
+        activeWindowDays,
+        cooldownDays,
+        templateOverride: forcedTemplate,
+      });
       res.json({
         success: true,
         mode: "dry_run",
+        templateChoice: forcedTemplate || "auto_personalized",
         activeWindowDays: audience.activeWindowDays,
         cooldownDays: audience.cooldownDays,
         totalCandidates: audience.totalCandidates,

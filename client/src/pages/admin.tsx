@@ -229,6 +229,16 @@ const WEEKLY_EMAIL_SEGMENTS = [
 
 type WeeklyEmailSegment = typeof WEEKLY_EMAIL_SEGMENTS[number];
 
+const WEEKLY_EMAIL_TEMPLATE_OPTIONS = [
+  "auto_personalized",
+  "flight_planning",
+  "marketplace",
+  "training",
+  "logbook",
+] as const;
+
+type WeeklyEmailTemplateOption = typeof WEEKLY_EMAIL_TEMPLATE_OPTIONS[number];
+
 const WEEKLY_EMAIL_SEGMENT_LABELS: Record<WeeklyEmailSegment, string> = {
   flight_planning: "Flight Planning",
   marketplace: "Marketplace",
@@ -238,9 +248,18 @@ const WEEKLY_EMAIL_SEGMENT_LABELS: Record<WeeklyEmailSegment, string> = {
   platform_overview: "Platform Overview",
 };
 
+const WEEKLY_EMAIL_TEMPLATE_LABELS: Record<WeeklyEmailTemplateOption, string> = {
+  auto_personalized: "Auto Personalized",
+  flight_planning: "Flight Planning and Weather",
+  marketplace: "Marketplace and Rentals",
+  training: "Training and Student Pilot",
+  logbook: "Logbook and Currency",
+};
+
 type WeeklyEmailAudiencePreview = {
   success: boolean;
   mode: "dry_run";
+  templateChoice?: WeeklyEmailTemplateOption;
   activeWindowDays: number;
   cooldownDays: number;
   totalCandidates: number;
@@ -554,7 +573,8 @@ export default function AdminDashboard() {
   const [weeklyEmailActiveWindowDays, setWeeklyEmailActiveWindowDays] = useState("30");
   const [weeklyEmailCooldownDays, setWeeklyEmailCooldownDays] = useState("7");
   const [weeklyEmailTestEmail, setWeeklyEmailTestEmail] = useState("");
-  const [weeklyEmailTestSegment, setWeeklyEmailTestSegment] = useState<WeeklyEmailSegment>("platform_overview");
+  const [weeklyEmailTemplateChoice, setWeeklyEmailTemplateChoice] = useState<WeeklyEmailTemplateOption>("auto_personalized");
+  const [weeklyEmailTestTemplateChoice, setWeeklyEmailTestTemplateChoice] = useState<WeeklyEmailTemplateOption>("auto_personalized");
   const [weeklyEmailPreview, setWeeklyEmailPreview] = useState<WeeklyEmailAudiencePreview | null>(null);
   
   // Withdrawal monitoring state
@@ -1204,6 +1224,7 @@ export default function AdminDashboard() {
         mode: "dry_run",
         activeWindowDays: Number(weeklyEmailActiveWindowDays) || 30,
         cooldownDays: Number(weeklyEmailCooldownDays) || 7,
+        templateChoice: weeklyEmailTemplateChoice,
       });
       return response.json();
     },
@@ -1225,14 +1246,15 @@ export default function AdminDashboard() {
       const response = await apiRequest("POST", "/api/admin/marketing/weekly-engagement", {
         mode: "test",
         testEmail: weeklyEmailTestEmail.trim(),
-        testSegment: weeklyEmailTestSegment,
+        templateChoice: weeklyEmailTemplateChoice,
+        testTemplateChoice: weeklyEmailTestTemplateChoice,
       });
       return response.json();
     },
     onSuccess: () => {
       toast({
         title: "Weekly email test sent",
-        description: `Sent a ${WEEKLY_EMAIL_SEGMENT_LABELS[weeklyEmailTestSegment]} test to ${weeklyEmailTestEmail.trim()}.`,
+        description: `Sent a ${WEEKLY_EMAIL_TEMPLATE_LABELS[weeklyEmailTestTemplateChoice]} test to ${weeklyEmailTestEmail.trim()}.`,
       });
     },
     onError: (error: Error) => {
@@ -1250,6 +1272,7 @@ export default function AdminDashboard() {
         mode: "send",
         activeWindowDays: Number(weeklyEmailActiveWindowDays) || 30,
         cooldownDays: Number(weeklyEmailCooldownDays) || 7,
+        templateChoice: weeklyEmailTemplateChoice,
       });
       return response.json();
     },
@@ -1257,6 +1280,7 @@ export default function AdminDashboard() {
       setWeeklyEmailPreview({
         success: true,
         mode: "dry_run",
+        templateChoice: data.templateChoice,
         activeWindowDays: data.activeWindowDays,
         cooldownDays: data.cooldownDays,
         totalCandidates: data.totalCandidates,
@@ -3941,11 +3965,11 @@ export default function AdminDashboard() {
                 <CardHeader>
                   <CardTitle>Weekly Email Control</CardTitle>
                   <CardDescription>
-                    Preview the personalized weekly audience, send a segment test email, or run the weekly batch manually with the same audience rules used by automation.
+                    Preview the weekly audience, choose a content template, send a test email, or run the weekly batch manually with the same audience rules used by automation.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                     <div className="space-y-2">
                       <Label htmlFor="weekly-email-active-window">Active Window (Days)</Label>
                       <Input
@@ -3971,15 +3995,36 @@ export default function AdminDashboard() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="weekly-email-test-segment">Test Segment</Label>
-                      <Select value={weeklyEmailTestSegment} onValueChange={(value) => setWeeklyEmailTestSegment(value as WeeklyEmailSegment)}>
-                        <SelectTrigger id="weekly-email-test-segment" data-testid="select-weekly-email-test-segment">
+                      <Label htmlFor="weekly-email-template">Batch Template</Label>
+                      <Select
+                        value={weeklyEmailTemplateChoice}
+                        onValueChange={(value) => setWeeklyEmailTemplateChoice(value as WeeklyEmailTemplateOption)}
+                      >
+                        <SelectTrigger id="weekly-email-template" data-testid="select-weekly-email-template">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {WEEKLY_EMAIL_SEGMENTS.map((segment) => (
-                            <SelectItem key={segment} value={segment}>
-                              {WEEKLY_EMAIL_SEGMENT_LABELS[segment]}
+                          {WEEKLY_EMAIL_TEMPLATE_OPTIONS.map((template) => (
+                            <SelectItem key={template} value={template}>
+                              {WEEKLY_EMAIL_TEMPLATE_LABELS[template]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="weekly-email-test-template">Test Template</Label>
+                      <Select
+                        value={weeklyEmailTestTemplateChoice}
+                        onValueChange={(value) => setWeeklyEmailTestTemplateChoice(value as WeeklyEmailTemplateOption)}
+                      >
+                        <SelectTrigger id="weekly-email-test-template" data-testid="select-weekly-email-test-template">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {WEEKLY_EMAIL_TEMPLATE_OPTIONS.map((template) => (
+                            <SelectItem key={template} value={template}>
+                              {WEEKLY_EMAIL_TEMPLATE_LABELS[template]}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -4043,16 +4088,25 @@ export default function AdminDashboard() {
                           <div className="text-lg font-semibold">{weeklyEmailPreview.excludedRecentlySent}</div>
                         </div>
                         <div className="rounded-md border bg-background p-3">
-                          <div className="text-xs uppercase tracking-wide text-muted-foreground">Rules</div>
+                          <div className="text-xs uppercase tracking-wide text-muted-foreground">Rules and Template</div>
                           <div className="text-sm font-medium">
                             {weeklyEmailPreview.activeWindowDays}d active / {weeklyEmailPreview.cooldownDays}d cooldown
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {WEEKLY_EMAIL_TEMPLATE_LABELS[
+                              (weeklyEmailPreview.templateChoice as WeeklyEmailTemplateOption) || "auto_personalized"
+                            ]}
                           </div>
                         </div>
                       </div>
 
                       <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
                         <div className="space-y-2">
-                          <div className="text-sm font-semibold">Segment Breakdown</div>
+                          <div className="text-sm font-semibold">
+                            {weeklyEmailPreview.templateChoice && weeklyEmailPreview.templateChoice !== "auto_personalized"
+                              ? "Template Breakdown"
+                              : "Segment Breakdown"}
+                          </div>
                           <div className="space-y-2">
                             {Object.keys(weeklyEmailPreview.segmentBreakdown).length > 0 ? (
                               Object.entries(weeklyEmailPreview.segmentBreakdown).map(([segment, count]) => (

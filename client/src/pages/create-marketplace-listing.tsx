@@ -23,6 +23,7 @@ import type { MarketplaceListing } from "@shared/schema";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
 import { trackEvent } from "@/lib/analytics";
+import { clearResumeFlow, saveResumeFlow } from "@/lib/firstSessionFlow";
 
 // Base form schema
 const baseFormSchema = insertMarketplaceListingSchema.omit({ userId: true }).extend({
@@ -183,6 +184,27 @@ export default function CreateMarketplaceListing() {
       isActive: true,
     },
   });
+
+  useEffect(() => {
+    const subscription = form.watch((value) => {
+      const title = String(value.title || "").trim();
+      const category = String(value.category || "").trim();
+      const description = String(value.description || "").trim();
+      if (!title && !category && description.length < 8) return;
+      saveResumeFlow({
+        type: "listing",
+        title: "Complete your aircraft listing",
+        description: "Your listing draft is still waiting in RSF.",
+        target: isEditMode && listingId ? `/edit-marketplace-listing/${listingId}` : "/create-marketplace-listing",
+        updatedAt: Date.now(),
+        payload: {
+          category,
+          title,
+        },
+      });
+    });
+    return () => subscription.unsubscribe();
+  }, [form, isEditMode, listingId]);
 
   // Auto-fill contact email when user data loads
   useEffect(() => {
@@ -547,6 +569,7 @@ export default function CreateMarketplaceListing() {
           ? "Your marketplace listing has been updated."
           : "Your marketplace listing has been created.",
       });
+      clearResumeFlow("listing");
       navigate(isEditMode ? "/my-listings" : "/marketplace");
     },
     onError: (error: any) => {

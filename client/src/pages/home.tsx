@@ -19,12 +19,14 @@ import { AircraftCard } from "@/components/aircraft-card";
 import { AircraftFilters } from "@/components/aircraft-filters";
 import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
+import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
 import { PageShell } from "@/components/layout/PageShell";
 import { PressDemoBanner, PressDemoSpotlight, type PressDemoStep, usePressDemo } from "@/components/press/PressDemo";
 import { useAuth } from "@/hooks/useAuth";
 import wingtipImage from "@assets/wingtip_featured_1761494838973.jpg";
 import { trackEvent } from "@/lib/analytics";
 import { apiUrl } from "@/lib/api";
+import { getCurrentReturnTo } from "@/lib/returnTo";
 
 const quickFilters = [
   { label: "IFR Equipped", value: "ifr" },
@@ -60,6 +62,7 @@ export default function Home() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedAircraftId, setSelectedAircraftId] = useState<string | null>(null);
   const [showVerificationNudge, setShowVerificationNudge] = useState(false);
+  const [showBrowseSignupPrompt, setShowBrowseSignupPrompt] = useState(false);
 
   useEffect(() => {
     trackEvent("rentals_view", { page: "/rentals" });
@@ -119,6 +122,11 @@ export default function Home() {
     const dismissedForSession = window.localStorage.getItem("rsf_verification_nudge_dismissed") === sessionId;
     setShowVerificationNudge(!dismissedForSession);
   }, [isAuthenticated, user?.identityVerified]);
+
+  useEffect(() => {
+    if (isAuthenticated || !selectedAircraftId) return;
+    setShowBrowseSignupPrompt(true);
+  }, [isAuthenticated, selectedAircraftId]);
 
   const [keyword, setKeyword] = useState("");
   const [city, setCity] = useState("");
@@ -652,6 +660,12 @@ export default function Home() {
           }}
         />
       )}
+      <PostActionSignupPrompt
+        visible={showBrowseSignupPrompt && !isAuthenticated}
+        source="rentals"
+        returnTo={getCurrentReturnTo()}
+        onDismiss={() => setShowBrowseSignupPrompt(false)}
+      />
     </PageShell>
   );
 }

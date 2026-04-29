@@ -66,6 +66,7 @@ import {
   summarizeProviderUpdates,
 } from "@/components/flight-planner/FilingProviderWorkspace";
 import { OpenInAppBanner } from "@/components/OpenInAppBanner";
+import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
 import { PageShell } from "@/components/layout/PageShell";
 import { RsfModeToggle } from "@/components/map/RsfModeToggle";
 import Planner2DMapSurface from "@/components/flight-planner/Planner2DMapSurface";
@@ -1582,6 +1583,8 @@ export default function FlightPlanner() {
     fuelOnBoard: "",
     notes: "",
   });
+  const plannerUsageTrackedRef = useRef(false);
+  const [showPlannerSignupPrompt, setShowPlannerSignupPrompt] = useState(false);
   const appliedLiveMapAlternateRef = useRef<string | null>(null);
   const [waypointsInput, setWaypointsInput] = useState("");
   const [plannedStopsInput, setPlannedStopsInput] = useState("");
@@ -1598,6 +1601,17 @@ export default function FlightPlanner() {
   const [mapStyle, setMapStyle] = useState<RsfPlannerMapStyle>("sectional");
   const [mapRenderVersion, setMapRenderVersion] = useState(0);
   const [airportLabelMode, setAirportLabelMode] = useState<"icao" | "full" | "markers">("icao");
+
+  useEffect(() => {
+    if (isAuthenticated || plannerUsageTrackedRef.current) return;
+    const hasMeaningfulPlannerInput =
+      (form.departure.trim().length >= 3 && form.destination.trim().length >= 3) ||
+      form.route.trim().length >= 3;
+    if (!hasMeaningfulPlannerInput) return;
+    plannerUsageTrackedRef.current = true;
+    trackEvent("planner_used", { page: "/flight-planner", source: "anonymous" });
+    setShowPlannerSignupPrompt(true);
+  }, [form.departure, form.destination, form.route, isAuthenticated]);
   const [showAtcStrip, setShowAtcStrip] = useState(true);
   const [showApproachOffer, setShowApproachOffer] = useState(false);
   const [windsAltitudeChoice, setWindsAltitudeChoice] = useState("planned");
@@ -9505,6 +9519,12 @@ export default function FlightPlanner() {
         </div>
       </DialogContent>
     </Dialog>
+    <PostActionSignupPrompt
+      visible={showPlannerSignupPrompt && !isAuthenticated}
+      source="planner"
+      returnTo={getCurrentReturnTo()}
+      onDismiss={() => setShowPlannerSignupPrompt(false)}
+    />
     </>
   );
 }

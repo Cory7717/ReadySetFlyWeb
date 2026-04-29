@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
 import { LandingCurrentConditions } from "@/components/landing/LandingCurrentConditions";
@@ -21,6 +22,8 @@ import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
 import { useAuth } from "@/hooks/useAuth";
+import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
+import { clearResumeFlow, getPrimaryResumeFlow, saveResumeFlow, type ResumeFlowRecord } from "@/lib/firstSessionFlow";
 import { extractAtisIdentifier, extractRunwayInUse, parseFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import av8mapsLogo from "@assets/Av8Maps.JPG";
@@ -77,6 +80,22 @@ interface MembershipPartnerOfferPublic {
   tier: "pro" | "pro_plus";
   durationDays: number;
 }
+
+type QuickLogDraft = {
+  flightDate: string;
+  aircraft: string;
+  route: string;
+  duration: string;
+  remarks: string;
+};
+
+const EMPTY_QUICK_LOG_DRAFT: QuickLogDraft = {
+  flightDate: "",
+  aircraft: "",
+  route: "",
+  duration: "",
+  remarks: "",
+};
 
 const LANDING_PARTNER_OFFER_SLUGS = ["cpa-3mo-pro-plus", "abs-2mo-pro-plus"] as const;
 
@@ -166,6 +185,10 @@ export default function Landing() {
   const [weatherJumpDismissed, setWeatherJumpDismissed] = useState(false);
   const [showAiWeatherSummary, setShowAiWeatherSummary] = useState(false);
   const [showAiNotamTranslator, setShowAiNotamTranslator] = useState(false);
+  const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
+  const [quickLogDraft, setQuickLogDraft] = useState<QuickLogDraft>(EMPTY_QUICK_LOG_DRAFT);
+  const [resumeFlow, setResumeFlow] = useState<ResumeFlowRecord | null>(null);
+  const [showLogbookSignupPrompt, setShowLogbookSignupPrompt] = useState(false);
   const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const av8mapsTiles = useMemo(
@@ -567,6 +590,37 @@ export default function Landing() {
   }, []);
 
   useEffect(() => {
+    setResumeFlow(getPrimaryResumeFlow());
+  }, []);
+
+  useEffect(() => {
+    if (resumeFlow?.type !== "logbook" || !resumeFlow.payload) return;
+    const hasCurrentDraft = Object.values(quickLogDraft).some((value) => String(value || "").trim().length > 0);
+    if (hasCurrentDraft) return;
+    setQuickLogDraft((current) => ({
+      flightDate: typeof resumeFlow.payload?.flightDate === "string" ? resumeFlow.payload.flightDate : current.flightDate,
+      aircraft: typeof resumeFlow.payload?.aircraft === "string" ? resumeFlow.payload.aircraft : current.aircraft,
+      route: typeof resumeFlow.payload?.route === "string" ? resumeFlow.payload.route : current.route,
+      duration: typeof resumeFlow.payload?.duration === "string" ? resumeFlow.payload.duration : current.duration,
+      remarks: typeof resumeFlow.payload?.remarks === "string" ? resumeFlow.payload.remarks : current.remarks,
+    }));
+  }, [quickLogDraft, resumeFlow]);
+
+  useEffect(() => {
+    const hasDraftContent = Object.values(quickLogDraft).some((value) => String(value || "").trim().length > 0);
+    if (!hasDraftContent) return;
+    saveResumeFlow({
+      type: "logbook",
+      title: "Log your first flight",
+      description: "Your first flight draft is ready to finish when you come back.",
+      target: "landing-logbook",
+      updatedAt: Date.now(),
+      payload: quickLogDraft,
+    });
+    setResumeFlow(getPrimaryResumeFlow());
+  }, [quickLogDraft]);
+
+  useEffect(() => {
     if (activeMobileTab === "find") {
       setMobileFuelExpanded(true);
     }
@@ -778,6 +832,64 @@ export default function Landing() {
   useEffect(() => {
     trackEvent("starting_point_section_view");
   }, []);
+
+  const handleFirstActionClick = (action: "planner" | "logbook" | "rentals") => {
+    trackEvent("first_action_clicked", { action, page: "/" });
+    if (action === "planner") {
+      navigate("/flight-planner?source=first_action");
+      return;
+    }
+    if (action === "rentals") {
+      navigate("/rentals?source=first_action");
+      return;
+    }
+    if (isAuthenticated) {
+      navigate("/logbook");
+      return;
+    }
+    setIsQuickLogOpen(true);
+  };
+
+  const handleSaveQuickLogDraft = () => {
+    const normalizedDraft: QuickLogDraft = {
+      flightDate: quickLogDraft.flightDate,
+      aircraft: quickLogDraft.aircraft.trim(),
+      route: quickLogDraft.route.trim().toUpperCase(),
+      duration: quickLogDraft.duration.trim(),
+      remarks: quickLogDraft.remarks.trim(),
+    };
+
+    saveResumeFlow({
+      type: "logbook",
+      title: "Log your first flight",
+      description: "Your first flight draft is ready to finish when you come back.",
+      target: "landing-logbook",
+      updatedAt: Date.now(),
+      payload: normalizedDraft,
+    });
+    setResumeFlow(getPrimaryResumeFlow());
+    setQuickLogDraft(normalizedDraft);
+    setIsQuickLogOpen(false);
+    if (!isAuthenticated) {
+      setShowLogbookSignupPrompt(true);
+    }
+  };
+
+  const handleContinueFlow = () => {
+    if (!resumeFlow) return;
+    trackEvent("continue_flow_clicked", { flow: resumeFlow.type, target: resumeFlow.target });
+    if (resumeFlow.type === "logbook") {
+      setIsQuickLogOpen(true);
+      return;
+    }
+    navigate(resumeFlow.target);
+  };
+
+  const dismissResumeFlow = () => {
+    if (!resumeFlow) return;
+    clearResumeFlow(resumeFlow.type);
+    setResumeFlow(getPrimaryResumeFlow());
+  };
   
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -1814,6 +1926,98 @@ export default function Landing() {
         </div>
       </div>
 
+      <section id="landing-quickstart-section" className="rsf-metal-section border-y border-white/8 px-4 py-8 sm:py-10">
+        <div className="container mx-auto">
+          <div className="space-y-6">
+            <div className="max-w-2xl space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9cb8df]">First action</div>
+              <h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#F5F8FC] sm:text-3xl">
+                Start with something useful
+              </h2>
+              <p className="text-sm leading-6 text-[#B8C8DA]">
+                Try one of these — no account needed.
+              </p>
+            </div>
+
+            {resumeFlow ? (
+              <div className={`${metallicPanelClass} flex flex-col gap-4 rounded-[1.15rem] p-4 text-[#E8EDF4] sm:flex-row sm:items-center sm:justify-between`}>
+                <div className="space-y-1">
+                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#9cb8df]">Finish what you started</div>
+                  <div className="text-base font-semibold text-[#F5F8FC]">{resumeFlow.title}</div>
+                  <div className="text-sm text-[#AFC1D6]">{resumeFlow.description}</div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" className={metallicPrimaryButtonClass} onClick={handleContinueFlow}>
+                    {resumeFlow.type === "listing"
+                      ? "Complete your aircraft listing"
+                      : resumeFlow.type === "verification"
+                        ? "Finish your verification"
+                        : "Log your first flight"}
+                  </Button>
+                  <Button type="button" variant="outline" className={metallicSecondaryButtonClass} onClick={dismissResumeFlow}>
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)]">
+              <div className={`${metallicPanelInteractiveClass} rounded-[1.25rem] p-5 text-[#E8EDF4]`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#9cb8df]">Recommended first step</div>
+                    <div className="text-xl font-semibold tracking-[-0.02em] text-[#F5F8FC]">
+                      Plan your route, weather, and hazards (~2 min)
+                    </div>
+                    <p className="text-sm leading-6 text-[#B8C8DA]">
+                      Build your route, weather, and hazards in one place before you create an account.
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff]">
+                    About 2 minutes
+                  </Badge>
+                </div>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <Button type="button" className={metallicPrimaryButtonClass} onClick={() => handleFirstActionClick("planner")}>
+                    Open Flight Planner
+                  </Button>
+                </div>
+              </div>
+
+              <div className={`${metallicPanelInteractiveClass} rounded-[1.25rem] p-5 text-[#E8EDF4]`}>
+                <div className="space-y-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#9cb8df]">Quick logbook start</div>
+                  <div className="text-lg font-semibold tracking-[-0.02em] text-[#F5F8FC]">Log your first flight</div>
+                  <p className="text-sm leading-6 text-[#B8C8DA]">
+                    Start tracking your hours with a simple first entry in about a minute.
+                  </p>
+                </div>
+                <div className="mt-5">
+                  <Button type="button" variant="outline" className={metallicSecondaryButtonClass} onClick={() => handleFirstActionClick("logbook")}>
+                    Open quick log
+                  </Button>
+                </div>
+              </div>
+
+              <div className={`${metallicPanelInteractiveClass} rounded-[1.25rem] p-5 text-[#E8EDF4]`}>
+                <div className="space-y-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#9cb8df]">Aircraft search</div>
+                  <div className="text-lg font-semibold tracking-[-0.02em] text-[#F5F8FC]">Explore aircraft rentals</div>
+                  <p className="text-sm leading-6 text-[#B8C8DA]">
+                    Find aircraft near you and compare options without leaving RSF.
+                  </p>
+                </div>
+                <div className="mt-5">
+                  <Button type="button" variant="outline" className={metallicSecondaryButtonClass} onClick={() => handleFirstActionClick("rentals")}>
+                    Browse rentals
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="rsf-metal-section px-4 py-6">
         <div className="max-w-3xl mx-auto">
           <div className="mb-3 text-center">
@@ -2060,7 +2264,7 @@ export default function Landing() {
         </div>
       )}
 
-      <div id="landing-quickstart-section" className="hidden rsf-section-band py-8 sm:py-10 md:block">
+      <div id="landing-ecosystem-section" className="hidden rsf-section-band py-8 sm:py-10 md:block">
         <div className="container mx-auto px-4">
           <div className={`grid gap-6 ${!hasProPlus ? "xl:grid-cols-[minmax(0,1.12fr)_320px]" : ""}`}>
             <section className={`${metallicPanelClass} rounded-[1.45rem] p-5 text-[#E8EDF4] sm:p-6 ${activeMobileTab === "find" || activeMobileTab === "plan" || activeMobileTab === "log" ? "" : "hidden md:block"}`}>
@@ -2392,6 +2596,82 @@ export default function Landing() {
         />
       </div>
       )}
+
+      <Dialog open={isQuickLogOpen} onOpenChange={setIsQuickLogOpen}>
+        <DialogContent className={`${metallicPanelClass} max-w-xl text-[#E8EDF4]`}>
+          <DialogHeader>
+            <DialogTitle>Log your first flight</DialogTitle>
+            <DialogDescription className="text-[#AFC1D6]">
+              Start a simple draft in about a minute. You can create a free account after you see the workflow.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="quick-log-date">Flight date</Label>
+              <Input
+                id="quick-log-date"
+                type="date"
+                value={quickLogDraft.flightDate}
+                onChange={(event) => setQuickLogDraft((current) => ({ ...current, flightDate: event.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="quick-log-duration">Flight time</Label>
+              <Input
+                id="quick-log-duration"
+                value={quickLogDraft.duration}
+                onChange={(event) => setQuickLogDraft((current) => ({ ...current, duration: event.target.value }))}
+                placeholder="1.2"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="quick-log-aircraft">Aircraft</Label>
+              <Input
+                id="quick-log-aircraft"
+                value={quickLogDraft.aircraft}
+                onChange={(event) => setQuickLogDraft((current) => ({ ...current, aircraft: event.target.value }))}
+                placeholder="C172 / N12345"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="quick-log-route">Route</Label>
+              <Input
+                id="quick-log-route"
+                value={quickLogDraft.route}
+                onChange={(event) => setQuickLogDraft((current) => ({ ...current, route: event.target.value.toUpperCase() }))}
+                placeholder="KAUS KHYI"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="quick-log-remarks">Notes</Label>
+              <Input
+                id="quick-log-remarks"
+                value={quickLogDraft.remarks}
+                onChange={(event) => setQuickLogDraft((current) => ({ ...current, remarks: event.target.value }))}
+                placeholder="Short local flight, pattern work, cross-country practice..."
+              />
+            </div>
+          </div>
+          <div className={`${metallicSubpanelClass} rounded-[0.95rem] p-3 text-sm text-[#DCE6F2]`}>
+            Save a simple draft now, then create a free account if you want to keep tracking hours and come back later.
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" className={metallicSecondaryButtonClass} onClick={() => setIsQuickLogOpen(false)}>
+              Close
+            </Button>
+            <Button type="button" className={metallicPrimaryButtonClass} onClick={handleSaveQuickLogDraft}>
+              Save draft
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <PostActionSignupPrompt
+        visible={showLogbookSignupPrompt && !isAuthenticated}
+        source="logbook"
+        returnTo="/"
+        onDismiss={() => setShowLogbookSignupPrompt(false)}
+      />
 
       <LandingMobileBottomNav
         activeTab={activeMobileTab}

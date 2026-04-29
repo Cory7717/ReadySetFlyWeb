@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
+import { clearResumeFlow, saveResumeFlow } from "@/lib/firstSessionFlow";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,6 +96,7 @@ export default function VerifyIdentity() {
     onSuccess: (_, formData) => {
       trackEvent("verification_submitted", { userId: user?.id });
       if (import.meta.env.DEV) console.log("[verification] submitted successfully");
+      clearResumeFlow("verification");
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({
         title: "Verification Submitted",
@@ -146,6 +148,13 @@ export default function VerifyIdentity() {
       if (!startedRef.current) {
         startedRef.current = true;
         trackEvent("verification_started", { userId: user?.id });
+        saveResumeFlow({
+          type: "verification",
+          title: "Finish your verification",
+          description: "Your identity verification is already in progress.",
+          target: "/verify-identity",
+          updatedAt: Date.now(),
+        });
         if (import.meta.env.DEV) console.log("[verification] started");
       }
       setCurrentStep("documents");

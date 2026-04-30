@@ -28,6 +28,7 @@ import { getCrmLeadSalesEmailHtml, getCrmLeadSalesEmailSubject, getCrmLeadSalesE
 import { ADMIN_PERMISSIONS, ADMIN_ROLE_PERMISSIONS, normalizeAdminPermissions, type AdminPermission, type AdminRole } from "@shared/config/adminAccess";
 import { canSendEmail, logger as crmLogger } from "./crmEmailSuppression";
 import { buildCrmLeadTemplateCsv, buildCrmLeadTemplateXlsx, findCrmLeadImportDuplicates, mapImportedCrmLeadRows, mergeImportedLeadData, parseCrmLeadImportFile } from "./crmLeadImport";
+import { buildLogbookTemplateCsv, buildLogbookTemplateXlsx, findLogbookImportDuplicates, mapImportedLogbookRows, parseLogbookImportFile } from "./logbookImport";
 import registerMobileAuthRoutes from "./mobile-auth-routes";
 import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -4132,6 +4133,24 @@ const crmLeadImportUpload = multer({
       cb(null, true);
     } else {
       cb(new Error("Only CSV and XLSX files are allowed for CRM lead imports"));
+    }
+  },
+});
+
+const logbookImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const lower = file.originalname.toLowerCase();
+    const isCsv = file.mimetype === "text/csv" || lower.endsWith(".csv");
+    const isXlsx =
+      file.mimetype === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      lower.endsWith(".xlsx");
+
+    if (isCsv || isXlsx) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only CSV and XLSX files are allowed for logbook imports"));
     }
   },
 });
@@ -18127,6 +18146,115 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to fetch logbook entries:", error);
       res.status(500).json({ error: "Failed to fetch logbook entries" });
+    }
+  });
+
+  app.get("/api/logbook/import-template", isAuthenticated, async (req: any, res) => {
+    try {
+      const format = String(req.query.format || "csv").toLowerCase();
+      if (format === "xlsx") {
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        );
+        res.setHeader("Content-Disposition", 'attachment; filename="rsf-logbook-template.xlsx"');
+        return res.send(buildLogbookTemplateXlsx());
+      }
+
+      if (format !== "csv") {
+        return res.status(400).json({ error: "Unsupported template format" });
+      }
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="rsf-logbook-template.csv"');
+      res.send(buildLogbookTemplateCsv());
+    } catch (error) {
+      console.error("Logbook template export failed:", error);
+      res.status(500).json({ error: "Failed to export logbook template" });
+    }
+  });
+
+  app.post("/api/logbook/import-preview", isAuthenticated, logbookImportUpload.single("file"), async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file) {
+        return res.status(400).json({ error: "No logbook import file uploaded" });
+      }
+
+      const rows = parseLogbookImportFile(file.originalname, file.buffer);
+      const { imported, skipped } = mapImportedLogbookRows(rows);
+      const existingEntries = await storage.getLogbookEntriesByUser(userId);
+      const duplicates = findLogbookImportDuplicates(imported, existingEntries);
+
+      res.json({
+        success: true,
+        fileName: file.originalname,
+        totalRows: rows.length,
+        importableCount: imported.length,
+        duplicateCount: duplicates.length,
+        skippedCount: skipped.length,
+        skipped,
+        duplicates,
+      });
+    } catch (error: any) {
+      console.error("Logbook import preview failed:", error);
+      res.status(400).json({ error: error?.message || "Failed to preview logbook import" });
+    }
+  });
+
+  app.post("/api/logbook/import", isAuthenticated, logbookImportUpload.single("file"), async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file) {
+        return res.status(400).json({ error: "No logbook import file uploaded" });
+      }
+
+      const rows = parseLogbookImportFile(file.originalname, file.buffer);
+      const { imported, skipped } = mapImportedLogbookRows(rows);
+      const existingEntries = await storage.getLogbookEntriesByUser(userId);
+      const duplicates = findLogbookImportDuplicates(imported, existingEntries);
+      const excludedRowNumbers = parseCrmImportExcludedRows(req.body?.excludedRowNumbers);
+      const seenSignatures = new Set<string>();
+      const skippedRows = [...skipped];
+      let createdCount = 0;
+
+      for (const row of imported) {
+        if (excludedRowNumbers.has(row.rowNumber)) {
+          skippedRows.push({ rowNumber: row.rowNumber, reason: "Skipped during duplicate review" });
+          continue;
+        }
+
+        if (seenSignatures.has(row.signature)) {
+          skippedRows.push({ rowNumber: row.rowNumber, reason: "Duplicate row in import file" });
+          continue;
+        }
+
+        seenSignatures.add(row.signature);
+        await storage.createLogbookEntry({ ...row.entry, userId });
+        createdCount += 1;
+      }
+
+      res.json({
+        success: true,
+        fileName: file.originalname,
+        totalRows: rows.length,
+        createdCount,
+        skippedCount: skippedRows.length,
+        skipped: skippedRows,
+      });
+    } catch (error: any) {
+      console.error("Logbook import failed:", error);
+      res.status(400).json({ error: error?.message || "Failed to import logbook entries" });
     }
   });
 

@@ -10,9 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Plane, Lock, Edit, Trash2, Download, TrendingUp, Award, Bell, FileArchive, FileText, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Plus, Plane, Lock, Edit, Trash2, Download, TrendingUp, Award, Bell, FileArchive, FileText, ChevronLeft, ChevronRight, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { LogbookEntry, InsertLogbookEntry, Endorsement, LogbookArchive } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
@@ -51,6 +52,43 @@ type LogbookListResponse = {
     hasPreviousPage: boolean;
     hasNextPage: boolean;
   };
+};
+
+type LogbookImportSkip = {
+  rowNumber: number;
+  reason: string;
+};
+
+type LogbookImportDuplicate = {
+  rowNumber: number;
+  signature: string;
+  duplicateInExistingLogbook: boolean;
+  duplicateInFile: boolean;
+  matchingImportRowNumbers: number[];
+  existingEntryId?: string;
+  existingEntryDate?: string;
+  existingEntryRoute?: string;
+  existingEntryTailNumber?: string;
+};
+
+type LogbookImportPreview = {
+  success: boolean;
+  fileName: string;
+  totalRows: number;
+  importableCount: number;
+  duplicateCount: number;
+  skippedCount: number;
+  skipped: LogbookImportSkip[];
+  duplicates: LogbookImportDuplicate[];
+};
+
+type LogbookImportSummary = {
+  success: boolean;
+  fileName: string;
+  totalRows: number;
+  createdCount: number;
+  skippedCount: number;
+  skipped: LogbookImportSkip[];
 };
 
 const AIRCRAFT_CATEGORY_OPTIONS = [
@@ -327,6 +365,15 @@ export default function Logbook() {
   const [entryPageSize, setEntryPageSize] = useState("50");
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [templateExporting, setTemplateExporting] = useState<"csv" | "xlsx" | null>(null);
+  const [isImportingPreview, setIsImportingPreview] = useState(false);
+  const [isImportSubmitting, setIsImportSubmitting] = useState(false);
+  const [importPreview, setImportPreview] = useState<LogbookImportPreview | null>(null);
+  const [importSummary, setImportSummary] = useState<LogbookImportSummary | null>(null);
+  const [importReviewOpen, setImportReviewOpen] = useState(false);
+  const [importSummaryOpen, setImportSummaryOpen] = useState(false);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [duplicateSkipRows, setDuplicateSkipRows] = useState<Record<number, boolean>>({});
   const entitlements = (user as any)?.entitlements;
   const isPro = entitlements?.canUseLogbook ?? (user?.logbookProStatus === "active");
   const isGuest = !user;
@@ -359,6 +406,7 @@ export default function Logbook() {
   const [editingEndorsement, setEditingEndorsement] = useState<Endorsement | null>(null);
   const endorsementSaveDisabled = !endorsementForm.title.trim() || !endorsementForm.issuedAt;
   const archiveUploadMeta = useRef(new Map<string, { storageProvider: string; storagePath: string; fileName: string; fileSizeBytes?: number | null }>());
+  const logbookImportInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: logbookData, isLoading, isFetching } = useQuery<LogbookListResponse>({
     queryKey: ["/api/logbook", entryPage, entryPageSize],
@@ -483,6 +531,123 @@ export default function Logbook() {
       toast({ title: "Export failed", description: error?.message || "Unable to export PDF.", variant: "destructive" });
     } finally {
       setIsExportingPdf(false);
+    }
+  };
+
+  const closeImportReview = () => {
+    setImportReviewOpen(false);
+    setImportPreview(null);
+    setPendingImportFile(null);
+    setDuplicateSkipRows({});
+  };
+
+  const handleExportImportTemplate = async (format: "csv" | "xlsx") => {
+    try {
+      setTemplateExporting(format);
+      const response = await fetch(apiUrl(`/api/logbook/import-template?format=${format}`), {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Unable to export import template");
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = format === "xlsx" ? "rsf-logbook-template.xlsx" : "rsf-logbook-template.csv";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(objectUrl);
+    } catch (error: any) {
+      toast({ title: "Template export failed", description: error?.message || "Unable to download template.", variant: "destructive" });
+    } finally {
+      setTemplateExporting(null);
+    }
+  };
+
+  const handleImportFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingPreview(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(apiUrl("/api/logbook/import-preview"), {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Logbook import preview failed");
+      }
+
+      const defaultSkipRows = Object.fromEntries(
+        ((data?.duplicates || []) as LogbookImportDuplicate[]).map((item) => [item.rowNumber, true]),
+      );
+      setPendingImportFile(file);
+      setImportPreview(data as LogbookImportPreview);
+      setDuplicateSkipRows(defaultSkipRows);
+      setImportReviewOpen(true);
+    } catch (error: any) {
+      toast({
+        title: "Import preview failed",
+        description: error?.message || "Unable to preview logbook import.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsImportingPreview(false);
+      event.target.value = "";
+    }
+  };
+
+  const submitLogbookImport = async () => {
+    if (!pendingImportFile || !importPreview) return;
+
+    setIsImportSubmitting(true);
+    try {
+      const excludedRowNumbers = Object.entries(duplicateSkipRows)
+        .filter(([, shouldSkip]) => shouldSkip)
+        .map(([rowNumber]) => Number(rowNumber))
+        .filter((value) => Number.isInteger(value) && value > 0);
+
+      const formData = new FormData();
+      formData.append("file", pendingImportFile);
+      if (excludedRowNumbers.length > 0) {
+        formData.append("excludedRowNumbers", JSON.stringify(excludedRowNumbers));
+      }
+
+      const response = await fetch(apiUrl("/api/logbook/import"), {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Logbook import failed");
+      }
+
+      closeImportReview();
+      setImportSummary(data as LogbookImportSummary);
+      setImportSummaryOpen(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/logbook"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/logbook/pro/summary"] });
+      setEntryPage(1);
+      toast({
+        title: "Logbook import complete",
+        description: `${data.createdCount || 0} entries imported.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Import failed",
+        description: error?.message || "Unable to import logbook entries.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsImportSubmitting(false);
     }
   };
 
@@ -926,6 +1091,48 @@ export default function Logbook() {
                 <FileText className="mr-2 h-4 w-4" />
                 {isExportingPdf ? "Exporting PDF..." : "Export PDF"}
               </Button>
+              <input
+                ref={logbookImportInputRef}
+                type="file"
+                accept=".csv,.xlsx"
+                className="hidden"
+                onChange={handleImportFileSelected}
+              />
+              <Separator className="my-2" />
+              <div className="space-y-2">
+                <div className="text-xs text-[#A9BBCD]">
+                  Bring in legacy logbook history with the RSF CSV/XLSX template, review duplicates, then import.
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  <Button
+                    variant="outline"
+                    className={`w-full ${logbookSecondaryButtonClass}`}
+                    onClick={() => handleExportImportTemplate("csv")}
+                    disabled={templateExporting !== null || isImportingPreview || isImportSubmitting}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    {templateExporting === "csv" ? "Downloading CSV..." : "Download CSV Template"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className={`w-full ${logbookSecondaryButtonClass}`}
+                    onClick={() => handleExportImportTemplate("xlsx")}
+                    disabled={templateExporting !== null || isImportingPreview || isImportSubmitting}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    {templateExporting === "xlsx" ? "Downloading XLSX..." : "Download XLSX Template"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className={`w-full ${logbookSecondaryButtonClass}`}
+                    onClick={() => logbookImportInputRef.current?.click()}
+                    disabled={isImportingPreview || isImportSubmitting}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {isImportingPreview ? "Reading file..." : "Upload Import File"}
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1629,6 +1836,153 @@ export default function Logbook() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={importReviewOpen} onOpenChange={(open) => (!open ? closeImportReview() : setImportReviewOpen(true))}>
+        <DialogContent className="rsf-logbook-theme rsf-metal-panel max-h-[90vh] max-w-3xl overflow-y-auto text-[#E8EDF4]">
+          <DialogHeader>
+            <DialogTitle>Review logbook import</DialogTitle>
+            <DialogDescription>
+              Confirm the file summary, skipped rows, and any duplicates before importing into your logbook.
+            </DialogDescription>
+          </DialogHeader>
+          {importPreview && (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div className={`${logbookSubpanelClass} p-3`}>
+                  <div className="text-xs uppercase tracking-[0.14em] text-[#8FA6C0]">File rows</div>
+                  <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">{importPreview.totalRows}</div>
+                </div>
+                <div className={`${logbookSubpanelClass} p-3`}>
+                  <div className="text-xs uppercase tracking-[0.14em] text-[#8FA6C0]">Parsed rows</div>
+                  <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">{importPreview.importableCount}</div>
+                </div>
+                <div className={`${logbookSubpanelClass} p-3`}>
+                  <div className="text-xs uppercase tracking-[0.14em] text-[#8FA6C0]">Duplicates</div>
+                  <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">{importPreview.duplicateCount}</div>
+                </div>
+                <div className={`${logbookSubpanelClass} p-3`}>
+                  <div className="text-xs uppercase tracking-[0.14em] text-[#8FA6C0]">Skipped</div>
+                  <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">{importPreview.skippedCount}</div>
+                </div>
+              </div>
+
+              {importPreview.skipped.length > 0 && (
+                <div className={`${logbookSubpanelClass} p-4`}>
+                  <div className="text-sm font-semibold text-[#F5F8FC]">Skipped rows</div>
+                  <div className="mt-3 space-y-2 text-sm text-[#A9BBCD]">
+                    {importPreview.skipped.slice(0, 12).map((item) => (
+                      <div key={`${item.rowNumber}-${item.reason}`} className="flex items-start justify-between gap-3 border-b border-white/5 pb-2 last:border-b-0 last:pb-0">
+                        <div>Row {item.rowNumber}</div>
+                        <div className="text-right">{item.reason}</div>
+                      </div>
+                    ))}
+                    {importPreview.skipped.length > 12 && (
+                      <div className="text-xs text-[#8FA6C0]">Showing first 12 skipped rows.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {importPreview.duplicates.length > 0 && (
+                <div className={`${logbookSubpanelClass} p-4`}>
+                  <div className="text-sm font-semibold text-[#F5F8FC]">Duplicate review</div>
+                  <div className="mt-1 text-xs text-[#A9BBCD]">
+                    Duplicate rows are skipped by default. Uncheck a row only if you intentionally want that entry imported.
+                  </div>
+                  <div className="mt-3 space-y-3">
+                    {importPreview.duplicates.slice(0, 20).map((duplicate) => (
+                      <label
+                        key={duplicate.rowNumber}
+                        className="flex items-start gap-3 rounded-lg border border-white/8 bg-white/4 p-3"
+                      >
+                        <Checkbox
+                          checked={duplicateSkipRows[duplicate.rowNumber] ?? true}
+                          onCheckedChange={(checked) =>
+                            setDuplicateSkipRows((prev) => ({
+                              ...prev,
+                              [duplicate.rowNumber]: checked === true,
+                            }))
+                          }
+                        />
+                        <div className="space-y-1 text-sm">
+                          <div className="font-medium text-[#F5F8FC]">Row {duplicate.rowNumber}</div>
+                          <div className="text-[#A9BBCD]">
+                            {duplicate.duplicateInExistingLogbook ? "Matches an existing entry" : "No existing match"}
+                            {duplicate.duplicateInFile ? ` • Matches row(s) ${duplicate.matchingImportRowNumbers.join(", ")}` : ""}
+                          </div>
+                          <div className="text-xs text-[#8FA6C0]">
+                            {duplicate.existingEntryDate || "Date unknown"}
+                            {duplicate.existingEntryTailNumber ? ` • ${duplicate.existingEntryTailNumber}` : ""}
+                            {duplicate.existingEntryRoute ? ` • ${duplicate.existingEntryRoute}` : ""}
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                    {importPreview.duplicates.length > 20 && (
+                      <div className="text-xs text-[#8FA6C0]">Showing first 20 duplicate rows.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={closeImportReview}>
+              Cancel
+            </Button>
+            <Button onClick={submitLogbookImport} disabled={isImportSubmitting}>
+              {isImportSubmitting ? "Importing..." : "Import Logbook Rows"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={importSummaryOpen} onOpenChange={setImportSummaryOpen}>
+        <DialogContent className="rsf-logbook-theme rsf-metal-panel max-h-[90vh] max-w-2xl overflow-y-auto text-[#E8EDF4]">
+          <DialogHeader>
+            <DialogTitle>Logbook import complete</DialogTitle>
+            <DialogDescription>Review the import result before continuing.</DialogDescription>
+          </DialogHeader>
+          {importSummary && (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className={`${logbookSubpanelClass} p-3`}>
+                  <div className="text-xs uppercase tracking-[0.14em] text-[#8FA6C0]">File rows</div>
+                  <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">{importSummary.totalRows}</div>
+                </div>
+                <div className={`${logbookSubpanelClass} p-3`}>
+                  <div className="text-xs uppercase tracking-[0.14em] text-[#8FA6C0]">Imported</div>
+                  <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">{importSummary.createdCount}</div>
+                </div>
+                <div className={`${logbookSubpanelClass} p-3`}>
+                  <div className="text-xs uppercase tracking-[0.14em] text-[#8FA6C0]">Skipped</div>
+                  <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">{importSummary.skippedCount}</div>
+                </div>
+              </div>
+
+              {importSummary.skipped.length > 0 && (
+                <div className={`${logbookSubpanelClass} p-4`}>
+                  <div className="text-sm font-semibold text-[#F5F8FC]">Skipped rows</div>
+                  <div className="mt-3 space-y-2 text-sm text-[#A9BBCD]">
+                    {importSummary.skipped.slice(0, 12).map((item) => (
+                      <div key={`${item.rowNumber}-${item.reason}`} className="flex items-start justify-between gap-3 border-b border-white/5 pb-2 last:border-b-0 last:pb-0">
+                        <div>Row {item.rowNumber}</div>
+                        <div className="text-right">{item.reason}</div>
+                      </div>
+                    ))}
+                    {importSummary.skipped.length > 12 && (
+                      <div className="text-xs text-[#8FA6C0]">Showing first 12 skipped rows.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setImportSummaryOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {editingEntry && (
         <Dialog open={!!editingEntry} onOpenChange={() => setEditingEntry(null)}>

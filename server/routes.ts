@@ -18095,8 +18095,35 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const entries = await storage.getLogbookEntriesByUser(userId);
-      res.json(entries);
+      const all = String(req.query.all || "").toLowerCase() === "true";
+      const page = Math.max(1, Number.parseInt(String(req.query.page || "1"), 10) || 1);
+      const requestedPageSize = Number.parseInt(String(req.query.pageSize || "50"), 10) || 50;
+      const pageSize = Math.min(Math.max(requestedPageSize, 1), 250);
+      const offset = (page - 1) * pageSize;
+
+      const [entries, totals] = await Promise.all([
+        all
+          ? storage.getLogbookEntriesByUser(userId)
+          : storage.getLogbookEntriesByUser(userId, { limit: pageSize, offset }),
+        storage.getLogbookEntryTotalsByUser(userId),
+      ]);
+
+      const totalEntries = totals.totalEntries;
+      const effectivePageSize = all ? Math.max(totalEntries, 1) : pageSize;
+      const totalPages = all ? 1 : Math.max(1, Math.ceil(totalEntries / pageSize));
+
+      res.json({
+        entries,
+        totals,
+        pagination: {
+          page: all ? 1 : page,
+          pageSize: effectivePageSize,
+          totalEntries,
+          totalPages,
+          hasPreviousPage: !all && page > 1,
+          hasNextPage: !all && page < totalPages,
+        },
+      });
     } catch (error) {
       console.error("Failed to fetch logbook entries:", error);
       res.status(500).json({ error: "Failed to fetch logbook entries" });
@@ -19814,10 +19841,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const [settings, entries] = await Promise.all([
-        storage.getLogbookProSettings(userId),
-        storage.getLogbookEntriesByUser(userId),
-      ]);
+      const settings = await storage.getLogbookProSettings(userId);
 
       const now = new Date();
       const last90 = new Date(now);
@@ -19825,8 +19849,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const last6 = new Date(now);
       last6.setMonth(last6.getMonth() - 6);
 
-      const entriesLast90 = entries.filter((entry) => entry.flightDate && new Date(entry.flightDate) >= last90);
-      const entriesLast6 = entries.filter((entry) => entry.flightDate && new Date(entry.flightDate) >= last6);
+      const [entriesLast90, entriesLast6] = await Promise.all([
+        storage.getLogbookEntriesByUserSince(userId, last90),
+        storage.getLogbookEntriesByUserSince(userId, last6),
+      ]);
 
       const sum = (vals: Array<number | null | undefined>) => {
         let total = 0;

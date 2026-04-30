@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Plane, Lock, Edit, Trash2, Download, TrendingUp, Award, Bell, FileArchive, FileText } from "lucide-react";
+import { Loader2, Plus, Plane, Lock, Edit, Trash2, Download, TrendingUp, Award, Bell, FileArchive, FileText, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { LogbookEntry, InsertLogbookEntry, Endorsement, LogbookArchive } from "@shared/schema";
@@ -24,6 +24,34 @@ import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { PageShell } from "@/components/layout/PageShell";
 import { PressDemoBanner, PressDemoSpotlight, type PressDemoStep, usePressDemo } from "@/components/press/PressDemo";
+
+type LogbookTotals = {
+  totalEntries: number;
+  totalTime: number;
+  pic: number;
+  sic: number;
+  dual: number;
+  solo: number;
+  night: number;
+  day: number;
+  instrumentActual: number;
+  crossCountry: number;
+  approaches: number;
+  landings: number;
+};
+
+type LogbookListResponse = {
+  entries: LogbookEntry[];
+  totals: LogbookTotals;
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalEntries: number;
+    totalPages: number;
+    hasPreviousPage: boolean;
+    hasNextPage: boolean;
+  };
+};
 
 const AIRCRAFT_CATEGORY_OPTIONS = [
   "Airplane",
@@ -64,48 +92,6 @@ function csvEscape(value: unknown) {
     return `"${stringValue.replace(/"/g, "\"\"")}"`;
   }
   return stringValue;
-}
-
-// Helper function to calculate totals from entries
-function calculateTotals(entries: LogbookEntry[]) {
-  const totals = {
-    totalTime: 0,
-    pic: 0,
-    sic: 0,
-    dual: 0,
-    solo: 0,
-    night: 0,
-    day: 0,
-    instrumentActual: 0,
-    crossCountry: 0,
-    approaches: 0,
-    landings: 0,
-  };
-
-  entries.forEach((entry) => {
-    const pic = parseFloat(entry.pic || "0");
-    const sic = parseFloat(entry.sic || "0");
-    const dual = parseFloat(entry.dual || "0");
-    const solo = parseFloat(entry.solo || "0");
-    const night = parseFloat(entry.timeNight || "0");
-    const day = parseFloat(entry.timeDay || "0");
-    const inst = parseFloat(entry.instrumentActual || "0");
-    const xc = parseFloat(entry.crossCountry || "0");
-
-    totals.totalTime += pic + sic;
-    totals.pic += pic;
-    totals.sic += sic;
-    totals.dual += dual;
-    totals.solo += solo;
-    totals.night += night;
-    totals.day += day;
-    totals.instrumentActual += inst;
-    totals.crossCountry += xc;
-    totals.approaches += entry.approaches || 0;
-    totals.landings += (entry.landingsDay || 0) + (entry.landingsNight || 0);
-  });
-
-  return totals;
 }
 
 // Export to CSV
@@ -337,6 +323,10 @@ export default function Logbook() {
   const [isSignDialogOpen, setIsSignDialogOpen] = useState(false);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [signRole, setSignRole] = useState<"pilot" | "cfi">("pilot");
+  const [entryPage, setEntryPage] = useState(1);
+  const [entryPageSize, setEntryPageSize] = useState("50");
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const entitlements = (user as any)?.entitlements;
   const isPro = entitlements?.canUseLogbook ?? (user?.logbookProStatus === "active");
   const isGuest = !user;
@@ -370,8 +360,17 @@ export default function Logbook() {
   const endorsementSaveDisabled = !endorsementForm.title.trim() || !endorsementForm.issuedAt;
   const archiveUploadMeta = useRef(new Map<string, { storageProvider: string; storagePath: string; fileName: string; fileSizeBytes?: number | null }>());
 
-  const { data: entries = [], isLoading } = useQuery<LogbookEntry[]>({
-    queryKey: ["/api/logbook"],
+  const { data: logbookData, isLoading, isFetching } = useQuery<LogbookListResponse>({
+    queryKey: ["/api/logbook", entryPage, entryPageSize],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: String(entryPage),
+        pageSize: entryPageSize,
+      });
+      const res = await apiRequest("GET", `/api/logbook?${params.toString()}`);
+      return res.json();
+    },
+    placeholderData: (previousData) => previousData,
   });
 
   const { data: proSummary, isLoading: proSummaryLoading } = useQuery<any>({
@@ -393,6 +392,32 @@ export default function Logbook() {
     queryKey: ["/api/logbook/archives"],
     enabled: isPro,
   });
+
+  const entries = logbookData?.entries ?? [];
+  const totals = logbookData?.totals ?? {
+    totalEntries: 0,
+    totalTime: 0,
+    pic: 0,
+    sic: 0,
+    dual: 0,
+    solo: 0,
+    night: 0,
+    day: 0,
+    instrumentActual: 0,
+    crossCountry: 0,
+    approaches: 0,
+    landings: 0,
+  };
+  const pagination = logbookData?.pagination ?? {
+    page: 1,
+    pageSize: Number(entryPageSize),
+    totalEntries: 0,
+    totalPages: 1,
+    hasPreviousPage: false,
+    hasNextPage: false,
+  };
+  const pageRangeStart = pagination.totalEntries === 0 || entries.length === 0 ? 0 : (pagination.page - 1) * pagination.pageSize + 1;
+  const pageRangeEnd = pagination.totalEntries === 0 || entries.length === 0 ? 0 : pageRangeStart + entries.length - 1;
 
   useEffect(() => {
     if (proSummary?.settings) {
@@ -424,6 +449,42 @@ export default function Logbook() {
     sessionStorage.setItem(key, "1");
     setShowUpgradePrompt(true);
   }, [isPro]);
+
+  useEffect(() => {
+    if (entryPage > pagination.totalPages) {
+      setEntryPage(Math.max(1, pagination.totalPages));
+    }
+  }, [entryPage, pagination.totalPages]);
+
+  const fetchAllEntries = async () => {
+    const res = await apiRequest("GET", "/api/logbook?all=true");
+    const data = (await res.json()) as LogbookListResponse;
+    return data.entries ?? [];
+  };
+
+  const handleExportCsv = async () => {
+    try {
+      setIsExportingCsv(true);
+      const allEntries = await fetchAllEntries();
+      exportToCSV(allEntries);
+    } catch (error: any) {
+      toast({ title: "Export failed", description: error?.message || "Unable to export CSV.", variant: "destructive" });
+    } finally {
+      setIsExportingCsv(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    try {
+      setIsExportingPdf(true);
+      const allEntries = await fetchAllEntries();
+      exportToPDF(allEntries);
+    } catch (error: any) {
+      toast({ title: "Export failed", description: error?.message || "Unable to export PDF.", variant: "destructive" });
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
 
   const handleArchiveUploadParameters = async (file?: { id?: string; name?: string; type?: string; size?: number }) => {
     const res = await apiRequest("POST", "/api/logbook/archives/upload", {
@@ -475,6 +536,7 @@ export default function Logbook() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/logbook"] });
+      setEntryPage(1);
       setIsCreateDialogOpen(false);
       toast({ title: "Entry created" });
     },
@@ -490,6 +552,7 @@ export default function Logbook() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/logbook"] });
+      setEntryPage(1);
       setEditingEntry(null);
       toast({ title: "Entry updated" });
     },
@@ -680,8 +743,6 @@ export default function Logbook() {
     },
   });
 
-  const totalHours = entries.reduce((sum, e) => sum + parseFloat(e.pic || "0") + parseFloat(e.sic || "0"), 0).toFixed(1);
-  const totals = calculateTotals(entries);
   const logbookPanelClass = "rsf-metal-panel text-[#E8EDF4]";
   const logbookSubpanelClass = "rsf-logbook-subpanel rounded-[1rem] text-[#DCE6F2]";
   const logbookMetricClass = "rsf-logbook-metric px-4 py-4";
@@ -737,7 +798,7 @@ export default function Logbook() {
                 Free digital logbook
               </Badge>
               <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Export anytime</Badge>
-              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">{entries.length} entries</Badge>
+              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">{pagination.totalEntries} entries</Badge>
             </div>
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold text-[#F5F8FC]">Keep flights, endorsements, and totals in one working logbook.</h2>
@@ -850,20 +911,20 @@ export default function Logbook() {
               <Button
                 variant="outline"
                 className={`w-full ${logbookSecondaryButtonClass}`}
-                onClick={() => exportToCSV(entries)}
-                disabled={entries.length === 0}
+                onClick={handleExportCsv}
+                disabled={pagination.totalEntries === 0 || isExportingCsv || isExportingPdf}
               >
                 <Download className="mr-2 h-4 w-4" />
-                Export CSV
+                {isExportingCsv ? "Exporting CSV..." : "Export CSV"}
               </Button>
               <Button
                 variant="outline"
                 className={`w-full ${logbookSecondaryButtonClass}`}
-                onClick={() => exportToPDF(entries)}
-                disabled={entries.length === 0}
+                onClick={handleExportPdf}
+                disabled={pagination.totalEntries === 0 || isExportingCsv || isExportingPdf}
               >
                 <FileText className="mr-2 h-4 w-4" />
-                Export PDF
+                {isExportingPdf ? "Exporting PDF..." : "Export PDF"}
               </Button>
             </div>
           </div>
@@ -932,11 +993,11 @@ export default function Logbook() {
                 Flight Entries
               </CardTitle>
               <CardDescription>
-                Track your flights and build your experience
+                Track your flights and build your experience without loading your entire history at once.
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">{entries.length} logged flights</Badge>
+              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">{pagination.totalEntries} logged flights</Badge>
             </div>
           </div>
         </CardHeader>
@@ -950,6 +1011,60 @@ export default function Logbook() {
               No logbook entries yet. Add your first flight!
             </div>
           ) : (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="text-sm text-[#A9BBCD]">
+                  Showing {pageRangeStart}-{pageRangeEnd} of {pagination.totalEntries} entries
+                  {isFetching && !isLoading ? " • Updating..." : ""}
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-[#A9BBCD]">Rows</span>
+                    <Select
+                      value={entryPageSize}
+                      onValueChange={(value) => {
+                        setEntryPageSize(value);
+                        setEntryPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-[110px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                        <SelectItem value="200">200</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={logbookSecondaryButtonClass}
+                      onClick={() => setEntryPage((current) => Math.max(1, current - 1))}
+                      disabled={!pagination.hasPreviousPage || isFetching}
+                    >
+                      <ChevronLeft className="mr-1 h-4 w-4" />
+                      Previous
+                    </Button>
+                    <div className="min-w-[88px] text-center text-sm text-[#A9BBCD]">
+                      Page {pagination.page} of {pagination.totalPages}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={logbookSecondaryButtonClass}
+                      onClick={() => setEntryPage((current) => current + 1)}
+                      disabled={!pagination.hasNextPage || isFetching}
+                    >
+                      Next
+                      <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1064,6 +1179,7 @@ export default function Logbook() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

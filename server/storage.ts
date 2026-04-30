@@ -659,6 +659,22 @@ export interface IStorage {
   getLogbookProSettings(userId: string): Promise<LogbookProSettings | undefined>;
   upsertLogbookProSettings(userId: string, updates: InsertLogbookProSettings): Promise<LogbookProSettings>;
   getActiveLogbookProUsers(): Promise<User[]>;
+  getLogbookEntriesByUser(userId: string, options?: { limit?: number; offset?: number }): Promise<LogbookEntry[]>;
+  getLogbookEntryTotalsByUser(userId: string): Promise<{
+    totalEntries: number;
+    totalTime: number;
+    pic: number;
+    sic: number;
+    dual: number;
+    solo: number;
+    night: number;
+    day: number;
+    instrumentActual: number;
+    crossCountry: number;
+    approaches: number;
+    landings: number;
+  }>;
+  getLogbookEntriesByUserSince(userId: string, since: Date): Promise<LogbookEntry[]>;
 
   // Logbook Archives
   createLogbookArchive(data: InsertLogbookArchive & { userId: string }): Promise<LogbookArchive>;
@@ -5089,8 +5105,94 @@ export class DatabaseStorage implements IStorage {
     return entry;
   }
 
-  async getLogbookEntriesByUser(userId: string): Promise<LogbookEntry[]> {
-    return await db.select().from(logbookEntries).where(eq(logbookEntries.userId, userId)).orderBy(desc(logbookEntries.flightDate));
+  async getLogbookEntriesByUser(
+    userId: string,
+    options?: { limit?: number; offset?: number }
+  ): Promise<LogbookEntry[]> {
+    const baseQuery = db
+      .select()
+      .from(logbookEntries)
+      .where(eq(logbookEntries.userId, userId))
+      .orderBy(desc(logbookEntries.flightDate));
+
+    if (typeof options?.limit === "number" && typeof options?.offset === "number" && options.offset > 0) {
+      return await baseQuery.limit(options.limit).offset(options.offset);
+    }
+
+    if (typeof options?.limit === "number") {
+      return await baseQuery.limit(options.limit);
+    }
+
+    if (typeof options?.offset === "number" && options.offset > 0) {
+      return await baseQuery.offset(options.offset);
+    }
+
+    return await baseQuery;
+  }
+
+  async getLogbookEntryTotalsByUser(userId: string): Promise<{
+    totalEntries: number;
+    totalTime: number;
+    pic: number;
+    sic: number;
+    dual: number;
+    solo: number;
+    night: number;
+    day: number;
+    instrumentActual: number;
+    crossCountry: number;
+    approaches: number;
+    landings: number;
+  }> {
+    const [row] = await db
+      .select({
+        totalEntries: sql<number>`count(*)`,
+        pic: sql<string>`coalesce(sum(${logbookEntries.pic}::numeric), 0)`,
+        sic: sql<string>`coalesce(sum(${logbookEntries.sic}::numeric), 0)`,
+        dual: sql<string>`coalesce(sum(${logbookEntries.dual}::numeric), 0)`,
+        solo: sql<string>`coalesce(sum(${logbookEntries.solo}::numeric), 0)`,
+        night: sql<string>`coalesce(sum(${logbookEntries.timeNight}::numeric), 0)`,
+        day: sql<string>`coalesce(sum(${logbookEntries.timeDay}::numeric), 0)`,
+        instrumentActual: sql<string>`coalesce(sum(${logbookEntries.instrumentActual}::numeric), 0)`,
+        crossCountry: sql<string>`coalesce(sum(${logbookEntries.crossCountry}::numeric), 0)`,
+        approaches: sql<number>`coalesce(sum(${logbookEntries.approaches}), 0)`,
+        landings: sql<number>`coalesce(sum(${logbookEntries.landingsDay} + ${logbookEntries.landingsNight}), 0)`,
+      })
+      .from(logbookEntries)
+      .where(eq(logbookEntries.userId, userId));
+
+    const toNumber = (value: unknown) => {
+      if (typeof value === "number") return value;
+      const parsed = Number(value ?? 0);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const pic = toNumber(row?.pic);
+    const sic = toNumber(row?.sic);
+
+    return {
+      totalEntries: toNumber(row?.totalEntries),
+      totalTime: pic + sic,
+      pic,
+      sic,
+      dual: toNumber(row?.dual),
+      solo: toNumber(row?.solo),
+      night: toNumber(row?.night),
+      day: toNumber(row?.day),
+      instrumentActual: toNumber(row?.instrumentActual),
+      crossCountry: toNumber(row?.crossCountry),
+      approaches: toNumber(row?.approaches),
+      landings: toNumber(row?.landings),
+    };
+  }
+
+  async getLogbookEntriesByUserSince(userId: string, since: Date): Promise<LogbookEntry[]> {
+    const normalizedSince = since.toISOString().split("T")[0];
+    return await db
+      .select()
+      .from(logbookEntries)
+      .where(and(eq(logbookEntries.userId, userId), gte(logbookEntries.flightDate, normalizedSince)))
+      .orderBy(desc(logbookEntries.flightDate));
   }
 
   async updateLogbookEntry(id: string, updates: Partial<LogbookEntry>): Promise<LogbookEntry | undefined> {

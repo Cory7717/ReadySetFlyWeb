@@ -63,6 +63,9 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
   const transmittedRoute = asString(payloadRoute.normalizedTransmittedRoute);
   const effectiveRoute = asString(providerRoute.providerRoute);
   const fieldDiffs = Array.isArray(providerSnapshot.fieldDiffs) ? providerSnapshot.fieldDiffs as Array<Record<string, unknown>> : [];
+  const filedPilotPhone = asString((plan as any).filingPilotPhone) || pilotPhone;
+  const filedHomeBase = asString((plan as any).filingAircraftHomeBase) || pilotHomeBase;
+  const assignedBeaconCode = asString((plan as any).filingAssignedBeaconCode) || asString(providerSnapshot.beaconCode);
 
   return (
     <div className="grid gap-3 lg:grid-cols-3">
@@ -85,18 +88,18 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
             <div className="text-xs text-muted-foreground">Internal remarks</div>
             <div className="font-medium break-words">{plan.filingRemarks || plan.notes || "—"}</div>
           </div>
-          {(pilotPhone || pilotHomeBase) && (
+          {(filedPilotPhone || filedHomeBase) && (
             <div className="mt-1 space-y-1 border-t border-border/40 pt-2">
-              {pilotPhone && (
+              {filedPilotPhone && (
                 <div>
                   <div className="text-xs text-muted-foreground">Pilot phone</div>
-                  <div className="font-medium">{pilotPhone}</div>
+                  <div className="font-medium">{filedPilotPhone}</div>
                 </div>
               )}
-              {pilotHomeBase && (
+              {filedHomeBase && (
                 <div>
-                  <div className="text-xs text-muted-foreground">Home base</div>
-                  <div className="font-medium">{pilotHomeBase}</div>
+                  <div className="text-xs text-muted-foreground">Aircraft home base</div>
+                  <div className="font-medium">{filedHomeBase}</div>
                 </div>
               )}
             </div>
@@ -153,10 +156,10 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
               <div className="font-medium">{asString(providerSnapshot.artccState) || "—"}</div>
             </div>
           </div>
-          {asString(providerSnapshot.beaconCode) && (
+          {assignedBeaconCode && (
             <div>
-              <div className="text-xs text-muted-foreground">Beacon code / assigned squawk</div>
-              <div className="font-medium font-mono">{asString(providerSnapshot.beaconCode)}</div>
+              <div className="text-xs text-muted-foreground">Assigned Beacon Code</div>
+              <div className="font-medium font-mono">{assignedBeaconCode}</div>
             </div>
           )}
           <div>

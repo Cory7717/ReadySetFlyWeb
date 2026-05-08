@@ -21072,6 +21072,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     soulsOnBoard: z.string().trim().optional().nullable(),
     aircraftColor: z.string().trim().optional().nullable(),
     pilotName: z.string().trim().optional().nullable(),
+    pilotPhone: z.string().trim().optional().nullable(),
+    aircraftHomeBase: z.string().trim().optional().nullable(),
     wakeTurbulence: z.string().trim().optional().nullable(),
     typeOfFlight: z.string().trim().optional().nullable(),
     surveillanceEquipment: z.string().trim().optional().nullable(),
@@ -21253,6 +21255,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           filingLastProviderSyncAt: new Date(),
           filingProviderSnapshot: Object.keys(mergedSnapshot || {}).length > 0 ? mergedSnapshot as any : null,
           filingProviderMessages: mergedMessages as any,
+          filingAssignedBeaconCode: String((mergedSnapshot as any)?.beaconCode || matchedPlan.filingAssignedBeaconCode || "").trim() || null,
           filingRaw: syncResult
             ? {
               ...currentRaw,
@@ -21307,6 +21310,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!packet.aircraftId) errors.push("Aircraft ID / tail number is required.");
       if (!packet.aircraftType) errors.push("Aircraft type is required.");
       if (!packet.pilotName) errors.push("Pilot in command name is required.");
+      if (!packet.pilotPhone) errors.push("Pilot phone number is required.");
+      if (!packet.aircraftHomeBase) errors.push("Aircraft home base is required.");
       if (!packet.soulsOnBoard) errors.push("Souls on board must be entered.");
       if (flightRules === "IFR" && !routeNormalization.normalizedRoute) {
         errors.push("IFR filing requires a route before handoff.");
@@ -21327,7 +21332,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!packet.equipment) {
         warnings.push("Equipment code is blank. Verify equipment capability before filing.");
       }
-      if (packet.route && !routeNormalization.hasValidToken) {
+      if (packet.route && String(packet.route).trim().toUpperCase() !== "DCT" && !routeNormalization.hasValidToken) {
         errors.push("Route must contain at least one valid airport, fix, navaid, airway, or procedure token.");
       }
 
@@ -21391,7 +21396,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/flight-plans/route-search", async (req: any, res) => {
+  app.get("/api/flight-plans/route-search", isAuthenticated, async (req: any, res) => {
     try {
       const departure = typeof req.query.departure === "string" ? req.query.departure.trim().toUpperCase() : "";
       const destination = typeof req.query.destination === "string" ? req.query.destination.trim().toUpperCase() : "";
@@ -21477,6 +21482,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   });
 
   app.post("/api/flight-plans/guest-file", async (req: any, res) => {
+    return res.status(401).json({ error: "Create or sign in to your RSF account to file flight plans." });
+    /*
     try {
       const result = filingPreviewSchema.safeParse(req.body ?? {});
       if (!result.success) {
@@ -21556,6 +21563,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           : "Failed to file guest flight plan",
       });
     }
+    */
   });
 
   app.post("/api/flight-plans/:id/filing-action", isAuthenticated, async (req: any, res) => {
@@ -21671,6 +21679,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         filingPayload: Object.keys(nextFilingPayload || {}).length > 0 ? nextFilingPayload as any : null,
         filingProviderSnapshot: Object.keys(nextProviderSnapshot || {}).length > 0 ? nextProviderSnapshot as any : null,
         filingProviderMessages: nextProviderMessages as any,
+        filingAssignedBeaconCode: String((nextProviderSnapshot as any)?.beaconCode || plan.filingAssignedBeaconCode || "").trim() || null,
         filingRaw: nextFilingRaw,
         filingActionHistory: [...currentHistory, historyEntry],
         ...statusTimestamps,
@@ -21775,6 +21784,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         filingLastProviderSyncAt: now,
         filingProviderSnapshot: Object.keys(nextProviderSnapshot || {}).length > 0 ? nextProviderSnapshot as any : null,
         filingProviderMessages: nextProviderMessages as any,
+        filingAssignedBeaconCode: String((nextProviderSnapshot as any)?.beaconCode || plan.filingAssignedBeaconCode || "").trim() || null,
         filingRaw: nextRaw as any,
       } as any);
 
@@ -21931,6 +21941,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       if (plan.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
+      }
+      const status = String(plan.filingStatus || "draft").toLowerCase();
+      const hasProviderRecord = Boolean(
+        plan.filingIsLive ||
+        plan.filingProviderPlanId ||
+        plan.filingLastProviderSyncAt ||
+        (Array.isArray(plan.filingActionHistory) && plan.filingActionHistory.length > 0) ||
+        ["staged", "filed", "activated", "cancelled", "closed"].includes(status)
+      );
+      if (hasProviderRecord) {
+        return res.status(409).json({
+          error: "Filed or provider-synced flight plans cannot be deleted. Close or cancel through Leidos instead.",
+        });
       }
       const success = await storage.deleteFlightPlan(req.params.id);
       res.json({ success });

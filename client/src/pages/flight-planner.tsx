@@ -1,6 +1,6 @@
 ﻿
 import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
-import { Bell } from "lucide-react";
+import { Bell, ChevronDown, ChevronRight, X } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,7 @@ import {
 } from "@shared/flight-plan-route";
 import { extractFilingVersionStamp } from "@shared/flight-plan-filing";
 import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
+import { ICAO_EQUIPMENT_CODES, parseIcaoEquipmentCodes, normalizeIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
 import {
@@ -235,6 +236,7 @@ const buildPlannerStateSnapshot = ({
   departureTimeZone,
   destinationTimeZone,
   customProfile,
+  routeMode,
 }: {
   selectedProfileId: string;
   selectedTypeId: string;
@@ -250,6 +252,7 @@ const buildPlannerStateSnapshot = ({
     usableFuelOverrideGal: string;
     maxGrossWeightOverrideLb: string;
   };
+  routeMode?: "auto" | "direct" | "manual";
 }) => ({
   selectedProfileId,
   selectedTypeId,
@@ -259,6 +262,7 @@ const buildPlannerStateSnapshot = ({
   departureTimeZone,
   destinationTimeZone,
   customProfile,
+  routeMode,
 });
 
 const hasLiveProviderPlan = (plan: FlightPlan | null | undefined) =>
@@ -299,6 +303,54 @@ const canCancelPlan = (plan: FlightPlan | null | undefined) =>
     normalizedClientFilingStatus(plan) === "filed" &&
     hasLiveProviderPlan(plan),
   );
+
+const getPlanBeaconCode = (plan: FlightPlan | null | undefined) => {
+  const direct = String((plan as any)?.filingAssignedBeaconCode || "").trim();
+  if (direct) return direct;
+  const snapshot = (plan as any)?.filingProviderSnapshot;
+  if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)) {
+    const beacon = String((snapshot as Record<string, unknown>).beaconCode || "").trim();
+    if (beacon) return beacon;
+  }
+  return null;
+};
+
+const canDeleteLocalDraftPlan = (plan: FlightPlan | null | undefined) => {
+  if (!plan) return false;
+  const status = normalizedClientFilingStatus(plan) || "draft";
+  return !(
+    plan.filingIsLive ||
+    plan.filingProviderPlanId ||
+    plan.filingLastProviderSyncAt ||
+    (Array.isArray(plan.filingActionHistory) && plan.filingActionHistory.length > 0) ||
+    ["staged", "filed", "activated", "cancelled", "closed"].includes(status)
+  );
+};
+
+const getPlanTimeZone = (plan: FlightPlan | null | undefined, key: "departureTimeZone" | "destinationTimeZone", fallback?: string | null) => {
+  const plannerState = (plan as any)?.plannerState;
+  const value = plannerState && typeof plannerState === "object" && !Array.isArray(plannerState)
+    ? String((plannerState as Record<string, unknown>)[key] || "").trim()
+    : "";
+  return value || fallback || Intl.DateTimeFormat().resolvedOptions().timeZone;
+};
+
+const formatPlanLocalZulu = (value: string | Date | null | undefined, timeZone: string) => {
+  if (!value) return { local: "-", zulu: "-" };
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { local: "-", zulu: "-" };
+  const local = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(date);
+  const zulu = `${String(date.getUTCHours()).padStart(2, "0")}${String(date.getUTCMinutes()).padStart(2, "0")}Z`;
+  return { local, zulu };
+};
 
 const getAmendAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
   if (!plan) {
@@ -1385,6 +1437,7 @@ export default function FlightPlanner() {
   const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<FlightPlan | null>(null);
   const [overdueClosePlan, setOverdueClosePlan] = useState<FlightPlan | null>(null);
   const [overdueCloseLocation, setOverdueCloseLocation] = useState("");
+  const [expandedPlanIds, setExpandedPlanIds] = useState<Record<string, boolean>>({});
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [providerUpdatesPlan, setProviderUpdatesPlan] = useState<FlightPlan | null>(null);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
@@ -1598,6 +1651,7 @@ export default function FlightPlanner() {
   const [plannedAltitude, setPlannedAltitude] = useState("");
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
+  const [routeMode, setRouteMode] = useState<"auto" | "direct" | "manual">("auto");
   const [mapStyle, setMapStyle] = useState<RsfPlannerMapStyle>("sectional");
   const [mapRenderVersion, setMapRenderVersion] = useState(0);
   const [airportLabelMode, setAirportLabelMode] = useState<"icao" | "full" | "markers">("icao");
@@ -1612,6 +1666,15 @@ export default function FlightPlanner() {
     trackEvent("planner_used", { page: "/flight-planner", source: "anonymous" });
     setShowPlannerSignupPrompt(true);
   }, [form.departure, form.destination, form.route, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    setFilingDraft((current) => ({
+      ...current,
+      pilotPhone: current.pilotPhone || String((user as any)?.phone || ""),
+      aircraftHomeBase: current.aircraftHomeBase || String((user as any)?.homeBase || ""),
+    }));
+  }, [isAuthenticated, user]);
   const [showAtcStrip, setShowAtcStrip] = useState(true);
   const [showApproachOffer, setShowApproachOffer] = useState(false);
   const [windsAltitudeChoice, setWindsAltitudeChoice] = useState("planned");
@@ -1661,6 +1724,8 @@ export default function FlightPlanner() {
     soulsOnBoard: "1",
     aircraftColor: "",
     pilotName: "",
+    pilotPhone: "",
+    aircraftHomeBase: "",
     remarks: "",
     wakeTurbulence: "MEDIUM",
     typeOfFlight: "G",
@@ -1670,6 +1735,14 @@ export default function FlightPlanner() {
     destinationName: "",
     alternateName: "",
   });
+  const selectedEquipmentCodes = useMemo(
+    () => Array.from(new Set(parseIcaoEquipmentCodes(filingDraft.equipment))),
+    [filingDraft.equipment]
+  );
+  const setEquipmentCodes = useCallback((codes: string[]) => {
+    const next = normalizeIcaoEquipmentCodes(codes.join(""));
+    setFilingDraft((current) => ({ ...current, equipment: next || "" }));
+  }, []);
   const [checklist, setChecklist] = useState(checklistDefaults);
   const [departureSuggestions, setDepartureSuggestions] = useState<AirportSearchResult[]>([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState<AirportSearchResult[]>([]);
@@ -2061,6 +2134,40 @@ export default function FlightPlanner() {
   );
 
   useEffect(() => {
+    if (!isAuthenticated || activeTab !== "file") return;
+    const visibleProviderPlans = savedPlansView.filter((plan) =>
+      plan.filingProviderPlanId &&
+      !["cancelled", "closed"].includes(normalizedClientFilingStatus(plan))
+    );
+    if (visibleProviderPlans.length === 0) return;
+    let cancelled = false;
+    const poll = async () => {
+      for (const plan of visibleProviderPlans.slice(0, 5)) {
+        try {
+          const res = await apiRequest("POST", `/api/flight-plans/${plan.id}/filing-sync`);
+          const result = await res.json();
+          if (cancelled || !result?.plan) continue;
+          const previousSync = String(plan.filingLastProviderSyncAt || "");
+          const nextSync = String(result.plan.filingLastProviderSyncAt || "");
+          queryClient.setQueryData<FlightPlan[]>(["/api/flight-plans"], (current = []) =>
+            mergePlanIntoList(current, result.plan)
+          );
+          if (nextSync && nextSync !== previousSync) {
+            toast({ title: "Leidos update received", description: `${result.plan.departure} to ${result.plan.destination} refreshed from provider sync.` });
+          }
+        } catch {
+          // Background sync should not interrupt planner work.
+        }
+      }
+    };
+    const timer = window.setInterval(poll, 60000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeTab, isAuthenticated, mergePlanIntoList, queryClient, savedPlansView, toast]);
+
+  useEffect(() => {
     if (editingPlan || !draftPlanId || savedPlans.length === 0) return;
     const matchingPlan = savedPlans.find((plan) => plan.id === draftPlanId);
     if (!matchingPlan) return;
@@ -2205,6 +2312,7 @@ export default function FlightPlanner() {
     },
     enabled:
       Boolean(departureResolved && destinationResolved) &&
+      isAuthenticated &&
       ICAO_REGEX.test(departureResolved.trim().toUpperCase()) &&
       ICAO_REGEX.test(destinationResolved.trim().toUpperCase()),
     staleTime: 1000 * 60 * 10,
@@ -2813,8 +2921,12 @@ export default function FlightPlanner() {
     [plannedStopsInput, waypointsInput]
   );
   const activeFiledRoute = useMemo(
-    () => filedRouteInputNormalized || generatedRouteCore,
-    [filedRouteInputNormalized, generatedRouteCore]
+    () => {
+      if (routeMode === "direct") return "DCT";
+      if (routeMode === "manual") return filedRouteInputNormalized;
+      return filedRouteInputNormalized || generatedRouteCore;
+    },
+    [filedRouteInputNormalized, generatedRouteCore, routeMode]
   );
   const routePreviewFull = useMemo(
     () => buildRoutePreview(form.departure, activeFiledRoute, form.destination),
@@ -2957,6 +3069,8 @@ export default function FlightPlanner() {
     soulsOnBoard: filingDraft.soulsOnBoard.trim() || null,
     aircraftColor: filingDraft.aircraftColor.trim() || null,
     pilotName: filingDraft.pilotName.trim() || null,
+    pilotPhone: filingDraft.pilotPhone.trim() || String((user as any)?.phone || "").trim() || null,
+    aircraftHomeBase: filingDraft.aircraftHomeBase.trim().toUpperCase() || String((user as any)?.homeBase || "").trim().toUpperCase() || null,
     wakeTurbulence: filingDraft.wakeTurbulence.trim() || null,
     typeOfFlight: filingDraft.typeOfFlight.trim() || null,
     surveillanceEquipment: filingDraft.surveillanceEquipment.trim() || null,
@@ -2984,6 +3098,7 @@ export default function FlightPlanner() {
     selectedProfile,
     selectedType,
     selectedTypeId,
+    user,
   ]);
 
   const terrainProfileQuery = useQuery<TerrainProfilePlannerResponse>({
@@ -4443,6 +4558,8 @@ export default function FlightPlanner() {
         soulsOnBoard: "1",
         aircraftColor: "",
         pilotName: "",
+        pilotPhone: String((user as any)?.phone || ""),
+        aircraftHomeBase: String((user as any)?.homeBase || "").toUpperCase(),
         remarks: "",
         wakeTurbulence: "MEDIUM",
         typeOfFlight: "G",
@@ -4852,6 +4969,8 @@ export default function FlightPlanner() {
           filingSoulsOnBoard: filingDraft.soulsOnBoard.trim() || null,
           filingAircraftColor: filingDraft.aircraftColor.trim() || null,
           filingPilotName: filingDraft.pilotName.trim() || null,
+          filingPilotPhone: filingDraft.pilotPhone.trim() || String((user as any)?.phone || "").trim() || null,
+          filingAircraftHomeBase: filingDraft.aircraftHomeBase.trim().toUpperCase() || String((user as any)?.homeBase || "").trim().toUpperCase() || null,
           filingRemarks: filingDraft.remarks.trim() || null,
           filingWakeTurbulence: filingDraft.wakeTurbulence.trim() || null,
           filingTypeOfFlight: filingDraft.typeOfFlight.trim() || null,
@@ -4873,6 +4992,7 @@ export default function FlightPlanner() {
             departureTimeZone,
             destinationTimeZone,
             customProfile,
+            routeMode,
           }),
           plannedDepartureAt: form.plannedDepartureAt
             ? toUtcIso(form.plannedDepartureAt, departureTimeZone)
@@ -4932,6 +5052,8 @@ export default function FlightPlanner() {
         filingSoulsOnBoard: filingDraft.soulsOnBoard.trim() || null,
         filingAircraftColor: filingDraft.aircraftColor.trim() || null,
         filingPilotName: filingDraft.pilotName.trim() || null,
+        filingPilotPhone: filingDraft.pilotPhone.trim() || String((user as any)?.phone || "").trim() || null,
+        filingAircraftHomeBase: filingDraft.aircraftHomeBase.trim().toUpperCase() || String((user as any)?.homeBase || "").trim().toUpperCase() || null,
         filingRemarks: filingDraft.remarks.trim() || null,
         filingWakeTurbulence: filingDraft.wakeTurbulence.trim() || null,
         filingTypeOfFlight: filingDraft.typeOfFlight.trim() || null,
@@ -4953,6 +5075,7 @@ export default function FlightPlanner() {
           departureTimeZone,
           destinationTimeZone,
           customProfile,
+          routeMode,
         }),
         plannedDepartureAt: form.plannedDepartureAt
           ? toUtcIso(form.plannedDepartureAt, departureTimeZone)
@@ -5365,6 +5488,8 @@ export default function FlightPlanner() {
       soulsOnBoard: editingPlan.filingSoulsOnBoard || current.soulsOnBoard,
       aircraftColor: editingPlan.filingAircraftColor || current.aircraftColor,
       pilotName: editingPlan.filingPilotName || current.pilotName,
+      pilotPhone: (editingPlan as any).filingPilotPhone || current.pilotPhone || String((user as any)?.phone || ""),
+      aircraftHomeBase: (editingPlan as any).filingAircraftHomeBase || current.aircraftHomeBase || String((user as any)?.homeBase || "").toUpperCase(),
       remarks: editingPlan.filingRemarks || editingPlan.notes || current.remarks,
       wakeTurbulence: editingPlan.filingWakeTurbulence || current.wakeTurbulence,
       typeOfFlight: editingPlan.filingTypeOfFlight || current.typeOfFlight,
@@ -5378,6 +5503,7 @@ export default function FlightPlanner() {
     const savedRouteTokens = normalizedSavedRoute ? normalizedSavedRoute.split(/\s+/) : [];
     const savedRouteIsAirportOnly = savedRouteTokens.length > 0 && savedRouteTokens.every((token) => ICAO_REGEX.test(token));
     setWaypointsInput(savedRouteIsAirportOnly ? normalizedSavedRoute : "");
+    setRouteMode(normalizedSavedRoute === "DCT" ? "direct" : (normalizedSavedRoute ? "manual" : "auto"));
     setPlannedStopsInput("");
     setPlannedAltitude(editingPlan.filingPlannedAltitudeFt ? String(editingPlan.filingPlannedAltitudeFt) : "");
     const plannerState =
@@ -5395,6 +5521,9 @@ export default function FlightPlanner() {
     }
     if (typeof plannerState?.selectedTypeId === "string") {
       setSelectedTypeId(plannerState.selectedTypeId);
+    }
+    if (plannerState?.routeMode === "auto" || plannerState?.routeMode === "direct" || plannerState?.routeMode === "manual") {
+      setRouteMode(plannerState.routeMode);
     }
     if (typeof plannerState?.selectedProfileId === "string" || typeof plannerState?.selectedTypeId === "string") {
       setArrivalAuto(false);
@@ -6242,6 +6371,38 @@ export default function FlightPlanner() {
               )}
             </div>
             <div className="space-y-2 md:col-span-2">
+              <div className="space-y-2">
+                <Label>Route Mode</Label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: "auto", label: "Auto route / suggested waypoints" },
+                    { value: "direct", label: "Direct" },
+                    { value: "manual", label: "Manual route" },
+                  ].map((option) => (
+                    <Button
+                      key={option.value}
+                      type="button"
+                      size="sm"
+                      variant={routeMode === option.value ? "default" : "outline"}
+                      onClick={() => {
+                        const nextMode = option.value as typeof routeMode;
+                        setRouteMode(nextMode);
+                        if (nextMode === "direct") setForm((current) => ({ ...current, route: "DCT" }));
+                        if (nextMode === "auto" && form.route.trim().toUpperCase() === "DCT") setForm((current) => ({ ...current, route: "" }));
+                      }}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {routeMode === "direct"
+                    ? "RSF will file DCT without injecting route-assist waypoints."
+                    : routeMode === "manual"
+                      ? "RSF will file the route text you enter below."
+                      : "RSF may use selected route-assist waypoints when no manual route is entered."}
+                </p>
+              </div>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <Label>Filed route (ATC / Leidos)</Label>
@@ -6274,9 +6435,13 @@ export default function FlightPlanner() {
               </div>
               <Textarea
                 value={form.route}
-                onChange={(e) => setForm({ ...form, route: e.target.value.toUpperCase() })}
+                onChange={(e) => {
+                  setRouteMode("manual");
+                  setForm({ ...form, route: e.target.value.toUpperCase() });
+                }}
                 placeholder="DCT TXK V18 MEM J42 ATL"
                 className="min-h-[88px]"
+                readOnly={routeMode === "direct"}
               />
               <div className={cn(plannerSubpanelMutedClass, "border-dashed px-3 py-2 text-xs")}>
                 Planning preview only: <span className="font-medium text-[#F5F8FC]">{routePreviewFull || "-"}</span>
@@ -7655,12 +7820,40 @@ export default function FlightPlanner() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Equipment</Label>
-                  <Input
-                    value={filingDraft.equipment}
-                    onChange={(e) => setFilingDraft((current) => ({ ...current, equipment: e.target.value.toUpperCase() }))}
-                    placeholder="S/C"
-                  />
+                  <Label>Aircraft Equipment</Label>
+                  <div className="flex flex-wrap gap-2 rounded-lg border border-[#5d6f85]/24 bg-[#0f141a]/70 p-2">
+                    {ICAO_EQUIPMENT_CODES.map((entry) => {
+                      const selected = selectedEquipmentCodes.includes(entry.code);
+                      return (
+                        <Button
+                          key={entry.code}
+                          type="button"
+                          size="sm"
+                          variant={selected ? "default" : "outline"}
+                          className="h-8 px-2"
+                          title={entry.label}
+                          onClick={() => {
+                            const next = selected
+                              ? selectedEquipmentCodes.filter((code) => code !== entry.code)
+                              : [...selectedEquipmentCodes, entry.code];
+                            setEquipmentCodes(next);
+                          }}
+                        >
+                          {entry.code}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedEquipmentCodes.length > 0 ? selectedEquipmentCodes.map((code) => (
+                      <Badge key={code} variant="secondary" className="gap-1">
+                        {code}
+                        <button type="button" onClick={() => setEquipmentCodes(selectedEquipmentCodes.filter((entry) => entry !== code))} aria-label={`Remove ${code}`}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    )) : <span className="text-xs text-muted-foreground">Select one or more ICAO equipment codes.</span>}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Souls On Board</Label>
@@ -7684,6 +7877,22 @@ export default function FlightPlanner() {
                     value={filingDraft.pilotName}
                     onChange={(e) => setFilingDraft((current) => ({ ...current, pilotName: e.target.value }))}
                     placeholder="Pilot name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Pilot Phone Number</Label>
+                  <Input
+                    value={filingDraft.pilotPhone}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, pilotPhone: e.target.value }))}
+                    placeholder="+1 555 123 4567"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Aircraft Home Base</Label>
+                  <Input
+                    value={filingDraft.aircraftHomeBase}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, aircraftHomeBase: e.target.value.toUpperCase() }))}
+                    placeholder="KADS"
                   />
                 </div>
                 <div className="space-y-2">
@@ -7776,6 +7985,10 @@ export default function FlightPlanner() {
                     {hasCurrentSavedPlan ? currentSavedPlanStatus : (filingPreviewMutation.isPending ? "Validating handoff..." : "Save plan to enable lifecycle actions")}
                   </div>
                 </div>
+                <div className={plannerMetricClass}>
+                  <div className="text-xs text-[#A9BBCD]">Assigned Beacon Code</div>
+                  <div className="font-mono font-semibold text-[#F5F8FC]">{getPlanBeaconCode(currentSavedPlan) || "-"}</div>
+                </div>
               </div>
               {selectedProfile && (
                 <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
@@ -7786,7 +7999,7 @@ export default function FlightPlanner() {
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Filing Remarks</Label>
+            <Label>Filing Remarks / ATC Remarks</Label>
             <Textarea
               value={filingDraft.remarks}
               onChange={(e) => setFilingDraft((current) => ({ ...current, remarks: e.target.value }))}
@@ -7828,21 +8041,13 @@ export default function FlightPlanner() {
               <Button
                 type="button"
                 onClick={() => {
-                  if (guestFlightPlanFileLimitReached) {
-                    runWithAuth("file_flight_plan", async () => {
-                      await saveCurrentPlan({ returnToFile: true });
-                    });
-                    return;
-                  }
-                  guestFileMutation.mutate();
+                  runWithAuth("file_flight_plan", async () => {
+                    await saveCurrentPlan({ returnToFile: true });
+                  });
                 }}
                 disabled={filingPreviewMutation.isPending || guestFileMutation.isPending}
               >
-                {guestFileMutation.isPending
-                  ? "Submitting guest filing..."
-                  : guestFlightPlanFileLimitReached
-                    ? "Create free account to keep filing"
-                    : `File as guest (${guestFlightPlanFilesRemaining} free ${guestFlightPlanFilesRemaining === 1 ? "filing" : "filings"} left)`}
+                Create or sign in to your RSF account to file flight plans.
               </Button>
             )}
             <Button type="button" variant="ghost" asChild>
@@ -8166,7 +8371,14 @@ export default function FlightPlanner() {
                   .filter((g) => g.plans.length > 0);
                 return grouped.flatMap(({ k, plans }, gi) => [
                   <div key={`group-hdr-${k}`} className={cn("text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground", gi > 0 && "pt-2 border-t border-border/30")}>{bucketLabel[k]}</div>,
-                  ...plans.map((plan) => (
+                  ...plans.map((plan) => {
+                    const expanded = expandedPlanIds[plan.id] ?? false;
+                    const departureTime = formatPlanLocalZulu(plan.plannedDepartureAt, getPlanTimeZone(plan, "departureTimeZone", departureTimeZone));
+                    const arrivalTime = formatPlanLocalZulu(plan.plannedArrivalAt, getPlanTimeZone(plan, "destinationTimeZone", destinationTimeZone));
+                    const syncTime = formatPlanLocalZulu(plan.filingLastProviderSyncAt, getPlanTimeZone(plan, "departureTimeZone", departureTimeZone));
+                    const beaconCode = getPlanBeaconCode(plan);
+                    const deletable = canDeleteLocalDraftPlan(plan);
+                    return (
               <div key={plan.id} className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
@@ -8191,15 +8403,34 @@ export default function FlightPlanner() {
                     >
                       Edit
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => setDeleteConfirmPlan(plan)}
-                    >
-                      Delete
-                    </Button>
+                    {deletable && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => setDeleteConfirmPlan(plan)}
+                      >
+                        Delete
+                      </Button>
+                    )}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  className="flex w-full items-start gap-2 rounded-md border border-[#5d6f85]/18 bg-[#0f141a]/70 p-3 text-left"
+                  onClick={() => setExpandedPlanIds((current) => ({ ...current, [plan.id]: !expanded }))}
+                  aria-expanded={expanded}
+                >
+                  {expanded ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0" /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0" />}
+                  <div className="grid min-w-0 flex-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-5">
+                    <div><span className="text-muted-foreground">Route</span><div className="truncate font-medium">{plan.departure} to {plan.destination}</div></div>
+                    <div><span className="text-muted-foreground">Aircraft</span><div className="font-medium">{plan.tailNumber || "-"}</div></div>
+                    <div><span className="text-muted-foreground">Departure</span><div>{departureTime.local}</div><div className="font-mono text-xs text-muted-foreground">{departureTime.zulu}</div></div>
+                    <div><span className="text-muted-foreground">Arrival</span><div>{arrivalTime.local}</div><div className="font-mono text-xs text-muted-foreground">{arrivalTime.zulu}</div></div>
+                    <div><span className="text-muted-foreground">Assigned Squawk</span><div className="font-mono font-semibold">{beaconCode || "-"}</div></div>
+                  </div>
+                </button>
+                {expanded && (
+                <>
                 <div className="grid gap-2 md:grid-cols-4 text-sm">
                   <div>
                     <div className="text-muted-foreground">User-entered route</div>
@@ -8207,11 +8438,13 @@ export default function FlightPlanner() {
                   </div>
                   <div>
                     <div className="text-muted-foreground">Departure</div>
-                    <div>{plan.plannedDepartureAt ? new Date(plan.plannedDepartureAt).toLocaleString() : "-"}</div>
+                    <div>{departureTime.local}</div>
+                    <div className="font-mono text-xs text-muted-foreground">{departureTime.zulu}</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground">Arrival</div>
-                    <div>{plan.plannedArrivalAt ? new Date(plan.plannedArrivalAt).toLocaleString() : "-"}</div>
+                    <div>{arrivalTime.local}</div>
+                    <div className="font-mono text-xs text-muted-foreground">{arrivalTime.zulu}</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground">Filed live</div>
@@ -8233,9 +8466,15 @@ export default function FlightPlanner() {
                   </div>
                   <div>
                     <div className="text-muted-foreground">Last sync</div>
-                    <div>{plan.filingLastProviderSyncAt ? new Date(plan.filingLastProviderSyncAt).toLocaleString() : "-"}</div>
+                    <div>{plan.filingLastProviderSyncAt ? syncTime.local : "-"}</div>
+                    {plan.filingLastProviderSyncAt && <div className="font-mono text-xs text-muted-foreground">{syncTime.zulu}</div>}
                   </div>
                 </div>
+                {beaconCode && (
+                  <div className={cn("p-3 text-sm", plannerSubpanelSuccessClass)}>
+                    Assigned Beacon Code: <span className="font-mono font-semibold">{beaconCode}</span>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
@@ -8399,8 +8638,11 @@ export default function FlightPlanner() {
                 {plan.notes && (
                   <div className="text-sm text-muted-foreground">Notes: {plan.notes}</div>
                 )}
+                </>
+                )}
               </div>
-                  ))
+                    );
+                  })
                 ]);
               })()}
             </div>
@@ -9464,7 +9706,9 @@ export default function FlightPlanner() {
         <AlertDialogHeader>
           <AlertDialogTitle>Delete this flight plan?</AlertDialogTitle>
           <AlertDialogDescription>
-            {deleteConfirmPlan
+            {deleteConfirmPlan && !canDeleteLocalDraftPlan(deleteConfirmPlan)
+              ? "Filed or provider-synced flight plans cannot be deleted. Close or cancel through Leidos instead."
+              : deleteConfirmPlan
               ? `This will permanently remove "${deleteConfirmPlan.title}" from your saved plans in RSF.`
               : "This will permanently remove this flight plan from your saved plans in RSF."}
           </AlertDialogDescription>
@@ -9475,9 +9719,9 @@ export default function FlightPlanner() {
             onClick={(event) => {
               event.preventDefault();
               if (!deleteConfirmPlan) return;
-              deleteMutation.mutate(deleteConfirmPlan.id);
+              if (canDeleteLocalDraftPlan(deleteConfirmPlan)) deleteMutation.mutate(deleteConfirmPlan.id);
             }}
-            disabled={deleteMutation.isPending || !deleteConfirmPlan}
+            disabled={deleteMutation.isPending || !deleteConfirmPlan || !canDeleteLocalDraftPlan(deleteConfirmPlan)}
           >
             {deleteMutation.isPending ? "Deleting..." : "Delete flight plan"}
           </AlertDialogAction>

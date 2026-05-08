@@ -13,6 +13,7 @@ import {
   type FilingProviderMessage,
   type FilingProviderSnapshot,
 } from "@shared/flight-plan-filing-workflow";
+import { normalizeIcaoEquipmentCodes, hasOnlyKnownIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -630,12 +631,29 @@ const redactPayloadForLog = (payload: Record<string, string>) =>
     }),
   );
 
-const normalizeLeidosEquipmentCode = (value?: string | null) => {
+const normalizeLeidosEquipmentCode = (value?: string | null) => normalizeIcaoEquipmentCodes(value);
+
+const normalizeLeidosBeaconCode = (value?: string | null) => {
+  const normalized = String(value || "").trim().toUpperCase().replace(/[^0-7A-Z]/g, "");
+  const octalMatch = normalized.match(/\b[0-7]{4}\b/);
+  return octalMatch?.[0] || (normalized.length >= 4 && normalized.length <= 8 ? normalized : null);
+};
+
+const normalizeAtcRemarksForOtherInfo = (value?: string | null) => {
   const normalized = String(value || "")
-    .trim()
     .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
-  return normalized || null;
+    .replace(/[^A-Z0-9 .,'/-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return null;
+  return normalized.replace(/\s+/g, "_").slice(0, 180);
+};
+
+const mergeRemarksIntoOtherInfo = (otherInfo: string | null, remarks?: string | null) => {
+  const base = String(otherInfo || "").replace(/(?:^|\s)RMK\/\S*/gi, " ").replace(/\s+/g, " ").trim();
+  const normalizedRemarks = normalizeAtcRemarksForOtherInfo(remarks);
+  const merged = [base, normalizedRemarks ? `RMK/${normalizedRemarks}` : null].filter(Boolean).join(" ").trim();
+  return merged || null;
 };
 
 const normalizeLeidosAircraftColorExtended = (value?: string | null) => {
@@ -814,15 +832,20 @@ const buildProviderSnapshot = ({
   ]);
   const artccState = findNestedString(source, ["artccState", "artcc_status"]);
   const artccInfo = findNestedString(source, ["artccInfo", "artcc_info"]);
-  const beaconCode = findNestedString(source, [
+  const directBeaconCode = findNestedString(source, [
     "beaconCode",
     "beacon_code",
     "squawk",
+    "squawkCode",
+    "squawk_code",
     "transponder",
     "transponderCode",
+    "transponder_code",
     "assignedBeacon",
+    "assignedBeaconCode",
     "assignedCode",
     "discreteCode",
+    "discreteBeaconCode",
     "beacon",
   ]);
   const providerReferenceId = findNestedString(source, [
@@ -845,6 +868,9 @@ const buildProviderSnapshot = ({
       ]),
     ]),
   ).filter(Boolean);
+  const beaconCode = normalizeLeidosBeaconCode(directBeaconCode) ||
+    normalizeLeidosBeaconCode(notices.join(" ")) ||
+    normalizeLeidosBeaconCode(JSON.stringify(source));
   const route = {
     localEnteredRoute: payloadSnapshot?.route.localEnteredRoute || null,
     normalizedTransmittedRoute: payloadSnapshot?.route.normalizedTransmittedRoute || null,
@@ -947,12 +973,14 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("typeOfFlight", plan.filingTypeOfFlight || config.typeOfFlight);
     append("surveillanceEquipment", plan.filingSurveillanceEquipment || config.surveillanceEquipment);
     append("pilotInCommandExtended", plan.filingPilotName);
+    append("pilotPhone", plan.filingPilotPhone);
+    append("aircraftHomeBase", plan.filingAircraftHomeBase);
     append("suppRemarksExtended", plan.filingRemarks || plan.notes);
-    const mergedOtherInfo = injectZzzzSupplementals(otherInfoResult.otherInfo, {
+    const mergedOtherInfo = mergeRemarksIntoOtherInfo(injectZzzzSupplementals(otherInfoResult.otherInfo, {
       departureName: plan.departure?.toUpperCase() === "ZZZZ" ? plan.filingDepartureName : null,
       destinationName: plan.destination?.toUpperCase() === "ZZZZ" ? plan.filingDestinationName : null,
       alternateName: plan.alternate?.toUpperCase() === "ZZZZ" ? plan.filingAlternateName : null,
-    });
+    }), plan.filingRemarks || plan.notes);
     append("otherInfo", mergedOtherInfo);
     appendLeidosAltitudeFields(params, plan.filingPlannedAltitudeFt);
     if (action === "amend") {
@@ -1486,6 +1514,21 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if ((action === "file" || action === "amend") && !plan.filingPlannedAltitudeFt) {
     errors.push("Planned altitude is required before sending this filing action to Leidos.");
   }
+  if ((action === "file" || action === "amend") && !plan.filingEquipment) {
+    errors.push("Aircraft equipment is required before sending this filing action to Leidos.");
+  }
+  if ((action === "file" || action === "amend") && plan.filingEquipment && !hasOnlyKnownIcaoEquipmentCodes(plan.filingEquipment)) {
+    errors.push("Aircraft equipment must use approved ICAO equipment codes.");
+  }
+  if ((action === "file" || action === "amend") && !plan.filingPilotPhone) {
+    errors.push("Pilot phone number is required before sending this filing action to Leidos.");
+  }
+  if ((action === "file" || action === "amend") && !plan.filingAircraftHomeBase) {
+    errors.push("Aircraft home base is required before sending this filing action to Leidos.");
+  }
+  if ((action === "file" || action === "amend") && !plan.filingRemarks && !plan.notes) {
+    errors.push("Filing Remarks / ATC Remarks are required before sending this filing action to Leidos.");
+  }
   if ((action === "file" || action === "amend") && rules === "VFR" && Number(plan.filingPlannedAltitudeFt || 0) >= 18000) {
     errors.push("VFR flight plans cannot be filed at or above FL180. Use IFR or choose a lower altitude.");
   }
@@ -1497,7 +1540,7 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if (rules === "IFR" && !routeNormalization.normalizedRoute) {
     errors.push("IFR flight plans require a route before staging.");
   }
-  if ((action === "file" || action === "amend") && plan.route && !routeNormalization.hasValidToken) {
+  if ((action === "file" || action === "amend") && plan.route && String(plan.route).trim().toUpperCase() !== "DCT" && !routeNormalization.hasValidToken) {
     errors.push("Route must contain at least one valid airport, fix, navaid, airway, or procedure token before filing.");
   }
 
@@ -1552,10 +1595,6 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     warnings.push("VFR filing can proceed direct, but adding route detail improves the handoff packet.");
   }
   warnings.push(...routeNormalization.notes.filter((note) => !warnings.includes(note)));
-
-  if (!plan.filingRemarks && !plan.notes) {
-    warnings.push("No filing remarks or notes are attached to this plan.");
-  }
 
   return {
     ready: errors.length === 0,

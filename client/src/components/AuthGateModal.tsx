@@ -25,8 +25,8 @@ const authGateMessages: Record<string, { title: string; description: string; cta
     description: "RSF Pro connects planner workflow to your digital logbook, currency, and training history.",
   },
   file_flight_plan: {
-    title: "Create a free account to file and track your flights",
-    description: "Save your plans, access them from any device, and receive real-time updates when the provider changes your route or returns new filing information.",
+    title: "Create or sign in to your RSF account to file flight plans.",
+    description: "Create or sign in to your RSF account to file flight plans.",
     cta: "Create free account",
   },
 };

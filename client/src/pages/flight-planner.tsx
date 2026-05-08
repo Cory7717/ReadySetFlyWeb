@@ -8334,7 +8334,7 @@ export default function FlightPlanner() {
 
       <Card className={plannerPanelClass}>
         <CardHeader>
-          <CardTitle className={plannerCardTitleClass}>Saved Plans</CardTitle>
+          <CardTitle className={plannerCardTitleClass}>Active/Saved/Previous Plans</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>Access saved routes and fuel notes. Free accounts keep one plan.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

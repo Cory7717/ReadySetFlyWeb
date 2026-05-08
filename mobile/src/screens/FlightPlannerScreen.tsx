@@ -65,6 +65,8 @@ import {
 } from '../lib/flightMath';
 import type { MobileRouteLeg, MobileRouteNavDataLegPayload, MobileRouteProgressSummary } from '../lib/flightMath';
 import { analyzeFiledRoute, isFiledRouteAnchorKind } from '@shared/flight-plan-route';
+import type { FlightPlan } from '@shared/schema';
+import { ICAO_EQUIPMENT_CODES, normalizeIcaoEquipmentCodes, parseIcaoEquipmentCodes } from '@shared/icao-equipment-codes';
 import { getFlightDeckSourceArbitrationState } from '../lib/sourceArbitration';
 import FlightDeckView from '../components/flight-deck/FlightDeckView';
 import {
@@ -121,6 +123,31 @@ type AircraftProfile = {
   fuelBurnGphEffective?: number;
   usableFuelGalEffective?: number;
   maxGrossWeightLbEffective?: number;
+  filingEquipmentDefault?: string | null;
+  filingSoulsOnBoardDefault?: string | null;
+  filingAircraftColorDefault?: string | null;
+  filingPilotNameDefault?: string | null;
+  filingRemarksDefault?: string | null;
+  filingWakeTurbulenceDefault?: string | null;
+  filingTypeOfFlightDefault?: string | null;
+  filingSurveillanceEquipmentDefault?: string | null;
+  filingOtherInfoDefault?: string | null;
+};
+
+type FilingDraftState = {
+  flightRules: 'VFR' | 'IFR' | 'DVFR';
+  aircraftId: string;
+  equipment: string;
+  soulsOnBoard: string;
+  aircraftColor: string;
+  pilotName: string;
+  pilotPhone: string;
+  aircraftHomeBase: string;
+  remarks: string;
+  wakeTurbulence: string;
+  typeOfFlight: string;
+  surveillanceEquipment: string;
+  otherInfo: string;
 };
 
 type AircraftPerformanceState = {
@@ -184,6 +211,96 @@ function aircraftPerformanceReducer(
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 const WINDS_ALOFT_LEVELS = [3000, 6000, 9000, 12000, 18000, 24000, 30000, 34000, 39000];
+
+const formatLocalZulu = (value?: string | Date | null, timeZone?: string | null) => {
+  if (!value) return { local: '-', zulu: '-' };
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return { local: '-', zulu: '-' };
+  const zone = timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const local = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(parsed);
+  const zulu = `${String(parsed.getUTCHours()).padStart(2, '0')}${String(parsed.getUTCMinutes()).padStart(2, '0')}Z`;
+  return { local, zulu };
+};
+
+const getPlanTimeZone = (plan: FlightPlan | null | undefined, key: 'departureTimeZone' | 'destinationTimeZone', fallback?: string | null) => {
+  const plannerState = (plan as any)?.plannerState;
+  const zone = plannerState && typeof plannerState === 'object' && !Array.isArray(plannerState)
+    ? String(plannerState[key] || '').trim()
+    : '';
+  return zone || fallback || Intl.DateTimeFormat().resolvedOptions().timeZone;
+};
+
+const normalizedFilingStatus = (plan: FlightPlan | null | undefined) => String(plan?.filingStatus || 'draft').toLowerCase();
+
+const filingStatusLabel = (plan: FlightPlan | null | undefined) => {
+  const status = normalizedFilingStatus(plan);
+  if (status === 'activated') return 'Active';
+  if (status === 'filed') return 'Filed';
+  if (status === 'cancelled') return 'Cancelled';
+  if (status === 'closed') return 'Closed';
+  if (status === 'staged') return 'Staged';
+  return 'Draft';
+};
+
+const getPlanBeaconCode = (plan: FlightPlan | null | undefined) => {
+  const direct = String((plan as any)?.filingAssignedBeaconCode || '').trim();
+  if (direct) return direct;
+  const snapshot = (plan as any)?.filingProviderSnapshot;
+  if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)) {
+    const beacon = String(snapshot.beaconCode || '').trim();
+    if (beacon) return beacon;
+  }
+  return null;
+};
+
+const buildProviderUpdateSignature = (plan: FlightPlan | null | undefined) => {
+  const snapshot = (plan as any)?.filingProviderSnapshot;
+  const snapshotRecord = snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+    ? snapshot as Record<string, any>
+    : {};
+  const route = snapshotRecord.route && typeof snapshotRecord.route === 'object' && !Array.isArray(snapshotRecord.route)
+    ? snapshotRecord.route as Record<string, any>
+    : {};
+  const messages = Array.isArray((plan as any)?.filingProviderMessages)
+    ? Array.from(new Set((plan as any).filingProviderMessages.map((message: any) =>
+      [message?.title || '', message?.severity || '', message?.details || ''].join('|')
+    ).filter(Boolean))).slice(0, 5)
+    : [];
+  return JSON.stringify({
+    filingStatus: normalizedFilingStatus(plan),
+    pendingAction: (plan as any)?.filingPendingAction || null,
+    isLive: Boolean((plan as any)?.filingIsLive),
+    providerPlanId: (plan as any)?.filingProviderPlanId || snapshotRecord.providerPlanId || null,
+    versionStamp: snapshotRecord.versionStamp || null,
+    providerStatus: snapshotRecord.providerStatus || null,
+    artccState: snapshotRecord.artccState || null,
+    beaconCode: getPlanBeaconCode(plan),
+    providerRoute: route.providerRoute || null,
+    routeChangedByProvider: Boolean(route.changedByProvider),
+    notices: Array.isArray(snapshotRecord.notices) ? snapshotRecord.notices : [],
+    messages,
+  });
+};
+
+const canDeleteLocalDraftPlan = (plan: FlightPlan | null | undefined) => {
+  if (!plan) return false;
+  const status = normalizedFilingStatus(plan);
+  return !(
+    plan.filingIsLive ||
+    plan.filingProviderPlanId ||
+    plan.filingLastProviderSyncAt ||
+    (Array.isArray(plan.filingActionHistory) && plan.filingActionHistory.length > 0) ||
+    ['staged', 'filed', 'activated', 'cancelled', 'closed'].includes(status)
+  );
+};
 
 type WeatherResponse = {
   icao: string;
@@ -1415,6 +1532,8 @@ export default function FlightPlannerScreen() {
   const [plannedArrivalAt, setPlannedArrivalAt] = useState('');
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [suggestedMode, setSuggestedMode] = useState<'direct' | 'midpoint'>('direct');
+  const [routeMode, setRouteMode] = useState<'auto' | 'direct' | 'manual'>('auto');
+  const [manualFiledRoute, setManualFiledRoute] = useState('');
   const [loading, setLoading] = useState(false);
   const [routeSummary, setRouteSummary] = useState<{ totalNm: number; legs: MobileRouteLeg[] } | null>(null);
   const [routePoints, setRoutePoints] = useState<AirportMeta[]>([]);
@@ -1517,6 +1636,27 @@ export default function FlightPlannerScreen() {
   const [suggestionMeta, setSuggestionMeta] = useState<{ routeDistanceNm: number; maxLegNm: number } | null>(null);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [providerRouteSearch, setProviderRouteSearch] = useState<RouteSearchResponse | null>(null);
+  const [savedPlans, setSavedPlans] = useState<FlightPlan[]>([]);
+  const [savedPlansLoading, setSavedPlansLoading] = useState(false);
+  const [expandedPlanIds, setExpandedPlanIds] = useState<Record<string, boolean>>({});
+  const [activeSavedPlanId, setActiveSavedPlanId] = useState<string | null>(null);
+  const [filingBusy, setFilingBusy] = useState<string | null>(null);
+  const [equipmentDropdownOpen, setEquipmentDropdownOpen] = useState(false);
+  const [filingDraft, setFilingDraft] = useState<FilingDraftState>({
+    flightRules: 'VFR',
+    aircraftId: '',
+    equipment: 'S',
+    soulsOnBoard: '1',
+    aircraftColor: '',
+    pilotName: '',
+    pilotPhone: '',
+    aircraftHomeBase: '',
+    remarks: '',
+    wakeTurbulence: 'MEDIUM',
+    typeOfFlight: 'G',
+    surveillanceEquipment: 'N',
+    otherInfo: '',
+  });
   const [diversionCandidates, setDiversionCandidates] = useState<NearbyDiversionAirport[]>([]);
   const [diversionLoading, setDiversionLoading] = useState(false);
   const [diversionError, setDiversionError] = useState<string | null>(null);
@@ -2046,6 +2186,16 @@ export default function FlightPlannerScreen() {
       .filter(Boolean);
     return [dep, ...stopList, ...wpList, dest].filter(Boolean).join(' ');
   }, [departure, destination, plannedStops, waypoints]);
+  const activeFiledRoute = useMemo(() => {
+    const manual = manualFiledRoute.trim().toUpperCase().replace(/\s+/g, ' ');
+    if (routeMode === 'direct') return 'DCT';
+    if (routeMode === 'manual') return manual;
+    const helperCore = [plannedStops.trim(), waypoints.trim()]
+      .map((value) => value.toUpperCase().replace(/[\s,]+/g, ' ').trim())
+      .filter(Boolean)
+      .join(' ');
+    return manual || helperCore;
+  }, [manualFiledRoute, plannedStops, routeMode, waypoints]);
   const plannedRouteAnalysis = useMemo(() => analyzeFiledRoute(plannedRouteStructureText), [plannedRouteStructureText]);
   const providerRouteAnalysis = useMemo(
     () => analyzeFiledRoute(providerRouteSearch?.route || ''),
@@ -5854,7 +6004,7 @@ export default function FlightPlannerScreen() {
   useEffect(() => {
     const dep = departure.trim().toUpperCase();
     const dest = destination.trim().toUpperCase();
-    if (!ICAO_REGEX.test(dep) || !ICAO_REGEX.test(dest)) {
+    if (!isAuthenticated || !ICAO_REGEX.test(dep) || !ICAO_REGEX.test(dest)) {
       setProviderRouteSearch(null);
       return;
     }
@@ -5882,12 +6032,22 @@ export default function FlightPlannerScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [departure, destination, plannedAltitudeValue]);
+  }, [departure, destination, isAuthenticated, plannedAltitudeValue]);
 
   const effectiveProfile = useMemo(
     () => profiles.find((p) => p.id === selectedProfileId) || null,
     [profiles, selectedProfileId]
   );
+  const selectedEquipmentCodes = useMemo(
+    () => Array.from(new Set(parseIcaoEquipmentCodes(filingDraft.equipment))),
+    [filingDraft.equipment]
+  );
+  const setEquipmentCodes = (codes: string[]) => {
+    setFilingDraft((current) => ({
+      ...current,
+      equipment: normalizeIcaoEquipmentCodes(codes.join('')) || '',
+    }));
+  };
   const activeAircraftLabel = useMemo(() => {
     if (effectiveProfile?.name) return effectiveProfile.name;
     if (selectedType) return `${selectedType.make} ${selectedType.model}`;
@@ -5911,8 +6071,30 @@ export default function FlightPlannerScreen() {
   useEffect(() => {
     if (effectiveProfile) {
       dispatchAircraftPerformance({ type: 'load_from_profile', value: effectiveProfile });
+      setFilingDraft((current) => ({
+        ...current,
+        aircraftId: current.aircraftId || tailNumber,
+        equipment: effectiveProfile.filingEquipmentDefault || current.equipment,
+        soulsOnBoard: effectiveProfile.filingSoulsOnBoardDefault || current.soulsOnBoard,
+        aircraftColor: effectiveProfile.filingAircraftColorDefault || current.aircraftColor,
+        pilotName: effectiveProfile.filingPilotNameDefault || current.pilotName,
+        remarks: effectiveProfile.filingRemarksDefault || current.remarks,
+        wakeTurbulence: effectiveProfile.filingWakeTurbulenceDefault || current.wakeTurbulence,
+        typeOfFlight: effectiveProfile.filingTypeOfFlightDefault || current.typeOfFlight,
+        surveillanceEquipment: effectiveProfile.filingSurveillanceEquipmentDefault || current.surveillanceEquipment,
+        otherInfo: effectiveProfile.filingOtherInfoDefault || current.otherInfo,
+      }));
     }
-  }, [effectiveProfile]);
+  }, [effectiveProfile, tailNumber]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    setFilingDraft((current) => ({
+      ...current,
+      pilotPhone: current.pilotPhone || String((user as any)?.phone || ''),
+      aircraftHomeBase: current.aircraftHomeBase || String((user as any)?.homeBase || '').toUpperCase(),
+    }));
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
     if (selectedType) {
@@ -6246,6 +6428,215 @@ export default function FlightPlannerScreen() {
     const arrivalLocal = formatDateTimeLocal(arrivalUtc, resolvedDestinationTimeZone);
     setPlannedArrivalAt(arrivalLocal);
   }, [arrivalAuto, plannedDepartureAt, eteMinutes, resolvedDepartureTimeZone, resolvedDestinationTimeZone]);
+
+  const plannedArrivalUtc = useMemo(() => {
+    if (!plannedArrivalAt) return null;
+    return zonedDateTimeToUtc(plannedArrivalAt, resolvedDestinationTimeZone);
+  }, [plannedArrivalAt, resolvedDestinationTimeZone]);
+
+  const mergeSavedPlan = (plans: FlightPlan[], nextPlan: FlightPlan) => {
+    let replaced = false;
+    const merged = plans.map((plan) => {
+      if (plan.id !== nextPlan.id) return plan;
+      replaced = true;
+      return { ...plan, ...nextPlan };
+    });
+    return replaced ? merged : [nextPlan, ...plans];
+  };
+
+  const loadSavedPlans = async () => {
+    if (!isAuthenticated) return;
+    setSavedPlansLoading(true);
+    try {
+      const res = await api.get<FlightPlan[]>('/api/flight-plans');
+      setSavedPlans(Array.isArray(res.data) ? res.data : []);
+    } catch (error: any) {
+      Alert.alert('Saved plans unavailable', error?.response?.data?.error || 'Unable to load saved flight plans.');
+    } finally {
+      setSavedPlansLoading(false);
+    }
+  };
+
+  const buildFlightPlanPayload = () => {
+    const dep = departure.trim().toUpperCase();
+    const dest = destination.trim().toUpperCase();
+    const routeText = activeFiledRoute || null;
+    const selectedTypeLabel = selectedType ? `${selectedType.make || ''} ${selectedType.model || ''}`.trim() : '';
+    const aircraftType = selectedType?.icaoType || selectedTypeLabel || activeAircraftLabel;
+    const onboardGallons = Number(fuelOnBoard);
+    const enduranceMinutes = Number.isFinite(onboardGallons) && onboardGallons > 0 && burn > 0
+      ? (onboardGallons / burn) * 60
+      : null;
+    return {
+      title: `${dep || 'Departure'} to ${dest || 'Destination'}`,
+      departure: dep,
+      destination: dest,
+      route: routeText,
+      alternate: alternate.trim().toUpperCase() || null,
+      plannedDepartureAt: plannedDepartureUtc ? plannedDepartureUtc.toISOString() : null,
+      plannedArrivalAt: plannedArrivalUtc ? plannedArrivalUtc.toISOString() : null,
+      aircraftType: aircraftType || null,
+      tailNumber: filingDraft.aircraftId.trim().toUpperCase() || tailNumber.trim().toUpperCase() || null,
+      fuelOnBoard: fuelOnBoard.trim() || null,
+      fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
+      filingFlightRules: filingDraft.flightRules,
+      filingEquipment: filingDraft.equipment.trim() || null,
+      filingSoulsOnBoard: filingDraft.soulsOnBoard.trim() || null,
+      filingAircraftColor: filingDraft.aircraftColor.trim() || null,
+      filingPilotName: filingDraft.pilotName.trim() || null,
+      filingPilotPhone: filingDraft.pilotPhone.trim() || String((user as any)?.phone || '').trim() || null,
+      filingAircraftHomeBase: filingDraft.aircraftHomeBase.trim().toUpperCase() || String((user as any)?.homeBase || '').trim().toUpperCase() || null,
+      filingRemarks: filingDraft.remarks.trim() || notes.trim() || null,
+      filingWakeTurbulence: filingDraft.wakeTurbulence.trim() || null,
+      filingTypeOfFlight: filingDraft.typeOfFlight.trim() || null,
+      filingSurveillanceEquipment: filingDraft.surveillanceEquipment.trim() || null,
+      filingOtherInfo: filingDraft.otherInfo.trim().toUpperCase() || null,
+      filingTrueAirspeedKtas: Math.round(cruise) || null,
+      filingPlannedAltitudeFt: plannedAltitudeValue ? Math.round(plannedAltitudeValue) : null,
+      filingEstimatedEnrouteMinutes: eteMinutes ? Math.round(eteMinutes) : null,
+      filingEnduranceMinutes: enduranceMinutes ? Math.round(enduranceMinutes) : null,
+      plannerState: {
+        selectedProfileId,
+        departureTimeZone: resolvedDepartureTimeZone,
+        destinationTimeZone: resolvedDestinationTimeZone,
+        routeMode,
+      },
+      notes: notes.trim() || null,
+    };
+  };
+
+  const saveCurrentFlightPlan = async () => {
+    if (!isAuthenticated) {
+      Alert.alert('Create or sign in to your RSF account to file flight plans.');
+      return null;
+    }
+    setFilingBusy('save');
+    try {
+      const payload = buildFlightPlanPayload();
+      const res = activeSavedPlanId
+        ? await api.patch<FlightPlan>(`/api/flight-plans/${activeSavedPlanId}`, payload)
+        : await api.post<FlightPlan>('/api/flight-plans', payload);
+      setSavedPlans((current) => mergeSavedPlan(current, res.data));
+      setActiveSavedPlanId(res.data.id);
+      Alert.alert('Flight plan saved', 'This plan is ready for Leidos lifecycle actions.');
+      return res.data;
+    } catch (error: any) {
+      Alert.alert('Save failed', error?.response?.data?.error || 'Unable to save flight plan.');
+      return null;
+    } finally {
+      setFilingBusy(null);
+    }
+  };
+
+  const submitFilingAction = async (action: 'file' | 'amend' | 'activate' | 'cancel' | 'close', plan?: FlightPlan) => {
+    if (!isAuthenticated) {
+      Alert.alert('Create or sign in to your RSF account to file flight plans.');
+      return;
+    }
+    setFilingBusy(action);
+    try {
+      const targetPlan = plan || (activeSavedPlanId ? savedPlans.find((entry) => entry.id === activeSavedPlanId) : null) || await saveCurrentFlightPlan();
+      if (!targetPlan) return;
+      const res = await api.post(`/api/flight-plans/${targetPlan.id}/filing-action`, { action });
+      if (res.data?.plan) {
+        setSavedPlans((current) => mergeSavedPlan(current, res.data.plan));
+        setActiveSavedPlanId(res.data.plan.id);
+      }
+      Alert.alert(action === 'file' ? 'Flight plan filed' : 'Leidos action submitted', res.data?.message || 'Provider request accepted.');
+    } catch (error: any) {
+      Alert.alert('Leidos action failed', error?.response?.data?.error || 'Unable to submit this provider action.');
+    } finally {
+      setFilingBusy(null);
+    }
+  };
+
+  const syncFilingPlan = async (plan: FlightPlan, notify = true) => {
+    if (!isAuthenticated) return;
+    try {
+      const previousProviderState = buildProviderUpdateSignature(plan);
+      const res = await api.post(`/api/flight-plans/${plan.id}/filing-sync`);
+      if (res.data?.plan) {
+        const nextProviderState = buildProviderUpdateSignature(res.data.plan);
+        setSavedPlans((current) => mergeSavedPlan(current, res.data.plan));
+        if (notify) {
+          Alert.alert(
+            nextProviderState !== previousProviderState ? 'Leidos update received' : 'Provider sync checked',
+            res.data?.message || 'Provider sync refreshed.',
+          );
+        }
+      }
+    } catch (error: any) {
+      if (notify) Alert.alert('Provider sync failed', error?.response?.data?.error || 'Unable to refresh Leidos sync.');
+    }
+  };
+
+  const deleteDraftPlan = async (plan: FlightPlan) => {
+    if (!canDeleteLocalDraftPlan(plan)) {
+      Alert.alert('Cannot delete filed plan', 'Filed or provider-synced flight plans must be closed or cancelled through Leidos.');
+      return;
+    }
+    try {
+      await api.delete(`/api/flight-plans/${plan.id}`);
+      setSavedPlans((current) => current.filter((entry) => entry.id !== plan.id));
+      if (activeSavedPlanId === plan.id) setActiveSavedPlanId(null);
+      Alert.alert('Flight plan deleted');
+    } catch (error: any) {
+      Alert.alert('Delete failed', error?.response?.data?.error || 'Unable to delete this plan.');
+    }
+  };
+
+  const loadSavedPlanIntoPlanner = (plan: FlightPlan) => {
+    const depZone = getPlanTimeZone(plan, 'departureTimeZone', resolvedDepartureTimeZone);
+    const destZone = getPlanTimeZone(plan, 'destinationTimeZone', resolvedDestinationTimeZone);
+    setActiveSavedPlanId(plan.id);
+    setDeparture(plan.departure || '');
+    setDestination(plan.destination || '');
+    setAlternate(plan.alternate || '');
+    setTailNumber(plan.tailNumber || '');
+    setFuelOnBoard(plan.fuelOnBoard ? String(plan.fuelOnBoard) : '');
+    setNotes(plan.notes || '');
+    setPlannedAltitude(plan.filingPlannedAltitudeFt ? String(plan.filingPlannedAltitudeFt) : '');
+    setPlannedDepartureAt(plan.plannedDepartureAt ? formatDateTimeLocal(new Date(plan.plannedDepartureAt), depZone) : '');
+    setPlannedArrivalAt(plan.plannedArrivalAt ? formatDateTimeLocal(new Date(plan.plannedArrivalAt), destZone) : '');
+    setManualFiledRoute(plan.route || '');
+    setRouteMode(plan.route === 'DCT' ? 'direct' : (plan.route ? 'manual' : 'auto'));
+    setFilingDraft((current) => ({
+      ...current,
+      flightRules: (plan.filingFlightRules as FilingDraftState['flightRules']) || current.flightRules,
+      aircraftId: plan.tailNumber || current.aircraftId,
+      equipment: plan.filingEquipment || current.equipment,
+      soulsOnBoard: plan.filingSoulsOnBoard || current.soulsOnBoard,
+      aircraftColor: plan.filingAircraftColor || current.aircraftColor,
+      pilotName: plan.filingPilotName || current.pilotName,
+      pilotPhone: (plan as any).filingPilotPhone || current.pilotPhone,
+      aircraftHomeBase: (plan as any).filingAircraftHomeBase || current.aircraftHomeBase,
+      remarks: plan.filingRemarks || plan.notes || current.remarks,
+      wakeTurbulence: plan.filingWakeTurbulence || current.wakeTurbulence,
+      typeOfFlight: plan.filingTypeOfFlight || current.typeOfFlight,
+      surveillanceEquipment: plan.filingSurveillanceEquipment || current.surveillanceEquipment,
+      otherInfo: plan.filingOtherInfo || current.otherInfo,
+    }));
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      void loadSavedPlans();
+    } else {
+      setSavedPlans([]);
+      setActiveSavedPlanId(null);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || savedPlans.length === 0) return;
+    const timer = setInterval(() => {
+      savedPlans
+        .filter((plan) => plan.filingProviderPlanId && !['cancelled', 'closed'].includes(normalizedFilingStatus(plan)))
+        .slice(0, 5)
+        .forEach((plan) => void syncFilingPlan(plan, false));
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [isAuthenticated, savedPlans]);
   const depCategory = parseFlightCategory(departureWeather?.metar);
   const destCategory = parseFlightCategory(destinationWeather?.metar);
   const allWeather = [
@@ -7444,6 +7835,44 @@ export default function FlightPlannerScreen() {
           multiline
         />
         <View style={styles.suggestionBox}>
+          <Text style={styles.suggestionTitle}>Filed route mode</Text>
+          <Text style={styles.suggestionText}>
+            Direct files DCT. Manual preserves your route text. Auto uses selected helper waypoints when no manual route is entered.
+          </Text>
+          <View style={styles.suggestionRow}>
+            {[
+              { key: 'auto', label: 'Auto route / suggested waypoints' },
+              { key: 'direct', label: 'Direct' },
+              { key: 'manual', label: 'Manual route' },
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.key}
+                style={[styles.suggestionButton, routeMode === item.key && styles.suggestionButtonActive]}
+                onPress={() => {
+                  const nextMode = item.key as 'auto' | 'direct' | 'manual';
+                  setRouteMode(nextMode);
+                  if (nextMode === 'direct') setManualFiledRoute('DCT');
+                  if (nextMode === 'auto' && manualFiledRoute.trim().toUpperCase() === 'DCT') setManualFiledRoute('');
+                }}
+              >
+                <Text style={styles.suggestionButtonText}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={routeMode === 'direct' ? 'DCT' : manualFiledRoute}
+            onChangeText={(value) => {
+              setRouteMode('manual');
+              setManualFiledRoute(value.toUpperCase());
+            }}
+            editable={routeMode !== 'direct'}
+            placeholder="DCT TXK V18 MEM J42 ATL"
+            multiline
+          />
+          <Text style={styles.helperText}>Filed route: {activeFiledRoute || 'No filed route selected yet'}</Text>
+        </View>
+        <View style={styles.suggestionBox}>
           <Text style={styles.suggestionTitle}>Suggested routes</Text>
           <Text style={styles.suggestionText}>Midpoint adds a virtual waypoint for planning only.</Text>
           <View style={styles.suggestionRow}>
@@ -8303,8 +8732,150 @@ export default function FlightPlannerScreen() {
           </Text>
         </View>
         <Text style={styles.helperText}>
-          RSF does not file flight plans automatically. Use Flight Service or an approved provider.
+          Mobile filing uses your authenticated RSF account and the same Leidos provider workflow as web.
         </Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Leidos Filing</Text>
+        <Text style={styles.sectionSubtitle}>Create or sign in to your RSF account to file flight plans.</Text>
+        {!isAuthenticated ? (
+          <TouchableOpacity style={styles.primaryButton} onPress={() => navigation?.navigate?.('Auth')}>
+            <Text style={styles.primaryButtonText}>Create or sign in to your RSF account to file flight plans.</Text>
+          </TouchableOpacity>
+        ) : (
+          <>
+            <View style={styles.suggestionRow}>
+              {(['VFR', 'IFR', 'DVFR'] as const).map((rules) => (
+                <TouchableOpacity
+                  key={rules}
+                  style={[styles.suggestionButton, filingDraft.flightRules === rules && styles.suggestionButtonActive]}
+                  onPress={() => setFilingDraft((current) => ({ ...current, flightRules: rules }))}
+                >
+                  <Text style={styles.suggestionButtonText}>{rules}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.fieldLabel}>Aircraft ID / Tail</Text>
+            <TextInput style={styles.input} value={filingDraft.aircraftId} onChangeText={(value) => setFilingDraft((current) => ({ ...current, aircraftId: value.toUpperCase() }))} placeholder="N123RS" />
+            <Text style={styles.fieldLabel}>Aircraft Equipment</Text>
+            <TouchableOpacity
+              style={styles.dropdownButton}
+              onPress={() => setEquipmentDropdownOpen((current) => !current)}
+            >
+              <Text style={styles.dropdownButtonText}>Add equipment code</Text>
+              <Ionicons name={equipmentDropdownOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+            {equipmentDropdownOpen && (
+              <View style={styles.dropdownMenu}>
+                {ICAO_EQUIPMENT_CODES.map((entry) => (
+                  <TouchableOpacity
+                    key={entry.code}
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      if (!selectedEquipmentCodes.includes(entry.code)) {
+                        setEquipmentCodes([...selectedEquipmentCodes, entry.code]);
+                      }
+                      setEquipmentDropdownOpen(false);
+                    }}
+                  >
+                    <Text style={styles.dropdownItemText}>{entry.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <View style={styles.pillRow}>
+              {selectedEquipmentCodes.map((code) => (
+                <TouchableOpacity
+                  key={code}
+                  style={[styles.pill, styles.pillActive]}
+                  onPress={() => setEquipmentCodes(selectedEquipmentCodes.filter((entry) => entry !== code))}
+                >
+                  <Text style={[styles.pillText, styles.pillTextActive]}>{code} x</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.helperText}>Selected equipment: {selectedEquipmentCodes.join('') || 'None'}</Text>
+            <Text style={styles.fieldLabel}>PIC Name</Text>
+            <TextInput style={styles.input} value={filingDraft.pilotName} onChangeText={(value) => setFilingDraft((current) => ({ ...current, pilotName: value }))} placeholder="Pilot name" />
+            <Text style={styles.fieldLabel}>Pilot Phone Number</Text>
+            <TextInput style={styles.input} value={filingDraft.pilotPhone} onChangeText={(value) => setFilingDraft((current) => ({ ...current, pilotPhone: value }))} placeholder="+1 555 123 4567" keyboardType="phone-pad" />
+            <Text style={styles.fieldLabel}>Aircraft Home Base</Text>
+            <TextInput style={styles.input} value={filingDraft.aircraftHomeBase} onChangeText={(value) => setFilingDraft((current) => ({ ...current, aircraftHomeBase: value.toUpperCase() }))} placeholder="KADS" />
+            <Text style={styles.fieldLabel}>Souls On Board</Text>
+            <TextInput style={styles.input} value={filingDraft.soulsOnBoard} onChangeText={(value) => setFilingDraft((current) => ({ ...current, soulsOnBoard: value }))} placeholder="1" keyboardType="numeric" />
+            <Text style={styles.fieldLabel}>Aircraft Color</Text>
+            <TextInput style={styles.input} value={filingDraft.aircraftColor} onChangeText={(value) => setFilingDraft((current) => ({ ...current, aircraftColor: value }))} placeholder="White / Blue" />
+            <Text style={styles.fieldLabel}>Other ICAO Info</Text>
+            <TextInput style={[styles.input, styles.textArea]} value={filingDraft.otherInfo} onChangeText={(value) => setFilingDraft((current) => ({ ...current, otherInfo: value.toUpperCase() }))} placeholder="PBN/... NAV/... DAT/... SUR/..." multiline />
+            <Text style={styles.fieldLabel}>Filing Remarks / ATC Remarks</Text>
+            <TextInput style={[styles.input, styles.textArea]} value={filingDraft.remarks} onChangeText={(value) => setFilingDraft((current) => ({ ...current, remarks: value }))} placeholder="ATC remarks required for filing" multiline />
+            <View style={styles.suggestionRow}>
+              <TouchableOpacity style={styles.primaryButton} onPress={() => void saveCurrentFlightPlan()} disabled={Boolean(filingBusy)}>
+                <Text style={styles.primaryButtonText}>{filingBusy === 'save' ? 'Saving...' : activeSavedPlanId ? 'Save plan changes' : 'Save flight plan'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('file')} disabled={Boolean(filingBusy)}>
+                <Text style={styles.secondaryButtonText}>{filingBusy === 'file' ? 'Filing...' : 'File with Leidos'}</Text>
+              </TouchableOpacity>
+            </View>
+            {savedPlansLoading ? <ActivityIndicator color={colors.primary} /> : null}
+            {savedPlans.length > 0 && (
+              <View style={styles.suggestionBox}>
+                <Text style={styles.suggestionTitle}>Saved / Filed Plans</Text>
+                {savedPlans.map((plan) => {
+                  const expanded = Boolean(expandedPlanIds[plan.id]);
+                  const depTime = formatLocalZulu(plan.plannedDepartureAt, getPlanTimeZone(plan, 'departureTimeZone', resolvedDepartureTimeZone));
+                  const arrTime = formatLocalZulu(plan.plannedArrivalAt, getPlanTimeZone(plan, 'destinationTimeZone', resolvedDestinationTimeZone));
+                  const beacon = getPlanBeaconCode(plan);
+                  return (
+                    <View key={plan.id} style={styles.savedPlanCard}>
+                      <TouchableOpacity onPress={() => setExpandedPlanIds((current) => ({ ...current, [plan.id]: !expanded }))}>
+                        <View style={styles.rowBetween}>
+                          <Text style={styles.savedPlanTitle}>{plan.title || `${plan.departure} to ${plan.destination}`}</Text>
+                          <Text style={styles.badgeText}>{filingStatusLabel(plan)}</Text>
+                        </View>
+                        <Text style={styles.helperText}>{plan.departure} to {plan.destination} | {plan.tailNumber || 'No aircraft'} | Assigned Squawk {beacon || '-'}</Text>
+                        <Text style={styles.helperText}>Departure: {depTime.local} / {depTime.zulu}</Text>
+                        <Text style={styles.helperText}>Arrival: {arrTime.local} / {arrTime.zulu}</Text>
+                      </TouchableOpacity>
+                      {expanded && (
+                        <View style={styles.savedPlanActions}>
+                          <TouchableOpacity style={styles.secondaryButton} onPress={() => loadSavedPlanIntoPlanner(plan)}>
+                            <Text style={styles.secondaryButtonText}>Edit</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('amend', plan)}>
+                            <Text style={styles.secondaryButtonText}>Amend</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.secondaryButton} onPress={() => void syncFilingPlan(plan)}>
+                            <Text style={styles.secondaryButtonText}>Sync</Text>
+                          </TouchableOpacity>
+                          {(plan.filingFlightRules || 'VFR').toUpperCase() === 'VFR' && (
+                            <>
+                              <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('activate', plan)}>
+                                <Text style={styles.secondaryButtonText}>Activate</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('close', plan)}>
+                                <Text style={styles.secondaryButtonText}>Close</Text>
+                              </TouchableOpacity>
+                            </>
+                          )}
+                          <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('cancel', plan)}>
+                            <Text style={styles.secondaryButtonText}>Cancel</Text>
+                          </TouchableOpacity>
+                          {canDeleteLocalDraftPlan(plan) && (
+                            <TouchableOpacity style={styles.dangerButton} onPress={() => void deleteDraftPlan(plan)}>
+                              <Text style={styles.dangerButtonText}>Delete draft</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -10848,10 +11419,23 @@ const styles = StyleSheet.create({
   suggestionHint: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs, marginBottom: spacing.xs },
   pill: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  pillActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
   pillText: { fontSize: 11, color: colors.text },
+  pillTextActive: { color: colors.primary, fontWeight: '700' },
+  badgeText: { fontSize: 11, color: colors.primary, fontWeight: '700' },
+  savedPlanCard: { padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, marginTop: spacing.sm },
+  savedPlanTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text, paddingRight: spacing.sm },
+  savedPlanActions: { gap: spacing.xs, marginTop: spacing.sm },
+  dangerButton: { backgroundColor: 'rgba(239,68,68,0.12)', borderRadius: radius.md, paddingVertical: 13, alignItems: 'center', marginBottom: spacing.sm, borderWidth: 1, borderColor: 'rgba(239,68,68,0.35)' },
+  dangerButtonText: { color: '#ef4444', fontWeight: '700' },
   suggestionList: { backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, marginBottom: spacing.sm },
   suggestionItem: { paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   suggestionItemText: { fontSize: 12, color: colors.text },
+  dropdownButton: { minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs },
+  dropdownButtonText: { fontSize: 14, color: colors.text },
+  dropdownMenu: { borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, marginBottom: spacing.sm, overflow: 'hidden' },
+  dropdownItem: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  dropdownItemText: { fontSize: 13, color: colors.text },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
   altitudeCard: { marginTop: spacing.sm, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
   altitudeTitle: { fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: 4 },

@@ -4377,7 +4377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/ai-tools", aiToolsRouter);
 
   // Serve uploaded files
-  app.use('/uploads', express.static('uploads'));
+  app.use('/uploads', express.static('uploads', { dotfiles: 'deny' }));
 
   // Serve GPS trainer panel images from S3 (private buckets supported)
   app.get('/api/gps-sims/panels/:imageKey', async (req, res) => {
@@ -21647,7 +21647,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           ? error.message
           : "Failed to stage flight plan filing action";
       const isTimeout = /timed out before Flight Service responded|connect timeout|timed out/i.test(message);
-      res.status(isTimeout ? 504 : 500).json({
+      const isProviderRejected = /Leidos returned an unsuccessful|Webservice\.Cannot|not in the PROPOSED state|could not be cancelled/i.test(message);
+      res.status(isTimeout ? 504 : isProviderRejected ? 409 : 500).json({
         error: message,
       });
     }

@@ -20,10 +20,14 @@ import { setupVite, serveStatic, log } from "./vite";
 import { startFinanceAlertsJob } from "./jobs/financeAlerts";
 import { buildCorsOptions } from "./corsOptions";
 import { cloudflareGuard } from "./middleware/impressionMiddleware";
+import { scannerGuard } from "./middleware/scannerGuard";
 
 const app = express();
 // Behind Render's proxy; required for secure cookies/session in OAuth flows
 app.set("trust proxy", 1);
+
+// Block automated secret/config probes before body parsing, routes, static assets, or app fallback.
+app.use(scannerGuard);
 
 // CORS configuration - allow same-origin production traffic and explicit web origins.
 app.use(cors(buildCorsOptions()));

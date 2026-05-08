@@ -315,6 +315,35 @@ const getPlanBeaconCode = (plan: FlightPlan | null | undefined) => {
   return null;
 };
 
+const buildProviderUpdateSignature = (plan: FlightPlan | null | undefined) => {
+  const snapshot = (plan as any)?.filingProviderSnapshot;
+  const snapshotRecord = snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+    ? snapshot as Record<string, any>
+    : {};
+  const route = snapshotRecord.route && typeof snapshotRecord.route === "object" && !Array.isArray(snapshotRecord.route)
+    ? snapshotRecord.route as Record<string, any>
+    : {};
+  const messages = Array.isArray((plan as any)?.filingProviderMessages)
+    ? Array.from(new Set((plan as any).filingProviderMessages.map((message: any) =>
+      [message?.title || "", message?.severity || "", message?.details || ""].join("|")
+    ).filter(Boolean))).slice(0, 5)
+    : [];
+  return JSON.stringify({
+    filingStatus: normalizedClientFilingStatus(plan) || "draft",
+    pendingAction: (plan as any)?.filingPendingAction || null,
+    isLive: Boolean((plan as any)?.filingIsLive),
+    providerPlanId: (plan as any)?.filingProviderPlanId || snapshotRecord.providerPlanId || null,
+    versionStamp: snapshotRecord.versionStamp || null,
+    providerStatus: snapshotRecord.providerStatus || null,
+    artccState: snapshotRecord.artccState || null,
+    beaconCode: getPlanBeaconCode(plan),
+    providerRoute: route.providerRoute || null,
+    routeChangedByProvider: Boolean(route.changedByProvider),
+    notices: Array.isArray(snapshotRecord.notices) ? snapshotRecord.notices : [],
+    messages,
+  });
+};
+
 const canDeleteLocalDraftPlan = (plan: FlightPlan | null | undefined) => {
   if (!plan) return false;
   const status = normalizedClientFilingStatus(plan) || "draft";
@@ -2147,12 +2176,12 @@ export default function FlightPlanner() {
           const res = await apiRequest("POST", `/api/flight-plans/${plan.id}/filing-sync`);
           const result = await res.json();
           if (cancelled || !result?.plan) continue;
-          const previousSync = String(plan.filingLastProviderSyncAt || "");
-          const nextSync = String(result.plan.filingLastProviderSyncAt || "");
+          const previousProviderState = buildProviderUpdateSignature(plan);
+          const nextProviderState = buildProviderUpdateSignature(result.plan);
           queryClient.setQueryData<FlightPlan[]>(["/api/flight-plans"], (current = []) =>
             mergePlanIntoList(current, result.plan)
           );
-          if (nextSync && nextSync !== previousSync) {
+          if (nextProviderState !== previousProviderState) {
             toast({ title: "Leidos update received", description: `${result.plan.departure} to ${result.plan.destination} refreshed from provider sync.` });
           }
         } catch {
@@ -7821,29 +7850,24 @@ export default function FlightPlanner() {
                 </div>
                 <div className="space-y-2">
                   <Label>Aircraft Equipment</Label>
-                  <div className="flex flex-wrap gap-2 rounded-lg border border-[#5d6f85]/24 bg-[#0f141a]/70 p-2">
-                    {ICAO_EQUIPMENT_CODES.map((entry) => {
-                      const selected = selectedEquipmentCodes.includes(entry.code);
-                      return (
-                        <Button
-                          key={entry.code}
-                          type="button"
-                          size="sm"
-                          variant={selected ? "default" : "outline"}
-                          className="h-8 px-2"
-                          title={entry.label}
-                          onClick={() => {
-                            const next = selected
-                              ? selectedEquipmentCodes.filter((code) => code !== entry.code)
-                              : [...selectedEquipmentCodes, entry.code];
-                            setEquipmentCodes(next);
-                          }}
-                        >
-                          {entry.code}
-                        </Button>
-                      );
-                    })}
-                  </div>
+                  <Select
+                    value=""
+                    onValueChange={(code) => {
+                      if (!code || selectedEquipmentCodes.includes(code)) return;
+                      setEquipmentCodes([...selectedEquipmentCodes, code]);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Add equipment code" />
+                    </SelectTrigger>
+                    <SelectContent className={plannerSelectContentClass}>
+                      {ICAO_EQUIPMENT_CODES.map((entry) => (
+                        <SelectItem key={entry.code} value={entry.code}>
+                          {entry.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <div className="flex flex-wrap gap-1">
                     {selectedEquipmentCodes.length > 0 ? selectedEquipmentCodes.map((code) => (
                       <Badge key={code} variant="secondary" className="gap-1">

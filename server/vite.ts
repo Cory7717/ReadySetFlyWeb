@@ -29,7 +29,7 @@ export async function setupVite(app: Express, server: Server) {
     "Cesium",
   );
   if (fs.existsSync(cesiumStaticPath)) {
-    app.use("/cesium", express.static(cesiumStaticPath));
+    app.use("/cesium", express.static(cesiumStaticPath, { dotfiles: "deny" }));
   }
 
   const resolvedConfig =
@@ -102,9 +102,9 @@ export function serveStatic(app: Express) {
   }
 
   if (fs.existsSync(cesiumDistPath)) {
-    app.use("/cesium", express.static(cesiumDistPath));
+    app.use("/cesium", express.static(cesiumDistPath, { dotfiles: "deny" }));
   } else if (fs.existsSync(cesiumNodePath)) {
-    app.use("/cesium", express.static(cesiumNodePath));
+    app.use("/cesium", express.static(cesiumNodePath, { dotfiles: "deny" }));
   }
 
   app.use((req, res, next) => {
@@ -120,6 +120,7 @@ export function serveStatic(app: Express) {
 
   app.use(
     express.static(distPath, {
+      dotfiles: "deny",
       setHeaders: (res, filePath) => {
         if (filePath.endsWith(".html")) {
           res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");

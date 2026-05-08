@@ -1783,31 +1783,18 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       typeof parsedResponse.returnStatus === "boolean" ? parsedResponse.returnStatus : null;
 
     if (providerReturnStatus === false) {
-      return buildStagedFallbackResult(
-        plan,
+      const details = responseMessages.length > 0
+        ? responseMessages.join(" | ")
+        : "Leidos did not return a detailed provider message.";
+      console.info(JSON.stringify({
+        event: "leidos_action_rejected",
         action,
-        validation,
-        responseMessages.length > 0
-          ? `Leidos returned an unsuccessful ${action.toUpperCase()} response: ${responseMessages.join(" | ")}`
-          : `Leidos returned an unsuccessful ${action.toUpperCase()} response without a usable flight identifier.`,
-        {
-          providerPlanId: plan.filingProviderPlanId || null,
-          payloadSnapshot: payloadContext.payloadSnapshot,
-          providerMessages: buildProviderMessages({
-            action,
-            providerPlanId: plan.filingProviderPlanId || null,
-            response: parsedResponse,
-            source: "provider",
-          }),
-          rawExtras: {
-            requestUrl,
-            requestPayload: requestPayloadRecord,
-            response: parsedResponse,
-            responseMessages,
-            returnStatus: providerReturnStatus,
-          },
-        },
-      );
+        planId: plan.id,
+        providerPlanId: plan.filingProviderPlanId || null,
+        responseMessages,
+        returnStatus: providerReturnStatus,
+      }));
+      throw new Error(`Leidos returned an unsuccessful ${action.toUpperCase()} response: ${details}`);
     }
 
     const providerPlanId =

@@ -2,6 +2,17 @@ node_modules
 dist
 .DS_Store
 *.tar.gz
+*.zip
+*.tar
+*.gz
+*.7z
+*.bak
+*.backup
+*.old
+*.save
+*.swp
+*.sql
+*.map
 debug
 .local/
 .replit

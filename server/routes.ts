@@ -4327,6 +4327,20 @@ const registrationRateLimiter = createSoftAuthRateLimiter({
   key: 'registration',
 });
 
+const flightFilingRateLimiter = createSoftAuthRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  anonMax: 5,
+  authMax: 60,
+  key: 'flight_filing_provider',
+});
+
+const flightPlanUtilityRateLimiter = createSoftAuthRateLimiter({
+  windowMs: 60 * 1000,
+  anonMax: 30,
+  authMax: 120,
+  key: 'flight_plan_utility',
+});
+
 // Verification middleware - checks if user is verified
 // CRITICAL: For rental-related endpoints (aircraft listings, rental bookings),
 // verification is ALWAYS enforced for safety and security, regardless of any flags
@@ -9664,8 +9678,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/marketplace/:id", async (req, res) => {
+  app.delete("/api/marketplace/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       // Check if listing is a sample listing
       const listing = await storage.getMarketplaceListing(req.params.id);
       if (!listing) {
@@ -9673,6 +9691,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if ((listing as any).isExample) {
         return res.status(403).json({ error: "Sample listings cannot be deleted" });
+      }
+      const requester = await storage.getUser(userId);
+      if (listing.userId !== userId && !requester?.isAdmin && !requester?.isSuperAdmin) {
+        return res.status(403).json({ error: "Access denied" });
       }
       
       const deleted = await storage.deleteMarketplaceListing(req.params.id);
@@ -10202,8 +10224,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/messages/:id/read", async (req, res) => {
+  app.patch("/api/messages/:id/read", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const existing = await storage.getMessageById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+      if (existing.receiverId !== userId && existing.senderId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const message = await storage.markMessageAsRead(req.params.id);
       if (!message) {
         return res.status(404).json({ error: "Message not found" });
@@ -21117,13 +21150,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       // STEP 1 — Log the full raw payload for debugging during Leidos lab testing.
-      console.info(JSON.stringify({
-        event: "leidos_push_received",
-        timestamp: new Date().toISOString(),
-        userAgent: req.headers["user-agent"] || null,
-        body: req.body ?? null,
-      }));
-
       const payload = req.body ?? {};
 
       // Determine notification type (FLIGHT_CHANGE or FLIGHT_ALERT).
@@ -21140,6 +21166,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         payload.flightPlanId ??
         payload.id ??
         null;
+
+      console.info(JSON.stringify({
+        event: "leidos_push_received",
+        timestamp: new Date().toISOString(),
+        userAgent: req.headers["user-agent"] || null,
+        notificationType,
+        flightIdentifier,
+        payloadKeys: payload && typeof payload === "object" && !Array.isArray(payload) ? Object.keys(payload).slice(0, 25) : [],
+      }));
 
       const changeType: string | null =
         payload.changeType ??
@@ -21288,7 +21323,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.post("/api/flight-plans/filing-preview", async (req: any, res) => {
+  app.post("/api/flight-plans/filing-preview", flightPlanUtilityRateLimiter, async (req: any, res) => {
     try {
       const result = filingPreviewSchema.safeParse(req.body ?? {});
       if (!result.success) {
@@ -21436,7 +21471,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/flight-plans/route-analysis", async (req: any, res) => {
+  app.get("/api/flight-plans/route-analysis", flightPlanUtilityRateLimiter, async (req: any, res) => {
     try {
       const route = typeof req.query.route === "string" ? req.query.route : "";
       const analysis = analyzeFiledRoute(route);
@@ -21481,11 +21516,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.post("/api/flight-plans/guest-file", async (req: any, res) => {
+  app.post("/api/flight-plans/guest-file", flightFilingRateLimiter, async (req: any, res) => {
     return res.status(401).json({ error: "Create or sign in to your RSF account to file flight plans." });
   });
 
-  app.post("/api/flight-plans/:id/filing-action", isAuthenticated, async (req: any, res) => {
+  app.post("/api/flight-plans/:id/filing-action", isAuthenticated, flightFilingRateLimiter, async (req: any, res) => {
     try {
       const mergePreservedFilingRaw = (existingRaw: unknown, incomingRaw: unknown) => {
         const existingRecord =
@@ -21654,7 +21689,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.post("/api/flight-plans/:id/filing-sync", isAuthenticated, async (req: any, res) => {
+  app.post("/api/flight-plans/:id/filing-sync", isAuthenticated, flightFilingRateLimiter, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {

@@ -420,6 +420,7 @@ export interface IStorage {
   updateRental(id: string, updates: Partial<Rental>): Promise<Rental | undefined>;
   
   // Messages
+  getMessageById(id: string): Promise<Message | undefined>;
   getMessagesByRental(rentalId: string): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
   markMessageAsRead(id: string): Promise<Message | undefined>;
@@ -2339,6 +2340,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Messages
+  async getMessageById(id: string): Promise<Message | undefined> {
+    const [message] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, id))
+      .limit(1);
+    return message;
+  }
+
   async getMessagesByRental(rentalId: string): Promise<Message[]> {
     return await db
       .select()

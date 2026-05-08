@@ -35,6 +35,20 @@ const registrationRateLimiter = createSoftAuthRateLimiter({
   key: 'registration',
 });
 
+const loginRateLimiter = createSoftAuthRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  anonMax: 10,
+  authMax: 20,
+  key: 'auth_login',
+});
+
+const tokenRefreshRateLimiter = createSoftAuthRateLimiter({
+  windowMs: 5 * 60 * 1000,
+  anonMax: 60,
+  authMax: 120,
+  key: 'auth_refresh',
+});
+
 async function establishWebSession(
   req: any,
   userId: string,
@@ -244,7 +258,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
    * POST /api/auth/web-login
    * Login with email/password (WEB - creates session)
    */
-  router.post('/web-login', async (req: any, res: Response): Promise<void> => {
+  router.post('/web-login', loginRateLimiter, async (req: any, res: Response): Promise<void> => {
     try {
       const result = loginSchema.safeParse(req.body);
       if (!result.success) {
@@ -388,7 +402,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
    * POST /api/auth/login
    * Login with email/password
    */
-  router.post('/login', async (req: Request, res: Response): Promise<void> => {
+  router.post('/login', loginRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
       const result = loginSchema.safeParse(req.body);
       if (!result.success) {
@@ -454,7 +468,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
    * POST /api/auth/refresh
    * Refresh access token using refresh token
    */
-  router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
+  router.post('/refresh', tokenRefreshRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
       const result = refreshSchema.safeParse(req.body);
       if (!result.success) {

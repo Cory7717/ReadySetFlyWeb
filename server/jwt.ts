@@ -2,7 +2,14 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 
 // JWT Configuration
-const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || 'default-jwt-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET;
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET or SESSION_SECRET must be configured in production');
+  }
+  console.warn('JWT_SECRET/SESSION_SECRET not set; using development-only JWT secret');
+}
+const EFFECTIVE_JWT_SECRET = JWT_SECRET || 'development-only-jwt-secret';
 const ACCESS_TOKEN_EXPIRY = '15m'; // 15 minutes
 const REFRESH_TOKEN_EXPIRY = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 
@@ -21,7 +28,7 @@ export interface RefreshTokenPayload {
  */
 export function generateAccessToken(userId: string, email: string): string {
   const payload: AccessTokenPayload = { userId, email };
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
+  return jwt.sign(payload, EFFECTIVE_JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
 }
 
 /**
@@ -36,7 +43,7 @@ export function generateRefreshToken(): string {
  */
 export function verifyAccessToken(token: string): AccessTokenPayload | null {
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as AccessTokenPayload;
+    const payload = jwt.verify(token, EFFECTIVE_JWT_SECRET) as AccessTokenPayload;
     return payload;
   } catch (error) {
     return null;

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import type { IStorage } from './storage';
+import { createSoftAuthRateLimiter } from './middleware/rateLimit';
 import { 
   generateAccessToken, 
   generateRefreshToken, 
@@ -28,12 +29,33 @@ const refreshSchema = z.object({
   refreshToken: z.string().min(1, "Refresh token is required"),
 });
 
+const mobileRegistrationRateLimiter = createSoftAuthRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  anonMax: 5,
+  authMax: 5,
+  key: 'mobile_registration',
+});
+
+const mobileLoginRateLimiter = createSoftAuthRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  anonMax: 10,
+  authMax: 20,
+  key: 'mobile_auth_login',
+});
+
+const mobileRefreshRateLimiter = createSoftAuthRateLimiter({
+  windowMs: 5 * 60 * 1000,
+  anonMax: 60,
+  authMax: 120,
+  key: 'mobile_auth_refresh',
+});
+
 /**
  * POST /api/mobile/auth/register
  * Register a new user with email/password
  */
 export function registerMobileAuthRoutes(storage: IStorage) {
-  router.post('/register', async (req: Request, res: Response): Promise<void> => {
+  router.post('/register', mobileRegistrationRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate request body
       const result = registerSchema.safeParse(req.body);
@@ -98,7 +120,7 @@ export function registerMobileAuthRoutes(storage: IStorage) {
    * POST /api/mobile/auth/login
    * Login with email/password
    */
-  router.post('/login', async (req: Request, res: Response): Promise<void> => {
+  router.post('/login', mobileLoginRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate request body
       const result = loginSchema.safeParse(req.body);
@@ -165,7 +187,7 @@ export function registerMobileAuthRoutes(storage: IStorage) {
    * POST /api/mobile/auth/refresh
    * Refresh access token using refresh token
    */
-  router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
+  router.post('/refresh', mobileRefreshRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate request body
       const result = refreshSchema.safeParse(req.body);

@@ -30,13 +30,15 @@ test("scanner guard identifies secret and backup probes", () => {
   assert.equal(isScannerProbePath("/.git/config"), true);
   assert.equal(isScannerProbePath("/backend/.env"), true);
   assert.equal(isScannerProbePath("/config/database.sql"), true);
+  assert.equal(isScannerProbePath("/phpinfo.php"), true);
+  assert.equal(isScannerProbePath("/assets/app.js.map"), true);
   assert.equal(isScannerProbePath("/api/healthz"), false);
 });
 
 test("scanner guard blocks probes before fallback HTML", async () => {
   const server = await startTestServer();
   try {
-    for (const path of ["/.env", "/.git/config", "/backend/.env"]) {
+    for (const path of ["/.env", "/.git/config", "/backend/.env", "/phpinfo.php"]) {
       const response = await fetch(`${server.baseUrl}${path}`);
       const text = await response.text();
       assert.equal(response.status, 404);

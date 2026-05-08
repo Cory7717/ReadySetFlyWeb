@@ -13,7 +13,8 @@ const directScannerPatterns = [
   /^\/(\.env(?:[.~].*)?|\.git(?:\/|$)|\.svn(?:\/|$)|\.hg(?:\/|$)|\.DS_Store(?:$|\/))/i,
   /\/\.env(\.|$|~)/i,
   /\/\.git\//i,
-  /\.(bak|backup|old|save|swp|sql|zip|tar|gz|7z)$/i,
+  /^\/(?:phpinfo|info|test|debug)\.php$/i,
+  /\.(bak|backup|old|save|swp|sql|zip|tar|gz|7z|map)$/i,
 ];
 
 const sensitiveConfigDirs = new Set([

@@ -3,6 +3,9 @@ import type { CorsOptions } from "cors";
 const DEFAULT_WEB_ORIGINS = [
   "https://readysetfly.us",
   "https://www.readysetfly.us",
+];
+
+const LOCAL_DEV_ORIGINS = [
   "http://localhost:5173",
   "http://localhost:4173",
   "http://localhost:5000",
@@ -23,7 +26,10 @@ function getConfiguredOrigins(): string[] {
     .map((value) => normalizeOrigin(value))
     .filter(Boolean);
 
-  return Array.from(new Set([...DEFAULT_WEB_ORIGINS, ...envOrigins]));
+  const defaults = process.env.NODE_ENV === "production"
+    ? DEFAULT_WEB_ORIGINS
+    : [...DEFAULT_WEB_ORIGINS, ...LOCAL_DEV_ORIGINS];
+  return Array.from(new Set([...defaults, ...envOrigins]));
 }
 
 export function getAllowedOrigins(): string[] {

@@ -268,12 +268,42 @@ const buildPlannerStateSnapshot = ({
 const hasLiveProviderPlan = (plan: FlightPlan | null | undefined) =>
   Boolean(plan?.filingIsLive && plan?.filingProviderPlanId);
 
+const getProviderSnapshot = (plan: FlightPlan | null | undefined) => {
+  const snapshot = (plan as any)?.filingProviderSnapshot;
+  return snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+    ? snapshot as Record<string, any>
+    : {};
+};
+
+const getProviderActionAvailability = (plan: FlightPlan | null | undefined) => {
+  const snapshot = getProviderSnapshot(plan);
+  const availability = snapshot.providerActionAvailability;
+  const lifecycle = String(snapshot.providerLifecycleStatus || "").toLowerCase();
+  const providerStatusKnown = Boolean(
+    lifecycle &&
+    lifecycle !== "unknown" &&
+    (snapshot.providerStatus || snapshot.artccState || snapshot.versionStamp || snapshot.cancellationIndicator || snapshot.closureIndicator)
+  );
+  return {
+    lifecycle: lifecycle || "unknown",
+    providerStatusKnown,
+    amend: Boolean(availability?.amend),
+    activate: Boolean(availability?.activate),
+    cancel: Boolean(availability?.cancel),
+    close: Boolean(availability?.close),
+    reason: String(availability?.reason || ""),
+  };
+};
+
 const canSubmitAmendForPlan = (plan: FlightPlan | null | undefined) => {
   if (!plan) return false;
   const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
   const status = normalizedClientFilingStatus(plan);
+  const provider = getProviderActionAvailability(plan);
   return Boolean(
     hasLiveProviderPlan(plan) &&
+    provider.providerStatusKnown &&
+    provider.amend &&
     (rules === "VFR" ? ["filed", "activated"].includes(status) : status === "filed"),
   );
 };
@@ -283,6 +313,8 @@ const canActivatePlan = (plan: FlightPlan | null | undefined) =>
     plan &&
     String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
     normalizedClientFilingStatus(plan) === "filed" &&
+    getProviderActionAvailability(plan).providerStatusKnown &&
+    getProviderActionAvailability(plan).activate &&
     hasLiveProviderPlan(plan),
   );
 
@@ -291,6 +323,8 @@ const canClosePlan = (plan: FlightPlan | null | undefined) =>
     plan &&
     String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
     normalizedClientFilingStatus(plan) === "activated" &&
+    getProviderActionAvailability(plan).providerStatusKnown &&
+    getProviderActionAvailability(plan).close &&
     hasLiveProviderPlan(plan),
   );
 
@@ -301,6 +335,8 @@ const canCancelPlan = (plan: FlightPlan | null | undefined) =>
   Boolean(
     plan &&
     normalizedClientFilingStatus(plan) === "filed" &&
+    getProviderActionAvailability(plan).providerStatusKnown &&
+    getProviderActionAvailability(plan).cancel &&
     hasLiveProviderPlan(plan),
   );
 
@@ -401,6 +437,11 @@ const getAmendAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
     return "This filed record is still waiting on the Leidos amend token. Refresh provider sync in a few minutes, then try amend again.";
   }
 
+  const provider = getProviderActionAvailability(plan);
+  if (!provider.providerStatusKnown) {
+    return provider.reason || "Refresh provider sync before taking Leidos lifecycle actions. RSF could not determine the current provider state.";
+  }
+
   if (rules === "IFR" && status !== "filed") {
     return "IFR plans can only be amended from the filed state.";
   }
@@ -453,6 +494,17 @@ const getDraftAmendAvailabilityMessage = ({
     return "Planned altitude is required before RSF can send this amend request.";
   }
 
+  return null;
+};
+
+const getProviderLifecycleAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
+  if (!plan?.filingProviderPlanId) return null;
+  const provider = getProviderActionAvailability(plan);
+  const snapshot = getProviderSnapshot(plan);
+  if (snapshot.externalChangeNotice) return String(snapshot.externalChangeNotice);
+  if (!provider.providerStatusKnown) {
+    return provider.reason || "Provider state is unknown. Refresh provider sync before cancel, close, or activate.";
+  }
   return null;
 };
 
@@ -5268,6 +5320,7 @@ export default function FlightPlanner() {
   const currentSavedPlanCanActivate = canActivatePlan(currentSavedPlan);
   const currentSavedPlanCanClose = canClosePlan(currentSavedPlan);
   const currentSavedPlanCanCancel = canCancelPlan(currentSavedPlan);
+  const currentProviderLifecycleMessage = getProviderLifecycleAvailabilityMessage(currentSavedPlan);
   const hasCurrentSavedPlan = Boolean(currentSavedPlan?.id);
   const draftAmendAvailabilityMessage = useMemo(
     () =>
@@ -5322,8 +5375,12 @@ export default function FlightPlanner() {
     },
     onError: (error: any) => {
       setPendingFilingActionAfterSave(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
       toast({
-        title: isLeidosTimeoutMessage(error?.message) ? "Leidos is taking longer than usual" : "Staging failed",
+        title: /provider state|Leidos says|PROPOSED/i.test(String(error?.message || ""))
+          ? "Provider state changed"
+          : isLeidosTimeoutMessage(error?.message) ? "Leidos is taking longer than usual" : "Staging failed",
         description: summarizePlannerError(error?.message),
         variant: "destructive",
       });
@@ -8204,6 +8261,11 @@ export default function FlightPlanner() {
                   {getAmendAvailabilityMessage(currentSavedPlan)}
                 </div>
               )}
+              {currentProviderLifecycleMessage && (
+                <div className="rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                  {currentProviderLifecycleMessage}
+                </div>
+              )}
               {isPlanOverdueForClose(currentSavedPlan) && normalizedClientFilingStatus(currentSavedPlan) === "activated" && (
                 <div className="text-xs text-amber-400/80">
                   This plan is overdue — you'll be asked for your actual close location before submitting to Leidos.
@@ -8334,7 +8396,7 @@ export default function FlightPlanner() {
 
       <Card className={plannerPanelClass}>
         <CardHeader>
-          <CardTitle className={plannerCardTitleClass}>Active/Saved/Previous Plans</CardTitle>
+          <CardTitle className={plannerCardTitleClass}>Saved Plans</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>Access saved routes and fuel notes. Free accounts keep one plan.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -8401,6 +8463,7 @@ export default function FlightPlanner() {
                     const arrivalTime = formatPlanLocalZulu(plan.plannedArrivalAt, getPlanTimeZone(plan, "destinationTimeZone", destinationTimeZone));
                     const syncTime = formatPlanLocalZulu(plan.filingLastProviderSyncAt, getPlanTimeZone(plan, "departureTimeZone", departureTimeZone));
                     const beaconCode = getPlanBeaconCode(plan);
+                    const providerLifecycleMessage = getProviderLifecycleAvailabilityMessage(plan);
                     const deletable = canDeleteLocalDraftPlan(plan);
                     return (
               <div key={plan.id} className="rounded-lg border p-4 space-y-2">
@@ -8453,6 +8516,11 @@ export default function FlightPlanner() {
                     <div><span className="text-muted-foreground">Assigned Squawk</span><div className="font-mono font-semibold">{beaconCode || "-"}</div></div>
                   </div>
                 </button>
+                {providerLifecycleMessage && (
+                  <div className="rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                    {providerLifecycleMessage}
+                  </div>
+                )}
                 {expanded && (
                 <>
                 <div className="grid gap-2 md:grid-cols-4 text-sm">

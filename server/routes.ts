@@ -21079,6 +21079,108 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const appendPlanProviderMessages = (existingMessages: unknown, incomingMessages: FilingProviderMessage[] | undefined) =>
     mergeProviderMessages(existingMessages, incomingMessages || []);
 
+  const getProviderLifecycleStatus = (snapshot: Record<string, unknown>) =>
+    String(snapshot.providerLifecycleStatus || "").toLowerCase();
+
+  const getPlanStatusFromProviderLifecycle = (snapshot: Record<string, unknown>) => {
+    const lifecycle = getProviderLifecycleStatus(snapshot);
+    if (lifecycle === "cancelled") return "cancelled";
+    if (lifecycle === "closed") return "closed";
+    if (lifecycle === "activated") return "activated";
+    if (lifecycle === "proposed" || lifecycle === "filed") return "filed";
+    return null;
+  };
+
+  const addProviderStateMismatchNotice = (plan: any, snapshot: Record<string, unknown>, forceNotice?: string | null) => {
+    const providerStatus = getPlanStatusFromProviderLifecycle(snapshot);
+    const localStatus = String(plan.filingStatus || "draft").toLowerCase();
+    if (!forceNotice && (!providerStatus || localStatus === providerStatus)) return snapshot;
+
+    const notice = forceNotice || `External provider change detected: Leidos now reports ${providerStatus}, while RSF had ${localStatus || "draft"}.`;
+    const notices = Array.from(new Set([
+      notice,
+      ...(Array.isArray(snapshot.notices) ? snapshot.notices.map(String) : []),
+    ]));
+
+    return {
+      ...snapshot,
+      externalChangeDetected: true,
+      externalChangeNotice: notice,
+      notices,
+    };
+  };
+
+  const buildExternalProviderChangeMessage = (plan: any, snapshot: Record<string, unknown>): FilingProviderMessage | null => {
+    const notice = String(snapshot.externalChangeNotice || "").trim();
+    if (!notice) return null;
+    return {
+      id: buildFilingEventId("sync", plan.id, "external_provider_change", notice),
+      timestamp: new Date().toISOString(),
+      severity: "warning",
+      title: "External provider change detected",
+      details: notice,
+      source: "sync",
+      provider: "Leidos Flight Service",
+      providerPlanId: String(plan.filingProviderPlanId || snapshot.providerPlanId || "").trim() || null,
+    };
+  };
+
+  const persistLeidosProviderSync = async (
+    plan: any,
+    syncResult: Awaited<ReturnType<typeof syncLeidosPlanMetadata>>,
+    options: { extraMessages?: FilingProviderMessage[]; forceExternalNotice?: boolean } = {},
+  ) => {
+    const now = new Date();
+    const currentRaw =
+      plan.filingRaw && typeof plan.filingRaw === "object" && !Array.isArray(plan.filingRaw)
+        ? plan.filingRaw as Record<string, unknown>
+        : {};
+    const nextRaw = {
+      ...currentRaw,
+      providerPlanId: syncResult.providerPlanId ?? currentRaw.providerPlanId ?? null,
+      versionStamp: syncResult.versionStamp ?? currentRaw.versionStamp ?? null,
+      metadataResponse: syncResult.metadataResponse ?? currentRaw.metadataResponse ?? null,
+      retrievedAt: now.toISOString(),
+    };
+    const mergedSnapshotBase = syncResult.providerSnapshot
+      ? mergeProviderSnapshot((plan as Record<string, unknown>).filingProviderSnapshot, syncResult.providerSnapshot)
+      : asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+    const nextProviderSnapshot = addProviderStateMismatchNotice(
+      plan,
+      mergedSnapshotBase,
+      options.forceExternalNotice
+        ? "External provider change detected: Leidos rejected the requested action because the flight plan is no longer in the expected provider-side state."
+        : null,
+    );
+    const externalMessage = buildExternalProviderChangeMessage(plan, nextProviderSnapshot);
+    const nextProviderMessages = appendPlanProviderMessages(
+      (plan as Record<string, unknown>).filingProviderMessages,
+      [
+        ...(options.extraMessages || []),
+        ...(externalMessage ? [externalMessage] : []),
+        ...syncResult.providerMessages,
+      ],
+    );
+    const providerStatus = getPlanStatusFromProviderLifecycle(nextProviderSnapshot);
+    const statusTimestamps: Record<string, Date> = {};
+    if (providerStatus === "activated" && !plan.activatedAt) statusTimestamps.activatedAt = now;
+    if (providerStatus === "cancelled" && !plan.cancelledAt) statusTimestamps.cancelledAt = now;
+    if (providerStatus === "closed" && !plan.closedAt) statusTimestamps.closedAt = now;
+
+    return storage.updateFlightPlan(plan.id, {
+      filingProviderPlanId: syncResult.providerPlanId ?? plan.filingProviderPlanId,
+      filingStatus: providerStatus || plan.filingStatus,
+      filingPendingAction: providerStatus && ["cancelled", "closed"].includes(providerStatus) ? null : plan.filingPendingAction,
+      filingIsLive: providerStatus ? !["cancelled", "closed"].includes(providerStatus) : plan.filingIsLive,
+      filingLastProviderSyncAt: now,
+      filingProviderSnapshot: Object.keys(nextProviderSnapshot || {}).length > 0 ? nextProviderSnapshot as any : null,
+      filingProviderMessages: nextProviderMessages as any,
+      filingAssignedBeaconCode: String((nextProviderSnapshot as any)?.beaconCode || plan.filingAssignedBeaconCode || "").trim() || null,
+      filingRaw: nextRaw as any,
+      ...statusTimestamps,
+    } as any);
+  };
+
   const filingPreviewSchema = z.object({
     live: z.literal(false).optional(),
     provider: z.string().optional(),
@@ -21274,33 +21376,17 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         }
 
         const syncResult = await syncLeidosPlanMetadata(matchedPlan as any).catch(() => null);
-        const mergedSnapshot = syncResult?.providerSnapshot
-          ? mergeProviderSnapshot((matchedPlan as Record<string, unknown>).filingProviderSnapshot, syncResult.providerSnapshot)
-          : asRecord((matchedPlan as Record<string, unknown>).filingProviderSnapshot);
-        const mergedMessages = appendPlanProviderMessages(
-          (matchedPlan as Record<string, unknown>).filingProviderMessages,
-          [providerMessage, ...(syncResult?.providerMessages || [])],
-        );
-        const currentRaw =
-          matchedPlan.filingRaw && typeof matchedPlan.filingRaw === "object" && !Array.isArray(matchedPlan.filingRaw)
-            ? matchedPlan.filingRaw as Record<string, unknown>
-            : {};
-
-        await storage.updateFlightPlan(matchedPlan.id, {
-          filingLastProviderSyncAt: new Date(),
-          filingProviderSnapshot: Object.keys(mergedSnapshot || {}).length > 0 ? mergedSnapshot as any : null,
-          filingProviderMessages: mergedMessages as any,
-          filingAssignedBeaconCode: String((mergedSnapshot as any)?.beaconCode || matchedPlan.filingAssignedBeaconCode || "").trim() || null,
-          filingRaw: syncResult
-            ? {
-              ...currentRaw,
-              providerPlanId: syncResult.providerPlanId ?? currentRaw.providerPlanId ?? null,
-              versionStamp: syncResult.versionStamp ?? currentRaw.versionStamp ?? null,
-              metadataResponse: syncResult.metadataResponse ?? currentRaw.metadataResponse ?? null,
-              retrievedAt: new Date().toISOString(),
-            } as any
-            : matchedPlan.filingRaw,
-        } as any);
+        if (syncResult) {
+          await persistLeidosProviderSync(matchedPlan as any, syncResult, { extraMessages: [providerMessage] });
+        } else {
+          const mergedMessages = appendPlanProviderMessages(
+            (matchedPlan as Record<string, unknown>).filingProviderMessages,
+            [providerMessage],
+          );
+          await storage.updateFlightPlan(matchedPlan.id, {
+            filingProviderMessages: mergedMessages as any,
+          } as any);
+        }
       } catch (innerError) {
         console.error(JSON.stringify({
           event: "leidos_push_error",
@@ -21521,6 +21607,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   });
 
   app.post("/api/flight-plans/:id/filing-action", isAuthenticated, flightFilingRateLimiter, async (req: any, res) => {
+    let planForErrorSync: any = null;
     try {
       const mergePreservedFilingRaw = (existingRaw: unknown, incomingRaw: unknown) => {
         const existingRecord =
@@ -21549,6 +21636,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!plan) {
         return res.status(404).json({ error: "Flight plan not found" });
       }
+      planForErrorSync = plan;
       if (plan.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
@@ -21561,6 +21649,26 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const action = parsed.data.action as FlightPlanFilingAction;
       const closeLocation = parsed.data.closeLocation || null;
       const flightRules = (plan.filingFlightRules || "VFR").toUpperCase();
+      if (["cancel", "close", "activate"].includes(action) && plan.filingProviderPlanId) {
+        const providerSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+        const availability = asRecord(providerSnapshot.providerActionAvailability);
+        const lifecycle = getProviderLifecycleStatus(providerSnapshot);
+        if (!lifecycle || lifecycle === "unknown" || availability.requiresSync === true) {
+          return res.status(409).json({
+            error: "RSF needs a fresh Leidos provider sync before this action because the current provider state is unknown.",
+            requiresProviderSync: true,
+            plan,
+          });
+        }
+        const available = action === "cancel" ? availability.cancel : action === "close" ? availability.close : availability.activate;
+        if (available === false) {
+          return res.status(409).json({
+            error: `Leidos currently reports this flight plan as ${lifecycle}. ${action.toUpperCase()} is not available for that provider state.`,
+            providerLifecycleStatus: lifecycle,
+            plan,
+          });
+        }
+      }
       if ((action === "activate" || action === "close") && flightRules !== "VFR") {
         return res.status(400).json({ error: `${action} is only available for VFR flight plans.` });
       }
@@ -21623,7 +21731,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         providerResult.providerMessages,
       );
 
-      const updated = await storage.updateFlightPlan(plan.id, {
+      let updated = await storage.updateFlightPlan(plan.id, {
         filingProvider: "leidos_flight_service",
         filingProviderPlanId: nextProviderPlanId,
         filingStatus: nextFilingStatus,
@@ -21638,6 +21746,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         filingActionHistory: [...currentHistory, historyEntry],
         ...statusTimestamps,
       } as any);
+
+      if (updated?.filingProviderPlanId) {
+        try {
+          const postActionSync = await syncLeidosPlanMetadata(updated as any);
+          updated = await persistLeidosProviderSync(updated as any, postActionSync);
+        } catch (syncError: any) {
+          console.warn("Leidos post-action sync failed:", syncError?.message || syncError);
+        }
+      }
 
       if (providerResult.live) {
         const actionTitles: Record<string, string> = {
@@ -21683,8 +21800,34 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           : "Failed to stage flight plan filing action";
       const isTimeout = /timed out before Flight Service responded|connect timeout|timed out/i.test(message);
       const isProviderRejected = /Leidos returned an unsuccessful|Webservice\.Cannot|not in the PROPOSED state|could not be cancelled/i.test(message);
+      let syncedPlan: any = null;
+      if (planForErrorSync?.filingProviderPlanId) {
+        try {
+          const mismatchSync = await syncLeidosPlanMetadata(planForErrorSync as any);
+          syncedPlan = await persistLeidosProviderSync(planForErrorSync as any, mismatchSync, {
+            forceExternalNotice: true,
+            extraMessages: [{
+              id: buildFilingEventId("provider", planForErrorSync.id, "state_mismatch", message),
+              timestamp: new Date().toISOString(),
+              severity: "warning",
+              title: "External provider change detected",
+              details: "Leidos rejected the action because the provider-side flight plan state changed. RSF refreshed the provider record; review the current status before taking another action.",
+              source: "provider",
+              action: null,
+              provider: "Leidos Flight Service",
+              providerPlanId: planForErrorSync.filingProviderPlanId || null,
+            }],
+          });
+        } catch (syncError: any) {
+          console.warn("Leidos mismatch sync failed:", syncError?.message || syncError);
+        }
+      }
       res.status(isTimeout ? 504 : isProviderRejected ? 409 : 500).json({
-        error: message,
+        error: isProviderRejected
+          ? "Leidos says this flight plan is no longer in the provider state required for that action. RSF refreshed the provider record; review the current status and available actions."
+          : message,
+        providerMessage: message,
+        plan: syncedPlan,
       });
     }
   });
@@ -21705,46 +21848,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       const syncResult = await syncLeidosPlanMetadata(plan as any);
-      const now = new Date();
-      const currentRaw =
-        plan.filingRaw && typeof plan.filingRaw === "object" && !Array.isArray(plan.filingRaw)
-          ? plan.filingRaw as Record<string, unknown>
-          : {};
-      const nextRaw = {
-        ...currentRaw,
-        providerPlanId: syncResult.providerPlanId ?? currentRaw.providerPlanId ?? null,
-        versionStamp: syncResult.versionStamp ?? currentRaw.versionStamp ?? null,
-        metadataResponse: syncResult.metadataResponse ?? currentRaw.metadataResponse ?? null,
-        retrievedAt: now.toISOString(),
-      };
-      const existingProviderSnapshot = (plan as Record<string, unknown>).filingProviderSnapshot;
-      const nextProviderSnapshot = syncResult.providerSnapshot
-        ? mergeProviderSnapshot(existingProviderSnapshot, syncResult.providerSnapshot)
-        : asRecord(existingProviderSnapshot);
-      const nextProviderMessages = appendPlanProviderMessages(
-        (plan as Record<string, unknown>).filingProviderMessages,
-        syncResult.providerMessages,
-      );
+      const updated = await persistLeidosProviderSync(plan as any, syncResult);
+      const nextSnapshot = asRecord((updated as Record<string, unknown>).filingProviderSnapshot);
 
       console.info(JSON.stringify({
         event: "leidos_sync_persisted",
         planId: plan.id,
         providerPlanId: syncResult.providerPlanId ?? plan.filingProviderPlanId,
         versionStamp: syncResult.versionStamp,
-        notices: syncResult.providerSnapshot?.notices ?? [],
+        providerLifecycleStatus: nextSnapshot.providerLifecycleStatus || null,
+        notices: Array.isArray(nextSnapshot.notices) ? nextSnapshot.notices : [],
       }));
 
-      const updated = await storage.updateFlightPlan(plan.id, {
-        filingProviderPlanId: syncResult.providerPlanId ?? plan.filingProviderPlanId,
-        filingLastProviderSyncAt: now,
-        filingProviderSnapshot: Object.keys(nextProviderSnapshot || {}).length > 0 ? nextProviderSnapshot as any : null,
-        filingProviderMessages: nextProviderMessages as any,
-        filingAssignedBeaconCode: String((nextProviderSnapshot as any)?.beaconCode || plan.filingAssignedBeaconCode || "").trim() || null,
-        filingRaw: nextRaw as any,
-      } as any);
-
       const routeChangedByProvider = Boolean(syncResult.providerSnapshot?.route?.changedByProvider);
-      const hasProviderMessages = syncResult.providerMessages.length > 0;
+      const hasProviderMessages = syncResult.providerMessages.length > 0 || Boolean(nextSnapshot.externalChangeDetected);
       if (routeChangedByProvider || hasProviderMessages) {
         const planLabel = plan.title || `${plan.departure} to ${plan.destination}`;
         const providerRoute = (syncResult.providerSnapshot?.route as any)?.providerRoute ?? null;
@@ -21752,8 +21869,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         storage.upsertUserNotification({
           userId,
           type: `provider_sync:${plan.id}`,
-          title: routeChangedByProvider ? "Route updated by provider" : "Provider sync complete",
-          message: routeChangedByProvider
+          title: nextSnapshot.externalChangeDetected ? "External provider change detected" : routeChangedByProvider ? "Route updated by provider" : "Provider sync complete",
+          message: nextSnapshot.externalChangeDetected
+            ? String(nextSnapshot.externalChangeNotice || "Leidos returned a provider state that differs from RSF's prior local state.")
+            : routeChangedByProvider
             ? `Your filed route for "${planLabel}" was adjusted by the provider. Effective route: ${providerRoute || "see Provider Updates for details"}.`
             : `Provider sync completed for "${planLabel}". Your plan is current with the Leidos record.`,
           referenceDate: today as any,

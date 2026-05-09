@@ -871,6 +871,36 @@ const buildProviderSnapshot = ({
   const beaconCode = normalizeLeidosBeaconCode(directBeaconCode) ||
     normalizeLeidosBeaconCode(notices.join(" ")) ||
     normalizeLeidosBeaconCode(JSON.stringify(source));
+  const lifecycleText = [
+    providerStatus,
+    artccState,
+    artccInfo,
+    ...notices,
+    JSON.stringify(source),
+  ].filter(Boolean).join(" ").toLowerCase();
+  const providerLifecycleStatus: FilingProviderSnapshot["providerLifecycleStatus"] =
+    /cancelled|canceled|cancellation/.test(lifecycleText) ? "cancelled" :
+    /\bclosed\b|closure/.test(lifecycleText) ? "closed" :
+    /\bactivated\b|\bactive\b|\bopened\b/.test(lifecycleText) ? "activated" :
+    /\bproposed\b/.test(lifecycleText) ? "proposed" :
+    /\bfiled\b|\baccepted\b/.test(lifecycleText) ? "filed" :
+    "unknown";
+  const cancellationIndicator = /cancelled|canceled|cancellation/.test(lifecycleText)
+    ? (providerStatus || artccState || notices.find((notice) => /cancelled|canceled|cancellation/i.test(notice)) || "Provider indicates cancellation")
+    : null;
+  const closureIndicator = /\bclosed\b|closure/.test(lifecycleText)
+    ? (providerStatus || artccState || notices.find((notice) => /\bclosed\b|closure/i.test(notice)) || "Provider indicates closure")
+    : null;
+  const providerActionAvailability = {
+    amend: ["proposed", "filed", "activated"].includes(providerLifecycleStatus || ""),
+    activate: providerLifecycleStatus === "proposed" || providerLifecycleStatus === "filed",
+    cancel: providerLifecycleStatus === "proposed",
+    close: providerLifecycleStatus === "activated",
+    requiresSync: providerLifecycleStatus === "unknown",
+    reason: providerLifecycleStatus === "unknown"
+      ? "RSF could not determine the current Leidos state. Refresh provider sync before taking lifecycle actions."
+      : null,
+  };
   const route = {
     localEnteredRoute: payloadSnapshot?.route.localEnteredRoute || null,
     normalizedTransmittedRoute: payloadSnapshot?.route.normalizedTransmittedRoute || null,
@@ -893,6 +923,12 @@ const buildProviderSnapshot = ({
     providerStatus,
     artccState,
     artccInfo,
+    providerLifecycleStatus,
+    providerActionAvailability,
+    cancellationIndicator,
+    closureIndicator,
+    externalChangeDetected: false,
+    externalChangeNotice: null,
     beaconCode,
     route,
     notices,

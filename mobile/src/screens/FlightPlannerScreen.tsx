@@ -261,6 +261,33 @@ const getPlanBeaconCode = (plan: FlightPlan | null | undefined) => {
   return null;
 };
 
+const getProviderSnapshot = (plan: FlightPlan | null | undefined) => {
+  const snapshot = (plan as any)?.filingProviderSnapshot;
+  return snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+    ? snapshot as Record<string, any>
+    : {};
+};
+
+const getProviderActionAvailability = (plan: FlightPlan | null | undefined) => {
+  const snapshot = getProviderSnapshot(plan);
+  const availability = snapshot.providerActionAvailability;
+  const lifecycle = String(snapshot.providerLifecycleStatus || '').toLowerCase();
+  const providerStatusKnown = Boolean(
+    lifecycle &&
+    lifecycle !== 'unknown' &&
+    (snapshot.providerStatus || snapshot.artccState || snapshot.versionStamp || snapshot.cancellationIndicator || snapshot.closureIndicator)
+  );
+  return {
+    lifecycle: lifecycle || 'unknown',
+    providerStatusKnown,
+    amend: Boolean(availability?.amend),
+    activate: Boolean(availability?.activate),
+    cancel: Boolean(availability?.cancel),
+    close: Boolean(availability?.close),
+    reason: String(availability?.reason || ''),
+  };
+};
+
 const buildProviderUpdateSignature = (plan: FlightPlan | null | undefined) => {
   const snapshot = (plan as any)?.filingProviderSnapshot;
   const snapshotRecord = snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
@@ -288,6 +315,16 @@ const buildProviderUpdateSignature = (plan: FlightPlan | null | undefined) => {
     notices: Array.isArray(snapshotRecord.notices) ? snapshotRecord.notices : [],
     messages,
   });
+};
+
+const canSubmitProviderAction = (plan: FlightPlan | null | undefined, action: 'amend' | 'activate' | 'cancel' | 'close') => {
+  if (!plan?.filingIsLive || !plan.filingProviderPlanId) return false;
+  const provider = getProviderActionAvailability(plan);
+  if (!provider.providerStatusKnown) return false;
+  if (action === 'amend') return provider.amend;
+  if (action === 'activate') return provider.activate;
+  if (action === 'cancel') return provider.cancel;
+  return provider.close;
 };
 
 const canDeleteLocalDraftPlan = (plan: FlightPlan | null | undefined) => {
@@ -6537,6 +6574,16 @@ export default function FlightPlannerScreen() {
     try {
       const targetPlan = plan || (activeSavedPlanId ? savedPlans.find((entry) => entry.id === activeSavedPlanId) : null) || await saveCurrentFlightPlan();
       if (!targetPlan) return;
+      if (action !== 'file' && !canSubmitProviderAction(targetPlan, action)) {
+        const provider = getProviderActionAvailability(targetPlan);
+        Alert.alert(
+          'Refresh provider sync',
+          provider.providerStatusKnown
+            ? `Leidos currently reports ${provider.lifecycle}. ${action.toUpperCase()} is not available.`
+            : provider.reason || 'Provider state is unknown. Refresh provider sync before taking this action.',
+        );
+        return;
+      }
       const res = await api.post(`/api/flight-plans/${targetPlan.id}/filing-action`, { action });
       if (res.data?.plan) {
         setSavedPlans((current) => mergeSavedPlan(current, res.data.plan));
@@ -6544,6 +6591,11 @@ export default function FlightPlannerScreen() {
       }
       Alert.alert(action === 'file' ? 'Flight plan filed' : 'Leidos action submitted', res.data?.message || 'Provider request accepted.');
     } catch (error: any) {
+      if (error?.response?.data?.plan) {
+        setSavedPlans((current) => mergeSavedPlan(current, error.response.data.plan));
+      } else {
+        void loadSavedPlans();
+      }
       Alert.alert('Leidos action failed', error?.response?.data?.error || 'Unable to submit this provider action.');
     } finally {
       setFilingBusy(null);
@@ -8827,6 +8879,7 @@ export default function FlightPlannerScreen() {
                   const depTime = formatLocalZulu(plan.plannedDepartureAt, getPlanTimeZone(plan, 'departureTimeZone', resolvedDepartureTimeZone));
                   const arrTime = formatLocalZulu(plan.plannedArrivalAt, getPlanTimeZone(plan, 'destinationTimeZone', resolvedDestinationTimeZone));
                   const beacon = getPlanBeaconCode(plan);
+                  const providerMessage = String(getProviderSnapshot(plan).externalChangeNotice || getProviderActionAvailability(plan).reason || '');
                   return (
                     <View key={plan.id} style={styles.savedPlanCard}>
                       <TouchableOpacity onPress={() => setExpandedPlanIds((current) => ({ ...current, [plan.id]: !expanded }))}>
@@ -8837,13 +8890,14 @@ export default function FlightPlannerScreen() {
                         <Text style={styles.helperText}>{plan.departure} to {plan.destination} | {plan.tailNumber || 'No aircraft'} | Assigned Squawk {beacon || '-'}</Text>
                         <Text style={styles.helperText}>Departure: {depTime.local} / {depTime.zulu}</Text>
                         <Text style={styles.helperText}>Arrival: {arrTime.local} / {arrTime.zulu}</Text>
+                        {providerMessage ? <Text style={styles.warningText}>{providerMessage}</Text> : null}
                       </TouchableOpacity>
                       {expanded && (
                         <View style={styles.savedPlanActions}>
                           <TouchableOpacity style={styles.secondaryButton} onPress={() => loadSavedPlanIntoPlanner(plan)}>
                             <Text style={styles.secondaryButtonText}>Edit</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('amend', plan)}>
+                          <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('amend', plan)} disabled={!canSubmitProviderAction(plan, 'amend')}>
                             <Text style={styles.secondaryButtonText}>Amend</Text>
                           </TouchableOpacity>
                           <TouchableOpacity style={styles.secondaryButton} onPress={() => void syncFilingPlan(plan)}>
@@ -8851,15 +8905,15 @@ export default function FlightPlannerScreen() {
                           </TouchableOpacity>
                           {(plan.filingFlightRules || 'VFR').toUpperCase() === 'VFR' && (
                             <>
-                              <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('activate', plan)}>
+                              <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('activate', plan)} disabled={!canSubmitProviderAction(plan, 'activate')}>
                                 <Text style={styles.secondaryButtonText}>Activate</Text>
                               </TouchableOpacity>
-                              <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('close', plan)}>
+                              <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('close', plan)} disabled={!canSubmitProviderAction(plan, 'close')}>
                                 <Text style={styles.secondaryButtonText}>Close</Text>
                               </TouchableOpacity>
                             </>
                           )}
-                          <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('cancel', plan)}>
+                          <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('cancel', plan)} disabled={!canSubmitProviderAction(plan, 'cancel')}>
                             <Text style={styles.secondaryButtonText}>Cancel</Text>
                           </TouchableOpacity>
                           {canDeleteLocalDraftPlan(plan) && (

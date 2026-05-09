@@ -57,6 +57,19 @@ export type FilingProviderSnapshot = {
   providerStatus: string | null;
   artccState: string | null;
   artccInfo: string | null;
+  providerLifecycleStatus?: "proposed" | "filed" | "activated" | "cancelled" | "closed" | "unknown";
+  providerActionAvailability?: {
+    amend: boolean;
+    activate: boolean;
+    cancel: boolean;
+    close: boolean;
+    requiresSync: boolean;
+    reason: string | null;
+  };
+  cancellationIndicator?: string | null;
+  closureIndicator?: string | null;
+  externalChangeDetected?: boolean;
+  externalChangeNotice?: string | null;
   beaconCode: string | null;
   route: FilingRouteSnapshot;
   notices: string[];

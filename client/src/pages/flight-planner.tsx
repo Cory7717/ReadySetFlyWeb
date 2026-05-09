@@ -8505,7 +8505,7 @@ export default function FlightPlanner() {
                   type="button"
                   className="flex w-full items-start gap-2 rounded-md border border-[#5d6f85]/18 bg-[#0f141a]/70 p-3 text-left"
                   onClick={() => setExpandedPlanIds((current) => ({ ...current, [plan.id]: !expanded }))}
-                  aria-expanded={expanded}
+                  aria-expanded={expanded ? "true" : "false"}
                 >
                   {expanded ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0" /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0" />}
                   <div className="grid min-w-0 flex-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-5">

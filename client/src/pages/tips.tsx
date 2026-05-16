@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -30,14 +30,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const C = {
   page: "bg-[#f5efe7] text-[#201814]",
-  shell: "!border-[#ddccb5] !bg-[#fffaf2] !text-[#201814] shadow-[0_18px_45px_rgba(74,54,34,0.10)]",
-  panel: "border-[#e1d1bb] bg-[#fbf6ee] text-[#201814]",
+  shell: "!border-[#ddccb5] !bg-[#fffaf2] !bg-none !text-[#201814] shadow-[0_18px_45px_rgba(74,54,34,0.10)]",
+  panel: "border-[#e1d1bb] !bg-[#fbf6ee] !bg-none text-[#201814]",
   ink: "!text-[#201814]",
   muted: "!text-[#5f5247]",
-  accent: "bg-[#b98435] text-white hover:bg-[#9f6f2b]",
-  green: "bg-[#2f5f46] text-white hover:bg-[#274d39]",
+  accent: "!bg-[#b98435] !bg-none !text-white hover:!bg-[#9f6f2b]",
+  green: "!bg-[#2f5f46] !bg-none !text-white hover:!bg-[#274d39]",
   field: "!border-[#cdbda8] !bg-white !text-[#201814] placeholder:!text-[#76695d]",
-  outline: "border-[#cdbda8] bg-white text-[#201814] hover:bg-[#f8efe2]",
+  outline: "!border-[#cdbda8] !bg-white !bg-none !text-[#201814] hover:!bg-[#f8efe2]",
+  darkButton: "!border-[#111827] !bg-[#1f2937] !bg-none !text-white hover:!bg-[#111827]",
 };
 
 type TipsUser = {
@@ -63,10 +64,8 @@ type TipEntry = {
   id: string;
   entryDate: string;
   tipAmount: string;
-  cashTips: string;
   creditTips: string;
   grossSales: string;
-  coversServed?: number | null;
   shiftType?: "breakfast" | "lunch" | "dinner" | "bar" | "other";
   notes?: string | null;
   status: string;
@@ -103,6 +102,10 @@ function parseLocalDate(value: string) {
 function formatDisplayDate(value: string, style: "short" | "long" = "short") {
   const date = parseLocalDate(value);
   return date.toLocaleDateString(undefined, style === "long" ? { weekday: "long", month: "long", day: "numeric" } : { weekday: "short", month: "short", day: "numeric" });
+}
+
+function formatTodayLabel(value: string) {
+  return `Today, ${formatDisplayDate(value, "long")}`;
 }
 
 function formatPeriod(start: string, end: string) {
@@ -229,11 +232,8 @@ function DayEditor({
 }) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(Boolean(defaultOpen));
-  const [amount, setAmount] = useState(day.entry?.tipAmount || "");
-  const [cashTips, setCashTips] = useState(day.entry?.cashTips || "");
-  const [creditTips, setCreditTips] = useState(day.entry?.creditTips || "");
+  const [creditTips, setCreditTips] = useState(day.entry?.creditTips || day.entry?.tipAmount || "");
   const [grossSales, setGrossSales] = useState(day.entry?.grossSales || "");
-  const [coversServed, setCoversServed] = useState(day.entry?.coversServed?.toString() || "");
   const [shiftType, setShiftType] = useState<TipEntry["shiftType"]>(day.entry?.shiftType || "other");
   const [notes, setNotes] = useState(day.entry?.notes || "");
   const [file, setFile] = useState<File | null>(null);
@@ -245,16 +245,12 @@ function DayEditor({
   const save = useMutation({
     mutationFn: async () => {
       if (!file && !hasReport) throw new Error("Add a sales report photo before saving this tip entry.");
-      const cashValue = Number(cashTips || 0);
       const creditValue = Number(creditTips || 0);
-      const totalValue = amount === "" && (cashTips !== "" || creditTips !== "") ? cashValue + creditValue : Number(amount || 0);
       const response = await apiRequest("POST", "/api/tips/entries", {
         entryDate: day.date,
-        tipAmount: totalValue,
-        cashTips: cashValue,
+        tipAmount: creditValue,
         creditTips: creditValue,
         grossSales: Number(grossSales || 0),
-        coversServed: coversServed === "" ? null : Number(coversServed),
         shiftType: shiftType || "other",
         notes,
       });
@@ -282,7 +278,7 @@ function DayEditor({
       <button type="button" className="flex w-full items-center justify-between gap-3 p-4 text-left" onClick={() => setExpanded((value) => !value)}>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="font-semibold">{isToday ? "Today" : formatDisplayDate(day.date)}</div>
+            <div className="font-semibold">{isToday ? formatTodayLabel(day.date) : formatDisplayDate(day.date)}</div>
             {isToday && <Badge className="bg-[#b98435] text-white">Day {day.dayNumber}</Badge>}
           </div>
           <div className="mt-1 text-sm text-[#5f5247]">
@@ -301,30 +297,16 @@ function DayEditor({
       {expanded && (
         <div className="space-y-4 border-t border-[#e0d3c1] p-4">
           <div>
-            <Label>Tip amount</Label>
+            <Label>Credit card tips from sales report</Label>
             <div className="relative mt-1">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5f5247]">$</span>
-              <Input className={`${C.field} pl-7`} type="number" min="0" step="0.01" value={amount} disabled={locked} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" />
+              <Input className={`${C.field} pl-7`} type="number" min="0" step="0.01" value={creditTips} disabled={locked} onChange={(event) => setCreditTips(event.target.value)} placeholder="0.00" />
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label>Cash tips</Label>
-              <Input className={C.field} type="number" min="0" step="0.01" value={cashTips} disabled={locked} onChange={(event) => setCashTips(event.target.value)} placeholder="0.00" />
-            </div>
-            <div>
-              <Label>Credit/card tips</Label>
-              <Input className={C.field} type="number" min="0" step="0.01" value={creditTips} disabled={locked} onChange={(event) => setCreditTips(event.target.value)} placeholder="0.00" />
-            </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div>
               <Label>Gross sales</Label>
               <Input className={C.field} type="number" min="0" step="0.01" value={grossSales} disabled={locked} onChange={(event) => setGrossSales(event.target.value)} placeholder="0.00" />
-            </div>
-            <div>
-              <Label>Covers served</Label>
-              <Input className={C.field} type="number" min="0" step="1" value={coversServed} disabled={locked} onChange={(event) => setCoversServed(event.target.value)} placeholder="Optional" />
             </div>
             <div>
               <Label>Shift type</Label>
@@ -390,8 +372,12 @@ function ReviewDialog({
       const response = await apiRequest("POST", "/api/tips/submissions", { start: dashboard.period.start });
       return response.json();
     },
-    onSuccess: () => {
-      toast({ title: "Pay period submitted", description: "Your summary has been locked and emailed." });
+    onSuccess: (data) => {
+      toast({
+        title: "Pay period submitted",
+        description: data?.emailSent === false ? data.warning || "The period is locked, but the email notification failed." : "Your summary has been locked and emailed.",
+        variant: data?.emailSent === false ? "destructive" : "default",
+      });
       onOpenChange(false);
       onSubmitted();
     },
@@ -415,9 +401,7 @@ function ReviewDialog({
             {dashboard.days.map((day) => (
               <div key={day.date} className="grid gap-1 p-3 text-sm md:grid-cols-4">
                 <div className="font-medium">{formatDisplayDate(day.date)}</div>
-                <div>{formatMoney(day.entry?.tipAmount)}</div>
-                <div>Cash {formatMoney(day.entry?.cashTips)}</div>
-                <div>Card {formatMoney(day.entry?.creditTips)}</div>
+                <div>CC tips {formatMoney(day.entry?.creditTips || day.entry?.tipAmount)}</div>
                 <div>Sales {formatMoney(day.entry?.grossSales)}</div>
                 <div>{formatShiftType(day.entry?.shiftType)}</div>
                 <div>{day.entry?.attachments?.length ? "Photo yes" : "No photo"}</div>
@@ -491,9 +475,16 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
     onError: (error: Error) => toast({ title: "Role update failed", description: error.message, variant: "destructive" }),
   });
   const createUserMutation = useMutation({
-    mutationFn: async () => apiRequest("POST", "/api/tips/admin/users", newUserForm),
-    onSuccess: () => {
-      toast({ title: "Associate added", description: "An email notification has been sent to the associate." });
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/tips/admin/users", newUserForm);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Associate added",
+        description: data?.emailSent === false ? data.warning || "The associate was created, but the email notification failed." : "An email notification has been sent to the associate.",
+        variant: data?.emailSent === false ? "destructive" : "default",
+      });
       setNewUserForm({ firstName: "", lastName: "", employeeDisplayName: "", email: "", position: "", role: "employee", password: "" });
       queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/users"] });
     },
@@ -697,11 +688,6 @@ export default function TipsPage() {
   });
 
   const locked = !!dashboard?.submission && dashboard.submission.status !== "reopened";
-  const today = useMemo(() => {
-    if (!dashboard) return null;
-    const local = todayKey();
-    return dashboard.days.find((day) => day.date === local) || dashboard.days[0];
-  }, [dashboard]);
   const enteredCount = dashboard?.days.filter((day) => !!day.entry).length || 0;
   const missingPhotoCount = dashboard?.days.filter((day) => day.entry && !day.entry.attachments?.length).length || 0;
   const week1Days = dashboard?.days.slice(0, 7) || [];
@@ -719,7 +705,7 @@ export default function TipsPage() {
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Courtyard Tips Tracker</h1>
           </div>
           <div className="flex items-center gap-2">
-            {auth.user.isAdmin && <Button asChild variant="outline" size="sm" className={C.outline}><a href={isAdminPath ? "/tips" : "/tips/admin"}>{isAdminPath ? "Employee view" : "Admin"}</a></Button>}
+            {auth.user.isAdmin && <Button asChild size="sm" className={C.darkButton}><a href={isAdminPath ? "/tips" : "/tips/admin"}>{isAdminPath ? "Employee view" : "Admin"}</a></Button>}
             <Button variant="ghost" size="sm" className="text-[#5f5247]" onClick={() => logout.mutate()}>
               <LogOut className="mr-2 h-4 w-4" />
               Logout
@@ -776,13 +762,6 @@ export default function TipsPage() {
                 </CardContent>
               </Card>
             </div>
-
-            {today && (
-              <section>
-                <h2 className="mb-3 text-lg font-semibold">Today</h2>
-                <DayEditor day={today} locked={locked} defaultOpen onSaved={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/dashboard"] })} />
-              </section>
-            )}
 
             <section className="grid gap-5 lg:grid-cols-2">
               <div>

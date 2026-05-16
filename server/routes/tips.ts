@@ -360,11 +360,11 @@ async function generateTipsPdf(user: any, dashboard: any, submission: any | null
   if (submission?.submittedAt) draw(`Submitted: ${new Date(submission.submittedAt).toLocaleString()}`, 48, 11);
   y -= 8;
   draw("Daily Tips", 48, 13, true);
-  draw("Date          Tips       Cash       Card       Sales      Covers  Shift      Photo", 48, 9, true);
+  draw("Date          CC Tips    Sales      Shift      Photo", 48, 9, true);
   dashboard.days.forEach((day: any) => {
     const entry = day.entry;
     draw(
-      `${day.date}   $${moneyString(entry?.tipAmount)}   $${moneyString(entry?.cashTips)}   $${moneyString(entry?.creditTips)}   $${moneyString(entry?.grossSales)}   ${entry?.coversServed ?? "-"}   ${entry?.shiftType || "-"}   ${(entry?.attachments?.length || 0) > 0 ? "Yes" : "No"}`,
+      `${day.date}   $${moneyString(entry?.creditTips || entry?.tipAmount)}   $${moneyString(entry?.grossSales)}   ${entry?.shiftType || "-"}   ${(entry?.attachments?.length || 0) > 0 ? "Yes" : "No"}`,
       48,
       9,
     );
@@ -387,12 +387,12 @@ async function generateTipsPdf(user: any, dashboard: any, submission: any | null
   return path.relative(process.cwd(), absolutePath);
 }
 
-async function sendTipsSubmissionEmail(user: any, dashboard: any, submission: any, pdfPath: string) {
+async function sendTipsSubmissionEmail(user: any, dashboard: any) {
   const { client, fromEmail } = await getUncachableResendClient();
   const rows = dashboard.days
     .map((day: any) => {
       const entry = day.entry;
-      return `${day.date}: total $${moneyString(entry?.tipAmount)} | cash $${moneyString(entry?.cashTips)} | card $${moneyString(entry?.creditTips)} | sales $${moneyString(entry?.grossSales)} | covers ${entry?.coversServed ?? "-"} | shift ${entry?.shiftType || "-"} | photo ${(entry?.attachments?.length || 0) > 0 ? "yes" : "no"} | notes: ${entry?.notes || ""}`;
+      return `${day.date}: CC tips $${moneyString(entry?.creditTips || entry?.tipAmount)} | sales $${moneyString(entry?.grossSales)} | shift ${entry?.shiftType || "-"} | photo ${(entry?.attachments?.length || 0) > 0 ? "yes" : "no"} | notes: ${entry?.notes || ""}`;
     })
     .join("\n");
   const subject = `Tips Submission - ${user.employeeDisplayName} - ${dashboard.period.start} to ${dashboard.period.end}`;
@@ -410,7 +410,7 @@ async function sendTipsSubmissionEmail(user: any, dashboard: any, submission: an
       `Week 1 total: $${dashboard.week1Total}`,
       `Week 2 total: $${dashboard.week2Total}`,
       `Grand total: $${dashboard.totalTips}`,
-      `PDF path: ${pdfPath}`,
+      "PDF summary: available through the protected Tips admin view.",
       `Manager review: ${adminUrl}`,
       "",
       "Daily tips:",
@@ -539,6 +539,7 @@ export function registerTipsRoutes(app: Express) {
       }
       const submission = await getSubmission(req.tipsUser.id, period.start, period.end);
       if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
+      const reportedCcTips = parsed.data.creditTips > 0 ? parsed.data.creditTips : parsed.data.tipAmount;
 
       const [entry] = await db
         .insert(tipEntries)
@@ -547,11 +548,11 @@ export function registerTipsRoutes(app: Express) {
           entryDate: parsed.data.entryDate,
           payPeriodStart: period.start,
           payPeriodEnd: period.end,
-          tipAmount: parsed.data.tipAmount.toFixed(2),
-          cashTips: parsed.data.cashTips.toFixed(2),
-          creditTips: parsed.data.creditTips.toFixed(2),
+          tipAmount: reportedCcTips.toFixed(2),
+          cashTips: "0.00",
+          creditTips: reportedCcTips.toFixed(2),
           grossSales: parsed.data.grossSales.toFixed(2),
-          coversServed: parsed.data.coversServed ?? null,
+          coversServed: null,
           shiftType: parsed.data.shiftType,
           notes: parsed.data.notes || null,
           status: "saved",
@@ -559,11 +560,11 @@ export function registerTipsRoutes(app: Express) {
         .onConflictDoUpdate({
           target: [tipEntries.userId, tipEntries.entryDate],
           set: {
-            tipAmount: parsed.data.tipAmount.toFixed(2),
-            cashTips: parsed.data.cashTips.toFixed(2),
-            creditTips: parsed.data.creditTips.toFixed(2),
+            tipAmount: reportedCcTips.toFixed(2),
+            cashTips: "0.00",
+            creditTips: reportedCcTips.toFixed(2),
             grossSales: parsed.data.grossSales.toFixed(2),
-            coversServed: parsed.data.coversServed ?? null,
+            coversServed: null,
             shiftType: parsed.data.shiftType,
             notes: parsed.data.notes || null,
             status: "saved",
@@ -681,11 +682,21 @@ export function registerTipsRoutes(app: Express) {
         .set({ status: "submitted", updatedAt: new Date() })
         .where(and(eq(tipEntries.userId, req.tipsUser.id), eq(tipEntries.payPeriodStart, dashboard.period.start), eq(tipEntries.payPeriodEnd, dashboard.period.end)));
 
-      void sendTipsSubmissionEmail(req.tipsUser, dashboard, submission, pdfPath).catch((error) => {
+      let emailSent = true;
+      let emailWarning: string | undefined;
+      try {
+        await sendTipsSubmissionEmail(req.tipsUser, dashboard);
+      } catch (error) {
+        emailSent = false;
+        emailWarning = "Pay period was submitted, but the email notification could not be sent.";
         console.error("Failed to send tips submission email:", error);
-      });
+      }
 
-      res.status(201).json({ submission: { ...submission, week1Total: moneyString(submission.week1Total), week2Total: moneyString(submission.week2Total), totalTips: moneyString(submission.totalTips) } });
+      res.status(emailSent ? 201 : 202).json({
+        submission: { ...submission, week1Total: moneyString(submission.week1Total), week2Total: moneyString(submission.week2Total), totalTips: moneyString(submission.totalTips) },
+        emailSent,
+        warning: emailWarning,
+      });
     } catch (error) {
       next(error);
     }
@@ -751,22 +762,28 @@ export function registerTipsRoutes(app: Express) {
         action: "user_created",
         metadataJson: { role: created.role, position: created.position },
       });
-      void sendTipsAssociateCreatedEmail({
-        email,
-        firstName: created.firstName,
-        employeeDisplayName: created.employeeDisplayName,
-        temporaryPassword: parsed.data.password,
-        createdByName: req.tipsUser.employeeDisplayName || req.tipsUser.email,
-      }).catch((error) => {
+      let emailSent = true;
+      let emailWarning: string | undefined;
+      try {
+        await sendTipsAssociateCreatedEmail({
+          email,
+          firstName: created.firstName,
+          employeeDisplayName: created.employeeDisplayName,
+          temporaryPassword: parsed.data.password,
+          createdByName: req.tipsUser.employeeDisplayName || req.tipsUser.email,
+        });
+      } catch (error) {
+        emailSent = false;
+        emailWarning = "Associate was created, but the email notification could not be sent.";
         console.error("Failed to send tips associate created email:", error);
-      });
-      res.status(201).json({ user: publicTipsUser(created) });
+      }
+      res.status(emailSent ? 201 : 202).json({ user: publicTipsUser(created), emailSent, warning: emailWarning });
     } catch (error) {
       next(error);
     }
   });
 
-  router.patch("/admin/users/:id/position", requireTipsSuperAdmin, async (req: any, res, next) => {
+  router.patch("/admin/users/:id/position", requireTipsAdmin, async (req: any, res, next) => {
     try {
       const parsed = updateTipsUserPositionSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid position" });
@@ -912,7 +929,7 @@ export function registerTipsRoutes(app: Express) {
         .innerJoin(tipsUsers, eq(tipEntries.userId, tipsUsers.id))
         .orderBy(desc(tipEntries.payPeriodStart), asc(tipsUsers.employeeDisplayName), asc(tipEntries.entryDate));
       const csv = [
-        ["employee", "email", "position", "entry_date", "period_start", "period_end", "shift_type", "gross_sales", "cash_tips", "credit_tips", "total_tips", "covers_served", "notes", "status"].join(","),
+        ["employee", "email", "position", "entry_date", "period_start", "period_end", "shift_type", "gross_sales", "cc_tips", "notes", "status"].join(","),
         ...rows.map((row) =>
           [
             JSON.stringify(row.user.employeeDisplayName),
@@ -923,10 +940,7 @@ export function registerTipsRoutes(app: Express) {
             row.entry.payPeriodEnd,
             row.entry.shiftType || "other",
             moneyString(row.entry.grossSales),
-            moneyString(row.entry.cashTips),
             moneyString(row.entry.creditTips),
-            moneyString(row.entry.tipAmount),
-            row.entry.coversServed ?? "",
             JSON.stringify(row.entry.notes || ""),
             row.entry.status,
           ].join(","),

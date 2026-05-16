@@ -369,6 +369,121 @@ export const tipAdminActions = pgTable("tip_admin_actions", {
   index("idx_tip_admin_actions_created").on(table.createdAt),
 ]);
 
+export const scheduleEmployees = pgTable("schedule_employees", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  displayName: text("display_name").notNull(),
+  department: text("department").notNull().default("Other"),
+  position: text("position"),
+  defaultShiftType: text("default_shift_type"),
+  maxWeeklyHours: numeric("max_weekly_hours", { precision: 6, scale: 2 }),
+  phone: text("phone"),
+  email: varchar("email"),
+  active: boolean("active").notNull().default(true),
+  availabilityJson: jsonb("availability_json"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_schedule_employees_department").on(table.department),
+  index("idx_schedule_employees_active").on(table.active),
+]);
+
+export const scheduleShiftTypes = pgTable("schedule_shift_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  label: text("label").notNull().unique(),
+  startTime: time("start_time"),
+  endTime: time("end_time"),
+  unpaidBreakMinutes: integer("unpaid_break_minutes").notNull().default(0),
+  color: text("color").notNull(),
+  textColor: text("text_color").notNull().default("#111827"),
+  departmentHint: text("department_hint"),
+  isOvernight: boolean("is_overnight").notNull().default(false),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_schedule_shift_types_active").on(table.active),
+  index("idx_schedule_shift_types_sort").on(table.sortOrder),
+]);
+
+export const weeklySchedules = pgTable("weekly_schedules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyName: text("property_name").notNull().default("Courtyard Austin Lakeline"),
+  weekStartDate: date("week_start_date").notNull(),
+  weekEndDate: date("week_end_date").notNull(),
+  status: text("status").notNull().default("draft"),
+  createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  publishedAt: timestamp("published_at"),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_weekly_schedules_week").on(table.weekStartDate),
+  index("idx_weekly_schedules_status").on(table.status),
+]);
+
+export const scheduleForecastDays = pgTable("schedule_forecast_days", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scheduleId: varchar("schedule_id").notNull().references(() => weeklySchedules.id, { onDelete: "cascade" }),
+  forecastDate: date("forecast_date").notNull(),
+  roomsSold: integer("rooms_sold").notNull().default(0),
+  occupancyPercent: numeric("occupancy_percent", { precision: 5, scale: 2 }).notNull().default("0"),
+  arrivals: integer("arrivals").notNull().default(0),
+  departures: integer("departures").notNull().default(0),
+  stayovers: integer("stayovers").notNull().default(0),
+  groupsEventsNotes: text("groups_events_notes"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_schedule_forecast_schedule_date").on(table.scheduleId, table.forecastDate),
+]);
+
+export const scheduleShiftAssignments = pgTable("schedule_shift_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scheduleId: varchar("schedule_id").notNull().references(() => weeklySchedules.id, { onDelete: "cascade" }),
+  employeeId: varchar("employee_id").references(() => scheduleEmployees.id, { onDelete: "set null" }),
+  shiftDate: date("shift_date").notNull(),
+  shiftTypeId: varchar("shift_type_id").references(() => scheduleShiftTypes.id, { onDelete: "set null" }),
+  customStartTime: time("custom_start_time"),
+  customEndTime: time("custom_end_time"),
+  unpaidBreakMinutes: integer("unpaid_break_minutes"),
+  roleNote: text("role_note"),
+  managerNote: text("manager_note"),
+  isOpenShift: boolean("is_open_shift").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_schedule_shift_unique").on(table.scheduleId, table.employeeId, table.shiftDate),
+  index("idx_schedule_shift_schedule_date").on(table.scheduleId, table.shiftDate),
+]);
+
+export const scheduleShareLinks = pgTable("schedule_share_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scheduleId: varchar("schedule_id").notNull().references(() => weeklySchedules.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  revokedAt: timestamp("revoked_at"),
+}, (table) => [
+  index("idx_schedule_share_links_schedule").on(table.scheduleId),
+]);
+
+export const scheduleAuditLog = pgTable("schedule_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scheduleId: varchar("schedule_id").references(() => weeklySchedules.id, { onDelete: "cascade" }),
+  actorUserId: varchar("actor_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  action: text("action").notNull(),
+  metadataJson: jsonb("metadata_json"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_schedule_audit_schedule").on(table.scheduleId),
+  index("idx_schedule_audit_created").on(table.createdAt),
+]);
+
 // Aircraft Listings (for rent)
 export const aircraftListings = pgTable("aircraft_listings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1506,6 +1621,46 @@ export const insertTipPeriodSubmissionSchema = createInsertSchema(tipPeriodSubmi
 });
 
 export const insertTipAdminActionSchema = createInsertSchema(tipAdminActions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertScheduleEmployeeSchema = createInsertSchema(scheduleEmployees).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertScheduleShiftTypeSchema = createInsertSchema(scheduleShiftTypes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertWeeklyScheduleSchema = createInsertSchema(weeklySchedules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertScheduleForecastDaySchema = createInsertSchema(scheduleForecastDays).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertScheduleShiftAssignmentSchema = createInsertSchema(scheduleShiftAssignments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertScheduleShareLinkSchema = createInsertSchema(scheduleShareLinks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertScheduleAuditLogSchema = createInsertSchema(scheduleAuditLog).omit({
   id: true,
   createdAt: true,
 });
@@ -3176,6 +3331,20 @@ export type TipPeriodSubmission = typeof tipPeriodSubmissions.$inferSelect;
 export type InsertTipPeriodSubmission = z.infer<typeof insertTipPeriodSubmissionSchema>;
 export type TipAdminAction = typeof tipAdminActions.$inferSelect;
 export type InsertTipAdminAction = z.infer<typeof insertTipAdminActionSchema>;
+export type ScheduleEmployee = typeof scheduleEmployees.$inferSelect;
+export type InsertScheduleEmployee = z.infer<typeof insertScheduleEmployeeSchema>;
+export type ScheduleShiftType = typeof scheduleShiftTypes.$inferSelect;
+export type InsertScheduleShiftType = z.infer<typeof insertScheduleShiftTypeSchema>;
+export type WeeklySchedule = typeof weeklySchedules.$inferSelect;
+export type InsertWeeklySchedule = z.infer<typeof insertWeeklyScheduleSchema>;
+export type ScheduleForecastDay = typeof scheduleForecastDays.$inferSelect;
+export type InsertScheduleForecastDay = z.infer<typeof insertScheduleForecastDaySchema>;
+export type ScheduleShiftAssignment = typeof scheduleShiftAssignments.$inferSelect;
+export type InsertScheduleShiftAssignment = z.infer<typeof insertScheduleShiftAssignmentSchema>;
+export type ScheduleShareLink = typeof scheduleShareLinks.$inferSelect;
+export type InsertScheduleShareLink = z.infer<typeof insertScheduleShareLinkSchema>;
+export type ScheduleAuditLog = typeof scheduleAuditLog.$inferSelect;
+export type InsertScheduleAuditLog = z.infer<typeof insertScheduleAuditLogSchema>;
 
 export type AdminInvite = typeof adminInvites.$inferSelect;
 export type InsertAdminInvite = z.infer<typeof insertAdminInviteSchema>;

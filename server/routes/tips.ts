@@ -203,6 +203,11 @@ const loginSchema = z.object({
 const entrySchema = z.object({
   entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   tipAmount: z.coerce.number().min(0).max(100000),
+  cashTips: z.coerce.number().min(0).max(100000).default(0),
+  creditTips: z.coerce.number().min(0).max(100000).default(0),
+  grossSales: z.coerce.number().min(0).max(1000000).default(0),
+  coversServed: z.coerce.number().int().min(0).max(10000).optional().nullable(),
+  shiftType: z.enum(["breakfast", "lunch", "dinner", "bar", "other"]).default("other"),
   notes: z.string().max(2000).optional().nullable(),
 });
 
@@ -262,6 +267,9 @@ function computeTotals(entries: any[], period: ReturnType<typeof getPayPeriodFor
         ? {
             ...entry,
             tipAmount: moneyString(entry.tipAmount),
+            cashTips: moneyString(entry.cashTips),
+            creditTips: moneyString(entry.creditTips),
+            grossSales: moneyString(entry.grossSales),
             attachments: entry.attachments || [],
           }
         : null,
@@ -294,7 +302,14 @@ async function getEntriesForPeriod(userId: string, start: string, end: string) {
     list.push(attachment);
     attachmentsByEntry.set(attachment.tipEntryId, list);
   }
-  return rows.map((row) => ({ ...row, tipAmount: moneyString(row.tipAmount), attachments: attachmentsByEntry.get(row.id) || [] }));
+  return rows.map((row) => ({
+    ...row,
+    tipAmount: moneyString(row.tipAmount),
+    cashTips: moneyString(row.cashTips),
+    creditTips: moneyString(row.creditTips),
+    grossSales: moneyString(row.grossSales),
+    attachments: attachmentsByEntry.get(row.id) || [],
+  }));
 }
 
 async function getSubmission(userId: string, start: string, end: string) {
@@ -345,14 +360,15 @@ async function generateTipsPdf(user: any, dashboard: any, submission: any | null
   if (submission?.submittedAt) draw(`Submitted: ${new Date(submission.submittedAt).toLocaleString()}`, 48, 11);
   y -= 8;
   draw("Daily Tips", 48, 13, true);
-  draw("Date          Tips       Photo   Notes", 48, 10, true);
+  draw("Date          Tips       Cash       Card       Sales      Covers  Shift      Photo", 48, 9, true);
   dashboard.days.forEach((day: any) => {
     const entry = day.entry;
     draw(
-      `${day.date}   $${moneyString(entry?.tipAmount)}   ${(entry?.attachments?.length || 0) > 0 ? "Yes" : "No "}    ${(entry?.notes || "").replace(/\s+/g, " ")}`,
+      `${day.date}   $${moneyString(entry?.tipAmount)}   $${moneyString(entry?.cashTips)}   $${moneyString(entry?.creditTips)}   $${moneyString(entry?.grossSales)}   ${entry?.coversServed ?? "-"}   ${entry?.shiftType || "-"}   ${(entry?.attachments?.length || 0) > 0 ? "Yes" : "No"}`,
       48,
       9,
     );
+    if (entry?.notes) draw(`Notes: ${String(entry.notes).replace(/\s+/g, " ")}`, 64, 8);
   });
   y -= 8;
   draw(`Week 1 total: $${dashboard.week1Total}`, 48, 12, true);
@@ -376,7 +392,7 @@ async function sendTipsSubmissionEmail(user: any, dashboard: any, submission: an
   const rows = dashboard.days
     .map((day: any) => {
       const entry = day.entry;
-      return `${day.date}: $${moneyString(entry?.tipAmount)} | photo: ${(entry?.attachments?.length || 0) > 0 ? "yes" : "no"} | notes: ${entry?.notes || ""}`;
+      return `${day.date}: total $${moneyString(entry?.tipAmount)} | cash $${moneyString(entry?.cashTips)} | card $${moneyString(entry?.creditTips)} | sales $${moneyString(entry?.grossSales)} | covers ${entry?.coversServed ?? "-"} | shift ${entry?.shiftType || "-"} | photo ${(entry?.attachments?.length || 0) > 0 ? "yes" : "no"} | notes: ${entry?.notes || ""}`;
     })
     .join("\n");
   const subject = `Tips Submission - ${user.employeeDisplayName} - ${dashboard.period.start} to ${dashboard.period.end}`;
@@ -532,6 +548,11 @@ export function registerTipsRoutes(app: Express) {
           payPeriodStart: period.start,
           payPeriodEnd: period.end,
           tipAmount: parsed.data.tipAmount.toFixed(2),
+          cashTips: parsed.data.cashTips.toFixed(2),
+          creditTips: parsed.data.creditTips.toFixed(2),
+          grossSales: parsed.data.grossSales.toFixed(2),
+          coversServed: parsed.data.coversServed ?? null,
+          shiftType: parsed.data.shiftType,
           notes: parsed.data.notes || null,
           status: "saved",
         })
@@ -539,13 +560,26 @@ export function registerTipsRoutes(app: Express) {
           target: [tipEntries.userId, tipEntries.entryDate],
           set: {
             tipAmount: parsed.data.tipAmount.toFixed(2),
+            cashTips: parsed.data.cashTips.toFixed(2),
+            creditTips: parsed.data.creditTips.toFixed(2),
+            grossSales: parsed.data.grossSales.toFixed(2),
+            coversServed: parsed.data.coversServed ?? null,
+            shiftType: parsed.data.shiftType,
             notes: parsed.data.notes || null,
             status: "saved",
             updatedAt: new Date(),
           },
         })
         .returning();
-      res.json({ entry: { ...entry, tipAmount: moneyString(entry.tipAmount) } });
+      res.json({
+        entry: {
+          ...entry,
+          tipAmount: moneyString(entry.tipAmount),
+          cashTips: moneyString(entry.cashTips),
+          creditTips: moneyString(entry.creditTips),
+          grossSales: moneyString(entry.grossSales),
+        },
+      });
     } catch (error) {
       next(error);
     }
@@ -864,6 +898,42 @@ export function registerTipsRoutes(app: Express) {
       ].join("\n");
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", "attachment; filename=\"courtyard-tips-export.csv\"");
+      res.send(csv);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/admin/export-daily.csv", requireTipsAdmin, async (_req: any, res, next) => {
+    try {
+      const rows = await db
+        .select({ entry: tipEntries, user: tipsUsers })
+        .from(tipEntries)
+        .innerJoin(tipsUsers, eq(tipEntries.userId, tipsUsers.id))
+        .orderBy(desc(tipEntries.payPeriodStart), asc(tipsUsers.employeeDisplayName), asc(tipEntries.entryDate));
+      const csv = [
+        ["employee", "email", "position", "entry_date", "period_start", "period_end", "shift_type", "gross_sales", "cash_tips", "credit_tips", "total_tips", "covers_served", "notes", "status"].join(","),
+        ...rows.map((row) =>
+          [
+            JSON.stringify(row.user.employeeDisplayName),
+            JSON.stringify(row.user.email),
+            JSON.stringify(row.user.position || ""),
+            row.entry.entryDate,
+            row.entry.payPeriodStart,
+            row.entry.payPeriodEnd,
+            row.entry.shiftType || "other",
+            moneyString(row.entry.grossSales),
+            moneyString(row.entry.cashTips),
+            moneyString(row.entry.creditTips),
+            moneyString(row.entry.tipAmount),
+            row.entry.coversServed ?? "",
+            JSON.stringify(row.entry.notes || ""),
+            row.entry.status,
+          ].join(","),
+        ),
+      ].join("\n");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", "attachment; filename=\"courtyard-tips-daily-export.csv\"");
       res.send(csv);
     } catch (error) {
       next(error);

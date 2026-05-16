@@ -93,6 +93,7 @@ export const adminRoles = ["operations", "finance", "sales", "support", "content
 export const tipEntryStatuses = ["draft", "saved", "submitted"] as const;
 export const tipSubmissionStatuses = ["submitted", "reopened", "approved", "exported"] as const;
 export const tipsUserRoles = ["employee", "manager", "super_admin"] as const;
+export const tipShiftTypes = ["breakfast", "lunch", "dinner", "bar", "other"] as const;
 
 // Session storage table for web and OAuth-backed authentication
 export const sessions = pgTable(
@@ -307,6 +308,11 @@ export const tipEntries = pgTable("tip_entries", {
   payPeriodStart: date("pay_period_start").notNull(),
   payPeriodEnd: date("pay_period_end").notNull(),
   tipAmount: numeric("tip_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  cashTips: numeric("cash_tips", { precision: 10, scale: 2 }).notNull().default("0"),
+  creditTips: numeric("credit_tips", { precision: 10, scale: 2 }).notNull().default("0"),
+  grossSales: numeric("gross_sales", { precision: 10, scale: 2 }).notNull().default("0"),
+  coversServed: integer("covers_served"),
+  shiftType: text("shift_type").notNull().default("other"),
   notes: text("notes"),
   status: text("status").notNull().default("saved"),
   createdAt: timestamp("created_at").defaultNow(),

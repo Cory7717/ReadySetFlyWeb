@@ -82,6 +82,7 @@ import FlyingClubDetailPage from "@/pages/flying-club-detail";
 import InvestorDeck, { INVESTOR_DECK_SHARE_PATH } from "@/pages/investor-deck";
 import NoiseAndFuryPage from "@/pages/noise-and-fury";
 import CoryArmer from "@/pages/CoryArmer";
+import TipsPage from "@/pages/tips";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -232,6 +233,8 @@ function Router() {
       <Route path={INVESTOR_DECK_SHARE_PATH} component={InvestorDeck} />
       <Route path="/noiseandfury" component={NoiseAndFuryPage} />
       <Route path="/coryarmer" component={CoryArmer} />
+      <Route path="/tips" component={TipsPage} />
+      <Route path="/tips/admin" component={TipsPage} />
       <Route path="/404" component={NotFound} />
       
       {/* Protected routes - require authentication */}
@@ -355,7 +358,8 @@ function AppShell() {
   const [location] = useLocation();
   const isNoiseAndFuryPage = location.startsWith("/noiseandfury");
   const isCoryArmerPage = location.startsWith("/coryarmer");
-  const isStandalonePage = isNoiseAndFuryPage || isCoryArmerPage;
+  const isTipsPage = location.startsWith("/tips");
+  const isStandalonePage = isNoiseAndFuryPage || isCoryArmerPage || isTipsPage;
   useEffect(() => {
     setAuthState(isAuthenticated);
     if (!isAuthenticated && isSoftAuthEnabled()) {

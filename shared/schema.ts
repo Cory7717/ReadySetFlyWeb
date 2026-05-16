@@ -90,6 +90,8 @@ export const personalFinanceRsfCategories = [
 export const withdrawalStatuses = ["pending", "processing", "completed", "failed", "cancelled"] as const;
 export const approachPlateTypes = ["IAP", "SID", "STAR", "AIRPORT", "OTHER"] as const;
 export const adminRoles = ["operations", "finance", "sales", "support", "content"] as const;
+export const tipEntryStatuses = ["draft", "saved", "submitted"] as const;
+export const tipSubmissionStatuses = ["submitted", "reopened", "approved", "exported"] as const;
 
 // Session storage table for web and OAuth-backed authentication
 export const sessions = pgTable(
@@ -279,6 +281,81 @@ export const adminInvites = pgTable("admin_invites", {
   acceptedAt: timestamp("accepted_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Standalone Courtyard Tips Tracker users. Kept separate from RSF aviation users
+// so any employee email can register without aviation roles or profile requirements.
+export const tipsUsers = pgTable("tips_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: varchar("email").notNull().unique(),
+  employeeDisplayName: text("employee_display_name").notNull(),
+  hashedPassword: text("hashed_password").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_tips_users_email").on(table.email),
+]);
+
+export const tipEntries = pgTable("tip_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => tipsUsers.id, { onDelete: "cascade" }),
+  entryDate: date("entry_date").notNull(),
+  payPeriodStart: date("pay_period_start").notNull(),
+  payPeriodEnd: date("pay_period_end").notNull(),
+  tipAmount: numeric("tip_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  notes: text("notes"),
+  status: text("status").notNull().default("saved"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_tip_entries_user_date").on(table.userId, table.entryDate),
+  index("idx_tip_entries_user_period").on(table.userId, table.payPeriodStart, table.payPeriodEnd),
+]);
+
+export const tipEntryAttachments = pgTable("tip_entry_attachments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tipEntryId: varchar("tip_entry_id").notNull().references(() => tipEntries.id, { onDelete: "cascade" }),
+  storagePath: text("storage_path").notNull(),
+  originalFileName: text("original_file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  size: integer("size").notNull(),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+}, (table) => [
+  index("idx_tip_entry_attachments_entry").on(table.tipEntryId),
+]);
+
+export const tipPeriodSubmissions = pgTable("tip_period_submissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => tipsUsers.id, { onDelete: "cascade" }),
+  payPeriodStart: date("pay_period_start").notNull(),
+  payPeriodEnd: date("pay_period_end").notNull(),
+  week1Total: numeric("week1_total", { precision: 10, scale: 2 }).notNull().default("0"),
+  week2Total: numeric("week2_total", { precision: 10, scale: 2 }).notNull().default("0"),
+  totalTips: numeric("total_tips", { precision: 10, scale: 2 }).notNull().default("0"),
+  status: text("status").notNull().default("submitted"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: varchar("reviewed_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  pdfPath: text("pdf_path"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_tip_submissions_user_period").on(table.userId, table.payPeriodStart, table.payPeriodEnd),
+  index("idx_tip_submissions_period").on(table.payPeriodStart, table.payPeriodEnd),
+]);
+
+export const tipAdminActions = pgTable("tip_admin_actions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  actorUserId: varchar("actor_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  targetUserId: varchar("target_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  action: text("action").notNull(),
+  metadataJson: jsonb("metadata_json"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_tip_admin_actions_target").on(table.targetUserId),
+  index("idx_tip_admin_actions_created").on(table.createdAt),
+]);
 
 // Aircraft Listings (for rent)
 export const aircraftListings = pgTable("aircraft_listings", {
@@ -1391,6 +1468,34 @@ export const insertUserSchema = createInsertSchema(users).omit({
 }).extend({
   certifications: z.array(z.enum(certificationTypes)).default([]),
   totalFlightHours: z.number().min(0).default(0),
+});
+
+export const insertTipsUserSchema = createInsertSchema(tipsUsers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTipEntrySchema = createInsertSchema(tipEntries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTipEntryAttachmentSchema = createInsertSchema(tipEntryAttachments).omit({
+  id: true,
+  uploadedAt: true,
+});
+
+export const insertTipPeriodSubmissionSchema = createInsertSchema(tipPeriodSubmissions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTipAdminActionSchema = createInsertSchema(tipAdminActions).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({
@@ -3048,6 +3153,17 @@ export const insertPaypalOrderConsumptionSchema = createInsertSchema(paypalOrder
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = typeof users.$inferInsert;
+
+export type TipsUser = typeof tipsUsers.$inferSelect;
+export type InsertTipsUser = z.infer<typeof insertTipsUserSchema>;
+export type TipEntry = typeof tipEntries.$inferSelect;
+export type InsertTipEntry = z.infer<typeof insertTipEntrySchema>;
+export type TipEntryAttachment = typeof tipEntryAttachments.$inferSelect;
+export type InsertTipEntryAttachment = z.infer<typeof insertTipEntryAttachmentSchema>;
+export type TipPeriodSubmission = typeof tipPeriodSubmissions.$inferSelect;
+export type InsertTipPeriodSubmission = z.infer<typeof insertTipPeriodSubmissionSchema>;
+export type TipAdminAction = typeof tipAdminActions.$inferSelect;
+export type InsertTipAdminAction = z.infer<typeof insertTipAdminActionSchema>;
 
 export type AdminInvite = typeof adminInvites.$inferSelect;
 export type InsertAdminInvite = z.infer<typeof insertAdminInviteSchema>;

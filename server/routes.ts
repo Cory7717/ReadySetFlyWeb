@@ -51,6 +51,7 @@ import { partners } from "./config/partners";
 import { registerAdminFinanceRoutes } from "./routes/adminFinance";
 import { fuelPricesRouter } from "./routes/fuelPrices";
 import { aiToolsRouter } from "./routes/aiTools";
+import { registerTipsRoutes } from "./routes/tips";
 import {
   flightPlanFilingProvider,
   getLeidosFlightServiceDiagnostics,
@@ -4387,6 +4388,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/mobile/auth', registerMobileAuthRoutes(storage));
 
   registerAdminFinanceRoutes(app);
+  registerTipsRoutes(app);
   app.use("/api/fuel-prices", fuelPricesRouter);
   app.use("/api/ai-tools", aiToolsRouter);
 

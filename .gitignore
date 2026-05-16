@@ -12,10 +12,12 @@ dist
 *.save
 *.swp
 *.sql
+!migrations/*.sql
 *.map
 debug
 .local/
 .replit
+private-uploads/
 *.log
 *.err
 

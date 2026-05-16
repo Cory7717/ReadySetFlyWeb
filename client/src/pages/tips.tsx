@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileImage, Lock, LogOut, Pencil, ReceiptText, ShieldCheck, Upload } from "lucide-react";
+import { Download, FileImage, Lock, LogOut, ReceiptText, ShieldCheck, Upload } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type TipsUser = {
   id: string;
@@ -19,7 +20,10 @@ type TipsUser = {
   firstName: string;
   lastName: string;
   employeeDisplayName: string;
+  position: string | null;
+  role: "employee" | "manager" | "super_admin";
   isAdmin: boolean;
+  isSuperAdmin: boolean;
 };
 
 type Attachment = {
@@ -117,8 +121,8 @@ function TipsAuth({ onDone }: { onDone: () => void }) {
 
           <Card className="border-[#dccdb8] bg-white shadow-xl">
             <CardHeader>
-              <CardTitle>{mode === "login" ? "Employee login" : "Create employee account"}</CardTitle>
-              <CardDescription>Any valid email can register for the tips tracker.</CardDescription>
+              <CardTitle className="text-[#211a16]">{mode === "login" ? "Employee login" : "Create employee account"}</CardTitle>
+              <CardDescription className="text-[#62564b]">Any valid email can register for the tips tracker.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {mode === "register" && (
@@ -148,7 +152,7 @@ function TipsAuth({ onDone }: { onDone: () => void }) {
               <Button className="w-full bg-[#2f5f46] hover:bg-[#274d39]" onClick={() => submit.mutate()} disabled={submit.isPending}>
                 {submit.isPending ? "Please wait..." : mode === "login" ? "Log in" : "Create account"}
               </Button>
-              <Button variant="ghost" className="w-full" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+              <Button variant="ghost" className="w-full text-[#2f5f46]" onClick={() => setMode(mode === "login" ? "register" : "login")}>
                 {mode === "login" ? "Need an account? Register" : "Already registered? Log in"}
               </Button>
             </CardContent>
@@ -172,9 +176,13 @@ function DayEditor({
   const [amount, setAmount] = useState(day.entry?.tipAmount || "");
   const [notes, setNotes] = useState(day.entry?.notes || "");
   const [file, setFile] = useState<File | null>(null);
+  const hasReport = !!day.entry?.attachments?.length;
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!file && !hasReport) {
+        throw new Error("Add a sales report photo before saving this tip entry.");
+      }
       const response = await apiRequest("POST", "/api/tips/entries", {
         entryDate: day.date,
         tipAmount: Number(amount || 0),
@@ -204,12 +212,12 @@ function DayEditor({
   const attachment = day.entry?.attachments?.[0];
 
   return (
-    <Card className="border-[#e2d5c3]">
+    <Card className="border-[#d7c8b5] bg-white text-[#211a16] shadow-sm">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle className="text-base">{formatDisplayDate(day.date)}</CardTitle>
-            <CardDescription>Day {day.dayNumber} of the pay period</CardDescription>
+            <CardDescription className="text-[#62564b]">Day {day.dayNumber} of the pay period</CardDescription>
           </div>
           <Badge variant="outline" className={statusForDay(day, locked).className}>{statusForDay(day, locked).label}</Badge>
         </div>
@@ -217,14 +225,14 @@ function DayEditor({
       <CardContent className="space-y-3">
         <div>
           <Label>Tip amount</Label>
-          <Input type="number" min="0" step="0.01" value={amount} disabled={locked} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" />
+          <Input className="bg-white text-[#211a16]" type="number" min="0" step="0.01" value={amount} disabled={locked} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" />
         </div>
         <div>
           <Label>Notes</Label>
-          <Textarea value={notes} disabled={locked} onChange={(event) => setNotes(event.target.value)} placeholder="Optional notes" rows={2} />
+          <Textarea className="bg-white text-[#211a16]" value={notes} disabled={locked} onChange={(event) => setNotes(event.target.value)} placeholder="Optional notes" rows={2} />
         </div>
         <div className="rounded-md border border-dashed border-[#cbbca7] bg-[#fbf8f3] p-3">
-          <Label className="flex items-center gap-2 text-sm font-medium">
+          <Label className="flex items-center gap-2 text-sm font-medium text-[#211a16]">
             <FileImage className="h-4 w-4" />
             Add Sales Report Photo
           </Label>
@@ -233,11 +241,12 @@ function DayEditor({
               View current report: {attachment.originalFileName}
             </a>
           )}
-          <Input className="mt-3" type="file" accept="image/*,application/pdf" capture="environment" disabled={locked} onChange={(event) => setFile(event.target.files?.[0] || null)} />
+          <Input className="mt-3 bg-white text-[#211a16]" type="file" accept="image/*,application/pdf" capture="environment" disabled={locked} onChange={(event) => setFile(event.target.files?.[0] || null)} />
           {file && <div className="mt-2 text-xs text-[#6a5e52]">Ready to upload: {file.name}</div>}
+          {!attachment && !file && <div className="mt-2 text-xs font-medium text-[#8a4d12]">Required before this tip entry can be saved.</div>}
         </div>
         {!locked && (
-          <Button className="w-full bg-[#2f5f46] hover:bg-[#274d39]" onClick={() => save.mutate()} disabled={save.isPending}>
+          <Button className="w-full bg-[#2f5f46] hover:bg-[#274d39]" onClick={() => save.mutate()} disabled={save.isPending || (!file && !hasReport)}>
             <Upload className="mr-2 h-4 w-4" />
             {save.isPending ? "Saving..." : "Save"}
           </Button>
@@ -320,9 +329,22 @@ function ReviewDialog({
 function TipsAdmin() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [newUserForm, setNewUserForm] = useState({
+    firstName: "",
+    lastName: "",
+    employeeDisplayName: "",
+    email: "",
+    position: "",
+    role: "employee" as TipsUser["role"],
+    password: "",
+  });
   const { data, isLoading } = useQuery<{ submissions: any[] }>({
     queryKey: ["/api/tips/admin/submissions"],
     queryFn: () => fetchJson("/api/tips/admin/submissions"),
+  });
+  const { data: usersData, isLoading: usersLoading } = useQuery<{ users: TipsUser[] }>({
+    queryKey: ["/api/tips/admin/users"],
+    queryFn: () => fetchJson("/api/tips/admin/users"),
   });
   const statusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => apiRequest("POST", `/api/tips/admin/submissions/${id}/status`, { status }),
@@ -332,61 +354,202 @@ function TipsAdmin() {
     },
     onError: (error: Error) => toast({ title: "Update failed", description: error.message, variant: "destructive" }),
   });
+  const positionMutation = useMutation({
+    mutationFn: async ({ userId, position }: { userId: string; position: string }) =>
+      apiRequest("PATCH", `/api/tips/admin/users/${userId}/position`, { position }),
+    onSuccess: () => {
+      toast({ title: "Position updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/submissions"] });
+    },
+    onError: (error: Error) => toast({ title: "Position update failed", description: error.message, variant: "destructive" }),
+  });
+  const roleMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: TipsUser["role"] }) =>
+      apiRequest("PATCH", `/api/tips/admin/users/${userId}/role`, { role }),
+    onSuccess: () => {
+      toast({ title: "Role updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/submissions"] });
+    },
+    onError: (error: Error) => toast({ title: "Role update failed", description: error.message, variant: "destructive" }),
+  });
+  const createUserMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/tips/admin/users", newUserForm),
+    onSuccess: () => {
+      toast({ title: "Associate added" });
+      setNewUserForm({ firstName: "", lastName: "", employeeDisplayName: "", email: "", position: "", role: "employee", password: "" });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/users"] });
+    },
+    onError: (error: Error) => toast({ title: "Unable to add associate", description: error.message, variant: "destructive" }),
+  });
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => apiRequest("DELETE", `/api/tips/admin/users/${userId}`),
+    onSuccess: () => {
+      toast({ title: "Associate deleted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/submissions"] });
+    },
+    onError: (error: Error) => toast({ title: "Unable to delete associate", description: error.message, variant: "destructive" }),
+  });
+  const canManageAssociates = usersData?.users?.some((user) => user.isSuperAdmin) ?? false;
 
   return (
-    <Card className="border-[#dccdb8]">
-      <CardHeader>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <CardTitle>Manager submissions</CardTitle>
-            <CardDescription>Review, unlock, approve, and export payroll backup data.</CardDescription>
-          </div>
-          <Button asChild variant="outline">
-            <a href={apiUrl("/api/tips/admin/export.csv")}>
-              <Download className="mr-2 h-4 w-4" />
-              Export CSV
-            </a>
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="text-sm text-muted-foreground">Loading submissions...</div>
-        ) : (
-          <div className="space-y-3">
-            {(data?.submissions || []).map((submission) => (
-              <div key={submission.id} className="rounded-md border p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <div className="font-semibold">{submission.user.employeeDisplayName}</div>
-                    <div className="text-sm text-muted-foreground">{submission.user.email}</div>
-                    <div className="mt-1 text-sm">{submission.payPeriodStart} to {submission.payPeriodEnd}</div>
-                  </div>
-                  <Badge variant="outline">{submission.status}</Badge>
-                </div>
-                <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                  <div>Week 1: <strong>{formatMoney(submission.week1Total)}</strong></div>
-                  <div>Week 2: <strong>{formatMoney(submission.week2Total)}</strong></div>
-                  <div>Total: <strong>{formatMoney(submission.totalTips)}</strong></div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" asChild variant="outline">
-                    <a href={apiUrl(`/api/tips/admin/submissions/${submission.id}/pdf`)}>
-                      <Download className="mr-2 h-4 w-4" />
-                      PDF
-                    </a>
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: submission.id, status: "reopened" })}>Unlock</Button>
-                  <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: submission.id, status: "approved" })}>Approve</Button>
-                  <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: submission.id, status: "exported" })}>Mark exported</Button>
-                </div>
+    <div className="space-y-6">
+      <Card className="border-[#dccdb8] bg-white text-[#211a16]">
+        <CardHeader>
+          <CardTitle>Associate roles</CardTitle>
+          <CardDescription className="text-[#62564b]">Super admin manages associates and designates managers after they register.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {canManageAssociates && (
+            <div className="mb-5 rounded-md border border-[#e0d3c1] bg-[#fbf8f3] p-4">
+              <div className="mb-3 font-semibold">Add associate</div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <Input placeholder="First name" value={newUserForm.firstName} onChange={(event) => setNewUserForm({ ...newUserForm, firstName: event.target.value })} />
+                <Input placeholder="Last name" value={newUserForm.lastName} onChange={(event) => setNewUserForm({ ...newUserForm, lastName: event.target.value })} />
+                <Input placeholder="Display name" value={newUserForm.employeeDisplayName} onChange={(event) => setNewUserForm({ ...newUserForm, employeeDisplayName: event.target.value })} />
+                <Input placeholder="Email" type="email" value={newUserForm.email} onChange={(event) => setNewUserForm({ ...newUserForm, email: event.target.value })} />
+                <Input placeholder="Position" value={newUserForm.position} onChange={(event) => setNewUserForm({ ...newUserForm, position: event.target.value })} />
+                <Input placeholder="Temporary password" type="password" value={newUserForm.password} onChange={(event) => setNewUserForm({ ...newUserForm, password: event.target.value })} />
+                <Select value={newUserForm.role} onValueChange={(role: TipsUser["role"]) => setNewUserForm({ ...newUserForm, role })}>
+                  <SelectTrigger className="bg-white text-[#211a16]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="employee">Employee</SelectItem>
+                    <SelectItem value="manager">Manager</SelectItem>
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button className="bg-[#2f5f46] hover:bg-[#274d39]" onClick={() => createUserMutation.mutate()} disabled={createUserMutation.isPending}>Add associate</Button>
               </div>
-            ))}
-            {data?.submissions?.length === 0 && <div className="text-sm text-muted-foreground">No submissions yet.</div>}
+            </div>
+          )}
+          {usersLoading ? (
+            <div className="text-sm text-[#62564b]">Loading employees...</div>
+          ) : (
+            <div className="space-y-3">
+              {(usersData?.users || []).map((user) => (
+                <div key={user.id} className="grid gap-3 rounded-md border border-[#e0d3c1] p-3 lg:grid-cols-[1fr_190px_180px_auto_auto] lg:items-end">
+                  <div>
+                    <div className="font-semibold">{user.employeeDisplayName}</div>
+                    <div className="text-sm text-[#62564b]">{user.email}</div>
+                    <div className="mt-1 flex gap-2">
+                      {user.role === "super_admin" && <Badge className="bg-[#1f2937]">Super Admin</Badge>}
+                      {user.role === "manager" && <Badge className="bg-[#2f5f46]">Manager</Badge>}
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Position</Label>
+                    <Input
+                      defaultValue={user.position || ""}
+                      list="tips-position-options"
+                      placeholder="Server, Bartender, Host..."
+                      onBlur={(event) => {
+                        if ((user.position || "") !== event.target.value.trim()) {
+                          positionMutation.mutate({ userId: user.id, position: event.target.value });
+                        }
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label>Role</Label>
+                    <Select value={user.role} disabled={!canManageAssociates || user.isSuperAdmin} onValueChange={(role: TipsUser["role"]) => roleMutation.mutate({ userId: user.id, role })}>
+                      <SelectTrigger className="bg-white text-[#211a16]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="employee">Employee</SelectItem>
+                        <SelectItem value="manager">Manager</SelectItem>
+                        <SelectItem value="super_admin">Super Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!canManageAssociates}
+                    onClick={(event) => {
+                      const input = event.currentTarget.parentElement?.querySelector("input");
+                      positionMutation.mutate({ userId: user.id, position: input?.value || "" });
+                    }}
+                  >
+                    Save
+                  </Button>
+                  {canManageAssociates && !user.isSuperAdmin && (
+                    <Button type="button" variant="destructive" onClick={() => deleteUserMutation.mutate(user.id)}>
+                      Delete
+                    </Button>
+                  )}
+                </div>
+              ))}
+              <datalist id="tips-position-options">
+                <option value="Server" />
+                <option value="Bartender" />
+                <option value="Host" />
+                <option value="Busser" />
+                <option value="Food Runner" />
+                <option value="Supervisor" />
+                <option value="Manager" />
+              </datalist>
+              {usersData?.users?.length === 0 && <div className="text-sm text-[#62564b]">No employees have registered yet.</div>}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-[#dccdb8] bg-white text-[#211a16]">
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>Manager submissions</CardTitle>
+              <CardDescription className="text-[#62564b]">Review, unlock, approve, and export payroll backup data.</CardDescription>
+            </div>
+            <Button asChild variant="outline">
+              <a href={apiUrl("/api/tips/admin/export.csv")}>
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </a>
+            </Button>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="text-sm text-[#62564b]">Loading submissions...</div>
+          ) : (
+            <div className="space-y-3">
+              {(data?.submissions || []).map((submission) => (
+                <div key={submission.id} className="rounded-md border p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="font-semibold">{submission.user.employeeDisplayName}</div>
+                      <div className="text-sm text-[#62564b]">{submission.user.email}</div>
+                      <div className="text-sm text-[#62564b]">Position: {submission.user.position || "Unassigned"}</div>
+                      <div className="mt-1 text-sm">{submission.payPeriodStart} to {submission.payPeriodEnd}</div>
+                    </div>
+                    <Badge variant="outline">{submission.status}</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                    <div>Week 1: <strong>{formatMoney(submission.week1Total)}</strong></div>
+                    <div>Week 2: <strong>{formatMoney(submission.week2Total)}</strong></div>
+                    <div>Total: <strong>{formatMoney(submission.totalTips)}</strong></div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" asChild variant="outline">
+                      <a href={apiUrl(`/api/tips/admin/submissions/${submission.id}/pdf`)}>
+                        <Download className="mr-2 h-4 w-4" />
+                        PDF
+                      </a>
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: submission.id, status: "reopened" })}>Unlock</Button>
+                    <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: submission.id, status: "approved" })}>Approve</Button>
+                    <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: submission.id, status: "exported" })}>Mark exported</Button>
+                  </div>
+                </div>
+              ))}
+              {data?.submissions?.length === 0 && <div className="text-sm text-[#62564b]">No submissions yet.</div>}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -432,7 +595,7 @@ export default function TipsPage() {
       <header className="border-b border-[#deceba] bg-white/90 px-4 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">Courtyard Bistro</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">Courtyard Austin Lakeline Bistro</div>
             <h1 className="text-2xl font-semibold tracking-tight">Courtyard Tips Tracker</h1>
           </div>
           <div className="flex items-center gap-2">
@@ -453,22 +616,22 @@ export default function TipsPage() {
         ) : (
           <>
             <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-              <Card className="border-[#dccdb8]">
+              <Card className="border-[#dccdb8] bg-white text-[#211a16] shadow-sm">
                 <CardHeader>
                   <CardTitle>Current Pay Period</CardTitle>
-                  <CardDescription>{dashboard.period.start} to {dashboard.period.end}</CardDescription>
+                  <CardDescription className="text-[#62564b]">{dashboard.period.start} to {dashboard.period.end}</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-3 sm:grid-cols-4">
-                  <div className="rounded-md bg-white p-3"><div className="text-xs uppercase text-[#78695c]">Day</div><div className="text-2xl font-semibold">{dashboard.period.dayNumber}/14</div></div>
-                  <div className="rounded-md bg-white p-3"><div className="text-xs uppercase text-[#78695c]">Week 1</div><div className="text-2xl font-semibold">{formatMoney(dashboard.week1Total)}</div></div>
-                  <div className="rounded-md bg-white p-3"><div className="text-xs uppercase text-[#78695c]">Week 2</div><div className="text-2xl font-semibold">{formatMoney(dashboard.week2Total)}</div></div>
-                  <div className="rounded-md bg-[#e8f1ea] p-3"><div className="text-xs uppercase text-[#48644f]">Total</div><div className="text-2xl font-semibold">{formatMoney(dashboard.totalTips)}</div></div>
+                  <div className="rounded-md border border-[#e0d3c1] bg-[#fbf8f3] p-3 text-[#211a16]"><div className="text-xs uppercase text-[#78695c]">Day</div><div className="text-2xl font-semibold">{dashboard.period.dayNumber}/14</div></div>
+                  <div className="rounded-md border border-[#e0d3c1] bg-[#fbf8f3] p-3 text-[#211a16]"><div className="text-xs uppercase text-[#78695c]">Week 1</div><div className="text-2xl font-semibold">{formatMoney(dashboard.week1Total)}</div></div>
+                  <div className="rounded-md border border-[#e0d3c1] bg-[#fbf8f3] p-3 text-[#211a16]"><div className="text-xs uppercase text-[#78695c]">Week 2</div><div className="text-2xl font-semibold">{formatMoney(dashboard.week2Total)}</div></div>
+                  <div className="rounded-md border border-[#c8dccb] bg-[#e8f1ea] p-3 text-[#173c25]"><div className="text-xs uppercase text-[#48644f]">Total</div><div className="text-2xl font-semibold">{formatMoney(dashboard.totalTips)}</div></div>
                 </CardContent>
               </Card>
-              <Card className="border-[#dccdb8]">
+              <Card className="border-[#dccdb8] bg-white text-[#211a16] shadow-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">{locked && <Lock className="h-4 w-4" />} Actions</CardTitle>
-                  <CardDescription>{locked ? "This pay period is submitted and locked." : "Review carefully before final submission."}</CardDescription>
+                  <CardDescription className="text-[#62564b]">{locked ? "This pay period is submitted and locked." : "Review carefully before final submission."}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-2">
                   <Button className="bg-[#2f5f46] hover:bg-[#274d39]" disabled={locked} onClick={() => setReviewOpen(true)}>Review and submit period</Button>

@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS tips_users (
   last_name text NOT NULL,
   email varchar NOT NULL UNIQUE,
   employee_display_name text NOT NULL,
+  position text,
+  role text NOT NULL DEFAULT 'employee',
   hashed_password text NOT NULL,
   created_at timestamp DEFAULT now(),
   updated_at timestamp DEFAULT now()

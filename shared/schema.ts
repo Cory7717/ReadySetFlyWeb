@@ -92,6 +92,7 @@ export const approachPlateTypes = ["IAP", "SID", "STAR", "AIRPORT", "OTHER"] as 
 export const adminRoles = ["operations", "finance", "sales", "support", "content"] as const;
 export const tipEntryStatuses = ["draft", "saved", "submitted"] as const;
 export const tipSubmissionStatuses = ["submitted", "reopened", "approved", "exported"] as const;
+export const tipsUserRoles = ["employee", "manager", "super_admin"] as const;
 
 // Session storage table for web and OAuth-backed authentication
 export const sessions = pgTable(
@@ -290,6 +291,8 @@ export const tipsUsers = pgTable("tips_users", {
   lastName: text("last_name").notNull(),
   email: varchar("email").notNull().unique(),
   employeeDisplayName: text("employee_display_name").notNull(),
+  position: text("position"),
+  role: text("role").notNull().default("employee"),
   hashedPassword: text("hashed_password").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

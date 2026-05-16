@@ -18,15 +18,15 @@ import {
   tipsUsers,
 } from "@shared/schema";
 
-const TIPS_MANAGER_EMAILS = new Set(
-  (process.env.TIPS_MANAGER_EMAILS || "cory.armer@marriott.com,coryarmer@gmail.com")
+const TIPS_SUPER_ADMIN_EMAILS = new Set(
+  (process.env.TIPS_SUPER_ADMIN_EMAILS || "coryarmer@gmail.com")
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean),
 );
 
 // TODO: set the actual Courtyard Bistro current pay period start date in env/admin settings.
-const TIPS_PAY_PERIOD_SEED = process.env.TIPS_PAY_PERIOD_START_DATE || "2026-05-05";
+const TIPS_PAY_PERIOD_SEED = process.env.TIPS_PAY_PERIOD_START_DATE || "2026-05-16";
 const TIPS_SUBMISSION_RECIPIENT = process.env.TIPS_SUBMISSION_RECIPIENT || "cory.armer@marriott.com";
 const PRIVATE_TIPS_ROOT = path.resolve(process.cwd(), "private-uploads", "tips");
 const REPORTS_DIR = path.join(PRIVATE_TIPS_ROOT, "reports");
@@ -41,6 +41,8 @@ type TipsUserSession = {
   firstName: string;
   lastName: string;
   employeeDisplayName: string;
+  position: string | null;
+  role: "employee" | "manager" | "super_admin";
 };
 
 function normalizeEmail(email: string) {
@@ -66,7 +68,7 @@ function addUtcDays(date: Date, days: number) {
 }
 
 function getPayPeriodForDate(date = new Date()) {
-  const seed = parseDateKey(TIPS_PAY_PERIOD_SEED) || parseDateKey("2026-05-05")!;
+  const seed = parseDateKey(TIPS_PAY_PERIOD_SEED) || parseDateKey("2026-05-16")!;
   const target = parseDateKey(toDateKey(date)) || date;
   const diffDays = Math.floor((target.getTime() - seed.getTime()) / 86_400_000);
   const offset = ((diffDays % 14) + 14) % 14;
@@ -95,15 +97,35 @@ function moneyString(value: unknown) {
   return moneyNumber(value).toFixed(2);
 }
 
-function publicTipsUser(user: any): TipsUserSession & { isAdmin: boolean } {
+function resolveTipsRole(user: any): "employee" | "manager" | "super_admin" {
+  const email = String(user.email || "").toLowerCase();
+  if (TIPS_SUPER_ADMIN_EMAILS.has(email)) return "super_admin";
+  if (user.role === "manager" || user.role === "super_admin") return user.role;
+  return "employee";
+}
+
+function isTipsManager(user: any) {
+  const role = resolveTipsRole(user);
+  return role === "manager" || role === "super_admin";
+}
+
+function isTipsSuperAdmin(user: any) {
+  return resolveTipsRole(user) === "super_admin";
+}
+
+function publicTipsUser(user: any): TipsUserSession & { isAdmin: boolean; isSuperAdmin: boolean } {
   const email = String(user.email || "");
+  const role = resolveTipsRole(user);
   return {
     id: user.id,
     email,
     firstName: user.firstName,
     lastName: user.lastName,
     employeeDisplayName: user.employeeDisplayName,
-    isAdmin: TIPS_MANAGER_EMAILS.has(email.toLowerCase()),
+    position: user.position ?? null,
+    role,
+    isAdmin: role === "manager" || role === "super_admin",
+    isSuperAdmin: role === "super_admin",
   };
 }
 
@@ -129,9 +151,21 @@ const requireTipsAdmin: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getTipsUserBySession(req);
     if (!user) return res.status(401).json({ error: "Tips login required" });
-    if (!TIPS_MANAGER_EMAILS.has(String(user.email || "").toLowerCase())) {
+    if (!isTipsManager(user)) {
       return res.status(403).json({ error: "Tips manager access required" });
     }
+    req.tipsUser = user;
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+const requireTipsSuperAdmin: RequestHandler = async (req: any, res, next) => {
+  try {
+    const user = await getTipsUserBySession(req);
+    if (!user) return res.status(401).json({ error: "Tips login required" });
+    if (!isTipsSuperAdmin(user)) return res.status(403).json({ error: "Tips super admin access required" });
     req.tipsUser = user;
     next();
   } catch (error) {
@@ -174,6 +208,24 @@ const entrySchema = z.object({
 
 const periodSchema = z.object({
   start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+const updateTipsUserPositionSchema = z.object({
+  position: z.string().trim().max(120).nullable().optional(),
+});
+
+const updateTipsUserRoleSchema = z.object({
+  role: z.enum(["employee", "manager", "super_admin"]),
+});
+
+const adminCreateTipsUserSchema = z.object({
+  firstName: z.string().trim().min(1).max(80),
+  lastName: z.string().trim().min(1).max(80),
+  email: z.string().email(),
+  employeeDisplayName: z.string().trim().min(1).max(140).optional(),
+  position: z.string().trim().max(120).optional().nullable(),
+  role: z.enum(["employee", "manager", "super_admin"]).default("employee"),
+  password: z.string().min(8).max(200),
 });
 
 const upload = multer({
@@ -286,6 +338,7 @@ async function generateTipsPdf(user: any, dashboard: any, submission: any | null
 
   draw("Courtyard Tips Tracker", 48, 18, true);
   draw(`Employee: ${user.employeeDisplayName} (${user.firstName} ${user.lastName})`, 48, 11);
+  draw(`Position: ${user.position || "Unassigned"}`, 48, 11);
   draw(`Email: ${user.email}`, 48, 11);
   draw(`Pay period: ${dashboard.period.start} to ${dashboard.period.end}`, 48, 11);
   draw(`Submission status: ${submission?.status || "draft"}`, 48, 11);
@@ -335,6 +388,7 @@ async function sendTipsSubmissionEmail(user: any, dashboard: any, submission: an
     subject,
     text: [
       `Employee: ${user.employeeDisplayName}`,
+      `Position: ${user.position || "Unassigned"}`,
       `Email: ${user.email}`,
       `Pay period: ${dashboard.period.start} to ${dashboard.period.end}`,
       `Week 1 total: $${dashboard.week1Total}`,
@@ -376,6 +430,7 @@ export function registerTipsRoutes(app: Express) {
           lastName: parsed.data.lastName,
           email,
           employeeDisplayName: displayName,
+          role: TIPS_SUPER_ADMIN_EMAILS.has(email) ? "super_admin" : "employee",
           hashedPassword,
         })
         .returning();
@@ -507,7 +562,7 @@ export function registerTipsRoutes(app: Express) {
         .limit(1);
       if (!row) return res.status(404).json({ error: "Attachment not found" });
       const isOwner = row.entry.userId === req.tipsUser.id;
-      const isAdmin = TIPS_MANAGER_EMAILS.has(String(req.tipsUser.email || "").toLowerCase());
+      const isAdmin = isTipsManager(req.tipsUser);
       if (!isOwner && !isAdmin) return res.status(403).json({ error: "Forbidden" });
       const absolute = resolvePrivateFile(row.attachment.storagePath);
       if (!absolute || !fs.existsSync(absolute)) return res.status(404).json({ error: "Attachment file not found" });
@@ -602,6 +657,105 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
+  router.get("/admin/users", requireTipsAdmin, async (_req: any, res, next) => {
+    try {
+      const users = await db.select().from(tipsUsers).orderBy(asc(tipsUsers.employeeDisplayName));
+      res.json({ users: users.map(publicTipsUser) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/admin/users", requireTipsSuperAdmin, async (req: any, res, next) => {
+    try {
+      const parsed = adminCreateTipsUserSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid associate details", validation: parsed.error.format() });
+      const email = normalizeEmail(parsed.data.email);
+      const existing = await db.select({ id: tipsUsers.id }).from(tipsUsers).where(eq(tipsUsers.email, email)).limit(1);
+      if (existing.length) return res.status(409).json({ error: "An associate already exists for this email." });
+      const [created] = await db.insert(tipsUsers).values({
+        firstName: parsed.data.firstName,
+        lastName: parsed.data.lastName,
+        email,
+        employeeDisplayName: parsed.data.employeeDisplayName?.trim() || `${parsed.data.firstName} ${parsed.data.lastName}`.trim(),
+        position: parsed.data.position?.trim() || null,
+        role: TIPS_SUPER_ADMIN_EMAILS.has(email) ? "super_admin" : parsed.data.role,
+        hashedPassword: await bcrypt.hash(parsed.data.password, 12),
+      }).returning();
+      await db.insert(tipAdminActions).values({
+        actorUserId: req.tipsUser.id,
+        targetUserId: created.id,
+        action: "user_created",
+        metadataJson: { role: created.role, position: created.position },
+      });
+      res.status(201).json({ user: publicTipsUser(created) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/admin/users/:id/position", requireTipsSuperAdmin, async (req: any, res, next) => {
+    try {
+      const parsed = updateTipsUserPositionSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid position" });
+      const normalizedPosition = parsed.data.position?.trim() || null;
+      const [updated] = await db
+        .update(tipsUsers)
+        .set({ position: normalizedPosition, updatedAt: new Date() })
+        .where(eq(tipsUsers.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Tips user not found" });
+      await db.insert(tipAdminActions).values({
+        actorUserId: req.tipsUser.id,
+        targetUserId: updated.id,
+        action: "user_position_updated",
+        metadataJson: { position: normalizedPosition },
+      });
+      res.json({ user: publicTipsUser(updated) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/admin/users/:id/role", requireTipsSuperAdmin, async (req: any, res, next) => {
+    try {
+      const parsed = updateTipsUserRoleSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid role" });
+      const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
+      if (!target) return res.status(404).json({ error: "Tips user not found" });
+      const targetEmail = String(target.email || "").toLowerCase();
+      const nextRole = TIPS_SUPER_ADMIN_EMAILS.has(targetEmail) ? "super_admin" : parsed.data.role;
+      const [updated] = await db.update(tipsUsers).set({ role: nextRole, updatedAt: new Date() }).where(eq(tipsUsers.id, target.id)).returning();
+      await db.insert(tipAdminActions).values({
+        actorUserId: req.tipsUser.id,
+        targetUserId: updated.id,
+        action: "user_role_updated",
+        metadataJson: { role: nextRole },
+      });
+      res.json({ user: publicTipsUser(updated) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete("/admin/users/:id", requireTipsSuperAdmin, async (req: any, res, next) => {
+    try {
+      const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
+      if (!target) return res.status(404).json({ error: "Tips user not found" });
+      if (isTipsSuperAdmin(target)) return res.status(400).json({ error: "The Tips super admin cannot be deleted." });
+      await db.insert(tipAdminActions).values({
+        actorUserId: req.tipsUser.id,
+        targetUserId: null,
+        action: "user_deleted",
+        metadataJson: { deletedUserId: target.id, email: target.email },
+      });
+      await db.delete(tipsUsers).where(eq(tipsUsers.id, target.id));
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/admin/submissions/:id/status", requireTipsAdmin, async (req: any, res, next) => {
     try {
       const status = z.enum(["reopened", "approved", "exported"]).parse(req.body?.status);
@@ -654,11 +808,12 @@ export function registerTipsRoutes(app: Express) {
         .innerJoin(tipsUsers, eq(tipPeriodSubmissions.userId, tipsUsers.id))
         .orderBy(desc(tipPeriodSubmissions.payPeriodStart), asc(tipsUsers.employeeDisplayName));
       const csv = [
-        ["employee", "email", "period_start", "period_end", "week1_total", "week2_total", "total_tips", "status", "submitted_at"].join(","),
+        ["employee", "email", "position", "period_start", "period_end", "week1_total", "week2_total", "total_tips", "status", "submitted_at"].join(","),
         ...rows.map((row) =>
           [
             JSON.stringify(row.user.employeeDisplayName),
             JSON.stringify(row.user.email),
+            JSON.stringify(row.user.position || ""),
             row.submission.payPeriodStart,
             row.submission.payPeriodEnd,
             moneyString(row.submission.week1Total),

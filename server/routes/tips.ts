@@ -43,6 +43,8 @@ type TipsUserSession = {
   employeeDisplayName: string;
   position: string | null;
   role: "employee" | "manager" | "super_admin";
+  mustChangePassword: boolean;
+  disabledAt: Date | string | null;
 };
 
 function normalizeEmail(email: string) {
@@ -124,6 +126,8 @@ function publicTipsUser(user: any): TipsUserSession & { isAdmin: boolean; isSupe
     employeeDisplayName: user.employeeDisplayName,
     position: user.position ?? null,
     role,
+    mustChangePassword: Boolean(user.mustChangePassword),
+    disabledAt: user.disabledAt ?? null,
     isAdmin: role === "manager" || role === "super_admin",
     isSuperAdmin: role === "super_admin",
   };
@@ -140,6 +144,7 @@ const requireTipsAuth: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getTipsUserBySession(req);
     if (!user) return res.status(401).json({ error: "Tips login required" });
+    if (user.disabledAt) return res.status(403).json({ error: "This Tips account is disabled." });
     req.tipsUser = user;
     next();
   } catch (error) {
@@ -147,10 +152,19 @@ const requireTipsAuth: RequestHandler = async (req: any, res, next) => {
   }
 };
 
+const requireTipsReady: RequestHandler = async (req: any, res, next) => {
+  if (req.tipsUser?.mustChangePassword) {
+    return res.status(403).json({ error: "Password change required before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
+  }
+  next();
+};
+
 const requireTipsAdmin: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getTipsUserBySession(req);
     if (!user) return res.status(401).json({ error: "Tips login required" });
+    if (user.disabledAt) return res.status(403).json({ error: "This Tips account is disabled." });
+    if (user.mustChangePassword) return res.status(403).json({ error: "Password change required before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
     if (!isTipsManager(user)) {
       return res.status(403).json({ error: "Tips manager access required" });
     }
@@ -165,6 +179,8 @@ const requireTipsSuperAdmin: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getTipsUserBySession(req);
     if (!user) return res.status(401).json({ error: "Tips login required" });
+    if (user.disabledAt) return res.status(403).json({ error: "This Tips account is disabled." });
+    if (user.mustChangePassword) return res.status(403).json({ error: "Password change required before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
     if (!isTipsSuperAdmin(user)) return res.status(403).json({ error: "Tips super admin access required" });
     req.tipsUser = user;
     next();
@@ -200,6 +216,15 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const changePasswordSchema = z.object({
+  temporaryPassword: z.string().min(1),
+  newPassword: z.string().min(8).max(200),
+  confirmPassword: z.string().min(8).max(200),
+}).refine((value) => value.newPassword === value.confirmPassword, {
+  message: "New passwords do not match",
+  path: ["confirmPassword"],
+});
+
 const entrySchema = z.object({
   entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   tipAmount: z.coerce.number().min(0).max(100000),
@@ -231,6 +256,14 @@ const adminCreateTipsUserSchema = z.object({
   position: z.string().trim().max(120).optional().nullable(),
   role: z.enum(["employee", "manager", "super_admin"]).default("employee"),
   password: z.string().min(8).max(200),
+});
+
+const adminPasswordResetSchema = z.object({
+  temporaryPassword: z.string().min(8).max(200),
+});
+
+const adminDisableUserSchema = z.object({
+  disabled: z.boolean(),
 });
 
 const upload = multer({
@@ -444,7 +477,33 @@ async function sendTipsAssociateCreatedEmail(params: {
       `Email: ${params.email}`,
       `Temporary password: ${params.temporaryPassword}`,
       "",
-      "After signing in, enter your daily tips and upload the sales report photo for each day.",
+      "After signing in the first time, you will be asked to confirm this temporary password and create your new password.",
+    ].join("\n"),
+  });
+}
+
+async function sendTipsPasswordResetEmail(params: {
+  email: string;
+  firstName: string;
+  temporaryPassword: string;
+  requestedByName: string;
+}) {
+  const { client, fromEmail } = await getUncachableResendClient();
+  const tipsUrl = new URL("/tips", process.env.FRONTEND_BASE_URL || "https://readysetfly.us").toString();
+
+  await client.emails.send({
+    from: fromEmail,
+    to: params.email,
+    subject: "Courtyard Tips Tracker password change required",
+    text: [
+      `Hi ${params.firstName},`,
+      "",
+      `${params.requestedByName} requested a password change for your Courtyard Tips Tracker account.`,
+      "",
+      `Sign in here: ${tipsUrl}`,
+      `Temporary password: ${params.temporaryPassword}`,
+      "",
+      "After signing in, confirm this temporary password and create your new password.",
     ].join("\n"),
   });
 }
@@ -476,6 +535,7 @@ export function registerTipsRoutes(app: Express) {
           employeeDisplayName: displayName,
           role: TIPS_SUPER_ADMIN_EMAILS.has(email) ? "super_admin" : "employee",
           hashedPassword,
+          mustChangePassword: false,
         })
         .returning();
       req.session.tipsUserId = user.id;
@@ -493,6 +553,9 @@ export function registerTipsRoutes(app: Express) {
       if (!user || !(await bcrypt.compare(parsed.data.password, user.hashedPassword))) {
         return res.status(401).json({ error: "Invalid email or password" });
       }
+      if (user.disabledAt) {
+        return res.status(403).json({ error: "This Tips account is disabled. Contact your manager." });
+      }
       req.session.tipsUserId = user.id;
       req.session.save(() => res.json({ user: publicTipsUser(user) }));
     } catch (error) {
@@ -505,16 +568,45 @@ export function registerTipsRoutes(app: Express) {
     req.session?.save(() => res.json({ ok: true }));
   });
 
+  router.post("/auth/change-password", requireTipsAuth, tipsAuthRateLimiter, async (req: any, res, next) => {
+    try {
+      const parsed = changePasswordSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid password details", validation: parsed.error.format() });
+      if (!(await bcrypt.compare(parsed.data.temporaryPassword, req.tipsUser.hashedPassword))) {
+        return res.status(400).json({ error: "Temporary password is incorrect." });
+      }
+      if (await bcrypt.compare(parsed.data.newPassword, req.tipsUser.hashedPassword)) {
+        return res.status(400).json({ error: "New password must be different from the temporary password." });
+      }
+      const [updated] = await db
+        .update(tipsUsers)
+        .set({
+          hashedPassword: await bcrypt.hash(parsed.data.newPassword, 12),
+          mustChangePassword: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(tipsUsers.id, req.tipsUser.id))
+        .returning();
+      res.json({ user: publicTipsUser(updated) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get("/auth/me", async (req: any, res, next) => {
     try {
       const user = await getTipsUserBySession(req);
+      if (user?.disabledAt && req.session) {
+        delete req.session.tipsUserId;
+        return req.session.save(() => res.json({ user: null }));
+      }
       res.json({ user: user ? publicTipsUser(user) : null });
     } catch (error) {
       next(error);
     }
   });
 
-  router.get("/dashboard", requireTipsAuth, async (req: any, res, next) => {
+  router.get("/dashboard", requireTipsAuth, requireTipsReady, async (req: any, res, next) => {
     try {
       const parsed = periodSchema.safeParse(req.query);
       if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
@@ -524,7 +616,7 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
-  router.post("/entries", requireTipsAuth, async (req: any, res, next) => {
+  router.post("/entries", requireTipsAuth, requireTipsReady, async (req: any, res, next) => {
     try {
       const parsed = entrySchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid tip entry", validation: parsed.error.format() });
@@ -586,7 +678,7 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
-  router.post("/entries/:entryId/attachment", requireTipsAuth, tipsUploadRateLimiter, upload.single("salesReport"), async (req: any, res, next) => {
+  router.post("/entries/:entryId/attachment", requireTipsAuth, requireTipsReady, tipsUploadRateLimiter, upload.single("salesReport"), async (req: any, res, next) => {
     try {
       const [entry] = await db
         .select()
@@ -615,7 +707,7 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
-  router.get("/attachments/:attachmentId/view", requireTipsAuth, async (req: any, res, next) => {
+  router.get("/attachments/:attachmentId/view", requireTipsAuth, requireTipsReady, async (req: any, res, next) => {
     try {
       const [row] = await db
         .select({ attachment: tipEntryAttachments, entry: tipEntries })
@@ -636,7 +728,7 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
-  router.post("/submissions", requireTipsAuth, async (req: any, res, next) => {
+  router.post("/submissions", requireTipsAuth, requireTipsReady, async (req: any, res, next) => {
     try {
       const parsed = periodSchema.safeParse(req.body || {});
       if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
@@ -702,7 +794,7 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
-  router.get("/submissions/pdf", requireTipsAuth, async (req: any, res, next) => {
+  router.get("/submissions/pdf", requireTipsAuth, requireTipsReady, async (req: any, res, next) => {
     try {
       const parsed = periodSchema.safeParse(req.query);
       if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
@@ -755,6 +847,7 @@ export function registerTipsRoutes(app: Express) {
         position: parsed.data.position?.trim() || null,
         role: TIPS_SUPER_ADMIN_EMAILS.has(email) ? "super_admin" : requestedRole,
         hashedPassword: await bcrypt.hash(parsed.data.password, 12),
+        mustChangePassword: true,
       }).returning();
       await db.insert(tipAdminActions).values({
         actorUserId: req.tipsUser.id,
@@ -778,6 +871,78 @@ export function registerTipsRoutes(app: Express) {
         console.error("Failed to send tips associate created email:", error);
       }
       res.status(emailSent ? 201 : 202).json({ user: publicTipsUser(created), emailSent, warning: emailWarning });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/admin/users/:id/password-reset", requireTipsSuperAdmin, async (req: any, res, next) => {
+    try {
+      const parsed = adminPasswordResetSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Temporary password must be at least 8 characters." });
+      const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
+      if (!target) return res.status(404).json({ error: "Tips user not found" });
+      if (target.disabledAt) return res.status(400).json({ error: "Enable this associate before requesting a password change." });
+
+      const [updated] = await db
+        .update(tipsUsers)
+        .set({
+          hashedPassword: await bcrypt.hash(parsed.data.temporaryPassword, 12),
+          mustChangePassword: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(tipsUsers.id, target.id))
+        .returning();
+      await db.insert(tipAdminActions).values({
+        actorUserId: req.tipsUser.id,
+        targetUserId: updated.id,
+        action: "user_password_reset_requested",
+        metadataJson: { email: updated.email },
+      });
+
+      let emailSent = true;
+      let emailWarning: string | undefined;
+      try {
+        await sendTipsPasswordResetEmail({
+          email: updated.email,
+          firstName: updated.firstName,
+          temporaryPassword: parsed.data.temporaryPassword,
+          requestedByName: req.tipsUser.employeeDisplayName || req.tipsUser.email,
+        });
+      } catch (error) {
+        emailSent = false;
+        emailWarning = "Password change was required, but the email notification could not be sent.";
+        console.error("Failed to send tips password reset email:", error);
+      }
+      res.status(emailSent ? 200 : 202).json({ user: publicTipsUser(updated), emailSent, warning: emailWarning });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/admin/users/:id/disabled", requireTipsSuperAdmin, async (req: any, res, next) => {
+    try {
+      const parsed = adminDisableUserSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid disabled state" });
+      const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
+      if (!target) return res.status(404).json({ error: "Tips user not found" });
+      if (isTipsSuperAdmin(target)) return res.status(400).json({ error: "The Tips super admin cannot be disabled." });
+      const [updated] = await db
+        .update(tipsUsers)
+        .set({
+          disabledAt: parsed.data.disabled ? new Date() : null,
+          disabledBy: parsed.data.disabled ? req.tipsUser.id : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(tipsUsers.id, target.id))
+        .returning();
+      await db.insert(tipAdminActions).values({
+        actorUserId: req.tipsUser.id,
+        targetUserId: updated.id,
+        action: parsed.data.disabled ? "user_disabled" : "user_enabled",
+        metadataJson: { email: updated.email },
+      });
+      res.json({ user: publicTipsUser(updated) });
     } catch (error) {
       next(error);
     }

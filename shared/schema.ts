@@ -295,6 +295,9 @@ export const tipsUsers = pgTable("tips_users", {
   position: text("position"),
   role: text("role").notNull().default("employee"),
   hashedPassword: text("hashed_password").notNull(),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
+  disabledAt: timestamp("disabled_at"),
+  disabledBy: varchar("disabled_by"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [

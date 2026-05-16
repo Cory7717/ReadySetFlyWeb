@@ -6,6 +6,9 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock3,
+  Eye,
+  EyeOff,
+  KeyRound,
   Download,
   Lock,
   LogOut,
@@ -14,6 +17,8 @@ import {
   Upload,
   UserPlus,
   Users,
+  Ban,
+  RotateCcw,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
@@ -49,6 +54,8 @@ type TipsUser = {
   employeeDisplayName: string;
   position: string | null;
   role: "employee" | "manager" | "super_admin";
+  mustChangePassword: boolean;
+  disabledAt: string | Date | null;
   isAdmin: boolean;
   isSuperAdmin: boolean;
 };
@@ -143,6 +150,43 @@ async function fetchJson<T>(url: string): Promise<T> {
   return response.json();
 }
 
+function PasswordField({
+  value,
+  onChange,
+  placeholder,
+  autoComplete,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  autoComplete?: string;
+  disabled?: boolean;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        className={`${C.field} pr-11`}
+        type={visible ? "text" : "password"}
+        autoComplete={autoComplete}
+        value={value}
+        disabled={disabled}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <button
+        type="button"
+        className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-[#5f5247] hover:bg-[#f4eadb]"
+        onClick={() => setVisible((next) => !next)}
+        aria-label={visible ? "Hide password" : "Show password"}
+      >
+        {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+}
+
 function TipsAuth({ onDone }: { onDone: () => void }) {
   const { toast } = useToast();
   const [mode, setMode] = useState<AuthMode>("login");
@@ -204,13 +248,69 @@ function TipsAuth({ onDone }: { onDone: () => void }) {
             </div>
             <div>
               <Label>Password</Label>
-              <Input className={C.field} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
+              <PasswordField
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                value={form.password}
+                onChange={(password) => setForm({ ...form, password })}
+              />
             </div>
             <Button className={`w-full ${C.green}`} onClick={() => submit.mutate()} disabled={submit.isPending}>
               {submit.isPending ? "Please wait..." : mode === "login" ? "Log in" : "Create account"}
             </Button>
             <Button variant="ghost" className="w-full text-[#2f5f46]" onClick={() => setMode(mode === "login" ? "register" : "login")}>
               {mode === "login" ? "Need an account? Register" : "Already registered? Log in"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function ChangePasswordGate({ onDone }: { onDone: () => void }) {
+  const { toast } = useToast();
+  const [form, setForm] = useState({ temporaryPassword: "", newPassword: "", confirmPassword: "" });
+  const changePassword = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/tips/auth/change-password", form);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Password updated" });
+      setForm({ temporaryPassword: "", newPassword: "", confirmPassword: "" });
+      onDone();
+    },
+    onError: (error: Error) => toast({ title: "Password update failed", description: error.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className={`min-h-screen px-4 py-8 ${C.page}`}>
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-lg items-center">
+        <Card className={C.shell}>
+          <CardHeader>
+            <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-[#2f5f46] text-white">
+              <KeyRound className="h-5 w-5" />
+            </div>
+            <CardTitle className={C.ink}>Create your new password</CardTitle>
+            <CardDescription className={C.muted}>
+              Confirm the temporary password you were given, then create your permanent Tips Tracker password.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label>Temporary password</Label>
+              <PasswordField value={form.temporaryPassword} autoComplete="current-password" onChange={(temporaryPassword) => setForm({ ...form, temporaryPassword })} />
+            </div>
+            <div>
+              <Label>New password</Label>
+              <PasswordField value={form.newPassword} autoComplete="new-password" onChange={(newPassword) => setForm({ ...form, newPassword })} />
+            </div>
+            <div>
+              <Label>Confirm new password</Label>
+              <PasswordField value={form.confirmPassword} autoComplete="new-password" onChange={(confirmPassword) => setForm({ ...form, confirmPassword })} />
+            </div>
+            <Button className={`w-full ${C.green}`} disabled={changePassword.isPending} onClick={() => changePassword.mutate()}>
+              {changePassword.isPending ? "Updating..." : "Set new password"}
             </Button>
           </CardContent>
         </Card>
@@ -440,6 +540,7 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
     role: "employee" as TipsUser["role"],
     password: "",
   });
+  const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
   const { data, isLoading } = useQuery<{ submissions: any[] }>({
     queryKey: ["/api/tips/admin/submissions"],
     queryFn: () => fetchJson("/api/tips/admin/submissions"),
@@ -490,14 +591,30 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
     },
     onError: (error: Error) => toast({ title: "Unable to add associate", description: error.message, variant: "destructive" }),
   });
-  const deleteUserMutation = useMutation({
-    mutationFn: async (userId: string) => apiRequest("DELETE", `/api/tips/admin/users/${userId}`),
+  const passwordResetMutation = useMutation({
+    mutationFn: async ({ userId, temporaryPassword }: { userId: string; temporaryPassword: string }) => {
+      const response = await apiRequest("POST", `/api/tips/admin/users/${userId}/password-reset`, { temporaryPassword });
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      toast({
+        title: "Password change requested",
+        description: data?.emailSent === false ? data.warning || "The temporary password was set, but the email notification failed." : "The associate has been emailed their temporary password.",
+        variant: data?.emailSent === false ? "destructive" : "default",
+      });
+      setResetPasswords((current) => ({ ...current, [variables.userId]: "" }));
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/users"] });
+    },
+    onError: (error: Error) => toast({ title: "Password request failed", description: error.message, variant: "destructive" }),
+  });
+  const disabledMutation = useMutation({
+    mutationFn: async ({ userId, disabled }: { userId: string; disabled: boolean }) => apiRequest("PATCH", `/api/tips/admin/users/${userId}/disabled`, { disabled }),
     onSuccess: () => {
-      toast({ title: "Associate deleted" });
+      toast({ title: "Associate status updated" });
       queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/submissions"] });
     },
-    onError: (error: Error) => toast({ title: "Unable to delete associate", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Unable to update associate", description: error.message, variant: "destructive" }),
   });
   const canCreateAssociates = currentUser.isAdmin;
   const canManageRoles = currentUser.isSuperAdmin;
@@ -510,7 +627,7 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
             <Users className="h-5 w-5 text-[#b98435]" />
             <CardTitle className={C.ink}>Associates</CardTitle>
           </div>
-          <CardDescription className={C.muted}>Managers can add employees. Super admin controls manager designation and deletion.</CardDescription>
+          <CardDescription className={C.muted}>Managers can add employees. Super admin controls roles, password-change requests, and disabled accounts.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {canCreateAssociates && (
@@ -525,7 +642,7 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
                 <Input className={C.field} placeholder="Display name" value={newUserForm.employeeDisplayName} onChange={(event) => setNewUserForm({ ...newUserForm, employeeDisplayName: event.target.value })} />
                 <Input className={C.field} placeholder="Position" value={newUserForm.position} onChange={(event) => setNewUserForm({ ...newUserForm, position: event.target.value })} />
                 <Input className={C.field} placeholder="Email" type="email" value={newUserForm.email} onChange={(event) => setNewUserForm({ ...newUserForm, email: event.target.value })} />
-                <Input className={C.field} placeholder="Temporary password" type="password" value={newUserForm.password} onChange={(event) => setNewUserForm({ ...newUserForm, password: event.target.value })} />
+                <PasswordField placeholder="Temporary password" value={newUserForm.password} onChange={(password) => setNewUserForm({ ...newUserForm, password })} />
                 <Select value={newUserForm.role} disabled={!canManageRoles} onValueChange={(role: TipsUser["role"]) => setNewUserForm({ ...newUserForm, role })}>
                   <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -544,7 +661,7 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
           ) : (
             <div className="space-y-3">
               {(usersData?.users || []).map((user) => (
-                <div key={user.id} className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                <div key={user.id} className={`rounded-xl border p-4 ${user.disabledAt ? "border-slate-300 bg-slate-100 opacity-85" : "border-[#e0d3c1] bg-white"}`}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="font-semibold">{user.employeeDisplayName}</div>
@@ -553,10 +670,21 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
                         {user.role === "super_admin" && <Badge className="bg-[#1f2937]">Super Admin</Badge>}
                         {user.role === "manager" && <Badge className="bg-[#2f5f46]">Manager</Badge>}
                         {user.role === "employee" && <Badge variant="outline" className="border-[#d7c8b5] text-[#5f5247]">Employee</Badge>}
+                        {user.mustChangePassword && <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">Temporary password</Badge>}
+                        {user.disabledAt && <Badge variant="outline" className="border-slate-400 bg-slate-200 text-slate-800">Disabled</Badge>}
                       </div>
                     </div>
                     {canManageRoles && !user.isSuperAdmin && (
-                      <Button type="button" variant="destructive" size="sm" onClick={() => deleteUserMutation.mutate(user.id)}>Delete</Button>
+                      <Button
+                        type="button"
+                        variant={user.disabledAt ? "outline" : "destructive"}
+                        className={user.disabledAt ? C.outline : undefined}
+                        size="sm"
+                        onClick={() => disabledMutation.mutate({ userId: user.id, disabled: !user.disabledAt })}
+                      >
+                        {user.disabledAt ? <RotateCcw className="mr-2 h-4 w-4" /> : <Ban className="mr-2 h-4 w-4" />}
+                        {user.disabledAt ? "Enable" : "Disable"}
+                      </Button>
                     )}
                   </div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px_auto]">
@@ -576,6 +704,28 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
                       positionMutation.mutate({ userId: user.id, position: input?.value || "" });
                     }}>Save</Button>
                   </div>
+                  {canManageRoles && !user.isSuperAdmin && !user.disabledAt && (
+                    <div className="mt-4 rounded-lg border border-[#e0d3c1] bg-[#fbf6ee] p-3">
+                      <Label>Send password change request</Label>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+                        <PasswordField
+                          placeholder="Temporary password"
+                          value={resetPasswords[user.id] || ""}
+                          onChange={(temporaryPassword) => setResetPasswords((current) => ({ ...current, [user.id]: temporaryPassword }))}
+                        />
+                        <Button
+                          type="button"
+                          className={C.green}
+                          disabled={passwordResetMutation.isPending || (resetPasswords[user.id] || "").length < 8}
+                          onClick={() => passwordResetMutation.mutate({ userId: user.id, temporaryPassword: resetPasswords[user.id] || "" })}
+                        >
+                          <KeyRound className="mr-2 h-4 w-4" />
+                          Send request
+                        </Button>
+                      </div>
+                      <div className="mt-1 text-xs text-[#5f5247]">The associate must confirm this temporary password and create a new one at next login.</div>
+                    </div>
+                  )}
                 </div>
               ))}
               <datalist id="tips-position-options">
@@ -695,6 +845,9 @@ export default function TipsPage() {
 
   if (authLoading) return <div className={`min-h-screen p-8 ${C.page}`}>Loading Tips Tracker...</div>;
   if (!auth?.user) return <TipsAuth onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/auth/me"] })} />;
+  if (auth.user.mustChangePassword) {
+    return <ChangePasswordGate onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/auth/me"] })} />;
+  }
 
   return (
     <div className={`min-h-screen ${C.page}`}>

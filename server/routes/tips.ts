@@ -405,6 +405,34 @@ async function sendTipsSubmissionEmail(user: any, dashboard: any, submission: an
   });
 }
 
+async function sendTipsAssociateCreatedEmail(params: {
+  email: string;
+  firstName: string;
+  employeeDisplayName: string;
+  temporaryPassword: string;
+  createdByName: string;
+}) {
+  const { client, fromEmail } = await getUncachableResendClient();
+  const tipsUrl = new URL("/tips", process.env.FRONTEND_BASE_URL || "https://readysetfly.us").toString();
+
+  await client.emails.send({
+    from: fromEmail,
+    to: params.email,
+    subject: "Courtyard Tips Tracker account created",
+    text: [
+      `Hi ${params.firstName},`,
+      "",
+      `${params.createdByName} created a Courtyard Tips Tracker account for ${params.employeeDisplayName}.`,
+      "",
+      `Sign in here: ${tipsUrl}`,
+      `Email: ${params.email}`,
+      `Temporary password: ${params.temporaryPassword}`,
+      "",
+      "After signing in, enter your daily tips and upload the sales report photo for each day.",
+    ].join("\n"),
+  });
+}
+
 function resolvePrivateFile(storagePath: string) {
   const absolute = path.resolve(process.cwd(), storagePath);
   if (!absolute.startsWith(PRIVATE_TIPS_ROOT + path.sep)) return null;
@@ -666,20 +694,21 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
-  router.post("/admin/users", requireTipsSuperAdmin, async (req: any, res, next) => {
+  router.post("/admin/users", requireTipsAdmin, async (req: any, res, next) => {
     try {
       const parsed = adminCreateTipsUserSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid associate details", validation: parsed.error.format() });
       const email = normalizeEmail(parsed.data.email);
       const existing = await db.select({ id: tipsUsers.id }).from(tipsUsers).where(eq(tipsUsers.email, email)).limit(1);
       if (existing.length) return res.status(409).json({ error: "An associate already exists for this email." });
+      const requestedRole = isTipsSuperAdmin(req.tipsUser) ? parsed.data.role : "employee";
       const [created] = await db.insert(tipsUsers).values({
         firstName: parsed.data.firstName,
         lastName: parsed.data.lastName,
         email,
         employeeDisplayName: parsed.data.employeeDisplayName?.trim() || `${parsed.data.firstName} ${parsed.data.lastName}`.trim(),
         position: parsed.data.position?.trim() || null,
-        role: TIPS_SUPER_ADMIN_EMAILS.has(email) ? "super_admin" : parsed.data.role,
+        role: TIPS_SUPER_ADMIN_EMAILS.has(email) ? "super_admin" : requestedRole,
         hashedPassword: await bcrypt.hash(parsed.data.password, 12),
       }).returning();
       await db.insert(tipAdminActions).values({
@@ -687,6 +716,15 @@ export function registerTipsRoutes(app: Express) {
         targetUserId: created.id,
         action: "user_created",
         metadataJson: { role: created.role, position: created.position },
+      });
+      void sendTipsAssociateCreatedEmail({
+        email,
+        firstName: created.firstName,
+        employeeDisplayName: created.employeeDisplayName,
+        temporaryPassword: parsed.data.password,
+        createdByName: req.tipsUser.employeeDisplayName || req.tipsUser.email,
+      }).catch((error) => {
+        console.error("Failed to send tips associate created email:", error);
       });
       res.status(201).json({ user: publicTipsUser(created) });
     } catch (error) {

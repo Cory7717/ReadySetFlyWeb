@@ -212,12 +212,12 @@ function DayEditor({
   const attachment = day.entry?.attachments?.[0];
 
   return (
-    <Card className="border-[#d7c8b5] bg-white text-[#211a16] shadow-sm">
+    <Card className="!border-[#d7c8b5] !bg-[#fffaf3] !text-[#211a16] shadow-sm">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base">{formatDisplayDate(day.date)}</CardTitle>
-            <CardDescription className="text-[#62564b]">Day {day.dayNumber} of the pay period</CardDescription>
+            <CardTitle className="text-base !text-[#211a16]">{formatDisplayDate(day.date)}</CardTitle>
+            <CardDescription className="!text-[#4f463d]">Day {day.dayNumber} of the pay period</CardDescription>
           </div>
           <Badge variant="outline" className={statusForDay(day, locked).className}>{statusForDay(day, locked).label}</Badge>
         </div>
@@ -225,11 +225,11 @@ function DayEditor({
       <CardContent className="space-y-3">
         <div>
           <Label>Tip amount</Label>
-          <Input className="bg-white text-[#211a16]" type="number" min="0" step="0.01" value={amount} disabled={locked} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" />
+          <Input className="!bg-white !text-[#211a16] placeholder:!text-[#6d6257]" type="number" min="0" step="0.01" value={amount} disabled={locked} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" />
         </div>
         <div>
           <Label>Notes</Label>
-          <Textarea className="bg-white text-[#211a16]" value={notes} disabled={locked} onChange={(event) => setNotes(event.target.value)} placeholder="Optional notes" rows={2} />
+          <Textarea className="!bg-white !text-[#211a16] placeholder:!text-[#6d6257]" value={notes} disabled={locked} onChange={(event) => setNotes(event.target.value)} placeholder="Optional notes" rows={2} />
         </div>
         <div className="rounded-md border border-dashed border-[#cbbca7] bg-[#fbf8f3] p-3">
           <Label className="flex items-center gap-2 text-sm font-medium text-[#211a16]">
@@ -241,7 +241,7 @@ function DayEditor({
               View current report: {attachment.originalFileName}
             </a>
           )}
-          <Input className="mt-3 bg-white text-[#211a16]" type="file" accept="image/*,application/pdf" capture="environment" disabled={locked} onChange={(event) => setFile(event.target.files?.[0] || null)} />
+          <Input className="mt-3 !bg-white !text-[#211a16]" type="file" accept="image/*,application/pdf" capture="environment" disabled={locked} onChange={(event) => setFile(event.target.files?.[0] || null)} />
           {file && <div className="mt-2 text-xs text-[#6a5e52]">Ready to upload: {file.name}</div>}
           {!attachment && !file && <div className="mt-2 text-xs font-medium text-[#8a4d12]">Required before this tip entry can be saved.</div>}
         </div>
@@ -326,7 +326,7 @@ function ReviewDialog({
   );
 }
 
-function TipsAdmin() {
+function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newUserForm, setNewUserForm] = useState({
@@ -392,28 +392,29 @@ function TipsAdmin() {
     },
     onError: (error: Error) => toast({ title: "Unable to delete associate", description: error.message, variant: "destructive" }),
   });
-  const canManageAssociates = usersData?.users?.some((user) => user.isSuperAdmin) ?? false;
+  const canCreateAssociates = currentUser.isAdmin;
+  const canManageRoles = currentUser.isSuperAdmin;
 
   return (
     <div className="space-y-6">
-      <Card className="border-[#dccdb8] bg-white text-[#211a16]">
+      <Card className="!border-[#dccdb8] !bg-[#fffaf3] !text-[#211a16]">
         <CardHeader>
-          <CardTitle>Associate roles</CardTitle>
-          <CardDescription className="text-[#62564b]">Super admin manages associates and designates managers after they register.</CardDescription>
+          <CardTitle className="!text-[#211a16]">Associate roles</CardTitle>
+          <CardDescription className="!text-[#4f463d]">Super admin manages associates and designates managers after they register.</CardDescription>
         </CardHeader>
         <CardContent>
-          {canManageAssociates && (
+          {canCreateAssociates && (
             <div className="mb-5 rounded-md border border-[#e0d3c1] bg-[#fbf8f3] p-4">
               <div className="mb-3 font-semibold">Add associate</div>
               <div className="grid gap-3 md:grid-cols-3">
-                <Input placeholder="First name" value={newUserForm.firstName} onChange={(event) => setNewUserForm({ ...newUserForm, firstName: event.target.value })} />
-                <Input placeholder="Last name" value={newUserForm.lastName} onChange={(event) => setNewUserForm({ ...newUserForm, lastName: event.target.value })} />
-                <Input placeholder="Display name" value={newUserForm.employeeDisplayName} onChange={(event) => setNewUserForm({ ...newUserForm, employeeDisplayName: event.target.value })} />
-                <Input placeholder="Email" type="email" value={newUserForm.email} onChange={(event) => setNewUserForm({ ...newUserForm, email: event.target.value })} />
-                <Input placeholder="Position" value={newUserForm.position} onChange={(event) => setNewUserForm({ ...newUserForm, position: event.target.value })} />
-                <Input placeholder="Temporary password" type="password" value={newUserForm.password} onChange={(event) => setNewUserForm({ ...newUserForm, password: event.target.value })} />
-                <Select value={newUserForm.role} onValueChange={(role: TipsUser["role"]) => setNewUserForm({ ...newUserForm, role })}>
-                  <SelectTrigger className="bg-white text-[#211a16]"><SelectValue /></SelectTrigger>
+                <Input className="!bg-white !text-[#211a16] placeholder:!text-[#6d6257]" placeholder="First name" value={newUserForm.firstName} onChange={(event) => setNewUserForm({ ...newUserForm, firstName: event.target.value })} />
+                <Input className="!bg-white !text-[#211a16] placeholder:!text-[#6d6257]" placeholder="Last name" value={newUserForm.lastName} onChange={(event) => setNewUserForm({ ...newUserForm, lastName: event.target.value })} />
+                <Input className="!bg-white !text-[#211a16] placeholder:!text-[#6d6257]" placeholder="Display name" value={newUserForm.employeeDisplayName} onChange={(event) => setNewUserForm({ ...newUserForm, employeeDisplayName: event.target.value })} />
+                <Input className="!bg-white !text-[#211a16] placeholder:!text-[#6d6257]" placeholder="Email" type="email" value={newUserForm.email} onChange={(event) => setNewUserForm({ ...newUserForm, email: event.target.value })} />
+                <Input className="!bg-white !text-[#211a16] placeholder:!text-[#6d6257]" placeholder="Position" value={newUserForm.position} onChange={(event) => setNewUserForm({ ...newUserForm, position: event.target.value })} />
+                <Input className="!bg-white !text-[#211a16] placeholder:!text-[#6d6257]" placeholder="Temporary password" type="password" value={newUserForm.password} onChange={(event) => setNewUserForm({ ...newUserForm, password: event.target.value })} />
+                <Select value={newUserForm.role} disabled={!canManageRoles} onValueChange={(role: TipsUser["role"]) => setNewUserForm({ ...newUserForm, role })}>
+                  <SelectTrigger className="!bg-white !text-[#211a16]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="employee">Employee</SelectItem>
                     <SelectItem value="manager">Manager</SelectItem>
@@ -425,14 +426,14 @@ function TipsAdmin() {
             </div>
           )}
           {usersLoading ? (
-            <div className="text-sm text-[#62564b]">Loading employees...</div>
+            <div className="text-sm text-[#4f463d]">Loading employees...</div>
           ) : (
             <div className="space-y-3">
               {(usersData?.users || []).map((user) => (
                 <div key={user.id} className="grid gap-3 rounded-md border border-[#e0d3c1] p-3 lg:grid-cols-[1fr_190px_180px_auto_auto] lg:items-end">
                   <div>
                     <div className="font-semibold">{user.employeeDisplayName}</div>
-                    <div className="text-sm text-[#62564b]">{user.email}</div>
+                    <div className="text-sm text-[#4f463d]">{user.email}</div>
                     <div className="mt-1 flex gap-2">
                       {user.role === "super_admin" && <Badge className="bg-[#1f2937]">Super Admin</Badge>}
                       {user.role === "manager" && <Badge className="bg-[#2f5f46]">Manager</Badge>}
@@ -441,6 +442,7 @@ function TipsAdmin() {
                   <div>
                     <Label>Position</Label>
                     <Input
+                      className="!bg-white !text-[#211a16] placeholder:!text-[#6d6257]"
                       defaultValue={user.position || ""}
                       list="tips-position-options"
                       placeholder="Server, Bartender, Host..."
@@ -453,8 +455,8 @@ function TipsAdmin() {
                   </div>
                   <div>
                     <Label>Role</Label>
-                    <Select value={user.role} disabled={!canManageAssociates || user.isSuperAdmin} onValueChange={(role: TipsUser["role"]) => roleMutation.mutate({ userId: user.id, role })}>
-                      <SelectTrigger className="bg-white text-[#211a16]"><SelectValue /></SelectTrigger>
+                    <Select value={user.role} disabled={!canManageRoles || user.isSuperAdmin} onValueChange={(role: TipsUser["role"]) => roleMutation.mutate({ userId: user.id, role })}>
+                      <SelectTrigger className="!bg-white !text-[#211a16]"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="employee">Employee</SelectItem>
                         <SelectItem value="manager">Manager</SelectItem>
@@ -465,7 +467,7 @@ function TipsAdmin() {
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={!canManageAssociates}
+                    disabled={!canCreateAssociates}
                     onClick={(event) => {
                       const input = event.currentTarget.parentElement?.querySelector("input");
                       positionMutation.mutate({ userId: user.id, position: input?.value || "" });
@@ -473,7 +475,7 @@ function TipsAdmin() {
                   >
                     Save
                   </Button>
-                  {canManageAssociates && !user.isSuperAdmin && (
+                  {canManageRoles && !user.isSuperAdmin && (
                     <Button type="button" variant="destructive" onClick={() => deleteUserMutation.mutate(user.id)}>
                       Delete
                     </Button>
@@ -489,18 +491,18 @@ function TipsAdmin() {
                 <option value="Supervisor" />
                 <option value="Manager" />
               </datalist>
-              {usersData?.users?.length === 0 && <div className="text-sm text-[#62564b]">No employees have registered yet.</div>}
+              {usersData?.users?.length === 0 && <div className="text-sm text-[#4f463d]">No employees have registered yet.</div>}
             </div>
           )}
         </CardContent>
       </Card>
 
-      <Card className="border-[#dccdb8] bg-white text-[#211a16]">
+      <Card className="!border-[#dccdb8] !bg-[#fffaf3] !text-[#211a16]">
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle>Manager submissions</CardTitle>
-              <CardDescription className="text-[#62564b]">Review, unlock, approve, and export payroll backup data.</CardDescription>
+              <CardTitle className="!text-[#211a16]">Manager submissions</CardTitle>
+              <CardDescription className="!text-[#4f463d]">Review, unlock, approve, and export payroll backup data.</CardDescription>
             </div>
             <Button asChild variant="outline">
               <a href={apiUrl("/api/tips/admin/export.csv")}>
@@ -512,7 +514,7 @@ function TipsAdmin() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="text-sm text-[#62564b]">Loading submissions...</div>
+            <div className="text-sm text-[#4f463d]">Loading submissions...</div>
           ) : (
             <div className="space-y-3">
               {(data?.submissions || []).map((submission) => (
@@ -520,8 +522,8 @@ function TipsAdmin() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="font-semibold">{submission.user.employeeDisplayName}</div>
-                      <div className="text-sm text-[#62564b]">{submission.user.email}</div>
-                      <div className="text-sm text-[#62564b]">Position: {submission.user.position || "Unassigned"}</div>
+                      <div className="text-sm text-[#4f463d]">{submission.user.email}</div>
+                      <div className="text-sm text-[#4f463d]">Position: {submission.user.position || "Unassigned"}</div>
                       <div className="mt-1 text-sm">{submission.payPeriodStart} to {submission.payPeriodEnd}</div>
                     </div>
                     <Badge variant="outline">{submission.status}</Badge>
@@ -544,7 +546,7 @@ function TipsAdmin() {
                   </div>
                 </div>
               ))}
-              {data?.submissions?.length === 0 && <div className="text-sm text-[#62564b]">No submissions yet.</div>}
+              {data?.submissions?.length === 0 && <div className="text-sm text-[#4f463d]">No submissions yet.</div>}
             </div>
           )}
         </CardContent>
@@ -610,16 +612,16 @@ export default function TipsPage() {
 
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         {isAdminPath ? (
-          auth.user.isAdmin ? <TipsAdmin /> : <Card><CardContent className="p-6">Manager access is required.</CardContent></Card>
+          auth.user.isAdmin ? <TipsAdmin currentUser={auth.user} /> : <Card><CardContent className="p-6">Manager access is required.</CardContent></Card>
         ) : dashboardLoading || !dashboard ? (
           <div className="text-sm text-muted-foreground">Loading dashboard...</div>
         ) : (
           <>
             <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-              <Card className="border-[#dccdb8] bg-white text-[#211a16] shadow-sm">
+              <Card className="!border-[#dccdb8] !bg-[#fffaf3] !text-[#211a16] shadow-sm">
                 <CardHeader>
-                  <CardTitle>Current Pay Period</CardTitle>
-                  <CardDescription className="text-[#62564b]">{dashboard.period.start} to {dashboard.period.end}</CardDescription>
+                  <CardTitle className="!text-[#211a16]">Current Pay Period</CardTitle>
+                  <CardDescription className="!text-[#4f463d]">{dashboard.period.start} to {dashboard.period.end}</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-3 sm:grid-cols-4">
                   <div className="rounded-md border border-[#e0d3c1] bg-[#fbf8f3] p-3 text-[#211a16]"><div className="text-xs uppercase text-[#78695c]">Day</div><div className="text-2xl font-semibold">{dashboard.period.dayNumber}/14</div></div>
@@ -628,10 +630,10 @@ export default function TipsPage() {
                   <div className="rounded-md border border-[#c8dccb] bg-[#e8f1ea] p-3 text-[#173c25]"><div className="text-xs uppercase text-[#48644f]">Total</div><div className="text-2xl font-semibold">{formatMoney(dashboard.totalTips)}</div></div>
                 </CardContent>
               </Card>
-              <Card className="border-[#dccdb8] bg-white text-[#211a16] shadow-sm">
+              <Card className="!border-[#dccdb8] !bg-[#fffaf3] !text-[#211a16] shadow-sm">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">{locked && <Lock className="h-4 w-4" />} Actions</CardTitle>
-                  <CardDescription className="text-[#62564b]">{locked ? "This pay period is submitted and locked." : "Review carefully before final submission."}</CardDescription>
+                  <CardTitle className="flex items-center gap-2 !text-[#211a16]">{locked && <Lock className="h-4 w-4" />} Actions</CardTitle>
+                  <CardDescription className="!text-[#4f463d]">{locked ? "This pay period is submitted and locked." : "Review carefully before final submission."}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-2">
                   <Button className="bg-[#2f5f46] hover:bg-[#274d39]" disabled={locked} onClick={() => setReviewOpen(true)}>Review and submit period</Button>

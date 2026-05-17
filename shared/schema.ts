@@ -337,6 +337,62 @@ export const tipEntryAttachments = pgTable("tip_entry_attachments", {
   index("idx_tip_entry_attachments_entry").on(table.tipEntryId),
 ]);
 
+export const tipDailyReportAttachments = pgTable("tip_daily_report_attachments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reportDate: date("report_date").notNull(),
+  payPeriodStart: date("pay_period_start").notNull(),
+  payPeriodEnd: date("pay_period_end").notNull(),
+  storagePath: text("storage_path").notNull(),
+  originalFileName: text("original_file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  size: integer("size").notNull(),
+  uploadedBy: varchar("uploaded_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_tip_daily_report_date").on(table.reportDate),
+  index("idx_tip_daily_report_period").on(table.payPeriodStart, table.payPeriodEnd),
+]);
+
+export const tipGridSubmissions = pgTable("tip_grid_submissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  payPeriodStart: date("pay_period_start").notNull(),
+  payPeriodEnd: date("pay_period_end").notNull(),
+  week1Total: numeric("week1_total", { precision: 10, scale: 2 }).notNull().default("0"),
+  week2Total: numeric("week2_total", { precision: 10, scale: 2 }).notNull().default("0"),
+  totalTips: numeric("total_tips", { precision: 10, scale: 2 }).notNull().default("0"),
+  status: text("status").notNull().default("submitted"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: varchar("reviewed_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  pdfPath: text("pdf_path"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_tip_grid_submissions_period").on(table.payPeriodStart, table.payPeriodEnd),
+]);
+
+export const tipGridDaySummaries = pgTable("tip_grid_day_summaries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  summaryDate: date("summary_date").notNull(),
+  payPeriodStart: date("pay_period_start").notNull(),
+  payPeriodEnd: date("pay_period_end").notNull(),
+  grossSales: numeric("gross_sales", { precision: 10, scale: 2 }).notNull().default("0"),
+  notes: text("notes"),
+  updatedBy: varchar("updated_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_tip_grid_day_summaries_date").on(table.summaryDate),
+  index("idx_tip_grid_day_summaries_period").on(table.payPeriodStart, table.payPeriodEnd),
+]);
+
+export const tipsKioskSettings = pgTable("tips_kiosk_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedBy: varchar("updated_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const tipPeriodSubmissions = pgTable("tip_period_submissions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => tipsUsers.id, { onDelete: "cascade" }),
@@ -1613,6 +1669,25 @@ export const insertTipEntryAttachmentSchema = createInsertSchema(tipEntryAttachm
   id: true,
   uploadedAt: true,
 });
+
+export const insertTipDailyReportAttachmentSchema = createInsertSchema(tipDailyReportAttachments).omit({
+  id: true,
+  uploadedAt: true,
+});
+
+export const insertTipGridSubmissionSchema = createInsertSchema(tipGridSubmissions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTipGridDaySummarySchema = createInsertSchema(tipGridDaySummaries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTipsKioskSettingSchema = createInsertSchema(tipsKioskSettings);
 
 export const insertTipPeriodSubmissionSchema = createInsertSchema(tipPeriodSubmissions).omit({
   id: true,
@@ -3327,6 +3402,14 @@ export type TipEntry = typeof tipEntries.$inferSelect;
 export type InsertTipEntry = z.infer<typeof insertTipEntrySchema>;
 export type TipEntryAttachment = typeof tipEntryAttachments.$inferSelect;
 export type InsertTipEntryAttachment = z.infer<typeof insertTipEntryAttachmentSchema>;
+export type TipDailyReportAttachment = typeof tipDailyReportAttachments.$inferSelect;
+export type InsertTipDailyReportAttachment = z.infer<typeof insertTipDailyReportAttachmentSchema>;
+export type TipGridSubmission = typeof tipGridSubmissions.$inferSelect;
+export type InsertTipGridSubmission = z.infer<typeof insertTipGridSubmissionSchema>;
+export type TipGridDaySummary = typeof tipGridDaySummaries.$inferSelect;
+export type InsertTipGridDaySummary = z.infer<typeof insertTipGridDaySummarySchema>;
+export type TipsKioskSetting = typeof tipsKioskSettings.$inferSelect;
+export type InsertTipsKioskSetting = z.infer<typeof insertTipsKioskSettingSchema>;
 export type TipPeriodSubmission = typeof tipPeriodSubmissions.$inferSelect;
 export type InsertTipPeriodSubmission = z.infer<typeof insertTipPeriodSubmissionSchema>;
 export type TipAdminAction = typeof tipAdminActions.$inferSelect;

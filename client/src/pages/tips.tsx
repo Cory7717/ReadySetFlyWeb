@@ -95,6 +95,40 @@ type TipsDashboard = {
   totalTips: string;
 };
 
+type DailyReport = {
+  id: string;
+  reportDate: string;
+  originalFileName: string;
+  mimeType: string;
+  size: number;
+};
+
+type TipsGridCell = {
+  date: string;
+  entryId: string | null;
+  tipAmount: string;
+  notes: string;
+  status: string;
+  confirmed: boolean;
+};
+
+type TipsGridRow = {
+  associate: TipsUser;
+  cells: TipsGridCell[];
+  totalTips: string;
+};
+
+type TipsGrid = {
+  period: { start: string; end: string; dayNumber: number; days: string[] };
+  rows: TipsGridRow[];
+  dayTotals: Array<{ date: string; totalTips: string; grossSales: string; tipPercent: number; splitCount: number; splitAmount: string | null; report: DailyReport | null }>;
+  week1Total: string;
+  week2Total: string;
+  totalTips: string;
+  submission: any | null;
+  locked: boolean;
+};
+
 type AuthMode = "login" | "register";
 
 function formatMoney(value: string | number | undefined | null) {
@@ -113,6 +147,11 @@ function formatDisplayDate(value: string, style: "short" | "long" = "short") {
 
 function formatTodayLabel(value: string) {
   return `Today, ${formatDisplayDate(value, "long")}`;
+}
+
+function formatPercent(value: number | undefined | null) {
+  const numeric = Number(value || 0);
+  return `${(Number.isFinite(numeric) ? numeric : 0).toFixed(1)}%`;
 }
 
 function formatPeriod(start: string, end: string) {
@@ -528,6 +567,358 @@ function ReviewDialog({
   );
 }
 
+function TipsPinGate({ onUnlocked }: { onUnlocked: () => void }) {
+  const { toast } = useToast();
+  const [pin, setPin] = useState("");
+  const login = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/tips/kiosk/login", { pin }),
+    onSuccess: () => {
+      toast({ title: "Tips grid unlocked" });
+      onUnlocked();
+    },
+    onError: (error: Error) => toast({ title: "Unable to unlock", description: error.message, variant: "destructive" }),
+  });
+  return (
+    <div className={`min-h-screen ${C.page}`}>
+      <header className="border-b border-[#deceba] bg-[#fffaf2]/95 px-4 py-5">
+        <div className="mx-auto max-w-3xl">
+          <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">Courtyard Austin Lakeline Bistro</div>
+          <h1 className="text-3xl font-semibold tracking-tight">Courtyard Tips Tracker</h1>
+        </div>
+      </header>
+      <main className="mx-auto flex max-w-3xl items-center px-4 py-10">
+        <Card className={`w-full ${C.shell}`}>
+          <CardHeader>
+            <CardTitle className={C.ink}>Enter team PIN</CardTitle>
+            <CardDescription className={C.muted}>Use the 5 digit PIN assigned by the super admin to open the shared pay-period tip grid.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Input
+              className={`${C.field} h-14 text-center text-2xl tracking-[0.35em]`}
+              inputMode="numeric"
+              maxLength={5}
+              placeholder="00000"
+              value={pin}
+              onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 5))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && pin.length === 5) login.mutate();
+              }}
+            />
+            <Button className={`w-full ${C.green}`} disabled={pin.length !== 5 || login.isPending} onClick={() => login.mutate()}>
+              <KeyRound className="mr-2 h-4 w-4" />
+              {login.isPending ? "Checking PIN..." : "Open tips grid"}
+            </Button>
+            <div className="flex justify-center">
+              <Button asChild variant="ghost" className="text-[#5f5247]">
+                <a href="/tips/admin">Manager or super admin login</a>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </main>
+    </div>
+  );
+}
+
+function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [grossDrafts, setGrossDrafts] = useState<Record<string, string>>({});
+  const { data: grid, isLoading } = useQuery<TipsGrid>({
+    queryKey: ["/api/tips/grid"],
+    queryFn: () => fetchJson("/api/tips/grid"),
+  });
+  const saveEntry = useMutation({
+    mutationFn: async ({ userId, entryDate, tipAmount }: { userId: string; entryDate: string; tipAmount: string }) => {
+      const response = await apiRequest("POST", "/api/tips/grid/entries", { userId, entryDate, tipAmount });
+      return response.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] }),
+    onError: (error: Error) => toast({ title: "Tip save failed", description: error.message, variant: "destructive" }),
+  });
+  const saveGrossSales = useMutation({
+    mutationFn: async ({ date, grossSales }: { date: string; grossSales: string }) => {
+      const response = await apiRequest("POST", "/api/tips/grid/days", { date, grossSales });
+      return response.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] }),
+    onError: (error: Error) => toast({ title: "Gross sales save failed", description: error.message, variant: "destructive" }),
+  });
+  const confirmEntry = useMutation({
+    mutationFn: async (entryId: string) => apiRequest("POST", `/api/tips/grid/entries/${entryId}/confirm`),
+    onSuccess: () => {
+      toast({ title: "Tip confirmed" });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
+    },
+    onError: (error: Error) => toast({ title: "Unable to confirm", description: error.message, variant: "destructive" }),
+  });
+  const unlockEntry = useMutation({
+    mutationFn: async (entryId: string) => apiRequest("POST", `/api/tips/grid/entries/${entryId}/unlock`),
+    onSuccess: () => {
+      toast({ title: "Tip entry unlocked" });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
+    },
+    onError: (error: Error) => toast({ title: "Unable to unlock", description: error.message, variant: "destructive" }),
+  });
+  const uploadReport = useMutation({
+    mutationFn: async ({ date, file }: { date: string; file: File }) => {
+      const form = new FormData();
+      form.append("salesReport", file);
+      const response = await fetch(apiUrl(`/api/tips/grid/reports/${date}`), { method: "POST", credentials: "include", body: form });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Sales report uploaded" });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
+    },
+    onError: (error: Error) => toast({ title: "Upload failed", description: error.message, variant: "destructive" }),
+  });
+  const submitGrid = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/tips/grid/submit", { start: grid?.period.start });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Pay period submitted",
+        description: data?.emailSent === false ? data.warning || "Submitted, but email could not be sent." : "The GM notification email was sent.",
+        variant: data?.emailSent === false ? "destructive" : "default",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/submissions"] });
+    },
+    onError: (error: Error) => toast({ title: "Submission failed", description: error.message, variant: "destructive" }),
+  });
+  const kioskLogout = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/tips/kiosk/logout"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/kiosk/status"] });
+      queryClient.removeQueries({ queryKey: ["/api/tips/grid"] });
+    },
+  });
+
+  if (isLoading || !grid) return <div className="text-sm text-[#5f5247]">Loading tips grid...</div>;
+
+  const canUnlock = Boolean(currentUser?.isAdmin);
+  const missingReportDays = grid.dayTotals.filter((day) => Number(day.totalTips) > 0 && !day.report);
+  const unconfirmedCount = grid.rows.reduce((count, row) => count + row.cells.filter((cell) => Number(cell.tipAmount) > 0 && !cell.confirmed).length, 0);
+  const enteredDays = grid.dayTotals.filter((day) => Number(day.totalTips) > 0).length;
+  const week1Days = grid.period.days.slice(0, 7);
+  const week2Days = grid.period.days.slice(7, 14);
+  const dayTotal = (date: string) => grid.dayTotals.find((day) => day.date === date);
+  const cellValue = (row: TipsGridRow, cell: TipsGridCell) => drafts[`${row.associate.id}:${cell.date}`] ?? cell.tipAmount;
+  const grossValue = (date: string) => grossDrafts[date] ?? dayTotal(date)?.grossSales ?? "0.00";
+  const commitCell = (row: TipsGridRow, cell: TipsGridCell) => {
+    const value = cellValue(row, cell);
+    if (value === cell.tipAmount || grid.locked || cell.confirmed) return;
+    saveEntry.mutate({ userId: row.associate.id, entryDate: cell.date, tipAmount: value || "0" });
+  };
+  const commitGross = (date: string) => {
+    const value = grossValue(date);
+    if (value === dayTotal(date)?.grossSales || grid.locked) return;
+    saveGrossSales.mutate({ date, grossSales: value || "0" });
+  };
+
+  const renderWeekTable = (days: string[], title: string, total: string) => (
+    <Card className={C.shell}>
+      <CardHeader>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className={C.ink}>{title}</CardTitle>
+            <CardDescription className={C.muted}>{formatDisplayDate(days[0], "long")} - {formatDisplayDate(days[days.length - 1], "long")}</CardDescription>
+          </div>
+          <Badge variant="outline" className="border-[#d7c8b5] bg-white text-[#5f5247]">{formatMoney(total)}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto rounded-xl border border-[#ddccb5] bg-white">
+          <table className="min-w-[920px] w-full border-collapse text-sm">
+            <thead>
+              <tr className="bg-[#fbf6ee] text-left">
+                <th className="sticky left-0 z-10 min-w-[190px] border-b border-r border-[#e0d3c1] bg-[#fbf6ee] p-3">Associate</th>
+                {days.map((date) => {
+                  const totalForDay = dayTotal(date);
+                  const isToday = date === todayKey();
+                  return (
+                    <th key={date} className={`min-w-[132px] border-b border-r border-[#e0d3c1] p-2 align-top ${isToday ? "bg-[#fff3d8]" : ""}`}>
+                      <div className="font-semibold">{isToday ? "Today" : formatDisplayDate(date).split(",")[0]}</div>
+                      <div className="text-xs text-[#5f5247]">{formatDisplayDate(date).replace(/^\w+,\s*/, "")}</div>
+                      <div className="mt-2 space-y-1">
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-[#5f5247]">$</span>
+                          <Input
+                            className={`${C.field} h-8 pl-5 text-right text-xs`}
+                            inputMode="decimal"
+                            disabled={grid.locked}
+                            value={grossValue(date)}
+                            onChange={(event) => setGrossDrafts((current) => ({ ...current, [date]: event.target.value.replace(/[^0-9.]/g, "") }))}
+                            onBlur={() => commitGross(date)}
+                            aria-label={`Gross sales ${date}`}
+                          />
+                        </div>
+                        <div className="text-center text-xs text-[#5f5247]">Tip % {formatPercent(totalForDay?.tipPercent)}</div>
+                        {totalForDay?.splitCount === 2 && (
+                          <div className="rounded-md border border-[#bdd5c3] bg-[#e8f1ea] px-2 py-1 text-center text-xs text-[#173c25]">
+                            50/50: {formatMoney(totalForDay.splitAmount)}
+                          </div>
+                        )}
+                        <label className={`flex cursor-pointer items-center justify-center rounded-md border px-2 py-1 text-xs ${totalForDay?.report ? "border-emerald-300 bg-emerald-50 text-emerald-800" : Number(totalForDay?.totalTips || 0) > 0 ? "border-amber-300 bg-amber-50 text-amber-900" : "border-[#d7c8b5] bg-white text-[#5f5247]"}`}>
+                          <Camera className="mr-1 h-3 w-3" />
+                          {totalForDay?.report ? "Report" : "Upload"}
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept="image/*,application/pdf"
+                            capture="environment"
+                            disabled={grid.locked}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) uploadReport.mutate({ date, file });
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                        </label>
+                        {totalForDay?.report && (
+                          <a className="block truncate text-center text-xs text-[#2f5f46] underline" href={apiUrl(`/api/tips/grid/reports/${totalForDay.report.id}/view`)} target="_blank" rel="noreferrer">
+                            View
+                          </a>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
+                <th className="min-w-[110px] border-b border-[#e0d3c1] p-3 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grid.rows.map((row) => (
+                <tr key={`${title}-${row.associate.id}`} className="odd:bg-white even:bg-[#fffaf2]">
+                  <td className="sticky left-0 z-10 border-r border-t border-[#e0d3c1] bg-inherit p-3">
+                    <div className="font-semibold text-[#201814]">{row.associate.employeeDisplayName}</div>
+                    <div className="text-xs text-[#5f5247]">{row.associate.position || "Associate"}</div>
+                  </td>
+                  {days.map((date) => {
+                    const cell = row.cells.find((item) => item.date === date)!;
+                    const lockedCell = grid.locked || cell.confirmed;
+                    return (
+                      <td key={`${row.associate.id}-${date}`} className="border-r border-t border-[#e0d3c1] p-2 align-top">
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#5f5247]">$</span>
+                          <Input
+                            className={`${C.field} h-9 pl-6 text-right`}
+                            inputMode="decimal"
+                            disabled={lockedCell}
+                            value={cellValue(row, cell)}
+                            onChange={(event) => setDrafts((current) => ({ ...current, [`${row.associate.id}:${cell.date}`]: event.target.value.replace(/[^0-9.]/g, "") }))}
+                            onBlur={() => commitCell(row, cell)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") event.currentTarget.blur();
+                            }}
+                          />
+                        </div>
+                        <div className="mt-2 min-h-8">
+                          {cell.confirmed ? (
+                            canUnlock && cell.entryId ? (
+                              <Button type="button" size="sm" variant="outline" className={`h-7 w-full text-xs ${C.outline}`} onClick={() => unlockEntry.mutate(cell.entryId!)}>
+                                Unlock
+                              </Button>
+                            ) : (
+                              <Badge variant="outline" className="w-full justify-center border-emerald-300 bg-emerald-50 text-emerald-800">Confirmed</Badge>
+                            )
+                          ) : Number(cellValue(row, cell)) > 0 && cell.entryId ? (
+                            <Button type="button" size="sm" className={`h-7 w-full text-xs ${C.green}`} onClick={() => confirmEntry.mutate(cell.entryId!)}>
+                              Confirm
+                            </Button>
+                          ) : null}
+                        </div>
+                      </td>
+                    );
+                  })}
+                  <td className="border-t border-[#e0d3c1] p-3 text-right font-semibold">{formatMoney(row.totalTips)}</td>
+                </tr>
+              ))}
+              <tr className="bg-[#e8f1ea] font-semibold text-[#173c25]">
+                <td className="sticky left-0 z-10 border-r border-t border-[#bdd5c3] bg-[#e8f1ea] p-3">Daily total</td>
+                {days.map((date) => (
+                  <td key={date} className="border-r border-t border-[#bdd5c3] p-3 text-right">
+                    <div>{formatMoney(dayTotal(date)?.totalTips)}</div>
+                    <div className="text-xs font-normal">{formatPercent(dayTotal(date)?.tipPercent)}</div>
+                  </td>
+                ))}
+                <td className="border-t border-[#bdd5c3] p-3 text-right">{formatMoney(total)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
+        <Card className={C.shell}>
+          <CardHeader>
+            <CardTitle className={C.ink}>Current pay period</CardTitle>
+            <CardDescription className={C.muted}>{formatPeriod(grid.period.start, grid.period.end)}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-4">
+              <StatCard label="Day" value={`${grid.period.dayNumber}/14`} />
+              <StatCard label="Week 1" value={formatMoney(grid.week1Total)} />
+              <StatCard label="Week 2" value={formatMoney(grid.week2Total)} />
+              <StatCard label="Total" value={formatMoney(grid.totalTips)} tone="green" />
+            </div>
+            <div className="flex flex-wrap gap-2 text-sm text-[#5f5247]">
+              <Badge variant="outline" className="border-[#d7c8b5] bg-white text-[#5f5247]">{enteredDays} days with CC tips</Badge>
+              <Badge variant="outline" className={missingReportDays.length ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-800"}>
+                {missingReportDays.length} missing sales reports
+              </Badge>
+              <Badge variant="outline" className={unconfirmedCount ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-800"}>
+                {unconfirmedCount} unconfirmed entries
+              </Badge>
+              {grid.locked && <Badge className="bg-[#1f2937] text-white">Submitted and locked</Badge>}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={C.shell}>
+          <CardHeader>
+            <CardTitle className={C.ink}>Actions</CardTitle>
+            <CardDescription className={C.muted}>Final submission emails the pay-period totals to cory.armer@marriott.com.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button className={`w-full ${C.green}`} disabled={grid.locked || submitGrid.isPending || missingReportDays.length > 0 || unconfirmedCount > 0} onClick={() => submitGrid.mutate()}>
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              {submitGrid.isPending ? "Submitting..." : "Submit final tips"}
+            </Button>
+            <Button asChild variant="outline" className={`w-full ${C.outline}`}>
+              <a href={apiUrl(`/api/tips/grid/pdf?start=${grid.period.start}`)}>
+                <Download className="mr-2 h-4 w-4" />
+                Download grid PDF
+              </a>
+            </Button>
+            {!currentUser?.isAdmin && (
+              <Button variant="ghost" className="w-full text-[#5f5247]" onClick={() => kioskLogout.mutate()}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Lock grid
+              </Button>
+            )}
+            {missingReportDays.length > 0 && <div className="text-sm text-amber-900">Upload a sales report image for every day with entered tips before submitting.</div>}
+            {unconfirmedCount > 0 && <div className="text-sm text-amber-900">Each associate must confirm their entered tip amount before final submission.</div>}
+          </CardContent>
+        </Card>
+      </div>
+
+      {renderWeekTable(week1Days, "Week 1", grid.week1Total)}
+      {renderWeekTable(week2Days, "Week 2", grid.week2Total)}
+      {grid.rows.length === 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">No active associates are available. A manager or super admin can add associates from the admin page.</div>}
+    </div>
+  );
+}
+
 function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -540,6 +931,7 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
     role: "employee" as TipsUser["role"],
     password: "",
   });
+  const [kioskPin, setKioskPin] = useState("");
   const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
   const { data, isLoading } = useQuery<{ submissions: any[] }>({
     queryKey: ["/api/tips/admin/submissions"],
@@ -616,6 +1008,15 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
     },
     onError: (error: Error) => toast({ title: "Unable to update associate", description: error.message, variant: "destructive" }),
   });
+  const kioskPinMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/tips/admin/kiosk-pin", { pin: kioskPin }),
+    onSuccess: () => {
+      toast({ title: "Team PIN updated" });
+      setKioskPin("");
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/kiosk/status"] });
+    },
+    onError: (error: Error) => toast({ title: "PIN update failed", description: error.message, variant: "destructive" }),
+  });
   const canCreateAssociates = currentUser.isAdmin;
   const canManageRoles = currentUser.isSuperAdmin;
 
@@ -630,6 +1031,29 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
           <CardDescription className={C.muted}>Managers can add employees. Super admin controls roles, password-change requests, and disabled accounts.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          {canManageRoles && (
+            <div className={`rounded-xl border p-4 ${C.panel}`}>
+              <div className="mb-3 flex items-center gap-2 font-semibold">
+                <KeyRound className="h-4 w-4 text-[#b98435]" />
+                Shared team PIN
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <Input
+                  className={C.field}
+                  inputMode="numeric"
+                  maxLength={5}
+                  placeholder="5 digit PIN"
+                  value={kioskPin}
+                  onChange={(event) => setKioskPin(event.target.value.replace(/\D/g, "").slice(0, 5))}
+                />
+                <Button className={C.green} disabled={kioskPin.length !== 5 || kioskPinMutation.isPending} onClick={() => kioskPinMutation.mutate()}>
+                  Set PIN
+                </Button>
+              </div>
+              <div className="mt-2 text-xs text-[#5f5247]">Associates use this PIN at /tips to open the shared grid. Admin access still requires email and password.</div>
+            </div>
+          )}
+
           {canCreateAssociates && (
             <div className={`rounded-xl border p-4 ${C.panel}`}>
               <div className="mb-3 flex items-center gap-2 font-semibold">
@@ -818,16 +1242,15 @@ function StatCard({ label, value, tone = "neutral" }: { label: string; value: st
 
 export default function TipsPage() {
   const queryClient = useQueryClient();
-  const [reviewOpen, setReviewOpen] = useState(false);
   const isAdminPath = typeof window !== "undefined" && window.location.pathname.startsWith("/tips/admin");
   const { data: auth, isLoading: authLoading } = useQuery<{ user: TipsUser | null }>({
     queryKey: ["/api/tips/auth/me"],
     queryFn: () => fetchJson("/api/tips/auth/me"),
   });
-  const { data: dashboard, isLoading: dashboardLoading } = useQuery<TipsDashboard>({
-    queryKey: ["/api/tips/dashboard"],
-    queryFn: () => fetchJson("/api/tips/dashboard"),
-    enabled: !!auth?.user,
+  const { data: kioskStatus, isLoading: kioskLoading } = useQuery<{ unlocked: boolean; hasPin: boolean }>({
+    queryKey: ["/api/tips/kiosk/status"],
+    queryFn: () => fetchJson("/api/tips/kiosk/status"),
+    enabled: !isAdminPath || !!auth?.user,
   });
   const logout = useMutation({
     mutationFn: () => apiRequest("POST", "/api/tips/auth/logout"),
@@ -837,16 +1260,14 @@ export default function TipsPage() {
     },
   });
 
-  const locked = !!dashboard?.submission && dashboard.submission.status !== "reopened";
-  const enteredCount = dashboard?.days.filter((day) => !!day.entry).length || 0;
-  const missingPhotoCount = dashboard?.days.filter((day) => day.entry && !day.entry.attachments?.length).length || 0;
-  const week1Days = dashboard?.days.slice(0, 7) || [];
-  const week2Days = dashboard?.days.slice(7) || [];
-
   if (authLoading) return <div className={`min-h-screen p-8 ${C.page}`}>Loading Tips Tracker...</div>;
-  if (!auth?.user) return <TipsAuth onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/auth/me"] })} />;
-  if (auth.user.mustChangePassword) {
+  if (isAdminPath && !auth?.user) return <TipsAuth onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/auth/me"] })} />;
+  if (auth?.user?.mustChangePassword) {
     return <ChangePasswordGate onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/auth/me"] })} />;
+  }
+  if (!isAdminPath && (kioskLoading || !kioskStatus)) return <div className={`min-h-screen p-8 ${C.page}`}>Loading Tips Tracker...</div>;
+  if (!isAdminPath && !kioskStatus?.unlocked) {
+    return <TipsPinGate onUnlocked={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/kiosk/status"] })} />;
   }
 
   return (
@@ -858,91 +1279,22 @@ export default function TipsPage() {
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Courtyard Tips Tracker</h1>
           </div>
           <div className="flex items-center gap-2">
-            {auth.user.isAdmin && <Button asChild size="sm" className={C.darkButton}><a href={isAdminPath ? "/tips" : "/tips/admin"}>{isAdminPath ? "Employee view" : "Admin"}</a></Button>}
-            <Button variant="ghost" size="sm" className="text-[#5f5247]" onClick={() => logout.mutate()}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Logout
-            </Button>
+            {auth?.user?.isAdmin && <Button asChild size="sm" className={C.darkButton}><a href={isAdminPath ? "/tips" : "/tips/admin"}>{isAdminPath ? "Grid view" : "Admin"}</a></Button>}
+            {auth?.user && (
+              <Button variant="ghost" size="sm" className="text-[#5f5247]" onClick={() => logout.mutate()}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </Button>
+            )}
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         {isAdminPath ? (
-          auth.user.isAdmin ? <TipsAdmin currentUser={auth.user} /> : <Card className={C.shell}><CardContent className="p-6">Manager access is required.</CardContent></Card>
-        ) : dashboardLoading || !dashboard ? (
-          <div className="text-sm text-[#5f5247]">Loading dashboard...</div>
+          auth?.user?.isAdmin ? <TipsAdmin currentUser={auth.user} /> : <Card className={C.shell}><CardContent className="p-6">Manager access is required.</CardContent></Card>
         ) : (
-          <>
-            <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-              <Card className={C.shell}>
-                <CardHeader>
-                  <CardTitle className={C.ink}>Current pay period</CardTitle>
-                  <CardDescription className={C.muted}>{formatPeriod(dashboard.period.start, dashboard.period.end)}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-4">
-                    <StatCard label="Day" value={`${dashboard.period.dayNumber}/14`} />
-                    <StatCard label="Week 1" value={formatMoney(dashboard.week1Total)} />
-                    <StatCard label="Week 2" value={formatMoney(dashboard.week2Total)} />
-                    <StatCard label="Total" value={formatMoney(dashboard.totalTips)} tone="green" />
-                  </div>
-                  <div>
-                    <div className="mb-2 flex justify-between text-sm text-[#5f5247]">
-                      <span>{enteredCount} of 14 days entered</span>
-                      <span>{missingPhotoCount} missing photos</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-[#eadfce]">
-                      <div className="h-full rounded-full bg-[#b98435]" style={{ width: `${Math.round((enteredCount / 14) * 100)}%` }} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className={C.shell}>
-                <CardHeader>
-                  <CardTitle className={`flex items-center gap-2 ${C.ink}`}>{locked && <Lock className="h-4 w-4" />} Actions</CardTitle>
-                  <CardDescription className={C.muted}>{locked ? "This pay period is submitted and locked." : "Review carefully before final submission."}</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-2">
-                  <Button className={C.green} disabled={locked} onClick={() => setReviewOpen(true)}>Review and submit period</Button>
-                  <Button asChild variant="outline" className={C.outline}>
-                    <a href={apiUrl(`/api/tips/submissions/pdf?start=${dashboard.period.start}`)}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Download PDF summary
-                    </a>
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-
-            <section className="grid gap-5 lg:grid-cols-2">
-              <div>
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Week 1</h2>
-                  <Badge variant="outline" className="border-[#d7c8b5] bg-white text-[#5f5247]">{formatMoney(dashboard.week1Total)}</Badge>
-                </div>
-                <div className="space-y-3">
-                  {week1Days.map((day) => (
-                    <DayEditor key={day.date} day={day} locked={locked} defaultOpen={day.date === todayKey()} onSaved={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/dashboard"] })} />
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Week 2</h2>
-                  <Badge variant="outline" className="border-[#d7c8b5] bg-white text-[#5f5247]">{formatMoney(dashboard.week2Total)}</Badge>
-                </div>
-                <div className="space-y-3">
-                  {week2Days.map((day) => (
-                    <DayEditor key={day.date} day={day} locked={locked} defaultOpen={day.date === todayKey()} onSaved={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/dashboard"] })} />
-                  ))}
-                </div>
-              </div>
-            </section>
-
-            <ReviewDialog dashboard={dashboard} open={reviewOpen} onOpenChange={setReviewOpen} onSubmitted={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/dashboard"] })} />
-          </>
+          <TipsGridTracker currentUser={auth?.user || null} />
         )}
       </main>
     </div>

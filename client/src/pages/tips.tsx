@@ -625,9 +625,24 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [grossDrafts, setGrossDrafts] = useState<Record<string, string>>({});
+  const [addAssociateOpen, setAddAssociateOpen] = useState(false);
+  const [associateForm, setAssociateForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", position: "", email: "" });
   const { data: grid, isLoading } = useQuery<TipsGrid>({
     queryKey: ["/api/tips/grid"],
     queryFn: () => fetchJson("/api/tips/grid"),
+  });
+  const addAssociate = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/tips/grid/associates", associateForm);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Associate added to grid" });
+      setAssociateForm({ firstName: "", lastName: "", employeeDisplayName: "", position: "", email: "" });
+      setAddAssociateOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
+    },
+    onError: (error: Error) => toast({ title: "Unable to add associate", description: error.message, variant: "destructive" }),
   });
   const saveEntry = useMutation({
     mutationFn: async ({ userId, entryDate, tipAmount }: { userId: string; entryDate: string; tipAmount: string }) => {
@@ -737,7 +752,14 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
           <table className="min-w-[920px] w-full border-collapse text-sm">
             <thead>
               <tr className="bg-[#fbf6ee] text-left">
-                <th className="sticky left-0 z-10 min-w-[190px] border-b border-r border-[#e0d3c1] bg-[#fbf6ee] p-3">Associate</th>
+                <th className="sticky left-0 z-10 min-w-[190px] border-b border-r border-[#e0d3c1] bg-[#fbf6ee] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Associate</span>
+                    <Button type="button" size="sm" variant="outline" className={`h-8 w-8 p-0 ${C.outline}`} onClick={() => setAddAssociateOpen(true)} aria-label="Add associate">
+                      <UserPlus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </th>
                 {days.map((date) => {
                   const totalForDay = dayTotal(date);
                   const isToday = date === todayKey();
@@ -890,6 +912,10 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
             <CardDescription className={C.muted}>Final submission emails the pay-period totals to cory.armer@marriott.com.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
+            <Button variant="outline" className={`w-full ${C.outline}`} onClick={() => setAddAssociateOpen(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add associate to grid
+            </Button>
             <Button className={`w-full ${C.green}`} disabled={grid.locked || submitGrid.isPending || missingReportDays.length > 0 || unconfirmedCount > 0} onClick={() => submitGrid.mutate()}>
               <ShieldCheck className="mr-2 h-4 w-4" />
               {submitGrid.isPending ? "Submitting..." : "Submit final tips"}
@@ -914,7 +940,45 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
 
       {renderWeekTable(week1Days, "Week 1", grid.week1Total)}
       {renderWeekTable(week2Days, "Week 2", grid.week2Total)}
-      {grid.rows.length === 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">No active associates are available. A manager or super admin can add associates from the admin page.</div>}
+      {grid.rows.length === 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">No active associates are available. Add the first associate from the grid.</div>}
+      <Dialog open={addAssociateOpen} onOpenChange={setAddAssociateOpen}>
+        <DialogContent className="border-[#ddccb5] bg-[#fffaf2] text-[#201814] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add associate to grid</DialogTitle>
+            <DialogDescription className="text-[#5f5247]">Associates can add themselves here for tip entry. Email is optional for grid-only associates.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label>First name</Label>
+              <Input className={C.field} value={associateForm.firstName} onChange={(event) => setAssociateForm({ ...associateForm, firstName: event.target.value })} />
+            </div>
+            <div>
+              <Label>Last name</Label>
+              <Input className={C.field} value={associateForm.lastName} onChange={(event) => setAssociateForm({ ...associateForm, lastName: event.target.value })} />
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Display name</Label>
+              <Input className={C.field} placeholder="Optional" value={associateForm.employeeDisplayName} onChange={(event) => setAssociateForm({ ...associateForm, employeeDisplayName: event.target.value })} />
+            </div>
+            <div>
+              <Label>Position</Label>
+              <Input className={C.field} placeholder="Bistro attendant" value={associateForm.position} onChange={(event) => setAssociateForm({ ...associateForm, position: event.target.value })} />
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input className={C.field} type="email" placeholder="Optional" value={associateForm.email} onChange={(event) => setAssociateForm({ ...associateForm, email: event.target.value })} />
+            </div>
+          </div>
+          <Button
+            className={`w-full ${C.green}`}
+            disabled={addAssociate.isPending || !associateForm.firstName.trim() || !associateForm.lastName.trim()}
+            onClick={() => addAssociate.mutate()}
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            {addAssociate.isPending ? "Adding..." : "Add associate"}
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

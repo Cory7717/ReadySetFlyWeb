@@ -300,6 +300,14 @@ const gridDaySummarySchema = z.object({
   grossSales: z.coerce.number().min(0).max(1000000),
 });
 
+const gridAssociateSchema = z.object({
+  firstName: z.string().trim().min(1).max(80),
+  lastName: z.string().trim().min(1).max(80),
+  employeeDisplayName: z.string().trim().min(1).max(140).optional(),
+  position: z.string().trim().max(120).optional().nullable(),
+  email: z.string().trim().email().optional().or(z.literal("")),
+});
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, REPORTS_DIR),
@@ -1458,6 +1466,40 @@ export function registerTipsRoutes(app: Express) {
       const parsed = periodSchema.safeParse(req.query);
       if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
       res.json(await buildTipsGrid(parsed.data.start));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/grid/associates", requireTipsGridAccess, tipsAuthRateLimiter, async (req: any, res, next) => {
+    try {
+      const parsed = gridAssociateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid associate details", validation: parsed.error.format() });
+      const explicitEmail = parsed.data.email ? normalizeEmail(parsed.data.email) : "";
+      const email = explicitEmail || `tips-${crypto.randomUUID()}@courtyard-tips.local`;
+      const existing = await db.select({ id: tipsUsers.id }).from(tipsUsers).where(eq(tipsUsers.email, email)).limit(1);
+      if (existing.length) return res.status(409).json({ error: "An associate already exists for this email." });
+      const displayName = parsed.data.employeeDisplayName?.trim() || `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
+      const [created] = await db
+        .insert(tipsUsers)
+        .values({
+          firstName: parsed.data.firstName,
+          lastName: parsed.data.lastName,
+          email,
+          employeeDisplayName: displayName,
+          position: parsed.data.position?.trim() || null,
+          role: "employee",
+          hashedPassword: await bcrypt.hash(crypto.randomBytes(18).toString("hex"), 12),
+          mustChangePassword: false,
+        })
+        .returning();
+      await db.insert(tipAdminActions).values({
+        actorUserId: req.tipsUser?.id || null,
+        targetUserId: created.id,
+        action: "grid_associate_created",
+        metadataJson: { selfAdded: true, emailProvided: Boolean(explicitEmail), position: created.position },
+      });
+      res.status(201).json({ user: publicTipsUser(created) });
     } catch (error) {
       next(error);
     }

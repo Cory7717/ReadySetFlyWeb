@@ -24,26 +24,26 @@ const SCHEDULE_ADMIN_EMAILS = new Set(
 );
 
 const PROPERTY_NAME = process.env.SCHEDULE_PROPERTY_NAME || "Courtyard Austin Lakeline";
-const DEPARTMENTS = ["Leadership / MOD", "Front Desk", "Night Audit", "Bistro / Breakfast", "Housekeeping", "Laundry", "Engineering / Maintenance", "Other"];
+const DEPARTMENTS = ["Managers", "Front Desk", "Bistro", "Maintenance", "Housekeeping"];
 const DAY_MS = 86_400_000;
 
 const DEFAULT_SHIFT_TYPES = [
   { label: "AM", startTime: "07:00", endTime: "15:00", color: "#dbeafe", textColor: "#0f172a", departmentHint: "Front Desk" },
   { label: "PM", startTime: "15:00", endTime: "23:00", color: "#ede9fe", textColor: "#1e1b4b", departmentHint: "Front Desk" },
-  { label: "AUDIT", startTime: "23:00", endTime: "07:00", color: "#111827", textColor: "#ffffff", departmentHint: "Night Audit", isOvernight: true },
+  { label: "AUDIT", startTime: "23:00", endTime: "07:00", color: "#111827", textColor: "#ffffff", departmentHint: "Front Desk", isOvernight: true },
   { label: "MID", startTime: "10:00", endTime: "18:00", color: "#e0f2fe", textColor: "#0c4a6e", departmentHint: "Front Desk" },
-  { label: "BISTRO AM", startTime: "06:00", endTime: "14:00", color: "#fef3c7", textColor: "#713f12", departmentHint: "Bistro / Breakfast" },
-  { label: "BISTRO PM", startTime: "14:00", endTime: "22:00", color: "#fed7aa", textColor: "#7c2d12", departmentHint: "Bistro / Breakfast" },
-  { label: "BREAKFAST", startTime: "06:00", endTime: "12:00", color: "#fde68a", textColor: "#713f12", departmentHint: "Bistro / Breakfast" },
+  { label: "BISTRO AM", startTime: "06:00", endTime: "14:00", color: "#fef3c7", textColor: "#713f12", departmentHint: "Bistro" },
+  { label: "BISTRO PM", startTime: "14:00", endTime: "22:00", color: "#fed7aa", textColor: "#7c2d12", departmentHint: "Bistro" },
+  { label: "BREAKFAST", startTime: "06:00", endTime: "12:00", color: "#fde68a", textColor: "#713f12", departmentHint: "Bistro" },
   { label: "HOUSEKEEPING", startTime: "09:00", endTime: "17:00", color: "#dcfce7", textColor: "#14532d", departmentHint: "Housekeeping" },
-  { label: "LAUNDRY", startTime: "08:00", endTime: "16:00", color: "#ccfbf1", textColor: "#134e4a", departmentHint: "Laundry" },
-  { label: "MAINTENANCE", startTime: "08:00", endTime: "16:00", color: "#e5e7eb", textColor: "#111827", departmentHint: "Engineering / Maintenance" },
-  { label: "MOD", startTime: null, endTime: null, color: "#f5d0fe", textColor: "#581c87", departmentHint: "Leadership / MOD" },
-  { label: "TRAINING", startTime: null, endTime: null, color: "#cffafe", textColor: "#164e63", departmentHint: "Other" },
-  { label: "PTO", startTime: null, endTime: null, color: "#fce7f3", textColor: "#831843", departmentHint: "Other" },
-  { label: "OFF", startTime: null, endTime: null, color: "#f3f4f6", textColor: "#374151", departmentHint: "Other" },
-  { label: "CALL OFF", startTime: null, endTime: null, color: "#fee2e2", textColor: "#7f1d1d", departmentHint: "Other" },
-  { label: "OPEN SHIFT", startTime: null, endTime: null, color: "#fff7ed", textColor: "#9a3412", departmentHint: "Other" },
+  { label: "LAUNDRY", startTime: "08:00", endTime: "16:00", color: "#ccfbf1", textColor: "#134e4a", departmentHint: "Housekeeping" },
+  { label: "MAINTENANCE", startTime: "08:00", endTime: "16:00", color: "#e5e7eb", textColor: "#111827", departmentHint: "Maintenance" },
+  { label: "MOD", startTime: null, endTime: null, color: "#f5d0fe", textColor: "#581c87", departmentHint: "Managers" },
+  { label: "TRAINING", startTime: null, endTime: null, color: "#cffafe", textColor: "#164e63", departmentHint: "Managers" },
+  { label: "PTO", startTime: null, endTime: null, color: "#fce7f3", textColor: "#831843", departmentHint: "Managers" },
+  { label: "OFF", startTime: null, endTime: null, color: "#f3f4f6", textColor: "#374151", departmentHint: "Managers" },
+  { label: "CALL OFF", startTime: null, endTime: null, color: "#fee2e2", textColor: "#7f1d1d", departmentHint: "Managers" },
+  { label: "OPEN SHIFT", startTime: null, endTime: null, color: "#fff7ed", textColor: "#9a3412", departmentHint: "Managers" },
 ].map((shift, index) => ({ ...shift, unpaidBreakMinutes: 0, active: true, sortOrder: index + 1, isOvernight: Boolean((shift as any).isOvernight) }));
 
 function normalizeEmail(email: string) {
@@ -75,6 +75,16 @@ function mondayFor(date = new Date()) {
 
 function weekDays(start: string) {
   return Array.from({ length: 7 }, (_, index) => addDays(start, index));
+}
+
+function normalizeDepartment(value?: string | null) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized.includes("leadership") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
+  if (normalized.includes("front") || normalized.includes("audit")) return "Front Desk";
+  if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
+  if (normalized.includes("engineer") || normalized.includes("maintenance")) return "Maintenance";
+  if (normalized.includes("house") || normalized.includes("laundry")) return "Housekeeping";
+  return DEPARTMENTS.includes(String(value || "")) ? String(value) : "Front Desk";
 }
 
 function minutesFromTime(value?: string | null) {
@@ -162,7 +172,7 @@ const employeeSchema = z.object({
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().min(1).max(80),
   displayName: z.string().trim().min(1).max(140).optional(),
-  department: z.string().trim().min(1).max(120).default("Other"),
+  department: z.string().trim().min(1).max(120).default("Front Desk"),
   position: z.string().trim().max(120).optional().nullable(),
   defaultShiftType: z.string().trim().max(80).optional().nullable(),
   maxWeeklyHours: z.coerce.number().min(0).max(168).optional().nullable(),
@@ -264,7 +274,7 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   for (const assignment of assignments) {
     const shiftType = shiftTypeById.get(assignment.shiftTypeId);
     const employee = assignment.employeeId ? employeeById.get(assignment.employeeId) : null;
-    const department = employee?.department || shiftType?.departmentHint || "Other";
+    const department = normalizeDepartment(employee?.department || shiftType?.departmentHint);
     const hours = hoursForShift(assignment, shiftType);
     if (assignment.isOpenShift || shiftType?.label === "OPEN SHIFT") openShiftCount += 1;
     if (employee?.id) {
@@ -441,6 +451,7 @@ export function registerScheduleRoutes(app: Express) {
       if (!parsed.success) return res.status(400).json({ error: "Invalid employee", validation: parsed.error.format() });
       const [employee] = await db.insert(scheduleEmployees).values({
         ...parsed.data,
+        department: normalizeDepartment(parsed.data.department),
         displayName: parsed.data.displayName || `${parsed.data.firstName} ${parsed.data.lastName}`,
         email: parsed.data.email || null,
         maxWeeklyHours: parsed.data.maxWeeklyHours == null ? null : parsed.data.maxWeeklyHours.toFixed(2),
@@ -458,6 +469,7 @@ export function registerScheduleRoutes(app: Express) {
       if (!parsed.success) return res.status(400).json({ error: "Invalid employee", validation: parsed.error.format() });
       const [employee] = await db.update(scheduleEmployees).set({
         ...parsed.data,
+        department: parsed.data.department ? normalizeDepartment(parsed.data.department) : undefined,
         email: parsed.data.email === "" ? null : parsed.data.email,
         maxWeeklyHours: parsed.data.maxWeeklyHours == null ? undefined : parsed.data.maxWeeklyHours.toFixed(2),
         updatedAt: new Date(),

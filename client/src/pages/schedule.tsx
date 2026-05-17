@@ -41,7 +41,7 @@ const C = {
   darkButton: "!border-[#111827] !bg-[#1f2937] !bg-none !text-white hover:!bg-[#111827]",
 };
 
-const DEPARTMENTS = ["Leadership / MOD", "Front Desk", "Night Audit", "Bistro / Breakfast", "Housekeeping", "Laundry", "Engineering / Maintenance", "Other"];
+const DEPARTMENTS = ["Managers", "Front Desk", "Bistro", "Maintenance", "Housekeeping"];
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 type ScheduleUser = {
@@ -170,6 +170,16 @@ function shiftText(assignment: ShiftAssignment | undefined, shiftType: ShiftType
   const end = assignment.customEndTime || shiftType.endTime;
   const base = start && end ? `${start.slice(0, 5)}-${end.slice(0, 5)}` : shiftType.label;
   return [base, assignment.roleNote].filter(Boolean).join(" ");
+}
+
+function normalizeDepartment(value?: string | null) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized.includes("leadership") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
+  if (normalized.includes("front") || normalized.includes("audit")) return "Front Desk";
+  if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
+  if (normalized.includes("engineer") || normalized.includes("maintenance")) return "Maintenance";
+  if (normalized.includes("house") || normalized.includes("laundry")) return "Housekeeping";
+  return DEPARTMENTS.includes(String(value || "")) ? String(value) : "Front Desk";
 }
 
 function statusBadge(status: string) {
@@ -327,21 +337,21 @@ function ScheduleGrid({ payload, editable, onEdit }: { payload: SchedulePayload;
     <Card className={C.shell}>
       <CardHeader>
         <CardTitle className={C.ink}>Weekly schedule</CardTitle>
-        <CardDescription className={C.muted}>Desktop grid with mobile-friendly employee cards below.</CardDescription>
+        <CardDescription className={C.muted}>Associates are listed on the left by department. Click any date cell to add or edit that shift.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[980px] border-collapse text-sm">
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left">Employee</th>
+                <th className="sticky left-0 z-10 min-w-[220px] border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left">Associate</th>
                 {payload.days.map((day, index) => <th key={day} className="border border-[#e0d3c1] bg-[#f4eadb] p-2">{DAY_LABELS[index]}<br />{formatDate(day)}</th>)}
                 <th className="border border-[#e0d3c1] bg-[#f4eadb] p-2">Hours</th>
               </tr>
             </thead>
             <tbody>
               {payload.departments.map((department) => {
-                const employees = payload.employees.filter((employee) => employee.department === department && employee.active);
+                const employees = payload.employees.filter((employee) => normalizeDepartment(employee.department) === department && employee.active);
                 if (!employees.length) return null;
                 return [
                   <tr key={`${department}-header`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#2a211c] p-2 font-semibold text-white">{department} - {payload.totals.departmentWeeklyHours[department] || 0} hrs</td></tr>,
@@ -360,7 +370,7 @@ function ScheduleGrid({ payload, editable, onEdit }: { payload: SchedulePayload;
                               style={{ background: shift?.color || "#ffffff", color: shift?.textColor || "#201814" }}
                               onClick={() => onEdit(employee, day, assignment)}
                             >
-                              {shiftText(assignment, shift) || (editable ? "Add shift" : "-")}
+                              {shiftText(assignment, shift) || (editable ? "+ Add shift" : "-")}
                             </button>
                           </td>
                         );
@@ -380,7 +390,7 @@ function ScheduleGrid({ payload, editable, onEdit }: { payload: SchedulePayload;
         </div>
         <div className="space-y-4 lg:hidden">
           {payload.departments.map((department) => {
-            const employees = payload.employees.filter((employee) => employee.department === department && employee.active);
+            const employees = payload.employees.filter((employee) => normalizeDepartment(employee.department) === department && employee.active);
             if (!employees.length) return null;
             return (
               <div key={department}>
@@ -418,7 +428,7 @@ function EmployeeManager({ employees, onAdd, onUpdate }: { employees: ScheduleEm
     <Card className={C.shell}>
       <CardHeader>
         <CardTitle className={C.ink}>Employees</CardTitle>
-        <CardDescription className={C.muted}>Add schedule employees and assign departments.</CardDescription>
+        <CardDescription className={C.muted}>Add associates to the far-left schedule column and assign their department row group.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -442,7 +452,7 @@ function EmployeeManager({ employees, onAdd, onUpdate }: { employees: ScheduleEm
                 <div className="font-semibold">{employee.displayName}</div>
                 <div className="text-sm text-[#5f5247]">{employee.position || "No position"} {employee.maxWeeklyHours ? `- max ${employee.maxWeeklyHours} hrs` : ""}</div>
               </div>
-              <Select value={employee.department} onValueChange={(department) => onUpdate(employee.id, { department })}>
+              <Select value={normalizeDepartment(employee.department)} onValueChange={(department) => onUpdate(employee.id, { department })}>
                 <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
                 <SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent>
               </Select>

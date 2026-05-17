@@ -1171,13 +1171,16 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
-  router.patch("/admin/users/:id/disabled", requireTipsSuperAdmin, async (req: any, res, next) => {
+  router.patch("/admin/users/:id/disabled", requireTipsAdmin, async (req: any, res, next) => {
     try {
       const parsed = adminDisableUserSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid disabled state" });
       const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
       if (!target) return res.status(404).json({ error: "Tips user not found" });
       if (isTipsSuperAdmin(target)) return res.status(400).json({ error: "The Tips super admin cannot be disabled." });
+      if (!isTipsSuperAdmin(req.tipsUser) && isTipsManager(target)) {
+        return res.status(403).json({ error: "Only the super admin can disable managers." });
+      }
       const [updated] = await db
         .update(tipsUsers)
         .set({

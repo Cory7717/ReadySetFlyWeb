@@ -626,6 +626,8 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [grossDrafts, setGrossDrafts] = useState<Record<string, string>>({});
   const [addAssociateOpen, setAddAssociateOpen] = useState(false);
+  const [activeEntry, setActiveEntry] = useState<{ userId: string; date: string } | null>(null);
+  const [entryModalAmount, setEntryModalAmount] = useState("");
   const [associateForm, setAssociateForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", position: "", email: "" });
   const { data: grid, isLoading } = useQuery<TipsGrid>({
     queryKey: ["/api/tips/grid"],
@@ -735,9 +737,136 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
     if (value === dayTotal(date)?.grossSales || grid.locked) return;
     saveGrossSales.mutate({ date, grossSales: value || "0" });
   };
+  const activeRow = activeEntry ? grid.rows.find((row) => row.associate.id === activeEntry.userId) : null;
+  const activeCell = activeRow && activeEntry ? activeRow.cells.find((cell) => cell.date === activeEntry.date) : null;
+  const openEntryModal = (row: TipsGridRow, cell: TipsGridCell) => {
+    setActiveEntry({ userId: row.associate.id, date: cell.date });
+    setEntryModalAmount(cellValue(row, cell));
+  };
+  const saveEntryModal = () => {
+    if (!activeRow || !activeCell || grid.locked || activeCell.confirmed) return;
+    saveEntry.mutate({ userId: activeRow.associate.id, entryDate: activeCell.date, tipAmount: entryModalAmount || "0" });
+    setDrafts((current) => ({ ...current, [`${activeRow.associate.id}:${activeCell.date}`]: entryModalAmount || "0" }));
+    setActiveEntry(null);
+  };
+
+  const renderDayControls = (date: string) => {
+    const totalForDay = dayTotal(date);
+    return (
+      <div className="space-y-2">
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5f5247]">$</span>
+          <Input
+            className={`${C.field} h-11 pl-7 text-right`}
+            inputMode="decimal"
+            disabled={grid.locked}
+            value={grossValue(date)}
+            onChange={(event) => setGrossDrafts((current) => ({ ...current, [date]: event.target.value.replace(/[^0-9.]/g, "") }))}
+            onBlur={() => commitGross(date)}
+            aria-label={`Gross sales ${date}`}
+          />
+        </div>
+        <div className="flex items-center justify-between text-sm text-[#5f5247]">
+          <span>Tip % {formatPercent(totalForDay?.tipPercent)}</span>
+          <span>{formatMoney(totalForDay?.totalTips)} tips</span>
+        </div>
+        {totalForDay?.splitCount === 2 && (
+          <div className="rounded-md border border-[#bdd5c3] bg-[#e8f1ea] px-3 py-2 text-sm text-[#173c25]">
+            50/50 split: {formatMoney(totalForDay.splitAmount)} each
+          </div>
+        )}
+        <label className={`flex cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-sm ${totalForDay?.report ? "border-emerald-300 bg-emerald-50 text-emerald-800" : Number(totalForDay?.totalTips || 0) > 0 ? "border-amber-300 bg-amber-50 text-amber-900" : "border-[#d7c8b5] bg-white text-[#5f5247]"}`}>
+          <Camera className="mr-2 h-4 w-4" />
+          {totalForDay?.report ? "Sales report attached" : "Upload sales report"}
+          <input
+            type="file"
+            className="hidden"
+            accept="image/*,application/pdf"
+            capture="environment"
+            disabled={grid.locked}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) uploadReport.mutate({ date, file });
+              event.currentTarget.value = "";
+            }}
+          />
+        </label>
+        {totalForDay?.report && (
+          <a className="block text-center text-sm font-medium text-[#2f5f46] underline" href={apiUrl(`/api/tips/grid/reports/${totalForDay.report.id}/view`)} target="_blank" rel="noreferrer">
+            View sales report
+          </a>
+        )}
+      </div>
+    );
+  };
+
+  const renderMobileWeek = (days: string[], title: string, total: string) => (
+    <Card className={`${C.shell} md:hidden`}>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className={C.ink}>{title}</CardTitle>
+            <CardDescription className={C.muted}>{formatDisplayDate(days[0], "long")} - {formatDisplayDate(days[days.length - 1], "long")}</CardDescription>
+          </div>
+          <Badge variant="outline" className="border-[#d7c8b5] bg-white text-[#5f5247]">{formatMoney(total)}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {days.map((date) => {
+          const totalForDay = dayTotal(date);
+          return (
+            <div key={date} className={`rounded-xl border p-4 ${date === todayKey() ? "border-[#b98435] bg-[#fff3d8]" : "border-[#e0d3c1] bg-white"}`}>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-lg font-semibold text-[#201814]">{date === todayKey() ? "Today" : formatDisplayDate(date).split(",")[0]}</div>
+                  <div className="text-sm text-[#5f5247]">{formatDisplayDate(date).replace(/^\w+,\s*/, "")}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-semibold text-[#173c25]">{formatMoney(totalForDay?.totalTips)}</div>
+                  <div className="text-xs text-[#5f5247]">{formatPercent(totalForDay?.tipPercent)}</div>
+                </div>
+              </div>
+              {renderDayControls(date)}
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold text-[#201814]">Associates</div>
+                  <Button type="button" size="sm" variant="outline" className={`h-8 ${C.outline}`} onClick={() => setAddAssociateOpen(true)}>
+                    <UserPlus className="mr-1 h-4 w-4" />
+                    Add
+                  </Button>
+                </div>
+                {grid.rows.map((row) => {
+                  const cell = row.cells.find((item) => item.date === date)!;
+                  return (
+                    <button
+                      key={`${row.associate.id}-${date}`}
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 rounded-lg border border-[#e0d3c1] bg-[#fffaf2] p-3 text-left"
+                      onClick={() => openEntryModal(row, cell)}
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-[#201814]">{row.associate.employeeDisplayName}</div>
+                        <div className="truncate text-xs text-[#5f5247]">{row.associate.position || "Associate"}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-semibold text-[#201814]">{formatMoney(cellValue(row, cell))}</div>
+                        <div className={`text-xs ${cell.confirmed ? "text-emerald-700" : Number(cellValue(row, cell)) > 0 ? "text-amber-800" : "text-[#5f5247]"}`}>
+                          {cell.confirmed ? "Confirmed" : Number(cellValue(row, cell)) > 0 ? "Needs confirm" : "Tap to enter"}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
 
   const renderWeekTable = (days: string[], title: string, total: string) => (
-    <Card className={C.shell}>
+    <Card className={`${C.shell} hidden md:block`}>
       <CardHeader>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -938,9 +1067,66 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
         </Card>
       </div>
 
+      {renderMobileWeek(week1Days, "Week 1", grid.week1Total)}
+      {renderMobileWeek(week2Days, "Week 2", grid.week2Total)}
       {renderWeekTable(week1Days, "Week 1", grid.week1Total)}
       {renderWeekTable(week2Days, "Week 2", grid.week2Total)}
       {grid.rows.length === 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">No active associates are available. Add the first associate from the grid.</div>}
+      <Dialog open={Boolean(activeEntry)} onOpenChange={(open) => !open && setActiveEntry(null)}>
+        <DialogContent className="border-[#ddccb5] bg-[#fffaf2] text-[#201814] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{activeRow?.associate.employeeDisplayName || "Tip entry"}</DialogTitle>
+            <DialogDescription className="text-[#5f5247]">{activeCell ? formatDisplayDate(activeCell.date, "long") : ""}</DialogDescription>
+          </DialogHeader>
+          {activeRow && activeCell && (
+            <div className="space-y-4">
+              <div>
+                <Label>CC tips from sales report</Label>
+                <div className="relative mt-1">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-[#5f5247]">$</span>
+                  <Input
+                    className={`${C.field} h-14 pl-9 text-right text-2xl`}
+                    inputMode="decimal"
+                    autoFocus
+                    disabled={grid.locked || activeCell.confirmed}
+                    value={entryModalAmount}
+                    onChange={(event) => setEntryModalAmount(event.target.value.replace(/[^0-9.]/g, ""))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") saveEntryModal();
+                    }}
+                  />
+                </div>
+              </div>
+              {activeCell.confirmed ? (
+                canUnlock && activeCell.entryId ? (
+                  <Button type="button" variant="outline" className={`w-full ${C.outline}`} onClick={() => {
+                    unlockEntry.mutate(activeCell.entryId!);
+                    setActiveEntry(null);
+                  }}>
+                    Unlock entry
+                  </Button>
+                ) : (
+                  <Badge variant="outline" className="w-full justify-center border-emerald-300 bg-emerald-50 py-2 text-emerald-800">Confirmed and locked</Badge>
+                )
+              ) : (
+                <div className="grid gap-2">
+                  <Button type="button" className={`w-full ${C.green}`} disabled={saveEntry.isPending} onClick={saveEntryModal}>
+                    Save amount
+                  </Button>
+                  {Number(entryModalAmount || 0) > 0 && activeCell.entryId && (
+                    <Button type="button" variant="outline" className={`w-full ${C.outline}`} onClick={() => {
+                      confirmEntry.mutate(activeCell.entryId!);
+                      setActiveEntry(null);
+                    }}>
+                      Confirm and lock
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={addAssociateOpen} onOpenChange={setAddAssociateOpen}>
         <DialogContent className="border-[#ddccb5] bg-[#fffaf2] text-[#201814] sm:max-w-lg">
           <DialogHeader>
@@ -1162,7 +1348,7 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
                         {user.disabledAt && <Badge variant="outline" className="border-slate-400 bg-slate-200 text-slate-800">Disabled</Badge>}
                       </div>
                     </div>
-                    {canManageRoles && !user.isSuperAdmin && (
+                    {currentUser.isAdmin && !user.isSuperAdmin && (currentUser.isSuperAdmin || user.role === "employee") && (
                       <Button
                         type="button"
                         variant={user.disabledAt ? "outline" : "destructive"}

@@ -5,10 +5,12 @@ import { z } from "zod";
 import { and, asc, desc, eq, inArray, isNull, lte, lt } from "drizzle-orm";
 import { db } from "../db";
 import { createSoftAuthRateLimiter } from "../middleware/rateLimit";
+import { getUncachableResendClient } from "../resendClient";
 import {
   scheduleAuditLog,
   scheduleEmployees,
   scheduleForecastDays,
+  scheduleRequests,
   scheduleShareLinks,
   scheduleShiftAssignments,
   scheduleShiftTypes,
@@ -77,6 +79,18 @@ function weekDays(start: string) {
   return Array.from({ length: 7 }, (_, index) => addDays(start, index));
 }
 
+function todayDateKey() {
+  const now = new Date();
+  return toDateKey(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
+}
+
+function daysBetween(start: string, end: string) {
+  const startDate = parseDateKey(start);
+  const endDate = parseDateKey(end);
+  if (!startDate || !endDate) return 0;
+  return Math.floor((endDate.getTime() - startDate.getTime()) / DAY_MS);
+}
+
 function normalizeDepartment(value?: string | null) {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized.includes("leadership") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
@@ -123,6 +137,10 @@ function publicScheduleUser(user: any) {
   };
 }
 
+function scheduleDisplayName(user: any) {
+  return user.employeeDisplayName || [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email || "Associate";
+}
+
 async function getUserBySession(req: any) {
   const userId = req.session?.tipsUserId;
   if (!userId) return null;
@@ -132,6 +150,68 @@ async function getUserBySession(req: any) {
 
 function isManager(user: any) {
   return publicScheduleUser(user).isAdmin;
+}
+
+async function getScheduleEmployeeByEmail(email: string) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+  const employees = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
+  return employees.find((employee) => normalizeEmail(String(employee.email || "")) === normalizedEmail) || null;
+}
+
+async function getScheduleRequestDepartment(user: any) {
+  const employee = await getScheduleEmployeeByEmail(String(user.email || ""));
+  return normalizeDepartment(employee?.department || user.position);
+}
+
+async function getDepartmentManagerEmails(department: string) {
+  const users = await db.select().from(tipsUsers);
+  const employees = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
+  const employeeByEmail = new Map(employees.map((employee) => [normalizeEmail(String(employee.email || "")), employee]));
+  const managerEmails: string[] = [];
+  const fallbackEmails = new Set<string>(SCHEDULE_ADMIN_EMAILS);
+
+  for (const user of users) {
+    const email = normalizeEmail(String(user.email || ""));
+    if (!email || user.disabledAt) continue;
+    const publicUser = publicScheduleUser(user);
+    if (!publicUser.isAdmin) continue;
+    const employee = employeeByEmail.get(email);
+    const managerDepartment = normalizeDepartment(employee?.department || user.position);
+    if (managerDepartment === department) managerEmails.push(email);
+    if (publicUser.isSuperAdmin) fallbackEmails.add(email);
+  }
+
+  const selected = managerEmails.length > 0 ? managerEmails : Array.from(fallbackEmails);
+  return Array.from(new Set(selected.filter(Boolean)));
+}
+
+async function sendScheduleRequestEmail(request: any, requester: any, managerEmails: string[]) {
+  if (!managerEmails.length) return false;
+  const { client, fromEmail } = await getUncachableResendClient();
+  const requesterName = scheduleDisplayName(requester);
+  const timeWindow = [request.startTime?.slice(0, 5), request.endTime?.slice(0, 5)].filter(Boolean).join(" - ") || "Full day / not specified";
+
+  await client.emails.send({
+    from: fromEmail,
+    to: managerEmails,
+    subject: `Schedule Request - ${requesterName} - ${request.requestDate}`,
+    text: [
+      `Associate: ${requesterName}`,
+      `Email: ${requester.email}`,
+      `Department: ${request.department}`,
+      `Request date: ${request.requestDate}`,
+      `Request type: ${String(request.requestType || "").replace(/_/g, " ")}`,
+      `Time: ${timeWindow}`,
+      "",
+      "Notes:",
+      request.notes || "",
+      "",
+      `Review in Schedule Admin: ${(process.env.FRONTEND_BASE_URL || "https://readysetfly.us").replace(/\/$/, "")}/schedule`,
+    ].join("\n"),
+  });
+
+  return true;
 }
 
 const requireScheduleAuth: RequestHandler = async (req: any, res, next) => {
@@ -226,6 +306,18 @@ const shiftAssignmentSchema = z.object({
   managerNote: z.string().max(1000).optional().nullable(),
   isOpenShift: z.boolean().default(false),
   clear: z.boolean().default(false),
+});
+
+const scheduleRequestSchema = z.object({
+  requestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  requestType: z.enum(["time_off", "preferred_shift", "availability", "other"]).default("time_off"),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  notes: z.string().trim().min(1).max(2000),
+});
+
+const scheduleRequestStatusSchema = z.object({
+  status: z.enum(["submitted", "approved", "denied", "cancelled"]),
 });
 
 async function seedShiftTypes() {
@@ -487,6 +579,95 @@ export function registerScheduleRoutes(app: Express) {
       await seedShiftTypes();
       const shiftTypes = await db.select().from(scheduleShiftTypes).orderBy(asc(scheduleShiftTypes.sortOrder), asc(scheduleShiftTypes.label));
       res.json({ shiftTypes });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/requests", requireScheduleAuth, async (req: any, res, next) => {
+    try {
+      const user = publicScheduleUser(req.scheduleUser);
+      const query = db
+        .select({ request: scheduleRequests, user: tipsUsers })
+        .from(scheduleRequests)
+        .innerJoin(tipsUsers, eq(scheduleRequests.requesterUserId, tipsUsers.id));
+      let rows;
+      if (user.isSuperAdmin) {
+        rows = await query.orderBy(desc(scheduleRequests.requestDate), desc(scheduleRequests.createdAt));
+      } else if (user.isAdmin) {
+        const department = await getScheduleRequestDepartment(req.scheduleUser);
+        rows = await query.where(eq(scheduleRequests.department, department)).orderBy(desc(scheduleRequests.requestDate), desc(scheduleRequests.createdAt));
+      } else {
+        rows = await query.where(eq(scheduleRequests.requesterUserId, req.scheduleUser.id)).orderBy(desc(scheduleRequests.requestDate), desc(scheduleRequests.createdAt));
+      }
+      res.json({ requests: rows.map((row) => ({ ...row.request, requester: publicScheduleUser(row.user) })) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/requests", requireScheduleAuth, scheduleRateLimiter, async (req: any, res, next) => {
+    try {
+      const parsed = scheduleRequestSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid schedule request", validation: parsed.error.format() });
+      const leadDays = daysBetween(todayDateKey(), parsed.data.requestDate);
+      if (leadDays < 14) {
+        return res.status(400).json({
+          error: "Schedule requests must be submitted at least 14 days before the requested date.",
+          code: "REQUEST_TOO_CLOSE",
+        });
+      }
+      const department = await getScheduleRequestDepartment(req.scheduleUser);
+      const [request] = await db
+        .insert(scheduleRequests)
+        .values({
+          requesterUserId: req.scheduleUser.id,
+          department,
+          requestDate: parsed.data.requestDate,
+          requestType: parsed.data.requestType,
+          startTime: parsed.data.startTime || null,
+          endTime: parsed.data.endTime || null,
+          notes: parsed.data.notes,
+          status: "submitted",
+        })
+        .returning();
+      await audit(null, req.scheduleUser.id, "schedule_request_submitted", { requestId: request.id, requestDate: request.requestDate });
+      let emailSent = false;
+      try {
+        const managerEmails = await getDepartmentManagerEmails(department);
+        emailSent = await sendScheduleRequestEmail(request, req.scheduleUser, managerEmails);
+        await audit(null, req.scheduleUser.id, "schedule_request_email_sent", { requestId: request.id, department, recipientCount: managerEmails.length, emailSent });
+      } catch (emailError: any) {
+        console.error("Failed to send schedule request email:", {
+          requestId: request.id,
+          department,
+          error: emailError?.message || emailError,
+        });
+      }
+      res.status(201).json({ request, emailSent });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/requests/:id/status", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      const parsed = scheduleRequestStatusSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid request status", validation: parsed.error.format() });
+      const user = publicScheduleUser(req.scheduleUser);
+      const [existing] = await db.select().from(scheduleRequests).where(eq(scheduleRequests.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ error: "Schedule request not found" });
+      if (!user.isSuperAdmin) {
+        const managerDepartment = await getScheduleRequestDepartment(req.scheduleUser);
+        if (existing.department !== managerDepartment) return res.status(403).json({ error: "This request belongs to another department." });
+      }
+      const [request] = await db
+        .update(scheduleRequests)
+        .set({ status: parsed.data.status, reviewedByUserId: req.scheduleUser.id, reviewedAt: new Date(), updatedAt: new Date() })
+        .where(eq(scheduleRequests.id, req.params.id))
+        .returning();
+      await audit(null, req.scheduleUser.id, "schedule_request_status_updated", { requestId: request.id, status: request.status });
+      res.json({ request });
     } catch (error) {
       next(error);
     }

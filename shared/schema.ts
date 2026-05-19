@@ -528,6 +528,27 @@ export const scheduleShareLinks = pgTable("schedule_share_links", {
   index("idx_schedule_share_links_schedule").on(table.scheduleId),
 ]);
 
+export const scheduleRequests = pgTable("schedule_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requesterUserId: varchar("requester_user_id").notNull().references(() => tipsUsers.id, { onDelete: "cascade" }),
+  department: text("department").notNull().default("Front Desk"),
+  requestDate: date("request_date").notNull(),
+  requestType: text("request_type").notNull().default("time_off"),
+  startTime: time("start_time"),
+  endTime: time("end_time"),
+  notes: text("notes"),
+  status: text("status").notNull().default("submitted"),
+  reviewedByUserId: varchar("reviewed_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_schedule_requests_requester").on(table.requesterUserId),
+  index("idx_schedule_requests_department").on(table.department),
+  index("idx_schedule_requests_date").on(table.requestDate),
+  index("idx_schedule_requests_status").on(table.status),
+]);
+
 export const scheduleAuditLog = pgTable("schedule_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   scheduleId: varchar("schedule_id").references(() => weeklySchedules.id, { onDelete: "cascade" }),
@@ -1733,6 +1754,12 @@ export const insertScheduleShiftAssignmentSchema = createInsertSchema(scheduleSh
 export const insertScheduleShareLinkSchema = createInsertSchema(scheduleShareLinks).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertScheduleRequestSchema = createInsertSchema(scheduleRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 export const insertScheduleAuditLogSchema = createInsertSchema(scheduleAuditLog).omit({
@@ -3426,6 +3453,8 @@ export type ScheduleShiftAssignment = typeof scheduleShiftAssignments.$inferSele
 export type InsertScheduleShiftAssignment = z.infer<typeof insertScheduleShiftAssignmentSchema>;
 export type ScheduleShareLink = typeof scheduleShareLinks.$inferSelect;
 export type InsertScheduleShareLink = z.infer<typeof insertScheduleShareLinkSchema>;
+export type ScheduleRequest = typeof scheduleRequests.$inferSelect;
+export type InsertScheduleRequest = z.infer<typeof insertScheduleRequestSchema>;
 export type ScheduleAuditLog = typeof scheduleAuditLog.$inferSelect;
 export type InsertScheduleAuditLog = z.infer<typeof insertScheduleAuditLogSchema>;
 

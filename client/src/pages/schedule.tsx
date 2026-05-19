@@ -52,6 +52,20 @@ type ScheduleUser = {
   isSuperAdmin: boolean;
 };
 
+type ScheduleRequest = {
+  id: string;
+  requesterUserId: string;
+  department?: string | null;
+  requestDate: string;
+  requestType: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  notes?: string | null;
+  status: string;
+  createdAt?: string | null;
+  requester?: ScheduleUser;
+};
+
 type ScheduleEmployee = {
   id: string;
   firstName: string;
@@ -190,14 +204,15 @@ function statusBadge(status: string) {
 
 function ScheduleAuthGate({ onDone }: { onDone: () => void }) {
   const { toast } = useToast();
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [form, setForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", email: "", password: "" });
   const login = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/tips/auth/login", form);
+      const response = await apiRequest("POST", mode === "login" ? "/api/tips/auth/login" : "/api/tips/auth/register", mode === "login" ? { email: form.email, password: form.password } : form);
       return response.json();
     },
     onSuccess: onDone,
-    onError: (error: Error) => toast({ title: "Unable to sign in", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: mode === "login" ? "Unable to sign in" : "Unable to create login", description: error.message, variant: "destructive" }),
   });
   return (
     <div className={`min-h-screen px-4 py-8 ${C.page}`}>
@@ -205,12 +220,20 @@ function ScheduleAuthGate({ onDone }: { onDone: () => void }) {
         <Card className={C.shell}>
           <CardHeader>
             <CardTitle className={C.ink}>Courtyard Schedule</CardTitle>
-            <CardDescription className={C.muted}>Use your Courtyard account to view published schedules or manage drafts.</CardDescription>
+            <CardDescription className={C.muted}>{mode === "login" ? "Use your Courtyard account to view schedules and submit requests." : "Create your Courtyard login to view published schedules and submit requests."}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            {mode === "register" && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><Label>First name</Label><Input className={C.field} value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} /></div>
+                <div><Label>Last name</Label><Input className={C.field} value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} /></div>
+                <div className="sm:col-span-2"><Label>Display name</Label><Input className={C.field} value={form.employeeDisplayName} onChange={(event) => setForm({ ...form, employeeDisplayName: event.target.value })} placeholder="Optional" /></div>
+              </div>
+            )}
             <div><Label>Email</Label><Input className={C.field} type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></div>
             <div><Label>Password</Label><Input className={C.field} type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></div>
-            <Button className={`w-full ${C.green}`} disabled={login.isPending} onClick={() => login.mutate()}>{login.isPending ? "Signing in..." : "Sign in"}</Button>
+            <Button className={`w-full ${C.green}`} disabled={login.isPending} onClick={() => login.mutate()}>{login.isPending ? "Working..." : mode === "login" ? "Sign in" : "Create login"}</Button>
+            <Button variant="outline" className={`w-full ${C.outline}`} onClick={() => setMode(mode === "login" ? "register" : "login")}>{mode === "login" ? "Create your login" : "Back to sign in"}</Button>
             <Button asChild variant="ghost" className="w-full text-[#2f5f46]"><a href="/tips">Need to set or change your password?</a></Button>
           </CardContent>
         </Card>
@@ -465,6 +488,63 @@ function EmployeeManager({ employees, onAdd, onUpdate }: { employees: ScheduleEm
   );
 }
 
+function ScheduleRequestsPanel({ requests, isAdmin, onSubmit, onStatus }: { requests: ScheduleRequest[]; isAdmin: boolean; onSubmit: (request: any) => void; onStatus: (id: string, status: string) => void }) {
+  const [form, setForm] = useState({ requestDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+  const submit = () => {
+    onSubmit({ ...form, startTime: form.startTime || null, endTime: form.endTime || null });
+    setForm({ requestDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+  };
+  return (
+    <Card className={`${C.shell} print:hidden`}>
+      <CardHeader>
+        <CardTitle className={C.ink}>Schedule requests</CardTitle>
+        <CardDescription className={C.muted}>Requests must be submitted at least 14 days before the requested date.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-[160px_180px_120px_120px_1fr_auto]">
+          <div><Label>Date</Label><Input className={C.field} type="date" value={form.requestDate} onChange={(event) => setForm({ ...form, requestDate: event.target.value })} /></div>
+          <div>
+            <Label>Type</Label>
+            <Select value={form.requestType} onValueChange={(requestType) => setForm({ ...form, requestType })}>
+              <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="time_off">Time off</SelectItem>
+                <SelectItem value="preferred_shift">Preferred shift</SelectItem>
+                <SelectItem value="availability">Availability</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div><Label>Start</Label><Input className={C.field} type="time" value={form.startTime} onChange={(event) => setForm({ ...form, startTime: event.target.value })} /></div>
+          <div><Label>End</Label><Input className={C.field} type="time" value={form.endTime} onChange={(event) => setForm({ ...form, endTime: event.target.value })} /></div>
+          <div><Label>Notes</Label><Input className={C.field} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Request details" /></div>
+          <div className="flex items-end"><Button className={C.green} disabled={!form.requestDate || !form.notes.trim()} onClick={submit}>Submit</Button></div>
+        </div>
+        <div className="space-y-2">
+          {requests.map((request) => (
+            <div key={request.id} className="flex flex-col gap-2 rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="font-semibold">{isAdmin ? `${request.requester?.employeeDisplayName || "Associate"} - ` : ""}{formatDate(request.requestDate)} - {request.requestType.replace("_", " ")}</div>
+                <div className="text-[#5f5247]">{isAdmin && request.department ? `${request.department} - ` : ""}{[request.startTime?.slice(0, 5), request.endTime?.slice(0, 5)].filter(Boolean).join(" - ")} {request.notes}</div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className={request.status === "approved" ? "border-emerald-300 bg-emerald-50 text-emerald-800" : request.status === "denied" ? "border-red-300 bg-red-50 text-red-800" : "border-amber-300 bg-amber-50 text-amber-900"}>{request.status}</Badge>
+                {isAdmin && request.status === "submitted" && (
+                  <>
+                    <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request.id, "approved")}>Approve</Button>
+                    <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request.id, "denied")}>Deny</Button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+          {requests.length === 0 && <div className="text-sm text-[#5f5247]">No schedule requests yet.</div>}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SchedulePage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -476,6 +556,7 @@ export default function SchedulePage() {
 
   const auth = useQuery<{ user: ScheduleUser | null }>({ queryKey: ["/api/schedule/auth/me"], queryFn: () => fetchJson("/api/schedule/auth/me"), enabled: !shareToken });
   const weeks = useQuery<{ weeks: WeeklySchedule[] }>({ queryKey: ["/api/schedule/weeks"], queryFn: () => fetchJson("/api/schedule/weeks"), enabled: !!auth.data?.user && !shareToken });
+  const requests = useQuery<{ requests: ScheduleRequest[] }>({ queryKey: ["/api/schedule/requests"], queryFn: () => fetchJson("/api/schedule/requests"), enabled: !!auth.data?.user && !shareToken });
   const share = useQuery<SchedulePayload>({ queryKey: ["/api/schedule/share", shareToken], queryFn: () => fetchJson(`/api/schedule/share/${shareToken}`), enabled: !!shareToken });
   const weekId = selectedWeekId || weeks.data?.weeks?.[0]?.id || "";
   const detail = useQuery<SchedulePayload>({ queryKey: ["/api/schedule/weeks", weekId], queryFn: () => fetchJson(`/api/schedule/weeks/${weekId}`), enabled: !!weekId && !shareToken });
@@ -543,6 +624,28 @@ export default function SchedulePage() {
     },
     onError: (error: Error) => toast({ title: "Share failed", description: error.message, variant: "destructive" }),
   });
+  const submitRequest = useMutation({
+    mutationFn: async (request: any) => {
+      const response = await apiRequest("POST", "/api/schedule/requests", request);
+      return response.json();
+    },
+    onSuccess: (data: { emailSent?: boolean }) => {
+      toast({
+        title: "Schedule request submitted",
+        description: data.emailSent ? "Your department manager was notified." : "Your request was saved. Manager email could not be sent automatically.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/requests"] });
+    },
+    onError: (error: Error) => toast({ title: "Request not submitted", description: error.message, variant: "destructive" }),
+  });
+  const updateRequestStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => apiRequest("PATCH", `/api/schedule/requests/${id}/status`, { status }),
+    onSuccess: () => {
+      toast({ title: "Request updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/requests"] });
+    },
+    onError: (error: Error) => toast({ title: "Request update failed", description: error.message, variant: "destructive" }),
+  });
 
   if (!shareToken && auth.isLoading) return <div className={`min-h-screen p-8 ${C.page}`}>Loading Schedule...</div>;
   if (!shareToken && !auth.data?.user) return <ScheduleAuthGate onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/schedule/auth/me"] })} />;
@@ -591,6 +694,15 @@ export default function SchedulePage() {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {!shareToken && user && (
+          <ScheduleRequestsPanel
+            requests={requests.data?.requests || []}
+            isAdmin={Boolean(user.isAdmin)}
+            onSubmit={(request) => submitRequest.mutate(request)}
+            onStatus={(id, status) => updateRequestStatus.mutate({ id, status })}
+          />
         )}
 
         {!payload ? (

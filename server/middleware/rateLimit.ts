@@ -43,7 +43,7 @@ export const createSoftAuthRateLimiter = (config: RateLimitConfig = {}) => {
       return next();
     }
 
-    const isAuthed = Boolean(req.user?.claims?.sub || req.user?.id);
+    const isAuthed = Boolean(req.user?.claims?.sub || req.user?.id || req.session?.userId || req.session?.tipsUserId || req.session?.tipsKioskUnlocked);
     const ip = req.ip || req.connection?.remoteAddress || "unknown";
     const windowMs = config.windowMs ?? baseWindowMs;
     const anonMax = config.anonMax ?? defaultAnonMax;

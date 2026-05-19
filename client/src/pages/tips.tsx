@@ -226,7 +226,17 @@ function PasswordField({
   );
 }
 
-function TipsAuth({ onDone }: { onDone: () => void }) {
+function TipsAuth({
+  onDone,
+  allowRegister = true,
+  title,
+  description,
+}: {
+  onDone: () => void;
+  allowRegister?: boolean;
+  title?: string;
+  description?: string;
+}) {
   const { toast } = useToast();
   const [mode, setMode] = useState<AuthMode>("login");
   const [form, setForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", email: "", password: "" });
@@ -261,8 +271,10 @@ function TipsAuth({ onDone }: { onDone: () => void }) {
 
         <Card className={C.shell}>
           <CardHeader>
-            <CardTitle className={C.ink}>{mode === "login" ? "Employee login" : "Create employee account"}</CardTitle>
-            <CardDescription className={C.muted}>Use the account your manager created, or register with your own email.</CardDescription>
+            <CardTitle className={C.ink}>{title || (mode === "login" ? "Employee login" : "Create employee account")}</CardTitle>
+            <CardDescription className={C.muted}>
+              {description || "Use the account your manager created, or register with your own email."}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {mode === "register" && (
@@ -296,9 +308,11 @@ function TipsAuth({ onDone }: { onDone: () => void }) {
             <Button className={`w-full ${C.green}`} onClick={() => submit.mutate()} disabled={submit.isPending}>
               {submit.isPending ? "Please wait..." : mode === "login" ? "Log in" : "Create account"}
             </Button>
-            <Button variant="ghost" className="w-full text-[#2f5f46]" onClick={() => setMode(mode === "login" ? "register" : "login")}>
-              {mode === "login" ? "Need an account? Register" : "Already registered? Log in"}
-            </Button>
+            {allowRegister && (
+              <Button variant="ghost" className="w-full text-[#2f5f46]" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+                {mode === "login" ? "Need an account? Register" : "Already registered? Log in"}
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -1511,7 +1525,16 @@ export default function TipsPage() {
   });
 
   if (authLoading) return <div className={`min-h-screen p-8 ${C.page}`}>Loading Tips Tracker...</div>;
-  if (isAdminPath && !auth?.user) return <TipsAuth onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/auth/me"] })} />;
+  if (isAdminPath && !auth?.user) {
+    return (
+      <TipsAuth
+        allowRegister={false}
+        title="Manager login"
+        description="Tips admin is for designated managers and super admins. Associates use the shared PIN entry flow."
+        onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/auth/me"] })}
+      />
+    );
+  }
   if (auth?.user?.mustChangePassword) {
     return <ChangePasswordGate onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/auth/me"] })} />;
   }

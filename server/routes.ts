@@ -53,6 +53,7 @@ import { fuelPricesRouter } from "./routes/fuelPrices";
 import { aiToolsRouter } from "./routes/aiTools";
 import { registerTipsRoutes } from "./routes/tips";
 import { registerScheduleRoutes } from "./routes/schedule";
+import { registerOpsReportRoutes } from "./routes/opsReport";
 import {
   flightPlanFilingProvider,
   getLeidosFlightServiceDiagnostics,
@@ -4391,6 +4392,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerAdminFinanceRoutes(app);
   registerTipsRoutes(app);
   registerScheduleRoutes(app);
+  registerOpsReportRoutes(app);
   app.use("/api/fuel-prices", fuelPricesRouter);
   app.use("/api/ai-tools", aiToolsRouter);
 

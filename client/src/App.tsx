@@ -84,6 +84,7 @@ import NoiseAndFuryPage from "@/pages/noise-and-fury";
 import CoryArmer from "@/pages/CoryArmer";
 import TipsPage from "@/pages/tips";
 import SchedulePage from "@/pages/schedule";
+import OpsReportPage from "@/pages/ops-report";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -237,6 +238,7 @@ function Router() {
       <Route path="/tips" component={TipsPage} />
       <Route path="/tips/admin" component={TipsPage} />
       <Route path="/schedule" component={SchedulePage} />
+      <Route path="/opsreport" component={OpsReportPage} />
       <Route path="/404" component={NotFound} />
       
       {/* Protected routes - require authentication */}
@@ -362,7 +364,8 @@ function AppShell() {
   const isCoryArmerPage = location.startsWith("/coryarmer");
   const isTipsPage = location.startsWith("/tips");
   const isSchedulePage = location.startsWith("/schedule");
-  const isStandalonePage = isNoiseAndFuryPage || isCoryArmerPage || isTipsPage || isSchedulePage;
+  const isOpsReportPage = location.startsWith("/opsreport");
+  const isStandalonePage = isNoiseAndFuryPage || isCoryArmerPage || isTipsPage || isSchedulePage || isOpsReportPage;
   useEffect(() => {
     setAuthState(isAuthenticated);
     if (!isAuthenticated && isSoftAuthEnabled()) {

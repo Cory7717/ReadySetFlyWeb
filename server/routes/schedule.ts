@@ -2,7 +2,7 @@ import express, { type Express, type RequestHandler } from "express";
 import crypto from "crypto";
 import multer from "multer";
 import OpenAI from "openai";
-import pdfParse from "pdf-parse";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { z } from "zod";
 import { and, asc, desc, eq, inArray, isNull, lte, lt } from "drizzle-orm";

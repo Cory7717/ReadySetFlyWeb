@@ -176,6 +176,48 @@ function todayKey() {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
+async function compressSalesReportFile(file: File) {
+  if (!file.type.startsWith("image/")) return file;
+  if (file.size <= 2.5 * 1024 * 1024) return file;
+
+  const image = new Image();
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("Unable to read sales report image."));
+      image.src = objectUrl;
+    });
+
+    const maxSide = 1600;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.76));
+    if (!blob || blob.size >= file.size) return file;
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "sales-report";
+    return new File([blob], `${baseName}.jpg`, { type: "image/jpeg", lastModified: Date.now() });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function uploadErrorMessage(error: Error) {
+  try {
+    const parsed = JSON.parse(error.message);
+    return parsed?.error || error.message;
+  } catch {
+    return error.message;
+  }
+}
+
 function getDayStatus(day: DashboardDay, locked: boolean) {
   if (locked) return { label: "Locked", icon: Lock, className: "border-slate-300 bg-slate-100 text-slate-700" };
   if (!day.entry) return { label: "Not entered", icon: Clock3, className: "border-slate-300 bg-white text-slate-700" };
@@ -409,8 +451,9 @@ function DayEditor({
       });
       const data = await response.json();
       if (file) {
+        const uploadFile = await compressSalesReportFile(file);
         const formData = new FormData();
-        formData.append("salesReport", file);
+        formData.append("salesReport", uploadFile);
         const uploadResponse = await fetch(apiUrl(`/api/tips/entries/${data.entry.id}/attachment`), { method: "POST", credentials: "include", body: formData });
         if (!uploadResponse.ok) throw new Error(await uploadResponse.text());
       }
@@ -421,7 +464,7 @@ function DayEditor({
       setFile(null);
       onSaved();
     },
-    onError: (error: Error) => toast({ title: "Save failed", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Save failed", description: uploadErrorMessage(error), variant: "destructive" }),
   });
 
   const attachment = day.entry?.attachments?.[0];
@@ -694,8 +737,9 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   });
   const uploadReport = useMutation({
     mutationFn: async ({ date, file }: { date: string; file: File }) => {
+      const uploadFile = await compressSalesReportFile(file);
       const form = new FormData();
-      form.append("salesReport", file);
+      form.append("salesReport", uploadFile);
       const response = await fetch(apiUrl(`/api/tips/grid/reports/${date}`), { method: "POST", credentials: "include", body: form });
       if (!response.ok) throw new Error(await response.text());
       return response.json();
@@ -704,7 +748,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
       toast({ title: "Sales report uploaded" });
       queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
     },
-    onError: (error: Error) => toast({ title: "Upload failed", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Upload failed", description: uploadErrorMessage(error), variant: "destructive" }),
   });
   const submitGrid = useMutation({
     mutationFn: async () => {

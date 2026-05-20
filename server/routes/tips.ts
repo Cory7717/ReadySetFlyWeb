@@ -316,7 +316,7 @@ const upload = multer({
       cb(null, `${req.tipsUser?.id || "kiosk"}-${Date.now()}-${crypto.randomBytes(8).toString("hex")}${ext}`);
     },
   }),
-  limits: { fileSize: 8 * 1024 * 1024 },
+  limits: { fileSize: 12 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith("image/") || file.mimetype === "application/pdf") {
       cb(null, true);
@@ -325,6 +325,16 @@ const upload = multer({
     }
   },
 });
+
+const salesReportUpload: RequestHandler = (req, res, next) => {
+  upload.single("salesReport")(req, res, (error: any) => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({ error: "Sales report image is too large. Retake the photo farther back, crop it, or choose a smaller image." });
+    }
+    return res.status(400).json({ error: error?.message || "Sales report upload failed." });
+  });
+};
 
 function computeTotals(entries: any[], period: ReturnType<typeof getPayPeriodForDate>) {
   const byDate = new Map(entries.map((entry) => [String(entry.entryDate), entry]));
@@ -903,7 +913,7 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
-  router.post("/entries/:entryId/attachment", requireTipsAuth, requireTipsReady, tipsUploadRateLimiter, upload.single("salesReport"), async (req: any, res, next) => {
+  router.post("/entries/:entryId/attachment", requireTipsAuth, requireTipsReady, tipsUploadRateLimiter, salesReportUpload, async (req: any, res, next) => {
     try {
       const [entry] = await db
         .select()
@@ -1623,7 +1633,7 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
-  router.post("/grid/reports/:date", requireTipsGridAccess, tipsUploadRateLimiter, upload.single("salesReport"), async (req: any, res, next) => {
+  router.post("/grid/reports/:date", requireTipsGridAccess, tipsUploadRateLimiter, salesReportUpload, async (req: any, res, next) => {
     try {
       const reportDate = String(req.params.date || "");
       const period = getPayPeriodForEntryDate(reportDate);

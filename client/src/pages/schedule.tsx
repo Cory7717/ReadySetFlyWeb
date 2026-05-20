@@ -16,6 +16,7 @@ import {
   Share2,
   Sparkles,
   Users,
+  X,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
@@ -48,8 +49,20 @@ const DAY_LABELS_ES = ["Sab", "Dom", "Lun", "Mar", "Mie", "Jue", "Vie"];
 
 const ES: Record<string, string> = {
   "Courtyard Schedule Builder": "Constructor de Horarios Courtyard",
+  "Courtyard Austin Lakeline": "Courtyard Austin Lakeline",
+  English: "Ingles",
+  "Blank week": "Semana en blanco",
+  "Copy previous": "Copiar anterior",
+  Print: "Imprimir",
+  Week: "Semana",
+  "Select schedule": "Seleccionar horario",
+  Publish: "Publicar",
+  Reopen: "Reabrir",
+  Archive: "Archivar",
+  "Copy share link": "Copiar enlace",
   "Generate AI schedule": "Generar horario con IA",
   "Weekly hours": "Horas semanales",
+  "Labor $": "Labor $",
   "Open shifts": "Turnos abiertos",
   Employees: "Empleados",
   Warnings: "Alertas",
@@ -67,19 +80,72 @@ const ES: Record<string, string> = {
   "Save forecast": "Guardar pronostico",
   "Import OTB CSV": "Importar CSV OTB",
   "Upload actualized CSV": "Subir CSV actualizado",
+  "DOS pop-up group adjustment": "Ajuste de grupo nuevo del DOS",
+  "Group rooms": "Cuartos de grupo",
+  "Group notes": "Notas del grupo",
+  "Save group": "Guardar grupo",
   "Weekly schedule": "Horario semanal",
+  "Associates are listed on the left by department. Click any date cell to add or edit that shift.": "Los empleados estan a la izquierda por departamento. Haga clic en cualquier celda para agregar o editar un turno.",
   Associate: "Empleado",
   Hours: "Horas",
   "Approved request": "Solicitud aprobada",
   "Add shift": "Agregar turno",
   "Daily labor hours": "Horas de labor diarias",
   "Bistro labor": "Labor Bistro",
+  "Add employee": "Agregar empleado",
+  "Add employees to the far-left schedule column and assign their department row group.": "Agregue empleados a la columna izquierda del horario y asigne su departamento.",
+  "First name": "Nombre",
+  "Last name": "Apellido",
+  "Display name": "Nombre visible",
+  Department: "Departamento",
+  Position: "Puesto",
+  "Max weekly hours": "Horas maximas semanales",
+  "Hourly rate": "Tarifa por hora",
+  Email: "Correo",
+  Phone: "Telefono",
+  "Import payroll rates": "Importar tarifas de nomina",
+  "Importing payroll...": "Importando nomina...",
+  Deactivate: "Desactivar",
+  Activate: "Activar",
+  "No position": "Sin puesto",
+  "Schedule requests": "Solicitudes de horario",
+  "Requests must be submitted at least 14 days before the requested date.": "Las solicitudes deben enviarse al menos 14 dias antes de la fecha solicitada.",
+  Date: "Fecha",
+  Type: "Tipo",
+  Start: "Inicio",
+  End: "Fin",
+  "Request details": "Detalles de la solicitud",
+  Submit: "Enviar",
+  "Time off": "Tiempo libre",
+  "Preferred shift": "Turno preferido",
+  Availability: "Disponibilidad",
+  Other: "Otro",
+  Approve: "Aprobar",
+  Deny: "Negar",
+  "No schedule requests yet.": "Todavia no hay solicitudes de horario.",
+  "Published schedules are read-only until reopened.": "Los horarios publicados son de solo lectura hasta que se reabran.",
+  "Schedule tutorial": "Tutorial del horario",
+  "Create or select a week": "Crear o seleccionar una semana",
+  "Choose the Saturday start date, create a blank week, or copy the previous schedule.": "Elija la fecha de inicio del sabado, cree una semana en blanco o copie el horario anterior.",
+  "Review, approve, or deny department requests before building the week.": "Revise, apruebe o niegue solicitudes del departamento antes de crear la semana.",
+  "Submit time-off or availability requests here. Requests inside the two-week window may be rejected.": "Envie solicitudes de tiempo libre o disponibilidad aqui. Las solicitudes dentro de dos semanas pueden ser rechazadas.",
+  "Import OTB reports, upload actualized stats, and adjust rooms. Forecast changes drive staffing warnings and labor targets.": "Importe reportes OTB, suba estadisticas actualizadas y ajuste cuartos. El pronostico controla alertas de personal y metas de labor.",
+  "Weekly grid": "Tabla semanal",
+  "Click an associate/day cell to add or edit a shift. Housekeeping cells include a board button for MPOR.": "Haga clic en empleado/dia para agregar o editar un turno. Las celdas de Housekeeping incluyen boton de tablero para MPOR.",
+  "View your published schedule by department and day.": "Vea su horario publicado por departamento y dia.",
+  Associates: "Empleados",
+  "Managers add associates, assign departments, and activate or deactivate employees. Only super admin can see pay rates.": "Los managers agregan empleados, asignan departamentos y activan o desactivan empleados. Solo super admin puede ver tarifas.",
+  Next: "Siguiente",
+  Back: "Atras",
+  Done: "Listo",
+  "Skip tutorial": "Omitir tutorial",
 };
 
 type ScheduleUser = {
   id: string;
   email: string;
   employeeDisplayName: string;
+  role?: string;
   isAdmin: boolean;
   isSuperAdmin: boolean;
 };
@@ -148,6 +214,8 @@ type ForecastDay = {
   arrivals: number;
   departures: number;
   stayovers: number;
+  dndRooms?: number | null;
+  roomRevenue?: string | number | null;
   otbRoomsSold?: number | null;
   otbOccupancyPercent?: string | number | null;
   otbArrivals?: number | null;
@@ -156,6 +224,7 @@ type ForecastDay = {
   actualOccupancyPercent?: string | number | null;
   actualArrivals?: number | null;
   actualDepartures?: number | null;
+  actualRoomRevenue?: string | number | null;
   popupGroupRooms?: number | null;
   popupGroupNotes?: string | null;
   groupsEventsNotes?: string | null;
@@ -319,6 +388,10 @@ function normalizeDepartment(value?: string | null) {
   return DEPARTMENTS.includes(String(value || "")) ? String(value) : "Front Desk";
 }
 
+function tr(spanish: boolean, value: string) {
+  return spanish ? ES[value] || value : value;
+}
+
 function statusBadge(status: string) {
   if (status === "published") return "border-emerald-300 bg-emerald-50 text-emerald-800";
   if (status === "archived") return "border-slate-300 bg-slate-100 text-slate-700";
@@ -328,6 +401,21 @@ function statusBadge(status: string) {
 function metricTone(value: number, target: number, higherIsBad = true) {
   const isBad = higherIsBad ? value > target : value < target;
   return isBad ? "text-red-700" : "text-emerald-800";
+}
+
+function numberValue(value: unknown) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function inferRoomCapacity(day: ForecastDay) {
+  const otbRooms = numberValue(day.otbRoomsSold);
+  const otbOcc = numberValue(day.otbOccupancyPercent);
+  if (otbRooms > 0 && otbOcc > 0) return Math.max(1, Math.round(otbRooms / (otbOcc / 100)));
+  const rooms = numberValue(day.roomsSold);
+  const occ = numberValue(day.occupancyPercent);
+  if (rooms > 0 && occ > 0) return Math.max(1, Math.round(rooms / (occ / 100)));
+  return 118;
 }
 
 function housekeepingBoardTone(board?: HousekeepingBoard) {
@@ -378,6 +466,77 @@ function ScheduleAuthGate({ onDone }: { onDone: () => void }) {
   );
 }
 
+function ScheduleTutorial({ spanish, isAdmin, userId }: { spanish: boolean; isAdmin: boolean; userId?: string }) {
+  const [active, setActive] = useState(false);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const steps = useMemo(() => [
+    ...(isAdmin ? [{ selector: "[data-tour='week-controls']", title: "Create or select a week", body: "Choose the Saturday start date, create a blank week, or copy the previous schedule." }] : []),
+    { selector: "[data-tour='requests']", title: "Schedule requests", body: isAdmin ? "Review, approve, or deny department requests before building the week." : "Submit time-off or availability requests here. Requests inside the two-week window may be rejected." },
+    ...(isAdmin ? [{ selector: "[data-tour='forecast']", title: "Forecast", body: "Import OTB reports, upload actualized stats, and adjust rooms. Forecast changes drive staffing warnings and labor targets." }] : []),
+    { selector: "[data-tour='schedule-grid']", title: "Weekly grid", body: isAdmin ? "Click an associate/day cell to add or edit a shift. Housekeeping cells include a board button for MPOR." : "View your published schedule by department and day." },
+    ...(isAdmin ? [{ selector: "[data-tour='employees']", title: "Associates", body: "Managers add associates, assign departments, and activate or deactivate employees. Only super admin can see pay rates." }] : []),
+  ], [isAdmin]);
+  const t = (value: string) => tr(spanish, value);
+
+  useEffect(() => {
+    if (!userId || typeof window === "undefined") return;
+    const key = `schedule_tutorial_views_${userId}`;
+    const count = Number(window.localStorage.getItem(key) || "0");
+    if (count < 3) {
+      window.localStorage.setItem(key, String(count + 1));
+      setActive(true);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (!active) return;
+    const updateRect = () => {
+      const selector = steps[stepIndex]?.selector;
+      const element = selector ? document.querySelector(selector) : null;
+      if (!element) return setRect(null);
+      element.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      window.setTimeout(() => setRect(element.getBoundingClientRect()), 180);
+    };
+    updateRect();
+    window.addEventListener("resize", updateRect);
+    return () => window.removeEventListener("resize", updateRect);
+  }, [active, stepIndex, steps]);
+
+  if (!active || !steps.length) return null;
+  const step = steps[stepIndex];
+  const close = () => setActive(false);
+  return (
+    <div className="fixed inset-0 z-50 print:hidden">
+      <div className="absolute inset-0 bg-black/55" />
+      {rect && (
+        <div
+          className="pointer-events-none absolute rounded-xl border-2 border-[#f5c66b] shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]"
+          style={{ left: Math.max(8, rect.left - 8), top: Math.max(8, rect.top - 8), width: rect.width + 16, height: rect.height + 16 }}
+        />
+      )}
+      <div className="absolute left-4 right-4 top-6 mx-auto max-w-md rounded-xl border border-[#e0d3c1] bg-[#fffaf2] p-4 text-[#201814] shadow-2xl sm:left-auto sm:right-8">
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a6b3f]">{t("Schedule tutorial")}</div>
+            <h2 className="text-xl font-semibold">{t(step.title)}</h2>
+          </div>
+          <Button variant="ghost" size="icon" onClick={close} aria-label={t("Skip tutorial")}><X className="h-4 w-4" /></Button>
+        </div>
+        <p className="text-sm text-[#5f5247]">{t(step.body)}</p>
+        <div className="mt-4 flex items-center justify-between gap-2">
+          <div className="text-xs text-[#6d5d50]">{stepIndex + 1} / {steps.length}</div>
+          <div className="flex gap-2">
+            <Button variant="outline" className={C.outline} disabled={stepIndex === 0} onClick={() => setStepIndex((index) => Math.max(0, index - 1))}>{t("Back")}</Button>
+            <Button className={C.green} onClick={() => stepIndex === steps.length - 1 ? close() : setStepIndex((index) => index + 1)}>{stepIndex === steps.length - 1 ? t("Done") : t("Next")}</Button>
+          </div>
+        </div>
+        <Button variant="ghost" className="mt-2 w-full text-[#5f5247]" onClick={close}>{t("Skip tutorial")}</Button>
+      </div>
+    </div>
+  );
+}
+
 function ForecastPanel({
   payload,
   editable,
@@ -407,17 +566,44 @@ function ForecastPanel({
   useEffect(() => {
     setDays(payload.days.map((date) => payload.forecast.find((day) => day.forecastDate === date) || { forecastDate: date, roomsSold: 0, occupancyPercent: 0, arrivals: 0, departures: 0, stayovers: 0 }));
   }, [payload.schedule.id, payload.forecast, payload.days]);
+  const updateDayField = (index: number, key: string, value: string) => {
+    setDays((current) => current.map((item, i) => {
+      if (i !== index) return item;
+      if (key !== "roomsSold") return { ...item, [key]: value };
+
+      const nextRoomsSold = Math.max(0, Math.round(numberValue(value)));
+      const previousRoomsSold = numberValue(item.roomsSold);
+      const roomDelta = nextRoomsSold - previousRoomsSold;
+      const capacity = inferRoomCapacity(item);
+      const occupancyPercent = Number(((nextRoomsSold / capacity) * 100).toFixed(2));
+      const previousArrivals = numberValue(item.arrivals);
+      const arrivals = Math.max(0, Math.round(previousArrivals + roomDelta));
+      const stayovers = Math.max(0, nextRoomsSold - arrivals);
+      const currentAdr = previousRoomsSold > 0 ? numberValue(item.roomRevenue) / previousRoomsSold : 0;
+      const nextAdr = currentAdr > 0 ? currentAdr + 2 : 0;
+      const roomRevenue = nextAdr > 0 ? Number((nextRoomsSold * nextAdr).toFixed(2)) : numberValue(item.roomRevenue);
+
+      return {
+        ...item,
+        roomsSold: nextRoomsSold,
+        occupancyPercent,
+        arrivals,
+        stayovers,
+        roomRevenue,
+      };
+    }));
+  };
   return (
-    <Card className={C.shell}>
+    <Card className={C.shell} data-tour="forecast">
       <CardHeader>
         <CardTitle className={C.ink}>{t("Forecast")}</CardTitle>
-        <CardDescription className={C.muted}>Rooms, occupancy, arrivals, departures, and notes drive staffing warnings.</CardDescription>
+        <CardDescription className={C.muted}>{spanish ? "Cuartos, ocupacion, llegadas, salidas y notas controlan alertas de personal." : "Rooms, occupancy, arrivals, departures, and notes drive staffing warnings."}</CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <table className="w-full min-w-[820px] border-collapse text-sm">
           <thead>
             <tr>
-              <th className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left">Metric</th>
+              <th className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left">{spanish ? "Metrica" : "Metric"}</th>
               {days.map((day, index) => <th key={day.forecastDate} className="border border-[#e0d3c1] bg-[#f4eadb] p-2">{(spanish ? DAY_LABELS_ES : DAY_LABELS)[index]} {formatDate(day.forecastDate)}</th>)}
             </tr>
           </thead>
@@ -427,10 +613,10 @@ function ForecastPanel({
               ["occupancyPercent", "Occ %"],
               ["arrivals", t("Arrivals")],
               ["departures", t("Departures")],
-              ["stayovers", "Stayovers"],
-              ["dndRooms", "DND rooms"],
-              ["roomRevenue", "Room rev"],
-              ["popupGroupRooms", "Pop-up rooms"],
+              ["stayovers", t("Stayovers")],
+              ["dndRooms", spanish ? "Cuartos DND" : "DND rooms"],
+              ["roomRevenue", spanish ? "Ingresos cuartos" : "Room rev"],
+              ["popupGroupRooms", spanish ? "Cuartos grupo" : "Pop-up rooms"],
               ["notes", t("Notes")],
             ].map(([key, label]) => (
               <tr key={key}>
@@ -440,9 +626,9 @@ function ForecastPanel({
                     <Input
                       className={C.field}
                       disabled={!editable}
-                      value={(day as any)[key] || ""}
+                      value={(day as any)[key] ?? ""}
                       type={key === "notes" ? "text" : "number"}
-                      onChange={(event) => setDays((current) => current.map((item, i) => i === index ? { ...item, [key]: event.target.value } : item))}
+                      onChange={(event) => updateDayField(index, key, event.target.value)}
                     />
                   </td>
                 ))}
@@ -466,7 +652,7 @@ function ForecastPanel({
             />
             <Button variant="outline" className={C.outline} disabled={importing} onClick={() => fileInputRef.current?.click()}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
-              {importing ? "Importing..." : t("Import OTB CSV")}
+              {importing ? (spanish ? "Importando..." : "Importing...") : t("Import OTB CSV")}
             </Button>
             <input
               ref={actualizedInputRef}
@@ -481,21 +667,21 @@ function ForecastPanel({
             />
             <Button variant="outline" className={C.outline} disabled={actualizing} onClick={() => actualizedInputRef.current?.click()}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
-              {actualizing ? "Uploading..." : t("Upload actualized CSV")}
+              {actualizing ? (spanish ? "Subiendo..." : "Uploading...") : t("Upload actualized CSV")}
             </Button>
           </div>
         )}
         {editable && (
           <div className="mt-4 rounded-xl border border-[#e0d3c1] bg-white p-3">
-            <div className="mb-2 font-semibold">DOS pop-up group adjustment</div>
+            <div className="mb-2 font-semibold">{t("DOS pop-up group adjustment")}</div>
             <div className="grid gap-2 md:grid-cols-[160px_140px_1fr_auto]">
               <Select value={groupForm.forecastDate} onValueChange={(forecastDate) => setGroupForm({ ...groupForm, forecastDate })}>
                 <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
                 <SelectContent>{payload.days.map((day, index) => <SelectItem key={day} value={day}>{(spanish ? DAY_LABELS_ES : DAY_LABELS)[index]} {formatDate(day)}</SelectItem>)}</SelectContent>
               </Select>
-              <Input className={C.field} type="number" value={groupForm.popupGroupRooms} onChange={(event) => setGroupForm({ ...groupForm, popupGroupRooms: event.target.value })} placeholder="Rooms" />
-              <Input className={C.field} value={groupForm.popupGroupNotes} onChange={(event) => setGroupForm({ ...groupForm, popupGroupNotes: event.target.value })} placeholder="Group / demand generator notes" />
-              <Button className={C.green} onClick={() => onPopupGroupSave({ forecastDate: groupForm.forecastDate, popupGroupRooms: Number(groupForm.popupGroupRooms || 0), popupGroupNotes: groupForm.popupGroupNotes })}>Save group</Button>
+              <Input className={C.field} type="number" value={groupForm.popupGroupRooms} onChange={(event) => setGroupForm({ ...groupForm, popupGroupRooms: event.target.value })} placeholder={t("Group rooms")} />
+              <Input className={C.field} value={groupForm.popupGroupNotes} onChange={(event) => setGroupForm({ ...groupForm, popupGroupNotes: event.target.value })} placeholder={t("Group notes")} />
+              <Button className={C.green} onClick={() => onPopupGroupSave({ forecastDate: groupForm.forecastDate, popupGroupRooms: Number(groupForm.popupGroupRooms || 0), popupGroupNotes: groupForm.popupGroupNotes })}>{t("Save group")}</Button>
             </div>
           </div>
         )}
@@ -659,10 +845,10 @@ function ScheduleGrid({ payload, editable, onEdit, onHousekeepingBoard, spanish 
   const t = (value: string) => spanish ? ES[value] || value : value;
   const labels = spanish ? DAY_LABELS_ES : DAY_LABELS;
   return (
-    <Card className={C.shell}>
+    <Card className={C.shell} data-tour="schedule-grid">
       <CardHeader>
         <CardTitle className={C.ink}>{t("Weekly schedule")}</CardTitle>
-        <CardDescription className={C.muted}>Associates are listed on the left by department. Click any date cell to add or edit that shift.</CardDescription>
+        <CardDescription className={C.muted}>{t("Associates are listed on the left by department. Click any date cell to add or edit that shift.")}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="hidden overflow-x-auto lg:block">
@@ -777,30 +963,31 @@ function ScheduleGrid({ payload, editable, onEdit, onHousekeepingBoard, spanish 
   );
 }
 
-function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollImport, importingPayroll }: { employees: ScheduleEmployee[]; canViewRates: boolean; onAdd: (employee: any) => void; onUpdate: (id: string, patch: any) => void; onPayrollImport: (file: File) => void; importingPayroll: boolean }) {
+function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollImport, importingPayroll, spanish }: { employees: ScheduleEmployee[]; canViewRates: boolean; spanish: boolean; onAdd: (employee: any) => void; onUpdate: (id: string, patch: any) => void; onPayrollImport: (file: File) => void; importingPayroll: boolean }) {
   const payrollInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState({ firstName: "", lastName: "", displayName: "", department: "Front Desk", position: "", maxWeeklyHours: "40", hourlyRate: "", email: "", phone: "" });
+  const t = (value: string) => tr(spanish, value);
   return (
-    <Card className={C.shell}>
+    <Card className={C.shell} data-tour="employees">
       <CardHeader>
-        <CardTitle className={C.ink}>Employees</CardTitle>
-        <CardDescription className={C.muted}>Add associates to the far-left schedule column and assign their department row group.</CardDescription>
+        <CardTitle className={C.ink}>{t("Employees")}</CardTitle>
+        <CardDescription className={C.muted}>{t("Add employees to the far-left schedule column and assign their department row group.")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Input className={C.field} placeholder="First name" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} />
-          <Input className={C.field} placeholder="Last name" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
-          <Input className={C.field} placeholder="Display name" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} />
+          <Input className={C.field} placeholder={t("First name")} value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} />
+          <Input className={C.field} placeholder={t("Last name")} value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
+          <Input className={C.field} placeholder={t("Display name")} value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} />
           <Select value={form.department} onValueChange={(department) => setForm({ ...form, department })}>
             <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
             <SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent>
           </Select>
-          <Input className={C.field} placeholder="Position" value={form.position} onChange={(event) => setForm({ ...form, position: event.target.value })} />
-          <Input className={C.field} placeholder="Max weekly hours" type="number" value={form.maxWeeklyHours} onChange={(event) => setForm({ ...form, maxWeeklyHours: event.target.value })} />
-          {canViewRates && <Input className={C.field} placeholder="Hourly rate" type="number" value={form.hourlyRate} onChange={(event) => setForm({ ...form, hourlyRate: event.target.value })} />}
-          <Input className={C.field} placeholder="Email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
-          <Input className={C.field} placeholder="Phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
-          <Button className={C.green} onClick={() => onAdd({ ...form, maxWeeklyHours: Number(form.maxWeeklyHours || 0), hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate) })}><Plus className="mr-2 h-4 w-4" />Add employee</Button>
+          <Input className={C.field} placeholder={t("Position")} value={form.position} onChange={(event) => setForm({ ...form, position: event.target.value })} />
+          <Input className={C.field} placeholder={t("Max weekly hours")} type="number" value={form.maxWeeklyHours} onChange={(event) => setForm({ ...form, maxWeeklyHours: event.target.value })} />
+          {canViewRates && <Input className={C.field} placeholder={t("Hourly rate")} type="number" value={form.hourlyRate} onChange={(event) => setForm({ ...form, hourlyRate: event.target.value })} />}
+          <Input className={C.field} placeholder={t("Email")} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+          <Input className={C.field} placeholder={t("Phone")} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+          <Button className={C.green} onClick={() => onAdd({ ...form, maxWeeklyHours: Number(form.maxWeeklyHours || 0), hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate) })}><Plus className="mr-2 h-4 w-4" />{t("Add employee")}</Button>
           {canViewRates && (
             <>
               <input
@@ -816,7 +1003,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
               />
               <Button variant="outline" className={C.outline} disabled={importingPayroll} onClick={() => payrollInputRef.current?.click()}>
                 <FileSpreadsheet className="mr-2 h-4 w-4" />
-                {importingPayroll ? "Importing payroll..." : "Import payroll rates"}
+                {importingPayroll ? t("Importing payroll...") : t("Import payroll rates")}
               </Button>
             </>
           )}
@@ -826,13 +1013,13 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
             <div key={employee.id} className={`grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_220px_120px] ${employee.active ? "border-[#e0d3c1] bg-white" : "border-slate-300 bg-slate-100"}`}>
               <div>
                 <div className="font-semibold">{employee.displayName}</div>
-                <div className="text-sm text-[#5f5247]">{employee.position || "No position"} {employee.maxWeeklyHours ? `- max ${employee.maxWeeklyHours} hrs` : ""} {canViewRates && employee.hourlyRate ? `- $${employee.hourlyRate}/hr` : ""}</div>
+                <div className="text-sm text-[#5f5247]">{employee.position || t("No position")} {employee.maxWeeklyHours ? `- max ${employee.maxWeeklyHours} hrs` : ""} {canViewRates && employee.hourlyRate ? `- $${employee.hourlyRate}/hr` : ""}</div>
               </div>
               <Select value={normalizeDepartment(employee.department)} onValueChange={(department) => onUpdate(employee.id, { department })}>
                 <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
                 <SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent>
               </Select>
-              <Button variant="outline" className={C.outline} onClick={() => onUpdate(employee.id, { active: !employee.active })}>{employee.active ? "Deactivate" : "Activate"}</Button>
+              <Button variant="outline" className={C.outline} onClick={() => onUpdate(employee.id, { active: !employee.active })}>{employee.active ? t("Deactivate") : t("Activate")}</Button>
             </div>
           ))}
         </div>
@@ -841,37 +1028,38 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
   );
 }
 
-function ScheduleRequestsPanel({ requests, isAdmin, onSubmit, onStatus }: { requests: ScheduleRequest[]; isAdmin: boolean; onSubmit: (request: any) => void; onStatus: (request: ScheduleRequest, status: string) => void }) {
+function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus }: { requests: ScheduleRequest[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => void; onStatus: (request: ScheduleRequest, status: string) => void }) {
   const [form, setForm] = useState({ requestDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+  const t = (value: string) => tr(spanish, value);
   const submit = () => {
     onSubmit({ ...form, startTime: form.startTime || null, endTime: form.endTime || null });
     setForm({ requestDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
   };
   return (
-    <Card className={`${C.shell} print:hidden`}>
+    <Card className={`${C.shell} print:hidden`} data-tour="requests">
       <CardHeader>
-        <CardTitle className={C.ink}>Schedule requests</CardTitle>
-        <CardDescription className={C.muted}>Requests must be submitted at least 14 days before the requested date.</CardDescription>
+        <CardTitle className={C.ink}>{t("Schedule requests")}</CardTitle>
+        <CardDescription className={C.muted}>{t("Requests must be submitted at least 14 days before the requested date.")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-[160px_180px_120px_120px_1fr_auto]">
-          <div><Label>Date</Label><Input className={C.field} type="date" value={form.requestDate} onChange={(event) => setForm({ ...form, requestDate: event.target.value })} /></div>
+          <div><Label>{t("Date")}</Label><Input className={C.field} type="date" value={form.requestDate} onChange={(event) => setForm({ ...form, requestDate: event.target.value })} /></div>
           <div>
-            <Label>Type</Label>
+            <Label>{t("Type")}</Label>
             <Select value={form.requestType} onValueChange={(requestType) => setForm({ ...form, requestType })}>
               <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="time_off">Time off</SelectItem>
-                <SelectItem value="preferred_shift">Preferred shift</SelectItem>
-                <SelectItem value="availability">Availability</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
+                <SelectItem value="time_off">{t("Time off")}</SelectItem>
+                <SelectItem value="preferred_shift">{t("Preferred shift")}</SelectItem>
+                <SelectItem value="availability">{t("Availability")}</SelectItem>
+                <SelectItem value="other">{t("Other")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div><Label>Start</Label><Input className={C.field} type="time" value={form.startTime} onChange={(event) => setForm({ ...form, startTime: event.target.value })} /></div>
-          <div><Label>End</Label><Input className={C.field} type="time" value={form.endTime} onChange={(event) => setForm({ ...form, endTime: event.target.value })} /></div>
-          <div><Label>Notes</Label><Input className={C.field} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Request details" /></div>
-          <div className="flex items-end"><Button className={C.green} disabled={!form.requestDate || !form.notes.trim()} onClick={submit}>Submit</Button></div>
+          <div><Label>{t("Start")}</Label><Input className={C.field} type="time" value={form.startTime} onChange={(event) => setForm({ ...form, startTime: event.target.value })} /></div>
+          <div><Label>{t("End")}</Label><Input className={C.field} type="time" value={form.endTime} onChange={(event) => setForm({ ...form, endTime: event.target.value })} /></div>
+          <div><Label>{t("Notes")}</Label><Input className={C.field} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder={t("Request details")} /></div>
+          <div className="flex items-end"><Button className={C.green} disabled={!form.requestDate || !form.notes.trim()} onClick={submit}>{t("Submit")}</Button></div>
         </div>
         <div className="space-y-2">
           {requests.map((request) => (
@@ -883,20 +1071,20 @@ function ScheduleRequestsPanel({ requests, isAdmin, onSubmit, onStatus }: { requ
               <div className="flex flex-wrap items-center gap-2">
                 {isAdmin && request.status === "submitted" && Number(request.conflictCount || 0) > 0 && (
                   <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-900">
-                    {request.conflictCount} already approved
+                    {request.conflictCount} {spanish ? "ya aprobado(s)" : "already approved"}
                   </Badge>
                 )}
                 <Badge variant="outline" className={request.status === "approved" ? "border-emerald-300 bg-emerald-50 text-emerald-800" : request.status === "denied" ? "border-red-300 bg-red-50 text-red-800" : "border-amber-300 bg-amber-50 text-amber-900"}>{request.status}</Badge>
                 {isAdmin && request.status === "submitted" && (
                   <>
-                    <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "approved")}>Approve</Button>
-                    <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "denied")}>Deny</Button>
+                    <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "approved")}>{t("Approve")}</Button>
+                    <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "denied")}>{t("Deny")}</Button>
                   </>
                 )}
               </div>
             </div>
           ))}
-          {requests.length === 0 && <div className="text-sm text-[#5f5247]">No schedule requests yet.</div>}
+          {requests.length === 0 && <div className="text-sm text-[#5f5247]">{t("No schedule requests yet.")}</div>}
         </div>
       </CardContent>
     </Card>
@@ -924,6 +1112,7 @@ export default function SchedulePage() {
   const payload = shareToken ? share.data : detail.data;
   const user = auth.data?.user;
   const editable = Boolean(user?.isAdmin && payload?.schedule.status === "draft" && !shareToken);
+  const t = (value: string) => tr(spanish, value);
 
   const createWeek = useMutation({
     mutationFn: async (mode: "blank" | "copyPrevious") => {
@@ -1113,17 +1302,17 @@ export default function SchedulePage() {
       <header className="border-b border-[#deceba] bg-[#fffaf2]/95 px-4 py-4 backdrop-blur print:hidden">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">Courtyard Austin Lakeline</div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Courtyard Schedule Builder</h1>
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">{t("Courtyard Austin Lakeline")}</div>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("Courtyard Schedule Builder")}</h1>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2" data-tour="week-controls">
             <Button variant="outline" className={C.outline} onClick={() => setSpanish((value) => !value)}>
-              {spanish ? "English" : "Español"}
+              {spanish ? "English" : "Espanol"}
             </Button>
             {!shareToken && user?.isAdmin && <Input className={`${C.field} w-[160px]`} type="date" value={weekStartDate} onChange={(event) => setWeekStartDate(event.target.value)} />}
-            {!shareToken && user?.isAdmin && <Button className={C.green} onClick={() => createWeek.mutate("blank")}><CalendarDays className="mr-2 h-4 w-4" />Blank week</Button>}
-            {!shareToken && user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => createWeek.mutate("copyPrevious")}><Copy className="mr-2 h-4 w-4" />Copy previous</Button>}
-            <Button variant="outline" className={C.outline} onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" />Print</Button>
+            {!shareToken && user?.isAdmin && <Button className={C.green} onClick={() => createWeek.mutate("blank")}><CalendarDays className="mr-2 h-4 w-4" />{t("Blank week")}</Button>}
+            {!shareToken && user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => createWeek.mutate("copyPrevious")}><Copy className="mr-2 h-4 w-4" />{t("Copy previous")}</Button>}
+            <Button variant="outline" className={C.outline} onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" />{t("Print")}</Button>
           </div>
         </div>
       </header>
@@ -1133,11 +1322,11 @@ export default function SchedulePage() {
           <Card className={`${C.shell} print:hidden`}>
             <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-2">
-                <Label>Week</Label>
+                <Label>{t("Week")}</Label>
                 <Select value={weekId || "none"} onValueChange={setSelectedWeekId}>
                   <SelectTrigger className={`${C.field} w-[240px]`}><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Select schedule</SelectItem>
+                    <SelectItem value="none">{t("Select schedule")}</SelectItem>
                     {(weeks.data?.weeks || []).map((week) => <SelectItem key={week.id} value={week.id}>{formatWeek(week.weekStartDate, week.weekEndDate)} - {week.status}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -1145,10 +1334,10 @@ export default function SchedulePage() {
               {payload && (
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline" className={statusBadge(payload.schedule.status)}>{payload.schedule.status}</Badge>
-                  {payload.schedule.status === "draft" && user?.isAdmin && <Button className={C.green} onClick={() => action.mutate({ name: "publish" })}><CheckCircle2 className="mr-2 h-4 w-4" />Publish</Button>}
-                  {payload.schedule.status === "published" && user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "reopen", body: { reason: "Manager edit" } })}><RefreshCw className="mr-2 h-4 w-4" />Reopen</Button>}
-                  {user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "archive" })}><Archive className="mr-2 h-4 w-4" />Archive</Button>}
-                  {payload.schedule.status === "published" && user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => shareLink.mutate()}><Share2 className="mr-2 h-4 w-4" />Copy share link</Button>}
+                  {payload.schedule.status === "draft" && user?.isAdmin && <Button className={C.green} onClick={() => action.mutate({ name: "publish" })}><CheckCircle2 className="mr-2 h-4 w-4" />{t("Publish")}</Button>}
+                  {payload.schedule.status === "published" && user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "reopen", body: { reason: "Manager edit" } })}><RefreshCw className="mr-2 h-4 w-4" />{t("Reopen")}</Button>}
+                  {user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "archive" })}><Archive className="mr-2 h-4 w-4" />{t("Archive")}</Button>}
+                  {payload.schedule.status === "published" && user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => shareLink.mutate()}><Share2 className="mr-2 h-4 w-4" />{t("Copy share link")}</Button>}
                   <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/pdf`)}><Download className="mr-2 h-4 w-4" />PDF</a></Button>
                   <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/excel`)}><FileSpreadsheet className="mr-2 h-4 w-4" />Excel</a></Button>
                 </div>
@@ -1161,6 +1350,7 @@ export default function SchedulePage() {
           <ScheduleRequestsPanel
             requests={requests.data?.requests || []}
             isAdmin={Boolean(user.isAdmin)}
+            spanish={spanish}
             onSubmit={(request) => submitRequest.mutate(request)}
             onStatus={(request, status) => {
               if (
@@ -1176,7 +1366,7 @@ export default function SchedulePage() {
         )}
 
         {!payload ? (
-          <Card className={C.shell}><CardContent className="p-6">{shareToken ? "Loading shared schedule..." : "Create or select a week to begin."}</CardContent></Card>
+          <Card className={C.shell}><CardContent className="p-6">{shareToken ? (spanish ? "Cargando horario compartido..." : "Loading shared schedule...") : (spanish ? "Cree o seleccione una semana para comenzar." : "Create or select a week to begin.")}</CardContent></Card>
         ) : (
           <>
             <Card className={C.shell}>
@@ -1292,13 +1482,14 @@ export default function SchedulePage() {
               <EmployeeManager
                 employees={payload.employees}
                 canViewRates={Boolean(user?.isSuperAdmin)}
+                spanish={spanish}
                 onAdd={(employee) => addEmployee.mutate(employee)}
                 onUpdate={(id, patch) => updateEmployee.mutate({ id, patch })}
                 onPayrollImport={(file) => importPayrollRates.mutate(file)}
                 importingPayroll={importPayrollRates.isPending}
               />
             )}
-            {!editable && !shareToken && payload.schedule.status === "published" && <div className="flex items-center gap-2 text-sm text-[#5f5247]"><Lock className="h-4 w-4" />Published schedules are read-only until reopened.</div>}
+            {!editable && !shareToken && payload.schedule.status === "published" && <div className="flex items-center gap-2 text-sm text-[#5f5247]"><Lock className="h-4 w-4" />{t("Published schedules are read-only until reopened.")}</div>}
           </>
         )}
       </main>
@@ -1369,6 +1560,7 @@ export default function SchedulePage() {
           )}
         </DialogContent>
       </Dialog>
+      {!shareToken && user && <ScheduleTutorial spanish={spanish} isAdmin={Boolean(user.isAdmin)} userId={user.id} />}
     </div>
   );
 }

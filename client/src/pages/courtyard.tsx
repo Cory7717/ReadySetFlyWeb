@@ -50,34 +50,14 @@ function CourtyardLogin({ onDone }: { onDone: () => void }) {
 
   return (
     <div className={`min-h-screen ${C.page}`}>
-      <main className="mx-auto flex min-h-screen max-w-6xl items-center px-4 py-8">
-        <div className="grid w-full gap-6 lg:grid-cols-[1fr_420px] lg:items-center">
-          <section className="space-y-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.28em] text-[#8a6b3f]">Courtyard Austin Lakeline</div>
-            <h1 className="max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">Associate Portal</h1>
-            <p className="max-w-xl text-lg text-[#5f5247]">
-              One place for schedules, Bistro tip reporting, and hotel operations tools.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Card className={C.shell}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg"><CalendarDays className="h-5 w-5 text-[#2f5f46]" /> Schedule</CardTitle>
-                  <CardDescription className={C.muted}>View published schedules and submit schedule requests.</CardDescription>
-                </CardHeader>
-              </Card>
-              <Card className={C.shell}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg"><Coffee className="h-5 w-5 text-[#b98435]" /> Tips</CardTitle>
-                  <CardDescription className={C.muted}>Bistro associates can enter credit-card tips and upload sales reports.</CardDescription>
-                </CardHeader>
-              </Card>
-            </div>
-          </section>
-
-          <Card className={C.shell}>
+      <main className="mx-auto flex min-h-screen max-w-lg items-center px-4 py-8">
+          <Card className={`w-full ${C.shell}`}>
             <CardHeader>
-              <CardTitle>Sign in</CardTitle>
-              <CardDescription className={C.muted}>Use your Courtyard account to continue.</CardDescription>
+              <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">Courtyard Austin Lakeline</div>
+              <CardTitle className="text-3xl">Associate Portal</CardTitle>
+              <CardDescription className={C.muted}>
+                Sign in with your Courtyard schedule account to access schedules, Bistro tip reporting, and operations tools.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
@@ -91,13 +71,11 @@ function CourtyardLogin({ onDone }: { onDone: () => void }) {
               <Button className={`w-full ${C.green}`} disabled={login.isPending || !form.email || !form.password} onClick={() => login.mutate()}>
                 {login.isPending ? "Signing in..." : "Sign in"}
               </Button>
-              <div className="grid gap-2 pt-2 sm:grid-cols-2">
-                <Button asChild variant="outline" className={C.outline}><Link href="/schedule">Create schedule login</Link></Button>
-                <Button asChild variant="outline" className={C.outline}><Link href="/tips">Tips access</Link></Button>
-              </div>
+              <p className="text-center text-sm text-[#5f5247]">
+                Need an account? Open the schedule page and choose create login.
+              </p>
             </CardContent>
           </Card>
-        </div>
       </main>
     </div>
   );
@@ -107,19 +85,19 @@ export default function CourtyardPortalPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const auth = useQuery<{ user: CourtyardUser | null }>({
-    queryKey: ["/api/tips/auth/me", "courtyard"],
-    queryFn: () => fetchJson("/api/tips/auth/me"),
+    queryKey: ["/api/schedule/auth/me", "courtyard"],
+    queryFn: () => fetchJson("/api/schedule/auth/me"),
   });
   const logout = useMutation({
     mutationFn: () => apiRequest("POST", "/api/tips/auth/logout", {}),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tips/auth/me", "courtyard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/auth/me", "courtyard"] });
     },
     onError: (error: Error) => toast({ title: "Logout failed", description: error.message, variant: "destructive" }),
   });
 
   if (auth.isLoading) return <div className={`min-h-screen p-8 ${C.page}`}>Loading Courtyard portal...</div>;
-  if (!auth.data?.user) return <CourtyardLogin onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/auth/me", "courtyard"] })} />;
+  if (!auth.data?.user) return <CourtyardLogin onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/schedule/auth/me", "courtyard"] })} />;
 
   const user = auth.data.user;
   const tools = [
@@ -135,8 +113,8 @@ export default function CourtyardPortalPage() {
       href: "/tips",
       icon: Coffee,
       title: "Bistro Tips",
-      description: "Enter credit-card tips from the daily sales report, upload the report photo, and review pay-period totals.",
-      action: "Open tips tracker",
+      description: "Open the Bistro tip reporting page. Associates enter the 5 digit team PIN before entering tip reports.",
+      action: "Open tips reports",
       tone: C.accent,
     },
     {

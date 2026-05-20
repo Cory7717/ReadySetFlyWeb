@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   FileSpreadsheet,
+  GripVertical,
   Lock,
   Plus,
   Printer,
@@ -417,16 +418,17 @@ function roleDepartment(value?: string | null) {
   if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
   if (normalized.includes("maintenance") || normalized.includes("engineer")) return "Maintenance";
   if (normalized.includes("room attendant") || normalized.includes("laundry") || normalized.includes("inspector") || normalized.includes("houseperson") || normalized.includes("housekeeping")) return "Housekeeping";
-  if (normalized.includes("gm") || normalized.includes("dos") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
-  return normalizeDepartment(value);
+  if (normalized.includes("director of sales") || normalized === "sales" || normalized.includes("gm") || normalized.includes("dos") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
+  return "";
 }
 
 function employeeDepartments(employee: ScheduleEmployee) {
+  const primaryDepartment = normalizeDepartment(employee.department);
   const roleDepartments = [
     ...rolesArray(employee.rolesJson),
     employee.position || "",
   ].map(roleDepartment).filter(Boolean);
-  const departments = roleDepartments.length ? roleDepartments : [normalizeDepartment(employee.department)];
+  const departments = [primaryDepartment, ...roleDepartments];
   return Array.from(new Set(departments));
 }
 
@@ -947,26 +949,35 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                         const canEditCell = editable && editableDepartments.includes(department);
                         const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
                         const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;
+                        const handleShiftDragStart = (event: DragEvent) => {
+                          if (!assignment || !canEditCell) return;
+                          const payload = JSON.stringify(assignment);
+                          event.dataTransfer.effectAllowed = "copy";
+                          event.dataTransfer.setData("application/json", payload);
+                          event.dataTransfer.setData("text/plain", payload);
+                        };
+                        const handleShiftDrop = (event: DragEvent) => {
+                          event.preventDefault();
+                          const raw = event.dataTransfer.getData("application/json") || event.dataTransfer.getData("text/plain");
+                          if (!raw || !canEditCell) return;
+                          onCopyShift(JSON.parse(raw), employee, day, department);
+                        };
                         return (
-                          <td key={day} className="border border-[#e0d3c1] p-1 align-top">
+                          <td key={day} className="border border-[#e0d3c1] p-1 align-top" onDragOver={(event) => canEditCell && event.preventDefault()} onDrop={handleShiftDrop}>
                             <div className="space-y-1">
                               <button
                                 type="button"
                                 draggable={canEditCell && Boolean(assignment)}
                                 disabled={!canEditCell || Boolean(approvedRequest)}
-                                className="min-h-12 w-full rounded-md border border-[#e0d3c1] p-2 text-left text-xs disabled:cursor-default"
+                                className={`min-h-12 w-full rounded-md border border-[#e0d3c1] p-2 text-left text-xs disabled:cursor-default ${assignment ? "cursor-copy" : ""}`}
                                 style={{ background: approvedRequest ? "#e5e7eb" : shift?.color || "#ffffff", color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }}
-                                onDragStart={(event) => assignment && event.dataTransfer.setData("application/json", JSON.stringify(assignment))}
+                                onDragStart={handleShiftDragStart}
                                 onDragOver={(event) => canEditCell && event.preventDefault()}
-                                onDrop={(event) => {
-                                  event.preventDefault();
-                                  const raw = event.dataTransfer.getData("application/json");
-                                  if (!raw || !canEditCell) return;
-                                  onCopyShift(JSON.parse(raw), employee, day, department);
-                                }}
+                                onDrop={handleShiftDrop}
                                 onClick={() => onEdit(employee, day, department, assignment)}
                               >
                                 {approvedRequest ? t("Approved request") : shiftText(assignment, shift) || (editable ? `+ ${t("Add shift")}` : "-")}
+                                {assignment && <span className="mt-1 block text-[10px] opacity-75">Drag to copy</span>}
                               </button>
                               {isHousekeeping && (
                                 <button
@@ -1135,8 +1146,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
             const draft = employeePatch(employee);
             const roles = rolesArray(draft.rolesJson);
             return (
-            <div key={employee.id} draggable className={`grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_220px_120px] ${employee.active ? "border-[#e0d3c1] bg-white" : "border-slate-300 bg-slate-100"}`}
-              onDragStart={(event) => event.dataTransfer.setData("text/plain", employee.id)}
+            <div key={employee.id} className={`grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_220px_120px] ${employee.active ? "border-[#e0d3c1] bg-white" : "border-slate-300 bg-slate-100"}`}
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {
                 event.preventDefault();
@@ -1144,7 +1154,21 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
                 reorderEmployee(draggedId, employee.id);
               }}>
               <div>
-                <Input className={C.field} value={draft.displayName || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, displayName: event.target.value } })} />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    draggable
+                    className="mt-1 flex h-9 w-9 shrink-0 cursor-grab items-center justify-center rounded-md border border-[#d6c8b5] bg-[#fffaf2] text-[#5f5247] active:cursor-grabbing"
+                    title="Drag to reorder this associate"
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", employee.id);
+                    }}
+                  >
+                    <GripVertical className="h-4 w-4" />
+                  </button>
+                  <Input className={C.field} value={draft.displayName || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, displayName: event.target.value } })} />
+                </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   <Input className={C.field} placeholder="Phone" value={draft.phone || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, phone: event.target.value } })} />
                   <Input className={C.field} placeholder="Email" value={draft.email || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, email: event.target.value } })} />

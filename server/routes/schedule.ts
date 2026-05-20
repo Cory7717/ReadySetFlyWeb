@@ -143,8 +143,10 @@ function managerDepartmentsForUser(user: any, employees: any[] = []) {
   const publicUser = publicScheduleUser(user);
   if (publicUser.isSuperAdmin) return DEPARTMENTS;
   const employee = employees.find((item) => normalizeEmail(String(item.email || "")) === normalizeEmail(String(user.email || "")));
-  if (employee?.isDepartmentManager) return [normalizeDepartment(employee.department)];
-  if (publicUser.isAdmin) return [normalizeDepartment(employee?.department || user.position)];
+  const managerDepartment = normalizeDepartment(employee?.department || user.position);
+  if (employee?.isDepartmentManager || publicUser.isAdmin) {
+    return managerDepartment === "Front Desk" ? ["Front Desk", "Night Audit"] : [managerDepartment];
+  }
   return [];
 }
 
@@ -196,8 +198,11 @@ async function getUserBySession(req: any) {
   return user || null;
 }
 
-function isManager(user: any) {
-  return publicScheduleUser(user).isAdmin;
+async function isScheduleManager(user: any) {
+  const publicUser = publicScheduleUser(user);
+  if (publicUser.isAdmin) return true;
+  const employee = await getScheduleEmployeeByEmail(String(user.email || ""));
+  return Boolean(employee?.isDepartmentManager);
 }
 
 async function getScheduleEmployeeByEmail(email: string) {
@@ -209,10 +214,16 @@ async function getScheduleEmployeeByEmail(email: string) {
 
 async function publicScheduleUserWithProfile(user: any) {
   const scheduleEmployee = await getScheduleEmployeeByEmail(String(user.email || ""));
+  const baseUser = publicScheduleUser(user);
+  const isDepartmentManager = Boolean(scheduleEmployee?.isDepartmentManager);
+  const isAdmin = baseUser.isAdmin || isDepartmentManager;
   return {
-    ...publicScheduleUser(user),
+    ...baseUser,
+    role: isAdmin && baseUser.role === "employee" ? "manager" : baseUser.role,
+    isAdmin,
     scheduleRoles: rolesArray(scheduleEmployee?.rolesJson || user.position),
     department: scheduleEmployee?.department || null,
+    isDepartmentManager,
   };
 }
 
@@ -264,8 +275,8 @@ async function getDepartmentManagerEmails(department: string) {
     const email = normalizeEmail(String(user.email || ""));
     if (!email || user.disabledAt) continue;
     const publicUser = publicScheduleUser(user);
-    if (!publicUser.isAdmin) continue;
     const employee = employeeByEmail.get(email);
+    if (!publicUser.isAdmin && !employee?.isDepartmentManager) continue;
     const managerDepartment = normalizeDepartment(employee?.department || user.position);
     if (managerDepartment === department) managerEmails.push(email);
     if (publicUser.isSuperAdmin) fallbackEmails.add(email);
@@ -322,7 +333,7 @@ const requireScheduleManager: RequestHandler = async (req: any, res, next) => {
     if (!user) return res.status(401).json({ error: "Schedule login required" });
     if (user.disabledAt) return res.status(403).json({ error: "This account is disabled." });
     if (user.mustChangePassword) return res.status(403).json({ error: "Password change required before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
-    if (!isManager(user)) return res.status(403).json({ error: "Schedule manager access required" });
+    if (!(await isScheduleManager(user))) return res.status(403).json({ error: "Schedule manager access required" });
     req.scheduleUser = user;
     next();
   } catch (error) {

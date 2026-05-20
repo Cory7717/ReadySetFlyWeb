@@ -812,7 +812,8 @@ export function registerTipsRoutes(app: Express) {
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid login details" });
       const [user] = await db.select().from(tipsUsers).where(eq(tipsUsers.email, normalizeEmail(parsed.data.email))).limit(1);
-      if (!user || !(await bcrypt.compare(parsed.data.password, user.hashedPassword))) {
+      const loginPassword = parsed.data.password.trim();
+      if (!user || !(await bcrypt.compare(loginPassword, user.hashedPassword))) {
         return res.status(401).json({ error: "Invalid email or password" });
       }
       if (user.disabledAt) {

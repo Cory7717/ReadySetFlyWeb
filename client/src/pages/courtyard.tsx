@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Coffee, DoorOpen, FileSpreadsheet, LogOut, ShieldCheck } from "lucide-react";
+import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -45,12 +46,12 @@ function userHasTipsAccess(user: CourtyardUser) {
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { credentials: "include" });
+  const response = await fetch(apiUrl(url), { credentials: "include" });
   if (!response.ok) throw new Error(await response.text());
   return response.json();
 }
 
-function CourtyardLogin({ onDone }: { onDone: () => void }) {
+function CourtyardLogin({ onDone }: { onDone: (user?: CourtyardUser) => void }) {
   const { toast } = useToast();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [access, setAccess] = useState({ schedule: true, tips: false });
@@ -60,6 +61,9 @@ function CourtyardLogin({ onDone }: { onDone: () => void }) {
       if (mode === "register" && access.tips && !form.rolesJson.some(isBistroRole)) {
         throw new Error("Tips access requires a Bistro or Breakfast role.");
       }
+      if (mode === "register" && form.rolesJson.length === 0) {
+        throw new Error("Select at least one role before creating the account.");
+      }
       const response = await apiRequest(
         "POST",
         mode === "login" ? "/api/tips/auth/login" : "/api/schedule/auth/register",
@@ -67,7 +71,7 @@ function CourtyardLogin({ onDone }: { onDone: () => void }) {
       );
       return response.json();
     },
-    onSuccess: onDone,
+    onSuccess: (data: { user?: CourtyardUser }) => onDone(data.user),
     onError: (error: Error) => toast({ title: mode === "login" ? "Unable to sign in" : "Unable to create account", description: error.message, variant: "destructive" }),
   });
   const resetPassword = useMutation({
@@ -143,7 +147,7 @@ function CourtyardLogin({ onDone }: { onDone: () => void }) {
   );
 }
 
-function CourtyardPasswordChange({ onDone }: { onDone: () => void }) {
+function CourtyardPasswordChange({ onDone }: { onDone: (user?: CourtyardUser) => void }) {
   const { toast } = useToast();
   const [form, setForm] = useState({ temporaryPassword: "", newPassword: "", confirmPassword: "" });
   const changePassword = useMutation({
@@ -151,7 +155,7 @@ function CourtyardPasswordChange({ onDone }: { onDone: () => void }) {
       const response = await apiRequest("POST", "/api/tips/auth/change-password", form);
       return response.json();
     },
-    onSuccess: onDone,
+    onSuccess: (data: { user?: CourtyardUser }) => onDone(data.user),
     onError: (error: Error) => toast({ title: "Unable to update password", description: error.message, variant: "destructive" }),
   });
   return (
@@ -193,8 +197,26 @@ export default function CourtyardPortalPage() {
   });
 
   if (auth.isLoading) return <div className={`min-h-screen p-8 ${C.page}`}>Loading Courtyard portal...</div>;
-  if (!auth.data?.user) return <CourtyardLogin onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/schedule/auth/me", "courtyard"] })} />;
-  if (auth.data.user.mustChangePassword) return <CourtyardPasswordChange onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/schedule/auth/me", "courtyard"] })} />;
+  if (!auth.data?.user) {
+    return (
+      <CourtyardLogin
+        onDone={(user) => {
+          if (user) queryClient.setQueryData(["/api/schedule/auth/me", "courtyard"], { user });
+          queryClient.invalidateQueries({ queryKey: ["/api/schedule/auth/me", "courtyard"] });
+        }}
+      />
+    );
+  }
+  if (auth.data.user.mustChangePassword) {
+    return (
+      <CourtyardPasswordChange
+        onDone={(user) => {
+          if (user) queryClient.setQueryData(["/api/schedule/auth/me", "courtyard"], { user });
+          queryClient.invalidateQueries({ queryKey: ["/api/schedule/auth/me", "courtyard"] });
+        }}
+      />
+    );
+  }
 
   const user = auth.data.user;
   const tools = [

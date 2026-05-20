@@ -207,6 +207,15 @@ async function getScheduleEmployeeByEmail(email: string) {
   return employees.find((employee) => normalizeEmail(String(employee.email || "")) === normalizedEmail) || null;
 }
 
+async function publicScheduleUserWithProfile(user: any) {
+  const scheduleEmployee = await getScheduleEmployeeByEmail(String(user.email || ""));
+  return {
+    ...publicScheduleUser(user),
+    scheduleRoles: rolesArray(scheduleEmployee?.rolesJson || user.position),
+    department: scheduleEmployee?.department || null,
+  };
+}
+
 function employeeProfileMatches(employee: any, input: { email?: string; phone?: string; firstName?: string; lastName?: string }) {
   const emailMatch = input.email && normalizeEmail(String(employee.email || "")) === normalizeEmail(input.email);
   const phoneMatch = input.phone && String(employee.phone || "").replace(/\D/g, "") === String(input.phone || "").replace(/\D/g, "");
@@ -1223,14 +1232,7 @@ export function registerScheduleRoutes(app: Express) {
     try {
       const user = await getUserBySession(req);
       if (!user || user.disabledAt) return res.json({ user: null });
-      const scheduleEmployee = await getScheduleEmployeeByEmail(String(user.email || ""));
-      res.json({
-        user: {
-          ...publicScheduleUser(user),
-          scheduleRoles: rolesArray(scheduleEmployee?.rolesJson || user.position),
-          department: scheduleEmployee?.department || null,
-        },
-      });
+      res.json({ user: await publicScheduleUserWithProfile(user) });
     } catch (error) {
       next(error);
     }
@@ -1243,7 +1245,12 @@ export function registerScheduleRoutes(app: Express) {
       const email = normalizeEmail(parsed.data.email);
       const existing = await db.select().from(tipsUsers).where(eq(tipsUsers.email, email)).limit(1);
       let user = existing[0];
-      if (!user) {
+      if (user) {
+        if (user.disabledAt) return res.status(403).json({ error: "This account is disabled. Contact your manager." });
+        if (!(await bcrypt.compare(parsed.data.password.trim(), user.hashedPassword))) {
+          return res.status(409).json({ error: "An account already exists for this email. Sign in or request a temporary password." });
+        }
+      } else {
         const hashedPassword = await bcrypt.hash(parsed.data.password, 12);
         [user] = await db.insert(tipsUsers).values({
           firstName: parsed.data.firstName,
@@ -1257,7 +1264,7 @@ export function registerScheduleRoutes(app: Express) {
       }
       await upsertScheduleEmployeeForUser(user, { ...parsed.data, email });
       req.session.tipsUserId = user.id;
-      res.status(existing[0] ? 200 : 201).json({ user: publicScheduleUser(user) });
+      req.session.save(async () => res.status(existing[0] ? 200 : 201).json({ user: await publicScheduleUserWithProfile(user) }));
     } catch (error) {
       next(error);
     }

@@ -85,6 +85,7 @@ import CoryArmer from "@/pages/CoryArmer";
 import TipsPage from "@/pages/tips";
 import SchedulePage from "@/pages/schedule";
 import OpsReportPage from "@/pages/ops-report";
+import CourtyardPortalPage from "@/pages/courtyard";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -237,6 +238,7 @@ function Router() {
       <Route path="/coryarmer" component={CoryArmer} />
       <Route path="/tips" component={TipsPage} />
       <Route path="/tips/admin" component={TipsPage} />
+      <Route path="/courtyard" component={CourtyardPortalPage} />
       <Route path="/schedule" component={SchedulePage} />
       <Route path="/opsreport" component={OpsReportPage} />
       <Route path="/404" component={NotFound} />
@@ -364,8 +366,9 @@ function AppShell() {
   const isCoryArmerPage = location.startsWith("/coryarmer");
   const isTipsPage = location.startsWith("/tips");
   const isSchedulePage = location.startsWith("/schedule");
+  const isCourtyardPage = location.startsWith("/courtyard");
   const isOpsReportPage = location.startsWith("/opsreport");
-  const isStandalonePage = isNoiseAndFuryPage || isCoryArmerPage || isTipsPage || isSchedulePage || isOpsReportPage;
+  const isStandalonePage = isNoiseAndFuryPage || isCoryArmerPage || isTipsPage || isSchedulePage || isCourtyardPage || isOpsReportPage;
   useEffect(() => {
     setAuthState(isAuthenticated);
     if (!isAuthenticated && isSoftAuthEnabled()) {

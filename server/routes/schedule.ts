@@ -126,7 +126,7 @@ function normalizeDepartment(value?: string | null) {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized.includes("leadership") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
   if (normalized.includes("audit") || normalized.includes("night")) return "Night Audit";
-  if (normalized.includes("front")) return "Front Desk";
+  if (normalized.includes("front") || normalized.includes("fd ") || normalized === "fd am" || normalized === "fd pm" || normalized.includes("desk")) return "Front Desk";
   if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
   if (normalized.includes("engineer") || normalized.includes("maintenance")) return "Maintenance";
   if (normalized.includes("house") || normalized.includes("laundry") || normalized.includes("room attendant") || normalized.includes("inspector")) return "Housekeeping";
@@ -421,6 +421,12 @@ const housekeepingBoardSchema = z.object({
   notes: z.string().trim().max(2000).optional().nullable(),
 });
 
+const timeInputSchema = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, 5) : null;
+}, z.string().regex(/^\d{2}:\d{2}$/).nullable());
+
 const scheduleRegisterSchema = z.object({
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().min(1).max(80),
@@ -561,8 +567,8 @@ const shiftAssignmentSchema = z.object({
   employeeId: z.string().optional().nullable(),
   shiftDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   shiftTypeId: z.string().optional().nullable(),
-  customStartTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
-  customEndTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  customStartTime: timeInputSchema.optional(),
+  customEndTime: timeInputSchema.optional(),
   unpaidBreakMinutes: z.coerce.number().int().min(0).max(240).optional().nullable(),
   roleWorked: z.string().max(120).optional().nullable(),
   roleNote: z.string().max(300).optional().nullable(),

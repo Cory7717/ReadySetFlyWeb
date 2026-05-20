@@ -402,11 +402,47 @@ function normalizeDepartment(value?: string | null) {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized.includes("leadership") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
   if (normalized.includes("audit") || normalized.includes("night")) return "Night Audit";
-  if (normalized.includes("front")) return "Front Desk";
+  if (normalized.includes("front") || normalized.includes("fd ") || normalized === "fd am" || normalized === "fd pm" || normalized.includes("desk")) return "Front Desk";
   if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
   if (normalized.includes("engineer") || normalized.includes("maintenance")) return "Maintenance";
-  if (normalized.includes("house") || normalized.includes("laundry")) return "Housekeeping";
+  if (normalized.includes("house") || normalized.includes("laundry") || normalized.includes("room attendant") || normalized.includes("inspector")) return "Housekeeping";
   return DEPARTMENTS.includes(String(value || "")) ? String(value) : "Front Desk";
+}
+
+function roleDepartment(value?: string | null) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "";
+  if (normalized.includes("fd ") || normalized === "front desk" || normalized.includes("desk")) return "Front Desk";
+  if (normalized.includes("audit") || normalized.includes("night")) return "Night Audit";
+  if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
+  if (normalized.includes("maintenance") || normalized.includes("engineer")) return "Maintenance";
+  if (normalized.includes("room attendant") || normalized.includes("laundry") || normalized.includes("inspector") || normalized.includes("houseperson") || normalized.includes("housekeeping")) return "Housekeeping";
+  if (normalized.includes("gm") || normalized.includes("dos") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
+  return normalizeDepartment(value);
+}
+
+function employeeDepartments(employee: ScheduleEmployee) {
+  const roleDepartments = [
+    ...rolesArray(employee.rolesJson),
+    employee.position || "",
+  ].map(roleDepartment).filter(Boolean);
+  const departments = roleDepartments.length ? roleDepartments : [normalizeDepartment(employee.department)];
+  return Array.from(new Set(departments));
+}
+
+function assignmentDepartment(assignment: ShiftAssignment | undefined, employee: ScheduleEmployee, shiftType?: ShiftType) {
+  return roleDepartment(assignment?.roleWorked || shiftType?.departmentHint || employee.department);
+}
+
+function cleanTime(value?: string | null) {
+  return value ? value.slice(0, 5) : null;
+}
+
+function shiftTone(assignment: ShiftAssignment | undefined, shiftType: ShiftType | undefined, shiftTypes: Map<string, ShiftType>) {
+  const roleShift = assignment?.roleWorked
+    ? Array.from(shiftTypes.values()).find((shift) => shift.label.toLowerCase() === String(assignment.roleWorked).toLowerCase())
+    : undefined;
+  return roleShift || shiftType;
 }
 
 function tr(spanish: boolean, value: string) {
@@ -729,6 +765,7 @@ function ShiftEditDialog({
   payload,
   employee,
   date,
+  rowDepartment,
   assignment,
   onSave,
   onClear,
@@ -738,16 +775,20 @@ function ShiftEditDialog({
   payload: SchedulePayload;
   employee: ScheduleEmployee | null;
   date: string;
+  rowDepartment?: string;
   assignment?: ShiftAssignment;
   onSave: (body: any) => void;
   onClear: () => void;
 }) {
+  const defaultRole = employee
+    ? rolesArray(employee.rolesJson).find((role) => roleDepartment(role) === rowDepartment) || rowDepartment || employee.rolesJson?.[0] || ""
+    : rowDepartment || "";
   const [form, setForm] = useState({
     shiftTypeId: assignment?.shiftTypeId || "",
     customStartTime: assignment?.customStartTime?.slice(0, 5) || "",
     customEndTime: assignment?.customEndTime?.slice(0, 5) || "",
     unpaidBreakMinutes: assignment?.unpaidBreakMinutes?.toString() || "",
-    roleWorked: assignment?.roleWorked || employee?.rolesJson?.[0] || "",
+    roleWorked: assignment?.roleWorked || defaultRole,
     roleNote: assignment?.roleNote || "",
     managerNote: assignment?.managerNote || "",
     isOpenShift: assignment?.isOpenShift || false,
@@ -786,7 +827,7 @@ function ShiftEditDialog({
               <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No role label</SelectItem>
-                {Array.from(new Set([...(employee?.rolesJson || []), ...SCHEDULE_ROLES])).map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
+                {Array.from(new Set([...(employee?.rolesJson || []), rowDepartment || "", ...SCHEDULE_ROLES].filter(Boolean))).map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -891,7 +932,7 @@ function HousekeepingBoardDialog({
   );
 }
 
-function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBoard, spanish }: { payload: SchedulePayload; editable: boolean; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, assignment?: ShiftAssignment) => void; onCopyShift: (assignment: ShiftAssignment, employee: ScheduleEmployee, date: string) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board?: HousekeepingBoard) => void }) {
+function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBoard, spanish }: { payload: SchedulePayload; editable: boolean; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, department: string, assignment?: ShiftAssignment) => void; onCopyShift: (assignment: ShiftAssignment, employee: ScheduleEmployee, date: string, department: string) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board?: HousekeepingBoard) => void }) {
   const assignments = useMemo(() => new Map(payload.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment])), [payload.assignments]);
   const housekeepingBoards = useMemo(() => new Map((payload.housekeepingBoards || []).map((board) => [`${board.employeeId}:${board.boardDate}`, board])), [payload.housekeepingBoards]);
   const shiftTypes = useMemo(() => new Map(payload.shiftTypes.map((shift) => [shift.id, shift])), [payload.shiftTypes]);
@@ -917,7 +958,7 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
             </thead>
             <tbody>
               {payload.departments.map((department) => {
-                const employees = payload.employees.filter((employee) => normalizeDepartment(employee.department) === department && employee.active).sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName));
+                const employees = payload.employees.filter((employee) => employee.active && employeeDepartments(employee).includes(department)).sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName));
                 if (!employees.length) return null;
                 return [
                   <tr key={`${department}-header`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#2a211c] p-2 font-semibold text-white">{department} - {payload.totals.departmentWeeklyHours[department] || 0} hrs</td></tr>,
@@ -925,12 +966,14 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                     <tr key={employee.id}>
                       <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-white p-2 font-medium">{employee.displayName}<div className="text-xs text-[#5f5247]">{employee.position || ""}</div></td>
                       {payload.days.map((day) => {
-                        const assignment = assignments.get(`${employee.id}:${day}`);
+                        const rawAssignment = assignments.get(`${employee.id}:${day}`);
                         const hkBoard = housekeepingBoards.get(`${employee.id}:${day}`);
-                        const isHousekeeping = normalizeDepartment(employee.department) === "Housekeeping";
-                        const canEditCell = editable && editableDepartments.includes(normalizeDepartment(assignment?.roleWorked || employee.department));
+                        const rawShift = rawAssignment ? shiftTypes.get(rawAssignment.shiftTypeId || "") : undefined;
+                        const assignment = rawAssignment && assignmentDepartment(rawAssignment, employee, rawShift) === department ? rawAssignment : undefined;
+                        const isHousekeeping = department === "Housekeeping";
+                        const canEditCell = editable && editableDepartments.includes(department);
                         const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
-                        const shift = assignment ? shiftTypes.get(assignment.shiftTypeId || "") : undefined;
+                        const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;
                         return (
                           <td key={day} className="border border-[#e0d3c1] p-1 align-top">
                             <div className="space-y-1">
@@ -946,9 +989,9 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                                   event.preventDefault();
                                   const raw = event.dataTransfer.getData("application/json");
                                   if (!raw || !canEditCell) return;
-                                  onCopyShift(JSON.parse(raw), employee, day);
+                                  onCopyShift(JSON.parse(raw), employee, day, department);
                                 }}
-                                onClick={() => onEdit(employee, day, assignment)}
+                                onClick={() => onEdit(employee, day, department, assignment)}
                               >
                                 {approvedRequest ? t("Approved request") : shiftText(assignment, shift) || (editable ? `+ ${t("Add shift")}` : "-")}
                               </button>
@@ -981,7 +1024,7 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
         </div>
         <div className="space-y-4 lg:hidden">
           {payload.departments.map((department) => {
-            const employees = payload.employees.filter((employee) => normalizeDepartment(employee.department) === department && employee.active).sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName));
+            const employees = payload.employees.filter((employee) => employee.active && employeeDepartments(employee).includes(department)).sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName));
             if (!employees.length) return null;
             return (
               <div key={department}>
@@ -992,14 +1035,16 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                       <div className="mb-2 flex justify-between"><div className="font-semibold">{employee.displayName}</div><Badge variant="outline">{payload.totals.employeeWeeklyHours[employee.id] || 0} hrs</Badge></div>
                       <div className="grid gap-2">
                         {payload.days.map((day, index) => {
-                          const assignment = assignments.get(`${employee.id}:${day}`);
+                          const rawAssignment = assignments.get(`${employee.id}:${day}`);
                           const hkBoard = housekeepingBoards.get(`${employee.id}:${day}`);
-                          const isHousekeeping = normalizeDepartment(employee.department) === "Housekeeping";
+                          const rawShift = rawAssignment ? shiftTypes.get(rawAssignment.shiftTypeId || "") : undefined;
+                          const assignment = rawAssignment && assignmentDepartment(rawAssignment, employee, rawShift) === department ? rawAssignment : undefined;
+                          const isHousekeeping = department === "Housekeeping";
                           const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
-                          const shift = assignment ? shiftTypes.get(assignment.shiftTypeId || "") : undefined;
+                          const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;
                           return (
                             <div key={day} className="rounded-md border border-[#e0d3c1] bg-white p-2">
-                              <button disabled={!editable || Boolean(approvedRequest)} className="w-full text-left text-sm disabled:cursor-default" style={{ color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }} onClick={() => onEdit(employee, day, assignment)}>
+                              <button disabled={!editable || Boolean(approvedRequest)} className="w-full text-left text-sm disabled:cursor-default" style={{ color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }} onClick={() => onEdit(employee, day, department, assignment)}>
                                 <strong>{labels[index]} {formatDate(day)}:</strong> {approvedRequest ? t("Approved request") : shiftText(assignment, shift) || "-"}
                               </button>
                               {isHousekeeping && (
@@ -1038,6 +1083,28 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
   const toggleRole = (role: string) => setForm((current) => ({ ...current, rolesJson: current.rolesJson.includes(role) ? current.rolesJson.filter((item) => item !== role) : [...current.rolesJson, role] }));
   const employeePatch = (employee: ScheduleEmployee) => editing[employee.id] || employee;
   const saveEmployee = (employee: ScheduleEmployee) => onUpdate(employee.id, employeePatch(employee));
+  const toggleEmployeeRole = (employee: ScheduleEmployee, role: string) => {
+    const draft = employeePatch(employee);
+    const roles = rolesArray(draft.rolesJson);
+    const nextRoles = roles.includes(role) ? roles.filter((item) => item !== role) : [...roles, role];
+    setEditing({ ...editing, [employee.id]: { ...draft, rolesJson: nextRoles } });
+  };
+  const reorderEmployee = (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+    const ordered = [...employees].sort((a, b) => normalizeDepartment(a.department).localeCompare(normalizeDepartment(b.department)) || Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName));
+    const dragged = ordered.find((employee) => employee.id === draggedId);
+    const target = ordered.find((employee) => employee.id === targetId);
+    if (!dragged || !target || normalizeDepartment(dragged.department) !== normalizeDepartment(target.department)) return;
+    const sameDepartment = ordered.filter((employee) => normalizeDepartment(employee.department) === normalizeDepartment(target.department));
+    const from = sameDepartment.findIndex((employee) => employee.id === draggedId);
+    const to = sameDepartment.findIndex((employee) => employee.id === targetId);
+    if (from < 0 || to < 0) return;
+    const [moved] = sameDepartment.splice(from, 1);
+    sameDepartment.splice(to, 0, moved);
+    sameDepartment.forEach((employee, index) => {
+      if (Number(employee.sortOrder || 0) !== index + 1) onUpdate(employee.id, { sortOrder: index + 1 });
+    });
+  };
   return (
     <Card className={C.shell} data-tour="employees">
       <CardHeader>
@@ -1101,8 +1168,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
               onDrop={(event) => {
                 event.preventDefault();
                 const draggedId = event.dataTransfer.getData("text/plain");
-                const dragged = employees.find((item) => item.id === draggedId);
-                if (dragged && dragged.id !== employee.id) onUpdate(dragged.id, { sortOrder: Number(employee.sortOrder || index) });
+                reorderEmployee(draggedId, employee.id);
               }}>
               <div>
                 <Input className={C.field} value={draft.displayName || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, displayName: event.target.value } })} />
@@ -1111,7 +1177,18 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
                   <Input className={C.field} placeholder="Email" value={draft.email || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, email: event.target.value } })} />
                 </div>
                 {(!draft.phone || !draft.email) && <Badge variant="outline" className="mt-2 border-amber-300 bg-amber-50 text-amber-900">Missing phone/email</Badge>}
-                <div className="mt-2 flex flex-wrap gap-1">{roles.map((role) => <Badge key={role} variant="outline">{role}</Badge>)}</div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {SCHEDULE_ROLES.map((role) => (
+                    <button
+                      key={role}
+                      type="button"
+                      className={`rounded-full border px-2 py-1 text-xs font-semibold ${roles.includes(role) ? "border-[#2f5f46] bg-[#e8f3ec] text-[#244c37]" : "border-[#d6c8b5] bg-white text-[#5f5247]"}`}
+                      onClick={() => toggleEmployeeRole(employee, role)}
+                    >
+                      {role}
+                    </button>
+                  ))}
+                </div>
                 <div className="text-sm text-[#5f5247]">{draft.position || t("No position")} {draft.maxWeeklyHours ? `- max ${draft.maxWeeklyHours} hrs` : ""} {draft.isSalaried ? "- salaried" : ""} {canViewRates && draft.hourlyRate ? `- $${draft.hourlyRate}/hr` : ""}</div>
               </div>
               <Select value={normalizeDepartment(draft.department)} onValueChange={(department) => setEditing({ ...editing, [employee.id]: { ...draft, department } })}>
@@ -1200,7 +1277,7 @@ export default function SchedulePage() {
   const shareToken = params.get("share");
   const [selectedWeekId, setSelectedWeekId] = useState<string>("");
   const [weekStartDate, setWeekStartDate] = useState(saturdayFor());
-  const [selectedShift, setSelectedShift] = useState<{ employee: ScheduleEmployee; date: string; assignment?: ShiftAssignment } | null>(null);
+  const [selectedShift, setSelectedShift] = useState<{ employee: ScheduleEmployee; date: string; department: string; assignment?: ShiftAssignment } | null>(null);
   const [selectedHousekeepingBoard, setSelectedHousekeepingBoard] = useState<{ employee: ScheduleEmployee; date: string; board?: HousekeepingBoard } | null>(null);
   const [aiDraft, setAiDraft] = useState<AiScheduleDraft | null>(null);
   const [spanish, setSpanish] = useState(false);
@@ -1610,15 +1687,15 @@ export default function SchedulePage() {
               payload={payload}
               editable={editable}
               spanish={spanish}
-              onEdit={(employee, date, assignment) => setSelectedShift({ employee, date, assignment })}
-              onCopyShift={(assignment, employee, date) => saveShift.mutate({
+              onEdit={(employee, date, department, assignment) => setSelectedShift({ employee, date, department, assignment })}
+              onCopyShift={(assignment, employee, date, department) => saveShift.mutate({
                 employeeId: employee.id,
                 shiftDate: date,
                 shiftTypeId: assignment.shiftTypeId,
-                customStartTime: assignment.customStartTime,
-                customEndTime: assignment.customEndTime,
+                customStartTime: cleanTime(assignment.customStartTime),
+                customEndTime: cleanTime(assignment.customEndTime),
                 unpaidBreakMinutes: assignment.unpaidBreakMinutes,
-                roleWorked: assignment.roleWorked,
+                roleWorked: assignment.roleWorked || rolesArray(employee.rolesJson).find((role) => roleDepartment(role) === department) || department,
                 roleNote: assignment.roleNote,
                 managerNote: assignment.managerNote,
                 isOpenShift: assignment.isOpenShift,
@@ -1647,6 +1724,7 @@ export default function SchedulePage() {
           payload={payload}
           employee={selectedShift.employee}
           date={selectedShift.date}
+          rowDepartment={selectedShift.department}
           assignment={selectedShift.assignment}
           onSave={(body) => saveShift.mutate(body)}
           onClear={() => saveShift.mutate({ employeeId: selectedShift.employee.id, shiftDate: selectedShift.date, clear: true })}

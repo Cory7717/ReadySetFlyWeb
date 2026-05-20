@@ -432,6 +432,10 @@ export const scheduleEmployees = pgTable("schedule_employees", {
   displayName: text("display_name").notNull(),
   department: text("department").notNull().default("Other"),
   position: text("position"),
+  rolesJson: jsonb("roles_json"),
+  isSalaried: boolean("is_salaried").notNull().default(false),
+  isDepartmentManager: boolean("is_department_manager").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
   defaultShiftType: text("default_shift_type"),
   maxWeeklyHours: numeric("max_weekly_hours", { precision: 6, scale: 2 }),
   hourlyRate: numeric("hourly_rate", { precision: 10, scale: 2 }),
@@ -445,6 +449,7 @@ export const scheduleEmployees = pgTable("schedule_employees", {
 }, (table) => [
   index("idx_schedule_employees_department").on(table.department),
   index("idx_schedule_employees_active").on(table.active),
+  index("idx_schedule_employees_sort").on(table.department, table.sortOrder),
 ]);
 
 export const scheduleShiftTypes = pgTable("schedule_shift_types", {
@@ -472,6 +477,7 @@ export const weeklySchedules = pgTable("weekly_schedules", {
   weekStartDate: date("week_start_date").notNull(),
   weekEndDate: date("week_end_date").notNull(),
   status: text("status").notNull().default("draft"),
+  departmentStatusJson: jsonb("department_status_json"),
   createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
   publishedAt: timestamp("published_at"),
   archivedAt: timestamp("archived_at"),
@@ -521,6 +527,7 @@ export const scheduleShiftAssignments = pgTable("schedule_shift_assignments", {
   customStartTime: time("custom_start_time"),
   customEndTime: time("custom_end_time"),
   unpaidBreakMinutes: integer("unpaid_break_minutes"),
+  roleWorked: text("role_worked"),
   roleNote: text("role_note"),
   managerNote: text("manager_note"),
   isOpenShift: boolean("is_open_shift").notNull().default(false),

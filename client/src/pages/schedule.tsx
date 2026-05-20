@@ -43,7 +43,8 @@ const C = {
   darkButton: "!border-[#111827] !bg-[#1f2937] !bg-none !text-white hover:!bg-[#111827]",
 };
 
-const DEPARTMENTS = ["Managers", "Front Desk", "Bistro", "Maintenance", "Housekeeping"];
+const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
+const SCHEDULE_ROLES = ["GM", "DOS", "MOD", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
 const DAY_LABELS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 const DAY_LABELS_ES = ["Sab", "Dom", "Lun", "Mar", "Mie", "Jue", "Vie"];
 
@@ -174,6 +175,10 @@ type ScheduleEmployee = {
   displayName: string;
   department: string;
   position?: string | null;
+  rolesJson?: string[] | null;
+  isSalaried?: boolean;
+  isDepartmentManager?: boolean;
+  sortOrder?: number;
   defaultShiftType?: string | null;
   maxWeeklyHours?: string | null;
   hourlyRate?: string | null;
@@ -242,6 +247,7 @@ type ShiftAssignment = {
   unpaidBreakMinutes?: number | null;
   roleNote?: string | null;
   managerNote?: string | null;
+  roleWorked?: string | null;
   isOpenShift: boolean;
 };
 
@@ -266,6 +272,7 @@ type SchedulePayload = {
   schedule: WeeklySchedule;
   days: string[];
   departments: string[];
+  requiredDepartments?: string[];
   employees: ScheduleEmployee[];
   shiftTypes: ShiftType[];
   forecast: ForecastDay[];
@@ -277,10 +284,12 @@ type SchedulePayload = {
     departmentDailyHours: Record<string, Record<string, number>>;
     departmentWeeklyHours: Record<string, number>;
     departmentWeeklyLaborDollars?: Record<string, number>;
+    departmentWeeklyLaborDollarsIncludingSalary?: Record<string, number>;
     dailyLaborHours: Record<string, number>;
     dailyLaborDollars?: Record<string, number>;
     totalWeeklyLaborHours: string;
     totalWeeklyLaborDollars?: string;
+    totalWeeklyLaborDollarsIncludingSalary?: string;
     coverage: Record<string, Record<string, number>>;
     openShiftCount: number;
     warnings: string[];
@@ -296,6 +305,8 @@ type SchedulePayload = {
     };
   };
   readOnly?: boolean;
+  departmentStatus?: Record<string, { completedAt?: string; completedBy?: string }>;
+  currentUserPermissions?: { editableDepartments: string[]; canPublishFinal: boolean };
 };
 
 type LaborMetrics = {
@@ -374,14 +385,24 @@ function shiftText(assignment: ShiftAssignment | undefined, shiftType: ShiftType
   if (!assignment || !shiftType) return "";
   const start = assignment.customStartTime || shiftType.startTime;
   const end = assignment.customEndTime || shiftType.endTime;
-  const base = start && end ? `${start.slice(0, 5)}-${end.slice(0, 5)}` : shiftType.label;
-  return [base, assignment.roleNote].filter(Boolean).join(" ");
+  const base = start && end ? `${formatTime12(start)} - ${formatTime12(end)}` : shiftType.label;
+  return [base, assignment.roleWorked, assignment.roleNote].filter(Boolean).join(" ");
+}
+
+function formatTime12(value?: string | null) {
+  if (!value) return "";
+  const [hh, mm] = value.slice(0, 5).split(":").map(Number);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return value || "";
+  const period = hh >= 12 ? "PM" : "AM";
+  const hour = hh % 12 || 12;
+  return `${hour}:${String(mm).padStart(2, "0")} ${period}`;
 }
 
 function normalizeDepartment(value?: string | null) {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized.includes("leadership") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
-  if (normalized.includes("front") || normalized.includes("audit")) return "Front Desk";
+  if (normalized.includes("audit") || normalized.includes("night")) return "Night Audit";
+  if (normalized.includes("front")) return "Front Desk";
   if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
   if (normalized.includes("engineer") || normalized.includes("maintenance")) return "Maintenance";
   if (normalized.includes("house") || normalized.includes("laundry")) return "Housekeeping";
@@ -408,6 +429,12 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function rolesArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
 function inferRoomCapacity(day: ForecastDay) {
   const otbRooms = numberValue(day.otbRoomsSold);
   const otbOcc = numberValue(day.otbOccupancyPercent);
@@ -429,10 +456,10 @@ function housekeepingBoardTone(board?: HousekeepingBoard) {
 function ScheduleAuthGate({ onDone }: { onDone: () => void }) {
   const { toast } = useToast();
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [form, setForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", email: "", password: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", email: "", password: "", phone: "", department: "Front Desk", rolesJson: [] as string[], position: "" });
   const login = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", mode === "login" ? "/api/tips/auth/login" : "/api/tips/auth/register", mode === "login" ? { email: form.email, password: form.password } : form);
+      const response = await apiRequest("POST", mode === "login" ? "/api/tips/auth/login" : "/api/schedule/auth/register", mode === "login" ? { email: form.email, password: form.password } : form);
       return response.json();
     },
     onSuccess: onDone,
@@ -452,6 +479,12 @@ function ScheduleAuthGate({ onDone }: { onDone: () => void }) {
                 <div><Label>First name</Label><Input className={C.field} value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} /></div>
                 <div><Label>Last name</Label><Input className={C.field} value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} /></div>
                 <div className="sm:col-span-2"><Label>Display name</Label><Input className={C.field} value={form.employeeDisplayName} onChange={(event) => setForm({ ...form, employeeDisplayName: event.target.value })} placeholder="Optional" /></div>
+                <div><Label>Phone</Label><Input className={C.field} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></div>
+                <div><Label>Department</Label><Select value={form.department} onValueChange={(department) => setForm({ ...form, department })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent></Select></div>
+                <div className="sm:col-span-2">
+                  <Label>Roles</Label>
+                  <div className="mt-1 flex flex-wrap gap-2">{SCHEDULE_ROLES.map((role) => <Button key={role} size="sm" variant="outline" className={form.rolesJson.includes(role) ? C.green : C.outline} onClick={() => setForm({ ...form, rolesJson: form.rolesJson.includes(role) ? form.rolesJson.filter((item) => item !== role) : [...form.rolesJson, role] })}>{role}</Button>)}</div>
+                </div>
               </div>
             )}
             <div><Label>Email</Label><Input className={C.field} type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></div>
@@ -714,10 +747,21 @@ function ShiftEditDialog({
     customStartTime: assignment?.customStartTime?.slice(0, 5) || "",
     customEndTime: assignment?.customEndTime?.slice(0, 5) || "",
     unpaidBreakMinutes: assignment?.unpaidBreakMinutes?.toString() || "",
+    roleWorked: assignment?.roleWorked || employee?.rolesJson?.[0] || "",
     roleNote: assignment?.roleNote || "",
     managerNote: assignment?.managerNote || "",
     isOpenShift: assignment?.isOpenShift || false,
   });
+  const selectShiftType = (shiftTypeId: string) => {
+    const shift = payload.shiftTypes.find((item) => item.id === shiftTypeId);
+    setForm({
+      ...form,
+      shiftTypeId: shiftTypeId === "none" ? "" : shiftTypeId,
+      customStartTime: shift?.startTime?.slice(0, 5) || "",
+      customEndTime: shift?.endTime?.slice(0, 5) || "",
+      roleWorked: form.roleWorked || shift?.label || "",
+    });
+  };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg bg-[#fffaf2] text-[#201814]">
@@ -728,11 +772,21 @@ function ShiftEditDialog({
         <div className="space-y-3">
           <div>
             <Label>Shift type</Label>
-            <Select value={form.shiftTypeId || "none"} onValueChange={(shiftTypeId) => setForm({ ...form, shiftTypeId: shiftTypeId === "none" ? "" : shiftTypeId })}>
+            <Select value={form.shiftTypeId || "none"} onValueChange={selectShiftType}>
               <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Clear / no shift</SelectItem>
                 {payload.shiftTypes.filter((shift) => shift.active).map((shift) => <SelectItem key={shift.id} value={shift.id}>{shift.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Role worked</Label>
+            <Select value={form.roleWorked || "none"} onValueChange={(roleWorked) => setForm({ ...form, roleWorked: roleWorked === "none" ? "" : roleWorked })}>
+              <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No role label</SelectItem>
+                {Array.from(new Set([...(employee?.rolesJson || []), ...SCHEDULE_ROLES])).map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -744,7 +798,7 @@ function ShiftEditDialog({
           <div><Label>Role / station note</Label><Input className={C.field} value={form.roleNote} onChange={(event) => setForm({ ...form, roleNote: event.target.value })} placeholder="Breakfast, MOD, desk, etc." /></div>
           <div><Label>Manager note</Label><Textarea className={C.field} value={form.managerNote} onChange={(event) => setForm({ ...form, managerNote: event.target.value })} rows={2} /></div>
           <div className="flex gap-2">
-            <Button className={C.green} onClick={() => onSave({ employeeId: employee?.id || null, shiftDate: date, ...form, unpaidBreakMinutes: form.unpaidBreakMinutes === "" ? null : Number(form.unpaidBreakMinutes) })}>Save shift</Button>
+            <Button className={C.green} onClick={() => onSave({ employeeId: employee?.id || null, shiftDate: date, ...form, roleWorked: form.roleWorked || null, unpaidBreakMinutes: form.unpaidBreakMinutes === "" ? null : Number(form.unpaidBreakMinutes) })}>Save shift</Button>
             <Button variant="outline" className={C.outline} onClick={onClear}>Clear</Button>
           </div>
         </div>
@@ -837,13 +891,14 @@ function HousekeepingBoardDialog({
   );
 }
 
-function ScheduleGrid({ payload, editable, onEdit, onHousekeepingBoard, spanish }: { payload: SchedulePayload; editable: boolean; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, assignment?: ShiftAssignment) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board?: HousekeepingBoard) => void }) {
+function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBoard, spanish }: { payload: SchedulePayload; editable: boolean; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, assignment?: ShiftAssignment) => void; onCopyShift: (assignment: ShiftAssignment, employee: ScheduleEmployee, date: string) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board?: HousekeepingBoard) => void }) {
   const assignments = useMemo(() => new Map(payload.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment])), [payload.assignments]);
   const housekeepingBoards = useMemo(() => new Map((payload.housekeepingBoards || []).map((board) => [`${board.employeeId}:${board.boardDate}`, board])), [payload.housekeepingBoards]);
   const shiftTypes = useMemo(() => new Map(payload.shiftTypes.map((shift) => [shift.id, shift])), [payload.shiftTypes]);
   const approvedRequests = useMemo(() => new Map((payload.approvedRequests || []).map((request) => [`${request.employeeId}:${request.requestDate}`, request])), [payload.approvedRequests]);
   const t = (value: string) => spanish ? ES[value] || value : value;
   const labels = spanish ? DAY_LABELS_ES : DAY_LABELS;
+  const editableDepartments = payload.currentUserPermissions?.editableDepartments || [];
   return (
     <Card className={C.shell} data-tour="schedule-grid">
       <CardHeader>
@@ -862,7 +917,7 @@ function ScheduleGrid({ payload, editable, onEdit, onHousekeepingBoard, spanish 
             </thead>
             <tbody>
               {payload.departments.map((department) => {
-                const employees = payload.employees.filter((employee) => normalizeDepartment(employee.department) === department && employee.active);
+                const employees = payload.employees.filter((employee) => normalizeDepartment(employee.department) === department && employee.active).sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName));
                 if (!employees.length) return null;
                 return [
                   <tr key={`${department}-header`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#2a211c] p-2 font-semibold text-white">{department} - {payload.totals.departmentWeeklyHours[department] || 0} hrs</td></tr>,
@@ -873,6 +928,7 @@ function ScheduleGrid({ payload, editable, onEdit, onHousekeepingBoard, spanish 
                         const assignment = assignments.get(`${employee.id}:${day}`);
                         const hkBoard = housekeepingBoards.get(`${employee.id}:${day}`);
                         const isHousekeeping = normalizeDepartment(employee.department) === "Housekeeping";
+                        const canEditCell = editable && editableDepartments.includes(normalizeDepartment(assignment?.roleWorked || employee.department));
                         const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
                         const shift = assignment ? shiftTypes.get(assignment.shiftTypeId || "") : undefined;
                         return (
@@ -880,9 +936,18 @@ function ScheduleGrid({ payload, editable, onEdit, onHousekeepingBoard, spanish 
                             <div className="space-y-1">
                               <button
                                 type="button"
-                                disabled={!editable || Boolean(approvedRequest)}
+                                draggable={canEditCell && Boolean(assignment)}
+                                disabled={!canEditCell || Boolean(approvedRequest)}
                                 className="min-h-12 w-full rounded-md border border-[#e0d3c1] p-2 text-left text-xs disabled:cursor-default"
                                 style={{ background: approvedRequest ? "#e5e7eb" : shift?.color || "#ffffff", color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }}
+                                onDragStart={(event) => assignment && event.dataTransfer.setData("application/json", JSON.stringify(assignment))}
+                                onDragOver={(event) => canEditCell && event.preventDefault()}
+                                onDrop={(event) => {
+                                  event.preventDefault();
+                                  const raw = event.dataTransfer.getData("application/json");
+                                  if (!raw || !canEditCell) return;
+                                  onCopyShift(JSON.parse(raw), employee, day);
+                                }}
                                 onClick={() => onEdit(employee, day, assignment)}
                               >
                                 {approvedRequest ? t("Approved request") : shiftText(assignment, shift) || (editable ? `+ ${t("Add shift")}` : "-")}
@@ -890,7 +955,7 @@ function ScheduleGrid({ payload, editable, onEdit, onHousekeepingBoard, spanish 
                               {isHousekeeping && (
                                 <button
                                   type="button"
-                                  disabled={!editable}
+                                  disabled={!canEditCell}
                                   className={`w-full rounded-md border px-2 py-1 text-center text-[11px] font-semibold disabled:cursor-default ${housekeepingBoardTone(hkBoard)}`}
                                   onClick={() => onHousekeepingBoard(employee, day, hkBoard)}
                                 >
@@ -916,7 +981,7 @@ function ScheduleGrid({ payload, editable, onEdit, onHousekeepingBoard, spanish 
         </div>
         <div className="space-y-4 lg:hidden">
           {payload.departments.map((department) => {
-            const employees = payload.employees.filter((employee) => normalizeDepartment(employee.department) === department && employee.active);
+            const employees = payload.employees.filter((employee) => normalizeDepartment(employee.department) === department && employee.active).sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName));
             if (!employees.length) return null;
             return (
               <div key={department}>
@@ -965,8 +1030,14 @@ function ScheduleGrid({ payload, editable, onEdit, onHousekeepingBoard, spanish 
 
 function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollImport, importingPayroll, spanish }: { employees: ScheduleEmployee[]; canViewRates: boolean; spanish: boolean; onAdd: (employee: any) => void; onUpdate: (id: string, patch: any) => void; onPayrollImport: (file: File) => void; importingPayroll: boolean }) {
   const payrollInputRef = useRef<HTMLInputElement | null>(null);
-  const [form, setForm] = useState({ firstName: "", lastName: "", displayName: "", department: "Front Desk", position: "", maxWeeklyHours: "40", hourlyRate: "", email: "", phone: "" });
+  const emptyForm = { firstName: "", lastName: "", displayName: "", department: "Front Desk", position: "", rolesJson: [] as string[], maxWeeklyHours: "40", hourlyRate: "", email: "", phone: "", isSalaried: false, isDepartmentManager: false };
+  const [form, setForm] = useState(emptyForm);
+  const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState<Record<string, any>>({});
   const t = (value: string) => tr(spanish, value);
+  const toggleRole = (role: string) => setForm((current) => ({ ...current, rolesJson: current.rolesJson.includes(role) ? current.rolesJson.filter((item) => item !== role) : [...current.rolesJson, role] }));
+  const employeePatch = (employee: ScheduleEmployee) => editing[employee.id] || employee;
+  const saveEmployee = (employee: ScheduleEmployee) => onUpdate(employee.id, employeePatch(employee));
   return (
     <Card className={C.shell} data-tour="employees">
       <CardHeader>
@@ -983,11 +1054,19 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
             <SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent>
           </Select>
           <Input className={C.field} placeholder={t("Position")} value={form.position} onChange={(event) => setForm({ ...form, position: event.target.value })} />
+          <div className="sm:col-span-2">
+            <Label>{t("Roles")}</Label>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {SCHEDULE_ROLES.map((role) => <Button key={role} type="button" size="sm" variant="outline" className={form.rolesJson.includes(role) ? C.green : C.outline} onClick={() => toggleRole(role)}>{role}</Button>)}
+            </div>
+          </div>
           <Input className={C.field} placeholder={t("Max weekly hours")} type="number" value={form.maxWeeklyHours} onChange={(event) => setForm({ ...form, maxWeeklyHours: event.target.value })} />
           {canViewRates && <Input className={C.field} placeholder={t("Hourly rate")} type="number" value={form.hourlyRate} onChange={(event) => setForm({ ...form, hourlyRate: event.target.value })} />}
           <Input className={C.field} placeholder={t("Email")} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
           <Input className={C.field} placeholder={t("Phone")} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
-          <Button className={C.green} onClick={() => onAdd({ ...form, maxWeeklyHours: Number(form.maxWeeklyHours || 0), hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate) })}><Plus className="mr-2 h-4 w-4" />{t("Add employee")}</Button>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isSalaried} onChange={(event) => setForm({ ...form, isSalaried: event.target.checked })} /> Salaried</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isDepartmentManager} onChange={(event) => setForm({ ...form, isDepartmentManager: event.target.checked })} /> Department manager</label>
+          <Button className={C.green} onClick={() => { onAdd({ ...form, maxWeeklyHours: Number(form.maxWeeklyHours || 0), hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate) }); setForm(emptyForm); }}><Plus className="mr-2 h-4 w-4" />{t("Add employee")}</Button>
           {canViewRates && (
             <>
               <input
@@ -1008,21 +1087,44 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
             </>
           )}
         </div>
-        <div className="space-y-2">
-          {employees.map((employee) => (
-            <div key={employee.id} className={`grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_220px_120px] ${employee.active ? "border-[#e0d3c1] bg-white" : "border-slate-300 bg-slate-100"}`}>
+        <div className="flex justify-between">
+          <Button variant="outline" className={C.outline} onClick={() => setExpanded((value) => !value)}>{expanded ? "Hide employee list" : "Show employee list"}</Button>
+        </div>
+        {expanded && <div className="space-y-2">
+          {[...employees].sort((a, b) => normalizeDepartment(a.department).localeCompare(normalizeDepartment(b.department)) || Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName)).map((employee, index) => {
+            const draft = employeePatch(employee);
+            const roles = rolesArray(draft.rolesJson);
+            return (
+            <div key={employee.id} draggable className={`grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_220px_120px] ${employee.active ? "border-[#e0d3c1] bg-white" : "border-slate-300 bg-slate-100"}`}
+              onDragStart={(event) => event.dataTransfer.setData("text/plain", employee.id)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const draggedId = event.dataTransfer.getData("text/plain");
+                const dragged = employees.find((item) => item.id === draggedId);
+                if (dragged && dragged.id !== employee.id) onUpdate(dragged.id, { sortOrder: Number(employee.sortOrder || index) });
+              }}>
               <div>
-                <div className="font-semibold">{employee.displayName}</div>
-                <div className="text-sm text-[#5f5247]">{employee.position || t("No position")} {employee.maxWeeklyHours ? `- max ${employee.maxWeeklyHours} hrs` : ""} {canViewRates && employee.hourlyRate ? `- $${employee.hourlyRate}/hr` : ""}</div>
+                <Input className={C.field} value={draft.displayName || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, displayName: event.target.value } })} />
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <Input className={C.field} placeholder="Phone" value={draft.phone || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, phone: event.target.value } })} />
+                  <Input className={C.field} placeholder="Email" value={draft.email || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, email: event.target.value } })} />
+                </div>
+                {(!draft.phone || !draft.email) && <Badge variant="outline" className="mt-2 border-amber-300 bg-amber-50 text-amber-900">Missing phone/email</Badge>}
+                <div className="mt-2 flex flex-wrap gap-1">{roles.map((role) => <Badge key={role} variant="outline">{role}</Badge>)}</div>
+                <div className="text-sm text-[#5f5247]">{draft.position || t("No position")} {draft.maxWeeklyHours ? `- max ${draft.maxWeeklyHours} hrs` : ""} {draft.isSalaried ? "- salaried" : ""} {canViewRates && draft.hourlyRate ? `- $${draft.hourlyRate}/hr` : ""}</div>
               </div>
-              <Select value={normalizeDepartment(employee.department)} onValueChange={(department) => onUpdate(employee.id, { department })}>
+              <Select value={normalizeDepartment(draft.department)} onValueChange={(department) => setEditing({ ...editing, [employee.id]: { ...draft, department } })}>
                 <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
                 <SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent>
               </Select>
-              <Button variant="outline" className={C.outline} onClick={() => onUpdate(employee.id, { active: !employee.active })}>{employee.active ? t("Deactivate") : t("Activate")}</Button>
+              <div className="flex flex-col gap-2">
+                <Button className={C.green} onClick={() => saveEmployee(employee)}>Save</Button>
+                <Button variant="outline" className={C.outline} onClick={() => onUpdate(employee.id, { active: !employee.active })}>{employee.active ? t("Deactivate") : t("Activate")}</Button>
+              </div>
             </div>
-          ))}
-        </div>
+          );})}
+        </div>}
       </CardContent>
     </Card>
   );
@@ -1211,7 +1313,8 @@ export default function SchedulePage() {
   });
   const generateAiSchedule = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/generate`, {});
+      const department = payload?.currentUserPermissions?.editableDepartments?.find((item) => item !== "Managers") || payload?.currentUserPermissions?.editableDepartments?.[0] || "Front Desk";
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/generate`, { department });
       return response.json() as Promise<AiScheduleDraft>;
     },
     onSuccess: (data) => {
@@ -1259,6 +1362,14 @@ export default function SchedulePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
     },
+  });
+  const completeDepartment = useMutation({
+    mutationFn: (department: string) => apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/departments/${encodeURIComponent(department)}/complete`, {}),
+    onSuccess: () => {
+      toast({ title: "Department completed" });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
+    },
+    onError: (error: Error) => toast({ title: "Department save failed", description: error.message, variant: "destructive" }),
   });
   const shareLink = useMutation({
     mutationFn: async () => {
@@ -1334,7 +1445,7 @@ export default function SchedulePage() {
               {payload && (
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline" className={statusBadge(payload.schedule.status)}>{payload.schedule.status}</Badge>
-                  {payload.schedule.status === "draft" && user?.isAdmin && <Button className={C.green} onClick={() => action.mutate({ name: "publish" })}><CheckCircle2 className="mr-2 h-4 w-4" />{t("Publish")}</Button>}
+                  {payload.schedule.status === "draft" && payload.currentUserPermissions?.canPublishFinal && <Button className={C.green} onClick={() => action.mutate({ name: "publish" })}><CheckCircle2 className="mr-2 h-4 w-4" />Save & Publish Final Schedule</Button>}
                   {payload.schedule.status === "published" && user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "reopen", body: { reason: "Manager edit" } })}><RefreshCw className="mr-2 h-4 w-4" />{t("Reopen")}</Button>}
                   {user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "archive" })}><Archive className="mr-2 h-4 w-4" />{t("Archive")}</Button>}
                   {payload.schedule.status === "published" && user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => shareLink.mutate()}><Share2 className="mr-2 h-4 w-4" />{t("Copy share link")}</Button>}
@@ -1389,7 +1500,7 @@ export default function SchedulePage() {
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">{spanish ? ES["Weekly hours"] : "Weekly hours"}</div><div className="text-3xl font-semibold">{payload.totals.totalWeeklyLaborHours}</div></div>
-                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Labor $</div><div className="text-3xl font-semibold">${payload.totals.totalWeeklyLaborDollars || "0.00"}</div></div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Hourly labor $</div><div className="text-3xl font-semibold">${payload.totals.totalWeeklyLaborDollars || "0.00"}</div><div className="text-xs text-[#5f5247]">Incl. salary: ${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}</div></div>
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
                   <div className="text-sm text-[#5f5247]">HPOR target {payload.totals.laborMetrics?.targets.hpor ?? 1.3}</div>
                   <div className={`text-3xl font-semibold ${metricTone(payload.totals.laborMetrics?.weekly.hpor || 0, payload.totals.laborMetrics?.targets.hpor || 1.3)}`}>{payload.totals.laborMetrics?.weekly.hpor ?? "0.00"}</div>
@@ -1438,6 +1549,30 @@ export default function SchedulePage() {
                 </CardContent>
               </Card>
             )}
+            {user?.isAdmin && (
+              <Card className={C.shell}>
+                <CardHeader>
+                  <CardTitle className={C.ink}>Department completion</CardTitle>
+                  <CardDescription className={C.muted}>Department managers save their section when complete. GM/admin publishes after all required departments are complete.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-2">
+                  {(payload.requiredDepartments || []).map((department) => {
+                    const completed = Boolean(payload.departmentStatus?.[department]?.completedAt);
+                    const canComplete = payload.currentUserPermissions?.editableDepartments?.includes(department);
+                    return (
+                      <div key={department} className="rounded-lg border border-[#e0d3c1] bg-white p-3">
+                        <div className="font-semibold">{department}</div>
+                        <Badge variant="outline" className={completed ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-amber-300 bg-amber-50 text-amber-900"}>{completed ? "Completed" : "Open"}</Badge>
+                        {canComplete && !completed && <Button size="sm" className={`${C.green} ml-2`} onClick={() => completeDepartment.mutate(department)}>Save section</Button>}
+                      </div>
+                    );
+                  })}
+                  {(payload.requiredDepartments || []).every((department) => payload.departmentStatus?.[department]?.completedAt) && (
+                    <div className="w-full rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-emerald-900">Full schedule is ready to review and publish.</div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
             {payload.totals.bistroLabor && (
               <Card className={C.shell}>
                 <CardHeader>
@@ -1476,6 +1611,18 @@ export default function SchedulePage() {
               editable={editable}
               spanish={spanish}
               onEdit={(employee, date, assignment) => setSelectedShift({ employee, date, assignment })}
+              onCopyShift={(assignment, employee, date) => saveShift.mutate({
+                employeeId: employee.id,
+                shiftDate: date,
+                shiftTypeId: assignment.shiftTypeId,
+                customStartTime: assignment.customStartTime,
+                customEndTime: assignment.customEndTime,
+                unpaidBreakMinutes: assignment.unpaidBreakMinutes,
+                roleWorked: assignment.roleWorked,
+                roleNote: assignment.roleNote,
+                managerNote: assignment.managerNote,
+                isOpenShift: assignment.isOpenShift,
+              })}
               onHousekeepingBoard={(employee, date, board) => setSelectedHousekeepingBoard({ employee, date, board })}
             />
             {user?.isAdmin && !shareToken && (

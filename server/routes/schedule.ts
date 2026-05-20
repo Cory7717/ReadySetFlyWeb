@@ -4,6 +4,7 @@ import multer from "multer";
 import OpenAI from "openai";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import bcrypt from "bcrypt";
 import { z } from "zod";
 import { and, asc, desc, eq, inArray, isNull, lte, lt } from "drizzle-orm";
 import { db } from "../db";
@@ -30,7 +31,9 @@ const SCHEDULE_ADMIN_EMAILS = new Set(
 );
 
 const PROPERTY_NAME = process.env.SCHEDULE_PROPERTY_NAME || "Courtyard Austin Lakeline";
-const DEPARTMENTS = ["Managers", "Front Desk", "Bistro", "Maintenance", "Housekeeping"];
+const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
+const REQUIRED_DEPARTMENTS = ["Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
+const SCHEDULE_ROLES = ["GM", "DOS", "MOD", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
 const DAY_MS = 86_400_000;
 const TARGET_OCCUPANCY_PERCENT = Number(process.env.SCHEDULE_TARGET_OCCUPANCY_PERCENT || 65);
 const TARGET_HPOR = Number(process.env.SCHEDULE_TARGET_HPOR || 1.3);
@@ -55,9 +58,12 @@ const BISTRO_LABOR_SCALE = [
 ];
 
 const DEFAULT_SHIFT_TYPES = [
+  { label: "FD AM", startTime: "07:00", endTime: "15:00", color: "#dbeafe", textColor: "#0f172a", departmentHint: "Front Desk" },
+  { label: "FD PM", startTime: "15:00", endTime: "23:00", color: "#ede9fe", textColor: "#1e1b4b", departmentHint: "Front Desk" },
+  { label: "Night Audit", startTime: "23:00", endTime: "07:00", color: "#111827", textColor: "#ffffff", departmentHint: "Night Audit", isOvernight: true },
   { label: "AM", startTime: "07:00", endTime: "15:00", color: "#dbeafe", textColor: "#0f172a", departmentHint: "Front Desk" },
   { label: "PM", startTime: "15:00", endTime: "23:00", color: "#ede9fe", textColor: "#1e1b4b", departmentHint: "Front Desk" },
-  { label: "AUDIT", startTime: "23:00", endTime: "07:00", color: "#111827", textColor: "#ffffff", departmentHint: "Front Desk", isOvernight: true },
+  { label: "AUDIT", startTime: "23:00", endTime: "07:00", color: "#111827", textColor: "#ffffff", departmentHint: "Night Audit", isOvernight: true },
   { label: "MID", startTime: "10:00", endTime: "18:00", color: "#e0f2fe", textColor: "#0c4a6e", departmentHint: "Front Desk" },
   { label: "BISTRO AM", startTime: "06:00", endTime: "14:00", color: "#fef3c7", textColor: "#713f12", departmentHint: "Bistro" },
   { label: "BISTRO PM", startTime: "14:00", endTime: "22:00", color: "#fed7aa", textColor: "#7c2d12", departmentHint: "Bistro" },
@@ -119,11 +125,27 @@ function daysBetween(start: string, end: string) {
 function normalizeDepartment(value?: string | null) {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized.includes("leadership") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
-  if (normalized.includes("front") || normalized.includes("audit")) return "Front Desk";
+  if (normalized.includes("audit") || normalized.includes("night")) return "Night Audit";
+  if (normalized.includes("front")) return "Front Desk";
   if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
   if (normalized.includes("engineer") || normalized.includes("maintenance")) return "Maintenance";
-  if (normalized.includes("house") || normalized.includes("laundry")) return "Housekeeping";
+  if (normalized.includes("house") || normalized.includes("laundry") || normalized.includes("room attendant") || normalized.includes("inspector")) return "Housekeeping";
   return DEPARTMENTS.includes(String(value || "")) ? String(value) : "Front Desk";
+}
+
+function rolesArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
+function managerDepartmentsForUser(user: any, employees: any[] = []) {
+  const publicUser = publicScheduleUser(user);
+  if (publicUser.isSuperAdmin) return DEPARTMENTS;
+  const employee = employees.find((item) => normalizeEmail(String(item.email || "")) === normalizeEmail(String(user.email || "")));
+  if (employee?.isDepartmentManager) return [normalizeDepartment(employee.department)];
+  if (publicUser.isAdmin) return [normalizeDepartment(employee?.department || user.position)];
+  return [];
 }
 
 function minutesFromTime(value?: string | null) {
@@ -157,6 +179,7 @@ function publicScheduleUser(user: any) {
     role,
     isAdmin: role === "manager" || role === "super_admin",
     isSuperAdmin: role === "super_admin",
+    scheduleRoles: rolesArray(user.scheduleRoles),
     disabledAt: user.disabledAt ?? null,
     mustChangePassword: Boolean(user.mustChangePassword),
   };
@@ -182,6 +205,38 @@ async function getScheduleEmployeeByEmail(email: string) {
   if (!normalizedEmail) return null;
   const employees = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
   return employees.find((employee) => normalizeEmail(String(employee.email || "")) === normalizedEmail) || null;
+}
+
+function employeeProfileMatches(employee: any, input: { email?: string; phone?: string; firstName?: string; lastName?: string }) {
+  const emailMatch = input.email && normalizeEmail(String(employee.email || "")) === normalizeEmail(input.email);
+  const phoneMatch = input.phone && String(employee.phone || "").replace(/\D/g, "") === String(input.phone || "").replace(/\D/g, "");
+  const nameMatch = input.firstName && input.lastName &&
+    String(employee.firstName || "").trim().toLowerCase() === input.firstName.trim().toLowerCase() &&
+    String(employee.lastName || "").trim().toLowerCase() === input.lastName.trim().toLowerCase();
+  return Boolean(emailMatch || phoneMatch || nameMatch);
+}
+
+async function upsertScheduleEmployeeForUser(user: any, profile: any) {
+  const employees = await db.select().from(scheduleEmployees);
+  const existing = employees.find((employee) => employeeProfileMatches(employee, profile));
+  const values = {
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    displayName: profile.employeeDisplayName || `${profile.firstName} ${profile.lastName}`,
+    email: normalizeEmail(profile.email),
+    phone: profile.phone,
+    department: normalizeDepartment(profile.department),
+    position: profile.position || rolesArray(profile.rolesJson).join(", "),
+    rolesJson: rolesArray(profile.rolesJson),
+    updatedAt: new Date(),
+  } as any;
+  if (existing) {
+    const [employee] = await db.update(scheduleEmployees).set(values).where(eq(scheduleEmployees.id, existing.id)).returning();
+    return employee;
+  }
+  const nextSort = employees.filter((employee) => normalizeDepartment(employee.department) === normalizeDepartment(profile.department)).length + 1;
+  const [employee] = await db.insert(scheduleEmployees).values({ ...values, sortOrder: nextSort, active: true } as any).returning();
+  return employee;
 }
 
 async function getScheduleRequestDepartment(user: any) {
@@ -298,6 +353,10 @@ const employeeSchema = z.object({
   displayName: z.string().trim().min(1).max(140).optional(),
   department: z.string().trim().min(1).max(120).default("Front Desk"),
   position: z.string().trim().max(120).optional().nullable(),
+  rolesJson: z.array(z.string().trim().min(1).max(80)).optional().nullable(),
+  isSalaried: z.boolean().optional().default(false),
+  isDepartmentManager: z.boolean().optional().default(false),
+  sortOrder: z.coerce.number().int().min(0).optional().default(0),
   defaultShiftType: z.string().trim().max(80).optional().nullable(),
   maxWeeklyHours: z.coerce.number().min(0).max(168).optional().nullable(),
   hourlyRate: z.coerce.number().min(0).max(500).optional().nullable(),
@@ -360,6 +419,18 @@ const housekeepingBoardSchema = z.object({
   oooRooms: z.coerce.number().int().min(0).max(500).default(0),
   deepCleanRooms: z.coerce.number().int().min(0).max(500).default(0),
   notes: z.string().trim().max(2000).optional().nullable(),
+});
+
+const scheduleRegisterSchema = z.object({
+  firstName: z.string().trim().min(1).max(80),
+  lastName: z.string().trim().min(1).max(80),
+  employeeDisplayName: z.string().trim().max(140).optional(),
+  email: z.string().email(),
+  password: z.string().min(8).max(200),
+  phone: z.string().trim().min(7).max(40),
+  department: z.string().trim().min(1).max(120),
+  rolesJson: z.array(z.string().trim().min(1).max(80)).min(1).max(12),
+  position: z.string().trim().max(120).optional().nullable(),
 });
 
 function splitCsvLine(line: string) {
@@ -493,6 +564,7 @@ const shiftAssignmentSchema = z.object({
   customStartTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
   customEndTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
   unpaidBreakMinutes: z.coerce.number().int().min(0).max(240).optional().nullable(),
+  roleWorked: z.string().max(120).optional().nullable(),
   roleNote: z.string().max(300).optional().nullable(),
   managerNote: z.string().max(1000).optional().nullable(),
   isOpenShift: z.boolean().default(false),
@@ -507,6 +579,7 @@ const aiDraftApplySchema = z.object({
     customStartTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
     customEndTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
     unpaidBreakMinutes: z.coerce.number().int().min(0).max(240).optional().nullable(),
+    roleWorked: z.string().max(120).optional().nullable(),
     roleNote: z.string().max(200).optional().nullable(),
     managerNote: z.string().max(2000).optional().nullable(),
     isOpenShift: z.boolean().default(false),
@@ -541,13 +614,25 @@ async function getScheduleOr404(id: string) {
   return schedule || null;
 }
 
+async function canManageDepartment(user: any, department: string) {
+  const publicUser = publicScheduleUser(user);
+  if (publicUser.isSuperAdmin) return true;
+  const employees = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
+  return managerDepartmentsForUser(user, employees).includes(normalizeDepartment(department));
+}
+
+function sectionCompleted(schedule: any, department: string) {
+  const status = (schedule.departmentStatusJson || {})[normalizeDepartment(department)];
+  return Boolean(status?.completedAt);
+}
+
 async function buildSchedulePayload(scheduleId: string) {
   await seedShiftTypes();
   const schedule = await getScheduleOr404(scheduleId);
   if (!schedule) return null;
   const days = weekDays(schedule.weekStartDate);
   const [employees, shiftTypes, forecast, assignments, housekeepingBoards, approvedRequestRows] = await Promise.all([
-    db.select().from(scheduleEmployees).orderBy(asc(scheduleEmployees.department), asc(scheduleEmployees.displayName)),
+    db.select().from(scheduleEmployees).orderBy(asc(scheduleEmployees.department), asc(scheduleEmployees.sortOrder), asc(scheduleEmployees.displayName)),
     db.select().from(scheduleShiftTypes).orderBy(asc(scheduleShiftTypes.sortOrder), asc(scheduleShiftTypes.label)),
     db.select().from(scheduleForecastDays).where(eq(scheduleForecastDays.scheduleId, scheduleId)).orderBy(asc(scheduleForecastDays.forecastDate)),
     db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, scheduleId)).orderBy(asc(scheduleShiftAssignments.shiftDate)),
@@ -572,7 +657,7 @@ async function buildSchedulePayload(scheduleId: string) {
     })
     .filter(Boolean);
   const totals = calculateTotals(days, employees, shiftTypes, forecast, assignments);
-  return { schedule, days, departments: DEPARTMENTS, employees, shiftTypes, forecast, assignments, housekeepingBoards: housekeepingBoards.map(summarizeHousekeepingBoard), approvedRequests, totals };
+  return { schedule, days, departments: DEPARTMENTS, requiredDepartments: REQUIRED_DEPARTMENTS, employees, shiftTypes, forecast, assignments, housekeepingBoards: housekeepingBoards.map(summarizeHousekeepingBoard), approvedRequests, totals, departmentStatus: schedule.departmentStatusJson || {} };
 }
 
 function summarizeHousekeepingBoard(board: any) {
@@ -595,9 +680,12 @@ function summarizeHousekeepingBoard(board: any) {
 }
 
 function stripPrivateScheduleRates(payload: any, user: any) {
-  if (publicScheduleUser(user).isSuperAdmin) return payload;
+  const publicUser = publicScheduleUser(user);
+  const editableDepartments = managerDepartmentsForUser(user, payload.employees);
+  const enriched = { ...payload, currentUserPermissions: { editableDepartments, canPublishFinal: publicUser.isSuperAdmin } };
+  if (publicUser.isSuperAdmin) return enriched;
   return {
-    ...payload,
+    ...enriched,
     employees: payload.employees.map(({ hourlyRate, ...employee }: any) => employee),
   };
 }
@@ -643,7 +731,9 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   const departmentWeeklyHours: Record<string, number> = {};
   const dailyLaborHours: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
   const dailyLaborDollars: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
+  const dailyLaborDollarsIncludingSalary: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
   const departmentWeeklyLaborDollars: Record<string, number> = {};
+  const departmentWeeklyLaborDollarsIncludingSalary: Record<string, number> = {};
   const coverage: Record<string, Record<string, number>> = Object.fromEntries(days.map((day) => [day, { AM: 0, PM: 0, AUDIT: 0, MOD: 0 }]));
   let openShiftCount = 0;
   const warnings: string[] = [];
@@ -652,22 +742,27 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   for (const assignment of assignments) {
     const shiftType = shiftTypeById.get(assignment.shiftTypeId);
     const employee = assignment.employeeId ? employeeById.get(assignment.employeeId) : null;
-    const department = normalizeDepartment(employee?.department || shiftType?.departmentHint);
+    const department = normalizeDepartment(assignment.roleWorked || employee?.department || shiftType?.departmentHint);
     const hours = hoursForShift(assignment, shiftType);
-    const laborDollars = hours * Number(employee?.hourlyRate || 0);
+    const isSalaried = Boolean(employee?.isSalaried);
+    const laborDollarsIncludingSalary = hours * Number(employee?.hourlyRate || 0);
+    const laborDollars = isSalaried ? 0 : laborDollarsIncludingSalary;
+    const hourlyHours = isSalaried ? 0 : hours;
     if (assignment.isOpenShift || shiftType?.label === "OPEN SHIFT") openShiftCount += 1;
     if (employee?.id) {
       const key = `${employee.id}:${assignment.shiftDate}`;
       if (assignmentKeys.has(key)) warnings.push(`${employee.displayName} has duplicate shifts on ${assignment.shiftDate}.`);
       assignmentKeys.add(key);
-      employeeWeeklyHours[employee.id] = (employeeWeeklyHours[employee.id] || 0) + hours;
+      employeeWeeklyHours[employee.id] = (employeeWeeklyHours[employee.id] || 0) + hourlyHours;
     }
     departmentDailyHours[department] ||= {};
-    departmentDailyHours[department][assignment.shiftDate] = (departmentDailyHours[department][assignment.shiftDate] || 0) + hours;
-    departmentWeeklyHours[department] = (departmentWeeklyHours[department] || 0) + hours;
+    departmentDailyHours[department][assignment.shiftDate] = (departmentDailyHours[department][assignment.shiftDate] || 0) + hourlyHours;
+    departmentWeeklyHours[department] = (departmentWeeklyHours[department] || 0) + hourlyHours;
     departmentWeeklyLaborDollars[department] = (departmentWeeklyLaborDollars[department] || 0) + laborDollars;
-    dailyLaborHours[assignment.shiftDate] = (dailyLaborHours[assignment.shiftDate] || 0) + hours;
+    departmentWeeklyLaborDollarsIncludingSalary[department] = (departmentWeeklyLaborDollarsIncludingSalary[department] || 0) + laborDollarsIncludingSalary;
+    dailyLaborHours[assignment.shiftDate] = (dailyLaborHours[assignment.shiftDate] || 0) + hourlyHours;
     dailyLaborDollars[assignment.shiftDate] = (dailyLaborDollars[assignment.shiftDate] || 0) + laborDollars;
+    dailyLaborDollarsIncludingSalary[assignment.shiftDate] = (dailyLaborDollarsIncludingSalary[assignment.shiftDate] || 0) + laborDollarsIncludingSalary;
     const label = String(shiftType?.label || "").toUpperCase();
     if (coverage[assignment.shiftDate]?.[label] != null) coverage[assignment.shiftDate][label] += 1;
   }
@@ -700,10 +795,13 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     departmentDailyHours: roundNestedRecord(departmentDailyHours),
     departmentWeeklyHours: roundRecord(departmentWeeklyHours),
     departmentWeeklyLaborDollars: roundRecord(departmentWeeklyLaborDollars),
+    departmentWeeklyLaborDollarsIncludingSalary: roundRecord(departmentWeeklyLaborDollarsIncludingSalary),
     dailyLaborHours: roundRecord(dailyLaborHours),
     dailyLaborDollars: roundRecord(dailyLaborDollars),
+    dailyLaborDollarsIncludingSalary: roundRecord(dailyLaborDollarsIncludingSalary),
     totalWeeklyLaborHours: Object.values(dailyLaborHours).reduce((sum, value) => sum + value, 0).toFixed(2),
     totalWeeklyLaborDollars: Object.values(dailyLaborDollars).reduce((sum, value) => sum + value, 0).toFixed(2),
+    totalWeeklyLaborDollarsIncludingSalary: Object.values(dailyLaborDollarsIncludingSalary).reduce((sum, value) => sum + value, 0).toFixed(2),
     coverage,
     openShiftCount,
     warnings,
@@ -860,11 +958,20 @@ function scheduleCellText(assignment: any, shiftType: any) {
   if (!assignment || !shiftType) return "";
   const start = assignment.customStartTime || shiftType.startTime;
   const end = assignment.customEndTime || shiftType.endTime;
-  const time = start && end ? `${start.slice(0, 5)}-${end.slice(0, 5)}` : shiftType.label;
-  return [time, assignment.roleNote].filter(Boolean).join(" ");
+  const time = start && end ? `${formatTime12(start)} - ${formatTime12(end)}` : shiftType.label;
+  return [time, assignment.roleWorked, assignment.roleNote].filter(Boolean).join(" ");
 }
 
-function buildAiScheduleDraft(payload: any) {
+function formatTime12(value?: string | null) {
+  if (!value) return "";
+  const [hh, mm] = value.slice(0, 5).split(":").map(Number);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return value;
+  const period = hh >= 12 ? "PM" : "AM";
+  const hour = hh % 12 || 12;
+  return `${hour}:${String(mm).padStart(2, "0")} ${period}`;
+}
+
+function buildAiScheduleDraft(payload: any, scopeDepartment?: string) {
   const shiftByLabel = new Map<string, any>(payload.shiftTypes.map((shift: any) => [String(shift.label).toUpperCase(), shift]));
   const employeesByDepartment = new Map<string, any[]>();
   for (const department of DEPARTMENTS) {
@@ -914,6 +1021,7 @@ function buildAiScheduleDraft(payload: any) {
   };
 
   const forecastByDay = new Map<string, any>(payload.forecast.map((day: any) => [day.forecastDate, day]));
+  const allowed = scopeDepartment ? new Set([normalizeDepartment(scopeDepartment)]) : null;
   for (const day of payload.days) {
     const forecast: any = forecastByDay.get(day) || {};
     const rooms = Number(forecast.roomsSold || 0);
@@ -924,16 +1032,24 @@ function buildAiScheduleDraft(payload: any) {
     const roomCredits = Math.max(0, departures + stayovers * 0.5);
     const hkAttendants = Math.max(1, Math.ceil(((roomCredits * 28) / 60) / 8));
 
-    add("Front Desk", "AM", day, "Desk");
-    add("Front Desk", "PM", day, "Desk");
-    add("Front Desk", "AUDIT", day, "Audit");
-    if (occ >= 65 || arrivals + departures >= 55) add("Front Desk", "MID", day, "Volume support");
-    add("Managers", "MOD", day, "MOD");
-    add("Bistro", "BREAKFAST", day, "Breakfast");
-    if (occ >= 65 || arrivals >= 20) add("Bistro", "BISTRO PM", day, "Evening demand");
-    for (let index = 0; index < hkAttendants; index += 1) add("Housekeeping", "HOUSEKEEPING", day, "Room attendant");
-    if (departures >= 45) add("Housekeeping", "LAUNDRY", day, "High departures");
-    if (![0, 6].includes(new Date(`${day}T00:00:00Z`).getUTCDay()) || occ >= 75) add("Maintenance", "MAINTENANCE", day, "Property coverage");
+    if (!allowed || allowed.has("Front Desk")) {
+      add("Front Desk", "FD AM", day, "Desk");
+      add("Front Desk", "FD PM", day, "Desk");
+      if (occ >= 65 || arrivals + departures >= 55) add("Front Desk", "MID", day, "Volume support");
+    }
+    if (!allowed || allowed.has("Night Audit")) add("Night Audit", "Night Audit", day, "Audit");
+    if (!allowed || allowed.has("Managers")) add("Managers", "MOD", day, "MOD");
+    if (!allowed || allowed.has("Bistro")) {
+      add("Bistro", "BREAKFAST", day, "Breakfast");
+      if (occ >= 65 || arrivals >= 20) add("Bistro", "BISTRO PM", day, "Evening demand");
+    }
+    if (!allowed || allowed.has("Housekeeping")) {
+      for (let index = 0; index < hkAttendants; index += 1) add("Housekeeping", "HOUSEKEEPING", day, "Room Attendant");
+      if (departures >= 45) add("Housekeeping", "LAUNDRY", day, "Laundry");
+    }
+    if (!allowed || allowed.has("Maintenance")) {
+      if (![0, 6].includes(new Date(`${day}T00:00:00Z`).getUTCDay()) || occ >= 75) add("Maintenance", "MAINTENANCE", day, "Property coverage");
+    }
   }
 
   const bistroTarget = payload.totals.bistroLabor;
@@ -1035,6 +1151,7 @@ async function renderSchedulePdf(payload: any) {
   };
   draw(`${payload.schedule.propertyName} Schedule`, 36, 16, true);
   draw(`${payload.schedule.weekStartDate} to ${payload.schedule.weekEndDate} - ${payload.schedule.status.toUpperCase()}`, 36, 10);
+  draw(`Hourly labor $${payload.totals.totalWeeklyLaborDollars || "0.00"} | Incl. salaried $${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}`, 360, 9);
   if (payload.schedule.publishedAt) draw(`Published: ${new Date(payload.schedule.publishedAt).toLocaleString()}`, 540, 8);
   y -= 28;
   draw("Forecast", 36, 11, true);
@@ -1047,9 +1164,9 @@ async function renderSchedulePdf(payload: any) {
   const assignmentsByEmployeeDay = new Map(payload.assignments.map((assignment: any) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment]));
   const shiftTypeById = new Map(payload.shiftTypes.map((shift: any) => [shift.id, shift]));
   for (const department of payload.departments) {
-    const employees = payload.employees.filter((employee: any) => employee.department === department && employee.active);
+    const employees = payload.employees.filter((employee: any) => normalizeDepartment(employee.department) === department && employee.active);
     if (!employees.length) continue;
-    draw(department, 36, 11, true);
+    draw(`${department} - ${payload.totals.departmentWeeklyHours[department] || 0} hourly hrs`, 36, 11, true);
     y -= 14;
     draw(["Employee", ...payload.days.map((day: string) => day.slice(5)), "Hrs"].join("   "), 44, 7, true);
     y -= 11;
@@ -1058,13 +1175,14 @@ async function renderSchedulePdf(payload: any) {
         const assignment: any = assignmentsByEmployeeDay.get(`${employee.id}:${day}`);
         return scheduleCellText(assignment, shiftTypeById.get(assignment?.shiftTypeId)) || "-";
       });
-      draw([employee.displayName, ...cells, payload.totals.employeeWeeklyHours[employee.id] || 0].join(" | "), 44, 6);
+      const contactWarning = !employee.phone || !employee.email ? " *missing contact" : "";
+      draw([`${employee.displayName}${contactWarning}`, ...cells, payload.totals.employeeWeeklyHours[employee.id] || 0].join(" | "), 44, 6);
       y -= 10;
     }
     y -= 8;
   }
   y -= 8;
-  draw(`Total weekly labor hours: ${payload.totals.totalWeeklyLaborHours}`, 36, 10, true);
+  draw(`Total hourly labor hours: ${payload.totals.totalWeeklyLaborHours} | Hourly labor dollars: $${payload.totals.totalWeeklyLaborDollars || "0.00"} | Including salaried: $${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}`, 36, 10, true);
   return Buffer.from(await pdf.save());
 }
 
@@ -1079,7 +1197,7 @@ function renderScheduleExcelHtml(payload: any) {
   }
   rows.push("</table><br/><table border='1'><tr><th>Department</th><th>Employee</th>" + payload.days.map((day: string) => `<th>${day}</th>`).join("") + "<th>Total</th></tr>");
   for (const department of payload.departments) {
-    for (const employee of payload.employees.filter((item: any) => item.department === department && item.active)) {
+    for (const employee of payload.employees.filter((item: any) => normalizeDepartment(item.department) === department && item.active)) {
       rows.push(`<tr><td>${department}</td><td>${employee.displayName}</td>${payload.days.map((day: string) => {
         const assignment: any = assignmentsByEmployeeDay.get(`${employee.id}:${day}`);
         const shiftType: any = shiftTypeById.get(assignment?.shiftTypeId);
@@ -1099,6 +1217,33 @@ export function registerScheduleRoutes(app: Express) {
     try {
       const user = await getUserBySession(req);
       res.json({ user: user && !user.disabledAt ? publicScheduleUser(user) : null });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/auth/register", scheduleRateLimiter, async (req: any, res, next) => {
+    try {
+      const parsed = scheduleRegisterSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid schedule signup", validation: parsed.error.format() });
+      const email = normalizeEmail(parsed.data.email);
+      const existing = await db.select().from(tipsUsers).where(eq(tipsUsers.email, email)).limit(1);
+      let user = existing[0];
+      if (!user) {
+        const hashedPassword = await bcrypt.hash(parsed.data.password, 12);
+        [user] = await db.insert(tipsUsers).values({
+          firstName: parsed.data.firstName,
+          lastName: parsed.data.lastName,
+          employeeDisplayName: parsed.data.employeeDisplayName || `${parsed.data.firstName} ${parsed.data.lastName}`,
+          email,
+          position: parsed.data.position || parsed.data.rolesJson.join(", "),
+          role: SCHEDULE_ADMIN_EMAILS.has(email) ? "super_admin" : "employee",
+          hashedPassword,
+        } as any).returning();
+      }
+      await upsertScheduleEmployeeForUser(user, { ...parsed.data, email });
+      req.session.tipsUserId = user.id;
+      res.status(existing[0] ? 200 : 201).json({ user: publicScheduleUser(user) });
     } catch (error) {
       next(error);
     }
@@ -1158,6 +1303,10 @@ export function registerScheduleRoutes(app: Express) {
         ...parsed.data,
         hourlyRate: isSuperAdmin && parsed.data.hourlyRate != null ? parsed.data.hourlyRate.toFixed(2) : null,
         department: normalizeDepartment(parsed.data.department),
+        rolesJson: parsed.data.rolesJson || rolesArray(parsed.data.position || parsed.data.department),
+        isSalaried: Boolean(parsed.data.isSalaried),
+        isDepartmentManager: Boolean(parsed.data.isDepartmentManager),
+        sortOrder: parsed.data.sortOrder || 0,
         displayName: parsed.data.displayName || `${parsed.data.firstName} ${parsed.data.lastName}`,
         email: parsed.data.email || null,
         maxWeeklyHours: parsed.data.maxWeeklyHours == null ? null : parsed.data.maxWeeklyHours.toFixed(2),
@@ -1178,6 +1327,10 @@ export function registerScheduleRoutes(app: Express) {
         ...parsed.data,
         hourlyRate: isSuperAdmin && parsed.data.hourlyRate != null ? parsed.data.hourlyRate.toFixed(2) : undefined,
         department: parsed.data.department ? normalizeDepartment(parsed.data.department) : undefined,
+        rolesJson: parsed.data.rolesJson === null ? null : parsed.data.rolesJson,
+        isSalaried: parsed.data.isSalaried,
+        isDepartmentManager: parsed.data.isDepartmentManager,
+        sortOrder: parsed.data.sortOrder,
         email: parsed.data.email === "" ? null : parsed.data.email,
         maxWeeklyHours: parsed.data.maxWeeklyHours == null ? undefined : parsed.data.maxWeeklyHours.toFixed(2),
         updatedAt: new Date(),
@@ -1358,6 +1511,7 @@ export function registerScheduleRoutes(app: Express) {
               customEndTime: assignment.customEndTime,
               unpaidBreakMinutes: assignment.unpaidBreakMinutes,
               roleNote: assignment.roleNote,
+              roleWorked: assignment.roleWorked,
               managerNote: assignment.managerNote,
               isOpenShift: assignment.isOpenShift,
             } as any).onConflictDoNothing();
@@ -1493,6 +1647,10 @@ export function registerScheduleRoutes(app: Express) {
       const parsed = shiftAssignmentSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid shift", validation: parsed.error.format() });
       const employeeId = parsed.data.employeeId || null;
+      const [targetEmployee] = employeeId ? await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.id, employeeId)).limit(1) : [];
+      const targetDepartment = normalizeDepartment(parsed.data.roleWorked || targetEmployee?.department);
+      if (!(await canManageDepartment(req.scheduleUser, targetDepartment))) return res.status(403).json({ error: "You can only edit your assigned department schedule." });
+      if (!publicScheduleUser(req.scheduleUser).isSuperAdmin && sectionCompleted(schedule, targetDepartment)) return res.status(423).json({ error: `${targetDepartment} has already been marked completed.` });
       if (parsed.data.clear) {
         await db.delete(scheduleShiftAssignments).where(and(eq(scheduleShiftAssignments.scheduleId, schedule.id), eq(scheduleShiftAssignments.shiftDate, parsed.data.shiftDate), employeeId ? eq(scheduleShiftAssignments.employeeId, employeeId) : eq(scheduleShiftAssignments.isOpenShift, true)));
       } else {
@@ -1514,6 +1672,7 @@ export function registerScheduleRoutes(app: Express) {
           customEndTime: parsed.data.customEndTime || null,
           unpaidBreakMinutes: parsed.data.unpaidBreakMinutes ?? null,
           roleNote: parsed.data.roleNote || null,
+          roleWorked: parsed.data.roleWorked || null,
           managerNote: parsed.data.managerNote || null,
           isOpenShift: parsed.data.isOpenShift,
         } as any).onConflictDoUpdate({
@@ -1524,6 +1683,7 @@ export function registerScheduleRoutes(app: Express) {
             customEndTime: parsed.data.customEndTime || null,
             unpaidBreakMinutes: parsed.data.unpaidBreakMinutes ?? null,
             roleNote: parsed.data.roleNote || null,
+            roleWorked: parsed.data.roleWorked || null,
             managerNote: parsed.data.managerNote || null,
             isOpenShift: parsed.data.isOpenShift,
             updatedAt: new Date(),
@@ -1588,13 +1748,16 @@ export function registerScheduleRoutes(app: Express) {
       const payload = await buildSchedulePayload(req.params.id);
       if (!payload) return res.status(404).json({ error: "Schedule not found" });
       if (payload.schedule.status === "published") return res.status(423).json({ error: "Published schedules are locked. Reopen before generating a draft." });
-      const draft = buildAiScheduleDraft(payload);
+      const requestedDepartment = normalizeDepartment(String(req.body?.department || ""));
+      if (!(await canManageDepartment(req.scheduleUser, requestedDepartment))) return res.status(403).json({ error: "You can only generate AI schedules for your assigned department." });
+      const draft = buildAiScheduleDraft(payload, requestedDepartment);
       const ai = await summarizeAiSchedule(payload, draft);
       await audit(payload.schedule.id, req.scheduleUser.id, "schedule_ai_draft_generated", {
         proposedAssignments: draft.assignments.length,
+        department: requestedDepartment,
         aiAvailable: ai.aiAvailable,
       });
-      res.json({ ...draft, ai, laborMetrics: payload.totals.laborMetrics });
+      res.json({ ...draft, ai, laborMetrics: payload.totals.laborMetrics, department: requestedDepartment });
     } catch (error) {
       next(error);
     }
@@ -1609,7 +1772,12 @@ export function registerScheduleRoutes(app: Express) {
       if (!parsed.success) return res.status(400).json({ error: "Invalid AI draft", validation: parsed.error.format() });
 
       let applied = 0;
+      const employees = await db.select().from(scheduleEmployees);
+      const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
       for (const assignment of parsed.data.assignments) {
+        const employee = employeeById.get(assignment.employeeId);
+        const department = normalizeDepartment(assignment.roleWorked || employee?.department);
+        if (!(await canManageDepartment(req.scheduleUser, department))) continue;
         const approvedRequest = await getApprovedRequestForEmployeeDate(assignment.employeeId, assignment.shiftDate);
         if (approvedRequest) continue;
         await db.insert(scheduleShiftAssignments).values({
@@ -1619,6 +1787,7 @@ export function registerScheduleRoutes(app: Express) {
           customEndTime: assignment.customEndTime || null,
           unpaidBreakMinutes: assignment.unpaidBreakMinutes ?? null,
           roleNote: assignment.roleNote || null,
+          roleWorked: assignment.roleWorked || null,
           managerNote: assignment.managerNote || "AI draft",
         } as any).onConflictDoUpdate({
           target: [scheduleShiftAssignments.scheduleId, scheduleShiftAssignments.employeeId, scheduleShiftAssignments.shiftDate],
@@ -1628,6 +1797,7 @@ export function registerScheduleRoutes(app: Express) {
             customEndTime: assignment.customEndTime || null,
             unpaidBreakMinutes: assignment.unpaidBreakMinutes ?? null,
             roleNote: assignment.roleNote || null,
+            roleWorked: assignment.roleWorked || null,
             managerNote: assignment.managerNote || "AI draft",
             isOpenShift: assignment.isOpenShift,
             updatedAt: new Date(),
@@ -1642,8 +1812,33 @@ export function registerScheduleRoutes(app: Express) {
     }
   });
 
+  router.post("/weeks/:id/departments/:department/complete", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      const department = normalizeDepartment(req.params.department);
+      if (!REQUIRED_DEPARTMENTS.includes(department)) return res.status(400).json({ error: "Unknown required department." });
+      if (!(await canManageDepartment(req.scheduleUser, department))) return res.status(403).json({ error: "You can only complete your assigned department." });
+      const nextStatus = {
+        ...(schedule.departmentStatusJson || {}),
+        [department]: { completedAt: new Date().toISOString(), completedBy: req.scheduleUser.id },
+      };
+      const [updated] = await db.update(weeklySchedules).set({ departmentStatusJson: nextStatus, updatedAt: new Date() } as any).where(eq(weeklySchedules.id, schedule.id)).returning();
+      await audit(schedule.id, req.scheduleUser.id, "schedule_department_completed", { department });
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(updated.id), req.scheduleUser));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/weeks/:id/publish", requireScheduleManager, async (req: any, res, next) => {
     try {
+      if (!publicScheduleUser(req.scheduleUser).isSuperAdmin) return res.status(403).json({ error: "Only GM/admin can publish the final schedule." });
+      const current = await getScheduleOr404(req.params.id);
+      if (!current) return res.status(404).json({ error: "Schedule not found" });
+      const status = (current.departmentStatusJson || {}) as Record<string, any>;
+      const missing = REQUIRED_DEPARTMENTS.filter((department) => !status[department]?.completedAt);
+      if (missing.length) return res.status(409).json({ error: "All departments must be completed before final publish.", missingDepartments: missing });
       const [schedule] = await db.update(weeklySchedules).set({ status: "published", publishedAt: new Date(), updatedAt: new Date() }).where(eq(weeklySchedules.id, req.params.id)).returning();
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
       await audit(schedule.id, req.scheduleUser.id, "schedule_published");

@@ -56,6 +56,8 @@ type ScheduleRequest = {
   id: string;
   requesterUserId: string;
   department?: string | null;
+  employeeId?: string | null;
+  employeeName?: string | null;
   requestDate: string;
   requestType: string;
   startTime?: string | null;
@@ -63,6 +65,7 @@ type ScheduleRequest = {
   notes?: string | null;
   status: string;
   createdAt?: string | null;
+  conflictCount?: number;
   requester?: ScheduleUser;
 };
 
@@ -138,6 +141,7 @@ type SchedulePayload = {
   shiftTypes: ShiftType[];
   forecast: ForecastDay[];
   assignments: ShiftAssignment[];
+  approvedRequests?: ScheduleRequest[];
   totals: {
     employeeWeeklyHours: Record<string, number>;
     departmentDailyHours: Record<string, Record<string, number>>;
@@ -356,6 +360,7 @@ function ShiftEditDialog({
 function ScheduleGrid({ payload, editable, onEdit }: { payload: SchedulePayload; editable: boolean; onEdit: (employee: ScheduleEmployee, date: string, assignment?: ShiftAssignment) => void }) {
   const assignments = useMemo(() => new Map(payload.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment])), [payload.assignments]);
   const shiftTypes = useMemo(() => new Map(payload.shiftTypes.map((shift) => [shift.id, shift])), [payload.shiftTypes]);
+  const approvedRequests = useMemo(() => new Map((payload.approvedRequests || []).map((request) => [`${request.employeeId}:${request.requestDate}`, request])), [payload.approvedRequests]);
   return (
     <Card className={C.shell}>
       <CardHeader>
@@ -383,17 +388,18 @@ function ScheduleGrid({ payload, editable, onEdit }: { payload: SchedulePayload;
                       <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-white p-2 font-medium">{employee.displayName}<div className="text-xs text-[#5f5247]">{employee.position || ""}</div></td>
                       {payload.days.map((day) => {
                         const assignment = assignments.get(`${employee.id}:${day}`);
+                        const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
                         const shift = assignment ? shiftTypes.get(assignment.shiftTypeId || "") : undefined;
                         return (
                           <td key={day} className="border border-[#e0d3c1] p-1 align-top">
                             <button
                               type="button"
-                              disabled={!editable}
+                              disabled={!editable || Boolean(approvedRequest)}
                               className="min-h-12 w-full rounded-md border border-[#e0d3c1] p-2 text-left text-xs disabled:cursor-default"
-                              style={{ background: shift?.color || "#ffffff", color: shift?.textColor || "#201814" }}
+                              style={{ background: approvedRequest ? "#e5e7eb" : shift?.color || "#ffffff", color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }}
                               onClick={() => onEdit(employee, day, assignment)}
                             >
-                              {shiftText(assignment, shift) || (editable ? "+ Add shift" : "-")}
+                              {approvedRequest ? "Approved request" : shiftText(assignment, shift) || (editable ? "+ Add shift" : "-")}
                             </button>
                           </td>
                         );
@@ -425,10 +431,11 @@ function ScheduleGrid({ payload, editable, onEdit }: { payload: SchedulePayload;
                       <div className="grid gap-2">
                         {payload.days.map((day, index) => {
                           const assignment = assignments.get(`${employee.id}:${day}`);
+                          const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
                           const shift = assignment ? shiftTypes.get(assignment.shiftTypeId || "") : undefined;
                           return (
-                            <button key={day} disabled={!editable} className="rounded-md border border-[#e0d3c1] p-2 text-left text-sm" style={{ background: shift?.color || "#fff", color: shift?.textColor || "#201814" }} onClick={() => onEdit(employee, day, assignment)}>
-                              <strong>{DAY_LABELS[index]} {formatDate(day)}:</strong> {shiftText(assignment, shift) || "-"}
+                            <button key={day} disabled={!editable || Boolean(approvedRequest)} className="rounded-md border border-[#e0d3c1] p-2 text-left text-sm disabled:cursor-default" style={{ background: approvedRequest ? "#e5e7eb" : shift?.color || "#fff", color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }} onClick={() => onEdit(employee, day, assignment)}>
+                              <strong>{DAY_LABELS[index]} {formatDate(day)}:</strong> {approvedRequest ? "Approved request" : shiftText(assignment, shift) || "-"}
                             </button>
                           );
                         })}
@@ -488,7 +495,7 @@ function EmployeeManager({ employees, onAdd, onUpdate }: { employees: ScheduleEm
   );
 }
 
-function ScheduleRequestsPanel({ requests, isAdmin, onSubmit, onStatus }: { requests: ScheduleRequest[]; isAdmin: boolean; onSubmit: (request: any) => void; onStatus: (id: string, status: string) => void }) {
+function ScheduleRequestsPanel({ requests, isAdmin, onSubmit, onStatus }: { requests: ScheduleRequest[]; isAdmin: boolean; onSubmit: (request: any) => void; onStatus: (request: ScheduleRequest, status: string) => void }) {
   const [form, setForm] = useState({ requestDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
   const submit = () => {
     onSubmit({ ...form, startTime: form.startTime || null, endTime: form.endTime || null });
@@ -528,11 +535,16 @@ function ScheduleRequestsPanel({ requests, isAdmin, onSubmit, onStatus }: { requ
                 <div className="text-[#5f5247]">{isAdmin && request.department ? `${request.department} - ` : ""}{[request.startTime?.slice(0, 5), request.endTime?.slice(0, 5)].filter(Boolean).join(" - ")} {request.notes}</div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {isAdmin && request.status === "submitted" && Number(request.conflictCount || 0) > 0 && (
+                  <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-900">
+                    {request.conflictCount} already approved
+                  </Badge>
+                )}
                 <Badge variant="outline" className={request.status === "approved" ? "border-emerald-300 bg-emerald-50 text-emerald-800" : request.status === "denied" ? "border-red-300 bg-red-50 text-red-800" : "border-amber-300 bg-amber-50 text-amber-900"}>{request.status}</Badge>
                 {isAdmin && request.status === "submitted" && (
                   <>
-                    <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request.id, "approved")}>Approve</Button>
-                    <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request.id, "denied")}>Deny</Button>
+                    <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "approved")}>Approve</Button>
+                    <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "denied")}>Deny</Button>
                   </>
                 )}
               </div>
@@ -701,7 +713,16 @@ export default function SchedulePage() {
             requests={requests.data?.requests || []}
             isAdmin={Boolean(user.isAdmin)}
             onSubmit={(request) => submitRequest.mutate(request)}
-            onStatus={(id, status) => updateRequestStatus.mutate({ id, status })}
+            onStatus={(request, status) => {
+              if (
+                status === "approved" &&
+                Number(request.conflictCount || 0) > 0 &&
+                !window.confirm(`${request.conflictCount} associate(s) in ${request.department || "this department"} are already approved off on ${formatDate(request.requestDate)}. Approve this additional request?`)
+              ) {
+                return;
+              }
+              updateRequestStatus.mutate({ id: request.id, status });
+            }}
           />
         )}
 

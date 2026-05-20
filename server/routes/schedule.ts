@@ -341,14 +341,60 @@ async function buildSchedulePayload(scheduleId: string) {
   const schedule = await getScheduleOr404(scheduleId);
   if (!schedule) return null;
   const days = weekDays(schedule.weekStartDate);
-  const [employees, shiftTypes, forecast, assignments] = await Promise.all([
+  const [employees, shiftTypes, forecast, assignments, approvedRequestRows] = await Promise.all([
     db.select().from(scheduleEmployees).orderBy(asc(scheduleEmployees.department), asc(scheduleEmployees.displayName)),
     db.select().from(scheduleShiftTypes).orderBy(asc(scheduleShiftTypes.sortOrder), asc(scheduleShiftTypes.label)),
     db.select().from(scheduleForecastDays).where(eq(scheduleForecastDays.scheduleId, scheduleId)).orderBy(asc(scheduleForecastDays.forecastDate)),
     db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, scheduleId)).orderBy(asc(scheduleShiftAssignments.shiftDate)),
+    db
+      .select({ request: scheduleRequests, user: tipsUsers })
+      .from(scheduleRequests)
+      .innerJoin(tipsUsers, eq(scheduleRequests.requesterUserId, tipsUsers.id))
+      .where(and(eq(scheduleRequests.status, "approved"), inArray(scheduleRequests.requestDate, days))),
   ]);
+  const employeeByEmail = new Map(employees.map((employee) => [normalizeEmail(String(employee.email || "")), employee]));
+  const approvedRequests = approvedRequestRows
+    .map((row) => {
+      const employee = employeeByEmail.get(normalizeEmail(String(row.user.email || "")));
+      if (!employee) return null;
+      return {
+        ...row.request,
+        employeeId: employee.id,
+        employeeName: employee.displayName,
+        requester: publicScheduleUser(row.user),
+      };
+    })
+    .filter(Boolean);
   const totals = calculateTotals(days, employees, shiftTypes, forecast, assignments);
-  return { schedule, days, departments: DEPARTMENTS, employees, shiftTypes, forecast, assignments, totals };
+  return { schedule, days, departments: DEPARTMENTS, employees, shiftTypes, forecast, assignments, approvedRequests, totals };
+}
+
+async function addRequestConflictInfo(rows: Array<{ request: any; user: any }>) {
+  const approved = await db.select().from(scheduleRequests).where(eq(scheduleRequests.status, "approved"));
+  return rows.map((row) => {
+    const conflicts = approved.filter((request) =>
+      request.department === row.request.department &&
+      request.requestDate === row.request.requestDate &&
+      request.id !== row.request.id,
+    );
+    return {
+      ...row.request,
+      requester: publicScheduleUser(row.user),
+      conflictCount: conflicts.length,
+    };
+  });
+}
+
+async function getApprovedRequestForEmployeeDate(employeeId: string, requestDate: string) {
+  const [employee] = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.id, employeeId)).limit(1);
+  const employeeEmail = normalizeEmail(String(employee?.email || ""));
+  if (!employeeEmail) return null;
+  const rows = await db
+    .select({ request: scheduleRequests, user: tipsUsers })
+    .from(scheduleRequests)
+    .innerJoin(tipsUsers, eq(scheduleRequests.requesterUserId, tipsUsers.id))
+    .where(and(eq(scheduleRequests.status, "approved"), eq(scheduleRequests.requestDate, requestDate)));
+  return rows.find((row) => normalizeEmail(String(row.user.email || "")) === employeeEmail)?.request || null;
 }
 
 function calculateTotals(days: string[], employees: any[], shiftTypes: any[], forecast: any[], assignments: any[]) {
@@ -600,7 +646,7 @@ export function registerScheduleRoutes(app: Express) {
       } else {
         rows = await query.where(eq(scheduleRequests.requesterUserId, req.scheduleUser.id)).orderBy(desc(scheduleRequests.requestDate), desc(scheduleRequests.createdAt));
       }
-      res.json({ requests: rows.map((row) => ({ ...row.request, requester: publicScheduleUser(row.user) })) });
+      res.json({ requests: await addRequestConflictInfo(rows) });
     } catch (error) {
       next(error);
     }
@@ -667,7 +713,9 @@ export function registerScheduleRoutes(app: Express) {
         .where(eq(scheduleRequests.id, req.params.id))
         .returning();
       await audit(null, req.scheduleUser.id, "schedule_request_status_updated", { requestId: request.id, status: request.status });
-      res.json({ request });
+      const [requester] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, request.requesterUserId)).limit(1);
+      const [requestWithConflicts] = await addRequestConflictInfo([{ request, user: requester }]);
+      res.json({ request: requestWithConflicts });
     } catch (error) {
       next(error);
     }
@@ -806,6 +854,15 @@ export function registerScheduleRoutes(app: Express) {
       if (parsed.data.clear) {
         await db.delete(scheduleShiftAssignments).where(and(eq(scheduleShiftAssignments.scheduleId, schedule.id), eq(scheduleShiftAssignments.shiftDate, parsed.data.shiftDate), employeeId ? eq(scheduleShiftAssignments.employeeId, employeeId) : eq(scheduleShiftAssignments.isOpenShift, true)));
       } else {
+        if (employeeId) {
+          const approvedRequest = await getApprovedRequestForEmployeeDate(employeeId, parsed.data.shiftDate);
+          if (approvedRequest) {
+            return res.status(409).json({
+              error: "This associate has an approved schedule request for this date.",
+              requestId: approvedRequest.id,
+            });
+          }
+        }
         await db.insert(scheduleShiftAssignments).values({
           scheduleId: schedule.id,
           employeeId,

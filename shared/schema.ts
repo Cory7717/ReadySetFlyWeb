@@ -563,6 +563,27 @@ export const scheduleRequests = pgTable("schedule_requests", {
   index("idx_schedule_requests_status").on(table.status),
 ]);
 
+export const scheduleHousekeepingBoards = pgTable("schedule_housekeeping_boards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scheduleId: varchar("schedule_id").notNull().references(() => weeklySchedules.id, { onDelete: "cascade" }),
+  employeeId: varchar("employee_id").notNull().references(() => scheduleEmployees.id, { onDelete: "cascade" }),
+  boardDate: date("board_date").notNull(),
+  actualHours: numeric("actual_hours", { precision: 5, scale: 2 }).notNull().default("0"),
+  checkoutRooms: integer("checkout_rooms").notNull().default(0),
+  stayoverRooms: integer("stayover_rooms").notNull().default(0),
+  dndRooms: integer("dnd_rooms").notNull().default(0),
+  oooRooms: integer("ooo_rooms").notNull().default(0),
+  deepCleanRooms: integer("deep_clean_rooms").notNull().default(0),
+  notes: text("notes"),
+  enteredByUserId: varchar("entered_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_schedule_hk_board_unique").on(table.scheduleId, table.employeeId, table.boardDate),
+  index("idx_schedule_hk_board_schedule_date").on(table.scheduleId, table.boardDate),
+  index("idx_schedule_hk_board_employee").on(table.employeeId),
+]);
+
 export const scheduleAuditLog = pgTable("schedule_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   scheduleId: varchar("schedule_id").references(() => weeklySchedules.id, { onDelete: "cascade" }),
@@ -1771,6 +1792,12 @@ export const insertScheduleShareLinkSchema = createInsertSchema(scheduleShareLin
 });
 
 export const insertScheduleRequestSchema = createInsertSchema(scheduleRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertScheduleHousekeepingBoardSchema = createInsertSchema(scheduleHousekeepingBoards).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -3469,6 +3496,8 @@ export type ScheduleShareLink = typeof scheduleShareLinks.$inferSelect;
 export type InsertScheduleShareLink = z.infer<typeof insertScheduleShareLinkSchema>;
 export type ScheduleRequest = typeof scheduleRequests.$inferSelect;
 export type InsertScheduleRequest = z.infer<typeof insertScheduleRequestSchema>;
+export type ScheduleHousekeepingBoard = typeof scheduleHousekeepingBoards.$inferSelect;
+export type InsertScheduleHousekeepingBoard = z.infer<typeof insertScheduleHousekeepingBoardSchema>;
 export type ScheduleAuditLog = typeof scheduleAuditLog.$inferSelect;
 export type InsertScheduleAuditLog = z.infer<typeof insertScheduleAuditLogSchema>;
 

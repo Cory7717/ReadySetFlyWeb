@@ -13,6 +13,7 @@ import {
   scheduleAuditLog,
   scheduleEmployees,
   scheduleForecastDays,
+  scheduleHousekeepingBoards,
   scheduleRequests,
   scheduleShareLinks,
   scheduleShiftAssignments,
@@ -349,6 +350,18 @@ const popupGroupSchema = z.object({
   popupGroupNotes: z.string().trim().max(2000).optional().nullable(),
 });
 
+const housekeepingBoardSchema = z.object({
+  employeeId: z.string().trim().min(1),
+  boardDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  actualHours: z.coerce.number().min(0).max(24).default(0),
+  checkoutRooms: z.coerce.number().int().min(0).max(500).default(0),
+  stayoverRooms: z.coerce.number().int().min(0).max(500).default(0),
+  dndRooms: z.coerce.number().int().min(0).max(500).default(0),
+  oooRooms: z.coerce.number().int().min(0).max(500).default(0),
+  deepCleanRooms: z.coerce.number().int().min(0).max(500).default(0),
+  notes: z.string().trim().max(2000).optional().nullable(),
+});
+
 function splitCsvLine(line: string) {
   const result: string[] = [];
   let current = "";
@@ -392,11 +405,22 @@ function parseReportNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function pickupRoomsForLeadDays(leadDays: number) {
-  if (leadDays <= 1) return 4;
-  if (leadDays <= 3) return 15;
-  if (leadDays <= 5) return 12;
-  return 8;
+function occupancyTargetForDate(dateKey: string) {
+  const day = parseDateKey(dateKey)?.getUTCDay();
+  if (day === 0) return 50; // Sunday is typically softer than the weekly target.
+  if (day === 5 || day === 6) return TARGET_OCCUPANCY_PERCENT;
+  return Math.max(55, Math.min(TARGET_OCCUPANCY_PERCENT, 60));
+}
+
+function pickupRoomsForDemand(leadDays: number, occupancyPercent: number) {
+  const leadWindowPickup = leadDays <= 1 ? 4 : leadDays <= 3 ? 15 : leadDays <= 5 ? 12 : 8;
+  const occupancyPickup =
+    occupancyPercent < 35 ? 15 :
+    occupancyPercent < 50 ? 12 :
+    occupancyPercent < 60 ? 8 :
+    occupancyPercent < TARGET_OCCUPANCY_PERCENT ? 5 :
+    0;
+  return Math.min(leadWindowPickup, occupancyPickup);
 }
 
 function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
@@ -414,18 +438,19 @@ function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
     const outOfOrder = parseReportNumber(row.OOO);
     const capacity = Math.max(1, activeRooms - outOfOrder);
     const leadDays = Math.max(0, daysBetween(today, forecastDate));
-    const pickupRooms = pickupRoomsForLeadDays(leadDays);
-    const targetRooms = Math.ceil(capacity * (TARGET_OCCUPANCY_PERCENT / 100));
-    const forecastRooms = Math.min(capacity, Math.max(roomsSoldOtb + pickupRooms, targetRooms));
-    const pickupApplied = Math.max(0, forecastRooms - roomsSoldOtb);
-    const occupancyPercent = Number(((forecastRooms / capacity) * 100).toFixed(1));
-    const arrivals = parseReportNumber(row.Arr) + pickupApplied;
+    const occupancyPercent = occOtb || Number(((roomsSoldOtb / capacity) * 100).toFixed(1));
+    const targetOccupancyPercent = occupancyTargetForDate(forecastDate);
+    const pickupRooms = pickupRoomsForDemand(leadDays, occupancyPercent);
+    const targetRooms = Math.ceil(capacity * (targetOccupancyPercent / 100));
+    const suggestedForecastRooms = Math.min(capacity, Math.min(targetRooms, roomsSoldOtb + pickupRooms));
+    const suggestedPickup = Math.max(0, suggestedForecastRooms - roomsSoldOtb);
+    const arrivals = parseReportNumber(row.Arr);
     const departures = parseReportNumber(row.Dept);
-    const stayovers = Math.max(0, forecastRooms - arrivals);
+    const stayovers = Math.max(0, roomsSoldOtb - arrivals);
 
     forecastByDate.set(forecastDate, {
       forecastDate,
-      roomsSold: forecastRooms,
+      roomsSold: roomsSoldOtb,
       occupancyPercent,
       arrivals,
       departures,
@@ -435,7 +460,7 @@ function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
       otbArrivals: parseReportNumber(row.Arr),
       otbDepartures: parseReportNumber(row.Dept),
       roomRevenue: parseReportNumber(row["Rm Rev ($)"]),
-      notes: `Imported OTB: ${roomsSoldOtb} rooms / ${occOtb}%. Forecast adds ${pickupApplied} rooms using ${TARGET_OCCUPANCY_PERCENT}% target and ${leadDays}-day pickup window.`,
+      notes: `Imported OTB: ${roomsSoldOtb} rooms / ${occupancyPercent}%. Suggested pickup is +${suggestedPickup} rooms toward ${targetOccupancyPercent}% ${targetOccupancyPercent === TARGET_OCCUPANCY_PERCENT ? "weekly" : "day"} target using the ${leadDays}-day pickup window.`,
     });
   }
 
@@ -521,11 +546,12 @@ async function buildSchedulePayload(scheduleId: string) {
   const schedule = await getScheduleOr404(scheduleId);
   if (!schedule) return null;
   const days = weekDays(schedule.weekStartDate);
-  const [employees, shiftTypes, forecast, assignments, approvedRequestRows] = await Promise.all([
+  const [employees, shiftTypes, forecast, assignments, housekeepingBoards, approvedRequestRows] = await Promise.all([
     db.select().from(scheduleEmployees).orderBy(asc(scheduleEmployees.department), asc(scheduleEmployees.displayName)),
     db.select().from(scheduleShiftTypes).orderBy(asc(scheduleShiftTypes.sortOrder), asc(scheduleShiftTypes.label)),
     db.select().from(scheduleForecastDays).where(eq(scheduleForecastDays.scheduleId, scheduleId)).orderBy(asc(scheduleForecastDays.forecastDate)),
     db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, scheduleId)).orderBy(asc(scheduleShiftAssignments.shiftDate)),
+    db.select().from(scheduleHousekeepingBoards).where(eq(scheduleHousekeepingBoards.scheduleId, scheduleId)).orderBy(asc(scheduleHousekeepingBoards.boardDate)),
     db
       .select({ request: scheduleRequests, user: tipsUsers })
       .from(scheduleRequests)
@@ -546,7 +572,26 @@ async function buildSchedulePayload(scheduleId: string) {
     })
     .filter(Boolean);
   const totals = calculateTotals(days, employees, shiftTypes, forecast, assignments);
-  return { schedule, days, departments: DEPARTMENTS, employees, shiftTypes, forecast, assignments, approvedRequests, totals };
+  return { schedule, days, departments: DEPARTMENTS, employees, shiftTypes, forecast, assignments, housekeepingBoards: housekeepingBoards.map(summarizeHousekeepingBoard), approvedRequests, totals };
+}
+
+function summarizeHousekeepingBoard(board: any) {
+  const actualHours = Number(board.actualHours || 0);
+  const checkoutRooms = Number(board.checkoutRooms || 0);
+  const stayoverRooms = Number(board.stayoverRooms || 0);
+  const dndRooms = Number(board.dndRooms || 0);
+  const deepCleanRooms = Number(board.deepCleanRooms || 0);
+  const serviceStayovers = Math.max(0, stayoverRooms - dndRooms);
+  const roomCredits = Math.max(0, checkoutRooms + serviceStayovers * 0.5 + deepCleanRooms);
+  const standardMinutes = Math.max(0, checkoutRooms * 30 + serviceStayovers * 15 + deepCleanRooms * 30);
+  const mpor = actualHours > 0 ? roomCredits / actualHours : 0;
+  return {
+    ...board,
+    actualHours,
+    roomCredits: Number(roomCredits.toFixed(2)),
+    standardMinutes,
+    mpor: Number(mpor.toFixed(2)),
+  };
 }
 
 function stripPrivateScheduleRates(payload: any, user: any) {
@@ -1486,6 +1531,52 @@ export function registerScheduleRoutes(app: Express) {
         });
       }
       await audit(schedule.id, req.scheduleUser.id, "shift_updated", { employeeId, shiftDate: parsed.data.shiftDate });
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.put("/weeks/:id/housekeeping-board", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      const parsed = housekeepingBoardSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid housekeeping board", validation: parsed.error.format() });
+      const days = weekDays(schedule.weekStartDate);
+      if (!days.includes(parsed.data.boardDate)) return res.status(400).json({ error: "Board date is outside this schedule week." });
+      const [employee] = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.id, parsed.data.employeeId)).limit(1);
+      if (!employee) return res.status(404).json({ error: "Schedule employee not found" });
+      if (normalizeDepartment(employee.department) !== "Housekeeping") {
+        return res.status(400).json({ error: "Housekeeping boards can only be entered for Housekeeping associates." });
+      }
+      await db.insert(scheduleHousekeepingBoards).values({
+        scheduleId: schedule.id,
+        employeeId: parsed.data.employeeId,
+        boardDate: parsed.data.boardDate,
+        actualHours: parsed.data.actualHours.toFixed(2),
+        checkoutRooms: parsed.data.checkoutRooms,
+        stayoverRooms: parsed.data.stayoverRooms,
+        dndRooms: parsed.data.dndRooms,
+        oooRooms: parsed.data.oooRooms,
+        deepCleanRooms: parsed.data.deepCleanRooms,
+        notes: parsed.data.notes || null,
+        enteredByUserId: req.scheduleUser.id,
+      } as any).onConflictDoUpdate({
+        target: [scheduleHousekeepingBoards.scheduleId, scheduleHousekeepingBoards.employeeId, scheduleHousekeepingBoards.boardDate],
+        set: {
+          actualHours: parsed.data.actualHours.toFixed(2),
+          checkoutRooms: parsed.data.checkoutRooms,
+          stayoverRooms: parsed.data.stayoverRooms,
+          dndRooms: parsed.data.dndRooms,
+          oooRooms: parsed.data.oooRooms,
+          deepCleanRooms: parsed.data.deepCleanRooms,
+          notes: parsed.data.notes || null,
+          enteredByUserId: req.scheduleUser.id,
+          updatedAt: new Date(),
+        } as any,
+      });
+      await audit(schedule.id, req.scheduleUser.id, "housekeeping_board_updated", { employeeId: parsed.data.employeeId, boardDate: parsed.data.boardDate });
       res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {
       next(error);

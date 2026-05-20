@@ -1,5 +1,8 @@
 import express, { type Express, type RequestHandler } from "express";
 import crypto from "crypto";
+import multer from "multer";
+import OpenAI from "openai";
+import pdfParse from "pdf-parse";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { z } from "zod";
 import { and, asc, desc, eq, inArray, isNull, lte, lt } from "drizzle-orm";
@@ -28,6 +31,27 @@ const SCHEDULE_ADMIN_EMAILS = new Set(
 const PROPERTY_NAME = process.env.SCHEDULE_PROPERTY_NAME || "Courtyard Austin Lakeline";
 const DEPARTMENTS = ["Managers", "Front Desk", "Bistro", "Maintenance", "Housekeeping"];
 const DAY_MS = 86_400_000;
+const TARGET_OCCUPANCY_PERCENT = Number(process.env.SCHEDULE_TARGET_OCCUPANCY_PERCENT || 65);
+const TARGET_HPOR = Number(process.env.SCHEDULE_TARGET_HPOR || 1.3);
+const TARGET_HK_MPOR_MIN = Number(process.env.SCHEDULE_TARGET_HK_MPOR_MIN || 25);
+const TARGET_HK_MPOR_MAX = Number(process.env.SCHEDULE_TARGET_HK_MPOR_MAX || 30);
+const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+const openaiBaseUrl = (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || "").trim();
+const openai = openaiApiKey
+  ? new OpenAI({
+      apiKey: openaiApiKey,
+      ...(openaiBaseUrl && openaiBaseUrl.startsWith("http") ? { baseURL: openaiBaseUrl } : {}),
+    })
+  : null;
+
+const BISTRO_LABOR_SCALE = [
+  { minOcc: 0, maxOcc: 49.99, minHours: 90, maxHours: 100, label: "Minimal Coverage" },
+  { minOcc: 50, maxOcc: 59.99, minHours: 100, maxHours: 110, label: "Lean Operations" },
+  { minOcc: 60, maxOcc: 69.99, minHours: 115, maxHours: 115, label: "Standard Lean Model" },
+  { minOcc: 70, maxOcc: 79.99, minHours: 125, maxHours: 135, label: "Moderate Overlap" },
+  { minOcc: 80, maxOcc: 89.99, minHours: 140, maxHours: 155, label: "Increased Peak Staffing" },
+  { minOcc: 90, maxOcc: 100, minHours: 160, maxHours: 180, label: "Full Staffing" },
+];
 
 const DEFAULT_SHIFT_TYPES = [
   { label: "AM", startTime: "07:00", endTime: "15:00", color: "#dbeafe", textColor: "#0f172a", departmentHint: "Front Desk" },
@@ -248,6 +272,25 @@ const scheduleRateLimiter = createSoftAuthRateLimiter({
   key: "schedule",
 });
 
+const forecastUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === "text/csv" || file.originalname.toLowerCase().endsWith(".csv")) return cb(null, true);
+    cb(new Error("Only CSV forecast reports are supported."));
+  },
+});
+
+const payrollUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    const name = file.originalname.toLowerCase();
+    if (file.mimetype === "application/pdf" || name.endsWith(".pdf") || file.mimetype === "text/plain" || name.endsWith(".txt")) return cb(null, true);
+    cb(new Error("Only PDF or text payroll register files are supported."));
+  },
+});
+
 const employeeSchema = z.object({
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().min(1).max(80),
@@ -256,6 +299,7 @@ const employeeSchema = z.object({
   position: z.string().trim().max(120).optional().nullable(),
   defaultShiftType: z.string().trim().max(80).optional().nullable(),
   maxWeeklyHours: z.coerce.number().min(0).max(168).optional().nullable(),
+  hourlyRate: z.coerce.number().min(0).max(500).optional().nullable(),
   phone: z.string().trim().max(40).optional().nullable(),
   email: z.string().email().optional().nullable().or(z.literal("")),
   active: z.boolean().default(true),
@@ -290,10 +334,132 @@ const forecastSchema = z.object({
     arrivals: z.coerce.number().int().min(0).max(10000).default(0),
     departures: z.coerce.number().int().min(0).max(10000).default(0),
     stayovers: z.coerce.number().int().min(0).max(10000).default(0),
+    dndRooms: z.coerce.number().int().min(0).max(10000).optional().default(0),
+    roomRevenue: z.coerce.number().min(0).max(10000000).optional().nullable(),
+    popupGroupRooms: z.coerce.number().int().min(0).max(10000).optional().default(0),
+    popupGroupNotes: z.string().max(2000).optional().nullable(),
     groupsEventsNotes: z.string().max(2000).optional().nullable(),
     notes: z.string().max(2000).optional().nullable(),
   })).min(1).max(7),
 });
+
+const popupGroupSchema = z.object({
+  forecastDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  popupGroupRooms: z.coerce.number().int().min(0).max(10000).default(0),
+  popupGroupNotes: z.string().trim().max(2000).optional().nullable(),
+});
+
+function splitCsvLine(line: string) {
+  const result: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      result.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function parseCsv(text: string) {
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter((line) => line.trim());
+  const headers = splitCsvLine(lines[0] || "").map((header) => header.trim());
+  return lines.slice(1).map((line) => {
+    const values = splitCsvLine(line);
+    return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""]));
+  });
+}
+
+function parseReportDate(value: string) {
+  const parsed = new Date(`${value.replace(/^"|"$/g, "").trim()} 00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return toDateKey(new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())));
+}
+
+function parseReportNumber(value: unknown) {
+  const parsed = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function pickupRoomsForLeadDays(leadDays: number) {
+  if (leadDays <= 1) return 4;
+  if (leadDays <= 3) return 15;
+  if (leadDays <= 5) return 12;
+  return 8;
+}
+
+function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
+  const rows = parseCsv(text);
+  const today = todayDateKey();
+  const forecastByDate = new Map<string, any>();
+
+  for (const row of rows) {
+    if (String(row.Date || "").trim().toUpperCase() === "TOTAL") continue;
+    const forecastDate = parseReportDate(String(row.Date || ""));
+    if (!forecastDate || !scheduleDays.includes(forecastDate)) continue;
+    const roomsSoldOtb = parseReportNumber(row["Rms Sold"]);
+    const occOtb = parseReportNumber(row["Occ %"]);
+    const activeRooms = parseReportNumber(row["Rms Active"]);
+    const outOfOrder = parseReportNumber(row.OOO);
+    const capacity = Math.max(1, activeRooms - outOfOrder);
+    const leadDays = Math.max(0, daysBetween(today, forecastDate));
+    const pickupRooms = pickupRoomsForLeadDays(leadDays);
+    const targetRooms = Math.ceil(capacity * (TARGET_OCCUPANCY_PERCENT / 100));
+    const forecastRooms = Math.min(capacity, Math.max(roomsSoldOtb + pickupRooms, targetRooms));
+    const pickupApplied = Math.max(0, forecastRooms - roomsSoldOtb);
+    const occupancyPercent = Number(((forecastRooms / capacity) * 100).toFixed(1));
+    const arrivals = parseReportNumber(row.Arr) + pickupApplied;
+    const departures = parseReportNumber(row.Dept);
+    const stayovers = Math.max(0, forecastRooms - arrivals);
+
+    forecastByDate.set(forecastDate, {
+      forecastDate,
+      roomsSold: forecastRooms,
+      occupancyPercent,
+      arrivals,
+      departures,
+      stayovers,
+      otbRoomsSold: roomsSoldOtb,
+      otbOccupancyPercent: occOtb,
+      otbArrivals: parseReportNumber(row.Arr),
+      otbDepartures: parseReportNumber(row.Dept),
+      roomRevenue: parseReportNumber(row["Rm Rev ($)"]),
+      notes: `Imported OTB: ${roomsSoldOtb} rooms / ${occOtb}%. Forecast adds ${pickupApplied} rooms using ${TARGET_OCCUPANCY_PERCENT}% target and ${leadDays}-day pickup window.`,
+    });
+  }
+
+  return scheduleDays.map((day) => forecastByDate.get(day)).filter(Boolean);
+}
+
+function actualizedFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
+  const rows = parseCsv(text);
+  const actualByDate = new Map<string, any>();
+  for (const row of rows) {
+    if (String(row.Date || "").trim().toUpperCase() === "TOTAL") continue;
+    const forecastDate = parseReportDate(String(row.Date || ""));
+    if (!forecastDate || !scheduleDays.includes(forecastDate)) continue;
+    actualByDate.set(forecastDate, {
+      forecastDate,
+      actualRoomsSold: parseReportNumber(row["Rms Sold"]),
+      actualOccupancyPercent: parseReportNumber(row["Occ %"]),
+      actualArrivals: parseReportNumber(row.Arr),
+      actualDepartures: parseReportNumber(row.Dept),
+      actualRoomRevenue: parseReportNumber(row["Rm Rev ($)"]),
+    });
+  }
+  return scheduleDays.map((day) => actualByDate.get(day)).filter(Boolean);
+}
 
 const shiftAssignmentSchema = z.object({
   employeeId: z.string().optional().nullable(),
@@ -306,6 +472,20 @@ const shiftAssignmentSchema = z.object({
   managerNote: z.string().max(1000).optional().nullable(),
   isOpenShift: z.boolean().default(false),
   clear: z.boolean().default(false),
+});
+
+const aiDraftApplySchema = z.object({
+  assignments: z.array(z.object({
+    employeeId: z.string().min(1),
+    shiftDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    shiftTypeId: z.string().min(1),
+    customStartTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+    customEndTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+    unpaidBreakMinutes: z.coerce.number().int().min(0).max(240).optional().nullable(),
+    roleNote: z.string().max(200).optional().nullable(),
+    managerNote: z.string().max(2000).optional().nullable(),
+    isOpenShift: z.boolean().default(false),
+  })).min(1).max(250),
 });
 
 const scheduleRequestSchema = z.object({
@@ -369,6 +549,19 @@ async function buildSchedulePayload(scheduleId: string) {
   return { schedule, days, departments: DEPARTMENTS, employees, shiftTypes, forecast, assignments, approvedRequests, totals };
 }
 
+function stripPrivateScheduleRates(payload: any, user: any) {
+  if (publicScheduleUser(user).isSuperAdmin) return payload;
+  return {
+    ...payload,
+    employees: payload.employees.map(({ hourlyRate, ...employee }: any) => employee),
+  };
+}
+
+function stripPrivateEmployeeRates(employees: any[], user: any) {
+  if (publicScheduleUser(user).isSuperAdmin) return employees;
+  return employees.map(({ hourlyRate, ...employee }: any) => employee);
+}
+
 async function addRequestConflictInfo(rows: Array<{ request: any; user: any }>) {
   const approved = await db.select().from(scheduleRequests).where(eq(scheduleRequests.status, "approved"));
   return rows.map((row) => {
@@ -404,6 +597,8 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   const departmentDailyHours: Record<string, Record<string, number>> = {};
   const departmentWeeklyHours: Record<string, number> = {};
   const dailyLaborHours: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
+  const dailyLaborDollars: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
+  const departmentWeeklyLaborDollars: Record<string, number> = {};
   const coverage: Record<string, Record<string, number>> = Object.fromEntries(days.map((day) => [day, { AM: 0, PM: 0, AUDIT: 0, MOD: 0 }]));
   let openShiftCount = 0;
   const warnings: string[] = [];
@@ -414,6 +609,7 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     const employee = assignment.employeeId ? employeeById.get(assignment.employeeId) : null;
     const department = normalizeDepartment(employee?.department || shiftType?.departmentHint);
     const hours = hoursForShift(assignment, shiftType);
+    const laborDollars = hours * Number(employee?.hourlyRate || 0);
     if (assignment.isOpenShift || shiftType?.label === "OPEN SHIFT") openShiftCount += 1;
     if (employee?.id) {
       const key = `${employee.id}:${assignment.shiftDate}`;
@@ -424,7 +620,9 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     departmentDailyHours[department] ||= {};
     departmentDailyHours[department][assignment.shiftDate] = (departmentDailyHours[department][assignment.shiftDate] || 0) + hours;
     departmentWeeklyHours[department] = (departmentWeeklyHours[department] || 0) + hours;
+    departmentWeeklyLaborDollars[department] = (departmentWeeklyLaborDollars[department] || 0) + laborDollars;
     dailyLaborHours[assignment.shiftDate] = (dailyLaborHours[assignment.shiftDate] || 0) + hours;
+    dailyLaborDollars[assignment.shiftDate] = (dailyLaborDollars[assignment.shiftDate] || 0) + laborDollars;
     const label = String(shiftType?.label || "").toUpperCase();
     if (coverage[assignment.shiftDate]?.[label] != null) coverage[assignment.shiftDate][label] += 1;
   }
@@ -445,17 +643,157 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     if (Number(day.departures || 0) >= 45 && hkHours < 24) warnings.push(`High departures on ${day.forecastDate} with low Housekeeping coverage.`);
   }
   if (openShiftCount > 0) warnings.push(`${openShiftCount} open shift(s) remaining.`);
+  const laborMetrics = calculateLaborMetrics(days, forecast, dailyLaborHours, departmentDailyHours, dailyLaborDollars);
+  const bistroLabor = calculateBistroLaborTarget(forecast, departmentWeeklyHours["Bistro"] || 0);
+  if (laborMetrics.weekly.hpor > TARGET_HPOR) warnings.push(`Weekly HPOR ${laborMetrics.weekly.hpor.toFixed(2)} is above target ${TARGET_HPOR}.`);
+  if (laborMetrics.weekly.hkMpor > TARGET_HK_MPOR_MAX) warnings.push(`Housekeeping MPOR ${laborMetrics.weekly.hkMpor.toFixed(1)} is above target ${TARGET_HK_MPOR_MIN}-${TARGET_HK_MPOR_MAX}.`);
+  if (bistroLabor.status === "under") warnings.push(`Bistro scheduled hours ${bistroLabor.scheduledHours} are below ${bistroLabor.model} target ${bistroLabor.targetMinHours}-${bistroLabor.targetMaxHours}.`);
+  if (bistroLabor.status === "over") warnings.push(`Bistro scheduled hours ${bistroLabor.scheduledHours} are above ${bistroLabor.model} target ${bistroLabor.targetMinHours}-${bistroLabor.targetMaxHours}.`);
 
   return {
     employeeWeeklyHours: roundRecord(employeeWeeklyHours),
     departmentDailyHours: roundNestedRecord(departmentDailyHours),
     departmentWeeklyHours: roundRecord(departmentWeeklyHours),
+    departmentWeeklyLaborDollars: roundRecord(departmentWeeklyLaborDollars),
     dailyLaborHours: roundRecord(dailyLaborHours),
+    dailyLaborDollars: roundRecord(dailyLaborDollars),
     totalWeeklyLaborHours: Object.values(dailyLaborHours).reduce((sum, value) => sum + value, 0).toFixed(2),
+    totalWeeklyLaborDollars: Object.values(dailyLaborDollars).reduce((sum, value) => sum + value, 0).toFixed(2),
     coverage,
     openShiftCount,
     warnings,
+    laborMetrics,
+    bistroLabor,
   };
+}
+
+function calculateLaborMetrics(days: string[], forecast: any[], dailyLaborHours: Record<string, number>, departmentDailyHours: Record<string, Record<string, number>>, dailyLaborDollars: Record<string, number>) {
+  const forecastByDay = new Map(forecast.map((day) => [day.forecastDate, day]));
+  const daily: Record<string, any> = {};
+  let weeklyLaborHours = 0;
+  let weeklyRooms = 0;
+  let weeklyRoomCredits = 0;
+  let weeklyHkHours = 0;
+  let weeklyRoomRevenue = 0;
+  let weeklyActualRoomRevenue = 0;
+  let weeklyLaborDollars = 0;
+
+  for (const day of days) {
+    const forecastDay = forecastByDay.get(day) || {};
+    const roomsSold = Number(forecastDay.roomsSold || 0) + Number(forecastDay.popupGroupRooms || 0);
+    const arrivals = Number(forecastDay.arrivals || 0);
+    const departures = Number(forecastDay.departures || 0);
+    const stayovers = Number(forecastDay.stayovers || Math.max(0, roomsSold - arrivals));
+    const dndRooms = Number(forecastDay.dndRooms || 0);
+    const laborHours = Number(dailyLaborHours[day] || 0);
+    const laborDollars = Number(dailyLaborDollars[day] || 0);
+    const hkHours = Number(departmentDailyHours["Housekeeping"]?.[day] || 0);
+    const serviceStayovers = Math.max(0, stayovers - dndRooms);
+    const roomCredits = Math.max(0, departures + serviceStayovers * 0.5);
+    const standardMinutes = Math.max(0, departures * 30 + serviceStayovers * 15);
+    const hpor = roomsSold > 0 ? laborHours / roomsSold : 0;
+    const hkMpor = roomCredits > 0 ? (hkHours * 60) / roomCredits : 0;
+    const roomRevenue = Number(forecastDay.roomRevenue || 0);
+    const actualRoomRevenue = Number(forecastDay.actualRoomRevenue || 0);
+    daily[day] = {
+      roomsSold,
+      pickupRooms: forecastDay.actualRoomsSold != null && forecastDay.otbRoomsSold != null ? Number(forecastDay.actualRoomsSold || 0) - Number(forecastDay.otbRoomsSold || 0) : null,
+      popupGroupRooms: Number(forecastDay.popupGroupRooms || 0),
+      laborHours: Number(laborHours.toFixed(2)),
+      laborDollars: Number(laborDollars.toFixed(2)),
+      hpor: Number(hpor.toFixed(2)),
+      housekeepingHours: Number(hkHours.toFixed(2)),
+      roomCredits: Number(roomCredits.toFixed(1)),
+      serviceStayovers,
+      dndRooms,
+      standardHousekeepingMinutes: standardMinutes,
+      hkMpor: Number(hkMpor.toFixed(1)),
+      targetHousekeepingHoursMin: Number(((roomCredits * TARGET_HK_MPOR_MIN) / 60).toFixed(2)),
+      targetHousekeepingHoursMax: Number(((roomCredits * TARGET_HK_MPOR_MAX) / 60).toFixed(2)),
+    };
+    weeklyLaborHours += laborHours;
+    weeklyLaborDollars += laborDollars;
+    weeklyRooms += roomsSold;
+    weeklyRoomCredits += roomCredits;
+    weeklyHkHours += hkHours;
+    weeklyRoomRevenue += roomRevenue;
+    weeklyActualRoomRevenue += actualRoomRevenue;
+  }
+
+  return {
+    targets: { hpor: TARGET_HPOR, hkMporMin: TARGET_HK_MPOR_MIN, hkMporMax: TARGET_HK_MPOR_MAX },
+    daily,
+    weekly: {
+      roomsSold: weeklyRooms,
+      laborHours: Number(weeklyLaborHours.toFixed(2)),
+      laborDollars: Number(weeklyLaborDollars.toFixed(2)),
+      roomRevenue: Number(weeklyRoomRevenue.toFixed(2)),
+      actualRoomRevenue: Number(weeklyActualRoomRevenue.toFixed(2)),
+      hpor: Number((weeklyRooms > 0 ? weeklyLaborHours / weeklyRooms : 0).toFixed(2)),
+      housekeepingHours: Number(weeklyHkHours.toFixed(2)),
+      roomCredits: Number(weeklyRoomCredits.toFixed(1)),
+      hkMpor: Number((weeklyRoomCredits > 0 ? (weeklyHkHours * 60) / weeklyRoomCredits : 0).toFixed(1)),
+      targetHousekeepingHoursMin: Number(((weeklyRoomCredits * TARGET_HK_MPOR_MIN) / 60).toFixed(2)),
+      targetHousekeepingHoursMax: Number(((weeklyRoomCredits * TARGET_HK_MPOR_MAX) / 60).toFixed(2)),
+    },
+  };
+}
+
+function calculateBistroLaborTarget(forecast: any[], bistroWeeklyHours: number) {
+  const occupiedRooms = forecast.reduce((sum, day) => sum + Number(day.roomsSold || 0) + Number(day.popupGroupRooms || 0), 0);
+  const roomNights = forecast.length * 118;
+  const weeklyOcc = roomNights > 0 ? (occupiedRooms / roomNights) * 100 : 0;
+  const scale = BISTRO_LABOR_SCALE.find((item) => weeklyOcc >= item.minOcc && weeklyOcc <= item.maxOcc) || BISTRO_LABOR_SCALE[BISTRO_LABOR_SCALE.length - 1];
+  return {
+    weeklyOccupancyPercent: Number(weeklyOcc.toFixed(1)),
+    occupiedRooms,
+    scheduledHours: Number(bistroWeeklyHours.toFixed(2)),
+    targetMinHours: scale.minHours,
+    targetMaxHours: scale.maxHours,
+    model: scale.label,
+    status: bistroWeeklyHours < scale.minHours ? "under" : bistroWeeklyHours > scale.maxHours ? "over" : "on_target",
+  };
+}
+
+function normalizePersonName(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z,\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function payrollNameMatches(employee: any, payrollName: string) {
+  const normalized = normalizePersonName(payrollName);
+  const direct = normalizePersonName(`${employee.lastName}, ${employee.firstName}`);
+  const display = normalizePersonName(employee.displayName || "");
+  return normalized === direct || normalized === display || normalized.includes(direct) || direct.includes(normalized);
+}
+
+function parsePayrollRegisterText(text: string) {
+  const blocks = text.split(/Emp #:/g).slice(1);
+  const rows: Array<{ employeeNumber: string; payrollName: string; hourlyRate: number; grossWage: number | null }> = [];
+  for (const block of blocks) {
+    const lines = block.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const employeeNumber = lines[0] || "";
+    const payrollName = lines[1] || "";
+    const hourlyMatch = block.match(/Hourly Rate:\s*(?:[\s\S]{0,80}?)\n\s*([0-9]+\.[0-9]{2,4})/);
+    const salaryMatch = block.match(/Per Pay Salary:\s*(?:[\s\S]{0,80}?)\n\s*([0-9,]+\.[0-9]{2})/);
+    const grossMatch = block.match(/Gross Wage:\s*\n?\s*([0-9,]+\.[0-9]{2})/);
+    const hourlyRate = hourlyMatch
+      ? Number(hourlyMatch[1])
+      : salaryMatch
+        ? Number(String(salaryMatch[1]).replace(/,/g, "")) / 80
+        : 0;
+    if (!payrollName || !hourlyRate) continue;
+    rows.push({
+      employeeNumber,
+      payrollName,
+      hourlyRate: Number(hourlyRate.toFixed(2)),
+      grossWage: grossMatch ? Number(String(grossMatch[1]).replace(/,/g, "")) : null,
+    });
+  }
+  return rows;
 }
 
 function roundRecord(record: Record<string, number>) {
@@ -479,6 +817,162 @@ function scheduleCellText(assignment: any, shiftType: any) {
   const end = assignment.customEndTime || shiftType.endTime;
   const time = start && end ? `${start.slice(0, 5)}-${end.slice(0, 5)}` : shiftType.label;
   return [time, assignment.roleNote].filter(Boolean).join(" ");
+}
+
+function buildAiScheduleDraft(payload: any) {
+  const shiftByLabel = new Map<string, any>(payload.shiftTypes.map((shift: any) => [String(shift.label).toUpperCase(), shift]));
+  const employeesByDepartment = new Map<string, any[]>();
+  for (const department of DEPARTMENTS) {
+    employeesByDepartment.set(department, payload.employees.filter((employee: any) => employee.active && normalizeDepartment(employee.department) === department));
+  }
+  const approvedByEmployeeDay = new Set((payload.approvedRequests || []).map((request: any) => `${request.employeeId}:${request.requestDate}`));
+  const assignedByEmployeeDay = new Set<string>();
+  const assignments: any[] = [];
+  const warnings: string[] = [];
+  const counters: Record<string, number> = {};
+  const proposedBistroHours = () => assignments.reduce((sum, assignment) => {
+    const shift = payload.shiftTypes.find((item: any) => item.id === assignment.shiftTypeId);
+    if (normalizeDepartment(shift?.departmentHint) !== "Bistro") return sum;
+    return sum + hoursForShift(assignment, shift);
+  }, 0);
+
+  const add = (department: string, shiftLabel: string, shiftDate: string, roleNote?: string) => {
+    const shift = shiftByLabel.get(shiftLabel);
+    if (!shift) {
+      warnings.push(`Missing shift type ${shiftLabel}.`);
+      return;
+    }
+    const employees = employeesByDepartment.get(department) || [];
+    const key = `${department}:${shiftDate}`;
+    for (let attempt = 0; attempt < employees.length; attempt += 1) {
+      const index = ((counters[key] || 0) + attempt) % employees.length;
+      const employee = employees[index];
+      const employeeDayKey = `${employee.id}:${shiftDate}`;
+      if (!approvedByEmployeeDay.has(employeeDayKey) && !assignedByEmployeeDay.has(employeeDayKey)) {
+        counters[key] = index + 1;
+        assignedByEmployeeDay.add(employeeDayKey);
+        assignments.push({
+          employeeId: employee.id,
+          shiftDate,
+          shiftTypeId: shift.id,
+          customStartTime: null,
+          customEndTime: null,
+          unpaidBreakMinutes: shift.unpaidBreakMinutes ?? 0,
+          roleNote: roleNote || null,
+          managerNote: "AI draft",
+          isOpenShift: false,
+        });
+        return;
+      }
+    }
+    warnings.push(`No available ${department} associate for ${shiftLabel} on ${shiftDate}.`);
+  };
+
+  const forecastByDay = new Map<string, any>(payload.forecast.map((day: any) => [day.forecastDate, day]));
+  for (const day of payload.days) {
+    const forecast: any = forecastByDay.get(day) || {};
+    const rooms = Number(forecast.roomsSold || 0);
+    const occ = Number(forecast.occupancyPercent || 0);
+    const arrivals = Number(forecast.arrivals || 0);
+    const departures = Number(forecast.departures || 0);
+    const stayovers = Number(forecast.stayovers || Math.max(0, rooms - arrivals));
+    const roomCredits = Math.max(0, departures + stayovers * 0.5);
+    const hkAttendants = Math.max(1, Math.ceil(((roomCredits * 28) / 60) / 8));
+
+    add("Front Desk", "AM", day, "Desk");
+    add("Front Desk", "PM", day, "Desk");
+    add("Front Desk", "AUDIT", day, "Audit");
+    if (occ >= 65 || arrivals + departures >= 55) add("Front Desk", "MID", day, "Volume support");
+    add("Managers", "MOD", day, "MOD");
+    add("Bistro", "BREAKFAST", day, "Breakfast");
+    if (occ >= 65 || arrivals >= 20) add("Bistro", "BISTRO PM", day, "Evening demand");
+    for (let index = 0; index < hkAttendants; index += 1) add("Housekeeping", "HOUSEKEEPING", day, "Room attendant");
+    if (departures >= 45) add("Housekeeping", "LAUNDRY", day, "High departures");
+    if (![0, 6].includes(new Date(`${day}T00:00:00Z`).getUTCDay()) || occ >= 75) add("Maintenance", "MAINTENANCE", day, "Property coverage");
+  }
+
+  const bistroTarget = payload.totals.bistroLabor;
+  if (bistroTarget) {
+    let pass = 0;
+    while (proposedBistroHours() < bistroTarget.targetMinHours && pass < payload.days.length * 2) {
+      const day = payload.days[pass % payload.days.length];
+      const label = pass % 2 === 0 ? "BISTRO AM" : "BISTRO PM";
+      add("Bistro", label, day, "Bistro labor scale support");
+      pass += 1;
+    }
+    if (proposedBistroHours() < bistroTarget.targetMinHours) {
+      warnings.push(`Bistro draft remains below sliding-scale target ${bistroTarget.targetMinHours}-${bistroTarget.targetMaxHours} hours.`);
+    }
+  }
+
+  return { assignments, warnings };
+}
+
+async function summarizeAiSchedule(payload: any, draft: any) {
+  const baseline = {
+    week: `${payload.schedule.weekStartDate} to ${payload.schedule.weekEndDate}`,
+    forecast: payload.forecast.map((day: any) => ({
+      date: day.forecastDate,
+      roomsSold: day.roomsSold,
+      occupancyPercent: day.occupancyPercent,
+      arrivals: day.arrivals,
+      departures: day.departures,
+      stayovers: day.stayovers,
+    })),
+    laborTargets: payload.totals.laborMetrics?.targets,
+    currentLabor: payload.totals.laborMetrics?.weekly,
+    proposedShiftCount: draft.assignments.length,
+    warnings: draft.warnings,
+  };
+
+  if (!openai) {
+    return {
+      aiAvailable: false,
+      summary: "AI is not configured. A rules-based draft was generated from forecast demand, approved requests, HPOR, and housekeeping MPOR targets.",
+      recommendations: [
+        "Review Front Desk AM/PM/Audit coverage each day.",
+        "Review Housekeeping room-attendant coverage against 25-30 MPOR.",
+        "Check HPOR after applying the draft and adjust departments as needed.",
+      ],
+      risks: draft.warnings,
+    };
+  }
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: process.env.SCHEDULE_AI_MODEL || "gpt-4o-mini",
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: "You are a hotel operations scheduling assistant. Return concise JSON with summary, recommendations array, and risks array. Do not invent employee names or change the provided draft.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            goal: "Review this weekly hotel schedule draft for HPOR target 1.3 and Housekeeping MPOR target 25-30.",
+            baseline,
+          }),
+        },
+      ],
+      temperature: 0.2,
+    });
+    const parsed = JSON.parse(completion.choices[0]?.message?.content || "{}");
+    return {
+      aiAvailable: true,
+      summary: String(parsed.summary || "AI reviewed the rules-based draft."),
+      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.map(String).slice(0, 8) : [],
+      risks: Array.isArray(parsed.risks) ? parsed.risks.map(String).slice(0, 8) : draft.warnings,
+    };
+  } catch (error: any) {
+    console.error("Schedule AI generation failed:", { error: error?.message || error });
+    return {
+      aiAvailable: false,
+      summary: "AI review failed, but a rules-based draft was generated.",
+      recommendations: ["Review and apply the draft manually if coverage looks appropriate."],
+      risks: draft.warnings,
+    };
+  }
 }
 
 async function renderSchedulePdf(payload: any) {
@@ -577,7 +1071,34 @@ export function registerScheduleRoutes(app: Express) {
   router.get("/employees", requireScheduleAuth, async (_req: any, res, next) => {
     try {
       const employees = await db.select().from(scheduleEmployees).orderBy(asc(scheduleEmployees.department), asc(scheduleEmployees.displayName));
-      res.json({ employees });
+      res.json({ employees: stripPrivateEmployeeRates(employees, _req.scheduleUser) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/employees/payroll-import", requireScheduleManager, payrollUpload.single("payrollRegister"), async (req: any, res, next) => {
+    try {
+      if (!publicScheduleUser(req.scheduleUser).isSuperAdmin) return res.status(403).json({ error: "Super admin access required for payroll rates." });
+      if (!req.file) return res.status(400).json({ error: "Payroll register PDF or text file is required." });
+      const text = req.file.mimetype === "application/pdf" || req.file.originalname.toLowerCase().endsWith(".pdf")
+        ? (await pdfParse(req.file.buffer)).text
+        : req.file.buffer.toString("utf8");
+      const payrollRows = parsePayrollRegisterText(text);
+      const employees = await db.select().from(scheduleEmployees);
+      const matched: any[] = [];
+      const unmatched: any[] = [];
+      for (const row of payrollRows) {
+        const employee = employees.find((item) => payrollNameMatches(item, row.payrollName));
+        if (!employee) {
+          unmatched.push({ payrollName: row.payrollName, employeeNumber: row.employeeNumber });
+          continue;
+        }
+        await db.update(scheduleEmployees).set({ hourlyRate: String(row.hourlyRate), updatedAt: new Date() } as any).where(eq(scheduleEmployees.id, employee.id));
+        matched.push({ employeeId: employee.id, displayName: employee.displayName, hourlyRate: row.hourlyRate, grossWage: row.grossWage });
+      }
+      await audit(null, req.scheduleUser.id, "schedule_payroll_rates_imported", { matched: matched.length, unmatched: unmatched.length });
+      res.json({ matched, unmatched });
     } catch (error) {
       next(error);
     }
@@ -587,8 +1108,10 @@ export function registerScheduleRoutes(app: Express) {
     try {
       const parsed = employeeSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid employee", validation: parsed.error.format() });
+      const isSuperAdmin = publicScheduleUser(req.scheduleUser).isSuperAdmin;
       const [employee] = await db.insert(scheduleEmployees).values({
         ...parsed.data,
+        hourlyRate: isSuperAdmin && parsed.data.hourlyRate != null ? parsed.data.hourlyRate.toFixed(2) : null,
         department: normalizeDepartment(parsed.data.department),
         displayName: parsed.data.displayName || `${parsed.data.firstName} ${parsed.data.lastName}`,
         email: parsed.data.email || null,
@@ -605,8 +1128,10 @@ export function registerScheduleRoutes(app: Express) {
     try {
       const parsed = employeeSchema.partial().safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid employee", validation: parsed.error.format() });
+      const isSuperAdmin = publicScheduleUser(req.scheduleUser).isSuperAdmin;
       const [employee] = await db.update(scheduleEmployees).set({
         ...parsed.data,
+        hourlyRate: isSuperAdmin && parsed.data.hourlyRate != null ? parsed.data.hourlyRate.toFixed(2) : undefined,
         department: parsed.data.department ? normalizeDepartment(parsed.data.department) : undefined,
         email: parsed.data.email === "" ? null : parsed.data.email,
         maxWeeklyHours: parsed.data.maxWeeklyHours == null ? undefined : parsed.data.maxWeeklyHours.toFixed(2),
@@ -795,7 +1320,7 @@ export function registerScheduleRoutes(app: Express) {
         }
       }
       await audit(schedule.id, req.scheduleUser.id, "schedule_created", { mode: parsed.data.mode });
-      res.status(201).json(await buildSchedulePayload(schedule.id));
+      res.status(201).json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {
       next(error);
     }
@@ -806,7 +1331,7 @@ export function registerScheduleRoutes(app: Express) {
       const payload = await buildSchedulePayload(req.params.id);
       if (!payload) return res.status(404).json({ error: "Schedule not found" });
       if (!publicScheduleUser(req.scheduleUser).isAdmin && payload.schedule.status !== "published") return res.status(403).json({ error: "Schedule is not published" });
-      res.json(payload);
+      res.json(stripPrivateScheduleRates(payload, req.scheduleUser));
     } catch (error) {
       next(error);
     }
@@ -818,7 +1343,7 @@ export function registerScheduleRoutes(app: Express) {
       if (!link || link.revokedAt) return res.status(404).json({ error: "Share link not found" });
       const payload = await buildSchedulePayload(link.scheduleId);
       if (!payload || payload.schedule.status !== "published") return res.status(404).json({ error: "Schedule is not published" });
-      res.json({ ...payload, readOnly: true });
+      res.json(stripPrivateScheduleRates({ ...payload, readOnly: true }, { email: "", role: "employee" }));
     } catch (error) {
       next(error);
     }
@@ -837,7 +1362,79 @@ export function registerScheduleRoutes(app: Express) {
         });
       }
       await audit(schedule.id, req.scheduleUser.id, "forecast_updated");
-      res.json(await buildSchedulePayload(schedule.id));
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/forecast/import", requireScheduleManager, forecastUpload.single("forecastReport"), async (req: any, res, next) => {
+    try {
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      if (!req.file) return res.status(400).json({ error: "CSV forecast report is required." });
+      const days = weekDays(schedule.weekStartDate);
+      const importedDays = forecastFromOnTheBooksCsv(req.file.buffer.toString("utf8"), days);
+      if (importedDays.length === 0) {
+        return res.status(400).json({ error: "No matching forecast dates were found in the uploaded report for this schedule week." });
+      }
+      for (const day of importedDays) {
+        await db.insert(scheduleForecastDays).values({ scheduleId: schedule.id, ...day } as any).onConflictDoUpdate({
+          target: [scheduleForecastDays.scheduleId, scheduleForecastDays.forecastDate],
+          set: { ...day, updatedAt: new Date() } as any,
+        });
+      }
+      await audit(schedule.id, req.scheduleUser.id, "forecast_imported", {
+        fileName: req.file.originalname,
+        importedDays: importedDays.length,
+        targetOccupancyPercent: TARGET_OCCUPANCY_PERCENT,
+      });
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/forecast/actualized", requireScheduleManager, forecastUpload.single("actualizedReport"), async (req: any, res, next) => {
+    try {
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      if (!req.file) return res.status(400).json({ error: "Actualized CSV report is required." });
+      const days = weekDays(schedule.weekStartDate);
+      const actualizedDays = actualizedFromOnTheBooksCsv(req.file.buffer.toString("utf8"), days);
+      if (actualizedDays.length === 0) {
+        return res.status(400).json({ error: "No matching actualized dates were found in the uploaded report for this schedule week." });
+      }
+      for (const day of actualizedDays) {
+        await db.insert(scheduleForecastDays).values({ scheduleId: schedule.id, ...day } as any).onConflictDoUpdate({
+          target: [scheduleForecastDays.scheduleId, scheduleForecastDays.forecastDate],
+          set: { ...day, updatedAt: new Date() } as any,
+        });
+      }
+      await audit(schedule.id, req.scheduleUser.id, "forecast_actualized_imported", {
+        fileName: req.file.originalname,
+        actualizedDays: actualizedDays.length,
+      });
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/weeks/:id/forecast/groups", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      const parsed = popupGroupSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid pop-up group adjustment", validation: parsed.error.format() });
+      const days = weekDays(schedule.weekStartDate);
+      if (!days.includes(parsed.data.forecastDate)) return res.status(400).json({ error: "Group date is outside this schedule week." });
+      await db.insert(scheduleForecastDays).values({ scheduleId: schedule.id, ...parsed.data } as any).onConflictDoUpdate({
+        target: [scheduleForecastDays.scheduleId, scheduleForecastDays.forecastDate],
+        set: { ...parsed.data, updatedAt: new Date() } as any,
+      });
+      await audit(schedule.id, req.scheduleUser.id, "forecast_popup_group_updated", parsed.data);
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {
       next(error);
     }
@@ -889,7 +1486,66 @@ export function registerScheduleRoutes(app: Express) {
         });
       }
       await audit(schedule.id, req.scheduleUser.id, "shift_updated", { employeeId, shiftDate: parsed.data.shiftDate });
-      res.json(await buildSchedulePayload(schedule.id));
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/ai/generate", requireScheduleManager, scheduleRateLimiter, async (req: any, res, next) => {
+    try {
+      const payload = await buildSchedulePayload(req.params.id);
+      if (!payload) return res.status(404).json({ error: "Schedule not found" });
+      if (payload.schedule.status === "published") return res.status(423).json({ error: "Published schedules are locked. Reopen before generating a draft." });
+      const draft = buildAiScheduleDraft(payload);
+      const ai = await summarizeAiSchedule(payload, draft);
+      await audit(payload.schedule.id, req.scheduleUser.id, "schedule_ai_draft_generated", {
+        proposedAssignments: draft.assignments.length,
+        aiAvailable: ai.aiAvailable,
+      });
+      res.json({ ...draft, ai, laborMetrics: payload.totals.laborMetrics });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/ai/apply", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      if (schedule.status === "published") return res.status(423).json({ error: "Published schedules are locked. Reopen before applying a draft." });
+      const parsed = aiDraftApplySchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid AI draft", validation: parsed.error.format() });
+
+      let applied = 0;
+      for (const assignment of parsed.data.assignments) {
+        const approvedRequest = await getApprovedRequestForEmployeeDate(assignment.employeeId, assignment.shiftDate);
+        if (approvedRequest) continue;
+        await db.insert(scheduleShiftAssignments).values({
+          scheduleId: schedule.id,
+          ...assignment,
+          customStartTime: assignment.customStartTime || null,
+          customEndTime: assignment.customEndTime || null,
+          unpaidBreakMinutes: assignment.unpaidBreakMinutes ?? null,
+          roleNote: assignment.roleNote || null,
+          managerNote: assignment.managerNote || "AI draft",
+        } as any).onConflictDoUpdate({
+          target: [scheduleShiftAssignments.scheduleId, scheduleShiftAssignments.employeeId, scheduleShiftAssignments.shiftDate],
+          set: {
+            shiftTypeId: assignment.shiftTypeId,
+            customStartTime: assignment.customStartTime || null,
+            customEndTime: assignment.customEndTime || null,
+            unpaidBreakMinutes: assignment.unpaidBreakMinutes ?? null,
+            roleNote: assignment.roleNote || null,
+            managerNote: assignment.managerNote || "AI draft",
+            isOpenShift: assignment.isOpenShift,
+            updatedAt: new Date(),
+          } as any,
+        });
+        applied += 1;
+      }
+      await audit(schedule.id, req.scheduleUser.id, "schedule_ai_draft_applied", { applied });
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {
       next(error);
     }
@@ -900,7 +1556,7 @@ export function registerScheduleRoutes(app: Express) {
       const [schedule] = await db.update(weeklySchedules).set({ status: "published", publishedAt: new Date(), updatedAt: new Date() }).where(eq(weeklySchedules.id, req.params.id)).returning();
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
       await audit(schedule.id, req.scheduleUser.id, "schedule_published");
-      res.json(await buildSchedulePayload(schedule.id));
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {
       next(error);
     }
@@ -912,7 +1568,7 @@ export function registerScheduleRoutes(app: Express) {
       const [schedule] = await db.update(weeklySchedules).set({ status: "draft", updatedAt: new Date() }).where(eq(weeklySchedules.id, req.params.id)).returning();
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
       await audit(schedule.id, req.scheduleUser.id, "schedule_reopened", { reason });
-      res.json(await buildSchedulePayload(schedule.id));
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {
       next(error);
     }
@@ -923,7 +1579,7 @@ export function registerScheduleRoutes(app: Express) {
       const [schedule] = await db.update(weeklySchedules).set({ status: "archived", archivedAt: new Date(), updatedAt: new Date() }).where(eq(weeklySchedules.id, req.params.id)).returning();
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
       await audit(schedule.id, req.scheduleUser.id, "schedule_archived");
-      res.json(await buildSchedulePayload(schedule.id));
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {
       next(error);
     }

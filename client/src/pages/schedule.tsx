@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Save,
   Share2,
+  Sparkles,
   Users,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
@@ -42,7 +43,38 @@ const C = {
 };
 
 const DEPARTMENTS = ["Managers", "Front Desk", "Bistro", "Maintenance", "Housekeeping"];
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_LABELS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
+const DAY_LABELS_ES = ["Sab", "Dom", "Lun", "Mar", "Mie", "Jue", "Vie"];
+
+const ES: Record<string, string> = {
+  "Courtyard Schedule Builder": "Constructor de Horarios Courtyard",
+  "Generate AI schedule": "Generar horario con IA",
+  "Weekly hours": "Horas semanales",
+  "Open shifts": "Turnos abiertos",
+  Employees: "Empleados",
+  Warnings: "Alertas",
+  "Labor targets": "Metas de labor",
+  "Forecast rooms": "Cuartos pronosticados",
+  "HK room credits": "Creditos de cuartos HK",
+  "Target HK hours": "Horas meta HK",
+  Forecast: "Pronostico",
+  "Rooms sold": "Cuartos vendidos",
+  "Occ %": "Ocupacion %",
+  Arrivals: "Llegadas",
+  Departures: "Salidas",
+  Stayovers: "Quedan",
+  Notes: "Notas",
+  "Save forecast": "Guardar pronostico",
+  "Import OTB CSV": "Importar CSV OTB",
+  "Upload actualized CSV": "Subir CSV actualizado",
+  "Weekly schedule": "Horario semanal",
+  Associate: "Empleado",
+  Hours: "Horas",
+  "Approved request": "Solicitud aprobada",
+  "Add shift": "Agregar turno",
+  "Daily labor hours": "Horas de labor diarias",
+  "Bistro labor": "Labor Bistro",
+};
 
 type ScheduleUser = {
   id: string;
@@ -78,6 +110,7 @@ type ScheduleEmployee = {
   position?: string | null;
   defaultShiftType?: string | null;
   maxWeeklyHours?: string | null;
+  hourlyRate?: string | null;
   phone?: string | null;
   email?: string | null;
   active: boolean;
@@ -115,13 +148,23 @@ type ForecastDay = {
   arrivals: number;
   departures: number;
   stayovers: number;
+  otbRoomsSold?: number | null;
+  otbOccupancyPercent?: string | number | null;
+  otbArrivals?: number | null;
+  otbDepartures?: number | null;
+  actualRoomsSold?: number | null;
+  actualOccupancyPercent?: string | number | null;
+  actualArrivals?: number | null;
+  actualDepartures?: number | null;
+  popupGroupRooms?: number | null;
+  popupGroupNotes?: string | null;
   groupsEventsNotes?: string | null;
   notes?: string | null;
 };
 
 type ShiftAssignment = {
-  id: string;
-  scheduleId: string;
+  id?: string;
+  scheduleId?: string;
   employeeId?: string | null;
   shiftDate: string;
   shiftTypeId?: string | null;
@@ -146,13 +189,71 @@ type SchedulePayload = {
     employeeWeeklyHours: Record<string, number>;
     departmentDailyHours: Record<string, Record<string, number>>;
     departmentWeeklyHours: Record<string, number>;
+    departmentWeeklyLaborDollars?: Record<string, number>;
     dailyLaborHours: Record<string, number>;
+    dailyLaborDollars?: Record<string, number>;
     totalWeeklyLaborHours: string;
+    totalWeeklyLaborDollars?: string;
     coverage: Record<string, Record<string, number>>;
     openShiftCount: number;
     warnings: string[];
+    laborMetrics?: LaborMetrics;
+    bistroLabor?: {
+      weeklyOccupancyPercent: number;
+      occupiedRooms: number;
+      scheduledHours: number;
+      targetMinHours: number;
+      targetMaxHours: number;
+      model: string;
+      status: string;
+    };
   };
   readOnly?: boolean;
+};
+
+type LaborMetrics = {
+  targets: { hpor: number; hkMporMin: number; hkMporMax: number };
+  daily: Record<string, {
+    roomsSold: number;
+    laborHours: number;
+    laborDollars: number;
+    hpor: number;
+    housekeepingHours: number;
+    roomCredits: number;
+    hkMpor: number;
+    targetHousekeepingHoursMin: number;
+    targetHousekeepingHoursMax: number;
+    pickupRooms?: number | null;
+    popupGroupRooms?: number;
+    serviceStayovers?: number;
+    dndRooms?: number;
+    standardHousekeepingMinutes?: number;
+  }>;
+  weekly: {
+    roomsSold: number;
+    laborHours: number;
+    laborDollars: number;
+    roomRevenue: number;
+    actualRoomRevenue: number;
+    hpor: number;
+    housekeepingHours: number;
+    roomCredits: number;
+    hkMpor: number;
+    targetHousekeepingHoursMin: number;
+    targetHousekeepingHoursMax: number;
+  };
+};
+
+type AiScheduleDraft = {
+  assignments: ShiftAssignment[];
+  warnings: string[];
+  laborMetrics?: LaborMetrics;
+  ai: {
+    aiAvailable: boolean;
+    summary: string;
+    recommendations: string[];
+    risks: string[];
+  };
 };
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -167,10 +268,10 @@ function localDateKey(date = new Date()) {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
-function mondayFor(date = new Date()) {
+function saturdayFor(date = new Date()) {
   const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const day = next.getDay() || 7;
-  next.setDate(next.getDate() - day + 1);
+  const day = next.getDay();
+  next.setDate(next.getDate() - day - (day === 6 ? 0 : 1));
   return localDateKey(next);
 }
 
@@ -204,6 +305,11 @@ function statusBadge(status: string) {
   if (status === "published") return "border-emerald-300 bg-emerald-50 text-emerald-800";
   if (status === "archived") return "border-slate-300 bg-slate-100 text-slate-700";
   return "border-amber-300 bg-amber-50 text-amber-900";
+}
+
+function metricTone(value: number, target: number, higherIsBad = true) {
+  const isBad = higherIsBad ? value > target : value < target;
+  return isBad ? "text-red-700" : "text-emerald-800";
 }
 
 function ScheduleAuthGate({ onDone }: { onDone: () => void }) {
@@ -246,12 +352,39 @@ function ScheduleAuthGate({ onDone }: { onDone: () => void }) {
   );
 }
 
-function ForecastPanel({ payload, editable, onSave }: { payload: SchedulePayload; editable: boolean; onSave: (days: ForecastDay[]) => void }) {
+function ForecastPanel({
+  payload,
+  editable,
+  onSave,
+  onImport,
+  onActualizedImport,
+  onPopupGroupSave,
+  importing,
+  actualizing,
+  spanish,
+}: {
+  payload: SchedulePayload;
+  editable: boolean;
+  onSave: (days: ForecastDay[]) => void;
+  onImport: (file: File) => void;
+  onActualizedImport: (file: File) => void;
+  onPopupGroupSave: (body: { forecastDate: string; popupGroupRooms: number; popupGroupNotes: string }) => void;
+  importing: boolean;
+  actualizing: boolean;
+  spanish: boolean;
+}) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const actualizedInputRef = useRef<HTMLInputElement | null>(null);
+  const t = (value: string) => spanish ? ES[value] || value : value;
   const [days, setDays] = useState<ForecastDay[]>(payload.days.map((date) => payload.forecast.find((day) => day.forecastDate === date) || { forecastDate: date, roomsSold: 0, occupancyPercent: 0, arrivals: 0, departures: 0, stayovers: 0 }));
+  const [groupForm, setGroupForm] = useState({ forecastDate: payload.days[0] || "", popupGroupRooms: "0", popupGroupNotes: "" });
+  useEffect(() => {
+    setDays(payload.days.map((date) => payload.forecast.find((day) => day.forecastDate === date) || { forecastDate: date, roomsSold: 0, occupancyPercent: 0, arrivals: 0, departures: 0, stayovers: 0 }));
+  }, [payload.schedule.id, payload.forecast, payload.days]);
   return (
     <Card className={C.shell}>
       <CardHeader>
-        <CardTitle className={C.ink}>Forecast</CardTitle>
+        <CardTitle className={C.ink}>{t("Forecast")}</CardTitle>
         <CardDescription className={C.muted}>Rooms, occupancy, arrivals, departures, and notes drive staffing warnings.</CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto">
@@ -259,17 +392,20 @@ function ForecastPanel({ payload, editable, onSave }: { payload: SchedulePayload
           <thead>
             <tr>
               <th className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left">Metric</th>
-              {days.map((day, index) => <th key={day.forecastDate} className="border border-[#e0d3c1] bg-[#f4eadb] p-2">{DAY_LABELS[index]} {formatDate(day.forecastDate)}</th>)}
+              {days.map((day, index) => <th key={day.forecastDate} className="border border-[#e0d3c1] bg-[#f4eadb] p-2">{(spanish ? DAY_LABELS_ES : DAY_LABELS)[index]} {formatDate(day.forecastDate)}</th>)}
             </tr>
           </thead>
           <tbody>
             {[
-              ["roomsSold", "Rooms sold"],
+              ["roomsSold", t("Rooms sold")],
               ["occupancyPercent", "Occ %"],
-              ["arrivals", "Arrivals"],
-              ["departures", "Departures"],
+              ["arrivals", t("Arrivals")],
+              ["departures", t("Departures")],
               ["stayovers", "Stayovers"],
-              ["notes", "Notes"],
+              ["dndRooms", "DND rooms"],
+              ["roomRevenue", "Room rev"],
+              ["popupGroupRooms", "Pop-up rooms"],
+              ["notes", t("Notes")],
             ].map(([key, label]) => (
               <tr key={key}>
                 <td className="border border-[#e0d3c1] p-2 font-medium">{label}</td>
@@ -288,7 +424,55 @@ function ForecastPanel({ payload, editable, onSave }: { payload: SchedulePayload
             ))}
           </tbody>
         </table>
-        {editable && <Button className={`mt-3 ${C.green}`} onClick={() => onSave(days)}><Save className="mr-2 h-4 w-4" />Save forecast</Button>}
+        {editable && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button className={C.green} onClick={() => onSave(days)}><Save className="mr-2 h-4 w-4" />{t("Save forecast")}</Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) onImport(file);
+                event.target.value = "";
+              }}
+            />
+            <Button variant="outline" className={C.outline} disabled={importing} onClick={() => fileInputRef.current?.click()}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              {importing ? "Importing..." : t("Import OTB CSV")}
+            </Button>
+            <input
+              ref={actualizedInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) onActualizedImport(file);
+                event.target.value = "";
+              }}
+            />
+            <Button variant="outline" className={C.outline} disabled={actualizing} onClick={() => actualizedInputRef.current?.click()}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              {actualizing ? "Uploading..." : t("Upload actualized CSV")}
+            </Button>
+          </div>
+        )}
+        {editable && (
+          <div className="mt-4 rounded-xl border border-[#e0d3c1] bg-white p-3">
+            <div className="mb-2 font-semibold">DOS pop-up group adjustment</div>
+            <div className="grid gap-2 md:grid-cols-[160px_140px_1fr_auto]">
+              <Select value={groupForm.forecastDate} onValueChange={(forecastDate) => setGroupForm({ ...groupForm, forecastDate })}>
+                <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
+                <SelectContent>{payload.days.map((day, index) => <SelectItem key={day} value={day}>{(spanish ? DAY_LABELS_ES : DAY_LABELS)[index]} {formatDate(day)}</SelectItem>)}</SelectContent>
+              </Select>
+              <Input className={C.field} type="number" value={groupForm.popupGroupRooms} onChange={(event) => setGroupForm({ ...groupForm, popupGroupRooms: event.target.value })} placeholder="Rooms" />
+              <Input className={C.field} value={groupForm.popupGroupNotes} onChange={(event) => setGroupForm({ ...groupForm, popupGroupNotes: event.target.value })} placeholder="Group / demand generator notes" />
+              <Button className={C.green} onClick={() => onPopupGroupSave({ forecastDate: groupForm.forecastDate, popupGroupRooms: Number(groupForm.popupGroupRooms || 0), popupGroupNotes: groupForm.popupGroupNotes })}>Save group</Button>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -357,14 +541,16 @@ function ShiftEditDialog({
   );
 }
 
-function ScheduleGrid({ payload, editable, onEdit }: { payload: SchedulePayload; editable: boolean; onEdit: (employee: ScheduleEmployee, date: string, assignment?: ShiftAssignment) => void }) {
+function ScheduleGrid({ payload, editable, onEdit, spanish }: { payload: SchedulePayload; editable: boolean; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, assignment?: ShiftAssignment) => void }) {
   const assignments = useMemo(() => new Map(payload.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment])), [payload.assignments]);
   const shiftTypes = useMemo(() => new Map(payload.shiftTypes.map((shift) => [shift.id, shift])), [payload.shiftTypes]);
   const approvedRequests = useMemo(() => new Map((payload.approvedRequests || []).map((request) => [`${request.employeeId}:${request.requestDate}`, request])), [payload.approvedRequests]);
+  const t = (value: string) => spanish ? ES[value] || value : value;
+  const labels = spanish ? DAY_LABELS_ES : DAY_LABELS;
   return (
     <Card className={C.shell}>
       <CardHeader>
-        <CardTitle className={C.ink}>Weekly schedule</CardTitle>
+        <CardTitle className={C.ink}>{t("Weekly schedule")}</CardTitle>
         <CardDescription className={C.muted}>Associates are listed on the left by department. Click any date cell to add or edit that shift.</CardDescription>
       </CardHeader>
       <CardContent>
@@ -372,9 +558,9 @@ function ScheduleGrid({ payload, editable, onEdit }: { payload: SchedulePayload;
           <table className="w-full min-w-[980px] border-collapse text-sm">
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 min-w-[220px] border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left">Associate</th>
-                {payload.days.map((day, index) => <th key={day} className="border border-[#e0d3c1] bg-[#f4eadb] p-2">{DAY_LABELS[index]}<br />{formatDate(day)}</th>)}
-                <th className="border border-[#e0d3c1] bg-[#f4eadb] p-2">Hours</th>
+                <th className="sticky left-0 z-10 min-w-[220px] border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left">{t("Associate")}</th>
+                {payload.days.map((day, index) => <th key={day} className="border border-[#e0d3c1] bg-[#f4eadb] p-2">{labels[index]}<br />{formatDate(day)}</th>)}
+                <th className="border border-[#e0d3c1] bg-[#f4eadb] p-2">{t("Hours")}</th>
               </tr>
             </thead>
             <tbody>
@@ -399,7 +585,7 @@ function ScheduleGrid({ payload, editable, onEdit }: { payload: SchedulePayload;
                               style={{ background: approvedRequest ? "#e5e7eb" : shift?.color || "#ffffff", color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }}
                               onClick={() => onEdit(employee, day, assignment)}
                             >
-                              {approvedRequest ? "Approved request" : shiftText(assignment, shift) || (editable ? "+ Add shift" : "-")}
+                              {approvedRequest ? t("Approved request") : shiftText(assignment, shift) || (editable ? `+ ${t("Add shift")}` : "-")}
                             </button>
                           </td>
                         );
@@ -410,7 +596,7 @@ function ScheduleGrid({ payload, editable, onEdit }: { payload: SchedulePayload;
                 ];
               })}
               <tr>
-                <td className="border border-[#e0d3c1] bg-[#f4eadb] p-2 font-semibold">Daily labor hours</td>
+                <td className="border border-[#e0d3c1] bg-[#f4eadb] p-2 font-semibold">{t("Daily labor hours")}</td>
                 {payload.days.map((day) => <td key={day} className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center font-semibold">{payload.totals.dailyLaborHours[day] || 0}</td>)}
                 <td className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center font-semibold">{payload.totals.totalWeeklyLaborHours}</td>
               </tr>
@@ -435,7 +621,7 @@ function ScheduleGrid({ payload, editable, onEdit }: { payload: SchedulePayload;
                           const shift = assignment ? shiftTypes.get(assignment.shiftTypeId || "") : undefined;
                           return (
                             <button key={day} disabled={!editable || Boolean(approvedRequest)} className="rounded-md border border-[#e0d3c1] p-2 text-left text-sm disabled:cursor-default" style={{ background: approvedRequest ? "#e5e7eb" : shift?.color || "#fff", color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }} onClick={() => onEdit(employee, day, assignment)}>
-                              <strong>{DAY_LABELS[index]} {formatDate(day)}:</strong> {approvedRequest ? "Approved request" : shiftText(assignment, shift) || "-"}
+                              <strong>{labels[index]} {formatDate(day)}:</strong> {approvedRequest ? t("Approved request") : shiftText(assignment, shift) || "-"}
                             </button>
                           );
                         })}
@@ -452,8 +638,9 @@ function ScheduleGrid({ payload, editable, onEdit }: { payload: SchedulePayload;
   );
 }
 
-function EmployeeManager({ employees, onAdd, onUpdate }: { employees: ScheduleEmployee[]; onAdd: (employee: any) => void; onUpdate: (id: string, patch: any) => void }) {
-  const [form, setForm] = useState({ firstName: "", lastName: "", displayName: "", department: "Front Desk", position: "", maxWeeklyHours: "40", email: "", phone: "" });
+function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollImport, importingPayroll }: { employees: ScheduleEmployee[]; canViewRates: boolean; onAdd: (employee: any) => void; onUpdate: (id: string, patch: any) => void; onPayrollImport: (file: File) => void; importingPayroll: boolean }) {
+  const payrollInputRef = useRef<HTMLInputElement | null>(null);
+  const [form, setForm] = useState({ firstName: "", lastName: "", displayName: "", department: "Front Desk", position: "", maxWeeklyHours: "40", hourlyRate: "", email: "", phone: "" });
   return (
     <Card className={C.shell}>
       <CardHeader>
@@ -471,16 +658,36 @@ function EmployeeManager({ employees, onAdd, onUpdate }: { employees: ScheduleEm
           </Select>
           <Input className={C.field} placeholder="Position" value={form.position} onChange={(event) => setForm({ ...form, position: event.target.value })} />
           <Input className={C.field} placeholder="Max weekly hours" type="number" value={form.maxWeeklyHours} onChange={(event) => setForm({ ...form, maxWeeklyHours: event.target.value })} />
+          {canViewRates && <Input className={C.field} placeholder="Hourly rate" type="number" value={form.hourlyRate} onChange={(event) => setForm({ ...form, hourlyRate: event.target.value })} />}
           <Input className={C.field} placeholder="Email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
           <Input className={C.field} placeholder="Phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
-          <Button className={C.green} onClick={() => onAdd({ ...form, maxWeeklyHours: Number(form.maxWeeklyHours || 0) })}><Plus className="mr-2 h-4 w-4" />Add employee</Button>
+          <Button className={C.green} onClick={() => onAdd({ ...form, maxWeeklyHours: Number(form.maxWeeklyHours || 0), hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate) })}><Plus className="mr-2 h-4 w-4" />Add employee</Button>
+          {canViewRates && (
+            <>
+              <input
+                ref={payrollInputRef}
+                type="file"
+                accept=".pdf,.txt,application/pdf,text/plain"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) onPayrollImport(file);
+                  event.target.value = "";
+                }}
+              />
+              <Button variant="outline" className={C.outline} disabled={importingPayroll} onClick={() => payrollInputRef.current?.click()}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                {importingPayroll ? "Importing payroll..." : "Import payroll rates"}
+              </Button>
+            </>
+          )}
         </div>
         <div className="space-y-2">
           {employees.map((employee) => (
             <div key={employee.id} className={`grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_220px_120px] ${employee.active ? "border-[#e0d3c1] bg-white" : "border-slate-300 bg-slate-100"}`}>
               <div>
                 <div className="font-semibold">{employee.displayName}</div>
-                <div className="text-sm text-[#5f5247]">{employee.position || "No position"} {employee.maxWeeklyHours ? `- max ${employee.maxWeeklyHours} hrs` : ""}</div>
+                <div className="text-sm text-[#5f5247]">{employee.position || "No position"} {employee.maxWeeklyHours ? `- max ${employee.maxWeeklyHours} hrs` : ""} {canViewRates && employee.hourlyRate ? `- $${employee.hourlyRate}/hr` : ""}</div>
               </div>
               <Select value={normalizeDepartment(employee.department)} onValueChange={(department) => onUpdate(employee.id, { department })}>
                 <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
@@ -563,8 +770,10 @@ export default function SchedulePage() {
   const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
   const shareToken = params.get("share");
   const [selectedWeekId, setSelectedWeekId] = useState<string>("");
-  const [weekStartDate, setWeekStartDate] = useState(mondayFor());
+  const [weekStartDate, setWeekStartDate] = useState(saturdayFor());
   const [selectedShift, setSelectedShift] = useState<{ employee: ScheduleEmployee; date: string; assignment?: ShiftAssignment } | null>(null);
+  const [aiDraft, setAiDraft] = useState<AiScheduleDraft | null>(null);
+  const [spanish, setSpanish] = useState(false);
 
   const auth = useQuery<{ user: ScheduleUser | null }>({ queryKey: ["/api/schedule/auth/me"], queryFn: () => fetchJson("/api/schedule/auth/me"), enabled: !shareToken });
   const weeks = useQuery<{ weeks: WeeklySchedule[] }>({ queryKey: ["/api/schedule/weeks"], queryFn: () => fetchJson("/api/schedule/weeks"), enabled: !!auth.data?.user && !shareToken });
@@ -606,6 +815,94 @@ export default function SchedulePage() {
   const saveForecast = useMutation({
     mutationFn: (days: ForecastDay[]) => apiRequest("PUT", `/api/schedule/weeks/${payload?.schedule.id}/forecast`, { days }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] }),
+  });
+  const importForecast = useMutation({
+    mutationFn: async (file: File) => {
+      if (!payload?.schedule.id) throw new Error("Select a schedule before importing forecast data.");
+      const formData = new FormData();
+      formData.append("forecastReport", file);
+      const response = await fetch(apiUrl(`/api/schedule/weeks/${payload.schedule.id}/forecast/import`), {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Forecast imported", description: "On-the-books data was parsed and adjusted for pickup." });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
+    },
+    onError: (error: Error) => toast({ title: "Forecast import failed", description: error.message, variant: "destructive" }),
+  });
+  const importActualized = useMutation({
+    mutationFn: async (file: File) => {
+      if (!payload?.schedule.id) throw new Error("Select a schedule before uploading actualized data.");
+      const formData = new FormData();
+      formData.append("actualizedReport", file);
+      const response = await fetch(apiUrl(`/api/schedule/weeks/${payload.schedule.id}/forecast/actualized`), {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Actualized stats uploaded", description: "Pickup can now be compared against the original OTB import." });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
+    },
+    onError: (error: Error) => toast({ title: "Actualized upload failed", description: error.message, variant: "destructive" }),
+  });
+  const savePopupGroup = useMutation({
+    mutationFn: (body: { forecastDate: string; popupGroupRooms: number; popupGroupNotes: string }) => apiRequest("PATCH", `/api/schedule/weeks/${payload?.schedule.id}/forecast/groups`, body),
+    onSuccess: () => {
+      toast({ title: "Pop-up group saved" });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
+    },
+    onError: (error: Error) => toast({ title: "Group save failed", description: error.message, variant: "destructive" }),
+  });
+  const importPayrollRates = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("payrollRegister", file);
+      const response = await fetch(apiUrl("/api/schedule/employees/payroll-import"), {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+    onSuccess: (data: { matched: any[]; unmatched: any[] }) => {
+      toast({ title: "Payroll rates imported", description: `${data.matched.length} matched, ${data.unmatched.length} unmatched.` });
+      if (weekId) queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
+    },
+    onError: (error: Error) => toast({ title: "Payroll import failed", description: error.message, variant: "destructive" }),
+  });
+  const generateAiSchedule = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/generate`, {});
+      return response.json() as Promise<AiScheduleDraft>;
+    },
+    onSuccess: (data) => {
+      setAiDraft(data);
+      toast({ title: "AI draft generated", description: `${data.assignments.length} proposed shifts are ready to review.` });
+    },
+    onError: (error: Error) => toast({ title: "AI draft failed", description: error.message, variant: "destructive" }),
+  });
+  const applyAiSchedule = useMutation({
+    mutationFn: async () => {
+      if (!aiDraft) throw new Error("Generate an AI draft first.");
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/apply`, { assignments: aiDraft.assignments });
+      return response.json();
+    },
+    onSuccess: () => {
+      setAiDraft(null);
+      toast({ title: "AI draft applied", description: "Review the schedule before publishing." });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
+    },
+    onError: (error: Error) => toast({ title: "AI apply failed", description: error.message, variant: "destructive" }),
   });
   const saveShift = useMutation({
     mutationFn: (body: any) => apiRequest("PUT", `/api/schedule/weeks/${payload?.schedule.id}/shifts`, body),
@@ -671,6 +968,9 @@ export default function SchedulePage() {
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Courtyard Schedule Builder</h1>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" className={C.outline} onClick={() => setSpanish((value) => !value)}>
+              {spanish ? "English" : "Español"}
+            </Button>
             {!shareToken && user?.isAdmin && <Input className={`${C.field} w-[160px]`} type="date" value={weekStartDate} onChange={(event) => setWeekStartDate(event.target.value)} />}
             {!shareToken && user?.isAdmin && <Button className={C.green} onClick={() => createWeek.mutate("blank")}><CalendarDays className="mr-2 h-4 w-4" />Blank week</Button>}
             {!shareToken && user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => createWeek.mutate("copyPrevious")}><Copy className="mr-2 h-4 w-4" />Copy previous</Button>}
@@ -737,16 +1037,82 @@ export default function SchedulePage() {
                     <CardTitle className={C.ink}>{payload.schedule.propertyName}</CardTitle>
                     <CardDescription className={C.muted}>{formatWeek(payload.schedule.weekStartDate, payload.schedule.weekEndDate)}</CardDescription>
                   </div>
-                  <Badge variant="outline" className={statusBadge(payload.schedule.status)}>{payload.schedule.status}</Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {editable && (
+                      <Button className={C.accent} disabled={generateAiSchedule.isPending} onClick={() => generateAiSchedule.mutate()}>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        {generateAiSchedule.isPending ? "Generating..." : (spanish ? ES["Generate AI schedule"] : "Generate AI schedule")}
+                      </Button>
+                    )}
+                    <Badge variant="outline" className={statusBadge(payload.schedule.status)}>{payload.schedule.status}</Badge>
+                  </div>
                 </div>
               </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-4">
-                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Weekly hours</div><div className="text-3xl font-semibold">{payload.totals.totalWeeklyLaborHours}</div></div>
-                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Open shifts</div><div className="text-3xl font-semibold">{payload.totals.openShiftCount}</div></div>
-                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Employees</div><div className="text-3xl font-semibold">{payload.employees.filter((e) => e.active).length}</div></div>
-                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Warnings</div><div className="text-3xl font-semibold">{payload.totals.warnings.length}</div></div>
+              <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">{spanish ? ES["Weekly hours"] : "Weekly hours"}</div><div className="text-3xl font-semibold">{payload.totals.totalWeeklyLaborHours}</div></div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Labor $</div><div className="text-3xl font-semibold">${payload.totals.totalWeeklyLaborDollars || "0.00"}</div></div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                  <div className="text-sm text-[#5f5247]">HPOR target {payload.totals.laborMetrics?.targets.hpor ?? 1.3}</div>
+                  <div className={`text-3xl font-semibold ${metricTone(payload.totals.laborMetrics?.weekly.hpor || 0, payload.totals.laborMetrics?.targets.hpor || 1.3)}`}>{payload.totals.laborMetrics?.weekly.hpor ?? "0.00"}</div>
+                </div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                  <div className="text-sm text-[#5f5247]">HK MPOR target {payload.totals.laborMetrics?.targets.hkMporMin ?? 25}-{payload.totals.laborMetrics?.targets.hkMporMax ?? 30}</div>
+                  <div className={`text-3xl font-semibold ${metricTone(payload.totals.laborMetrics?.weekly.hkMpor || 0, payload.totals.laborMetrics?.targets.hkMporMax || 30)}`}>{payload.totals.laborMetrics?.weekly.hkMpor ?? "0.0"}</div>
+                </div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">{spanish ? ES["Open shifts"] : "Open shifts"}</div><div className="text-3xl font-semibold">{payload.totals.openShiftCount}</div></div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">{spanish ? ES.Employees : "Employees"}</div><div className="text-3xl font-semibold">{payload.employees.filter((e) => e.active).length}</div></div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">{spanish ? ES.Warnings : "Warnings"}</div><div className="text-3xl font-semibold">{payload.totals.warnings.length}</div></div>
               </CardContent>
             </Card>
+
+            {payload.totals.laborMetrics && (
+              <Card className={C.shell}>
+                <CardHeader>
+                  <CardTitle className={C.ink}>Labor targets</CardTitle>
+                  <CardDescription className={C.muted}>HPOR is total labor hours per occupied room. HK MPOR is room-attendant minutes per weighted room credit.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                    <div className="text-sm text-[#5f5247]">Forecast rooms</div>
+                    <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.roomsSold}</div>
+                  </div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                    <div className="text-sm text-[#5f5247]">HK room credits</div>
+                    <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.roomCredits}</div>
+                  </div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                    <div className="text-sm text-[#5f5247]">Target HK hours</div>
+                    <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.targetHousekeepingHoursMin}-{payload.totals.laborMetrics.weekly.targetHousekeepingHoursMax}</div>
+                  </div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                    <div className="text-sm text-[#5f5247]">Room revenue</div>
+                    <div className="text-2xl font-semibold">${payload.totals.laborMetrics.weekly.roomRevenue || 0}</div>
+                  </div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                    <div className="text-sm text-[#5f5247]">Actual pickup</div>
+                    <div className="text-2xl font-semibold">
+                      {payload.forecast.some((day) => day.actualRoomsSold != null && day.otbRoomsSold != null)
+                        ? payload.forecast.reduce((sum, day) => sum + (Number(day.actualRoomsSold ?? day.otbRoomsSold ?? 0) - Number(day.otbRoomsSold ?? 0)), 0)
+                        : "-"}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            {payload.totals.bistroLabor && (
+              <Card className={C.shell}>
+                <CardHeader>
+                  <CardTitle className={C.ink}>{spanish ? ES["Bistro labor"] : "Bistro labor"}</CardTitle>
+                  <CardDescription className={C.muted}>Sliding scale from the Bistro labor guide based on weekly occupancy.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-4">
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Weekly Occ</div><div className="text-2xl font-semibold">{payload.totals.bistroLabor.weeklyOccupancyPercent}%</div></div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Model</div><div className="text-xl font-semibold">{payload.totals.bistroLabor.model}</div></div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Target hours</div><div className="text-2xl font-semibold">{payload.totals.bistroLabor.targetMinHours}-{payload.totals.bistroLabor.targetMaxHours}</div></div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Scheduled</div><div className="text-2xl font-semibold">{payload.totals.bistroLabor.scheduledHours}</div></div>
+                </CardContent>
+              </Card>
+            )}
 
             {payload.totals.warnings.length > 0 && (
               <Card className={`${C.shell} border-amber-300`}>
@@ -755,9 +1121,28 @@ export default function SchedulePage() {
               </Card>
             )}
 
-            <ForecastPanel payload={payload} editable={editable} onSave={(days) => saveForecast.mutate(days)} />
-            <ScheduleGrid payload={payload} editable={editable} onEdit={(employee, date, assignment) => setSelectedShift({ employee, date, assignment })} />
-            {user?.isAdmin && !shareToken && <EmployeeManager employees={payload.employees} onAdd={(employee) => addEmployee.mutate(employee)} onUpdate={(id, patch) => updateEmployee.mutate({ id, patch })} />}
+            <ForecastPanel
+              payload={payload}
+              editable={editable}
+              onSave={(days) => saveForecast.mutate(days)}
+              onImport={(file) => importForecast.mutate(file)}
+              onActualizedImport={(file) => importActualized.mutate(file)}
+              onPopupGroupSave={(body) => savePopupGroup.mutate(body)}
+              importing={importForecast.isPending}
+              actualizing={importActualized.isPending}
+              spanish={spanish}
+            />
+            <ScheduleGrid payload={payload} editable={editable} spanish={spanish} onEdit={(employee, date, assignment) => setSelectedShift({ employee, date, assignment })} />
+            {user?.isAdmin && !shareToken && (
+              <EmployeeManager
+                employees={payload.employees}
+                canViewRates={Boolean(user?.isSuperAdmin)}
+                onAdd={(employee) => addEmployee.mutate(employee)}
+                onUpdate={(id, patch) => updateEmployee.mutate({ id, patch })}
+                onPayrollImport={(file) => importPayrollRates.mutate(file)}
+                importingPayroll={importPayrollRates.isPending}
+              />
+            )}
             {!editable && !shareToken && payload.schedule.status === "published" && <div className="flex items-center gap-2 text-sm text-[#5f5247]"><Lock className="h-4 w-4" />Published schedules are read-only until reopened.</div>}
           </>
         )}
@@ -774,6 +1159,51 @@ export default function SchedulePage() {
           onClear={() => saveShift.mutate({ employeeId: selectedShift.employee.id, shiftDate: selectedShift.date, clear: true })}
         />
       )}
+      <Dialog open={!!aiDraft} onOpenChange={(open) => !open && setAiDraft(null)}>
+        <DialogContent className="max-w-3xl bg-[#fffaf2] text-[#201814]">
+          <DialogHeader>
+            <DialogTitle>AI schedule draft</DialogTitle>
+            <DialogDescription className={C.muted}>
+              Review the draft before applying. Applying updates matching associate/date cells but does not publish the schedule.
+            </DialogDescription>
+          </DialogHeader>
+          {aiDraft && (
+            <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+              <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                <div className="text-sm font-semibold">{aiDraft.ai.aiAvailable ? "OpenAI review" : "Rules-based draft"}</div>
+                <p className="mt-1 text-sm text-[#5f5247]">{aiDraft.ai.summary}</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Proposed shifts</div><div className="text-2xl font-semibold">{aiDraft.assignments.length}</div></div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Current HPOR</div><div className="text-2xl font-semibold">{aiDraft.laborMetrics?.weekly.hpor ?? "-"}</div></div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Current HK MPOR</div><div className="text-2xl font-semibold">{aiDraft.laborMetrics?.weekly.hkMpor ?? "-"}</div></div>
+              </div>
+              {aiDraft.ai.recommendations.length > 0 && (
+                <div>
+                  <h3 className="font-semibold">Recommendations</h3>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[#5f5247]">
+                    {aiDraft.ai.recommendations.map((item, index) => <li key={index}>{item}</li>)}
+                  </ul>
+                </div>
+              )}
+              {(aiDraft.ai.risks.length > 0 || aiDraft.warnings.length > 0) && (
+                <div>
+                  <h3 className="font-semibold">Warnings</h3>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[#5f5247]">
+                    {[...aiDraft.ai.risks, ...aiDraft.warnings].filter(Boolean).slice(0, 12).map((item, index) => <li key={index}>{item}</li>)}
+                  </ul>
+                </div>
+              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="outline" className={C.outline} onClick={() => setAiDraft(null)}>Keep manual schedule</Button>
+                <Button className={C.green} disabled={applyAiSchedule.isPending} onClick={() => applyAiSchedule.mutate()}>
+                  {applyAiSchedule.isPending ? "Applying..." : "Apply AI draft"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

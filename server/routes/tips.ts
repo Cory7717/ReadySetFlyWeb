@@ -257,6 +257,10 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const passwordResetRequestSchema = z.object({
+  email: z.string().email(),
+});
+
 const changePasswordSchema = z.object({
   temporaryPassword: z.string().min(1),
   newPassword: z.string().min(8).max(200),
@@ -564,7 +568,7 @@ async function sendTipsPasswordResetEmail(params: {
   requestedByName: string;
 }) {
   const { client, fromEmail } = await getUncachableResendClient();
-  const tipsUrl = new URL("/tips", process.env.FRONTEND_BASE_URL || "https://readysetfly.us").toString();
+  const tipsUrl = new URL("/courtyard", process.env.FRONTEND_BASE_URL || "https://readysetfly.us").toString();
 
   await client.emails.send({
     from: fromEmail,
@@ -816,6 +820,40 @@ export function registerTipsRoutes(app: Express) {
       }
       req.session.tipsUserId = user.id;
       req.session.save(() => res.json({ user: publicTipsUser(user) }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/auth/password-reset-request", tipsAuthRateLimiter, async (req: any, res, next) => {
+    try {
+      const parsed = passwordResetRequestSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Enter a valid email address." });
+      const email = normalizeEmail(parsed.data.email);
+      const [user] = await db.select().from(tipsUsers).where(eq(tipsUsers.email, email)).limit(1);
+      if (user && !user.disabledAt) {
+        const temporaryPassword = `Temp${crypto.randomInt(100000, 999999)}!`;
+        const [updated] = await db
+          .update(tipsUsers)
+          .set({
+            hashedPassword: await bcrypt.hash(temporaryPassword, 12),
+            mustChangePassword: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(tipsUsers.id, user.id))
+          .returning();
+        try {
+          await sendTipsPasswordResetEmail({
+            email: updated.email,
+            firstName: updated.firstName,
+            temporaryPassword,
+            requestedByName: "Courtyard Associate Portal",
+          });
+        } catch (error) {
+          console.error("Failed to send public Courtyard password reset email:", error);
+        }
+      }
+      res.json({ ok: true });
     } catch (error) {
       next(error);
     }

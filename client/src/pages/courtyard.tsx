@@ -70,6 +70,11 @@ function CourtyardLogin({ onDone }: { onDone: () => void }) {
     onSuccess: onDone,
     onError: (error: Error) => toast({ title: mode === "login" ? "Unable to sign in" : "Unable to create account", description: error.message, variant: "destructive" }),
   });
+  const resetPassword = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/tips/auth/password-reset-request", { email: form.email }),
+    onSuccess: () => toast({ title: "Check your email", description: "If that account exists, a temporary password was sent." }),
+    onError: (error: Error) => toast({ title: "Unable to request reset", description: error.message, variant: "destructive" }),
+  });
   const toggleRole = (role: string) => setForm((current) => ({ ...current, rolesJson: current.rolesJson.includes(role) ? current.rolesJson.filter((item) => item !== role) : [...current.rolesJson, role] }));
 
   return (
@@ -126,8 +131,47 @@ function CourtyardLogin({ onDone }: { onDone: () => void }) {
               <Button variant="outline" className={`w-full ${C.outline}`} onClick={() => setMode(mode === "login" ? "register" : "login")}>
                 {mode === "login" ? "Create an account" : "Back to sign in"}
               </Button>
+              {mode === "login" && (
+                <Button variant="ghost" className="w-full text-[#2f5f46]" disabled={!form.email || resetPassword.isPending} onClick={() => resetPassword.mutate()}>
+                  {resetPassword.isPending ? "Sending..." : "Email me a temporary password"}
+                </Button>
+              )}
             </CardContent>
           </Card>
+      </main>
+    </div>
+  );
+}
+
+function CourtyardPasswordChange({ onDone }: { onDone: () => void }) {
+  const { toast } = useToast();
+  const [form, setForm] = useState({ temporaryPassword: "", newPassword: "", confirmPassword: "" });
+  const changePassword = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/tips/auth/change-password", form);
+      return response.json();
+    },
+    onSuccess: onDone,
+    onError: (error: Error) => toast({ title: "Unable to update password", description: error.message, variant: "destructive" }),
+  });
+  return (
+    <div className={`min-h-screen ${C.page}`}>
+      <main className="mx-auto flex min-h-screen max-w-lg items-center px-4 py-8">
+        <Card className={`w-full ${C.shell}`}>
+          <CardHeader>
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">Courtyard Austin Lakeline</div>
+            <CardTitle>Create your new password</CardTitle>
+            <CardDescription className={C.muted}>Confirm the temporary password from your email, then create your permanent password.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div><Label>Temporary password</Label><Input className={C.field} type="password" value={form.temporaryPassword} onChange={(event) => setForm({ ...form, temporaryPassword: event.target.value })} /></div>
+            <div><Label>New password</Label><Input className={C.field} type="password" value={form.newPassword} onChange={(event) => setForm({ ...form, newPassword: event.target.value })} /></div>
+            <div><Label>Confirm new password</Label><Input className={C.field} type="password" value={form.confirmPassword} onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })} /></div>
+            <Button className={`w-full ${C.green}`} disabled={changePassword.isPending || !form.temporaryPassword || form.newPassword.length < 8 || form.confirmPassword.length < 8} onClick={() => changePassword.mutate()}>
+              {changePassword.isPending ? "Updating..." : "Set new password"}
+            </Button>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );
@@ -150,6 +194,7 @@ export default function CourtyardPortalPage() {
 
   if (auth.isLoading) return <div className={`min-h-screen p-8 ${C.page}`}>Loading Courtyard portal...</div>;
   if (!auth.data?.user) return <CourtyardLogin onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/schedule/auth/me", "courtyard"] })} />;
+  if (auth.data.user.mustChangePassword) return <CourtyardPasswordChange onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/schedule/auth/me", "courtyard"] })} />;
 
   const user = auth.data.user;
   const tools = [

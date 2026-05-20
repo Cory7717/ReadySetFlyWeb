@@ -490,44 +490,17 @@ function housekeepingBoardTone(board?: HousekeepingBoard) {
 }
 
 function ScheduleAuthGate({ onDone }: { onDone: () => void }) {
-  const { toast } = useToast();
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [form, setForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", email: "", password: "", phone: "", department: "Front Desk", rolesJson: [] as string[], position: "" });
-  const login = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", mode === "login" ? "/api/tips/auth/login" : "/api/schedule/auth/register", mode === "login" ? { email: form.email, password: form.password } : form);
-      return response.json();
-    },
-    onSuccess: onDone,
-    onError: (error: Error) => toast({ title: mode === "login" ? "Unable to sign in" : "Unable to create login", description: error.message, variant: "destructive" }),
-  });
   return (
     <div className={`min-h-screen px-4 py-8 ${C.page}`}>
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-lg items-center">
         <Card className={C.shell}>
           <CardHeader>
             <CardTitle className={C.ink}>Courtyard Schedule</CardTitle>
-            <CardDescription className={C.muted}>{mode === "login" ? "Use your Courtyard account to view schedules and submit requests." : "Create your Courtyard login to view published schedules and submit requests."}</CardDescription>
+            <CardDescription className={C.muted}>Schedule access now starts from the Courtyard Associate Portal.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {mode === "register" && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div><Label>First name</Label><Input className={C.field} value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} /></div>
-                <div><Label>Last name</Label><Input className={C.field} value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} /></div>
-                <div className="sm:col-span-2"><Label>Display name</Label><Input className={C.field} value={form.employeeDisplayName} onChange={(event) => setForm({ ...form, employeeDisplayName: event.target.value })} placeholder="Optional" /></div>
-                <div><Label>Phone</Label><Input className={C.field} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></div>
-                <div><Label>Department</Label><Select value={form.department} onValueChange={(department) => setForm({ ...form, department })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent></Select></div>
-                <div className="sm:col-span-2">
-                  <Label>Roles</Label>
-                  <div className="mt-1 flex flex-wrap gap-2">{SCHEDULE_ROLES.map((role) => <Button key={role} size="sm" variant="outline" className={form.rolesJson.includes(role) ? C.green : C.outline} onClick={() => setForm({ ...form, rolesJson: form.rolesJson.includes(role) ? form.rolesJson.filter((item) => item !== role) : [...form.rolesJson, role] })}>{role}</Button>)}</div>
-                </div>
-              </div>
-            )}
-            <div><Label>Email</Label><Input className={C.field} type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></div>
-            <div><Label>Password</Label><Input className={C.field} type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></div>
-            <Button className={`w-full ${C.green}`} disabled={login.isPending} onClick={() => login.mutate()}>{login.isPending ? "Working..." : mode === "login" ? "Sign in" : "Create login"}</Button>
-            <Button variant="outline" className={`w-full ${C.outline}`} onClick={() => setMode(mode === "login" ? "register" : "login")}>{mode === "login" ? "Create your login" : "Back to sign in"}</Button>
-            <Button asChild variant="ghost" className="w-full text-[#2f5f46]"><a href="/tips">Need to set or change your password?</a></Button>
+            <p className="text-sm text-[#5f5247]">Sign in or create your account on the portal, then open Schedule from there.</p>
+            <Button asChild className={`w-full ${C.green}`}><a href="/courtyard">Go to Courtyard portal</a></Button>
           </CardContent>
         </Card>
       </div>

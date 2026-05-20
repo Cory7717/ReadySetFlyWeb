@@ -20,6 +20,7 @@ import {
   tipPeriodSubmissions,
   tipsKioskSettings,
   tipsUsers,
+  scheduleEmployees,
 } from "@shared/schema";
 
 const TIPS_SUPER_ADMIN_EMAILS = new Set(
@@ -119,6 +120,23 @@ function isTipsSuperAdmin(user: any) {
   return resolveTipsRole(user) === "super_admin";
 }
 
+function hasBistroText(value: unknown) {
+  const normalized = String(value || "").toLowerCase();
+  return normalized.includes("bistro") || normalized.includes("breakfast");
+}
+
+async function hasBistroTipsAccess(user: any) {
+  if (!user || user.disabledAt || user.mustChangePassword) return false;
+  if (isTipsSuperAdmin(user)) return true;
+  if (hasBistroText(user.position)) return true;
+  const [employee] = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.email, normalizeEmail(String(user.email || "")))).limit(1);
+  return Boolean(employee && (
+    hasBistroText(employee.department) ||
+    hasBistroText(employee.position) ||
+    hasBistroText(Array.isArray(employee.rolesJson) ? employee.rolesJson.join(", ") : employee.rolesJson)
+  ));
+}
+
 function publicTipsUser(user: any): TipsUserSession & { isAdmin: boolean; isSuperAdmin: boolean } {
   const email = String(user.email || "");
   const role = resolveTipsRole(user);
@@ -196,11 +214,16 @@ const requireTipsSuperAdmin: RequestHandler = async (req: any, res, next) => {
 const requireTipsGridAccess: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getTipsUserBySession(req);
-    if (user && !user.disabledAt && !user.mustChangePassword && isTipsManager(user)) {
+    if (user && !user.disabledAt && !user.mustChangePassword && isTipsManager(user) && await hasBistroTipsAccess(user)) {
       req.tipsUser = user;
       return next();
     }
-    if (req.session?.tipsKioskUnlocked) return next();
+    if (!user) return res.status(401).json({ error: "Courtyard login required" });
+    if (!(await hasBistroTipsAccess(user))) return res.status(403).json({ error: "Bistro role required for tips access" });
+    if (req.session?.tipsKioskUnlocked) {
+      req.tipsUser = user;
+      return next();
+    }
     return res.status(401).json({ error: "Tips PIN required" });
   } catch (error) {
     next(error);
@@ -1429,7 +1452,13 @@ export function registerTipsRoutes(app: Express) {
   router.get("/kiosk/status", async (req: any, res, next) => {
     try {
       const user = await getTipsUserBySession(req);
-      const adminUnlocked = Boolean(user && !user.disabledAt && !user.mustChangePassword && isTipsManager(user));
+      if (!user || user.disabledAt || user.mustChangePassword) {
+        return res.json({ unlocked: false, hasPin: Boolean(await getKioskPinHash() || process.env.TIPS_KIOSK_PIN), requiresLogin: true });
+      }
+      if (!(await hasBistroTipsAccess(user))) {
+        return res.status(403).json({ error: "Bistro role required for tips access" });
+      }
+      const adminUnlocked = Boolean(isTipsManager(user));
       res.json({
         unlocked: Boolean(req.session?.tipsKioskUnlocked || adminUnlocked),
         hasPin: Boolean(await getKioskPinHash() || process.env.TIPS_KIOSK_PIN),
@@ -1441,6 +1470,9 @@ export function registerTipsRoutes(app: Express) {
 
   router.post("/kiosk/login", tipsAuthRateLimiter, async (req: any, res, next) => {
     try {
+      const user = await getTipsUserBySession(req);
+      if (!user || user.disabledAt || user.mustChangePassword) return res.status(401).json({ error: "Courtyard login required before entering the Tips PIN." });
+      if (!(await hasBistroTipsAccess(user))) return res.status(403).json({ error: "Bistro role required for tips access." });
       const parsed = kioskPinSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Enter the 5 digit PIN." });
       if (!(await verifyKioskPin(parsed.data.pin))) return res.status(401).json({ error: "Invalid PIN." });

@@ -1222,7 +1222,15 @@ export function registerScheduleRoutes(app: Express) {
   router.get("/auth/me", async (req: any, res, next) => {
     try {
       const user = await getUserBySession(req);
-      res.json({ user: user && !user.disabledAt ? publicScheduleUser(user) : null });
+      if (!user || user.disabledAt) return res.json({ user: null });
+      const scheduleEmployee = await getScheduleEmployeeByEmail(String(user.email || ""));
+      res.json({
+        user: {
+          ...publicScheduleUser(user),
+          scheduleRoles: rolesArray(scheduleEmployee?.rolesJson || user.position),
+          department: scheduleEmployee?.department || null,
+        },
+      });
     } catch (error) {
       next(error);
     }

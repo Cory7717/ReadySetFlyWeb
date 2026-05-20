@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const C = {
   page: "bg-[#f5efe7] text-[#201814]",
@@ -28,7 +29,20 @@ type CourtyardUser = {
   isAdmin: boolean;
   isSuperAdmin: boolean;
   mustChangePassword?: boolean;
+  scheduleRoles?: string[];
 };
+
+const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
+const SCHEDULE_ROLES = ["GM", "DOS", "MOD", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
+
+function isBistroRole(role: string) {
+  const normalized = role.toLowerCase();
+  return normalized.includes("bistro") || normalized.includes("breakfast");
+}
+
+function userHasTipsAccess(user: CourtyardUser) {
+  return user.isAdmin || (user.scheduleRoles || []).some(isBistroRole);
+}
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { credentials: "include" });
@@ -38,15 +52,25 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 function CourtyardLogin({ onDone }: { onDone: () => void }) {
   const { toast } = useToast();
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [access, setAccess] = useState({ schedule: true, tips: false });
+  const [form, setForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", email: "", password: "", phone: "", department: "Front Desk", rolesJson: [] as string[], position: "" });
   const login = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/tips/auth/login", form);
+      if (mode === "register" && access.tips && !form.rolesJson.some(isBistroRole)) {
+        throw new Error("Tips access requires a Bistro or Breakfast role.");
+      }
+      const response = await apiRequest(
+        "POST",
+        mode === "login" ? "/api/tips/auth/login" : "/api/schedule/auth/register",
+        mode === "login" ? { email: form.email, password: form.password } : form,
+      );
       return response.json();
     },
     onSuccess: onDone,
-    onError: (error: Error) => toast({ title: "Unable to sign in", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: mode === "login" ? "Unable to sign in" : "Unable to create account", description: error.message, variant: "destructive" }),
   });
+  const toggleRole = (role: string) => setForm((current) => ({ ...current, rolesJson: current.rolesJson.includes(role) ? current.rolesJson.filter((item) => item !== role) : [...current.rolesJson, role] }));
 
   return (
     <div className={`min-h-screen ${C.page}`}>
@@ -56,10 +80,38 @@ function CourtyardLogin({ onDone }: { onDone: () => void }) {
               <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">Courtyard Austin Lakeline</div>
               <CardTitle className="text-3xl">Associate Portal</CardTitle>
               <CardDescription className={C.muted}>
-                Sign in with your Courtyard schedule account to access schedules, Bistro tip reporting, and operations tools.
+                {mode === "login" ? "Sign in with your Courtyard account." : "Create your Courtyard account for schedule access, tips access, or both."}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              {mode === "register" && (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button type="button" className={`rounded-lg border p-3 text-left text-sm ${access.schedule ? "border-[#2f5f46] bg-[#e8f3ec]" : "border-[#cdbda8] bg-white"}`} onClick={() => setAccess({ ...access, schedule: !access.schedule })}>
+                      <div className="font-semibold">Schedule</div>
+                      <div className="text-[#5f5247]">View schedules and submit requests.</div>
+                    </button>
+                    <button type="button" className={`rounded-lg border p-3 text-left text-sm ${access.tips ? "border-[#b98435] bg-[#fff3dd]" : "border-[#cdbda8] bg-white"}`} onClick={() => setAccess({ ...access, tips: !access.tips })}>
+                      <div className="font-semibold">Tips</div>
+                      <div className="text-[#5f5247]">Bistro roles only.</div>
+                    </button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div><Label>First name</Label><Input className={C.field} value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} /></div>
+                    <div><Label>Last name</Label><Input className={C.field} value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} /></div>
+                    <div className="sm:col-span-2"><Label>Display name</Label><Input className={C.field} value={form.employeeDisplayName} onChange={(event) => setForm({ ...form, employeeDisplayName: event.target.value })} placeholder="Optional" /></div>
+                    <div><Label>Phone</Label><Input className={C.field} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></div>
+                    <div><Label>Department</Label><Select value={form.department} onValueChange={(department) => setForm({ ...form, department })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent></Select></div>
+                  </div>
+                  <div>
+                    <Label>Roles</Label>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {SCHEDULE_ROLES.map((role) => <Button key={role} type="button" size="sm" variant="outline" className={form.rolesJson.includes(role) ? C.green : C.outline} onClick={() => toggleRole(role)}>{role}</Button>)}
+                    </div>
+                    {access.tips && !form.rolesJson.some(isBistroRole) && <p className="mt-1 text-sm text-amber-800">Select Bistro AM, Bistro PM, or Breakfast to request Tips access.</p>}
+                  </div>
+                </>
+              )}
               <div>
                 <Label>Email</Label>
                 <Input className={C.field} type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
@@ -69,11 +121,11 @@ function CourtyardLogin({ onDone }: { onDone: () => void }) {
                 <Input className={C.field} type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
               </div>
               <Button className={`w-full ${C.green}`} disabled={login.isPending || !form.email || !form.password} onClick={() => login.mutate()}>
-                {login.isPending ? "Signing in..." : "Sign in"}
+                {login.isPending ? "Working..." : mode === "login" ? "Sign in" : "Create account"}
               </Button>
-              <p className="text-center text-sm text-[#5f5247]">
-                Need an account? Open the schedule page and choose create login.
-              </p>
+              <Button variant="outline" className={`w-full ${C.outline}`} onClick={() => setMode(mode === "login" ? "register" : "login")}>
+                {mode === "login" ? "Create an account" : "Back to sign in"}
+              </Button>
             </CardContent>
           </Card>
       </main>
@@ -116,6 +168,7 @@ export default function CourtyardPortalPage() {
       description: "Open the Bistro tip reporting page. Associates enter the 5 digit team PIN before entering tip reports.",
       action: "Open tips reports",
       tone: C.accent,
+      disabled: !userHasTipsAccess(user),
     },
     {
       href: "/opsreport",
@@ -173,9 +226,13 @@ export default function CourtyardPortalPage() {
                   <CardDescription className={C.muted}>{tool.description}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button asChild className={`w-full ${tool.tone}`}>
-                    <Link href={tool.href}>{tool.action}</Link>
-                  </Button>
+                  {tool.disabled ? (
+                    <Button className={`w-full ${C.outline}`} disabled>Bistro role required</Button>
+                  ) : (
+                    <Button asChild className={`w-full ${tool.tone}`}>
+                      <Link href={tool.href}>{tool.action}</Link>
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             );

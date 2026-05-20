@@ -677,6 +677,27 @@ function TipsPinGate({ onUnlocked }: { onUnlocked: () => void }) {
   );
 }
 
+function TipsPortalLoginRequired() {
+  return (
+    <div className={`min-h-screen ${C.page}`}>
+      <main className="mx-auto flex min-h-screen max-w-lg items-center px-4 py-8">
+        <Card className={`w-full ${C.shell}`}>
+          <CardHeader>
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">Courtyard Austin Lakeline Bistro</div>
+            <CardTitle className={C.ink}>Sign in required</CardTitle>
+            <CardDescription className={C.muted}>
+              Use the Courtyard Associate Portal first. Bistro associates can then enter the 5 digit PIN for tip reporting.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild className={`w-full ${C.green}`}><a href="/courtyard">Go to Courtyard portal</a></Button>
+          </CardContent>
+        </Card>
+      </main>
+    </div>
+  );
+}
+
 function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1555,10 +1576,10 @@ export default function TipsPage() {
     queryKey: ["/api/tips/auth/me"],
     queryFn: () => fetchJson("/api/tips/auth/me"),
   });
-  const { data: kioskStatus, isLoading: kioskLoading } = useQuery<{ unlocked: boolean; hasPin: boolean }>({
+  const { data: kioskStatus, isLoading: kioskLoading, error: kioskError } = useQuery<{ unlocked: boolean; hasPin: boolean }>({
     queryKey: ["/api/tips/kiosk/status"],
     queryFn: () => fetchJson("/api/tips/kiosk/status"),
-    enabled: !isAdminPath || !!auth?.user,
+    enabled: !!auth?.user,
   });
   const logout = useMutation({
     mutationFn: () => apiRequest("POST", "/api/tips/auth/logout"),
@@ -1581,6 +1602,24 @@ export default function TipsPage() {
   }
   if (auth?.user?.mustChangePassword) {
     return <ChangePasswordGate onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tips/auth/me"] })} />;
+  }
+  if (!isAdminPath && !auth?.user) return <TipsPortalLoginRequired />;
+  if (!isAdminPath && kioskError) {
+    return (
+      <div className={`min-h-screen ${C.page}`}>
+        <main className="mx-auto flex min-h-screen max-w-lg items-center px-4 py-8">
+          <Card className={`w-full ${C.shell}`}>
+            <CardHeader>
+              <CardTitle className={C.ink}>Tips access unavailable</CardTitle>
+              <CardDescription className={C.muted}>Tips reporting is limited to Bistro-related roles. Contact your manager if your role needs to be updated.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild className={`w-full ${C.green}`}><a href="/courtyard">Back to Courtyard portal</a></Button>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
   }
   if (!isAdminPath && (kioskLoading || !kioskStatus)) return <div className={`min-h-screen p-8 ${C.page}`}>Loading Tips Tracker...</div>;
   if (!isAdminPath && !kioskStatus?.unlocked) {

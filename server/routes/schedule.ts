@@ -1882,6 +1882,7 @@ export function registerScheduleRoutes(app: Express) {
 
   router.post("/weeks/:id/reopen", requireScheduleManager, async (req: any, res, next) => {
     try {
+      if (!publicScheduleUser(req.scheduleUser).isSuperAdmin) return res.status(403).json({ error: "Only GM/admin can reopen the final schedule." });
       const reason = z.string().max(500).optional().parse(req.body?.reason || "");
       const [schedule] = await db.update(weeklySchedules).set({ status: "draft", updatedAt: new Date() }).where(eq(weeklySchedules.id, req.params.id)).returning();
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
@@ -1894,6 +1895,7 @@ export function registerScheduleRoutes(app: Express) {
 
   router.post("/weeks/:id/archive", requireScheduleManager, async (req: any, res, next) => {
     try {
+      if (!publicScheduleUser(req.scheduleUser).isSuperAdmin) return res.status(403).json({ error: "Only GM/admin can archive schedules." });
       const [schedule] = await db.update(weeklySchedules).set({ status: "archived", archivedAt: new Date(), updatedAt: new Date() }).where(eq(weeklySchedules.id, req.params.id)).returning();
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
       await audit(schedule.id, req.scheduleUser.id, "schedule_archived");
@@ -1934,6 +1936,7 @@ export function registerScheduleRoutes(app: Express) {
 
   router.post("/weeks/:id/share-link", requireScheduleManager, async (req: any, res, next) => {
     try {
+      if (!publicScheduleUser(req.scheduleUser).isSuperAdmin) return res.status(403).json({ error: "Only GM/admin can create schedule share links." });
       const schedule = await getScheduleOr404(req.params.id);
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
       if (schedule.status !== "published") return res.status(400).json({ error: "Publish the schedule before sharing." });

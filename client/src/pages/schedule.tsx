@@ -610,6 +610,12 @@ function ForecastPanel({
   useEffect(() => {
     setDays(payload.days.map((date) => payload.forecast.find((day) => day.forecastDate === date) || { forecastDate: date, roomsSold: 0, occupancyPercent: 0, arrivals: 0, departures: 0, stayovers: 0 }));
   }, [payload.schedule.id, payload.forecast, payload.days]);
+  const hasOriginalUpload = days.some((day) =>
+    day.otbRoomsSold != null ||
+    day.otbOccupancyPercent != null ||
+    day.otbArrivals != null ||
+    day.otbDepartures != null
+  );
   const updateDayField = (index: number, key: string, value: string) => {
     setDays((current) => current.map((item, i) => {
       if (i !== index) return item;
@@ -644,6 +650,63 @@ function ForecastPanel({
         <CardDescription className={C.muted}>{spanish ? "Cuartos, ocupacion, llegadas, salidas y notas controlan alertas de personal." : "Rooms, occupancy, arrivals, departures, and notes drive staffing warnings."}</CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto">
+        {hasOriginalUpload && (
+          <div className="mb-5 rounded-xl border border-[#d9c9b4] bg-[#fbf6ee] p-3">
+            <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h3 className="font-semibold text-[#201814]">{spanish ? "Carga original" : "Original Upload"}</h3>
+                <p className="text-sm text-[#5f5247]">
+                  {spanish
+                    ? "Referencia bloqueada del reporte OTB inicial. No controla los calculos actuales."
+                    : "Locked reference from the initial OTB report. Current forecast calculations use the editable table below."}
+                </p>
+              </div>
+              {days.some((day) => day.actualRoomsSold != null && day.otbRoomsSold != null) && (
+                <Badge variant="outline" className="w-fit border-[#bdd5c3] bg-[#e8f1ea] text-[#173c25]">
+                  {spanish ? "Pickup vs original" : "Pickup vs original"}: {days.reduce((sum, day) => sum + (Number(day.actualRoomsSold ?? day.otbRoomsSold ?? 0) - Number(day.otbRoomsSold ?? 0)), 0)} rooms
+                </Badge>
+              )}
+            </div>
+            <table className="w-full min-w-[820px] border-collapse text-sm">
+              <thead>
+                <tr>
+                  <th className="border border-[#e0d3c1] bg-[#efe3d1] p-2 text-left">{spanish ? "Metrica" : "Metric"}</th>
+                  {days.map((day, index) => <th key={day.forecastDate} className="border border-[#e0d3c1] bg-[#efe3d1] p-2">{(spanish ? DAY_LABELS_ES : DAY_LABELS)[index]} {formatDate(day.forecastDate)}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["otbRoomsSold", t("Rooms sold")],
+                  ["otbOccupancyPercent", "Occ %"],
+                  ["otbArrivals", t("Arrivals")],
+                  ["otbDepartures", t("Departures")],
+                ].map(([key, label]) => (
+                  <tr key={key}>
+                    <td className="border border-[#e0d3c1] bg-white p-2 font-medium">{label}</td>
+                    {days.map((day) => (
+                      <td key={day.forecastDate} className="border border-[#e0d3c1] bg-white p-2 text-center font-semibold text-[#5f5247]">
+                        {(day as any)[key] ?? "-"}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                {days.some((day) => day.actualRoomsSold != null) && (
+                  <tr>
+                    <td className="border border-[#e0d3c1] bg-[#f4eadb] p-2 font-medium">{spanish ? "Pickup actual" : "Actual pickup"}</td>
+                    {days.map((day) => {
+                      const pickup = day.actualRoomsSold != null && day.otbRoomsSold != null ? Number(day.actualRoomsSold || 0) - Number(day.otbRoomsSold || 0) : null;
+                      return (
+                        <td key={day.forecastDate} className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center font-semibold">
+                          {pickup == null ? "-" : pickup > 0 ? `+${pickup}` : pickup}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
         <table className="w-full min-w-[820px] border-collapse text-sm">
           <thead>
             <tr>
@@ -1520,9 +1583,9 @@ export default function SchedulePage() {
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline" className={statusBadge(payload.schedule.status)}>{payload.schedule.status}</Badge>
                   {payload.schedule.status === "draft" && payload.currentUserPermissions?.canPublishFinal && <Button className={C.green} onClick={() => action.mutate({ name: "publish" })}><CheckCircle2 className="mr-2 h-4 w-4" />Save & Publish Final Schedule</Button>}
-                  {payload.schedule.status === "published" && user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "reopen", body: { reason: "Manager edit" } })}><RefreshCw className="mr-2 h-4 w-4" />{t("Reopen")}</Button>}
-                  {user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "archive" })}><Archive className="mr-2 h-4 w-4" />{t("Archive")}</Button>}
-                  {payload.schedule.status === "published" && user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => shareLink.mutate()}><Share2 className="mr-2 h-4 w-4" />{t("Copy share link")}</Button>}
+                  {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "reopen", body: { reason: "Manager edit" } })}><RefreshCw className="mr-2 h-4 w-4" />{t("Reopen")}</Button>}
+                  {payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "archive" })}><Archive className="mr-2 h-4 w-4" />{t("Archive")}</Button>}
+                  {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => shareLink.mutate()}><Share2 className="mr-2 h-4 w-4" />{t("Copy share link")}</Button>}
                   <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/pdf`)}><Download className="mr-2 h-4 w-4" />PDF</a></Button>
                   <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/excel`)}><FileSpreadsheet className="mr-2 h-4 w-4" />Excel</a></Button>
                 </div>

@@ -394,8 +394,20 @@ function shiftText(assignment: ShiftAssignment | undefined, shiftType: ShiftType
   if (!assignment || !shiftType) return "";
   const start = assignment.customStartTime || shiftType.startTime;
   const end = assignment.customEndTime || shiftType.endTime;
-  const base = start && end ? `${formatTime12(start)} - ${formatTime12(end)}` : shiftType.label;
-  return [base, assignment.roleWorked, assignment.roleNote].filter(Boolean).join(" ");
+  const base = start && end ? `${formatTimeCompact(start)} - ${formatTimeCompact(end)}` : shiftType.label;
+  const role = usefulRoleLabel(assignment.roleWorked, shiftType);
+  return [base, role, assignment.roleNote].filter(Boolean).join("\n");
+}
+
+function usefulRoleLabel(roleWorked: string | null | undefined, shiftType: ShiftType | undefined) {
+  const role = String(roleWorked || "").trim();
+  if (!role || !shiftType) return "";
+  const normalizedRole = role.toLowerCase();
+  const shiftLabel = String(shiftType.label || "").toLowerCase();
+  const departmentHint = String(shiftType.departmentHint || "").toLowerCase();
+  if (normalizedRole === shiftLabel || normalizedRole === departmentHint) return "";
+  if (roleDepartment(role) === roleDepartment(shiftType.label) && /^(fd am|fd pm|front desk|night audit|bistro am|bistro pm|breakfast|maintenance|gm|dos|dos \/ sales|sales|mod)$/i.test(role)) return "";
+  return role;
 }
 
 function formatTime12(value?: string | null) {
@@ -405,6 +417,15 @@ function formatTime12(value?: string | null) {
   const period = hh >= 12 ? "PM" : "AM";
   const hour = hh % 12 || 12;
   return `${hour}:${String(mm).padStart(2, "0")} ${period}`;
+}
+
+function formatTimeCompact(value?: string | null) {
+  if (!value) return "";
+  const [hh, mm] = value.slice(0, 5).split(":").map(Number);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return value || "";
+  const period = hh >= 12 ? "PM" : "AM";
+  const hour = hh % 12 || 12;
+  return mm === 0 ? `${hour} ${period}` : `${hour}:${String(mm).padStart(2, "0")} ${period}`;
 }
 
 function normalizeDepartment(value?: string | null) {
@@ -848,6 +869,20 @@ function ShiftEditDialog({
       roleWorked: form.roleWorked || shift?.label || "",
     });
   };
+  const selectRoleWorked = (roleWorked: string) => {
+    const nextRole = roleWorked === "none" ? "" : roleWorked;
+    const matchingShift = payload.shiftTypes.find((shift) => shift.label.toLowerCase() === nextRole.toLowerCase())
+      || (nextRole.toLowerCase().includes("audit") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "night audit" || shift.label.toLowerCase() === "audit") : undefined)
+      || (nextRole.toLowerCase().includes("dos") || nextRole.toLowerCase().includes("sales") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "dos / sales") : undefined)
+      || (nextRole.toLowerCase() === "gm" ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "gm") : undefined);
+    setForm({
+      ...form,
+      roleWorked: nextRole,
+      shiftTypeId: form.shiftTypeId || matchingShift?.id || "",
+      customStartTime: form.customStartTime || matchingShift?.startTime?.slice(0, 5) || "",
+      customEndTime: form.customEndTime || matchingShift?.endTime?.slice(0, 5) || "",
+    });
+  };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg bg-[#fffaf2] text-[#201814]">
@@ -868,7 +903,7 @@ function ShiftEditDialog({
           </div>
           <div>
             <Label>Role worked</Label>
-            <Select value={form.roleWorked || "none"} onValueChange={(roleWorked) => setForm({ ...form, roleWorked: roleWorked === "none" ? "" : roleWorked })}>
+            <Select value={form.roleWorked || "none"} onValueChange={selectRoleWorked}>
               <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No role label</SelectItem>
@@ -1012,6 +1047,11 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                 if (!employees.length) return null;
                 return [
                   <tr key={`${department}-header`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#2a211c] p-2 font-semibold text-white">{department} - {payload.totals.departmentWeeklyHours[department] || 0} hrs</td></tr>,
+                  <tr key={`${department}-days`}>
+                    <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left text-xs font-semibold uppercase tracking-wide text-[#5f5247]">{t("Associate")}</td>
+                    {payload.days.map((day, index) => <td key={day} className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center text-xs font-semibold uppercase tracking-wide text-[#5f5247]">{labels[index]}<br />{formatDate(day)}</td>)}
+                    <td className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center text-xs font-semibold uppercase tracking-wide text-[#5f5247]">{t("Hours")}</td>
+                  </tr>,
                   ...employees.map((employee) => (
                     <tr key={employee.id}>
                       <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-white p-2 align-middle font-medium">{employee.displayName}<div className="text-xs text-[#5f5247]">{employee.position || ""}</div></td>
@@ -1051,7 +1091,7 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                                 onDrop={handleShiftDrop}
                                 onClick={() => onEdit(employee, day, department, assignment)}
                               >
-                                <span className="line-clamp-3">{approvedRequest ? t("Approved request") : shiftText(assignment, shift) || (editable ? `+ ${t("Add shift")}` : "-")}</span>
+                                <span className="whitespace-pre-line leading-snug">{approvedRequest ? t("Approved request") : shiftText(assignment, shift) || (editable ? `+ ${t("Add shift")}` : "-")}</span>
                                 {assignment && <span className="mt-1 block text-[10px] opacity-75">Drag to copy</span>}
                               </button>
                               {isHousekeeping && (

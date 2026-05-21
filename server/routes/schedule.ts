@@ -34,6 +34,7 @@ const PROPERTY_NAME = process.env.SCHEDULE_PROPERTY_NAME || "Courtyard Austin La
 const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
 const REQUIRED_DEPARTMENTS = ["Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
 const SCHEDULE_ROLES = ["GM", "DOS", "DOS / Sales", "Sales", "MOD", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
+const SCHEDULE_DAY_LABELS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 const DAY_MS = 86_400_000;
 const TARGET_OCCUPANCY_PERCENT = Number(process.env.SCHEDULE_TARGET_OCCUPANCY_PERCENT || 65);
 const TARGET_HPOR = Number(process.env.SCHEDULE_TARGET_HPOR || 1.3);
@@ -194,6 +195,18 @@ function coverageKeyForShift(assignment: any, shiftType: any) {
   if (label.includes("PM")) return "PM";
   if (label.includes("AM")) return "AM";
   return "";
+}
+
+function resolveShiftTypeForAssignment(assignment: any, shiftTypeById: Map<any, any>, shiftTypeByLabel: Map<string, any>) {
+  const direct = shiftTypeById.get(assignment?.shiftTypeId);
+  if (direct) return direct;
+  const role = String(assignment?.roleWorked || "").trim().toUpperCase();
+  if (!role) return null;
+  return shiftTypeByLabel.get(role)
+    || (role.includes("AUDIT") || role.includes("NIGHT") ? shiftTypeByLabel.get("NIGHT AUDIT") || shiftTypeByLabel.get("AUDIT") : null)
+    || (role.includes("DOS") || role.includes("SALES") ? shiftTypeByLabel.get("DOS / SALES") : null)
+    || (role.includes("GM") ? shiftTypeByLabel.get("GM") : null)
+    || null;
 }
 
 function publicScheduleUser(user: any) {
@@ -879,6 +892,7 @@ async function getApprovedRequestForEmployeeDate(employeeId: string, requestDate
 
 function calculateTotals(days: string[], employees: any[], shiftTypes: any[], forecast: any[], assignments: any[]) {
   const shiftTypeById = new Map(shiftTypes.map((shift) => [shift.id, shift]));
+  const shiftTypeByLabel = new Map(shiftTypes.map((shift) => [String(shift.label || "").toUpperCase(), shift]));
   const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
   const employeeWeeklyHours: Record<string, number> = {};
   const departmentDailyHours: Record<string, Record<string, number>> = {};
@@ -897,7 +911,7 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   const assignmentKeys = new Set<string>();
 
   for (const assignment of assignments) {
-    const shiftType = shiftTypeById.get(assignment.shiftTypeId);
+    const shiftType = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
     const employee = assignment.employeeId ? employeeById.get(assignment.employeeId) : null;
     const department = normalizeDepartment(assignment.roleWorked || employee?.department || shiftType?.departmentHint);
     const hours = hoursForShift(assignment, shiftType);
@@ -1126,8 +1140,20 @@ function scheduleCellText(assignment: any, shiftType: any) {
   if (!assignment || !shiftType) return "";
   const start = assignment.customStartTime || shiftType.startTime;
   const end = assignment.customEndTime || shiftType.endTime;
-  const time = start && end ? `${formatTime12(start)} - ${formatTime12(end)}` : shiftType.label;
-  return [time, assignment.roleWorked, assignment.roleNote].filter(Boolean).join(" ");
+  const time = start && end ? `${formatTimeCompact(start)} - ${formatTimeCompact(end)}` : shiftType.label;
+  const role = usefulScheduleRoleLabel(assignment.roleWorked, shiftType);
+  return [time, role, assignment.roleNote].filter(Boolean).join("\n");
+}
+
+function usefulScheduleRoleLabel(roleWorked: string | null | undefined, shiftType: any) {
+  const role = String(roleWorked || "").trim();
+  if (!role || !shiftType) return "";
+  const normalizedRole = role.toLowerCase();
+  const shiftLabel = String(shiftType.label || "").toLowerCase();
+  const departmentHint = String(shiftType.departmentHint || "").toLowerCase();
+  if (normalizedRole === shiftLabel || normalizedRole === departmentHint) return "";
+  if (normalizeDepartment(role) === normalizeDepartment(shiftType.label || shiftType.departmentHint) && /^(fd am|fd pm|front desk|night audit|bistro am|bistro pm|breakfast|maintenance|gm|dos|dos \/ sales|sales|mod)$/i.test(role)) return "";
+  return role;
 }
 
 function formatTime12(value?: string | null) {
@@ -1137,6 +1163,15 @@ function formatTime12(value?: string | null) {
   const period = hh >= 12 ? "PM" : "AM";
   const hour = hh % 12 || 12;
   return `${hour}:${String(mm).padStart(2, "0")} ${period}`;
+}
+
+function formatTimeCompact(value?: string | null) {
+  if (!value) return "";
+  const [hh, mm] = value.slice(0, 5).split(":").map(Number);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return value;
+  const period = hh >= 12 ? "PM" : "AM";
+  const hour = hh % 12 || 12;
+  return mm === 0 ? `${hour} ${period}` : `${hour}:${String(mm).padStart(2, "0")} ${period}`;
 }
 
 function buildAiScheduleDraft(payload: any, scopeDepartment?: string) {
@@ -1310,7 +1345,13 @@ function pdfColor(hex: string, fallback = rgb(1, 1, 1)) {
   return rgb(parseInt(match[1], 16) / 255, parseInt(match[2], 16) / 255, parseInt(match[3], 16) / 255);
 }
 
-function wrapPdfText(text: string, maxChars: number, maxLines = 2) {
+function wrapPdfText(text: string, maxChars: number, maxLines = 2): string[] {
+  if (String(text || "").includes("\n")) {
+    return String(text || "")
+      .split("\n")
+      .flatMap((line: string) => wrapPdfText(line, maxChars, 1))
+      .slice(0, maxLines);
+  }
   const words = String(text || "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
   const lines: string[] = [];
   let current = "";
@@ -1383,7 +1424,7 @@ async function renderSchedulePdf(payload: any) {
   drawText("Metric", margin + 6, y - 13, 7, true);
   payload.days.forEach((day: string, index: number) => {
     drawBox(margin + metricW + index * forecastDayW, y, forecastDayW, 20, tan);
-    drawText(day.slice(5), margin + metricW + index * forecastDayW + 6, y - 13, 7, true);
+    drawText(`${SCHEDULE_DAY_LABELS[index] || ""} ${day.slice(5)}`, margin + metricW + index * forecastDayW + 6, y - 13, 7, true);
   });
   y -= 20;
   for (const [key, label] of [["roomsSold", "Rooms"], ["occupancyPercent", "Occ %"], ["arrivals", "Arr"], ["departures", "Dep"], ["stayovers", "Stay"]]) {
@@ -1399,7 +1440,8 @@ async function renderSchedulePdf(payload: any) {
   y -= 14;
 
   const assignmentsByEmployeeDay = new Map(payload.assignments.map((assignment: any) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment]));
-  const shiftTypeById = new Map(payload.shiftTypes.map((shift: any) => [shift.id, shift]));
+  const shiftTypeById = new Map<any, any>(payload.shiftTypes.map((shift: any) => [shift.id, shift]));
+  const shiftTypeByLabel = new Map<string, any>(payload.shiftTypes.map((shift: any) => [String(shift.label || "").toUpperCase(), shift]));
   for (const department of payload.departments) {
     const employees = payload.employees.filter((employee: any) => normalizeDepartment(employee.department) === department && employee.active);
     if (!employees.length) continue;
@@ -1412,7 +1454,7 @@ async function renderSchedulePdf(payload: any) {
     drawText("Associate", margin + 6, y - 13, 7, true);
     payload.days.forEach((day: string, index: number) => {
       drawBox(margin + employeeW + index * dayW, y, dayW, 20, tan);
-      drawText(day.slice(5), margin + employeeW + index * dayW + 6, y - 13, 7, true);
+      drawText(`${SCHEDULE_DAY_LABELS[index] || ""} ${day.slice(5)}`, margin + employeeW + index * dayW + 6, y - 13, 7, true);
     });
     drawBox(margin + employeeW + 7 * dayW, y, hoursW, 20, tan);
     drawText("Hrs", margin + employeeW + 7 * dayW + 8, y - 13, 7, true);
@@ -1426,13 +1468,13 @@ async function renderSchedulePdf(payload: any) {
       drawText(String(employee.position || "").slice(0, 28), margin + 6, y - 25, 6, false, muted);
       payload.days.forEach((day: string, index: number) => {
         const assignment: any = assignmentsByEmployeeDay.get(`${employee.id}:${day}`);
-        const shiftType: any = shiftTypeById.get(assignment?.shiftTypeId);
+        const shiftType: any = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
         const text = scheduleCellText(assignment, shiftType) || "";
         const fill = shiftType?.color ? pdfColor(shiftType.color, white) : white;
         const textColor = shiftType?.textColor ? pdfColor(shiftType.textColor, ink) : ink;
         const x = margin + employeeW + index * dayW;
         drawBox(x, y, dayW, rowH, fill);
-        wrapPdfText(text || "-", 16, 2).forEach((line, lineIndex) => drawText(line, x + 4, y - 11 - lineIndex * 9, 6, Boolean(text), textColor));
+        wrapPdfText(text || "-", 16, 2).forEach((line: string, lineIndex: number) => drawText(line, x + 4, y - 11 - lineIndex * 9, 6, Boolean(text), textColor));
       });
       drawBox(margin + employeeW + 7 * dayW, y, hoursW, rowH, white);
       drawText(String(payload.totals.employeeWeeklyHours[employee.id] || 0), margin + employeeW + 7 * dayW + 10, y - 19, 8, true);
@@ -1449,7 +1491,8 @@ async function renderSchedulePdf(payload: any) {
 }
 
 function renderScheduleExcelHtml(payload: any) {
-  const shiftTypeById = new Map(payload.shiftTypes.map((shift: any) => [shift.id, shift]));
+  const shiftTypeById = new Map<any, any>(payload.shiftTypes.map((shift: any) => [shift.id, shift]));
+  const shiftTypeByLabel = new Map<string, any>(payload.shiftTypes.map((shift: any) => [String(shift.label || "").toUpperCase(), shift]));
   const assignmentsByEmployeeDay = new Map(payload.assignments.map((assignment: any) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment]));
   const rows: string[] = [];
   rows.push(`<h1>${payload.schedule.propertyName} Schedule</h1><p>${payload.schedule.weekStartDate} to ${payload.schedule.weekEndDate}</p>`);
@@ -1462,7 +1505,7 @@ function renderScheduleExcelHtml(payload: any) {
     for (const employee of payload.employees.filter((item: any) => normalizeDepartment(item.department) === department && item.active)) {
       rows.push(`<tr><td>${department}</td><td>${employee.displayName}</td>${payload.days.map((day: string) => {
         const assignment: any = assignmentsByEmployeeDay.get(`${employee.id}:${day}`);
-        const shiftType: any = shiftTypeById.get(assignment?.shiftTypeId);
+        const shiftType: any = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
         const style = shiftType ? ` style="background:${shiftType.color};color:${shiftType.textColor}"` : "";
         return `<td${style}>${scheduleCellText(assignment, shiftType)}</td>`;
       }).join("")}<td>${payload.totals.employeeWeeklyHours[employee.id] || 0}</td></tr>`);

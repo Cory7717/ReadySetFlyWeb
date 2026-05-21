@@ -176,15 +176,24 @@ function minutesFromTime(value?: string | null) {
 }
 
 function hoursForShift(assignment: any, shiftType: any) {
-  const label = String(shiftType?.label || "").toUpperCase();
-  if (!shiftType || ["OFF", "PTO", "CALL OFF", "OPEN SHIFT"].includes(label)) return 0;
-  const start = minutesFromTime(assignment.customStartTime || shiftType.startTime);
-  const end = minutesFromTime(assignment.customEndTime || shiftType.endTime);
+  const label = String(shiftType?.label || assignment?.roleWorked || "").toUpperCase();
+  if (["OFF", "PTO", "CALL OFF", "OPEN SHIFT"].includes(label)) return 0;
+  const start = minutesFromTime(assignment.customStartTime || shiftType?.startTime);
+  const end = minutesFromTime(assignment.customEndTime || shiftType?.endTime);
   if (start == null || end == null) return 0;
   let duration = end - start;
-  if (duration <= 0 || assignment.isOvernight || shiftType.isOvernight) duration += 24 * 60;
-  const breakMinutes = assignment.unpaidBreakMinutes ?? shiftType.unpaidBreakMinutes ?? 0;
+  if (duration <= 0 || assignment.isOvernight || shiftType?.isOvernight || label.includes("AUDIT") || label.includes("NIGHT")) duration += 24 * 60;
+  const breakMinutes = assignment.unpaidBreakMinutes ?? shiftType?.unpaidBreakMinutes ?? 0;
   return Math.max(0, (duration - breakMinutes) / 60);
+}
+
+function coverageKeyForShift(assignment: any, shiftType: any) {
+  const label = String(assignment?.roleWorked || shiftType?.label || "").toUpperCase();
+  if (label.includes("AUDIT") || label.includes("NIGHT")) return "AUDIT";
+  if (label.includes("MOD")) return "MOD";
+  if (label.includes("PM")) return "PM";
+  if (label.includes("AM")) return "AM";
+  return "";
 }
 
 function publicScheduleUser(user: any) {
@@ -364,6 +373,22 @@ async function sendPublishedScheduleEmails(schedule: any, url: string, recipient
   if (!recipients.length) return { sent: 0, failed: 0 };
   const { client, fromEmail } = await getUncachableResendClient();
   const subject = `${schedule.propertyName || PROPERTY_NAME} Schedule - ${schedule.weekStartDate} to ${schedule.weekEndDate}`;
+  const html = `
+    <div style="margin:0;padding:0;background:#f6efe6;font-family:Arial,Helvetica,sans-serif;color:#221814;">
+      <div style="max-width:640px;margin:0 auto;padding:28px 18px;">
+        <div style="background:#2a211c;color:#fff;border-radius:14px 14px 0 0;padding:24px 26px;">
+          <div style="font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#d5bd91;">Courtyard Austin Lakeline</div>
+          <h1 style="margin:8px 0 0;font-size:26px;line-height:1.2;">Weekly Schedule Published</h1>
+          <p style="margin:10px 0 0;color:#eadfce;">${schedule.weekStartDate} to ${schedule.weekEndDate}</p>
+        </div>
+        <div style="background:#fffaf2;border:1px solid #dbc9b4;border-top:0;border-radius:0 0 14px 14px;padding:24px 26px;">
+          <p style="margin:0 0 18px;font-size:15px;line-height:1.5;">The published schedule for <strong>${schedule.propertyName || PROPERTY_NAME}</strong> is ready to view.</p>
+          <a href="${url}" style="display:inline-block;background:#28624f;color:#fff;text-decoration:none;border-radius:10px;padding:12px 18px;font-weight:700;">View Published Schedule</a>
+          <p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#6b5b4d;">This is a read-only schedule link. Contact your supervisor if you have a schedule question or need a correction.</p>
+        </div>
+      </div>
+    </div>
+  `;
   const text = [
     `${schedule.propertyName || PROPERTY_NAME} schedule is ready.`,
     "",
@@ -379,7 +404,7 @@ async function sendPublishedScheduleEmails(schedule: any, url: string, recipient
   let failed = 0;
   for (const email of recipients) {
     try {
-      await client.emails.send({ from: fromEmail, to: email, subject, text });
+      await client.emails.send({ from: fromEmail, to: email, subject, html, text });
       sent += 1;
     } catch (error) {
       failed += 1;
@@ -785,9 +810,37 @@ function stripPrivateScheduleRates(payload: any, user: any) {
   const editableDepartments = managerDepartmentsForUser(user, payload.employees);
   const enriched = { ...payload, currentUserPermissions: { editableDepartments, canPublishFinal: publicUser.isSuperAdmin } };
   if (publicUser.isSuperAdmin) return enriched;
+  const {
+    totalWeeklyLaborDollars,
+    totalWeeklyLaborDollarsIncludingSalary,
+    totalWeeklySalariedLaborDollars,
+    dailyLaborDollars,
+    dailyLaborDollarsIncludingSalary,
+    dailySalariedLaborDollars,
+    departmentWeeklyLaborDollars,
+    departmentWeeklyLaborDollarsIncludingSalary,
+    laborMetrics,
+    ...publicTotals
+  } = payload.totals || {};
   return {
     ...enriched,
     employees: payload.employees.map(({ hourlyRate, ...employee }: any) => employee),
+    totals: {
+      ...publicTotals,
+      laborMetrics: laborMetrics
+        ? {
+            ...laborMetrics,
+            daily: Object.fromEntries(Object.entries(laborMetrics.daily || {}).map(([day, metrics]: [string, any]) => {
+              const { laborDollars, ...publicMetrics } = metrics;
+              return [day, publicMetrics];
+            })),
+            weekly: (() => {
+              const { laborDollars, roomRevenue, actualRoomRevenue, ...publicWeekly } = laborMetrics.weekly || {};
+              return publicWeekly;
+            })(),
+          }
+        : undefined,
+    },
   };
 }
 
@@ -872,8 +925,8 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     dailyLaborDollars[assignment.shiftDate] = (dailyLaborDollars[assignment.shiftDate] || 0) + laborDollars;
     dailyLaborDollarsIncludingSalary[assignment.shiftDate] = (dailyLaborDollarsIncludingSalary[assignment.shiftDate] || 0) + laborDollarsIncludingSalary;
     dailySalariedLaborDollars[assignment.shiftDate] = (dailySalariedLaborDollars[assignment.shiftDate] || 0) + salariedLaborDollars;
-    const label = String(shiftType?.label || "").toUpperCase();
-    if (coverage[assignment.shiftDate]?.[label] != null) coverage[assignment.shiftDate][label] += 1;
+    const coverageKey = coverageKeyForShift(assignment, shiftType);
+    if (coverageKey && coverage[assignment.shiftDate]?.[coverageKey] != null) coverage[assignment.shiftDate][coverageKey] += 1;
   }
 
   for (const employee of employees) {
@@ -1251,55 +1304,147 @@ async function summarizeAiSchedule(payload: any, draft: any) {
   }
 }
 
+function pdfColor(hex: string, fallback = rgb(1, 1, 1)) {
+  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || "");
+  if (!match) return fallback;
+  return rgb(parseInt(match[1], 16) / 255, parseInt(match[2], 16) / 255, parseInt(match[3], 16) / 255);
+}
+
+function wrapPdfText(text: string, maxChars: number, maxLines = 2) {
+  const words = String(text || "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxChars && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+    if (lines.length >= maxLines) break;
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  return lines.length ? lines : [""];
+}
+
 async function renderSchedulePdf(payload: any) {
   const pdf = await PDFDocument.create();
-  let page = pdf.addPage([792, 612]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  let y = 568;
-  const draw = (text: string, x: number, size = 8, isBold = false) => {
-    if (y < 44) {
-      page = pdf.addPage([792, 612]);
-      y = 568;
-    }
-    page.drawText(String(text).slice(0, 120), { x, y, size, font: isBold ? bold : font, color: rgb(0.08, 0.09, 0.11) });
+  const pageSize: [number, number] = [792, 612];
+  const margin = 26;
+  const tableWidth = pageSize[0] - margin * 2;
+  const employeeW = 140;
+  const hoursW = 38;
+  const dayW = (tableWidth - employeeW - hoursW) / 7;
+  const ink = rgb(0.12, 0.09, 0.07);
+  const muted = rgb(0.38, 0.32, 0.27);
+  const border = rgb(0.84, 0.78, 0.69);
+  const tan = rgb(0.96, 0.92, 0.86);
+  const dark = rgb(0.16, 0.12, 0.10);
+  const white = rgb(1, 1, 1);
+  let page = pdf.addPage(pageSize);
+  let y = 570;
+
+  const drawText = (text: string, x: number, yPos: number, size = 8, isBold = false, color = ink) => {
+    page.drawText(String(text || "").slice(0, 160), { x, y: yPos, size, font: isBold ? bold : font, color });
   };
-  draw(`${payload.schedule.propertyName} Schedule`, 36, 16, true);
-  draw(`${payload.schedule.weekStartDate} to ${payload.schedule.weekEndDate} - ${payload.schedule.status.toUpperCase()}`, 36, 10);
-  draw(`Hourly labor $${payload.totals.totalWeeklyLaborDollars || "0.00"} | With salary $${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"} | Salary only $${payload.totals.totalWeeklySalariedLaborDollars || "0.00"}`, 330, 8);
-  if (payload.schedule.publishedAt) draw(`Published: ${new Date(payload.schedule.publishedAt).toLocaleString()}`, 540, 8);
-  y -= 28;
-  draw("Forecast", 36, 11, true);
-  y -= 14;
-  payload.forecast.forEach((day: any) => {
-    draw(`${day.forecastDate}: Rooms ${day.roomsSold || 0}, Occ ${day.occupancyPercent || 0}%, Arr ${day.arrivals || 0}, Dep ${day.departures || 0} ${day.notes || ""}`, 44, 7);
-    y -= 10;
+  const drawBox = (x: number, yTop: number, w: number, h: number, fill = white, stroke = border) => {
+    page.drawRectangle({ x, y: yTop - h, width: w, height: h, color: fill, borderColor: stroke, borderWidth: 0.7 });
+  };
+  const newPage = () => {
+    page = pdf.addPage(pageSize);
+    y = 570;
+    drawHeader(false);
+  };
+  const ensureSpace = (height: number) => {
+    if (y - height < 34) newPage();
+  };
+  const drawHeader = (full = true) => {
+    page.drawRectangle({ x: 0, y: 548, width: pageSize[0], height: 64, color: dark });
+    drawText(`${payload.schedule.propertyName || PROPERTY_NAME} Schedule`, margin, 584, 18, true, white);
+    drawText(`${payload.schedule.weekStartDate} to ${payload.schedule.weekEndDate}  |  ${String(payload.schedule.status || "").toUpperCase()}`, margin, 564, 9, false, rgb(0.90, 0.84, 0.75));
+    if (payload.schedule.publishedAt) drawText(`Published ${new Date(payload.schedule.publishedAt).toLocaleString()}`, 570, 564, 8, false, rgb(0.90, 0.84, 0.75));
+    if (full && payload.totals.totalWeeklyLaborDollarsIncludingSalary) {
+      drawText(`Hourly hrs ${payload.totals.totalWeeklyLaborHours || "0.00"} | Salaried hrs ${payload.totals.totalWeeklySalariedLaborHours || "0.00"}`, 520, 586, 8, false, white);
+      drawText(`Labor with salary $${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}`, 520, 574, 8, false, white);
+    }
+    y = 530;
+  };
+  drawHeader();
+
+  ensureSpace(86);
+  drawText("Forecast", margin, y, 12, true);
+  y -= 12;
+  const metricW = 82;
+  const forecastDayW = (tableWidth - metricW) / 7;
+  drawBox(margin, y, metricW, 20, tan);
+  drawText("Metric", margin + 6, y - 13, 7, true);
+  payload.days.forEach((day: string, index: number) => {
+    drawBox(margin + metricW + index * forecastDayW, y, forecastDayW, 20, tan);
+    drawText(day.slice(5), margin + metricW + index * forecastDayW + 6, y - 13, 7, true);
   });
-  y -= 8;
+  y -= 20;
+  for (const [key, label] of [["roomsSold", "Rooms"], ["occupancyPercent", "Occ %"], ["arrivals", "Arr"], ["departures", "Dep"], ["stayovers", "Stay"]]) {
+    drawBox(margin, y, metricW, 18, white);
+    drawText(label, margin + 6, y - 12, 7, true);
+    payload.days.forEach((day: string, index: number) => {
+      const value = payload.forecast.find((item: any) => item.forecastDate === day)?.[key] ?? "-";
+      drawBox(margin + metricW + index * forecastDayW, y, forecastDayW, 18, white);
+      drawText(String(value), margin + metricW + index * forecastDayW + 6, y - 12, 7);
+    });
+    y -= 18;
+  }
+  y -= 14;
+
   const assignmentsByEmployeeDay = new Map(payload.assignments.map((assignment: any) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment]));
   const shiftTypeById = new Map(payload.shiftTypes.map((shift: any) => [shift.id, shift]));
   for (const department of payload.departments) {
     const employees = payload.employees.filter((employee: any) => normalizeDepartment(employee.department) === department && employee.active);
     if (!employees.length) continue;
-    draw(`${department} - ${payload.totals.departmentWeeklyHours[department] || 0} hourly hrs`, 36, 11, true);
-    y -= 14;
-    draw(["Employee", ...payload.days.map((day: string) => day.slice(5)), "Hrs"].join("   "), 44, 7, true);
-    y -= 11;
+    const rowH = 34;
+    ensureSpace(48 + employees.length * rowH);
+    drawBox(margin, y, tableWidth, 22, dark, dark);
+    drawText(`${department} - ${payload.totals.departmentWeeklyHours[department] || 0} hrs`, margin + 8, y - 14, 9, true, white);
+    y -= 22;
+    drawBox(margin, y, employeeW, 20, tan);
+    drawText("Associate", margin + 6, y - 13, 7, true);
+    payload.days.forEach((day: string, index: number) => {
+      drawBox(margin + employeeW + index * dayW, y, dayW, 20, tan);
+      drawText(day.slice(5), margin + employeeW + index * dayW + 6, y - 13, 7, true);
+    });
+    drawBox(margin + employeeW + 7 * dayW, y, hoursW, 20, tan);
+    drawText("Hrs", margin + employeeW + 7 * dayW + 8, y - 13, 7, true);
+    y -= 20;
+
     for (const employee of employees) {
-      const cells = payload.days.map((day: string) => {
+      ensureSpace(rowH + 8);
+      drawBox(margin, y, employeeW, rowH, white);
+      const nameLines = wrapPdfText(employee.displayName, 25, 1);
+      drawText(nameLines[0], margin + 6, y - 13, 7, true);
+      drawText(String(employee.position || "").slice(0, 28), margin + 6, y - 25, 6, false, muted);
+      payload.days.forEach((day: string, index: number) => {
         const assignment: any = assignmentsByEmployeeDay.get(`${employee.id}:${day}`);
-        return scheduleCellText(assignment, shiftTypeById.get(assignment?.shiftTypeId)) || "-";
+        const shiftType: any = shiftTypeById.get(assignment?.shiftTypeId);
+        const text = scheduleCellText(assignment, shiftType) || "";
+        const fill = shiftType?.color ? pdfColor(shiftType.color, white) : white;
+        const textColor = shiftType?.textColor ? pdfColor(shiftType.textColor, ink) : ink;
+        const x = margin + employeeW + index * dayW;
+        drawBox(x, y, dayW, rowH, fill);
+        wrapPdfText(text || "-", 16, 2).forEach((line, lineIndex) => drawText(line, x + 4, y - 11 - lineIndex * 9, 6, Boolean(text), textColor));
       });
-      const contactWarning = !employee.phone || !employee.email ? " *missing contact" : "";
-      draw([`${employee.displayName}${contactWarning}`, ...cells, payload.totals.employeeWeeklyHours[employee.id] || 0].join(" | "), 44, 6);
-      y -= 10;
+      drawBox(margin + employeeW + 7 * dayW, y, hoursW, rowH, white);
+      drawText(String(payload.totals.employeeWeeklyHours[employee.id] || 0), margin + employeeW + 7 * dayW + 10, y - 19, 8, true);
+      y -= rowH;
     }
-    y -= 8;
+    y -= 12;
   }
-  y -= 8;
-  draw(`Hourly hours: ${payload.totals.totalWeeklyLaborHours} | Salaried manager hours shown: ${payload.totals.totalWeeklySalariedLaborHours || "0.00"} | All displayed hours: ${payload.totals.totalWeeklyLaborHoursIncludingSalary || "0.00"}`, 36, 9, true);
-  y -= 12;
-  draw(`Hourly labor dollars: $${payload.totals.totalWeeklyLaborDollars || "0.00"} | Salaried manager labor dollars: $${payload.totals.totalWeeklySalariedLaborDollars || "0.00"} | Total with salaried: $${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}`, 36, 9, true);
+
+  ensureSpace(44);
+  drawBox(margin, y, tableWidth, 30, tan);
+  drawText(`Hourly scheduled hours: ${payload.totals.totalWeeklyLaborHours || "0.00"}`, margin + 8, y - 12, 8, true);
+  drawText(`Salaried manager hours shown: ${payload.totals.totalWeeklySalariedLaborHours || "0.00"} | All displayed hours: ${payload.totals.totalWeeklyLaborHoursIncludingSalary || "0.00"}`, margin + 8, y - 24, 7, false, muted);
   return Buffer.from(await pdf.save());
 }
 
@@ -1328,9 +1473,11 @@ function renderScheduleExcelHtml(payload: any) {
   rows.push(`<tr><th>Hourly scheduled hours</th><td>${payload.totals.totalWeeklyLaborHours}</td></tr>`);
   rows.push(`<tr><th>Salaried manager hours shown</th><td>${payload.totals.totalWeeklySalariedLaborHours || "0.00"}</td></tr>`);
   rows.push(`<tr><th>All displayed hours</th><td>${payload.totals.totalWeeklyLaborHoursIncludingSalary || "0.00"}</td></tr>`);
-  rows.push(`<tr><th>Hourly labor dollars</th><td>${payload.totals.totalWeeklyLaborDollars || "0.00"}</td></tr>`);
-  rows.push(`<tr><th>Salaried manager labor dollars</th><td>${payload.totals.totalWeeklySalariedLaborDollars || "0.00"}</td></tr>`);
-  rows.push(`<tr><th>Total labor dollars with salaried</th><td>${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}</td></tr>`);
+  if (payload.totals.totalWeeklyLaborDollarsIncludingSalary != null) {
+    rows.push(`<tr><th>Hourly labor dollars</th><td>${payload.totals.totalWeeklyLaborDollars || "0.00"}</td></tr>`);
+    rows.push(`<tr><th>Salaried manager labor dollars</th><td>${payload.totals.totalWeeklySalariedLaborDollars || "0.00"}</td></tr>`);
+    rows.push(`<tr><th>Total labor dollars with salaried</th><td>${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}</td></tr>`);
+  }
   rows.push("</table>");
   return rows.join("\n");
 }
@@ -2009,7 +2156,8 @@ export function registerScheduleRoutes(app: Express) {
       const payload = await buildSchedulePayload(req.params.id);
       if (!payload) return res.status(404).json({ error: "Schedule not found" });
       if (!publicScheduleUser(req.scheduleUser).isAdmin && payload.schedule.status !== "published") return res.status(403).json({ error: "Schedule is not published" });
-      const bytes = await renderSchedulePdf(payload);
+      const visiblePayload = stripPrivateScheduleRates(payload, req.scheduleUser);
+      const bytes = await renderSchedulePdf(visiblePayload);
       await audit(payload.schedule.id, req.scheduleUser.id, "schedule_pdf_exported");
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="courtyard-schedule-${payload.schedule.weekStartDate}.pdf"`);
@@ -2027,7 +2175,7 @@ export function registerScheduleRoutes(app: Express) {
       await audit(payload.schedule.id, req.scheduleUser.id, "schedule_excel_exported");
       res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="courtyard-schedule-${payload.schedule.weekStartDate}.xls"`);
-      res.send(renderScheduleExcelHtml(payload));
+      res.send(renderScheduleExcelHtml(stripPrivateScheduleRates(payload, req.scheduleUser)));
     } catch (error) {
       next(error);
     }

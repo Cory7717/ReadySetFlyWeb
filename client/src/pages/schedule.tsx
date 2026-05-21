@@ -993,12 +993,17 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
       </CardHeader>
       <CardContent>
         <div className="hidden overflow-x-auto lg:block">
-          <table className="w-full min-w-[980px] border-collapse text-sm">
+          <table className="w-full min-w-[1160px] table-fixed border-collapse text-sm">
+            <colgroup>
+              <col className="w-[220px]" />
+              {payload.days.map((day) => <col key={day} className="w-[128px]" />)}
+              <col className="w-[60px]" />
+            </colgroup>
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 min-w-[220px] border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left">{t("Associate")}</th>
-                {payload.days.map((day, index) => <th key={day} className="border border-[#e0d3c1] bg-[#f4eadb] p-2">{labels[index]}<br />{formatDate(day)}</th>)}
-                <th className="border border-[#e0d3c1] bg-[#f4eadb] p-2">{t("Hours")}</th>
+                <th className="sticky left-0 z-10 border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left">{t("Associate")}</th>
+                {payload.days.map((day, index) => <th key={day} className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center">{labels[index]}<br />{formatDate(day)}</th>)}
+                <th className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center">{t("Hours")}</th>
               </tr>
             </thead>
             <tbody>
@@ -1009,7 +1014,7 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                   <tr key={`${department}-header`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#2a211c] p-2 font-semibold text-white">{department} - {payload.totals.departmentWeeklyHours[department] || 0} hrs</td></tr>,
                   ...employees.map((employee) => (
                     <tr key={employee.id}>
-                      <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-white p-2 font-medium">{employee.displayName}<div className="text-xs text-[#5f5247]">{employee.position || ""}</div></td>
+                      <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-white p-2 align-middle font-medium">{employee.displayName}<div className="text-xs text-[#5f5247]">{employee.position || ""}</div></td>
                       {payload.days.map((day) => {
                         const rawAssignment = assignments.get(`${employee.id}:${day}`);
                         const hkBoard = housekeepingBoards.get(`${employee.id}:${day}`);
@@ -1033,20 +1038,20 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                           onCopyShift(JSON.parse(raw), employee, day, department);
                         };
                         return (
-                          <td key={day} className="border border-[#e0d3c1] p-1 align-top" onDragOver={(event) => canEditCell && event.preventDefault()} onDrop={handleShiftDrop}>
+                          <td key={day} className="h-[92px] border border-[#e0d3c1] p-1 align-middle" onDragOver={(event) => canEditCell && event.preventDefault()} onDrop={handleShiftDrop}>
                             <div className="space-y-1">
                               <button
                                 type="button"
                                 draggable={canEditCell && Boolean(assignment)}
                                 disabled={!canEditCell || Boolean(approvedRequest)}
-                                className={`min-h-12 w-full rounded-md border border-[#e0d3c1] p-2 text-left text-xs disabled:cursor-default ${assignment ? "cursor-copy" : ""}`}
+                                className={`flex h-[76px] w-full flex-col justify-center overflow-hidden rounded-md border border-[#e0d3c1] p-2 text-left text-xs leading-snug disabled:cursor-default ${assignment ? "cursor-copy" : ""}`}
                                 style={{ background: approvedRequest ? "#e5e7eb" : shift?.color || "#ffffff", color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }}
                                 onDragStart={handleShiftDragStart}
                                 onDragOver={(event) => canEditCell && event.preventDefault()}
                                 onDrop={handleShiftDrop}
                                 onClick={() => onEdit(employee, day, department, assignment)}
                               >
-                                {approvedRequest ? t("Approved request") : shiftText(assignment, shift) || (editable ? `+ ${t("Add shift")}` : "-")}
+                                <span className="line-clamp-3">{approvedRequest ? t("Approved request") : shiftText(assignment, shift) || (editable ? `+ ${t("Add shift")}` : "-")}</span>
                                 {assignment && <span className="mt-1 block text-[10px] opacity-75">Drag to copy</span>}
                               </button>
                               {isHousekeeping && (
@@ -1662,12 +1667,20 @@ export default function SchedulePage() {
                   <div className="text-3xl font-semibold">{payload.totals.totalWeeklyLaborHours}</div>
                   <div className="text-xs text-[#5f5247]">Excludes salaried GM/DOS hours</div>
                 </div>
-                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
-                  <div className="text-sm text-[#5f5247]">Total labor $</div>
-                  <div className="text-3xl font-semibold">${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}</div>
-                  <div className="mt-1 text-xs text-[#5f5247]">Hourly only: ${payload.totals.totalWeeklyLaborDollars || "0.00"}</div>
-                  <div className="text-xs text-[#5f5247]">Salaried only: ${payload.totals.totalWeeklySalariedLaborDollars || "0.00"}</div>
-                </div>
+                {payload.totals.totalWeeklyLaborDollarsIncludingSalary != null ? (
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                    <div className="text-sm text-[#5f5247]">Total labor $</div>
+                    <div className="text-3xl font-semibold">${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}</div>
+                    <div className="mt-1 text-xs text-[#5f5247]">Hourly only: ${payload.totals.totalWeeklyLaborDollars || "0.00"}</div>
+                    <div className="text-xs text-[#5f5247]">Salaried only: ${payload.totals.totalWeeklySalariedLaborDollars || "0.00"}</div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                    <div className="text-sm text-[#5f5247]">Displayed hours</div>
+                    <div className="text-3xl font-semibold">{payload.totals.totalWeeklyLaborHoursIncludingSalary || payload.totals.totalWeeklyLaborHours}</div>
+                    <div className="text-xs text-[#5f5247]">Labor dollars hidden</div>
+                  </div>
+                )}
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
                   <div className="text-sm text-[#5f5247]">HPOR target {payload.totals.laborMetrics?.targets.hpor ?? 1.3}</div>
                   <div className={`text-3xl font-semibold ${metricTone(payload.totals.laborMetrics?.weekly.hpor || 0, payload.totals.laborMetrics?.targets.hpor || 1.3)}`}>{payload.totals.laborMetrics?.weekly.hpor ?? "0.00"}</div>

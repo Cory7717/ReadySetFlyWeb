@@ -314,6 +314,63 @@ async function sendScheduleRequestEmail(request: any, requester: any, managerEma
   return true;
 }
 
+async function getOrCreateScheduleShareLink(schedule: any, userId: string) {
+  const [existing] = await db
+    .select()
+    .from(scheduleShareLinks)
+    .where(and(eq(scheduleShareLinks.scheduleId, schedule.id), isNull(scheduleShareLinks.revokedAt)))
+    .limit(1);
+
+  const link = existing || (await db.insert(scheduleShareLinks).values({
+    scheduleId: schedule.id,
+    token: crypto.randomBytes(18).toString("hex"),
+    createdByUserId: userId,
+  }).returning())[0];
+
+  const url = new URL(`/schedule?share=${link.token}`, process.env.FRONTEND_BASE_URL || "https://readysetfly.us").toString();
+  return { link, url };
+}
+
+async function getActiveScheduleRecipientEmails() {
+  const employees = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
+  const activeEmployeeEmails = new Set(employees.map((employee) => normalizeEmail(String(employee.email || ""))).filter(Boolean));
+  const users = await db.select().from(tipsUsers).where(isNull(tipsUsers.disabledAt));
+  return Array.from(new Set(
+    users
+      .map((user) => normalizeEmail(String(user.email || "")))
+      .filter((email) => activeEmployeeEmails.has(email) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)),
+  ));
+}
+
+async function sendPublishedScheduleEmails(schedule: any, url: string, recipients: string[]) {
+  if (!recipients.length) return { sent: 0, failed: 0 };
+  const { client, fromEmail } = await getUncachableResendClient();
+  const subject = `${schedule.propertyName || PROPERTY_NAME} Schedule - ${schedule.weekStartDate} to ${schedule.weekEndDate}`;
+  const text = [
+    `${schedule.propertyName || PROPERTY_NAME} schedule is ready.`,
+    "",
+    `Week: ${schedule.weekStartDate} to ${schedule.weekEndDate}`,
+    "",
+    "View the published schedule here:",
+    url,
+    "",
+    "This is a read-only schedule link. Contact your supervisor if you have a scheduling question.",
+  ].join("\n");
+
+  let sent = 0;
+  let failed = 0;
+  for (const email of recipients) {
+    try {
+      await client.emails.send({ from: fromEmail, to: email, subject, text });
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      console.error("schedule_email_send_failed", { scheduleId: schedule.id, email, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { sent, failed };
+}
+
 const requireScheduleAuth: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getUserBySession(req);
@@ -1940,15 +1997,30 @@ export function registerScheduleRoutes(app: Express) {
       const schedule = await getScheduleOr404(req.params.id);
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
       if (schedule.status !== "published") return res.status(400).json({ error: "Publish the schedule before sharing." });
-      const [existing] = await db.select().from(scheduleShareLinks).where(and(eq(scheduleShareLinks.scheduleId, schedule.id), isNull(scheduleShareLinks.revokedAt))).limit(1);
-      const link = existing || (await db.insert(scheduleShareLinks).values({
-        scheduleId: schedule.id,
-        token: crypto.randomBytes(18).toString("hex"),
-        createdByUserId: req.scheduleUser.id,
-      }).returning())[0];
-      const url = new URL(`/schedule?share=${link.token}`, process.env.FRONTEND_BASE_URL || "https://readysetfly.us").toString();
+      const { link, url } = await getOrCreateScheduleShareLink(schedule, req.scheduleUser.id);
       await audit(schedule.id, req.scheduleUser.id, "schedule_share_link_created");
       res.json({ link, url });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/email", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      if (!publicScheduleUser(req.scheduleUser).isSuperAdmin) return res.status(403).json({ error: "Only GM/admin can email the final schedule." });
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      if (schedule.status !== "published") return res.status(400).json({ error: "Publish the schedule before emailing it." });
+
+      const { url } = await getOrCreateScheduleShareLink(schedule, req.scheduleUser.id);
+      const recipients = await getActiveScheduleRecipientEmails();
+      const result = await sendPublishedScheduleEmails(schedule, url, recipients);
+      await audit(schedule.id, req.scheduleUser.id, "schedule_published_email_sent", {
+        recipientCount: recipients.length,
+        sentCount: result.sent,
+        failedCount: result.failed,
+      });
+      res.json({ url, recipientCount: recipients.length, sentCount: result.sent, failedCount: result.failed });
     } catch (error) {
       next(error);
     }

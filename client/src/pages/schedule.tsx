@@ -10,6 +10,7 @@ import {
   FileSpreadsheet,
   GripVertical,
   Lock,
+  Mail,
   Plus,
   Printer,
   RefreshCw,
@@ -1519,6 +1520,19 @@ export default function SchedulePage() {
     },
     onError: (error: Error) => toast({ title: "Share failed", description: error.message, variant: "destructive" }),
   });
+  const emailSchedule = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/email`, {});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Schedule emailed",
+        description: `${data.sentCount || 0} of ${data.recipientCount || 0} employee email(s) sent.`,
+      });
+    },
+    onError: (error: Error) => toast({ title: "Email failed", description: error.message, variant: "destructive" }),
+  });
   const submitRequest = useMutation({
     mutationFn: async (request: any) => {
       const response = await apiRequest("POST", "/api/schedule/requests", request);
@@ -1586,6 +1600,7 @@ export default function SchedulePage() {
                   {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "reopen", body: { reason: "Manager edit" } })}><RefreshCw className="mr-2 h-4 w-4" />{t("Reopen")}</Button>}
                   {payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "archive" })}><Archive className="mr-2 h-4 w-4" />{t("Archive")}</Button>}
                   {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => shareLink.mutate()}><Share2 className="mr-2 h-4 w-4" />{t("Copy share link")}</Button>}
+                  {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} disabled={emailSchedule.isPending} onClick={() => emailSchedule.mutate()}><Mail className="mr-2 h-4 w-4" />{emailSchedule.isPending ? t("Emailing...") : t("Email schedule")}</Button>}
                   <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/pdf`)}><Download className="mr-2 h-4 w-4" />PDF</a></Button>
                   <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/excel`)}><FileSpreadsheet className="mr-2 h-4 w-4" />Excel</a></Button>
                 </div>

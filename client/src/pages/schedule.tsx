@@ -432,14 +432,16 @@ function formatTimeCompact(value?: string | null) {
 }
 
 function normalizeDepartment(value?: string | null) {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (normalized.includes("leadership") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
+  const raw = String(value || "").trim();
+  const normalized = raw.toLowerCase();
+  if (DEPARTMENTS.includes(raw)) return raw;
   if (normalized.includes("audit") || normalized.includes("night")) return "Night Audit";
   if (normalized.includes("front") || normalized.includes("fd ") || normalized === "fd am" || normalized === "fd pm" || normalized.includes("desk")) return "Front Desk";
   if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
   if (normalized.includes("engineer") || normalized.includes("maintenance")) return "Maintenance";
   if (normalized.includes("house") || normalized.includes("hk") || normalized.includes("laundry") || normalized.includes("room attendant") || normalized.includes("inspector")) return "Housekeeping";
-  return DEPARTMENTS.includes(String(value || "")) ? String(value) : "Front Desk";
+  if (normalized.includes("leadership") || normalized.includes("mod") || normalized.includes("general manager") || normalized === "gm" || normalized.includes("director of sales") || normalized === "dos" || normalized.includes("sales") || normalized.includes("manager")) return "Managers";
+  return "Front Desk";
 }
 
 function roleDepartment(value?: string | null) {
@@ -978,7 +980,7 @@ function HousekeepingBoardDialog({
   const serviceStayovers = Math.max(0, stayoverRooms - dndRooms);
   const roomCredits = Math.max(0, checkoutRooms + serviceStayovers * 0.5 + deepCleanRooms);
   const standardMinutes = Math.max(0, checkoutRooms * 30 + serviceStayovers * 15 + deepCleanRooms * 30);
-  const mpor = actualHours > 0 ? roomCredits / actualHours : 0;
+  const mpor = roomCredits > 0 ? (actualHours * 60) / roomCredits : 0;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl bg-[#fffaf2] text-[#201814]">

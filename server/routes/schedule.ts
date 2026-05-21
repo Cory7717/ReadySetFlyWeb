@@ -142,14 +142,16 @@ function daysBetween(start: string, end: string) {
 }
 
 function normalizeDepartment(value?: string | null) {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (normalized.includes("leadership") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
+  const raw = String(value || "").trim();
+  const normalized = raw.toLowerCase();
+  if (DEPARTMENTS.includes(raw)) return raw;
   if (normalized.includes("audit") || normalized.includes("night")) return "Night Audit";
   if (normalized.includes("front") || normalized.includes("fd ") || normalized === "fd am" || normalized === "fd pm" || normalized.includes("desk")) return "Front Desk";
   if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
   if (normalized.includes("engineer") || normalized.includes("maintenance")) return "Maintenance";
   if (normalized.includes("house") || normalized.includes("hk") || normalized.includes("laundry") || normalized.includes("room attendant") || normalized.includes("inspector")) return "Housekeeping";
-  return DEPARTMENTS.includes(String(value || "")) ? String(value) : "Front Desk";
+  if (normalized.includes("leadership") || normalized.includes("mod") || normalized.includes("general manager") || normalized === "gm" || normalized.includes("director of sales") || normalized === "dos" || normalized.includes("sales") || normalized.includes("manager")) return "Managers";
+  return "Front Desk";
 }
 
 function hasHousekeepingManagerRole(roles: unknown) {
@@ -165,12 +167,60 @@ function rolesArray(value: unknown): string[] {
   return [];
 }
 
+function employeeDepartmentCandidates(employee: any, fallback?: string | null) {
+  return [employee?.department, employee?.position, ...rolesArray(employee?.rolesJson), fallback].filter(Boolean).map((item) => normalizeDepartment(String(item)));
+}
+
+function primaryOperationalDepartment(employee: any, fallback?: string | null) {
+  const candidates = employeeDepartmentCandidates(employee, fallback);
+  return candidates.find((department) => department !== "Managers") || candidates[0] || "Front Desk";
+}
+
+function hasManagerAccessRole(employee: any, user?: any) {
+  const values = [
+    employee?.department,
+    employee?.position,
+    user?.position,
+    ...rolesArray(employee?.rolesJson),
+    ...rolesArray(user?.scheduleRoles),
+  ].map((item) => String(item || "").toLowerCase());
+  return values.some((value) =>
+    value.includes("executive housekeeper")
+    || value === "exec hk"
+    || value.includes("supervisor")
+    || value.includes("manager")
+    || value.includes("department lead")
+  );
+}
+
+function findEmployeeForUserInList(user: any, employees: any[] = []) {
+  const email = normalizeEmail(String(user?.email || ""));
+  if (email) {
+    const byEmail = employees.find((employee) => normalizeEmail(String(employee.email || "")) === email);
+    if (byEmail) return byEmail;
+  }
+
+  const first = String(user?.firstName || "").trim().toLowerCase();
+  const last = String(user?.lastName || "").trim().toLowerCase();
+  const display = String(user?.employeeDisplayName || [user?.firstName, user?.lastName].filter(Boolean).join(" ")).trim().toLowerCase();
+  const nameMatches = employees.filter((employee) => {
+    const employeeFirst = String(employee.firstName || "").trim().toLowerCase();
+    const employeeLast = String(employee.lastName || "").trim().toLowerCase();
+    const employeeDisplay = String(employee.displayName || "").trim().toLowerCase();
+    return Boolean(
+      (first && last && employeeFirst === first && employeeLast === last)
+      || (display && employeeDisplay === display)
+    );
+  });
+  return nameMatches.length === 1 ? nameMatches[0] : null;
+}
+
 function managerDepartmentsForUser(user: any, employees: any[] = []) {
   const publicUser = publicScheduleUser(user);
   if (publicUser.isSuperAdmin) return DEPARTMENTS;
-  const employee = employees.find((item) => normalizeEmail(String(item.email || "")) === normalizeEmail(String(user.email || "")));
-  const managerDepartment = normalizeDepartment(employee?.department || user.position);
-  if (employee?.isDepartmentManager || publicUser.isAdmin) {
+  const employee = findEmployeeForUserInList(user, employees);
+  const managerDepartment = primaryOperationalDepartment(employee, user.position);
+  if (employee?.isDepartmentManager || publicUser.isAdmin || hasManagerAccessRole(employee, user)) {
     return managerDepartment === "Front Desk" ? ["Front Desk", "Night Audit"] : [managerDepartment];
   }
   return [];
@@ -248,8 +298,8 @@ async function getUserBySession(req: any) {
 async function isScheduleManager(user: any) {
   const publicUser = publicScheduleUser(user);
   if (publicUser.isAdmin) return true;
-  const employee = await getScheduleEmployeeByEmail(String(user.email || ""));
-  return Boolean(employee?.isDepartmentManager);
+  const employee = await getScheduleEmployeeForUser(user);
+  return Boolean(employee?.isDepartmentManager || hasManagerAccessRole(employee, user));
 }
 
 async function getScheduleEmployeeByEmail(email: string) {
@@ -259,17 +309,22 @@ async function getScheduleEmployeeByEmail(email: string) {
   return employees.find((employee) => normalizeEmail(String(employee.email || "")) === normalizedEmail) || null;
 }
 
+async function getScheduleEmployeeForUser(user: any) {
+  const employees = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
+  return findEmployeeForUserInList(user, employees);
+}
+
 async function publicScheduleUserWithProfile(user: any) {
-  const scheduleEmployee = await getScheduleEmployeeByEmail(String(user.email || ""));
+  const scheduleEmployee = await getScheduleEmployeeForUser(user);
   const baseUser = publicScheduleUser(user);
-  const isDepartmentManager = Boolean(scheduleEmployee?.isDepartmentManager);
+  const isDepartmentManager = Boolean(scheduleEmployee?.isDepartmentManager || hasManagerAccessRole(scheduleEmployee, user));
   const isAdmin = baseUser.isAdmin || isDepartmentManager;
   return {
     ...baseUser,
     role: isAdmin && baseUser.role === "employee" ? "manager" : baseUser.role,
     isAdmin,
     scheduleRoles: rolesArray(scheduleEmployee?.rolesJson || user.position),
-    department: scheduleEmployee?.department || null,
+    department: scheduleEmployee ? primaryOperationalDepartment(scheduleEmployee, user.position) : null,
     isDepartmentManager,
   };
 }
@@ -310,8 +365,8 @@ async function upsertScheduleEmployeeForUser(user: any, profile: any) {
 }
 
 async function getScheduleRequestDepartment(user: any) {
-  const employee = await getScheduleEmployeeByEmail(String(user.email || ""));
-  return normalizeDepartment(employee?.department || user.position);
+  const employee = await getScheduleEmployeeForUser(user);
+  return primaryOperationalDepartment(employee, user.position);
 }
 
 async function getDepartmentManagerEmails(department: string) {
@@ -326,8 +381,8 @@ async function getDepartmentManagerEmails(department: string) {
     if (!email || user.disabledAt) continue;
     const publicUser = publicScheduleUser(user);
     const employee = employeeByEmail.get(email);
-    if (!publicUser.isAdmin && !employee?.isDepartmentManager) continue;
-    const managerDepartment = normalizeDepartment(employee?.department || user.position);
+    if (!publicUser.isAdmin && !employee?.isDepartmentManager && !hasManagerAccessRole(employee, user)) continue;
+    const managerDepartment = primaryOperationalDepartment(employee, user.position);
     if (managerDepartment === department) managerEmails.push(email);
     if (publicUser.isSuperAdmin) fallbackEmails.add(email);
   }
@@ -818,7 +873,7 @@ function summarizeHousekeepingBoard(board: any) {
   const serviceStayovers = Math.max(0, stayoverRooms - dndRooms);
   const roomCredits = Math.max(0, checkoutRooms + serviceStayovers * 0.5 + deepCleanRooms);
   const standardMinutes = Math.max(0, checkoutRooms * 30 + serviceStayovers * 15 + deepCleanRooms * 30);
-  const mpor = actualHours > 0 ? roomCredits / actualHours : 0;
+  const mpor = roomCredits > 0 ? (actualHours * 60) / roomCredits : 0;
   return {
     ...board,
     actualHours,
@@ -1703,7 +1758,7 @@ export function registerScheduleRoutes(app: Express) {
 
   router.get("/requests", requireScheduleAuth, async (req: any, res, next) => {
     try {
-      const user = publicScheduleUser(req.scheduleUser);
+      const user = await publicScheduleUserWithProfile(req.scheduleUser);
       const query = db
         .select({ request: scheduleRequests, user: tipsUsers })
         .from(scheduleRequests)
@@ -1819,8 +1874,8 @@ export function registerScheduleRoutes(app: Express) {
   router.get("/weeks", requireScheduleAuth, async (req: any, res, next) => {
     try {
       const rows = await db.select().from(weeklySchedules).orderBy(desc(weeklySchedules.weekStartDate)).limit(30);
-      const user = publicScheduleUser(req.scheduleUser);
-      res.json({ weeks: user.isAdmin ? rows : rows.filter((week) => week.status === "published") });
+      const canManage = await isScheduleManager(req.scheduleUser);
+      res.json({ weeks: canManage ? rows : rows.filter((week) => week.status === "published") });
     } catch (error) {
       next(error);
     }
@@ -1877,7 +1932,7 @@ export function registerScheduleRoutes(app: Express) {
     try {
       const payload = await buildSchedulePayload(req.params.id);
       if (!payload) return res.status(404).json({ error: "Schedule not found" });
-      if (!publicScheduleUser(req.scheduleUser).isAdmin && payload.schedule.status !== "published") return res.status(403).json({ error: "Schedule is not published" });
+      if (!(await isScheduleManager(req.scheduleUser)) && payload.schedule.status !== "published") return res.status(403).json({ error: "Schedule is not published" });
       res.json(stripPrivateScheduleRates(payload, req.scheduleUser));
     } catch (error) {
       next(error);
@@ -2225,7 +2280,7 @@ export function registerScheduleRoutes(app: Express) {
     try {
       const payload = await buildSchedulePayload(req.params.id);
       if (!payload) return res.status(404).json({ error: "Schedule not found" });
-      if (!publicScheduleUser(req.scheduleUser).isAdmin && payload.schedule.status !== "published") return res.status(403).json({ error: "Schedule is not published" });
+      if (!(await isScheduleManager(req.scheduleUser)) && payload.schedule.status !== "published") return res.status(403).json({ error: "Schedule is not published" });
       const visiblePayload = stripPrivateScheduleRates(payload, req.scheduleUser);
       const bytes = await renderSchedulePdf(visiblePayload);
       await audit(payload.schedule.id, req.scheduleUser.id, "schedule_pdf_exported");
@@ -2241,7 +2296,7 @@ export function registerScheduleRoutes(app: Express) {
     try {
       const payload = await buildSchedulePayload(req.params.id);
       if (!payload) return res.status(404).json({ error: "Schedule not found" });
-      if (!publicScheduleUser(req.scheduleUser).isAdmin && payload.schedule.status !== "published") return res.status(403).json({ error: "Schedule is not published" });
+      if (!(await isScheduleManager(req.scheduleUser)) && payload.schedule.status !== "published") return res.status(403).json({ error: "Schedule is not published" });
       await audit(payload.schedule.id, req.scheduleUser.id, "schedule_excel_exported");
       res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="courtyard-schedule-${payload.schedule.weekStartDate}.xls"`);

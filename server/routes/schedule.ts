@@ -191,7 +191,7 @@ function hoursForShift(assignment: any, shiftType: any) {
 function coverageKeyForShift(assignment: any, shiftType: any) {
   const label = String(assignment?.roleWorked || shiftType?.label || "").toUpperCase();
   if (label.includes("AUDIT") || label.includes("NIGHT")) return "AUDIT";
-  if (label.includes("MOD")) return "MOD";
+  if (label.includes("MOD") || /\bGM\b/.test(label) || label.includes("GENERAL MANAGER")) return "MOD";
   if (label.includes("PM")) return "PM";
   if (label.includes("AM")) return "AM";
   return "";
@@ -827,6 +827,8 @@ function stripPrivateScheduleRates(payload: any, user: any) {
     totalWeeklyLaborDollars,
     totalWeeklyLaborDollarsIncludingSalary,
     totalWeeklySalariedLaborDollars,
+    totalWeeklyLaborPercentOfRoomRevenue,
+    totalWeeklyLaborPercentOfRoomRevenueIncludingSalary,
     dailyLaborDollars,
     dailyLaborDollarsIncludingSalary,
     dailySalariedLaborDollars,
@@ -966,6 +968,13 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   if (bistroLabor.status === "under") warnings.push(`Bistro scheduled hours ${bistroLabor.scheduledHours} are below ${bistroLabor.model} target ${bistroLabor.targetMinHours}-${bistroLabor.targetMaxHours}.`);
   if (bistroLabor.status === "over") warnings.push(`Bistro scheduled hours ${bistroLabor.scheduledHours} are above ${bistroLabor.model} target ${bistroLabor.targetMinHours}-${bistroLabor.targetMaxHours}.`);
 
+  const totalWeeklyLaborDollars = Object.values(dailyLaborDollars).reduce((sum, value) => sum + value, 0);
+  const totalWeeklyLaborDollarsIncludingSalary = Object.values(dailyLaborDollarsIncludingSalary).reduce((sum, value) => sum + value, 0);
+  const totalWeeklySalariedLaborDollars = Object.values(dailySalariedLaborDollars).reduce((sum, value) => sum + value, 0);
+  const weeklyRoomRevenue = Number(laborMetrics.weekly.roomRevenue || 0);
+  const laborPercentOfRoomRevenue = weeklyRoomRevenue > 0 ? (totalWeeklyLaborDollars / weeklyRoomRevenue) * 100 : 0;
+  const laborPercentOfRoomRevenueIncludingSalary = weeklyRoomRevenue > 0 ? (totalWeeklyLaborDollarsIncludingSalary / weeklyRoomRevenue) * 100 : 0;
+
   return {
     employeeWeeklyHours: roundRecord(employeeWeeklyHours),
     departmentDailyHours: roundNestedRecord(departmentDailyHours),
@@ -981,9 +990,11 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     totalWeeklyLaborHours: Object.values(dailyLaborHours).reduce((sum, value) => sum + value, 0).toFixed(2),
     totalWeeklyLaborHoursIncludingSalary: Object.values(dailyLaborHoursIncludingSalary).reduce((sum, value) => sum + value, 0).toFixed(2),
     totalWeeklySalariedLaborHours: Object.values(dailySalariedLaborHours).reduce((sum, value) => sum + value, 0).toFixed(2),
-    totalWeeklyLaborDollars: Object.values(dailyLaborDollars).reduce((sum, value) => sum + value, 0).toFixed(2),
-    totalWeeklyLaborDollarsIncludingSalary: Object.values(dailyLaborDollarsIncludingSalary).reduce((sum, value) => sum + value, 0).toFixed(2),
-    totalWeeklySalariedLaborDollars: Object.values(dailySalariedLaborDollars).reduce((sum, value) => sum + value, 0).toFixed(2),
+    totalWeeklyLaborDollars: totalWeeklyLaborDollars.toFixed(2),
+    totalWeeklyLaborDollarsIncludingSalary: totalWeeklyLaborDollarsIncludingSalary.toFixed(2),
+    totalWeeklySalariedLaborDollars: totalWeeklySalariedLaborDollars.toFixed(2),
+    totalWeeklyLaborPercentOfRoomRevenue: laborPercentOfRoomRevenue.toFixed(1),
+    totalWeeklyLaborPercentOfRoomRevenueIncludingSalary: laborPercentOfRoomRevenueIncludingSalary.toFixed(1),
     coverage,
     openShiftCount,
     warnings,
@@ -1141,19 +1152,7 @@ function scheduleCellText(assignment: any, shiftType: any) {
   const start = assignment.customStartTime || shiftType.startTime;
   const end = assignment.customEndTime || shiftType.endTime;
   const time = start && end ? `${formatTimeCompact(start)} - ${formatTimeCompact(end)}` : shiftType.label;
-  const role = usefulScheduleRoleLabel(assignment.roleWorked, shiftType);
-  return [time, role, assignment.roleNote].filter(Boolean).join("\n");
-}
-
-function usefulScheduleRoleLabel(roleWorked: string | null | undefined, shiftType: any) {
-  const role = String(roleWorked || "").trim();
-  if (!role || !shiftType) return "";
-  const normalizedRole = role.toLowerCase();
-  const shiftLabel = String(shiftType.label || "").toLowerCase();
-  const departmentHint = String(shiftType.departmentHint || "").toLowerCase();
-  if (normalizedRole === shiftLabel || normalizedRole === departmentHint) return "";
-  if (normalizeDepartment(role) === normalizeDepartment(shiftType.label || shiftType.departmentHint) && /^(fd am|fd pm|front desk|night audit|bistro am|bistro pm|breakfast|maintenance|gm|dos|dos \/ sales|sales|mod)$/i.test(role)) return "";
-  return role;
+  return [time, assignment.roleNote].filter(Boolean).join("\n");
 }
 
 function formatTime12(value?: string | null) {
@@ -1410,6 +1409,7 @@ async function renderSchedulePdf(payload: any) {
     if (full && payload.totals.totalWeeklyLaborDollarsIncludingSalary) {
       drawText(`Hourly hrs ${payload.totals.totalWeeklyLaborHours || "0.00"} | Salaried hrs ${payload.totals.totalWeeklySalariedLaborHours || "0.00"}`, 520, 586, 8, false, white);
       drawText(`Labor with salary $${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}`, 520, 574, 8, false, white);
+      drawText(`Labor % room rev ${payload.totals.totalWeeklyLaborPercentOfRoomRevenueIncludingSalary || "0.0"}%`, 520, 562, 8, false, white);
     }
     y = 530;
   };
@@ -1465,7 +1465,7 @@ async function renderSchedulePdf(payload: any) {
       drawBox(margin, y, employeeW, rowH, white);
       const nameLines = wrapPdfText(employee.displayName, 25, 1);
       drawText(nameLines[0], margin + 6, y - 13, 7, true);
-      drawText(String(employee.position || "").slice(0, 28), margin + 6, y - 25, 6, false, muted);
+      drawText(String(employee.position || normalizeDepartment(employee.department) || "").slice(0, 28), margin + 6, y - 25, 6, false, muted);
       payload.days.forEach((day: string, index: number) => {
         const assignment: any = assignmentsByEmployeeDay.get(`${employee.id}:${day}`);
         const shiftType: any = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
@@ -1520,6 +1520,7 @@ function renderScheduleExcelHtml(payload: any) {
     rows.push(`<tr><th>Hourly labor dollars</th><td>${payload.totals.totalWeeklyLaborDollars || "0.00"}</td></tr>`);
     rows.push(`<tr><th>Salaried manager labor dollars</th><td>${payload.totals.totalWeeklySalariedLaborDollars || "0.00"}</td></tr>`);
     rows.push(`<tr><th>Total labor dollars with salaried</th><td>${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}</td></tr>`);
+    rows.push(`<tr><th>Labor % of room revenue</th><td>${payload.totals.totalWeeklyLaborPercentOfRoomRevenueIncludingSalary || "0.0"}%</td></tr>`);
   }
   rows.push("</table>");
   return rows.join("\n");

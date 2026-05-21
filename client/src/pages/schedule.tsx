@@ -299,6 +299,8 @@ type SchedulePayload = {
     totalWeeklyLaborDollars?: string;
     totalWeeklyLaborDollarsIncludingSalary?: string;
     totalWeeklySalariedLaborDollars?: string;
+    totalWeeklyLaborPercentOfRoomRevenue?: string;
+    totalWeeklyLaborPercentOfRoomRevenueIncludingSalary?: string;
     coverage: Record<string, Record<string, number>>;
     openShiftCount: number;
     warnings: string[];
@@ -395,19 +397,7 @@ function shiftText(assignment: ShiftAssignment | undefined, shiftType: ShiftType
   const start = assignment.customStartTime || shiftType.startTime;
   const end = assignment.customEndTime || shiftType.endTime;
   const base = start && end ? `${formatTimeCompact(start)} - ${formatTimeCompact(end)}` : shiftType.label;
-  const role = usefulRoleLabel(assignment.roleWorked, shiftType);
-  return [base, role, assignment.roleNote].filter(Boolean).join("\n");
-}
-
-function usefulRoleLabel(roleWorked: string | null | undefined, shiftType: ShiftType | undefined) {
-  const role = String(roleWorked || "").trim();
-  if (!role || !shiftType) return "";
-  const normalizedRole = role.toLowerCase();
-  const shiftLabel = String(shiftType.label || "").toLowerCase();
-  const departmentHint = String(shiftType.departmentHint || "").toLowerCase();
-  if (normalizedRole === shiftLabel || normalizedRole === departmentHint) return "";
-  if (roleDepartment(role) === roleDepartment(shiftType.label) && /^(fd am|fd pm|front desk|night audit|bistro am|bistro pm|breakfast|maintenance|gm|dos|dos \/ sales|sales|mod)$/i.test(role)) return "";
-  return role;
+  return [base, assignment.roleNote].filter(Boolean).join("\n");
 }
 
 function formatTime12(value?: string | null) {
@@ -462,6 +452,10 @@ function assignmentDepartment(assignment: ShiftAssignment | undefined, employee:
 function scheduleEmployeeSort(a: ScheduleEmployee, b: ScheduleEmployee) {
   const managerRank = Number(Boolean(b.isDepartmentManager)) - Number(Boolean(a.isDepartmentManager));
   return managerRank || Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName);
+}
+
+function employeeScheduleSubtitle(employee: ScheduleEmployee) {
+  return String(employee.position || normalizeDepartment(employee.department) || "").trim();
 }
 
 function cleanTime(value?: string | null) {
@@ -1054,7 +1048,7 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                   </tr>,
                   ...employees.map((employee) => (
                     <tr key={employee.id}>
-                      <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-white p-2 align-middle font-medium">{employee.displayName}<div className="text-xs text-[#5f5247]">{employee.position || ""}</div></td>
+                      <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-white p-2 align-middle font-medium">{employee.displayName}<div className="text-xs text-[#5f5247]">{employeeScheduleSubtitle(employee)}</div></td>
                       {payload.days.map((day) => {
                         const rawAssignment = assignments.get(`${employee.id}:${day}`);
                         const hkBoard = housekeepingBoards.get(`${employee.id}:${day}`);
@@ -1713,6 +1707,7 @@ export default function SchedulePage() {
                     <div className="text-3xl font-semibold">${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}</div>
                     <div className="mt-1 text-xs text-[#5f5247]">Hourly only: ${payload.totals.totalWeeklyLaborDollars || "0.00"}</div>
                     <div className="text-xs text-[#5f5247]">Salaried only: ${payload.totals.totalWeeklySalariedLaborDollars || "0.00"}</div>
+                    <div className="text-xs font-semibold text-[#5f5247]">Labor % room rev: {payload.totals.totalWeeklyLaborPercentOfRoomRevenueIncludingSalary || "0.0"}%</div>
                   </div>
                 ) : (
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">

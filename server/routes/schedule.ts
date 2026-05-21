@@ -83,6 +83,22 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+function isSalariedScheduleManager(employee: any) {
+  const values = [
+    employee?.department,
+    employee?.position,
+    employee?.displayName,
+    ...(Array.isArray(employee?.rolesJson) ? employee.rolesJson : []),
+  ].map((value) => String(value || "").toLowerCase());
+  return Boolean(employee?.isSalaried)
+    || values.some((value) =>
+      /\bgm\b/.test(value)
+      || /\bdos\b/.test(value)
+      || value.includes("general manager")
+      || value.includes("director of sales"),
+    );
+}
+
 function parseDateKey(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const date = new Date(`${value}T00:00:00.000Z`);
@@ -813,8 +829,11 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   const departmentDailyHours: Record<string, Record<string, number>> = {};
   const departmentWeeklyHours: Record<string, number> = {};
   const dailyLaborHours: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
+  const dailyLaborHoursIncludingSalary: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
+  const dailySalariedLaborHours: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
   const dailyLaborDollars: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
   const dailyLaborDollarsIncludingSalary: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
+  const dailySalariedLaborDollars: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
   const departmentWeeklyLaborDollars: Record<string, number> = {};
   const departmentWeeklyLaborDollarsIncludingSalary: Record<string, number> = {};
   const coverage: Record<string, Record<string, number>> = Object.fromEntries(days.map((day) => [day, { AM: 0, PM: 0, AUDIT: 0, MOD: 0 }]));
@@ -827,10 +846,12 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     const employee = assignment.employeeId ? employeeById.get(assignment.employeeId) : null;
     const department = normalizeDepartment(assignment.roleWorked || employee?.department || shiftType?.departmentHint);
     const hours = hoursForShift(assignment, shiftType);
-    const isSalaried = Boolean(employee?.isSalaried);
+    const isSalaried = employee ? isSalariedScheduleManager(employee) : false;
     const laborDollarsIncludingSalary = hours * Number(employee?.hourlyRate || 0);
     const laborDollars = isSalaried ? 0 : laborDollarsIncludingSalary;
+    const salariedLaborDollars = isSalaried ? laborDollarsIncludingSalary : 0;
     const hourlyHours = isSalaried ? 0 : hours;
+    const salariedHours = isSalaried ? hours : 0;
     if (assignment.isOpenShift || shiftType?.label === "OPEN SHIFT") openShiftCount += 1;
     if (employee?.id) {
       const key = `${employee.id}:${assignment.shiftDate}`;
@@ -844,8 +865,11 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     departmentWeeklyLaborDollars[department] = (departmentWeeklyLaborDollars[department] || 0) + laborDollars;
     departmentWeeklyLaborDollarsIncludingSalary[department] = (departmentWeeklyLaborDollarsIncludingSalary[department] || 0) + laborDollarsIncludingSalary;
     dailyLaborHours[assignment.shiftDate] = (dailyLaborHours[assignment.shiftDate] || 0) + hourlyHours;
+    dailyLaborHoursIncludingSalary[assignment.shiftDate] = (dailyLaborHoursIncludingSalary[assignment.shiftDate] || 0) + hours;
+    dailySalariedLaborHours[assignment.shiftDate] = (dailySalariedLaborHours[assignment.shiftDate] || 0) + salariedHours;
     dailyLaborDollars[assignment.shiftDate] = (dailyLaborDollars[assignment.shiftDate] || 0) + laborDollars;
     dailyLaborDollarsIncludingSalary[assignment.shiftDate] = (dailyLaborDollarsIncludingSalary[assignment.shiftDate] || 0) + laborDollarsIncludingSalary;
+    dailySalariedLaborDollars[assignment.shiftDate] = (dailySalariedLaborDollars[assignment.shiftDate] || 0) + salariedLaborDollars;
     const label = String(shiftType?.label || "").toUpperCase();
     if (coverage[assignment.shiftDate]?.[label] != null) coverage[assignment.shiftDate][label] += 1;
   }
@@ -880,11 +904,17 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     departmentWeeklyLaborDollars: roundRecord(departmentWeeklyLaborDollars),
     departmentWeeklyLaborDollarsIncludingSalary: roundRecord(departmentWeeklyLaborDollarsIncludingSalary),
     dailyLaborHours: roundRecord(dailyLaborHours),
+    dailyLaborHoursIncludingSalary: roundRecord(dailyLaborHoursIncludingSalary),
+    dailySalariedLaborHours: roundRecord(dailySalariedLaborHours),
     dailyLaborDollars: roundRecord(dailyLaborDollars),
     dailyLaborDollarsIncludingSalary: roundRecord(dailyLaborDollarsIncludingSalary),
+    dailySalariedLaborDollars: roundRecord(dailySalariedLaborDollars),
     totalWeeklyLaborHours: Object.values(dailyLaborHours).reduce((sum, value) => sum + value, 0).toFixed(2),
+    totalWeeklyLaborHoursIncludingSalary: Object.values(dailyLaborHoursIncludingSalary).reduce((sum, value) => sum + value, 0).toFixed(2),
+    totalWeeklySalariedLaborHours: Object.values(dailySalariedLaborHours).reduce((sum, value) => sum + value, 0).toFixed(2),
     totalWeeklyLaborDollars: Object.values(dailyLaborDollars).reduce((sum, value) => sum + value, 0).toFixed(2),
     totalWeeklyLaborDollarsIncludingSalary: Object.values(dailyLaborDollarsIncludingSalary).reduce((sum, value) => sum + value, 0).toFixed(2),
+    totalWeeklySalariedLaborDollars: Object.values(dailySalariedLaborDollars).reduce((sum, value) => sum + value, 0).toFixed(2),
     coverage,
     openShiftCount,
     warnings,
@@ -1234,7 +1264,7 @@ async function renderSchedulePdf(payload: any) {
   };
   draw(`${payload.schedule.propertyName} Schedule`, 36, 16, true);
   draw(`${payload.schedule.weekStartDate} to ${payload.schedule.weekEndDate} - ${payload.schedule.status.toUpperCase()}`, 36, 10);
-  draw(`Hourly labor $${payload.totals.totalWeeklyLaborDollars || "0.00"} | Incl. salaried $${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}`, 360, 9);
+  draw(`Hourly labor $${payload.totals.totalWeeklyLaborDollars || "0.00"} | With salary $${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"} | Salary only $${payload.totals.totalWeeklySalariedLaborDollars || "0.00"}`, 330, 8);
   if (payload.schedule.publishedAt) draw(`Published: ${new Date(payload.schedule.publishedAt).toLocaleString()}`, 540, 8);
   y -= 28;
   draw("Forecast", 36, 11, true);
@@ -1265,7 +1295,9 @@ async function renderSchedulePdf(payload: any) {
     y -= 8;
   }
   y -= 8;
-  draw(`Total hourly labor hours: ${payload.totals.totalWeeklyLaborHours} | Hourly labor dollars: $${payload.totals.totalWeeklyLaborDollars || "0.00"} | Including salaried: $${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}`, 36, 10, true);
+  draw(`Hourly hours: ${payload.totals.totalWeeklyLaborHours} | Salaried manager hours shown: ${payload.totals.totalWeeklySalariedLaborHours || "0.00"} | All displayed hours: ${payload.totals.totalWeeklyLaborHoursIncludingSalary || "0.00"}`, 36, 9, true);
+  y -= 12;
+  draw(`Hourly labor dollars: $${payload.totals.totalWeeklyLaborDollars || "0.00"} | Salaried manager labor dollars: $${payload.totals.totalWeeklySalariedLaborDollars || "0.00"} | Total with salaried: $${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}`, 36, 9, true);
   return Buffer.from(await pdf.save());
 }
 
@@ -1289,6 +1321,14 @@ function renderScheduleExcelHtml(payload: any) {
       }).join("")}<td>${payload.totals.employeeWeeklyHours[employee.id] || 0}</td></tr>`);
     }
   }
+  rows.push("</table>");
+  rows.push("<br/><table border='1'>");
+  rows.push(`<tr><th>Hourly scheduled hours</th><td>${payload.totals.totalWeeklyLaborHours}</td></tr>`);
+  rows.push(`<tr><th>Salaried manager hours shown</th><td>${payload.totals.totalWeeklySalariedLaborHours || "0.00"}</td></tr>`);
+  rows.push(`<tr><th>All displayed hours</th><td>${payload.totals.totalWeeklyLaborHoursIncludingSalary || "0.00"}</td></tr>`);
+  rows.push(`<tr><th>Hourly labor dollars</th><td>${payload.totals.totalWeeklyLaborDollars || "0.00"}</td></tr>`);
+  rows.push(`<tr><th>Salaried manager labor dollars</th><td>${payload.totals.totalWeeklySalariedLaborDollars || "0.00"}</td></tr>`);
+  rows.push(`<tr><th>Total labor dollars with salaried</th><td>${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}</td></tr>`);
   rows.push("</table>");
   return rows.join("\n");
 }

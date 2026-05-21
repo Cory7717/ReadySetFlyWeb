@@ -288,10 +288,17 @@ type SchedulePayload = {
     departmentWeeklyLaborDollars?: Record<string, number>;
     departmentWeeklyLaborDollarsIncludingSalary?: Record<string, number>;
     dailyLaborHours: Record<string, number>;
+    dailyLaborHoursIncludingSalary?: Record<string, number>;
+    dailySalariedLaborHours?: Record<string, number>;
     dailyLaborDollars?: Record<string, number>;
+    dailyLaborDollarsIncludingSalary?: Record<string, number>;
+    dailySalariedLaborDollars?: Record<string, number>;
     totalWeeklyLaborHours: string;
+    totalWeeklyLaborHoursIncludingSalary?: string;
+    totalWeeklySalariedLaborHours?: string;
     totalWeeklyLaborDollars?: string;
     totalWeeklyLaborDollarsIncludingSalary?: string;
+    totalWeeklySalariedLaborDollars?: string;
     coverage: Record<string, Record<string, number>>;
     openShiftCount: number;
     warnings: string[];
@@ -424,17 +431,16 @@ function roleDepartment(value?: string | null) {
 }
 
 function employeeDepartments(employee: ScheduleEmployee) {
-  const primaryDepartment = normalizeDepartment(employee.department);
-  const roleDepartments = [
-    ...rolesArray(employee.rolesJson),
-    employee.position || "",
-  ].map(roleDepartment).filter(Boolean);
-  const departments = [primaryDepartment, ...roleDepartments];
-  return Array.from(new Set(departments));
+  return [normalizeDepartment(employee.department)];
 }
 
 function assignmentDepartment(assignment: ShiftAssignment | undefined, employee: ScheduleEmployee, shiftType?: ShiftType) {
   return roleDepartment(assignment?.roleWorked || shiftType?.departmentHint || employee.department);
+}
+
+function scheduleEmployeeSort(a: ScheduleEmployee, b: ScheduleEmployee) {
+  const managerRank = Number(Boolean(b.isDepartmentManager)) - Number(Boolean(a.isDepartmentManager));
+  return managerRank || Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName);
 }
 
 function cleanTime(value?: string | null) {
@@ -997,7 +1003,7 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
             </thead>
             <tbody>
               {payload.departments.map((department) => {
-                const employees = payload.employees.filter((employee) => employee.active && employeeDepartments(employee).includes(department)).sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName));
+                const employees = payload.employees.filter((employee) => employee.active && employeeDepartments(employee).includes(department)).sort(scheduleEmployeeSort);
                 if (!employees.length) return null;
                 return [
                   <tr key={`${department}-header`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#2a211c] p-2 font-semibold text-white">{department} - {payload.totals.departmentWeeklyHours[department] || 0} hrs</td></tr>,
@@ -1008,7 +1014,7 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                         const rawAssignment = assignments.get(`${employee.id}:${day}`);
                         const hkBoard = housekeepingBoards.get(`${employee.id}:${day}`);
                         const rawShift = rawAssignment ? shiftTypes.get(rawAssignment.shiftTypeId || "") : undefined;
-                        const assignment = rawAssignment && assignmentDepartment(rawAssignment, employee, rawShift) === department ? rawAssignment : undefined;
+                        const assignment = rawAssignment;
                         const isHousekeeping = department === "Housekeeping";
                         const canEditCell = editable && editableDepartments.includes(department);
                         const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
@@ -1072,7 +1078,7 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
         </div>
         <div className="space-y-4 lg:hidden">
           {payload.departments.map((department) => {
-            const employees = payload.employees.filter((employee) => employee.active && employeeDepartments(employee).includes(department)).sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName));
+            const employees = payload.employees.filter((employee) => employee.active && employeeDepartments(employee).includes(department)).sort(scheduleEmployeeSort);
             if (!employees.length) return null;
             return (
               <div key={department}>
@@ -1086,7 +1092,7 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                           const rawAssignment = assignments.get(`${employee.id}:${day}`);
                           const hkBoard = housekeepingBoards.get(`${employee.id}:${day}`);
                           const rawShift = rawAssignment ? shiftTypes.get(rawAssignment.shiftTypeId || "") : undefined;
-                          const assignment = rawAssignment && assignmentDepartment(rawAssignment, employee, rawShift) === department ? rawAssignment : undefined;
+                          const assignment = rawAssignment;
                           const isHousekeeping = department === "Housekeeping";
                           const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
                           const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;
@@ -1651,8 +1657,17 @@ export default function SchedulePage() {
                 </div>
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">{spanish ? ES["Weekly hours"] : "Weekly hours"}</div><div className="text-3xl font-semibold">{payload.totals.totalWeeklyLaborHours}</div></div>
-                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Hourly labor $</div><div className="text-3xl font-semibold">${payload.totals.totalWeeklyLaborDollars || "0.00"}</div><div className="text-xs text-[#5f5247]">Incl. salary: ${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}</div></div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                  <div className="text-sm text-[#5f5247]">Hourly scheduled hours</div>
+                  <div className="text-3xl font-semibold">{payload.totals.totalWeeklyLaborHours}</div>
+                  <div className="text-xs text-[#5f5247]">Excludes salaried GM/DOS hours</div>
+                </div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                  <div className="text-sm text-[#5f5247]">Total labor $</div>
+                  <div className="text-3xl font-semibold">${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}</div>
+                  <div className="mt-1 text-xs text-[#5f5247]">Hourly only: ${payload.totals.totalWeeklyLaborDollars || "0.00"}</div>
+                  <div className="text-xs text-[#5f5247]">Salaried only: ${payload.totals.totalWeeklySalariedLaborDollars || "0.00"}</div>
+                </div>
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
                   <div className="text-sm text-[#5f5247]">HPOR target {payload.totals.laborMetrics?.targets.hpor ?? 1.3}</div>
                   <div className={`text-3xl font-semibold ${metricTone(payload.totals.laborMetrics?.weekly.hpor || 0, payload.totals.laborMetrics?.targets.hpor || 1.3)}`}>{payload.totals.laborMetrics?.weekly.hpor ?? "0.00"}</div>

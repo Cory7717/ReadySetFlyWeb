@@ -149,6 +149,8 @@ type ScheduleUser = {
   id: string;
   email: string;
   employeeDisplayName: string;
+  firstName?: string;
+  lastName?: string;
   role?: string;
   isAdmin: boolean;
   isSuperAdmin: boolean;
@@ -457,7 +459,29 @@ function roleDepartment(value?: string | null) {
 }
 
 function employeeDepartments(employee: ScheduleEmployee) {
-  return [normalizeDepartment(employee.department)];
+  return Array.from(new Set([
+    normalizeDepartment(employee.department),
+    ...rolesArray(employee.rolesJson).map(roleDepartment).filter(Boolean),
+  ]));
+}
+
+function findEmployeeForUser(payload: SchedulePayload, user?: ScheduleUser | null) {
+  if (!user) return null;
+  const email = String(user.email || "").trim().toLowerCase();
+  if (email) {
+    const byEmail = payload.employees.find((employee) => String(employee.email || "").trim().toLowerCase() === email);
+    if (byEmail) return byEmail;
+  }
+  const first = String(user.firstName || "").trim().toLowerCase();
+  const last = String(user.lastName || "").trim().toLowerCase();
+  const display = String(user.employeeDisplayName || [user.firstName, user.lastName].filter(Boolean).join(" ")).trim().toLowerCase();
+  const matches = payload.employees.filter((employee) => {
+    const employeeFirst = String(employee.firstName || "").trim().toLowerCase();
+    const employeeLast = String(employee.lastName || "").trim().toLowerCase();
+    const employeeDisplay = String(employee.displayName || "").trim().toLowerCase();
+    return Boolean((first && last && employeeFirst === first && employeeLast === last) || (display && employeeDisplay === display));
+  });
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function assignmentDepartment(assignment: ShiftAssignment | undefined, employee: ScheduleEmployee, shiftType?: ShiftType) {
@@ -892,6 +916,9 @@ function ShiftEditDialog({
       customEndTime: form.customEndTime || matchingShift?.endTime?.slice(0, 5) || "",
     });
   };
+  const roleOptions = employee
+    ? Array.from(new Set([...(employee.rolesJson || []), rowDepartment || ""].filter(Boolean)))
+    : Array.from(new Set([rowDepartment || "", ...SCHEDULE_ROLES].filter(Boolean)));
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg bg-[#fffaf2] text-[#201814]">
@@ -916,7 +943,7 @@ function ShiftEditDialog({
               <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No role label</SelectItem>
-                {Array.from(new Set([...(employee?.rolesJson || []), rowDepartment || "", ...SCHEDULE_ROLES].filter(Boolean))).map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
+                {roleOptions.map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -1018,6 +1045,59 @@ function HousekeepingBoardDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PersonalScheduleCard({ payload, user, spanish }: { payload: SchedulePayload; user?: ScheduleUser | null; spanish: boolean }) {
+  const employee = findEmployeeForUser(payload, user);
+  const shiftTypes = useMemo(() => new Map(payload.shiftTypes.map((shift) => [shift.id, shift])), [payload.shiftTypes]);
+  const approvedRequests = useMemo(() => new Map((payload.approvedRequests || []).map((request) => [`${request.employeeId}:${request.requestDate}`, request])), [payload.approvedRequests]);
+  const labels = spanish ? DAY_LABELS_ES : DAY_LABELS;
+  if (!employee) return null;
+  const rows = payload.days.map((day, index) => {
+    const assignment = payload.assignments.find((item) => item.employeeId === employee.id && item.shiftDate === day);
+    const shiftType = assignment ? shiftTypes.get(assignment.shiftTypeId || "") : undefined;
+    const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
+    const department = assignment ? assignmentDepartment(assignment, employee, shiftType) : "";
+    return { day, index, assignment, shiftType, approvedRequest, department };
+  });
+  const hasCrossDepartment = rows.some((row) => row.department && row.department !== normalizeDepartment(employee.department));
+  return (
+    <Card className={`${C.shell} border-[#2f5f46]`}>
+      <CardHeader>
+        <CardTitle className={C.ink}>{spanish ? "Mi horario" : "My Schedule"}</CardTitle>
+        <CardDescription className={C.muted}>
+          {spanish ? "Resumen personal para evitar confusiones entre departamentos." : "Your personal schedule across all departments for this week."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {hasCrossDepartment && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-900">
+            {spanish ? "Tiene turnos en mas de un departamento esta semana." : "You have shifts in more than one department this week. Review each day carefully."}
+          </div>
+        )}
+        <div className="grid gap-2 md:grid-cols-7">
+          {rows.map((row) => {
+            const text = row.approvedRequest ? (spanish ? "Solicitud aprobada" : "Approved request") : shiftText(row.assignment, row.shiftType);
+            const tone = row.assignment ? shiftTone(row.assignment, row.shiftType, shiftTypes) : undefined;
+            return (
+              <div key={row.day} className="rounded-xl border border-[#e0d3c1] bg-white p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">{labels[row.index]}</div>
+                <div className="font-semibold">{formatDate(row.day)}</div>
+                {text ? (
+                  <div className="mt-2 rounded-lg border border-[#e0d3c1] p-2 text-sm whitespace-pre-line" style={{ background: row.approvedRequest ? "#e5e7eb" : tone?.color || "#ffffff", color: row.approvedRequest ? "#374151" : tone?.textColor || "#201814" }}>
+                    {text}
+                    {row.department && <div className="mt-1 text-xs font-semibold opacity-80">{row.department}</div>}
+                  </div>
+                ) : (
+                  <div className="mt-2 rounded-lg border border-dashed border-[#d6c8b5] p-2 text-sm text-[#5f5247]">{spanish ? "Sin turno" : "No shift"}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1255,7 +1335,8 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
           </Select>
           <Input className={C.field} placeholder={t("Position")} value={form.position} onChange={(event) => setForm({ ...form, position: event.target.value })} />
           <div className="sm:col-span-2">
-            <Label>{t("Roles")}</Label>
+            <Label>{t("Approved roles / cross-department access")}</Label>
+            <p className="mb-2 text-xs text-[#5f5247]">Select every role this associate is approved to work. Extra department roles make them available in those schedule sections.</p>
             <div className="mt-1 flex flex-wrap gap-2">
               {SCHEDULE_ROLES.map((role) => <Button key={role} type="button" size="sm" variant="outline" className={form.rolesJson.includes(role) ? C.green : C.outline} onClick={() => toggleRole(role)}>{role}</Button>)}
             </div>
@@ -1359,7 +1440,9 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
                   <Input className={C.field} placeholder="Email" value={draft.email || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, email: event.target.value } })} />
                 </div>
                 {(!draft.phone || !draft.email) && <Badge variant="outline" className="mt-2 border-amber-300 bg-amber-50 text-amber-900">Missing phone/email</Badge>}
-                <div className="mt-2 flex flex-wrap gap-1">
+                <div className="mt-3">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Approved roles / cross-department access</div>
+                  <div className="flex flex-wrap gap-1">
                   {SCHEDULE_ROLES.map((role) => (
                     <button
                       key={role}
@@ -1370,6 +1453,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
                       {role}
                     </button>
                   ))}
+                  </div>
                 </div>
                 <div className="text-sm text-[#5f5247]">{draft.position || t("No position")} {draft.maxWeeklyHours ? `- max ${draft.maxWeeklyHours} hrs` : ""} {draft.isSalaried ? "- salaried" : ""} {canViewRates && draft.hourlyRate ? `- $${draft.hourlyRate}/hr` : ""}</div>
               </div>
@@ -1465,6 +1549,7 @@ export default function SchedulePage() {
   const [selectedHousekeepingBoard, setSelectedHousekeepingBoard] = useState<{ employee: ScheduleEmployee; date: string; board?: HousekeepingBoard } | null>(null);
   const [aiDraft, setAiDraft] = useState<AiScheduleDraft | null>(null);
   const [spanish, setSpanish] = useState(false);
+  const dailyHporToastKey = useRef("");
 
   const auth = useQuery<{ user: ScheduleUser | null }>({ queryKey: ["/api/schedule/auth/me"], queryFn: () => fetchJson("/api/schedule/auth/me"), enabled: !shareToken });
   const weeks = useQuery<{ weeks: WeeklySchedule[] }>({ queryKey: ["/api/schedule/weeks"], queryFn: () => fetchJson("/api/schedule/weeks"), enabled: !!auth.data?.user && !shareToken });
@@ -1476,6 +1561,23 @@ export default function SchedulePage() {
   const user = auth.data?.user;
   const editable = Boolean(user?.isAdmin && payload?.schedule.status === "draft" && !shareToken);
   const t = (value: string) => tr(spanish, value);
+
+  useEffect(() => {
+    if (!payload || !user?.isAdmin || shareToken) return;
+    const daily = payload.totals.laborMetrics?.daily || {};
+    const overTarget = payload.days
+      .map((day) => ({ day, hpor: Number(daily[day]?.hpor || 0) }))
+      .filter((item) => item.hpor > 1.25);
+    if (!overTarget.length) return;
+    const key = `${payload.schedule.id}:${overTarget.map((item) => `${item.day}:${item.hpor.toFixed(2)}`).join("|")}`;
+    if (dailyHporToastKey.current === key) return;
+    dailyHporToastKey.current = key;
+    toast({
+      title: "Daily labor HPOR alert",
+      description: overTarget.map((item) => `${formatDate(item.day)} ${item.hpor.toFixed(2)} HPOR`).join(", "),
+      variant: "destructive",
+    });
+  }, [payload, shareToken, toast, user?.isAdmin]);
 
   const createWeek = useMutation({
     mutationFn: async (mode: "blank" | "copyPrevious") => {
@@ -1887,6 +1989,8 @@ export default function SchedulePage() {
                 <CardContent className="grid gap-2 sm:grid-cols-2">{payload.totals.warnings.map((warning) => <div key={warning} className="rounded-md border border-amber-200 bg-amber-50 p-2 text-sm text-amber-900">{warning}</div>)}</CardContent>
               </Card>
             )}
+
+            <PersonalScheduleCard payload={payload} user={user} spanish={spanish} />
 
             <ForecastPanel
               payload={payload}

@@ -176,6 +176,20 @@ function primaryOperationalDepartment(employee: any, fallback?: string | null) {
   return candidates.find((department) => department !== "Managers") || candidates[0] || "Front Desk";
 }
 
+function employeeScheduleDepartments(employee: any) {
+  return Array.from(new Set([
+    normalizeDepartment(employee?.department),
+    ...rolesArray(employee?.rolesJson).map((role) => normalizeDepartment(role)).filter(Boolean),
+  ]));
+}
+
+function employeeApprovedForDepartment(employee: any, department: string, roleWorked?: string | null) {
+  const normalizedDepartment = normalizeDepartment(department);
+  if (employeeScheduleDepartments(employee).includes(normalizedDepartment)) return true;
+  const normalizedRole = String(roleWorked || "").trim().toLowerCase();
+  return Boolean(normalizedRole && rolesArray(employee?.rolesJson).some((role) => role.toLowerCase() === normalizedRole));
+}
+
 function hasManagerAccessRole(employee: any, user?: any) {
   const values = [
     employee?.department,
@@ -1258,7 +1272,7 @@ function buildAiScheduleDraft(payload: any, scopeDepartment?: string) {
   const shiftByLabel = new Map<string, any>(payload.shiftTypes.map((shift: any) => [String(shift.label).toUpperCase(), shift]));
   const employeesByDepartment = new Map<string, any[]>();
   for (const department of DEPARTMENTS) {
-    employeesByDepartment.set(department, payload.employees.filter((employee: any) => employee.active && normalizeDepartment(employee.department) === department));
+    employeesByDepartment.set(department, payload.employees.filter((employee: any) => employee.active && employeeScheduleDepartments(employee).includes(department)));
   }
   const approvedByEmployeeDay = new Set((payload.approvedRequests || []).map((request: any) => `${request.employeeId}:${request.requestDate}`));
   const assignedByEmployeeDay = new Set<string>();
@@ -1524,7 +1538,7 @@ async function renderSchedulePdf(payload: any) {
   const shiftTypeById = new Map<any, any>(payload.shiftTypes.map((shift: any) => [shift.id, shift]));
   const shiftTypeByLabel = new Map<string, any>(payload.shiftTypes.map((shift: any) => [String(shift.label || "").toUpperCase(), shift]));
   for (const department of payload.departments) {
-    const employees = payload.employees.filter((employee: any) => normalizeDepartment(employee.department) === department && employee.active);
+    const employees = payload.employees.filter((employee: any) => employee.active && employeeScheduleDepartments(employee).includes(department));
     if (!employees.length) continue;
     const rowH = 34;
     ensureSpace(48 + employees.length * rowH);
@@ -1583,7 +1597,7 @@ function renderScheduleExcelHtml(payload: any) {
   }
   rows.push("</table><br/><table border='1'><tr><th>Department</th><th>Employee</th>" + payload.days.map((day: string) => `<th>${day}</th>`).join("") + "<th>Total</th></tr>");
   for (const department of payload.departments) {
-    for (const employee of payload.employees.filter((item: any) => normalizeDepartment(item.department) === department && item.active)) {
+    for (const employee of payload.employees.filter((item: any) => item.active && employeeScheduleDepartments(item).includes(department))) {
       rows.push(`<tr><td>${department}</td><td>${employee.displayName}</td>${payload.days.map((day: string) => {
         const assignment: any = assignmentsByEmployeeDay.get(`${employee.id}:${day}`);
         const shiftType: any = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
@@ -2053,6 +2067,9 @@ export function registerScheduleRoutes(app: Express) {
       const [targetEmployee] = employeeId ? await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.id, employeeId)).limit(1) : [];
       const targetDepartment = normalizeDepartment(parsed.data.roleWorked || targetEmployee?.department);
       if (!(await canManageDepartment(req.scheduleUser, targetDepartment))) return res.status(403).json({ error: "You can only edit your assigned department schedule." });
+      if (targetEmployee && !employeeApprovedForDepartment(targetEmployee, targetDepartment, parsed.data.roleWorked)) {
+        return res.status(403).json({ error: "This associate is not approved to work that department. Add the cross-department role on their employee profile first." });
+      }
       if (!publicScheduleUser(req.scheduleUser).isSuperAdmin && sectionCompleted(schedule, targetDepartment)) return res.status(423).json({ error: `${targetDepartment} has already been marked completed.` });
       if (parsed.data.clear) {
         await db.delete(scheduleShiftAssignments).where(and(eq(scheduleShiftAssignments.scheduleId, schedule.id), eq(scheduleShiftAssignments.shiftDate, parsed.data.shiftDate), employeeId ? eq(scheduleShiftAssignments.employeeId, employeeId) : eq(scheduleShiftAssignments.isOpenShift, true)));
@@ -2181,6 +2198,7 @@ export function registerScheduleRoutes(app: Express) {
         const employee = employeeById.get(assignment.employeeId);
         const department = normalizeDepartment(assignment.roleWorked || employee?.department);
         if (!(await canManageDepartment(req.scheduleUser, department))) continue;
+        if (employee && !employeeApprovedForDepartment(employee, department, assignment.roleWorked)) continue;
         const approvedRequest = await getApprovedRequestForEmployeeDate(assignment.employeeId, assignment.shiftDate);
         if (approvedRequest) continue;
         await db.insert(scheduleShiftAssignments).values({

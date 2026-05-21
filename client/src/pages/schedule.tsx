@@ -1624,6 +1624,7 @@ export default function SchedulePage() {
   const user = auth.data?.user;
   const editable = Boolean(user?.isAdmin && payload?.schedule.status === "draft" && !shareToken);
   const t = (value: string) => tr(spanish, value);
+  const hasHousekeepingBoardData = Boolean(payload?.housekeepingBoards?.some((board) => Number(board.actualHours || 0) > 0));
 
   useEffect(() => {
     if (!payload || !user?.isAdmin || shareToken) return;
@@ -1965,7 +1966,14 @@ export default function SchedulePage() {
                 </div>
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
                   <div className="text-sm text-[#5f5247]">HK MPOR target {payload.totals.laborMetrics?.targets.hkMporMin ?? 25}-{payload.totals.laborMetrics?.targets.hkMporMax ?? 30}</div>
-                  <div className={`text-3xl font-semibold ${metricTone(payload.totals.laborMetrics?.weekly.hkMpor || 0, payload.totals.laborMetrics?.targets.hkMporMax || 30)}`}>{payload.totals.laborMetrics?.weekly.hkMpor ?? "0.0"}</div>
+                  {hasHousekeepingBoardData ? (
+                    <div className={`text-3xl font-semibold ${metricTone(payload.totals.laborMetrics?.weekly.hkMpor || 0, payload.totals.laborMetrics?.targets.hkMporMax || 30)}`}>{payload.totals.laborMetrics?.weekly.hkMpor ?? "0.0"}</div>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-semibold text-[#5f5247]">Pending</div>
+                      <div className="text-xs text-[#5f5247]">Enter HK board data to calculate actual MPOR.</div>
+                    </>
+                  )}
                 </div>
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">{spanish ? ES["Open shifts"] : "Open shifts"}</div><div className="text-3xl font-semibold">{payload.totals.openShiftCount}</div></div>
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">{spanish ? ES.Employees : "Employees"}</div><div className="text-3xl font-semibold">{payload.employees.filter((e) => e.active).length}</div></div>
@@ -2140,7 +2148,7 @@ export default function SchedulePage() {
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Proposed shifts</div><div className="text-2xl font-semibold">{aiDraft.assignments.length}</div></div>
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Current HPOR</div><div className="text-2xl font-semibold">{aiDraft.laborMetrics?.weekly.hpor ?? "-"}</div></div>
-                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Current HK MPOR</div><div className="text-2xl font-semibold">{aiDraft.laborMetrics?.weekly.hkMpor ?? "-"}</div></div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Current HK MPOR</div><div className="text-2xl font-semibold">{hasHousekeepingBoardData ? aiDraft.laborMetrics?.weekly.hkMpor ?? "-" : "Pending"}</div></div>
               </div>
               {aiDraft.ai.recommendations.length > 0 && (
                 <div>

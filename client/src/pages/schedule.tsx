@@ -1101,6 +1101,66 @@ function PersonalScheduleCard({ payload, user, spanish }: { payload: SchedulePay
   );
 }
 
+function HousekeepingForecastMini({ payload, labels }: { payload: SchedulePayload; labels: string[] }) {
+  const forecastByDay = new Map(payload.forecast.map((day) => [day.forecastDate, day]));
+  const metrics = [
+    { key: "arrivals", label: "Arr" },
+    { key: "departures", label: "Dep" },
+    { key: "stayovers", label: "Stay" },
+    { key: "dndRooms", label: "DND" },
+  ] as const;
+  return (
+    <tr>
+      <td colSpan={9} className="border border-[#e0d3c1] bg-[#fbf6ee] p-2">
+        <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Housekeeping forecast reference</div>
+        <div className="mt-2 grid grid-cols-7 gap-2">
+          {payload.days.map((day, index) => {
+            const forecast = forecastByDay.get(day);
+            return (
+              <div key={day} className="rounded-lg border border-[#d6c8b5] bg-white p-2 text-xs">
+                <div className="font-semibold text-[#201814]">{labels[index]} {formatDate(day)}</div>
+                <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-1 text-[#5f5247]">
+                  {metrics.map((metric) => (
+                    <div key={metric.key} className="flex justify-between gap-2">
+                      <span>{metric.label}</span>
+                      <strong className="text-[#201814]">{Number(forecast?.[metric.key] || 0)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function HousekeepingForecastMiniCards({ payload, labels }: { payload: SchedulePayload; labels: string[] }) {
+  const forecastByDay = new Map(payload.forecast.map((day) => [day.forecastDate, day]));
+  return (
+    <div className="mb-3 rounded-xl border border-[#e0d3c1] bg-[#fbf6ee] p-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Housekeeping forecast reference</div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        {payload.days.map((day, index) => {
+          const forecast = forecastByDay.get(day);
+          return (
+            <div key={day} className="rounded-lg border border-[#d6c8b5] bg-white p-2 text-sm">
+              <div className="font-semibold">{labels[index]} {formatDate(day)}</div>
+              <div className="mt-1 grid grid-cols-4 gap-2 text-xs text-[#5f5247]">
+                <div>Arr <strong className="text-[#201814]">{Number(forecast?.arrivals || 0)}</strong></div>
+                <div>Dep <strong className="text-[#201814]">{Number(forecast?.departures || 0)}</strong></div>
+                <div>Stay <strong className="text-[#201814]">{Number(forecast?.stayovers || 0)}</strong></div>
+                <div>DND <strong className="text-[#201814]">{Number(forecast?.dndRooms || 0)}</strong></div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBoard, spanish }: { payload: SchedulePayload; editable: boolean; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, department: string, assignment?: ShiftAssignment) => void; onCopyShift: (assignment: ShiftAssignment, employee: ScheduleEmployee, date: string, department: string) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board?: HousekeepingBoard) => void }) {
   const assignments = useMemo(() => new Map(payload.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment])), [payload.assignments]);
   const housekeepingBoards = useMemo(() => new Map((payload.housekeepingBoards || []).map((board) => [`${board.employeeId}:${board.boardDate}`, board])), [payload.housekeepingBoards]);
@@ -1134,8 +1194,10 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
               {payload.departments.map((department) => {
                 const employees = payload.employees.filter((employee) => employee.active && employeeDepartments(employee).includes(department)).sort(scheduleEmployeeSort);
                 if (!employees.length) return null;
+                const showHousekeepingReference = department === "Housekeeping" && editable && editableDepartments.includes("Housekeeping");
                 return [
                   <tr key={`${department}-header`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#2a211c] p-2 font-semibold text-white">{department} - {payload.totals.departmentWeeklyHours[department] || 0} hrs</td></tr>,
+                  showHousekeepingReference ? <HousekeepingForecastMini key={`${department}-forecast`} payload={payload} labels={labels} /> : null,
                   <tr key={`${department}-days`}>
                     <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left text-xs font-semibold uppercase tracking-wide text-[#5f5247]">{t("Associate")}</td>
                     {payload.days.map((day, index) => <td key={day} className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center text-xs font-semibold uppercase tracking-wide text-[#5f5247]">{labels[index]}<br />{formatDate(day)}</td>)}
@@ -1214,9 +1276,11 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
           {payload.departments.map((department) => {
             const employees = payload.employees.filter((employee) => employee.active && employeeDepartments(employee).includes(department)).sort(scheduleEmployeeSort);
             if (!employees.length) return null;
+            const showHousekeepingReference = department === "Housekeeping" && editable && editableDepartments.includes("Housekeeping");
             return (
               <div key={department}>
                 <h3 className="mb-2 font-semibold">{department}</h3>
+                {showHousekeepingReference && <HousekeepingForecastMiniCards payload={payload} labels={labels} />}
                 <div className="space-y-3">
                   {employees.map((employee) => (
                     <div key={employee.id} className="rounded-xl border border-[#e0d3c1] bg-white p-3">
@@ -1263,7 +1327,7 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
 
 function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollImport, importingPayroll, spanish }: { employees: ScheduleEmployee[]; canViewRates: boolean; spanish: boolean; onAdd: (employee: any) => void; onUpdate: (id: string, patch: any) => void; onPayrollImport: (file: File) => void; importingPayroll: boolean }) {
   const payrollInputRef = useRef<HTMLInputElement | null>(null);
-  const emptyForm = { firstName: "", lastName: "", displayName: "", department: "Front Desk", position: "", rolesJson: [] as string[], maxWeeklyHours: "40", hourlyRate: "", email: "", phone: "", isSalaried: false, isDepartmentManager: false };
+  const emptyForm = { firstName: "", lastName: "", displayName: "", department: "Front Desk", position: "", rolesJson: [] as string[], hourlyRate: "", email: "", phone: "", isSalaried: false, isDepartmentManager: false };
   const [form, setForm] = useState(emptyForm);
   const [expanded, setExpanded] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
@@ -1341,13 +1405,12 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
               {SCHEDULE_ROLES.map((role) => <Button key={role} type="button" size="sm" variant="outline" className={form.rolesJson.includes(role) ? C.green : C.outline} onClick={() => toggleRole(role)}>{role}</Button>)}
             </div>
           </div>
-          <Input className={C.field} placeholder={t("Max weekly hours")} type="number" value={form.maxWeeklyHours} onChange={(event) => setForm({ ...form, maxWeeklyHours: event.target.value })} />
           {canViewRates && <Input className={C.field} placeholder={t("Hourly rate")} type="number" value={form.hourlyRate} onChange={(event) => setForm({ ...form, hourlyRate: event.target.value })} />}
           <Input className={C.field} placeholder={t("Email")} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
           <Input className={C.field} placeholder={t("Phone")} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isSalaried} onChange={(event) => setForm({ ...form, isSalaried: event.target.checked })} /> Salaried</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isDepartmentManager} onChange={(event) => setForm({ ...form, isDepartmentManager: event.target.checked })} /> Department manager</label>
-          <Button className={C.green} onClick={() => { onAdd({ ...form, maxWeeklyHours: Number(form.maxWeeklyHours || 0), hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate) }); setForm(emptyForm); }}><Plus className="mr-2 h-4 w-4" />{t("Add employee")}</Button>
+          <Button className={C.green} onClick={() => { onAdd({ ...form, hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate) }); setForm(emptyForm); }}><Plus className="mr-2 h-4 w-4" />{t("Add employee")}</Button>
           {canViewRates && (
             <>
               <input

@@ -15,6 +15,7 @@ import {
   Printer,
   RefreshCw,
   Save,
+  Search,
   Share2,
   Sparkles,
   Users,
@@ -46,7 +47,7 @@ const C = {
 };
 
 const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
-const SCHEDULE_ROLES = ["GM", "DOS", "DOS / Sales", "Sales", "MOD", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
+const SCHEDULE_ROLES = ["GM", "DOS", "DOS / Sales", "Sales", "MOD", "Executive Housekeeper", "Exec HK", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
 const DAY_LABELS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 const DAY_LABELS_ES = ["Sab", "Dom", "Lun", "Mar", "Mie", "Jue", "Vie"];
 
@@ -437,7 +438,7 @@ function normalizeDepartment(value?: string | null) {
   if (normalized.includes("front") || normalized.includes("fd ") || normalized === "fd am" || normalized === "fd pm" || normalized.includes("desk")) return "Front Desk";
   if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
   if (normalized.includes("engineer") || normalized.includes("maintenance")) return "Maintenance";
-  if (normalized.includes("house") || normalized.includes("laundry") || normalized.includes("room attendant") || normalized.includes("inspector")) return "Housekeeping";
+  if (normalized.includes("house") || normalized.includes("hk") || normalized.includes("laundry") || normalized.includes("room attendant") || normalized.includes("inspector")) return "Housekeeping";
   return DEPARTMENTS.includes(String(value || "")) ? String(value) : "Front Desk";
 }
 
@@ -448,7 +449,7 @@ function roleDepartment(value?: string | null) {
   if (normalized.includes("audit") || normalized.includes("night")) return "Night Audit";
   if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
   if (normalized.includes("maintenance") || normalized.includes("engineer")) return "Maintenance";
-  if (normalized.includes("room attendant") || normalized.includes("laundry") || normalized.includes("inspector") || normalized.includes("houseperson") || normalized.includes("housekeeping")) return "Housekeeping";
+  if (normalized.includes("room attendant") || normalized.includes("laundry") || normalized.includes("inspector") || normalized.includes("houseperson") || normalized.includes("housekeeping") || normalized.includes("hk")) return "Housekeeping";
   if (normalized.includes("director of sales") || normalized === "sales" || normalized.includes("gm") || normalized.includes("dos") || normalized.includes("mod") || normalized.includes("manager")) return "Managers";
   return "";
 }
@@ -1183,6 +1184,8 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
   const emptyForm = { firstName: "", lastName: "", displayName: "", department: "Front Desk", position: "", rolesJson: [] as string[], maxWeeklyHours: "40", hourlyRate: "", email: "", phone: "", isSalaried: false, isDepartmentManager: false };
   const [form, setForm] = useState(emptyForm);
   const [expanded, setExpanded] = useState(false);
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("All");
   const [editing, setEditing] = useState<Record<string, any>>({});
   const t = (value: string) => tr(spanish, value);
   const toggleRole = (role: string) => setForm((current) => ({ ...current, rolesJson: current.rolesJson.includes(role) ? current.rolesJson.filter((item) => item !== role) : [...current.rolesJson, role] }));
@@ -1210,6 +1213,29 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
       if (Number(employee.sortOrder || 0) !== index + 1) onUpdate(employee.id, { sortOrder: index + 1 });
     });
   };
+  const sortedEmployees = [...employees].sort((a, b) => normalizeDepartment(a.department).localeCompare(normalizeDepartment(b.department)) || Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName));
+  const query = employeeSearch.trim().toLowerCase();
+  const filteredEmployees = sortedEmployees.filter((employee) => {
+    const draft = employeePatch(employee);
+    const department = normalizeDepartment(draft.department);
+    if (departmentFilter !== "All" && department !== departmentFilter) return false;
+    if (!query) return true;
+    const searchable = [
+      draft.displayName,
+      draft.firstName,
+      draft.lastName,
+      draft.position,
+      draft.email,
+      draft.phone,
+      department,
+      rolesArray(draft.rolesJson).join(" "),
+    ].join(" ").toLowerCase();
+    return searchable.includes(query);
+  });
+  const groupedDepartments = (departmentFilter === "All" ? DEPARTMENTS : [departmentFilter]).map((department) => ({
+    department,
+    employees: filteredEmployees.filter((employee) => normalizeDepartment(employeePatch(employee).department) === department),
+  })).filter((group) => group.employees.length > 0);
   return (
     <Card className={C.shell} data-tour="employees">
       <CardHeader>
@@ -1259,11 +1285,47 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
             </>
           )}
         </div>
-        <div className="flex justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Button variant="outline" className={C.outline} onClick={() => setExpanded((value) => !value)}>{expanded ? "Hide employee list" : "Show employee list"}</Button>
+          {expanded && <Badge variant="outline" className="border-[#d6c8b5] bg-white text-[#5f5247]">{filteredEmployees.length} of {employees.length} associates</Badge>}
         </div>
-        {expanded && <div className="space-y-2">
-          {[...employees].sort((a, b) => normalizeDepartment(a.department).localeCompare(normalizeDepartment(b.department)) || Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName)).map((employee, index) => {
+        {expanded && <div className="space-y-4">
+          <div className="grid gap-3 rounded-xl border border-[#e0d3c1] bg-[#fbf6ee] p-3 md:grid-cols-[1fr_240px]">
+            <div>
+              <Label>{t("Search employees")}</Label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#76695d]" />
+                <Input
+                  className={`${C.field} pl-9`}
+                  placeholder={t("Search by name, role, email, phone...")}
+                  value={employeeSearch}
+                  onChange={(event) => setEmployeeSearch(event.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>{t("Department")}</Label>
+              <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">{t("All departments")}</SelectItem>
+                  {DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {groupedDepartments.length === 0 && (
+            <div className="rounded-lg border border-[#e0d3c1] bg-white p-4 text-sm text-[#5f5247]">
+              {t("No employees match that search or department filter.")}
+            </div>
+          )}
+          {groupedDepartments.map((group) => (
+            <div key={group.department} className="space-y-2">
+              <div className="flex items-center justify-between rounded-lg border border-[#d6c8b5] bg-[#2a211c] px-3 py-2 text-white">
+                <div className="font-semibold">{group.department}</div>
+                <Badge variant="outline" className="border-white/30 bg-white/10 text-white">{group.employees.length}</Badge>
+              </div>
+              {group.employees.map((employee) => {
             const draft = employeePatch(employee);
             const roles = rolesArray(draft.rolesJson);
             return (
@@ -1319,6 +1381,8 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
               </div>
             </div>
           );})}
+            </div>
+          ))}
         </div>}
       </CardContent>
     </Card>

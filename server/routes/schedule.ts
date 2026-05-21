@@ -33,7 +33,7 @@ const SCHEDULE_ADMIN_EMAILS = new Set(
 const PROPERTY_NAME = process.env.SCHEDULE_PROPERTY_NAME || "Courtyard Austin Lakeline";
 const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
 const REQUIRED_DEPARTMENTS = ["Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
-const SCHEDULE_ROLES = ["GM", "DOS", "DOS / Sales", "Sales", "MOD", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
+const SCHEDULE_ROLES = ["GM", "DOS", "DOS / Sales", "Sales", "MOD", "Executive Housekeeper", "Exec HK", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
 const SCHEDULE_DAY_LABELS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 const DAY_MS = 86_400_000;
 const TARGET_OCCUPANCY_PERCENT = Number(process.env.SCHEDULE_TARGET_OCCUPANCY_PERCENT || 65);
@@ -148,8 +148,15 @@ function normalizeDepartment(value?: string | null) {
   if (normalized.includes("front") || normalized.includes("fd ") || normalized === "fd am" || normalized === "fd pm" || normalized.includes("desk")) return "Front Desk";
   if (normalized.includes("bistro") || normalized.includes("breakfast")) return "Bistro";
   if (normalized.includes("engineer") || normalized.includes("maintenance")) return "Maintenance";
-  if (normalized.includes("house") || normalized.includes("laundry") || normalized.includes("room attendant") || normalized.includes("inspector")) return "Housekeeping";
+  if (normalized.includes("house") || normalized.includes("hk") || normalized.includes("laundry") || normalized.includes("room attendant") || normalized.includes("inspector")) return "Housekeeping";
   return DEPARTMENTS.includes(String(value || "")) ? String(value) : "Front Desk";
+}
+
+function hasHousekeepingManagerRole(roles: unknown) {
+  return rolesArray(roles).some((role) => {
+    const normalized = role.toLowerCase();
+    return normalized.includes("executive housekeeper") || normalized === "exec hk" || normalized.includes("housekeeping manager");
+  });
 }
 
 function rolesArray(value: unknown): string[] {
@@ -279,22 +286,25 @@ function employeeProfileMatches(employee: any, input: { email?: string; phone?: 
 async function upsertScheduleEmployeeForUser(user: any, profile: any) {
   const employees = await db.select().from(scheduleEmployees);
   const existing = employees.find((employee) => employeeProfileMatches(employee, profile));
+  const isHousekeepingManager = hasHousekeepingManagerRole(profile.rolesJson);
+  const department = isHousekeepingManager ? "Housekeeping" : normalizeDepartment(profile.department);
   const values = {
     firstName: profile.firstName,
     lastName: profile.lastName,
     displayName: profile.employeeDisplayName || `${profile.firstName} ${profile.lastName}`,
     email: normalizeEmail(profile.email),
     phone: profile.phone,
-    department: normalizeDepartment(profile.department),
-    position: profile.position || rolesArray(profile.rolesJson).join(", "),
+    department,
+    position: profile.position || (isHousekeepingManager ? "Executive Housekeeper" : rolesArray(profile.rolesJson).join(", ")),
     rolesJson: rolesArray(profile.rolesJson),
+    isDepartmentManager: isHousekeepingManager || Boolean(existing?.isDepartmentManager),
     updatedAt: new Date(),
   } as any;
   if (existing) {
     const [employee] = await db.update(scheduleEmployees).set(values).where(eq(scheduleEmployees.id, existing.id)).returning();
     return employee;
   }
-  const nextSort = employees.filter((employee) => normalizeDepartment(employee.department) === normalizeDepartment(profile.department)).length + 1;
+  const nextSort = employees.filter((employee) => normalizeDepartment(employee.department) === department).length + 1;
   const [employee] = await db.insert(scheduleEmployees).values({ ...values, sortOrder: nextSort, active: true } as any).returning();
   return employee;
 }

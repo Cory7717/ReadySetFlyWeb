@@ -397,7 +397,19 @@ function shiftText(assignment: ShiftAssignment | undefined, shiftType: ShiftType
   const start = assignment.customStartTime || shiftType.startTime;
   const end = assignment.customEndTime || shiftType.endTime;
   const base = start && end ? `${formatTimeCompact(start)} - ${formatTimeCompact(end)}` : shiftType.label;
-  return [base, assignment.roleNote].filter(Boolean).join("\n");
+  return [base, usefulShiftNote(assignment.roleNote, assignment.roleWorked, shiftType)].filter(Boolean).join("\n");
+}
+
+function usefulShiftNote(note: string | null | undefined, roleWorked: string | null | undefined, shiftType: ShiftType | undefined) {
+  const value = String(note || "").trim();
+  if (!value) return "";
+  const normalized = value.toLowerCase();
+  const role = String(roleWorked || "").trim().toLowerCase();
+  const shiftLabel = String(shiftType?.label || "").trim().toLowerCase();
+  const department = String(shiftType?.departmentHint || "").trim().toLowerCase();
+  if (normalized === role || normalized === shiftLabel || normalized === department) return "";
+  if (/^(gm|dos|dos \/ sales|sales|mod|manager|managers|front desk|fd am|fd pm|night audit|bistro|bistro am|bistro pm|breakfast|maintenance|housekeeping|room attendant|laundry|room inspector|houseperson)$/i.test(value)) return "";
+  return value;
 }
 
 function formatTime12(value?: string | null) {

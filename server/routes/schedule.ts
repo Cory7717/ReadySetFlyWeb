@@ -965,15 +965,19 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   const bistroLabor = calculateBistroLaborTarget(forecast, departmentWeeklyHours["Bistro"] || 0);
   if (laborMetrics.weekly.hpor > TARGET_HPOR) warnings.push(`Weekly HPOR ${laborMetrics.weekly.hpor.toFixed(2)} is above target ${TARGET_HPOR}.`);
   if (laborMetrics.weekly.hkMpor > TARGET_HK_MPOR_MAX) warnings.push(`Housekeeping MPOR ${laborMetrics.weekly.hkMpor.toFixed(1)} is above target ${TARGET_HK_MPOR_MIN}-${TARGET_HK_MPOR_MAX}.`);
-  if (bistroLabor.status === "under") warnings.push(`Bistro scheduled hours ${bistroLabor.scheduledHours} are below ${bistroLabor.model} target ${bistroLabor.targetMinHours}-${bistroLabor.targetMaxHours}.`);
-  if (bistroLabor.status === "over") warnings.push(`Bistro scheduled hours ${bistroLabor.scheduledHours} are above ${bistroLabor.model} target ${bistroLabor.targetMinHours}-${bistroLabor.targetMaxHours}.`);
-
   const totalWeeklyLaborDollars = Object.values(dailyLaborDollars).reduce((sum, value) => sum + value, 0);
   const totalWeeklyLaborDollarsIncludingSalary = Object.values(dailyLaborDollarsIncludingSalary).reduce((sum, value) => sum + value, 0);
   const totalWeeklySalariedLaborDollars = Object.values(dailySalariedLaborDollars).reduce((sum, value) => sum + value, 0);
   const weeklyRoomRevenue = Number(laborMetrics.weekly.roomRevenue || 0);
   const laborPercentOfRoomRevenue = weeklyRoomRevenue > 0 ? (totalWeeklyLaborDollars / weeklyRoomRevenue) * 100 : 0;
   const laborPercentOfRoomRevenueIncludingSalary = weeklyRoomRevenue > 0 ? (totalWeeklyLaborDollarsIncludingSalary / weeklyRoomRevenue) * 100 : 0;
+  if (bistroLabor.status === "under") warnings.push(`Bistro scheduled hours ${bistroLabor.scheduledHours} are below ${bistroLabor.model} target ${bistroLabor.targetMinHours}-${bistroLabor.targetMaxHours}.`);
+  if (bistroLabor.status === "over") warnings.push(`Bistro scheduled hours ${bistroLabor.scheduledHours} are above ${bistroLabor.model} target ${bistroLabor.targetMinHours}-${bistroLabor.targetMaxHours}.`);
+  if (laborPercentOfRoomRevenueIncludingSalary > 32) {
+    warnings.push(`Projected labor is ${laborPercentOfRoomRevenueIncludingSalary.toFixed(1)}% of room revenue. Recommend reducing scheduled hours or having managers cover appropriate shifts.`);
+  } else if (laborPercentOfRoomRevenueIncludingSalary > 25) {
+    warnings.push(`Projected labor is ${laborPercentOfRoomRevenueIncludingSalary.toFixed(1)}% of room revenue, above the 25% target.`);
+  }
 
   return {
     employeeWeeklyHours: roundRecord(employeeWeeklyHours),
@@ -1152,7 +1156,19 @@ function scheduleCellText(assignment: any, shiftType: any) {
   const start = assignment.customStartTime || shiftType.startTime;
   const end = assignment.customEndTime || shiftType.endTime;
   const time = start && end ? `${formatTimeCompact(start)} - ${formatTimeCompact(end)}` : shiftType.label;
-  return [time, assignment.roleNote].filter(Boolean).join("\n");
+  return [time, usefulShiftNote(assignment.roleNote, assignment.roleWorked, shiftType)].filter(Boolean).join("\n");
+}
+
+function usefulShiftNote(note: string | null | undefined, roleWorked: string | null | undefined, shiftType: any) {
+  const value = String(note || "").trim();
+  if (!value) return "";
+  const normalized = value.toLowerCase();
+  const role = String(roleWorked || "").trim().toLowerCase();
+  const shiftLabel = String(shiftType?.label || "").trim().toLowerCase();
+  const department = String(shiftType?.departmentHint || "").trim().toLowerCase();
+  if (normalized === role || normalized === shiftLabel || normalized === department) return "";
+  if (/^(gm|dos|dos \/ sales|sales|mod|manager|managers|front desk|fd am|fd pm|night audit|bistro|bistro am|bistro pm|breakfast|maintenance|housekeeping|room attendant|laundry|room inspector|houseperson)$/i.test(value)) return "";
+  return value;
 }
 
 function formatTime12(value?: string | null) {

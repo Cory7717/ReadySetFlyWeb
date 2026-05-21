@@ -33,7 +33,7 @@ const SCHEDULE_ADMIN_EMAILS = new Set(
 const PROPERTY_NAME = process.env.SCHEDULE_PROPERTY_NAME || "Courtyard Austin Lakeline";
 const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
 const REQUIRED_DEPARTMENTS = ["Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
-const SCHEDULE_ROLES = ["GM", "DOS", "MOD", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
+const SCHEDULE_ROLES = ["GM", "DOS", "DOS / Sales", "Sales", "MOD", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
 const DAY_MS = 86_400_000;
 const TARGET_OCCUPANCY_PERCENT = Number(process.env.SCHEDULE_TARGET_OCCUPANCY_PERCENT || 65);
 const TARGET_HPOR = Number(process.env.SCHEDULE_TARGET_HPOR || 1.3);
@@ -71,6 +71,8 @@ const DEFAULT_SHIFT_TYPES = [
   { label: "HOUSEKEEPING", startTime: "09:00", endTime: "17:00", color: "#dcfce7", textColor: "#14532d", departmentHint: "Housekeeping" },
   { label: "LAUNDRY", startTime: "08:00", endTime: "16:00", color: "#ccfbf1", textColor: "#134e4a", departmentHint: "Housekeeping" },
   { label: "MAINTENANCE", startTime: "08:00", endTime: "16:00", color: "#e5e7eb", textColor: "#111827", departmentHint: "Maintenance" },
+  { label: "GM", startTime: "09:00", endTime: "17:00", color: "#e9d5ff", textColor: "#3b0764", departmentHint: "Managers" },
+  { label: "DOS / Sales", startTime: "09:00", endTime: "17:00", color: "#dbeafe", textColor: "#1e3a8a", departmentHint: "Managers" },
   { label: "MOD", startTime: null, endTime: null, color: "#f5d0fe", textColor: "#581c87", departmentHint: "Managers" },
   { label: "TRAINING", startTime: null, endTime: null, color: "#cffafe", textColor: "#164e63", departmentHint: "Managers" },
   { label: "PTO", startTime: null, endTime: null, color: "#fce7f3", textColor: "#831843", departmentHint: "Managers" },

@@ -319,7 +319,7 @@ type SchedulePayload = {
     };
   };
   readOnly?: boolean;
-  departmentStatus?: Record<string, { completedAt?: string; completedBy?: string }>;
+  departmentStatus?: Record<string, { completedAt?: string; completedBy?: string; reopenedAt?: string; reopenedBy?: string }>;
   currentUserPermissions?: { editableDepartments: string[]; canPublishFinal: boolean };
 };
 
@@ -400,7 +400,15 @@ function shiftText(assignment: ShiftAssignment | undefined, shiftType: ShiftType
   const start = assignment.customStartTime || shiftType.startTime;
   const end = assignment.customEndTime || shiftType.endTime;
   const base = start && end ? `${formatTimeCompact(start)} - ${formatTimeCompact(end)}` : shiftType.label;
-  return [base, usefulShiftNote(assignment.roleNote, assignment.roleWorked, shiftType)].filter(Boolean).join("\n");
+  return [base, usefulRoleWorkedLabel(assignment.roleWorked, shiftType), usefulShiftNote(assignment.roleNote, assignment.roleWorked, shiftType)].filter(Boolean).join("\n");
+}
+
+function usefulRoleWorkedLabel(roleWorked: string | null | undefined, shiftType: ShiftType | undefined) {
+  const value = String(roleWorked || "").trim();
+  if (!value || roleDepartment(value) !== "Housekeeping") return "";
+  const normalized = value.toLowerCase();
+  if (normalized === "housekeeping") return "";
+  return value;
 }
 
 function usefulShiftNote(note: string | null | undefined, roleWorked: string | null | undefined, shiftType: ShiftType | undefined) {
@@ -503,7 +511,15 @@ function cleanTime(value?: string | null) {
 
 function shiftTone(assignment: ShiftAssignment | undefined, shiftType: ShiftType | undefined, shiftTypes: Map<string, ShiftType>) {
   const roleShift = assignment?.roleWorked
-    ? Array.from(shiftTypes.values()).find((shift) => shift.label.toLowerCase() === String(assignment.roleWorked).toLowerCase())
+    ? Array.from(shiftTypes.values()).find((shift) => {
+        const role = String(assignment.roleWorked).toLowerCase();
+        const label = shift.label.toLowerCase();
+        return label === role
+          || (role.includes("room attendant") && (label === "room attendant" || label === "housekeeping"))
+          || (role.includes("laundry") && label === "laundry")
+          || ((role.includes("houseperson") || role.includes("houseman")) && label === "houseperson")
+          || (role.includes("inspector") && label === "room inspector");
+      })
     : undefined;
   return roleShift || shiftType;
 }
@@ -907,6 +923,10 @@ function ShiftEditDialog({
     const matchingShift = payload.shiftTypes.find((shift) => shift.label.toLowerCase() === nextRole.toLowerCase())
       || (nextRole.toLowerCase().includes("audit") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "night audit" || shift.label.toLowerCase() === "audit") : undefined)
       || (nextRole.toLowerCase().includes("dos") || nextRole.toLowerCase().includes("sales") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "dos / sales") : undefined)
+      || (nextRole.toLowerCase().includes("room attendant") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "room attendant" || shift.label.toLowerCase() === "housekeeping") : undefined)
+      || (nextRole.toLowerCase().includes("laundry") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "laundry") : undefined)
+      || (nextRole.toLowerCase().includes("houseperson") || nextRole.toLowerCase().includes("houseman") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "houseperson") : undefined)
+      || (nextRole.toLowerCase().includes("inspector") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "room inspector") : undefined)
       || (nextRole.toLowerCase() === "gm" ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "gm") : undefined);
     setForm({
       ...form,
@@ -2021,6 +2041,14 @@ export default function SchedulePage() {
     },
     onError: (error: Error) => toast({ title: "Department save failed", description: error.message, variant: "destructive" }),
   });
+  const reopenDepartment = useMutation({
+    mutationFn: (department: string) => apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/departments/${encodeURIComponent(department)}/reopen`, {}),
+    onSuccess: () => {
+      toast({ title: "Department reopened", description: "Managers can make last-minute edits to that section again." });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
+    },
+    onError: (error: Error) => toast({ title: "Department reopen failed", description: error.message, variant: "destructive" }),
+  });
   const shareLink = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/share-link`, {});
@@ -2247,12 +2275,13 @@ export default function SchedulePage() {
                 <CardContent className="flex flex-wrap gap-2">
                   {(payload.requiredDepartments || []).map((department) => {
                     const completed = Boolean(payload.departmentStatus?.[department]?.completedAt);
-                    const canComplete = payload.currentUserPermissions?.editableDepartments?.includes(department);
+                    const canManageSection = Boolean(payload.currentUserPermissions?.canPublishFinal || payload.currentUserPermissions?.editableDepartments?.includes(department));
                     return (
                       <div key={department} className="rounded-lg border border-[#e0d3c1] bg-white p-3">
                         <div className="font-semibold">{department}</div>
                         <Badge variant="outline" className={completed ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-amber-300 bg-amber-50 text-amber-900"}>{completed ? "Completed" : "Open"}</Badge>
-                        {canComplete && !completed && <Button size="sm" className={`${C.green} ml-2`} onClick={() => completeDepartment.mutate(department)}>Save section</Button>}
+                        {canManageSection && !completed && <Button size="sm" className={`${C.green} ml-2`} onClick={() => completeDepartment.mutate(department)} disabled={completeDepartment.isPending}>Save section</Button>}
+                        {canManageSection && completed && <Button size="sm" variant="outline" className="ml-2 border-[#b98a43] text-[#2a211c]" onClick={() => reopenDepartment.mutate(department)} disabled={reopenDepartment.isPending}>Reopen</Button>}
                       </div>
                     );
                   })}

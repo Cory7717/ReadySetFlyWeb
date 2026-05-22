@@ -70,7 +70,11 @@ const DEFAULT_SHIFT_TYPES = [
   { label: "BISTRO PM", startTime: "14:00", endTime: "22:00", color: "#fed7aa", textColor: "#7c2d12", departmentHint: "Bistro" },
   { label: "BREAKFAST", startTime: "06:00", endTime: "12:00", color: "#fde68a", textColor: "#713f12", departmentHint: "Bistro" },
   { label: "HOUSEKEEPING", startTime: "09:00", endTime: "17:00", color: "#dcfce7", textColor: "#14532d", departmentHint: "Housekeeping" },
+  { label: "Room Attendant", startTime: "09:00", endTime: "17:00", color: "#dcfce7", textColor: "#14532d", departmentHint: "Housekeeping" },
   { label: "LAUNDRY", startTime: "08:00", endTime: "16:00", color: "#ccfbf1", textColor: "#134e4a", departmentHint: "Housekeeping" },
+  { label: "Laundry", startTime: "08:00", endTime: "16:00", color: "#ccfbf1", textColor: "#134e4a", departmentHint: "Housekeeping" },
+  { label: "Houseperson", startTime: "09:00", endTime: "16:00", color: "#fef9c3", textColor: "#713f12", departmentHint: "Housekeeping" },
+  { label: "Room Inspector", startTime: "09:00", endTime: "16:00", color: "#e0e7ff", textColor: "#312e81", departmentHint: "Housekeeping" },
   { label: "MAINTENANCE", startTime: "08:00", endTime: "16:00", color: "#e5e7eb", textColor: "#111827", departmentHint: "Maintenance" },
   { label: "GM", startTime: "09:00", endTime: "17:00", color: "#e9d5ff", textColor: "#3b0764", departmentHint: "Managers" },
   { label: "DOS / Sales", startTime: "09:00", endTime: "17:00", color: "#dbeafe", textColor: "#1e3a8a", departmentHint: "Managers" },
@@ -276,6 +280,10 @@ function resolveShiftTypeForAssignment(assignment: any, shiftTypeById: Map<any, 
   return shiftTypeByLabel.get(role)
     || (role.includes("AUDIT") || role.includes("NIGHT") ? shiftTypeByLabel.get("NIGHT AUDIT") || shiftTypeByLabel.get("AUDIT") : null)
     || (role.includes("DOS") || role.includes("SALES") ? shiftTypeByLabel.get("DOS / SALES") : null)
+    || (role.includes("ROOM ATTENDANT") ? shiftTypeByLabel.get("ROOM ATTENDANT") || shiftTypeByLabel.get("HOUSEKEEPING") : null)
+    || (role.includes("LAUNDRY") ? shiftTypeByLabel.get("LAUNDRY") : null)
+    || (role.includes("HOUSEPERSON") || role.includes("HOUSEMAN") ? shiftTypeByLabel.get("HOUSEPERSON") : null)
+    || (role.includes("INSPECTOR") ? shiftTypeByLabel.get("ROOM INSPECTOR") : null)
     || (role.includes("GM") ? shiftTypeByLabel.get("GM") : null)
     || null;
 }
@@ -2248,6 +2256,39 @@ export function registerScheduleRoutes(app: Express) {
       };
       const [updated] = await db.update(weeklySchedules).set({ departmentStatusJson: nextStatus, updatedAt: new Date() } as any).where(eq(weeklySchedules.id, schedule.id)).returning();
       await audit(schedule.id, req.scheduleUser.id, "schedule_department_completed", { department });
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(updated.id), req.scheduleUser));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/departments/:department/reopen", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      const department = normalizeDepartment(req.params.department);
+      if (!REQUIRED_DEPARTMENTS.includes(department)) return res.status(400).json({ error: "Unknown required department." });
+      const isAdmin = publicScheduleUser(req.scheduleUser).isSuperAdmin;
+      if (!isAdmin && !(await canManageDepartment(req.scheduleUser, department))) {
+        return res.status(403).json({ error: "You can only reopen your assigned department." });
+      }
+      const currentStatus = (schedule.departmentStatusJson || {}) as Record<string, any>;
+      const previous = currentStatus[department] || {};
+      const nextDepartmentStatus = {
+        ...previous,
+        lastCompletedAt: previous.completedAt || previous.lastCompletedAt,
+        lastCompletedBy: previous.completedBy || previous.lastCompletedBy,
+        reopenedAt: new Date().toISOString(),
+        reopenedBy: req.scheduleUser.id,
+      };
+      delete nextDepartmentStatus.completedAt;
+      delete nextDepartmentStatus.completedBy;
+      const nextStatus = {
+        ...currentStatus,
+        [department]: nextDepartmentStatus,
+      };
+      const [updated] = await db.update(weeklySchedules).set({ departmentStatusJson: nextStatus, updatedAt: new Date() } as any).where(eq(weeklySchedules.id, schedule.id)).returning();
+      await audit(schedule.id, req.scheduleUser.id, "schedule_department_reopened", { department });
       res.json(stripPrivateScheduleRates(await buildSchedulePayload(updated.id), req.scheduleUser));
     } catch (error) {
       next(error);

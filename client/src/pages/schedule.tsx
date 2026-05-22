@@ -1203,6 +1203,96 @@ function HousekeepingForecastMiniCards({ payload, labels }: { payload: ScheduleP
   );
 }
 
+function HousekeepingSchedulingGuide() {
+  const sections = [
+    {
+      title: "Room Attendant Coverage",
+      items: [
+        "Schedule approximately 1 room attendant per 16-20 estimated rooms per board",
+        "Lean toward 16 rooms on heavy checkout days",
+        "Lean toward 20 rooms on stayover-heavy days",
+      ],
+    },
+    {
+      title: "Houseperson Coverage",
+      items: [
+        "Schedule 1 Houseperson daily",
+        "Standard shift: 7 hours",
+        "Add additional coverage on sold-out or group-heavy days if needed",
+      ],
+    },
+    {
+      title: "Laundry Coverage",
+      items: [
+        "Schedule 1 Laundry Attendant daily",
+        "Standard shift: 7 hours",
+        "Add support coverage during heavy turnover or linen volume days",
+      ],
+    },
+    {
+      title: "Inspector Coverage",
+      items: [
+        "Executive Housekeeper performs inspections 5 days per week",
+        "Designated Room Attendant performs inspections remaining 2 days",
+        "Inspection time should flex based on occupancy and checkout volume",
+        "Average inspection workload should generally take approximately 4-5 hours at moderate occupancy",
+      ],
+    },
+    {
+      title: "Recommended Use of Inspector Time When Not Inspecting",
+      items: [
+        "Assist with room boards during heavy checkout periods",
+        "Perform deep clean inspections",
+        "Conduct public area quality walks",
+        "Complete linen and inventory audits",
+        "Assist with VIP/Elite arrival room checks",
+        "Training and coaching room attendants",
+        "PM / preventative maintenance reporting",
+        "Follow-up on out-of-order rooms",
+        "Laundry assistance during peak linen periods",
+        "Final room readiness walkthroughs before peak arrivals",
+      ],
+    },
+    {
+      title: "Occupancy-Based Adjustments",
+      items: [
+        "Under 60% OCC: minimal overlap, lean staffing model, single houseperson/laundry coverage sufficient",
+        "60-79% OCC: standard staffing model, add selective overlap during heavy checkout days",
+        "80%+ OCC: add room attendant support, inspection assistance, and laundry or houseperson support based on turnover volume",
+      ],
+    },
+    {
+      title: "Group / Event Guidance",
+      items: [
+        "Review group departure patterns before assigning boards",
+        "Add staffing support for early arrival groups or mass departures",
+        "Do not include deep cleans or special projects in standard room board calculations",
+      ],
+    },
+  ];
+  return (
+    <div className="mb-3 rounded-xl border border-[#e0d3c1] bg-[#fffaf2] p-4 shadow-[0_12px_30px_rgba(74,54,34,0.08)]">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6b3f]">Housekeeping</div>
+          <h3 className="text-xl font-semibold text-[#201814]">HK Scheduling Guide</h3>
+        </div>
+        <div className="rounded-full border border-[#d6c8b5] bg-white px-3 py-1 text-sm font-semibold text-[#2f5f46]">Staff to demand, not habit.</div>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {sections.map((section) => (
+          <div key={section.title} className="rounded-lg border border-[#eadfce] bg-white p-3">
+            <div className="font-semibold text-[#201814]">{section.title}</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-relaxed text-[#5f5247]">
+              {section.items.map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onHousekeepingBoard, spanish }: { payload: SchedulePayload; editable: boolean; currentUser?: ScheduleUser | null; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, department: string, assignment?: ShiftAssignment) => void; onCopyShift: (assignment: ShiftAssignment, employee: ScheduleEmployee, date: string, department: string) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board?: HousekeepingBoard) => void }) {
   const assignments = useMemo(() => new Map(payload.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment])), [payload.assignments]);
   const housekeepingBoards = useMemo(() => new Map((payload.housekeepingBoards || []).map((board) => [`${board.employeeId}:${board.boardDate}`, board])), [payload.housekeepingBoards]);
@@ -1240,6 +1330,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onH
                 const showHousekeepingReference = department === "Housekeeping" && editable && editableDepartments.includes("Housekeeping");
                 return [
                   <tr key={`${department}-header`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#2a211c] p-2 font-semibold text-white">{department} - {payload.totals.departmentWeeklyHours[department] || 0} hrs</td></tr>,
+                  showHousekeepingReference ? <tr key={`${department}-guide`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#fbf6ee] p-3"><HousekeepingSchedulingGuide /></td></tr> : null,
                   showHousekeepingReference ? <HousekeepingForecastMini key={`${department}-forecast`} payload={payload} labels={labels} /> : null,
                   <tr key={`${department}-days`}>
                     <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left text-xs font-semibold uppercase tracking-wide text-[#5f5247]">{t("Associate")}</td>
@@ -1323,7 +1414,12 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onH
             return (
               <div key={department}>
                 <h3 className="mb-2 font-semibold">{department}</h3>
-                {showHousekeepingReference && <HousekeepingForecastMiniCards payload={payload} labels={labels} />}
+                {showHousekeepingReference && (
+                  <>
+                    <HousekeepingSchedulingGuide />
+                    <HousekeepingForecastMiniCards payload={payload} labels={labels} />
+                  </>
+                )}
                 <div className="space-y-3">
                   {employees.map((employee) => (
                     <div key={employee.id} className="rounded-xl border border-[#e0d3c1] bg-white p-3">

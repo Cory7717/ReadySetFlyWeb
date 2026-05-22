@@ -1104,6 +1104,8 @@ function PersonalScheduleCard({ payload, user, spanish }: { payload: SchedulePay
 function HousekeepingForecastMini({ payload, labels }: { payload: SchedulePayload; labels: string[] }) {
   const forecastByDay = new Map(payload.forecast.map((day) => [day.forecastDate, day]));
   const metrics = [
+    { key: "roomsSold", label: "Rooms" },
+    { key: "occupancyPercent", label: "Occ %" },
     { key: "arrivals", label: "Arr" },
     { key: "departures", label: "Dep" },
     { key: "stayovers", label: "Stay" },
@@ -1112,7 +1114,8 @@ function HousekeepingForecastMini({ payload, labels }: { payload: SchedulePayloa
   return (
     <tr>
       <td colSpan={9} className="border border-[#e0d3c1] bg-[#fbf6ee] p-2">
-        <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Housekeeping forecast reference</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Housekeeping working forecast</div>
+        <div className="text-[11px] text-[#5f5247]">Uses the saved manager forecast, not the original upload baseline.</div>
         <div className="mt-2 grid grid-cols-7 gap-2">
           {payload.days.map((day, index) => {
             const forecast = forecastByDay.get(day);
@@ -1140,14 +1143,17 @@ function HousekeepingForecastMiniCards({ payload, labels }: { payload: ScheduleP
   const forecastByDay = new Map(payload.forecast.map((day) => [day.forecastDate, day]));
   return (
     <div className="mb-3 rounded-xl border border-[#e0d3c1] bg-[#fbf6ee] p-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Housekeeping forecast reference</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Housekeeping working forecast</div>
+      <div className="text-[11px] text-[#5f5247]">Uses the saved manager forecast, not the original upload baseline.</div>
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         {payload.days.map((day, index) => {
           const forecast = forecastByDay.get(day);
           return (
             <div key={day} className="rounded-lg border border-[#d6c8b5] bg-white p-2 text-sm">
               <div className="font-semibold">{labels[index]} {formatDate(day)}</div>
-              <div className="mt-1 grid grid-cols-4 gap-2 text-xs text-[#5f5247]">
+              <div className="mt-1 grid grid-cols-3 gap-2 text-xs text-[#5f5247]">
+                <div>Rooms <strong className="text-[#201814]">{Number(forecast?.roomsSold || 0)}</strong></div>
+                <div>Occ <strong className="text-[#201814]">{Number(forecast?.occupancyPercent || 0)}%</strong></div>
                 <div>Arr <strong className="text-[#201814]">{Number(forecast?.arrivals || 0)}</strong></div>
                 <div>Dep <strong className="text-[#201814]">{Number(forecast?.departures || 0)}</strong></div>
                 <div>Stay <strong className="text-[#201814]">{Number(forecast?.stayovers || 0)}</strong></div>

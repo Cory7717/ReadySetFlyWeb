@@ -1103,6 +1103,18 @@ function PersonalScheduleCard({ payload, user, spanish }: { payload: SchedulePay
 
 function HousekeepingForecastMini({ payload, labels }: { payload: SchedulePayload; labels: string[] }) {
   const forecastByDay = new Map(payload.forecast.map((day) => [day.forecastDate, day]));
+  const recommendationForDay = (index: number) => {
+    const workloadDay = payload.days[index - 1] || payload.days[index];
+    const workloadForecast = forecastByDay.get(workloadDay);
+    const roomsToClean = Number(workloadForecast?.roomsSold || 0);
+    const roomAttendants = Math.ceil(roomsToClean / 16);
+    return {
+      workloadDay,
+      roomsToClean,
+      roomAttendants,
+      housekeepingHours: roomAttendants * 8 + 7 + 7,
+    };
+  };
   const metrics = [
     { key: "roomsSold", label: "Rooms" },
     { key: "occupancyPercent", label: "Occ %" },
@@ -1119,6 +1131,7 @@ function HousekeepingForecastMini({ payload, labels }: { payload: SchedulePayloa
         <div className="mt-2 grid grid-cols-7 gap-2">
           {payload.days.map((day, index) => {
             const forecast = forecastByDay.get(day);
+            const recommendation = recommendationForDay(index);
             return (
               <div key={day} className="rounded-lg border border-[#d6c8b5] bg-white p-2 text-xs">
                 <div className="font-semibold text-[#201814]">{labels[index]} {formatDate(day)}</div>
@@ -1129,6 +1142,11 @@ function HousekeepingForecastMini({ payload, labels }: { payload: SchedulePayloa
                       <strong className="text-[#201814]">{Number(forecast?.[metric.key] || 0)}</strong>
                     </div>
                   ))}
+                </div>
+                <div className="mt-2 border-t border-[#eadfce] pt-1 text-[#5f5247]">
+                  <div className="flex justify-between gap-2"><span>RA needed</span><strong className="text-[#201814]">{recommendation.roomAttendants}</strong></div>
+                  <div className="flex justify-between gap-2"><span>HK hrs</span><strong className="text-[#201814]">{recommendation.housekeepingHours}</strong></div>
+                  <div className="text-[10px]">Workload: {recommendation.roomsToClean} rooms from {formatDate(recommendation.workloadDay)}</div>
                 </div>
               </div>
             );
@@ -1141,6 +1159,18 @@ function HousekeepingForecastMini({ payload, labels }: { payload: SchedulePayloa
 
 function HousekeepingForecastMiniCards({ payload, labels }: { payload: SchedulePayload; labels: string[] }) {
   const forecastByDay = new Map(payload.forecast.map((day) => [day.forecastDate, day]));
+  const recommendationForDay = (index: number) => {
+    const workloadDay = payload.days[index - 1] || payload.days[index];
+    const workloadForecast = forecastByDay.get(workloadDay);
+    const roomsToClean = Number(workloadForecast?.roomsSold || 0);
+    const roomAttendants = Math.ceil(roomsToClean / 16);
+    return {
+      workloadDay,
+      roomsToClean,
+      roomAttendants,
+      housekeepingHours: roomAttendants * 8 + 7 + 7,
+    };
+  };
   return (
     <div className="mb-3 rounded-xl border border-[#e0d3c1] bg-[#fbf6ee] p-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Housekeeping working forecast</div>
@@ -1148,6 +1178,7 @@ function HousekeepingForecastMiniCards({ payload, labels }: { payload: ScheduleP
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         {payload.days.map((day, index) => {
           const forecast = forecastByDay.get(day);
+          const recommendation = recommendationForDay(index);
           return (
             <div key={day} className="rounded-lg border border-[#d6c8b5] bg-white p-2 text-sm">
               <div className="font-semibold">{labels[index]} {formatDate(day)}</div>
@@ -1159,6 +1190,11 @@ function HousekeepingForecastMiniCards({ payload, labels }: { payload: ScheduleP
                 <div>Stay <strong className="text-[#201814]">{Number(forecast?.stayovers || 0)}</strong></div>
                 <div>DND <strong className="text-[#201814]">{Number(forecast?.dndRooms || 0)}</strong></div>
               </div>
+              <div className="mt-2 rounded-md bg-[#f4eadb] p-2 text-xs text-[#5f5247]">
+                <div><strong className="text-[#201814]">{recommendation.roomAttendants}</strong> room attendants recommended</div>
+                <div><strong className="text-[#201814]">{recommendation.housekeepingHours}</strong> estimated HK hours incl. 7 HP + 7 laundry</div>
+                <div>Workload: {recommendation.roomsToClean} rooms from {formatDate(recommendation.workloadDay)}</div>
+              </div>
             </div>
           );
         })}
@@ -1167,7 +1203,7 @@ function HousekeepingForecastMiniCards({ payload, labels }: { payload: ScheduleP
   );
 }
 
-function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBoard, spanish }: { payload: SchedulePayload; editable: boolean; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, department: string, assignment?: ShiftAssignment) => void; onCopyShift: (assignment: ShiftAssignment, employee: ScheduleEmployee, date: string, department: string) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board?: HousekeepingBoard) => void }) {
+function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onHousekeepingBoard, spanish }: { payload: SchedulePayload; editable: boolean; currentUser?: ScheduleUser | null; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, department: string, assignment?: ShiftAssignment) => void; onCopyShift: (assignment: ShiftAssignment, employee: ScheduleEmployee, date: string, department: string) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board?: HousekeepingBoard) => void }) {
   const assignments = useMemo(() => new Map(payload.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment])), [payload.assignments]);
   const housekeepingBoards = useMemo(() => new Map((payload.housekeepingBoards || []).map((board) => [`${board.employeeId}:${board.boardDate}`, board])), [payload.housekeepingBoards]);
   const shiftTypes = useMemo(() => new Map(payload.shiftTypes.map((shift) => [shift.id, shift])), [payload.shiftTypes]);
@@ -1175,6 +1211,7 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
   const t = (value: string) => spanish ? ES[value] || value : value;
   const labels = spanish ? DAY_LABELS_ES : DAY_LABELS;
   const editableDepartments = payload.currentUserPermissions?.editableDepartments || [];
+  const currentEmployee = findEmployeeForUser(payload, currentUser);
   return (
     <Card className={C.shell} data-tour="schedule-grid">
       <CardHeader>
@@ -1218,7 +1255,7 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                         const rawShift = rawAssignment ? shiftTypes.get(rawAssignment.shiftTypeId || "") : undefined;
                         const assignment = rawAssignment;
                         const isHousekeeping = department === "Housekeeping";
-                        const canEditCell = editable && editableDepartments.includes(department);
+                        const canEditCell = editable && (editableDepartments.includes(department) || currentEmployee?.id === employee.id);
                         const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
                         const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;
                         const handleShiftDragStart = (event: DragEvent) => {
@@ -1300,15 +1337,16 @@ function ScheduleGrid({ payload, editable, onEdit, onCopyShift, onHousekeepingBo
                           const isHousekeeping = department === "Housekeeping";
                           const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
                           const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;
+                          const canEditCell = editable && (editableDepartments.includes(department) || currentEmployee?.id === employee.id);
                           return (
                             <div key={day} className="rounded-md border border-[#e0d3c1] bg-white p-2">
-                              <button disabled={!editable || Boolean(approvedRequest)} className="w-full text-left text-sm disabled:cursor-default" style={{ color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }} onClick={() => onEdit(employee, day, department, assignment)}>
+                              <button disabled={!canEditCell || Boolean(approvedRequest)} className="w-full text-left text-sm disabled:cursor-default" style={{ color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }} onClick={() => onEdit(employee, day, department, assignment)}>
                                 <strong>{labels[index]} {formatDate(day)}:</strong> {approvedRequest ? t("Approved request") : shiftText(assignment, shift) || "-"}
                               </button>
                               {isHousekeeping && (
                                 <button
                                   type="button"
-                                  disabled={!editable}
+                                  disabled={!canEditCell}
                                   className={`mt-2 w-full rounded-md border px-2 py-1 text-xs font-semibold disabled:cursor-default ${housekeepingBoardTone(hkBoard)}`}
                                   onClick={() => onHousekeepingBoard(employee, day, hkBoard)}
                                 >
@@ -2083,6 +2121,7 @@ export default function SchedulePage() {
             <ScheduleGrid
               payload={payload}
               editable={editable}
+              currentUser={user}
               spanish={spanish}
               onEdit={(employee, date, department, assignment) => setSelectedShift({ employee, date, department, assignment })}
               onCopyShift={(assignment, employee, date, department) => saveShift.mutate({

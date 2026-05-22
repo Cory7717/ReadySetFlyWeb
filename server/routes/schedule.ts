@@ -2066,11 +2066,13 @@ export function registerScheduleRoutes(app: Express) {
       const employeeId = parsed.data.employeeId || null;
       const [targetEmployee] = employeeId ? await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.id, employeeId)).limit(1) : [];
       const targetDepartment = normalizeDepartment(parsed.data.roleWorked || targetEmployee?.department);
-      if (!(await canManageDepartment(req.scheduleUser, targetDepartment))) return res.status(403).json({ error: "You can only edit your assigned department schedule." });
-      if (targetEmployee && !employeeApprovedForDepartment(targetEmployee, targetDepartment, parsed.data.roleWorked)) {
+      const requesterEmployee = await getScheduleEmployeeForUser(req.scheduleUser);
+      const isOwnScheduleCell = Boolean(targetEmployee && requesterEmployee && targetEmployee.id === requesterEmployee.id);
+      if (!(await canManageDepartment(req.scheduleUser, targetDepartment)) && !isOwnScheduleCell) return res.status(403).json({ error: "You can only edit your assigned department schedule." });
+      if (targetEmployee && !isOwnScheduleCell && !employeeApprovedForDepartment(targetEmployee, targetDepartment, parsed.data.roleWorked)) {
         return res.status(403).json({ error: "This associate is not approved to work that department. Add the cross-department role on their employee profile first." });
       }
-      if (!publicScheduleUser(req.scheduleUser).isSuperAdmin && sectionCompleted(schedule, targetDepartment)) return res.status(423).json({ error: `${targetDepartment} has already been marked completed.` });
+      if (!publicScheduleUser(req.scheduleUser).isSuperAdmin && !isOwnScheduleCell && sectionCompleted(schedule, targetDepartment)) return res.status(423).json({ error: `${targetDepartment} has already been marked completed.` });
       if (parsed.data.clear) {
         await db.delete(scheduleShiftAssignments).where(and(eq(scheduleShiftAssignments.scheduleId, schedule.id), eq(scheduleShiftAssignments.shiftDate, parsed.data.shiftDate), employeeId ? eq(scheduleShiftAssignments.employeeId, employeeId) : eq(scheduleShiftAssignments.isOpenShift, true)));
       } else {

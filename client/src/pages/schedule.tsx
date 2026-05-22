@@ -1203,8 +1203,74 @@ function HousekeepingForecastMiniCards({ payload, labels }: { payload: ScheduleP
   );
 }
 
-function HousekeepingSchedulingGuide() {
-  const sections = [
+function HousekeepingSchedulingGuide({ spanish }: { spanish: boolean }) {
+  const [open, setOpen] = useState(false);
+  const sections = spanish ? [
+    {
+      title: "Cobertura de Camaristas",
+      items: [
+        "Programe aproximadamente 1 camarista por cada 16-20 habitaciones estimadas por tablero",
+        "Use 16 habitaciones en dias con muchas salidas",
+        "Use 20 habitaciones en dias con mas stayovers",
+      ],
+    },
+    {
+      title: "Cobertura de Houseperson",
+      items: [
+        "Programe 1 Houseperson diariamente",
+        "Turno estandar: 7 horas",
+        "Agregue cobertura adicional en dias vendidos o con grupos si es necesario",
+      ],
+    },
+    {
+      title: "Cobertura de Lavanderia",
+      items: [
+        "Programe 1 asistente de lavanderia diariamente",
+        "Turno estandar: 7 horas",
+        "Agregue apoyo durante alta rotacion o volumen de linos",
+      ],
+    },
+    {
+      title: "Cobertura de Inspeccion",
+      items: [
+        "La Executive Housekeeper realiza inspecciones 5 dias por semana",
+        "Una camarista designada realiza inspecciones los 2 dias restantes",
+        "El tiempo de inspeccion debe ajustarse segun ocupacion y volumen de salidas",
+        "La inspeccion promedio debe tomar aproximadamente 4-5 horas con ocupacion moderada",
+      ],
+    },
+    {
+      title: "Uso recomendado del tiempo de inspeccion cuando no inspecciona",
+      items: [
+        "Ayudar con tableros en periodos de muchas salidas",
+        "Realizar inspecciones de deep clean",
+        "Hacer recorridos de calidad en areas publicas",
+        "Completar auditorias de linos e inventario",
+        "Ayudar con habitaciones VIP/Elite antes de llegadas",
+        "Entrenar y dar coaching a camaristas",
+        "Reportar PM / mantenimiento preventivo",
+        "Dar seguimiento a habitaciones fuera de servicio",
+        "Apoyar lavanderia en periodos de alto volumen",
+        "Revisar habitaciones listas antes de llegadas fuertes",
+      ],
+    },
+    {
+      title: "Ajustes basados en ocupacion",
+      items: [
+        "Menos de 60% OCC: minimo overlap, modelo lean, un houseperson/lavanderia suficiente",
+        "60-79% OCC: modelo estandar, agregue overlap selectivo en dias con muchas salidas",
+        "80%+ OCC: agregue apoyo de camaristas, inspeccion, lavanderia o houseperson segun volumen",
+      ],
+    },
+    {
+      title: "Guia de grupos / eventos",
+      items: [
+        "Revise patrones de salida de grupos antes de asignar tableros",
+        "Agregue apoyo para grupos con llegadas tempranas o salidas masivas",
+        "No incluya deep cleans o proyectos especiales en calculos estandar de tableros",
+      ],
+    },
+  ] : [
     {
       title: "Room Attendant Coverage",
       items: [
@@ -1270,16 +1336,12 @@ function HousekeepingSchedulingGuide() {
       ],
     },
   ];
-  return (
-    <div className="mb-3 rounded-xl border border-[#e0d3c1] bg-[#fffaf2] p-4 shadow-[0_12px_30px_rgba(74,54,34,0.08)]">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6b3f]">Housekeeping</div>
-          <h3 className="text-xl font-semibold text-[#201814]">HK Scheduling Guide</h3>
-        </div>
-        <div className="rounded-full border border-[#d6c8b5] bg-white px-3 py-1 text-sm font-semibold text-[#2f5f46]">Staff to demand, not habit.</div>
-      </div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+  const title = spanish ? "Guia de programacion HK" : "HK Scheduling Guide";
+  const philosophy = spanish ? "Programe segun la demanda, no por costumbre." : "Staff to demand, not habit.";
+  const body = (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-[#d6c8b5] bg-white px-3 py-2 text-sm font-semibold text-[#2f5f46]">{philosophy}</div>
+      <div className="grid gap-3 lg:grid-cols-2">
         {sections.map((section) => (
           <div key={section.title} className="rounded-lg border border-[#eadfce] bg-white p-3">
             <div className="font-semibold text-[#201814]">{section.title}</div>
@@ -1289,6 +1351,27 @@ function HousekeepingSchedulingGuide() {
           </div>
         ))}
       </div>
+    </div>
+  );
+  return (
+    <div className="mb-3 rounded-xl border border-[#e0d3c1] bg-[#fffaf2] p-3 shadow-[0_8px_22px_rgba(74,54,34,0.07)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6b3f]">Housekeeping</div>
+          <h3 className="text-base font-semibold text-[#201814]">{title}</h3>
+          <p className="text-sm text-[#5f5247]">{spanish ? "Abra la guia para referencias rapidas de cobertura." : "Open the guide for quick coverage standards."}</p>
+        </div>
+        <Button variant="outline" className={C.outline} onClick={() => setOpen(true)}>{spanish ? "Ver guia" : "View guide"}</Button>
+      </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-4xl bg-[#fffaf2] text-[#201814]">
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription className={C.muted}>{spanish ? "Referencia operacional para programar Housekeeping." : "Operational reference for Housekeeping scheduling."}</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[72vh] overflow-y-auto pr-1">{body}</div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1330,7 +1413,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onH
                 const showHousekeepingReference = department === "Housekeeping" && editable && editableDepartments.includes("Housekeeping");
                 return [
                   <tr key={`${department}-header`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#2a211c] p-2 font-semibold text-white">{department} - {payload.totals.departmentWeeklyHours[department] || 0} hrs</td></tr>,
-                  showHousekeepingReference ? <tr key={`${department}-guide`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#fbf6ee] p-3"><HousekeepingSchedulingGuide /></td></tr> : null,
+                  showHousekeepingReference ? <tr key={`${department}-guide`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#fbf6ee] p-3"><HousekeepingSchedulingGuide spanish={spanish} /></td></tr> : null,
                   showHousekeepingReference ? <HousekeepingForecastMini key={`${department}-forecast`} payload={payload} labels={labels} /> : null,
                   <tr key={`${department}-days`}>
                     <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-[#f4eadb] p-2 text-left text-xs font-semibold uppercase tracking-wide text-[#5f5247]">{t("Associate")}</td>
@@ -1416,7 +1499,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onH
                 <h3 className="mb-2 font-semibold">{department}</h3>
                 {showHousekeepingReference && (
                   <>
-                    <HousekeepingSchedulingGuide />
+                    <HousekeepingSchedulingGuide spanish={spanish} />
                     <HousekeepingForecastMiniCards payload={payload} labels={labels} />
                   </>
                 )}

@@ -386,6 +386,27 @@ export const tipGridDaySummaries = pgTable("tip_grid_day_summaries", {
   index("idx_tip_grid_day_summaries_period").on(table.payPeriodStart, table.payPeriodEnd),
 ]);
 
+export const tipBanquetReports = pgTable("tip_banquet_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventDate: date("event_date").notNull(),
+  payPeriodStart: date("pay_period_start").notNull(),
+  payPeriodEnd: date("pay_period_end").notNull(),
+  eventName: text("event_name").notNull(),
+  grossSales: numeric("gross_sales", { precision: 10, scale: 2 }).notNull().default("0"),
+  banquetTips: numeric("banquet_tips", { precision: 10, scale: 2 }).notNull().default("0"),
+  notes: text("notes"),
+  storagePath: text("storage_path"),
+  originalFileName: text("original_file_name"),
+  mimeType: text("mime_type"),
+  size: integer("size"),
+  updatedBy: varchar("updated_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_tip_banquet_reports_date").on(table.eventDate),
+  index("idx_tip_banquet_reports_period").on(table.payPeriodStart, table.payPeriodEnd),
+]);
+
 export const tipsKioskSettings = pgTable("tips_kiosk_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
@@ -1745,6 +1766,12 @@ export const insertTipGridSubmissionSchema = createInsertSchema(tipGridSubmissio
 });
 
 export const insertTipGridDaySummarySchema = createInsertSchema(tipGridDaySummaries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTipBanquetReportSchema = createInsertSchema(tipBanquetReports).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -3483,6 +3510,8 @@ export type TipGridSubmission = typeof tipGridSubmissions.$inferSelect;
 export type InsertTipGridSubmission = z.infer<typeof insertTipGridSubmissionSchema>;
 export type TipGridDaySummary = typeof tipGridDaySummaries.$inferSelect;
 export type InsertTipGridDaySummary = z.infer<typeof insertTipGridDaySummarySchema>;
+export type TipBanquetReport = typeof tipBanquetReports.$inferSelect;
+export type InsertTipBanquetReport = z.infer<typeof insertTipBanquetReportSchema>;
 export type TipsKioskSetting = typeof tipsKioskSettings.$inferSelect;
 export type InsertTipsKioskSetting = z.infer<typeof insertTipsKioskSettingSchema>;
 export type TipPeriodSubmission = typeof tipPeriodSubmissions.$inferSelect;

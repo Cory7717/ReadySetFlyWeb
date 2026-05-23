@@ -15,6 +15,7 @@ import {
   tipDailyReportAttachments,
   tipEntries,
   tipEntryAttachments,
+  tipBanquetReports,
   tipGridDaySummaries,
   tipGridSubmissions,
   tipPeriodSubmissions,
@@ -135,6 +136,28 @@ async function hasBistroTipsAccess(user: any) {
     hasBistroText(employee.position) ||
     hasBistroText(Array.isArray(employee.rolesJson) ? employee.rolesJson.join(", ") : employee.rolesJson)
   ));
+}
+
+function scheduleEmployeeHasBistroRole(employee: any) {
+  return Boolean(employee && (
+    hasBistroText(employee.department) ||
+    hasBistroText(employee.position) ||
+    hasBistroText(Array.isArray(employee.rolesJson) ? employee.rolesJson.join(", ") : employee.rolesJson)
+  ));
+}
+
+async function getBistroTipsUsers() {
+  const [users, scheduleRows] = await Promise.all([
+    db.select().from(tipsUsers).orderBy(asc(tipsUsers.employeeDisplayName)),
+    db.select().from(scheduleEmployees),
+  ]);
+  const scheduleByEmail = new Map(scheduleRows.map((employee) => [normalizeEmail(String(employee.email || "")), employee]));
+  return users.filter((user) => {
+    if (user.disabledAt || resolveTipsRole(user) === "super_admin") return false;
+    if (hasBistroText(user.position)) return true;
+    const scheduleEmployee = scheduleByEmail.get(normalizeEmail(String(user.email || "")));
+    return scheduleEmployeeHasBistroRole(scheduleEmployee);
+  });
 }
 
 function publicTipsUser(user: any): TipsUserSession & { isAdmin: boolean; isSuperAdmin: boolean } {
@@ -333,6 +356,14 @@ const gridAssociateSchema = z.object({
   employeeDisplayName: z.string().trim().min(1).max(140).optional(),
   position: z.string().trim().max(120).optional().nullable(),
   email: z.string().trim().email().optional().or(z.literal("")),
+});
+
+const banquetReportSchema = z.object({
+  eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  eventName: z.string().trim().min(1).max(160),
+  grossSales: z.coerce.number().min(0).max(1000000),
+  banquetTips: z.coerce.number().min(0).max(100000),
+  notes: z.string().trim().max(1000).optional().nullable(),
 });
 
 const upload = multer({
@@ -641,7 +672,7 @@ async function buildTipsGrid(requestedStart?: string) {
       }
     : getPayPeriodForDate();
   const [users, entries, reports, daySummaries, submission] = await Promise.all([
-    db.select().from(tipsUsers).orderBy(asc(tipsUsers.employeeDisplayName)),
+    getBistroTipsUsers(),
     db.select().from(tipEntries).where(and(gte(tipEntries.entryDate, period.start), lte(tipEntries.entryDate, period.end))).orderBy(asc(tipEntries.entryDate)),
     getDailyReportsForPeriod(period.start, period.end),
     getGridDaySummariesForPeriod(period.start, period.end),
@@ -688,6 +719,12 @@ async function buildTipsGrid(requestedStart?: string) {
   });
   const week1Total = dayTotals.slice(0, 7).reduce((sum, day) => sum + moneyNumber(day.totalTips), 0);
   const week2Total = dayTotals.slice(7).reduce((sum, day) => sum + moneyNumber(day.totalTips), 0);
+  const banquetReports = await db
+    .select()
+    .from(tipBanquetReports)
+    .where(and(gte(tipBanquetReports.eventDate, period.start), lte(tipBanquetReports.eventDate, period.end)))
+    .orderBy(asc(tipBanquetReports.eventDate), asc(tipBanquetReports.eventName));
+  const banquetTotal = banquetReports.reduce((sum, report) => sum + moneyNumber(report.banquetTips), 0);
   return {
     period: { start: period.start, end: period.end, dayNumber: period.dayNumber, days: period.days },
     rows,
@@ -695,6 +732,12 @@ async function buildTipsGrid(requestedStart?: string) {
     week1Total: moneyString(week1Total),
     week2Total: moneyString(week2Total),
     totalTips: moneyString(week1Total + week2Total),
+    banquetReports: banquetReports.map((report) => ({
+      ...report,
+      grossSales: moneyString(report.grossSales),
+      banquetTips: moneyString(report.banquetTips),
+    })),
+    banquetTotal: moneyString(banquetTotal),
     submission: submission ? { ...submission, week1Total: moneyString(submission.week1Total), week2Total: moneyString(submission.week2Total), totalTips: moneyString(submission.totalTips) } : null,
     locked: Boolean(submission && submission.status !== "reopened"),
   };
@@ -742,6 +785,17 @@ async function generateTipsGridPdf(grid: any, submission: any | null) {
     draw(`${day.date}: ${day.report ? day.report.originalFileName : "Missing"}`, 44, 7);
     y -= 10;
   });
+  if (grid.banquetReports?.length) {
+    y -= 8;
+    draw("Banquet tips report:", 36, 10, true);
+    y -= 12;
+    grid.banquetReports.forEach((report: any) => {
+      draw(`${report.eventDate}: ${report.eventName} | sales $${report.grossSales} | tips $${report.banquetTips}`, 44, 7);
+      y -= 10;
+    });
+    y -= 6;
+    draw(`Banquet total: $${grid.banquetTotal}`, 44, 9, true);
+  }
   const bytes = await pdf.save();
   const fileName = `grid-${grid.period.start}-${grid.period.end}.pdf`;
   const absolutePath = path.join(PDFS_DIR, fileName);
@@ -753,6 +807,7 @@ async function sendTipsGridSubmissionEmail(grid: any) {
   const { client, fromEmail } = await getUncachableResendClient();
   const rows = grid.rows.map((row: any) => `${row.associate.employeeDisplayName}: $${row.totalTips}`).join("\n");
   const daily = grid.dayTotals.map((day: any) => `${day.date}: tips $${day.totalTips} | gross $${day.grossSales} | tip ${Number(day.tipPercent || 0).toFixed(1)}% | report ${day.report ? "yes" : "no"}${day.splitCount === 2 ? ` | 50/50 split $${day.splitAmount}` : ""}`).join("\n");
+  const banquet = (grid.banquetReports || []).map((report: any) => `${report.eventDate}: ${report.eventName} | tips $${report.banquetTips} | sales $${report.grossSales}`).join("\n");
   const adminUrl = new URL("/tips/admin", process.env.FRONTEND_BASE_URL || "https://readysetfly.us").toString();
   await client.emails.send({
     from: fromEmail,
@@ -770,6 +825,10 @@ async function sendTipsGridSubmissionEmail(grid: any) {
       "",
       "Daily totals and report status:",
       daily,
+      "",
+      "Banquet tips report:",
+      banquet || "No banquet tips reported.",
+      banquet ? `Banquet total: $${grid.banquetTotal}` : "",
       "",
       "The PDF summary and sales report images are available through the protected Tips admin view.",
     ].join("\n"),
@@ -1147,7 +1206,12 @@ export function registerTipsRoutes(app: Express) {
 
   router.get("/admin/users", requireTipsAdmin, async (_req: any, res, next) => {
     try {
-      const users = await db.select().from(tipsUsers).orderBy(asc(tipsUsers.employeeDisplayName));
+      const [allUsers, bistroUsers] = await Promise.all([
+        db.select().from(tipsUsers).orderBy(asc(tipsUsers.employeeDisplayName)),
+        getBistroTipsUsers(),
+      ]);
+      const bistroIds = new Set(bistroUsers.map((user) => user.id));
+      const users = allUsers.filter((user) => bistroIds.has(user.id) || isTipsManager(user));
       res.json({ users: users.map(publicTipsUser) });
     } catch (error) {
       next(error);
@@ -1564,6 +1628,8 @@ export function registerTipsRoutes(app: Express) {
       const existing = await db.select({ id: tipsUsers.id }).from(tipsUsers).where(eq(tipsUsers.email, email)).limit(1);
       if (existing.length) return res.status(409).json({ error: "An associate already exists for this email." });
       const displayName = parsed.data.employeeDisplayName?.trim() || `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
+      const position = parsed.data.position?.trim() || "Bistro attendant";
+      if (!hasBistroText(position)) return res.status(400).json({ error: "Only Bistro or Breakfast associates can be added to the tips grid." });
       const [created] = await db
         .insert(tipsUsers)
         .values({
@@ -1571,7 +1637,7 @@ export function registerTipsRoutes(app: Express) {
           lastName: parsed.data.lastName,
           email,
           employeeDisplayName: displayName,
-          position: parsed.data.position?.trim() || null,
+          position,
           role: "employee",
           hashedPassword: await bcrypt.hash(crypto.randomBytes(18).toString("hex"), 12),
           mustChangePassword: false,
@@ -1597,6 +1663,10 @@ export function registerTipsRoutes(app: Express) {
       if (!period) return res.status(400).json({ error: "Invalid entry date" });
       const submission = await getGridSubmission(period.start, period.end);
       if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
+      const allowedUsers = await getBistroTipsUsers();
+      if (!allowedUsers.some((user) => user.id === parsed.data.userId)) {
+        return res.status(403).json({ error: "Only Bistro or Breakfast associates can be entered on the tips grid." });
+      }
       const [existingEntry] = await db
         .select()
         .from(tipEntries)
@@ -1667,6 +1737,60 @@ export function registerTipsRoutes(app: Express) {
         })
         .returning();
       res.json({ summary: { ...summary, grossSales: moneyString(summary.grossSales) } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/grid/banquet-reports", requireTipsGridAccess, tipsUploadRateLimiter, (req: any, res, next) => {
+    upload.single("banquetReport")(req, res, (error: any) => {
+      if (!error) return next();
+      if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ error: "Banquet report file is too large. Use a smaller image or PDF." });
+      }
+      return res.status(400).json({ error: error?.message || "Banquet report upload failed." });
+    });
+  }, async (req: any, res, next) => {
+    try {
+      const parsed = banquetReportSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid banquet report", validation: parsed.error.format() });
+      const period = getPayPeriodForEntryDate(parsed.data.eventDate);
+      if (!period) return res.status(400).json({ error: "Invalid event date" });
+      const submission = await getGridSubmission(period.start, period.end);
+      if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
+      const [report] = await db.insert(tipBanquetReports).values({
+        eventDate: parsed.data.eventDate,
+        payPeriodStart: period.start,
+        payPeriodEnd: period.end,
+        eventName: parsed.data.eventName,
+        grossSales: parsed.data.grossSales.toFixed(2),
+        banquetTips: parsed.data.banquetTips.toFixed(2),
+        notes: parsed.data.notes || null,
+        storagePath: req.file ? path.relative(process.cwd(), req.file.path) : null,
+        originalFileName: req.file?.originalname || null,
+        mimeType: req.file?.mimetype || null,
+        size: req.file?.size || null,
+        updatedBy: req.tipsUser?.id || null,
+      } as any).returning();
+      await db.insert(tipAdminActions).values({
+        actorUserId: req.tipsUser?.id || null,
+        action: "banquet_tip_report_created",
+        metadataJson: { reportId: report.id, eventDate: report.eventDate, eventName: report.eventName },
+      });
+      res.status(201).json({ report: { ...report, grossSales: moneyString(report.grossSales), banquetTips: moneyString(report.banquetTips) } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/grid/banquet-reports/:id/view", requireTipsGridAccess, async (req: any, res, next) => {
+    try {
+      const [report] = await db.select().from(tipBanquetReports).where(eq(tipBanquetReports.id, req.params.id)).limit(1);
+      if (!report?.storagePath || !report.mimeType) return res.status(404).json({ error: "Banquet report file not found" });
+      const absolute = resolvePrivateFile(report.storagePath);
+      if (!absolute || !fs.existsSync(absolute)) return res.status(404).json({ error: "Banquet report file not found" });
+      res.type(report.mimeType);
+      res.sendFile(absolute);
     } catch (error) {
       next(error);
     }
@@ -1785,7 +1909,10 @@ export function registerTipsRoutes(app: Express) {
         .returning();
       const pdfPath = await generateTipsGridPdf(grid, submission);
       [submission] = await db.update(tipGridSubmissions).set({ pdfPath, updatedAt: new Date() }).where(eq(tipGridSubmissions.id, submission.id)).returning();
-      await db.update(tipEntries).set({ status: "submitted", updatedAt: new Date() }).where(and(eq(tipEntries.payPeriodStart, grid.period.start), eq(tipEntries.payPeriodEnd, grid.period.end)));
+      const bistroUserIds = grid.rows.map((row: any) => row.associate.id).filter(Boolean);
+      if (bistroUserIds.length) {
+        await db.update(tipEntries).set({ status: "submitted", updatedAt: new Date() }).where(and(eq(tipEntries.payPeriodStart, grid.period.start), eq(tipEntries.payPeriodEnd, grid.period.end), inArray(tipEntries.userId, bistroUserIds)));
+      }
       let emailSent = true;
       let emailWarning: string | undefined;
       try {

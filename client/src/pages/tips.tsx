@@ -122,6 +122,8 @@ type TipsGrid = {
   period: { start: string; end: string; dayNumber: number; days: string[] };
   rows: TipsGridRow[];
   dayTotals: Array<{ date: string; totalTips: string; grossSales: string; tipPercent: number; splitCount: number; splitAmount: string | null; report: DailyReport | null }>;
+  banquetReports: Array<{ id: string; eventDate: string; eventName: string; grossSales: string; banquetTips: string; notes?: string | null; originalFileName?: string | null; storagePath?: string | null }>;
+  banquetTotal: string;
   week1Total: string;
   week2Total: string;
   totalTips: string;
@@ -706,7 +708,9 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const [addAssociateOpen, setAddAssociateOpen] = useState(false);
   const [activeEntry, setActiveEntry] = useState<{ userId: string; date: string } | null>(null);
   const [entryModalAmount, setEntryModalAmount] = useState("");
-  const [associateForm, setAssociateForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", position: "", email: "" });
+  const [associateForm, setAssociateForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", position: "Bistro attendant", email: "" });
+  const [banquetForm, setBanquetForm] = useState({ eventDate: todayKey(), eventName: "", grossSales: "", banquetTips: "", notes: "" });
+  const [banquetFile, setBanquetFile] = useState<File | null>(null);
   const { data: grid, isLoading } = useQuery<TipsGrid>({
     queryKey: ["/api/tips/grid"],
     queryFn: () => fetchJson("/api/tips/grid"),
@@ -718,7 +722,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
     },
     onSuccess: () => {
       toast({ title: "Associate added to grid" });
-      setAssociateForm({ firstName: "", lastName: "", employeeDisplayName: "", position: "", email: "" });
+      setAssociateForm({ firstName: "", lastName: "", employeeDisplayName: "", position: "Bistro attendant", email: "" });
       setAddAssociateOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
     },
@@ -770,6 +774,27 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
       queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
     },
     onError: (error: Error) => toast({ title: "Upload failed", description: uploadErrorMessage(error), variant: "destructive" }),
+  });
+  const addBanquetReport = useMutation({
+    mutationFn: async () => {
+      const form = new FormData();
+      form.append("eventDate", banquetForm.eventDate);
+      form.append("eventName", banquetForm.eventName);
+      form.append("grossSales", banquetForm.grossSales || "0");
+      form.append("banquetTips", banquetForm.banquetTips || "0");
+      form.append("notes", banquetForm.notes || "");
+      if (banquetFile) form.append("banquetReport", await compressSalesReportFile(banquetFile));
+      const response = await fetch(apiUrl("/api/tips/grid/banquet-reports"), { method: "POST", credentials: "include", body: form });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Banquet tips added" });
+      setBanquetForm({ eventDate: todayKey(), eventName: "", grossSales: "", banquetTips: "", notes: "" });
+      setBanquetFile(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
+    },
+    onError: (error: Error) => toast({ title: "Banquet report failed", description: uploadErrorMessage(error), variant: "destructive" }),
   });
   const submitGrid = useMutation({
     mutationFn: async () => {
@@ -960,12 +985,10 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
           <table className="min-w-[920px] w-full border-collapse text-sm">
             <thead>
               <tr className="bg-[#fbf6ee] text-left">
-                <th className="sticky left-0 z-10 min-w-[190px] border-b border-r border-[#e0d3c1] bg-[#fbf6ee] p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span>Associate</span>
-                    <Button type="button" size="sm" variant="outline" className={`h-8 w-8 p-0 ${C.outline}`} onClick={() => setAddAssociateOpen(true)} aria-label="Add associate">
-                      <UserPlus className="h-4 w-4" />
-                    </Button>
+                <th className="sticky left-0 z-10 min-w-[190px] border-b border-r border-[#e0d3c1] bg-[#fbf6ee] p-3 align-top">
+                  <div className="font-semibold text-[#201814]">Daily sales report</div>
+                  <div className="mt-1 text-xs font-normal text-[#5f5247]">
+                    Gross sales, tip %, and report upload apply to the whole day.
                   </div>
                 </th>
                 {days.map((date) => {
@@ -1020,6 +1043,22 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                   );
                 })}
                 <th className="min-w-[110px] border-b border-[#e0d3c1] p-3 text-right">Total</th>
+              </tr>
+              <tr className="bg-[#f4eadb] text-left">
+                <th className="sticky left-0 z-10 border-b border-r border-[#e0d3c1] bg-[#f4eadb] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Bistro associate</span>
+                    <Button type="button" size="sm" variant="outline" className={`h-8 w-8 p-0 ${C.outline}`} onClick={() => setAddAssociateOpen(true)} aria-label="Add Bistro associate">
+                      <UserPlus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </th>
+                {days.map((date) => (
+                  <th key={`entry-${date}`} className="border-b border-r border-[#e0d3c1] p-2 text-center text-xs font-semibold uppercase tracking-wide text-[#5f5247]">
+                    Associate CC tips
+                  </th>
+                ))}
+                <th className="border-b border-[#e0d3c1] p-3 text-right">Associate total</th>
               </tr>
             </thead>
             <tbody>
@@ -1101,6 +1140,9 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
               <StatCard label="Week 2" value={formatMoney(grid.week2Total)} />
               <StatCard label="Total" value={formatMoney(grid.totalTips)} tone="green" />
             </div>
+            <div className="rounded-lg border border-[#d7c8b5] bg-white p-3 text-sm text-[#5f5247]">
+              Bistro CC tips only. Banquet/meeting tips are tracked separately below and do not change the Bistro grid total.
+            </div>
             <div className="flex flex-wrap gap-2 text-sm text-[#5f5247]">
               <Badge variant="outline" className="border-[#d7c8b5] bg-white text-[#5f5247]">{enteredDays} days with CC tips</Badge>
               <Badge variant="outline" className={missingReportDays.length ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-800"}>
@@ -1145,6 +1187,77 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
           </CardContent>
         </Card>
       </div>
+
+      <Card className={C.shell}>
+        <CardHeader>
+          <CardTitle className={C.ink}>Banquet tips</CardTitle>
+          <CardDescription className={C.muted}>Use this separate report when a meeting or banquet produces tips outside the Bistro sales report.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 lg:grid-cols-[150px_1fr_150px_150px]">
+            <div>
+              <Label>Event date</Label>
+              <Input className={C.field} type="date" value={banquetForm.eventDate} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, eventDate: event.target.value })} />
+            </div>
+            <div>
+              <Label>Event / meeting name</Label>
+              <Input className={C.field} placeholder="Meeting name" value={banquetForm.eventName} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, eventName: event.target.value })} />
+            </div>
+            <div>
+              <Label>Gross sales</Label>
+              <Input className={C.field} inputMode="decimal" placeholder="0.00" value={banquetForm.grossSales} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, grossSales: event.target.value.replace(/[^0-9.]/g, "") })} />
+            </div>
+            <div>
+              <Label>Banquet tips</Label>
+              <Input className={C.field} inputMode="decimal" placeholder="0.00" value={banquetForm.banquetTips} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, banquetTips: event.target.value.replace(/[^0-9.]/g, "") })} />
+            </div>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-[1fr_260px_auto]">
+            <div>
+              <Label>Notes</Label>
+              <Input className={C.field} placeholder="Optional" value={banquetForm.notes} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, notes: event.target.value })} />
+            </div>
+            <div>
+              <Label>Banquet report</Label>
+              <Input className={C.field} type="file" accept="image/*,application/pdf" disabled={grid.locked} onChange={(event) => setBanquetFile(event.target.files?.[0] || null)} />
+            </div>
+            <div className="flex items-end">
+              <Button className={`w-full ${C.green}`} disabled={grid.locked || addBanquetReport.isPending || !banquetForm.eventDate || !banquetForm.eventName.trim() || Number(banquetForm.banquetTips || 0) <= 0} onClick={() => addBanquetReport.mutate()}>
+                <ReceiptText className="mr-2 h-4 w-4" />
+                {addBanquetReport.isPending ? "Adding..." : "Add banquet tips"}
+              </Button>
+            </div>
+          </div>
+          <div className="rounded-lg border border-[#e0d3c1] bg-white">
+            <div className="flex items-center justify-between border-b border-[#e0d3c1] p-3">
+              <div className="font-semibold text-[#201814]">Banquet report total</div>
+              <Badge variant="outline" className="border-[#bdd5c3] bg-[#e8f1ea] text-[#173c25]">{formatMoney(grid.banquetTotal)}</Badge>
+            </div>
+            {(grid.banquetReports || []).length ? (
+              <div className="divide-y divide-[#e0d3c1]">
+                {(grid.banquetReports || []).map((report) => (
+                  <div key={report.id} className="grid gap-2 p-3 text-sm md:grid-cols-[140px_1fr_120px_120px_auto]">
+                    <div className="font-medium">{formatDisplayDate(report.eventDate)}</div>
+                    <div>
+                      <div className="font-semibold text-[#201814]">{report.eventName}</div>
+                      {report.notes && <div className="text-[#5f5247]">{report.notes}</div>}
+                    </div>
+                    <div>Sales {formatMoney(report.grossSales)}</div>
+                    <div>Tips {formatMoney(report.banquetTips)}</div>
+                    {report.originalFileName ? (
+                      <a className="font-medium text-[#2f5f46] underline" href={apiUrl(`/api/tips/grid/banquet-reports/${report.id}/view`)} target="_blank" rel="noreferrer">View report</a>
+                    ) : (
+                      <span className="text-[#5f5247]">No file</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-3 text-sm text-[#5f5247]">No banquet tips reported for this pay period.</div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {renderMobileWeek(week1Days, "Week 1", grid.week1Total)}
       {renderMobileWeek(week2Days, "Week 2", grid.week2Total)}
@@ -1210,7 +1323,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
         <DialogContent className="border-[#ddccb5] bg-[#fffaf2] text-[#201814] sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add associate to grid</DialogTitle>
-            <DialogDescription className="text-[#5f5247]">Associates can add themselves here for tip entry. Email is optional for grid-only associates.</DialogDescription>
+            <DialogDescription className="text-[#5f5247]">Only Bistro or Breakfast associates can be added to this tip grid. Email is optional for grid-only associates.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>

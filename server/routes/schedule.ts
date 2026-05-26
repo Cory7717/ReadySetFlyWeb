@@ -71,8 +71,8 @@ const DEFAULT_SHIFT_TYPES = [
   { label: "BREAKFAST", startTime: "06:00", endTime: "12:00", color: "#fde68a", textColor: "#713f12", departmentHint: "Bistro" },
   { label: "HOUSEKEEPING", startTime: "09:00", endTime: "17:00", color: "#dcfce7", textColor: "#14532d", departmentHint: "Housekeeping" },
   { label: "Room Attendant", startTime: "09:00", endTime: "17:00", color: "#dcfce7", textColor: "#14532d", departmentHint: "Housekeeping" },
-  { label: "LAUNDRY", startTime: "08:00", endTime: "16:00", color: "#ccfbf1", textColor: "#134e4a", departmentHint: "Housekeeping" },
-  { label: "Laundry", startTime: "08:00", endTime: "16:00", color: "#ccfbf1", textColor: "#134e4a", departmentHint: "Housekeeping" },
+  { label: "LAUNDRY", startTime: "08:00", endTime: "15:00", color: "#ccfbf1", textColor: "#134e4a", departmentHint: "Housekeeping" },
+  { label: "Laundry", startTime: "08:00", endTime: "15:00", color: "#ccfbf1", textColor: "#134e4a", departmentHint: "Housekeeping" },
   { label: "Houseperson", startTime: "09:00", endTime: "16:00", color: "#fef9c3", textColor: "#713f12", departmentHint: "Housekeeping" },
   { label: "Room Inspector", startTime: "09:00", endTime: "16:00", color: "#e0e7ff", textColor: "#312e81", departmentHint: "Housekeeping" },
   { label: "MAINTENANCE", startTime: "08:00", endTime: "16:00", color: "#e5e7eb", textColor: "#111827", departmentHint: "Maintenance" },
@@ -85,6 +85,16 @@ const DEFAULT_SHIFT_TYPES = [
   { label: "CALL OFF", startTime: null, endTime: null, color: "#fee2e2", textColor: "#7f1d1d", departmentHint: "Managers" },
   { label: "OPEN SHIFT", startTime: null, endTime: null, color: "#fff7ed", textColor: "#9a3412", departmentHint: "Managers" },
 ].map((shift, index) => ({ ...shift, unpaidBreakMinutes: 0, active: true, sortOrder: index + 1, isOvernight: Boolean((shift as any).isOvernight) }));
+
+const HOUSEKEEPING_ROLE_SHIFT_FALLBACKS: Record<string, any> = {
+  "ROOM ATTENDANT": { label: "Room Attendant", startTime: "09:00", endTime: "17:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
+  HOUSEKEEPING: { label: "HOUSEKEEPING", startTime: "09:00", endTime: "17:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
+  LAUNDRY: { label: "Laundry", startTime: "08:00", endTime: "15:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
+  HOUSEPERSON: { label: "Houseperson", startTime: "09:00", endTime: "16:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
+  HOUSEMAN: { label: "Houseperson", startTime: "09:00", endTime: "16:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
+  "ROOM INSPECTOR": { label: "Room Inspector", startTime: "09:00", endTime: "16:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
+  INSPECTOR: { label: "Room Inspector", startTime: "09:00", endTime: "16:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
+};
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -252,14 +262,17 @@ function minutesFromTime(value?: string | null) {
 }
 
 function hoursForShift(assignment: any, shiftType: any) {
-  const label = String(shiftType?.label || assignment?.roleWorked || "").toUpperCase();
+  const roleLabel = String(assignment?.roleWorked || "").trim().toUpperCase();
+  const fallbackShift = HOUSEKEEPING_ROLE_SHIFT_FALLBACKS[roleLabel];
+  const effectiveShift = shiftType || fallbackShift;
+  const label = String(effectiveShift?.label || assignment?.roleWorked || "").toUpperCase();
   if (["OFF", "PTO", "CALL OFF", "OPEN SHIFT"].includes(label)) return 0;
-  const start = minutesFromTime(assignment.customStartTime || shiftType?.startTime);
-  const end = minutesFromTime(assignment.customEndTime || shiftType?.endTime);
+  const start = minutesFromTime(assignment.customStartTime || effectiveShift?.startTime);
+  const end = minutesFromTime(assignment.customEndTime || effectiveShift?.endTime);
   if (start == null || end == null) return 0;
   let duration = end - start;
-  if (duration <= 0 || assignment.isOvernight || shiftType?.isOvernight || label.includes("AUDIT") || label.includes("NIGHT")) duration += 24 * 60;
-  const breakMinutes = assignment.unpaidBreakMinutes ?? shiftType?.unpaidBreakMinutes ?? 0;
+  if (duration <= 0 || assignment.isOvernight || effectiveShift?.isOvernight || label.includes("AUDIT") || label.includes("NIGHT")) duration += 24 * 60;
+  const breakMinutes = assignment.unpaidBreakMinutes ?? effectiveShift?.unpaidBreakMinutes ?? 0;
   return Math.max(0, (duration - breakMinutes) / 60);
 }
 
@@ -274,10 +287,9 @@ function coverageKeyForShift(assignment: any, shiftType: any) {
 
 function resolveShiftTypeForAssignment(assignment: any, shiftTypeById: Map<any, any>, shiftTypeByLabel: Map<string, any>) {
   const direct = shiftTypeById.get(assignment?.shiftTypeId);
-  if (direct) return direct;
   const role = String(assignment?.roleWorked || "").trim().toUpperCase();
-  if (!role) return null;
-  return shiftTypeByLabel.get(role)
+  const roleResolved = role
+    ? shiftTypeByLabel.get(role)
     || (role.includes("AUDIT") || role.includes("NIGHT") ? shiftTypeByLabel.get("NIGHT AUDIT") || shiftTypeByLabel.get("AUDIT") : null)
     || (role.includes("DOS") || role.includes("SALES") ? shiftTypeByLabel.get("DOS / SALES") : null)
     || (role.includes("ROOM ATTENDANT") ? shiftTypeByLabel.get("ROOM ATTENDANT") || shiftTypeByLabel.get("HOUSEKEEPING") : null)
@@ -285,7 +297,11 @@ function resolveShiftTypeForAssignment(assignment: any, shiftTypeById: Map<any, 
     || (role.includes("HOUSEPERSON") || role.includes("HOUSEMAN") ? shiftTypeByLabel.get("HOUSEPERSON") : null)
     || (role.includes("INSPECTOR") ? shiftTypeByLabel.get("ROOM INSPECTOR") : null)
     || (role.includes("GM") ? shiftTypeByLabel.get("GM") : null)
-    || null;
+    || HOUSEKEEPING_ROLE_SHIFT_FALLBACKS[role]
+    || null
+    : null;
+  if (roleResolved && normalizeDepartment(roleResolved.departmentHint || roleResolved.label) === "Housekeeping") return roleResolved;
+  return direct || roleResolved;
 }
 
 function publicScheduleUser(user: any) {
@@ -829,6 +845,7 @@ async function seedShiftTypes() {
   const labels = new Set(existing.map((row) => row.label));
   const missing = DEFAULT_SHIFT_TYPES.filter((shift) => !labels.has(shift.label));
   if (missing.length) await db.insert(scheduleShiftTypes).values(missing as any);
+  await db.update(scheduleShiftTypes).set({ endTime: "15:00", updatedAt: new Date() } as any).where(inArray(scheduleShiftTypes.label, ["LAUNDRY", "Laundry"]));
 }
 
 async function audit(scheduleId: string | null, actorUserId: string | null, action: string, metadataJson?: any) {

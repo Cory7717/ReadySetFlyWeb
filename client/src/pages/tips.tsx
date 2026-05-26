@@ -122,7 +122,8 @@ type TipsGrid = {
   period: { start: string; end: string; dayNumber: number; days: string[] };
   rows: TipsGridRow[];
   dayTotals: Array<{ date: string; totalTips: string; grossSales: string; taxAmount: string; netSales: string; beerSales: string; liquorSales: string; foodSales: string; wineSales: string; tipPercent: number; splitCount: number; splitAmount: string | null; report: DailyReport | null }>;
-  banquetReports: Array<{ id: string; eventDate: string; reportType?: "banquet_service" | "group_breakfast"; eventName: string; grossSales: string; serviceRate?: string; banquetTips: string; assignedAssociatesJson?: Array<{ userId: string; displayName: string; splitAmount: string }>; notes?: string | null; originalFileName?: string | null; storagePath?: string | null }>;
+  banquetReports: Array<{ id: string; eventDate: string; reportType?: "banquet_service" | "group_breakfast"; eventName: string; grossSales: string; serviceRate?: string; banquetTips: string; assignedAssociatesJson?: Array<{ userId: string; displayName: string; department?: string | null; position?: string | null; splitAmount: string }>; notes?: string | null; originalFileName?: string | null; storagePath?: string | null }>;
+  banquetAssociates: Array<{ id: string; employeeDisplayName: string; department?: string | null; position?: string | null }>;
   banquetTotal: string;
   salesTotals: Record<"week1" | "week2" | "period" | "month", { grossSales: string; taxAmount: string; netSales: string; beerSales: string; liquorSales: string; foodSales: string; wineSales: string }>;
   canManageSales: boolean;
@@ -1421,12 +1422,12 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                   </Badge>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {grid.rows.map((row) => (
-                    <label key={row.associate.id} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm ${banquetAssociateIds.includes(row.associate.id) ? "border-[#2f5f46] bg-[#e8f1ea]" : "border-[#e0d3c1] bg-[#fffaf2]"}`}>
-                      <Checkbox checked={banquetAssociateIds.includes(row.associate.id)} disabled={grid.locked} onCheckedChange={() => toggleBanquetAssociate(row.associate.id)} />
+                  {grid.banquetAssociates.map((associate) => (
+                    <label key={associate.id} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm ${banquetAssociateIds.includes(associate.id) ? "border-[#2f5f46] bg-[#e8f1ea]" : "border-[#e0d3c1] bg-[#fffaf2]"}`}>
+                      <Checkbox checked={banquetAssociateIds.includes(associate.id)} disabled={grid.locked} onCheckedChange={() => toggleBanquetAssociate(associate.id)} />
                       <span>
-                        <span className="block font-semibold text-[#201814]">{row.associate.employeeDisplayName}</span>
-                        {row.associate.position && <span className="block text-xs text-[#5f5247]">{row.associate.position}</span>}
+                        <span className="block font-semibold text-[#201814]">{associate.employeeDisplayName}</span>
+                        <span className="block text-xs text-[#5f5247]">{[associate.department, associate.position].filter(Boolean).join(" | ")}</span>
                       </span>
                     </label>
                   ))}

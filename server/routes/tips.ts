@@ -191,6 +191,20 @@ async function getBistroTipsUsers() {
   });
 }
 
+async function getBanquetTipAssociates() {
+  const employees = await db
+    .select()
+    .from(scheduleEmployees)
+    .where(eq(scheduleEmployees.active, true))
+    .orderBy(asc(scheduleEmployees.department), asc(scheduleEmployees.displayName));
+  return employees.map((employee) => ({
+    id: employee.id,
+    employeeDisplayName: employee.displayName,
+    position: employee.position || null,
+    department: employee.department || null,
+  }));
+}
+
 function publicTipsUser(user: any): TipsUserSession & { isAdmin: boolean; isSuperAdmin: boolean } {
   const email = String(user.email || "");
   const role = resolveTipsRole(user);
@@ -738,6 +752,7 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
     getGridDaySummariesForPeriod(period.start, period.end),
     getGridSubmission(period.start, period.end),
   ]);
+  const banquetAssociates = await getBanquetTipAssociates();
   const associates = users
     .filter((user) => !user.disabledAt && resolveTipsRole(user) !== "super_admin")
     .map(publicTipsUser);
@@ -829,6 +844,7 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
       banquetTips: moneyString(report.banquetTips),
       assignedAssociatesJson: Array.isArray(report.assignedAssociatesJson) ? report.assignedAssociatesJson : [],
     })),
+    banquetAssociates,
     banquetTotal: moneyString(banquetTotal),
     salesTotals: {
       week1: salesTotal(dayTotals.slice(0, 7)),
@@ -1914,10 +1930,10 @@ export function registerTipsRoutes(app: Express) {
       if (!period) return res.status(400).json({ error: "Invalid event date" });
       const submission = await getGridSubmission(period.start, period.end);
       if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
-      const bistroUsers = await getBistroTipsUsers();
-      const selectedAssociates = bistroUsers.filter((user) => parsed.data.assignedUserIds.includes(user.id));
+      const banquetAssociates = await getBanquetTipAssociates();
+      const selectedAssociates = banquetAssociates.filter((user) => parsed.data.assignedUserIds.includes(user.id));
       if (parsed.data.assignedUserIds.length !== selectedAssociates.length) {
-        return res.status(400).json({ error: "One or more selected banquet associates are not valid Bistro/Breakfast associates." });
+        return res.status(400).json({ error: "One or more selected banquet associates are not active Schedule associates." });
       }
       const banquetTipAmount = resolveBanquetTipAmount(parsed.data);
       const serviceRate = serviceRateForReportType(parsed.data.reportType);
@@ -1925,6 +1941,8 @@ export function registerTipsRoutes(app: Express) {
       const assignedAssociatesJson = selectedAssociates.map((user) => ({
         userId: user.id,
         displayName: user.employeeDisplayName,
+        department: user.department,
+        position: user.position,
         splitAmount: splitAmount.toFixed(2),
       }));
       const [report] = await db.insert(tipBanquetReports).values({
@@ -1965,10 +1983,10 @@ export function registerTipsRoutes(app: Express) {
       if (!period) return res.status(400).json({ error: "Invalid event date" });
       const submission = await getGridSubmission(existing.payPeriodStart, existing.payPeriodEnd);
       if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
-      const bistroUsers = await getBistroTipsUsers();
-      const selectedAssociates = bistroUsers.filter((user) => parsed.data.assignedUserIds.includes(user.id));
+      const banquetAssociates = await getBanquetTipAssociates();
+      const selectedAssociates = banquetAssociates.filter((user) => parsed.data.assignedUserIds.includes(user.id));
       if (parsed.data.assignedUserIds.length !== selectedAssociates.length) {
-        return res.status(400).json({ error: "One or more selected banquet associates are not valid Bistro/Breakfast associates." });
+        return res.status(400).json({ error: "One or more selected banquet associates are not active Schedule associates." });
       }
       const banquetTipAmount = resolveBanquetTipAmount(parsed.data);
       const serviceRate = serviceRateForReportType(parsed.data.reportType);
@@ -1976,6 +1994,8 @@ export function registerTipsRoutes(app: Express) {
       const assignedAssociatesJson = selectedAssociates.map((user) => ({
         userId: user.id,
         displayName: user.employeeDisplayName,
+        department: user.department,
+        position: user.position,
         splitAmount: splitAmount.toFixed(2),
       }));
       const [updated] = await db.update(tipBanquetReports).set({

@@ -402,11 +402,29 @@ const gridAssociateSchema = z.object({
 
 const banquetReportSchema = z.object({
   eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  reportType: z.enum(["banquet_service", "group_breakfast"]).default("banquet_service"),
   eventName: z.string().trim().min(1).max(160),
   grossSales: z.coerce.number().min(0).max(1000000),
-  banquetTips: z.coerce.number().min(0).max(100000),
+  banquetTips: z.coerce.number().min(0).max(100000).optional(),
+  assignedUserIds: z.preprocess((value) => {
+    if (typeof value !== "string") return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }, z.array(z.string().trim().min(1)).max(20).default([])),
   notes: z.string().trim().max(1000).optional().nullable(),
 });
+
+function serviceRateForReportType(reportType: string) {
+  return reportType === "group_breakfast" ? 0.18 : 0.21;
+}
+
+function resolveBanquetTipAmount(input: { reportType: string; grossSales: number; banquetTips?: number | null }) {
+  if (typeof input.banquetTips === "number" && Number.isFinite(input.banquetTips) && input.banquetTips > 0) return input.banquetTips;
+  return input.grossSales * serviceRateForReportType(input.reportType);
+}
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -807,7 +825,9 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
     banquetReports: banquetReports.map((report) => ({
       ...report,
       grossSales: moneyString(report.grossSales),
+      serviceRate: String(report.serviceRate ?? serviceRateForReportType(report.reportType)),
       banquetTips: moneyString(report.banquetTips),
+      assignedAssociatesJson: Array.isArray(report.assignedAssociatesJson) ? report.assignedAssociatesJson : [],
     })),
     banquetTotal: moneyString(banquetTotal),
     salesTotals: {
@@ -871,6 +891,11 @@ async function generateTipsGridPdf(grid: any, submission: any | null) {
     grid.banquetReports.forEach((report: any) => {
       draw(`${report.eventDate}: ${report.eventName} | sales $${report.grossSales} | tips $${report.banquetTips}`, 44, 7);
       y -= 10;
+      const assigned = Array.isArray(report.assignedAssociatesJson) ? report.assignedAssociatesJson : [];
+      if (assigned.length) {
+        draw(`Split: ${assigned.map((associate: any) => `${associate.displayName} $${associate.splitAmount}`).join(" | ")}`, 52, 7);
+        y -= 10;
+      }
     });
     y -= 6;
     draw(`Banquet total: $${grid.banquetTotal}`, 44, 9, true);
@@ -886,7 +911,12 @@ async function sendTipsGridSubmissionEmail(grid: any) {
   const { client, fromEmail } = await getUncachableResendClient();
   const rows = grid.rows.map((row: any) => `${row.associate.employeeDisplayName}: $${row.totalTips}`).join("\n");
   const daily = grid.dayTotals.map((day: any) => `${day.date}: tips $${day.totalTips} | gross $${day.grossSales} | tip ${Number(day.tipPercent || 0).toFixed(1)}% | report ${day.report ? "yes" : "no"}${day.splitCount === 2 ? ` | 50/50 split $${day.splitAmount}` : ""}`).join("\n");
-  const banquet = (grid.banquetReports || []).map((report: any) => `${report.eventDate}: ${report.eventName} | tips $${report.banquetTips} | sales $${report.grossSales}`).join("\n");
+  const banquet = (grid.banquetReports || []).map((report: any) => {
+    const assigned = Array.isArray(report.assignedAssociatesJson) && report.assignedAssociatesJson.length
+      ? ` | split ${report.assignedAssociatesJson.map((associate: any) => `${associate.displayName} $${associate.splitAmount}`).join("; ")}`
+      : "";
+    return `${report.eventDate}: ${report.eventName} | tips $${report.banquetTips} | sales $${report.grossSales}${assigned}`;
+  }).join("\n");
   const adminUrl = new URL("/tips/admin", process.env.FRONTEND_BASE_URL || "https://readysetfly.us").toString();
   await client.emails.send({
     from: fromEmail,
@@ -1884,13 +1914,29 @@ export function registerTipsRoutes(app: Express) {
       if (!period) return res.status(400).json({ error: "Invalid event date" });
       const submission = await getGridSubmission(period.start, period.end);
       if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
+      const bistroUsers = await getBistroTipsUsers();
+      const selectedAssociates = bistroUsers.filter((user) => parsed.data.assignedUserIds.includes(user.id));
+      if (parsed.data.assignedUserIds.length !== selectedAssociates.length) {
+        return res.status(400).json({ error: "One or more selected banquet associates are not valid Bistro/Breakfast associates." });
+      }
+      const banquetTipAmount = resolveBanquetTipAmount(parsed.data);
+      const serviceRate = serviceRateForReportType(parsed.data.reportType);
+      const splitAmount = selectedAssociates.length ? banquetTipAmount / selectedAssociates.length : 0;
+      const assignedAssociatesJson = selectedAssociates.map((user) => ({
+        userId: user.id,
+        displayName: user.employeeDisplayName,
+        splitAmount: splitAmount.toFixed(2),
+      }));
       const [report] = await db.insert(tipBanquetReports).values({
         eventDate: parsed.data.eventDate,
         payPeriodStart: period.start,
         payPeriodEnd: period.end,
+        reportType: parsed.data.reportType,
         eventName: parsed.data.eventName,
         grossSales: parsed.data.grossSales.toFixed(2),
-        banquetTips: parsed.data.banquetTips.toFixed(2),
+        serviceRate: serviceRate.toFixed(4),
+        banquetTips: banquetTipAmount.toFixed(2),
+        assignedAssociatesJson,
         notes: parsed.data.notes || null,
         storagePath: req.file ? path.relative(process.cwd(), req.file.path) : null,
         originalFileName: req.file?.originalname || null,
@@ -1901,9 +1947,57 @@ export function registerTipsRoutes(app: Express) {
       await db.insert(tipAdminActions).values({
         actorUserId: req.tipsUser?.id || null,
         action: "banquet_tip_report_created",
-        metadataJson: { reportId: report.id, eventDate: report.eventDate, eventName: report.eventName },
+        metadataJson: { reportId: report.id, reportType: report.reportType, eventDate: report.eventDate, eventName: report.eventName, assignedAssociates: assignedAssociatesJson },
       });
-      res.status(201).json({ report: { ...report, grossSales: moneyString(report.grossSales), banquetTips: moneyString(report.banquetTips) } });
+      res.status(201).json({ report: { ...report, grossSales: moneyString(report.grossSales), serviceRate: String(report.serviceRate), banquetTips: moneyString(report.banquetTips), assignedAssociatesJson } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/grid/banquet-reports/:id", requireTipsGridAccess, async (req: any, res, next) => {
+    try {
+      const parsed = banquetReportSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid banquet report", validation: parsed.error.format() });
+      const [existing] = await db.select().from(tipBanquetReports).where(eq(tipBanquetReports.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ error: "Banquet report not found." });
+      const period = getPayPeriodForEntryDate(parsed.data.eventDate);
+      if (!period) return res.status(400).json({ error: "Invalid event date" });
+      const submission = await getGridSubmission(existing.payPeriodStart, existing.payPeriodEnd);
+      if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
+      const bistroUsers = await getBistroTipsUsers();
+      const selectedAssociates = bistroUsers.filter((user) => parsed.data.assignedUserIds.includes(user.id));
+      if (parsed.data.assignedUserIds.length !== selectedAssociates.length) {
+        return res.status(400).json({ error: "One or more selected banquet associates are not valid Bistro/Breakfast associates." });
+      }
+      const banquetTipAmount = resolveBanquetTipAmount(parsed.data);
+      const serviceRate = serviceRateForReportType(parsed.data.reportType);
+      const splitAmount = selectedAssociates.length ? banquetTipAmount / selectedAssociates.length : 0;
+      const assignedAssociatesJson = selectedAssociates.map((user) => ({
+        userId: user.id,
+        displayName: user.employeeDisplayName,
+        splitAmount: splitAmount.toFixed(2),
+      }));
+      const [updated] = await db.update(tipBanquetReports).set({
+        eventDate: parsed.data.eventDate,
+        payPeriodStart: period.start,
+        payPeriodEnd: period.end,
+        reportType: parsed.data.reportType,
+        eventName: parsed.data.eventName,
+        grossSales: parsed.data.grossSales.toFixed(2),
+        serviceRate: serviceRate.toFixed(4),
+        banquetTips: banquetTipAmount.toFixed(2),
+        assignedAssociatesJson,
+        notes: parsed.data.notes || null,
+        updatedBy: req.tipsUser?.id || null,
+        updatedAt: new Date(),
+      } as any).where(eq(tipBanquetReports.id, existing.id)).returning();
+      await db.insert(tipAdminActions).values({
+        actorUserId: req.tipsUser?.id || null,
+        action: "banquet_tip_report_updated",
+        metadataJson: { reportId: updated.id, reportType: updated.reportType, eventDate: updated.eventDate, eventName: updated.eventName, assignedAssociates: assignedAssociatesJson },
+      });
+      res.json({ report: { ...updated, grossSales: moneyString(updated.grossSales), serviceRate: String(updated.serviceRate), banquetTips: moneyString(updated.banquetTips), assignedAssociatesJson } });
     } catch (error) {
       next(error);
     }

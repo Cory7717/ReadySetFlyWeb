@@ -122,7 +122,7 @@ type TipsGrid = {
   period: { start: string; end: string; dayNumber: number; days: string[] };
   rows: TipsGridRow[];
   dayTotals: Array<{ date: string; totalTips: string; grossSales: string; taxAmount: string; netSales: string; beerSales: string; liquorSales: string; foodSales: string; wineSales: string; tipPercent: number; splitCount: number; splitAmount: string | null; report: DailyReport | null }>;
-  banquetReports: Array<{ id: string; eventDate: string; eventName: string; grossSales: string; banquetTips: string; notes?: string | null; originalFileName?: string | null; storagePath?: string | null }>;
+  banquetReports: Array<{ id: string; eventDate: string; reportType?: "banquet_service" | "group_breakfast"; eventName: string; grossSales: string; serviceRate?: string; banquetTips: string; assignedAssociatesJson?: Array<{ userId: string; displayName: string; splitAmount: string }>; notes?: string | null; originalFileName?: string | null; storagePath?: string | null }>;
   banquetTotal: string;
   salesTotals: Record<"week1" | "week2" | "period" | "month", { grossSales: string; taxAmount: string; netSales: string; beerSales: string; liquorSales: string; foodSales: string; wineSales: string }>;
   canManageSales: boolean;
@@ -178,6 +178,14 @@ function todayKey() {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function addDaysKey(value: string, days: number) {
+  const date = parseLocalDate(value);
+  date.setDate(date.getDate() + days);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 async function compressSalesReportFile(file: File) {
@@ -711,12 +719,16 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const [activeEntry, setActiveEntry] = useState<{ userId: string; date: string } | null>(null);
   const [entryModalAmount, setEntryModalAmount] = useState("");
   const [associateForm, setAssociateForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", position: "Bistro attendant", email: "" });
-  const [banquetForm, setBanquetForm] = useState({ eventDate: todayKey(), eventName: "", grossSales: "", banquetTips: "", notes: "" });
+  const [selectedPeriodStart, setSelectedPeriodStart] = useState("");
+  const [banquetForm, setBanquetForm] = useState({ eventDate: todayKey(), reportType: "banquet_service" as "banquet_service" | "group_breakfast", eventName: "", grossSales: "", banquetTips: "", notes: "" });
   const [banquetFile, setBanquetFile] = useState<File | null>(null);
+  const [banquetAssociateIds, setBanquetAssociateIds] = useState<string[]>([]);
+  const [editingBanquetId, setEditingBanquetId] = useState<string | null>(null);
+  const [banquetOpen, setBanquetOpen] = useState(false);
   const [salesOpen, setSalesOpen] = useState(false);
   const { data: grid, isLoading } = useQuery<TipsGrid>({
-    queryKey: ["/api/tips/grid"],
-    queryFn: () => fetchJson("/api/tips/grid"),
+    queryKey: ["/api/tips/grid", selectedPeriodStart],
+    queryFn: () => fetchJson(`/api/tips/grid${selectedPeriodStart ? `?start=${selectedPeriodStart}` : ""}`),
   });
   const addAssociate = useMutation({
     mutationFn: async () => {
@@ -780,22 +792,33 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   });
   const addBanquetReport = useMutation({
     mutationFn: async () => {
+      const payload = {
+        eventDate: banquetForm.eventDate,
+        reportType: banquetForm.reportType,
+        eventName: banquetForm.eventName,
+        grossSales: banquetForm.grossSales || "0",
+        banquetTips: banquetForm.banquetTips || "0",
+        assignedUserIds: banquetAssociateIds,
+        notes: banquetForm.notes || "",
+      };
+      if (editingBanquetId) {
+        const response = await apiRequest("PATCH", `/api/tips/grid/banquet-reports/${editingBanquetId}`, payload);
+        return response.json();
+      }
       const form = new FormData();
-      form.append("eventDate", banquetForm.eventDate);
-      form.append("eventName", banquetForm.eventName);
-      form.append("grossSales", banquetForm.grossSales || "0");
-      form.append("banquetTips", banquetForm.banquetTips || "0");
-      form.append("notes", banquetForm.notes || "");
+      Object.entries(payload).forEach(([key, value]) => form.append(key, Array.isArray(value) ? JSON.stringify(value) : String(value)));
       if (banquetFile) form.append("banquetReport", await compressSalesReportFile(banquetFile));
       const response = await fetch(apiUrl("/api/tips/grid/banquet-reports"), { method: "POST", credentials: "include", body: form });
       if (!response.ok) throw new Error(await response.text());
       return response.json();
     },
     onSuccess: () => {
-      toast({ title: "Banquet tips added" });
-      setBanquetForm({ eventDate: todayKey(), eventName: "", grossSales: "", banquetTips: "", notes: "" });
+      toast({ title: editingBanquetId ? "Banquet report updated" : "Banquet tips added" });
+      setBanquetForm({ eventDate: grid?.period.start || todayKey(), reportType: "banquet_service", eventName: "", grossSales: "", banquetTips: "", notes: "" });
       setBanquetFile(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
+      setBanquetAssociateIds([]);
+      setEditingBanquetId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/grid", selectedPeriodStart] });
     },
     onError: (error: Error) => toast({ title: "Banquet report failed", description: uploadErrorMessage(error), variant: "destructive" }),
   });
@@ -835,6 +858,32 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const cellValue = (row: TipsGridRow, cell: TipsGridCell) => drafts[`${row.associate.id}:${cell.date}`] ?? cell.tipAmount;
   const salesFieldValue = (date: string, field: keyof TipsGrid["dayTotals"][number]) => salesDrafts[date]?.[field as string] ?? String(dayTotal(date)?.[field] ?? "0.00");
   const canManageSales = Boolean(grid.canManageSales);
+  const banquetRate = banquetForm.reportType === "group_breakfast" ? 0.18 : 0.21;
+  const computedBanquetTips = Number(banquetForm.banquetTips || 0) > 0 ? Number(banquetForm.banquetTips || 0) : Number(banquetForm.grossSales || 0) * banquetRate;
+  const banquetSplitAmount = banquetAssociateIds.length ? computedBanquetTips / banquetAssociateIds.length : 0;
+  const toggleBanquetAssociate = (userId: string) => {
+    setBanquetAssociateIds((current) => current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]);
+  };
+  const startEditBanquetReport = (report: TipsGrid["banquetReports"][number]) => {
+    setEditingBanquetId(report.id);
+    setBanquetOpen(true);
+    setBanquetForm({
+      eventDate: report.eventDate,
+      reportType: report.reportType || "banquet_service",
+      eventName: report.eventName,
+      grossSales: report.grossSales,
+      banquetTips: report.banquetTips,
+      notes: report.notes || "",
+    });
+    setBanquetAssociateIds((report.assignedAssociatesJson || []).map((associate) => associate.userId));
+    setBanquetFile(null);
+  };
+  const clearBanquetForm = () => {
+    setEditingBanquetId(null);
+    setBanquetForm({ eventDate: grid.period.start, reportType: "banquet_service", eventName: "", grossSales: "", banquetTips: "", notes: "" });
+    setBanquetAssociateIds([]);
+    setBanquetFile(null);
+  };
   const commitCell = (row: TipsGridRow, cell: TipsGridCell) => {
     const value = cellValue(row, cell);
     if (value === cell.tipAmount || grid.locked || cell.confirmed) return;
@@ -1294,62 +1343,121 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
 
       <Card className={C.shell}>
         <CardHeader>
-          <CardTitle className={C.ink}>Banquet tips</CardTitle>
-          <CardDescription className={C.muted}>Use this separate report when a meeting or banquet produces tips outside the Bistro sales report.</CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className={C.ink}>Banquet and group breakfast tips</CardTitle>
+              <CardDescription className={C.muted}>Track meeting service fees at 21% and group breakfast payouts at 18% for selected associates.</CardDescription>
+            </div>
+            <Button type="button" variant="outline" className={`${C.outline} shrink-0`} onClick={() => setBanquetOpen((open) => !open)} aria-expanded={banquetOpen}>
+              <ChevronDown className={`mr-2 h-4 w-4 transition-transform ${banquetOpen ? "rotate-180" : ""}`} />
+              {banquetOpen ? "Hide banquet" : "Show banquet"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 lg:grid-cols-[150px_1fr_150px_150px]">
+          <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
             <div>
-              <Label>Event date</Label>
-              <Input className={C.field} type="date" value={banquetForm.eventDate} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, eventDate: event.target.value })} />
+              <Label>Pay period lookup</Label>
+              <Input className={C.field} type="date" value={grid.period.start} onChange={(event) => setSelectedPeriodStart(event.target.value)} />
             </div>
-            <div>
-              <Label>Event / meeting name</Label>
-              <Input className={C.field} placeholder="Meeting name" value={banquetForm.eventName} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, eventName: event.target.value })} />
-            </div>
-            <div>
-              <Label>Gross sales</Label>
-              <Input className={C.field} inputMode="decimal" placeholder="0.00" value={banquetForm.grossSales} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, grossSales: event.target.value.replace(/[^0-9.]/g, "") })} />
-            </div>
-            <div>
-              <Label>Banquet tips</Label>
-              <Input className={C.field} inputMode="decimal" placeholder="0.00" value={banquetForm.banquetTips} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, banquetTips: event.target.value.replace(/[^0-9.]/g, "") })} />
-            </div>
+            <Button type="button" variant="outline" className={C.outline} onClick={() => setSelectedPeriodStart(addDaysKey(grid.period.start, -14))}>Previous period</Button>
+            <Button type="button" variant="outline" className={C.outline} onClick={() => setSelectedPeriodStart(addDaysKey(grid.period.start, 14))}>Next period</Button>
           </div>
-          <div className="grid gap-3 lg:grid-cols-[1fr_260px_auto]">
-            <div>
-              <Label>Notes</Label>
-              <Input className={C.field} placeholder="Optional" value={banquetForm.notes} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, notes: event.target.value })} />
-            </div>
-            <div>
-              <Label>Banquet report</Label>
-              <Input className={C.field} type="file" accept="image/*,application/pdf" disabled={grid.locked} onChange={(event) => setBanquetFile(event.target.files?.[0] || null)} />
-            </div>
-            <div className="flex items-end">
-              <Button className={`w-full ${C.green}`} disabled={grid.locked || addBanquetReport.isPending || !banquetForm.eventDate || !banquetForm.eventName.trim() || Number(banquetForm.banquetTips || 0) <= 0} onClick={() => addBanquetReport.mutate()}>
-                <ReceiptText className="mr-2 h-4 w-4" />
-                {addBanquetReport.isPending ? "Adding..." : "Add banquet tips"}
-              </Button>
-            </div>
-          </div>
+          {banquetOpen && (
+            <>
+              <div className="grid gap-3 lg:grid-cols-[170px_150px_1fr_150px_150px]">
+                <div>
+                  <Label>Report type</Label>
+                  <Select value={banquetForm.reportType} disabled={grid.locked} onValueChange={(reportType: "banquet_service" | "group_breakfast") => setBanquetForm({ ...banquetForm, reportType, banquetTips: "" })}>
+                    <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="banquet_service">Meeting service fee</SelectItem>
+                      <SelectItem value="group_breakfast">Group breakfast</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Event date</Label>
+                  <Input className={C.field} type="date" value={banquetForm.eventDate} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, eventDate: event.target.value })} />
+                </div>
+                <div>
+                  <Label>{banquetForm.reportType === "group_breakfast" ? "Group / breakfast name" : "Event / meeting name"}</Label>
+                  <Input className={C.field} placeholder="Meeting or group name" value={banquetForm.eventName} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, eventName: event.target.value })} />
+                </div>
+                <div>
+                  <Label>{banquetForm.reportType === "group_breakfast" ? "Breakfast amount" : "Service fee base"}</Label>
+                  <Input className={C.field} inputMode="decimal" placeholder="0.00" value={banquetForm.grossSales} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, grossSales: event.target.value.replace(/[^0-9.]/g, ""), banquetTips: "" })} />
+                </div>
+                <div>
+                  <Label>Calculated tips</Label>
+                  <Input className={C.field} inputMode="decimal" placeholder="0.00" value={banquetForm.banquetTips || computedBanquetTips.toFixed(2)} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, banquetTips: event.target.value.replace(/[^0-9.]/g, "") })} />
+                </div>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-[1fr_260px_auto_auto]">
+                <div>
+                  <Label>Notes</Label>
+                  <Input className={C.field} placeholder="Optional" value={banquetForm.notes} disabled={grid.locked} onChange={(event) => setBanquetForm({ ...banquetForm, notes: event.target.value })} />
+                </div>
+                <div>
+                  <Label>Report file</Label>
+                  <Input className={C.field} type="file" accept="image/*,application/pdf" disabled={grid.locked || Boolean(editingBanquetId)} onChange={(event) => setBanquetFile(event.target.files?.[0] || null)} />
+                </div>
+                <div className="flex items-end">
+                  <Button className={`w-full ${C.green}`} disabled={grid.locked || addBanquetReport.isPending || !banquetForm.eventDate || !banquetForm.eventName.trim() || computedBanquetTips <= 0} onClick={() => addBanquetReport.mutate()}>
+                    <ReceiptText className="mr-2 h-4 w-4" />
+                    {addBanquetReport.isPending ? "Saving..." : editingBanquetId ? "Save changes" : "Add report"}
+                  </Button>
+                </div>
+                {editingBanquetId && <div className="flex items-end"><Button type="button" variant="outline" className={`w-full ${C.outline}`} onClick={clearBanquetForm}>Cancel edit</Button></div>}
+              </div>
+              <div className="rounded-xl border border-[#ddccb5] bg-white p-3">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="font-semibold text-[#201814]">Associates who worked</div>
+                    <div className="text-sm text-[#5f5247]">Select one or more associates to split this payout evenly.</div>
+                  </div>
+                  <Badge variant="outline" className="border-[#bdd5c3] bg-[#e8f1ea] text-[#173c25]">
+                    {banquetAssociateIds.length ? `${banquetAssociateIds.length} selected | ${formatMoney(banquetSplitAmount)} each` : "No split assigned"}
+                  </Badge>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {grid.rows.map((row) => (
+                    <label key={row.associate.id} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm ${banquetAssociateIds.includes(row.associate.id) ? "border-[#2f5f46] bg-[#e8f1ea]" : "border-[#e0d3c1] bg-[#fffaf2]"}`}>
+                      <Checkbox checked={banquetAssociateIds.includes(row.associate.id)} disabled={grid.locked} onCheckedChange={() => toggleBanquetAssociate(row.associate.id)} />
+                      <span>
+                        <span className="block font-semibold text-[#201814]">{row.associate.employeeDisplayName}</span>
+                        {row.associate.position && <span className="block text-xs text-[#5f5247]">{row.associate.position}</span>}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
           <div className="rounded-lg border border-[#e0d3c1] bg-white">
-            <div className="flex items-center justify-between border-b border-[#e0d3c1] p-3">
+            <button type="button" className="flex w-full items-center justify-between border-b border-[#e0d3c1] p-3 text-left" onClick={() => setBanquetOpen((open) => !open)}>
               <div className="font-semibold text-[#201814]">Banquet report total</div>
               <Badge variant="outline" className="border-[#bdd5c3] bg-[#e8f1ea] text-[#173c25]">{formatMoney(grid.banquetTotal)}</Badge>
-            </div>
+            </button>
             {(grid.banquetReports || []).length ? (
               <div className="divide-y divide-[#e0d3c1]">
                 {(grid.banquetReports || []).map((report) => (
-                  <div key={report.id} className="grid gap-2 p-3 text-sm md:grid-cols-[140px_1fr_120px_120px_auto]">
+                  <div key={report.id} role="button" tabIndex={0} className="grid w-full cursor-pointer gap-2 p-3 text-left text-sm hover:bg-[#fbf6ee] md:grid-cols-[140px_150px_1fr_120px_120px_auto]" onClick={() => startEditBanquetReport(report)} onKeyDown={(event) => event.key === "Enter" && startEditBanquetReport(report)}>
                     <div className="font-medium">{formatDisplayDate(report.eventDate)}</div>
+                    <div>{report.reportType === "group_breakfast" ? "Group breakfast" : "Meeting service"}</div>
                     <div>
                       <div className="font-semibold text-[#201814]">{report.eventName}</div>
                       {report.notes && <div className="text-[#5f5247]">{report.notes}</div>}
+                      {report.assignedAssociatesJson?.length ? (
+                        <div className="mt-1 text-xs text-[#5f5247]">
+                          Split: {report.assignedAssociatesJson.map((associate) => `${associate.displayName} ${formatMoney(associate.splitAmount)}`).join(" | ")}
+                        </div>
+                      ) : null}
                     </div>
                     <div>Sales {formatMoney(report.grossSales)}</div>
                     <div>Tips {formatMoney(report.banquetTips)}</div>
                     {report.originalFileName ? (
-                      <a className="font-medium text-[#2f5f46] underline" href={apiUrl(`/api/tips/grid/banquet-reports/${report.id}/view`)} target="_blank" rel="noreferrer">View report</a>
+                      <a className="font-medium text-[#2f5f46] underline" href={apiUrl(`/api/tips/grid/banquet-reports/${report.id}/view`)} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>View report</a>
                     ) : (
                       <span className="text-[#5f5247]">No file</span>
                     )}

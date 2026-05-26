@@ -56,6 +56,8 @@ function userHasTipsAccess(user: CourtyardUser) {
 
 function toolEnabled(user: CourtyardUser, tool: ToolKey) {
   if (user.isSuperAdmin) return true;
+  const explicit = user.toolAccess?.[tool];
+  if (typeof explicit === "boolean") return explicit;
   if (tool === "schedule") return user.canAccessSchedule !== false;
   if (tool === "tips") return user.canAccessTips ?? userHasTipsAccess(user);
   return user.canAccessOpsReport ?? user.isAdmin;

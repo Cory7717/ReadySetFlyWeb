@@ -713,6 +713,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const [associateForm, setAssociateForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", position: "Bistro attendant", email: "" });
   const [banquetForm, setBanquetForm] = useState({ eventDate: todayKey(), eventName: "", grossSales: "", banquetTips: "", notes: "" });
   const [banquetFile, setBanquetFile] = useState<File | null>(null);
+  const [salesOpen, setSalesOpen] = useState(false);
   const { data: grid, isLoading } = useQuery<TipsGrid>({
     queryKey: ["/api/tips/grid"],
     queryFn: () => fetchJson("/api/tips/grid"),
@@ -1210,10 +1211,18 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
 
       <Card className={C.shell}>
         <CardHeader>
-          <CardTitle className={C.ink}>Bistro sales</CardTitle>
-          <CardDescription className={C.muted}>
-            GM/admin, Bistro Manager, or Bistro Supervisor can enter daily sales. Tip percentage uses net sales after tax.
-          </CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className={C.ink}>Bistro sales</CardTitle>
+              <CardDescription className={C.muted}>
+                GM/admin, Bistro Manager, or Bistro Supervisor can enter daily sales. Tip percentage uses net sales after tax.
+              </CardDescription>
+            </div>
+            <Button type="button" variant="outline" className={`${C.outline} shrink-0`} onClick={() => setSalesOpen((open) => !open)} aria-expanded={salesOpen}>
+              <ChevronDown className={`mr-2 h-4 w-4 transition-transform ${salesOpen ? "rotate-180" : ""}`} />
+              {salesOpen ? "Hide sales" : "Show sales"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-4">
@@ -1245,39 +1254,41 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
               Sales entry is limited to admin/GM, Bistro Manager, or Bistro Supervisor accounts.
             </div>
           )}
-          <div className="grid gap-3 lg:grid-cols-2">
-            {[week1Days, week2Days].map((days, index) => (
-              <div key={index} className="rounded-xl border border-[#ddccb5] bg-white">
-                <div className="border-b border-[#e0d3c1] bg-[#fbf6ee] p-3 font-semibold text-[#201814]">Week {index + 1} sales</div>
-                <div className="divide-y divide-[#e0d3c1]">
-                  {days.map((date) => {
-                    const totalForDay = dayTotal(date);
-                    return (
-                      <div key={date} className="space-y-3 p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="font-semibold text-[#201814]">{date === todayKey() ? formatTodayLabel(date) : formatDisplayDate(date, "long")}</div>
-                            <div className="text-xs text-[#5f5247]">Net {formatMoney(totalForDay?.netSales)} | Tip % {formatPercent(totalForDay?.tipPercent)}</div>
+          {salesOpen && (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {[week1Days, week2Days].map((days, index) => (
+                <div key={index} className="rounded-xl border border-[#ddccb5] bg-white">
+                  <div className="border-b border-[#e0d3c1] bg-[#fbf6ee] p-3 font-semibold text-[#201814]">Week {index + 1} sales</div>
+                  <div className="divide-y divide-[#e0d3c1]">
+                    {days.map((date) => {
+                      const totalForDay = dayTotal(date);
+                      return (
+                        <div key={date} className="space-y-3 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="font-semibold text-[#201814]">{date === todayKey() ? formatTodayLabel(date) : formatDisplayDate(date, "long")}</div>
+                              <div className="text-xs text-[#5f5247]">Net {formatMoney(totalForDay?.netSales)} | Tip % {formatPercent(totalForDay?.tipPercent)}</div>
+                            </div>
+                            <Button type="button" size="sm" variant="outline" className={C.outline} disabled={grid.locked || !canManageSales || saveSalesDay.isPending} onClick={() => commitSales(date)}>
+                              Save
+                            </Button>
                           </div>
-                          <Button type="button" size="sm" variant="outline" className={C.outline} disabled={grid.locked || !canManageSales || saveSalesDay.isPending} onClick={() => commitSales(date)}>
-                            Save
-                          </Button>
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            {renderSalesInput(date, "grossSales", "Gross")}
+                            {renderSalesInput(date, "taxAmount", "Tax")}
+                            {renderSalesInput(date, "foodSales", "Food")}
+                            {renderSalesInput(date, "beerSales", "Beer")}
+                            {renderSalesInput(date, "liquorSales", "Liquor")}
+                            {renderSalesInput(date, "wineSales", "Wine")}
+                          </div>
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-3">
-                          {renderSalesInput(date, "grossSales", "Gross")}
-                          {renderSalesInput(date, "taxAmount", "Tax")}
-                          {renderSalesInput(date, "foodSales", "Food")}
-                          {renderSalesInput(date, "beerSales", "Beer")}
-                          {renderSalesInput(date, "liquorSales", "Liquor")}
-                          {renderSalesInput(date, "wineSales", "Wine")}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -294,6 +294,7 @@ export const tipsUsers = pgTable("tips_users", {
   employeeDisplayName: text("employee_display_name").notNull(),
   position: text("position"),
   role: text("role").notNull().default("employee"),
+  toolAccessJson: jsonb("tool_access_json").$type<Record<string, boolean>>().notNull().default(sql`'{}'::jsonb`),
   hashedPassword: text("hashed_password").notNull(),
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   disabledAt: timestamp("disabled_at"),

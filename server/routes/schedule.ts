@@ -328,12 +328,23 @@ function publicScheduleUser(user: any) {
     lastName: user.lastName,
     employeeDisplayName: user.employeeDisplayName,
     role,
+    toolAccess: getToolAccess(user),
     isAdmin: role === "manager" || role === "super_admin",
     isSuperAdmin: role === "super_admin",
     scheduleRoles: rolesArray(user.scheduleRoles),
     disabledAt: user.disabledAt ?? null,
     mustChangePassword: Boolean(user.mustChangePassword),
   };
+}
+
+function getToolAccess(user: any): Record<string, boolean> {
+  const access = user?.toolAccessJson;
+  return access && typeof access === "object" && !Array.isArray(access) ? access as Record<string, boolean> : {};
+}
+
+function getExplicitToolAccess(user: any, tool: "schedule" | "tips" | "opsreport") {
+  const value = getToolAccess(user)[tool];
+  return typeof value === "boolean" ? value : null;
 }
 
 function scheduleDisplayName(user: any) {
@@ -372,17 +383,22 @@ async function publicScheduleUserWithProfile(user: any) {
   const isDepartmentManager = Boolean(scheduleEmployee?.isDepartmentManager || hasManagerAccessRole(scheduleEmployee, user));
   const isAdmin = baseUser.isAdmin || isDepartmentManager;
   const scheduleRoles = rolesArray(scheduleEmployee?.rolesJson || user.position);
-  const canAccessTips = baseUser.isSuperAdmin
-    || hasBistroScheduleRole(user.position)
-    || hasBistroScheduleRole(scheduleEmployee?.department)
-    || hasBistroScheduleRole(scheduleEmployee?.position)
-    || scheduleRoles.some(hasBistroScheduleRole);
+  const explicitTipsAccess = getExplicitToolAccess(user, "tips");
+  const canAccessTips = explicitTipsAccess ?? (
+    baseUser.isSuperAdmin
+      || hasBistroScheduleRole(user.position)
+      || hasBistroScheduleRole(scheduleEmployee?.department)
+      || hasBistroScheduleRole(scheduleEmployee?.position)
+      || scheduleRoles.some(hasBistroScheduleRole)
+  );
   return {
     ...baseUser,
     role: isAdmin && baseUser.role === "employee" ? "manager" : baseUser.role,
     isAdmin,
     scheduleRoles,
+    canAccessSchedule: getExplicitToolAccess(user, "schedule") !== false,
     canAccessTips,
+    canAccessOpsReport: getExplicitToolAccess(user, "opsreport") ?? baseUser.isAdmin,
     department: scheduleEmployee ? primaryOperationalDepartment(scheduleEmployee, user.position) : null,
     isDepartmentManager,
   };
@@ -562,6 +578,7 @@ const requireScheduleAuth: RequestHandler = async (req: any, res, next) => {
     if (!user) return res.status(401).json({ error: "Schedule login required" });
     if (user.disabledAt) return res.status(403).json({ error: "This account is disabled." });
     if (user.mustChangePassword) return res.status(403).json({ error: "Password change required before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
+    if (getExplicitToolAccess(user, "schedule") === false) return res.status(403).json({ error: "Schedule access has not been enabled for this account." });
     req.scheduleUser = user;
     next();
   } catch (error) {
@@ -575,6 +592,7 @@ const requireScheduleManager: RequestHandler = async (req: any, res, next) => {
     if (!user) return res.status(401).json({ error: "Schedule login required" });
     if (user.disabledAt) return res.status(403).json({ error: "This account is disabled." });
     if (user.mustChangePassword) return res.status(403).json({ error: "Password change required before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
+    if (getExplicitToolAccess(user, "schedule") === false) return res.status(403).json({ error: "Schedule access has not been enabled for this account." });
     if (!(await isScheduleManager(user))) return res.status(403).json({ error: "Schedule manager access required" });
     req.scheduleUser = user;
     next();

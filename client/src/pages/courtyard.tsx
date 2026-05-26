@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Coffee, DoorOpen, FileSpreadsheet, LogOut, ShieldCheck } from "lucide-react";
+import { CalendarDays, Coffee, DoorOpen, FileSpreadsheet, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 const C = {
   page: "bg-[#f5efe7] text-[#201814]",
@@ -26,12 +27,20 @@ type CourtyardUser = {
   id: string;
   email: string;
   employeeDisplayName: string;
+  position?: string | null;
   role: "employee" | "manager" | "super_admin";
   isAdmin: boolean;
   isSuperAdmin: boolean;
   mustChangePassword?: boolean;
   scheduleRoles?: string[];
+  toolAccess?: Record<string, boolean>;
+  canAccessSchedule?: boolean;
+  canAccessTips?: boolean;
+  canAccessOpsReport?: boolean;
 };
+
+type ToolKey = "schedule" | "tips" | "opsreport";
+type ToolAccessResponse = { users: CourtyardUser[]; tools: ToolKey[] };
 
 const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
 const SCHEDULE_ROLES = ["GM", "DOS", "MOD", "Executive Housekeeper", "Exec HK", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
@@ -42,7 +51,14 @@ function isBistroRole(role: string) {
 }
 
 function userHasTipsAccess(user: CourtyardUser) {
-  return user.isAdmin || (user.scheduleRoles || []).some(isBistroRole);
+  return user.canAccessTips ?? (user.isAdmin || (user.scheduleRoles || []).some(isBistroRole));
+}
+
+function toolEnabled(user: CourtyardUser, tool: ToolKey) {
+  if (user.isSuperAdmin) return true;
+  if (tool === "schedule") return user.canAccessSchedule !== false;
+  if (tool === "tips") return user.canAccessTips ?? userHasTipsAccess(user);
+  return user.canAccessOpsReport ?? user.isAdmin;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -181,6 +197,102 @@ function CourtyardPasswordChange({ onDone }: { onDone: (user?: CourtyardUser) =>
   );
 }
 
+function CourtyardToolAccessAdmin() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const accessUsers = useQuery<ToolAccessResponse>({
+    queryKey: ["/api/tips/admin/tool-access-users"],
+    queryFn: () => fetchJson("/api/tips/admin/tool-access-users"),
+  });
+  const updateAccess = useMutation({
+    mutationFn: async ({ userId, tool, enabled }: { userId: string; tool: ToolKey; enabled: boolean }) => {
+      const response = await apiRequest("PATCH", `/api/tips/admin/users/${userId}/tool-access`, { tool, enabled });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/tool-access-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/auth/me", "courtyard"] });
+      toast({ title: "Tool access updated" });
+    },
+    onError: (error: Error) => toast({ title: "Unable to update access", description: error.message, variant: "destructive" }),
+  });
+  const users = (accessUsers.data?.users || []).filter((item) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+    return `${item.employeeDisplayName} ${item.email} ${item.position || ""}`.toLowerCase().includes(query);
+  });
+  const toolLabels: Record<ToolKey, string> = {
+    schedule: "Schedule",
+    tips: "Tips",
+    opsreport: "Ops Report",
+  };
+
+  return (
+    <Card className={C.shell}>
+      <CardHeader>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2"><Settings2 className="h-5 w-5 text-[#8a6b3f]" /> Tool Access</CardTitle>
+            <CardDescription className={C.muted}>
+              Grant or withdraw access to Courtyard tools without changing an associate's job role.
+            </CardDescription>
+          </div>
+          <div className="relative w-full md:w-72">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#76695d]" />
+            <Input className={`${C.field} pl-9`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search associates" />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {accessUsers.isLoading ? (
+          <div className="text-sm text-[#5f5247]">Loading associates...</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#d7c8b5] text-left text-xs uppercase tracking-[0.12em] text-[#6b5f54]">
+                  <th className="py-2 pr-3">Associate</th>
+                  <th className="px-3 py-2">Role</th>
+                  <th className="px-3 py-2 text-center">Schedule</th>
+                  <th className="px-3 py-2 text-center">Tips</th>
+                  <th className="px-3 py-2 text-center">Ops Report</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((item) => (
+                  <tr key={item.id} className="border-b border-[#eadfce] last:border-0">
+                    <td className="py-3 pr-3">
+                      <div className="font-semibold text-[#201814]">{item.employeeDisplayName}</div>
+                      <div className="text-xs text-[#5f5247]">{item.email}</div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <Badge variant="outline" className="border-[#cdbda8] bg-white text-[#201814]">{item.role.replace("_", " ")}</Badge>
+                    </td>
+                    {(["schedule", "tips", "opsreport"] as ToolKey[]).map((tool) => (
+                      <td key={tool} className="px-3 py-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <Switch
+                            checked={toolEnabled(item, tool)}
+                            disabled={item.isSuperAdmin || updateAccess.isPending}
+                            aria-label={`${toolLabels[tool]} access for ${item.employeeDisplayName}`}
+                            onCheckedChange={(enabled) => updateAccess.mutate({ userId: item.id, tool, enabled })}
+                          />
+                          <span className="w-16 text-left text-xs text-[#5f5247]">{toolEnabled(item, tool) ? "Enabled" : "Off"}</span>
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function CourtyardPortalPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -227,6 +339,7 @@ export default function CourtyardPortalPage() {
       description: user.isAdmin ? "Build schedules, review requests, complete department sections, and publish final schedules." : "View your published schedule and submit time-off or availability requests.",
       action: user.isAdmin ? "Open schedule builder" : "View schedule",
       tone: C.green,
+      disabled: !toolEnabled(user, "schedule"),
     },
     {
       href: "/tips",
@@ -235,7 +348,7 @@ export default function CourtyardPortalPage() {
       description: "Open the Bistro tip reporting page. Associates enter the 5 digit team PIN before entering tip reports.",
       action: "Open tips reports",
       tone: C.accent,
-      disabled: !userHasTipsAccess(user),
+      disabled: !toolEnabled(user, "tips"),
     },
     {
       href: "/opsreport",
@@ -244,6 +357,7 @@ export default function CourtyardPortalPage() {
       description: "Open the weekly operations report workspace when you have access to that tool.",
       action: "Open ops report",
       tone: C.outline,
+      disabled: !toolEnabled(user, "opsreport"),
     },
   ];
 
@@ -294,7 +408,7 @@ export default function CourtyardPortalPage() {
                 </CardHeader>
                 <CardContent>
                   {tool.disabled ? (
-                    <Button className={`w-full ${C.outline}`} disabled>Bistro role required</Button>
+                    <Button className={`w-full ${C.outline}`} disabled>Access not enabled</Button>
                   ) : (
                     <Button asChild className={`w-full ${tool.tone}`}>
                       <Link href={tool.href}>{tool.action}</Link>
@@ -305,6 +419,8 @@ export default function CourtyardPortalPage() {
             );
           })}
         </section>
+
+        {user.isSuperAdmin && <CourtyardToolAccessAdmin />}
 
         <Card className={C.shell}>
           <CardHeader>

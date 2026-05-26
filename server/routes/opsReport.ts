@@ -23,16 +23,29 @@ function normalizeEmail(email: string) {
 function publicOpsUser(user: any) {
   const email = normalizeEmail(String(user.email || ""));
   const role = OPS_REPORT_ADMIN_EMAILS.has(email) || user.role === "super_admin" ? "super_admin" : user.role === "manager" ? "manager" : "employee";
+  const explicitAccess = getExplicitToolAccess(user, "opsreport");
+  const unlocked = explicitAccess ?? (role === "manager" || role === "super_admin");
   return {
     id: user.id,
     email,
     employeeDisplayName: user.employeeDisplayName,
     role,
-    isAdmin: role === "manager" || role === "super_admin",
+    isAdmin: unlocked,
     isSuperAdmin: role === "super_admin",
+    toolAccess: getToolAccess(user),
     disabledAt: user.disabledAt ?? null,
     mustChangePassword: Boolean(user.mustChangePassword),
   };
+}
+
+function getToolAccess(user: any): Record<string, boolean> {
+  const access = user?.toolAccessJson;
+  return access && typeof access === "object" && !Array.isArray(access) ? access as Record<string, boolean> : {};
+}
+
+function getExplicitToolAccess(user: any, tool: "schedule" | "tips" | "opsreport") {
+  const value = getToolAccess(user)[tool];
+  return typeof value === "boolean" ? value : null;
 }
 
 async function getUserBySession(req: any) {

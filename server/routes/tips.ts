@@ -49,9 +49,13 @@ type TipsUserSession = {
   employeeDisplayName: string;
   position: string | null;
   role: "employee" | "manager" | "super_admin";
+  toolAccess: Record<string, boolean>;
   mustChangePassword: boolean;
   disabledAt: Date | string | null;
 };
+
+const COURTYARD_TOOL_KEYS = ["schedule", "tips", "opsreport"] as const;
+type CourtyardToolKey = typeof COURTYARD_TOOL_KEYS[number];
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -125,6 +129,16 @@ function isTipsSuperAdmin(user: any) {
   return resolveTipsRole(user) === "super_admin";
 }
 
+function getToolAccess(user: any): Record<string, boolean> {
+  const access = user?.toolAccessJson;
+  return access && typeof access === "object" && !Array.isArray(access) ? access as Record<string, boolean> : {};
+}
+
+function getExplicitToolAccess(user: any, tool: CourtyardToolKey) {
+  const value = getToolAccess(user)[tool];
+  return typeof value === "boolean" ? value : null;
+}
+
 function hasBistroText(value: unknown) {
   const normalized = String(value || "").toLowerCase();
   return normalized.includes("bistro") || normalized.includes("breakfast");
@@ -133,6 +147,8 @@ function hasBistroText(value: unknown) {
 async function hasBistroTipsAccess(user: any) {
   if (!user || user.disabledAt || user.mustChangePassword) return false;
   if (isTipsSuperAdmin(user)) return true;
+  const explicit = getExplicitToolAccess(user, "tips");
+  if (explicit !== null) return explicit;
   if (hasBistroText(user.position)) return true;
   const [employee] = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.email, normalizeEmail(String(user.email || "")))).limit(1);
   return Boolean(employee && (
@@ -186,6 +202,7 @@ function publicTipsUser(user: any): TipsUserSession & { isAdmin: boolean; isSupe
     employeeDisplayName: user.employeeDisplayName,
     position: user.position ?? null,
     role,
+    toolAccess: getToolAccess(user),
     mustChangePassword: Boolean(user.mustChangePassword),
     disabledAt: user.disabledAt ?? null,
     isAdmin: role === "manager" || role === "super_admin",
@@ -252,7 +269,7 @@ const requireTipsSuperAdmin: RequestHandler = async (req: any, res, next) => {
 const requireTipsGridAccess: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getTipsUserBySession(req);
-    if (user && !user.disabledAt && !user.mustChangePassword && isTipsManager(user) && await hasBistroTipsAccess(user)) {
+    if (user && !user.disabledAt && !user.mustChangePassword && (isTipsManager(user) || getExplicitToolAccess(user, "tips") === true) && await hasBistroTipsAccess(user)) {
       req.tipsUser = user;
       return next();
     }
@@ -347,6 +364,11 @@ const adminPasswordResetSchema = z.object({
 
 const adminDisableUserSchema = z.object({
   disabled: z.boolean(),
+});
+
+const updateToolAccessSchema = z.object({
+  tool: z.enum(COURTYARD_TOOL_KEYS),
+  enabled: z.boolean(),
 });
 
 const kioskPinSchema = z.object({
@@ -1275,6 +1297,15 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
+  router.get("/admin/tool-access-users", requireTipsSuperAdmin, async (_req: any, res, next) => {
+    try {
+      const users = await db.select().from(tipsUsers).orderBy(asc(tipsUsers.employeeDisplayName));
+      res.json({ users: users.map(publicTipsUser), tools: COURTYARD_TOOL_KEYS });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/admin/users", requireTipsAdmin, async (req: any, res, next) => {
     try {
       const parsed = adminCreateTipsUserSchema.safeParse(req.body);
@@ -1388,6 +1419,33 @@ export function registerTipsRoutes(app: Express) {
         targetUserId: updated.id,
         action: parsed.data.disabled ? "user_disabled" : "user_enabled",
         metadataJson: { email: updated.email },
+      });
+      res.json({ user: publicTipsUser(updated) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/admin/users/:id/tool-access", requireTipsSuperAdmin, async (req: any, res, next) => {
+    try {
+      const parsed = updateToolAccessSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid tool access change" });
+      const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
+      if (!target) return res.status(404).json({ error: "Courtyard user not found" });
+      if (isTipsSuperAdmin(target) && !parsed.data.enabled) {
+        return res.status(400).json({ error: "Super admin tool access cannot be withdrawn." });
+      }
+      const nextAccess = { ...getToolAccess(target), [parsed.data.tool]: parsed.data.enabled };
+      const [updated] = await db
+        .update(tipsUsers)
+        .set({ toolAccessJson: nextAccess, updatedAt: new Date() } as any)
+        .where(eq(tipsUsers.id, target.id))
+        .returning();
+      await db.insert(tipAdminActions).values({
+        actorUserId: req.tipsUser.id,
+        targetUserId: updated.id,
+        action: "courtyard_tool_access_updated",
+        metadataJson: { tool: parsed.data.tool, enabled: parsed.data.enabled },
       });
       res.json({ user: publicTipsUser(updated) });
     } catch (error) {

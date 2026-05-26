@@ -286,6 +286,7 @@ type SchedulePayload = {
   approvedRequests?: ScheduleRequest[];
   totals: {
     employeeWeeklyHours: Record<string, number>;
+    employeeDepartmentWeeklyHours?: Record<string, Record<string, number>>;
     departmentDailyHours: Record<string, Record<string, number>>;
     departmentWeeklyHours: Record<string, number>;
     departmentWeeklyLaborDollars?: Record<string, number>;
@@ -494,6 +495,11 @@ function findEmployeeForUser(payload: SchedulePayload, user?: ScheduleUser | nul
 
 function assignmentDepartment(assignment: ShiftAssignment | undefined, employee: ScheduleEmployee, shiftType?: ShiftType) {
   return roleDepartment(assignment?.roleWorked || shiftType?.departmentHint || employee.department);
+}
+
+function assignmentBelongsToDepartment(assignment: ShiftAssignment | undefined, employee: ScheduleEmployee, shiftType: ShiftType | undefined, department: string) {
+  if (!assignment) return false;
+  return assignmentDepartment(assignment, employee, shiftType) === department;
 }
 
 function scheduleEmployeeSort(a: ScheduleEmployee, b: ScheduleEmployee) {
@@ -1447,7 +1453,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onH
                         const rawAssignment = assignments.get(`${employee.id}:${day}`);
                         const hkBoard = housekeepingBoards.get(`${employee.id}:${day}`);
                         const rawShift = rawAssignment ? shiftTypes.get(rawAssignment.shiftTypeId || "") : undefined;
-                        const assignment = rawAssignment;
+                        const assignment = assignmentBelongsToDepartment(rawAssignment, employee, rawShift, department) ? rawAssignment : undefined;
                         const isHousekeeping = department === "Housekeeping";
                         const canEditCell = editable && (editableDepartments.includes(department) || currentEmployee?.id === employee.id);
                         const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
@@ -1496,7 +1502,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onH
                           </td>
                         );
                       })}
-                      <td className="border border-[#e0d3c1] p-2 text-center font-semibold">{payload.totals.employeeWeeklyHours[employee.id] || 0}</td>
+                      <td className="border border-[#e0d3c1] p-2 text-center font-semibold">{payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0}</td>
                     </tr>
                   )),
                 ];
@@ -1526,13 +1532,13 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onH
                 <div className="space-y-3">
                   {employees.map((employee) => (
                     <div key={employee.id} className="rounded-xl border border-[#e0d3c1] bg-white p-3">
-                      <div className="mb-2 flex justify-between"><div className="font-semibold">{employee.displayName}</div><Badge variant="outline">{payload.totals.employeeWeeklyHours[employee.id] || 0} hrs</Badge></div>
+                      <div className="mb-2 flex justify-between"><div className="font-semibold">{employee.displayName}</div><Badge variant="outline">{payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0} hrs</Badge></div>
                       <div className="grid gap-2">
                         {payload.days.map((day, index) => {
                           const rawAssignment = assignments.get(`${employee.id}:${day}`);
                           const hkBoard = housekeepingBoards.get(`${employee.id}:${day}`);
                           const rawShift = rawAssignment ? shiftTypes.get(rawAssignment.shiftTypeId || "") : undefined;
-                          const assignment = rawAssignment;
+                          const assignment = assignmentBelongsToDepartment(rawAssignment, employee, rawShift, department) ? rawAssignment : undefined;
                           const isHousekeeping = department === "Housekeeping";
                           const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
                           const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;

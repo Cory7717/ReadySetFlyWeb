@@ -105,6 +105,10 @@ function moneyString(value: unknown) {
   return moneyNumber(value).toFixed(2);
 }
 
+function sumMoney(rows: any[], field: string) {
+  return moneyString(rows.reduce((sum, row) => sum + moneyNumber(row[field]), 0));
+}
+
 function resolveTipsRole(user: any): "employee" | "manager" | "super_admin" {
   const email = String(user.email || "").toLowerCase();
   if (TIPS_SUPER_ADMIN_EMAILS.has(email)) return "super_admin";
@@ -144,6 +148,17 @@ function scheduleEmployeeHasBistroRole(employee: any) {
     hasBistroText(employee.position) ||
     hasBistroText(Array.isArray(employee.rolesJson) ? employee.rolesJson.join(", ") : employee.rolesJson)
   ));
+}
+
+async function canManageTipsSales(user: any) {
+  if (!user || user.disabledAt || user.mustChangePassword) return false;
+  if (isTipsManager(user)) return true;
+  const text = `${user.position || ""} ${user.employeeDisplayName || ""}`.toLowerCase();
+  if (text.includes("gm") || text.includes("general manager")) return true;
+  if (text.includes("bistro") && (text.includes("manager") || text.includes("supervisor"))) return true;
+  const [employee] = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.email, normalizeEmail(String(user.email || "")))).limit(1);
+  const employeeText = `${employee?.department || ""} ${employee?.position || ""} ${Array.isArray(employee?.rolesJson) ? employee.rolesJson.join(" ") : employee?.rolesJson || ""}`.toLowerCase();
+  return Boolean(employeeText.includes("bistro") && (employeeText.includes("manager") || employeeText.includes("supervisor")));
 }
 
 async function getBistroTipsUsers() {
@@ -348,6 +363,11 @@ const gridEntrySchema = z.object({
 const gridDaySummarySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   grossSales: z.coerce.number().min(0).max(1000000),
+  taxAmount: z.coerce.number().min(0).max(1000000).default(0),
+  beerSales: z.coerce.number().min(0).max(1000000).default(0),
+  liquorSales: z.coerce.number().min(0).max(1000000).default(0),
+  foodSales: z.coerce.number().min(0).max(1000000).default(0),
+  wineSales: z.coerce.number().min(0).max(1000000).default(0),
 });
 
 const gridAssociateSchema = z.object({
@@ -661,7 +681,7 @@ async function getGridSubmission(start: string, end: string) {
   return submission || null;
 }
 
-async function buildTipsGrid(requestedStart?: string) {
+async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
   const startDate = requestedStart ? parseDateKey(requestedStart) : null;
   const period = startDate
     ? {
@@ -707,11 +727,20 @@ async function buildTipsGrid(requestedStart?: string) {
       .map((row) => row.cells.find((cell) => cell.date === date))
       .filter((cell) => moneyNumber(cell?.tipAmount) > 0);
     const grossSales = moneyNumber(summariesByDate.get(date)?.grossSales);
+    const summary = summariesByDate.get(date);
+    const taxAmount = moneyNumber(summary?.taxAmount);
+    const netSales = Math.max(0, grossSales - taxAmount);
     return {
       date,
       totalTips: moneyString(totalTips),
       grossSales: moneyString(grossSales),
-      tipPercent: grossSales > 0 ? (totalTips / grossSales) * 100 : 0,
+      taxAmount: moneyString(taxAmount),
+      netSales: moneyString(netSales),
+      beerSales: moneyString(summary?.beerSales),
+      liquorSales: moneyString(summary?.liquorSales),
+      foodSales: moneyString(summary?.foodSales),
+      wineSales: moneyString(summary?.wineSales),
+      tipPercent: netSales > 0 ? (totalTips / netSales) * 100 : 0,
       splitCount: activeCells.length,
       splitAmount: activeCells.length === 2 ? moneyString(totalTips / 2) : null,
       report: reportsByDate.get(date) || null,
@@ -719,6 +748,27 @@ async function buildTipsGrid(requestedStart?: string) {
   });
   const week1Total = dayTotals.slice(0, 7).reduce((sum, day) => sum + moneyNumber(day.totalTips), 0);
   const week2Total = dayTotals.slice(7).reduce((sum, day) => sum + moneyNumber(day.totalTips), 0);
+  const monthStart = `${period.start.slice(0, 7)}-01`;
+  const monthProbe = addUtcDays(parseDateKey(monthStart)!, 32);
+  const nextMonthStart = `${monthProbe.toISOString().slice(0, 7)}-01`;
+  const monthEnd = toDateKey(addUtcDays(parseDateKey(nextMonthStart)!, -1));
+  const monthSummaries = await db
+    .select()
+    .from(tipGridDaySummaries)
+    .where(and(gte(tipGridDaySummaries.summaryDate, monthStart), lte(tipGridDaySummaries.summaryDate, monthEnd)));
+  const salesTotal = (rows: any[]) => {
+    const grossSales = rows.reduce((sum, row) => sum + moneyNumber(row.grossSales), 0);
+    const taxAmount = rows.reduce((sum, row) => sum + moneyNumber(row.taxAmount), 0);
+    return {
+      grossSales: moneyString(grossSales),
+      taxAmount: moneyString(taxAmount),
+      netSales: moneyString(Math.max(0, grossSales - taxAmount)),
+      beerSales: sumMoney(rows, "beerSales"),
+      liquorSales: sumMoney(rows, "liquorSales"),
+      foodSales: sumMoney(rows, "foodSales"),
+      wineSales: sumMoney(rows, "wineSales"),
+    };
+  };
   const banquetReports = await db
     .select()
     .from(tipBanquetReports)
@@ -738,6 +788,13 @@ async function buildTipsGrid(requestedStart?: string) {
       banquetTips: moneyString(report.banquetTips),
     })),
     banquetTotal: moneyString(banquetTotal),
+    salesTotals: {
+      week1: salesTotal(dayTotals.slice(0, 7)),
+      week2: salesTotal(dayTotals.slice(7)),
+      period: salesTotal(dayTotals),
+      month: salesTotal(monthSummaries),
+    },
+    canManageSales: await canManageTipsSales(viewerUser),
     submission: submission ? { ...submission, week1Total: moneyString(submission.week1Total), week2Total: moneyString(submission.week2Total), totalTips: moneyString(submission.totalTips) } : null,
     locked: Boolean(submission && submission.status !== "reopened"),
   };
@@ -1613,7 +1670,7 @@ export function registerTipsRoutes(app: Express) {
     try {
       const parsed = periodSchema.safeParse(req.query);
       if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
-      res.json(await buildTipsGrid(parsed.data.start));
+      res.json(await buildTipsGrid(parsed.data.start, req.tipsUser));
     } catch (error) {
       next(error);
     }
@@ -1714,6 +1771,7 @@ export function registerTipsRoutes(app: Express) {
     try {
       const parsed = gridDaySummarySchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid day summary", validation: parsed.error.format() });
+      if (!(await canManageTipsSales(req.tipsUser))) return res.status(403).json({ error: "Manager access is required to update Bistro sales." });
       const period = getPayPeriodForEntryDate(parsed.data.date);
       if (!period) return res.status(400).json({ error: "Invalid day date" });
       const submission = await getGridSubmission(period.start, period.end);
@@ -1725,18 +1783,28 @@ export function registerTipsRoutes(app: Express) {
           payPeriodStart: period.start,
           payPeriodEnd: period.end,
           grossSales: parsed.data.grossSales.toFixed(2),
+          taxAmount: parsed.data.taxAmount.toFixed(2),
+          beerSales: parsed.data.beerSales.toFixed(2),
+          liquorSales: parsed.data.liquorSales.toFixed(2),
+          foodSales: parsed.data.foodSales.toFixed(2),
+          wineSales: parsed.data.wineSales.toFixed(2),
           updatedBy: req.tipsUser?.id || null,
         })
         .onConflictDoUpdate({
           target: tipGridDaySummaries.summaryDate,
           set: {
             grossSales: parsed.data.grossSales.toFixed(2),
+            taxAmount: parsed.data.taxAmount.toFixed(2),
+            beerSales: parsed.data.beerSales.toFixed(2),
+            liquorSales: parsed.data.liquorSales.toFixed(2),
+            foodSales: parsed.data.foodSales.toFixed(2),
+            wineSales: parsed.data.wineSales.toFixed(2),
             updatedBy: req.tipsUser?.id || null,
             updatedAt: new Date(),
           },
         })
         .returning();
-      res.json({ summary: { ...summary, grossSales: moneyString(summary.grossSales) } });
+      res.json({ summary: { ...summary, grossSales: moneyString(summary.grossSales), taxAmount: moneyString(summary.taxAmount), beerSales: moneyString(summary.beerSales), liquorSales: moneyString(summary.liquorSales), foodSales: moneyString(summary.foodSales), wineSales: moneyString(summary.wineSales) } });
     } catch (error) {
       next(error);
     }
@@ -1874,7 +1942,7 @@ export function registerTipsRoutes(app: Express) {
     try {
       const parsed = periodSchema.safeParse(req.body || {});
       if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
-      const grid = await buildTipsGrid(parsed.data.start);
+      const grid = await buildTipsGrid(parsed.data.start, req.tipsUser);
       const existing = await getGridSubmission(grid.period.start, grid.period.end);
       if (existing && existing.status !== "reopened") return res.status(409).json({ error: "This pay period has already been submitted." });
       const daysWithTips = grid.dayTotals.filter((day: any) => moneyNumber(day.totalTips) > 0);
@@ -1932,7 +2000,7 @@ export function registerTipsRoutes(app: Express) {
     try {
       const parsed = periodSchema.safeParse(req.query);
       if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
-      const grid = await buildTipsGrid(parsed.data.start);
+      const grid = await buildTipsGrid(parsed.data.start, req.tipsUser);
       const submission = await getGridSubmission(grid.period.start, grid.period.end);
       const pdfPath = submission?.pdfPath || (await generateTipsGridPdf(grid, submission));
       const absolute = resolvePrivateFile(pdfPath);

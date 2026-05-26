@@ -121,9 +121,11 @@ type TipsGridRow = {
 type TipsGrid = {
   period: { start: string; end: string; dayNumber: number; days: string[] };
   rows: TipsGridRow[];
-  dayTotals: Array<{ date: string; totalTips: string; grossSales: string; tipPercent: number; splitCount: number; splitAmount: string | null; report: DailyReport | null }>;
+  dayTotals: Array<{ date: string; totalTips: string; grossSales: string; taxAmount: string; netSales: string; beerSales: string; liquorSales: string; foodSales: string; wineSales: string; tipPercent: number; splitCount: number; splitAmount: string | null; report: DailyReport | null }>;
   banquetReports: Array<{ id: string; eventDate: string; eventName: string; grossSales: string; banquetTips: string; notes?: string | null; originalFileName?: string | null; storagePath?: string | null }>;
   banquetTotal: string;
+  salesTotals: Record<"week1" | "week2" | "period" | "month", { grossSales: string; taxAmount: string; netSales: string; beerSales: string; liquorSales: string; foodSales: string; wineSales: string }>;
+  canManageSales: boolean;
   week1Total: string;
   week2Total: string;
   totalTips: string;
@@ -704,7 +706,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [grossDrafts, setGrossDrafts] = useState<Record<string, string>>({});
+  const [salesDrafts, setSalesDrafts] = useState<Record<string, Record<string, string>>>({});
   const [addAssociateOpen, setAddAssociateOpen] = useState(false);
   const [activeEntry, setActiveEntry] = useState<{ userId: string; date: string } | null>(null);
   const [entryModalAmount, setEntryModalAmount] = useState("");
@@ -736,13 +738,13 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] }),
     onError: (error: Error) => toast({ title: "Tip save failed", description: error.message, variant: "destructive" }),
   });
-  const saveGrossSales = useMutation({
-    mutationFn: async ({ date, grossSales }: { date: string; grossSales: string }) => {
-      const response = await apiRequest("POST", "/api/tips/grid/days", { date, grossSales });
+  const saveSalesDay = useMutation({
+    mutationFn: async ({ date, sales }: { date: string; sales: Record<string, string> }) => {
+      const response = await apiRequest("POST", "/api/tips/grid/days", { date, ...sales });
       return response.json();
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] }),
-    onError: (error: Error) => toast({ title: "Gross sales save failed", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Sales save failed", description: error.message, variant: "destructive" }),
   });
   const confirmEntry = useMutation({
     mutationFn: async (entryId: string) => apiRequest("POST", `/api/tips/grid/entries/${entryId}/confirm`),
@@ -830,16 +832,24 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const week2Days = grid.period.days.slice(7, 14);
   const dayTotal = (date: string) => grid.dayTotals.find((day) => day.date === date);
   const cellValue = (row: TipsGridRow, cell: TipsGridCell) => drafts[`${row.associate.id}:${cell.date}`] ?? cell.tipAmount;
-  const grossValue = (date: string) => grossDrafts[date] ?? dayTotal(date)?.grossSales ?? "0.00";
+  const salesFieldValue = (date: string, field: keyof TipsGrid["dayTotals"][number]) => salesDrafts[date]?.[field as string] ?? String(dayTotal(date)?.[field] ?? "0.00");
+  const canManageSales = Boolean(grid.canManageSales);
   const commitCell = (row: TipsGridRow, cell: TipsGridCell) => {
     const value = cellValue(row, cell);
     if (value === cell.tipAmount || grid.locked || cell.confirmed) return;
     saveEntry.mutate({ userId: row.associate.id, entryDate: cell.date, tipAmount: value || "0" });
   };
-  const commitGross = (date: string) => {
-    const value = grossValue(date);
-    if (value === dayTotal(date)?.grossSales || grid.locked) return;
-    saveGrossSales.mutate({ date, grossSales: value || "0" });
+  const commitSales = (date: string) => {
+    if (grid.locked || !canManageSales) return;
+    const sales = {
+      grossSales: salesFieldValue(date, "grossSales") || "0",
+      taxAmount: salesFieldValue(date, "taxAmount") || "0",
+      beerSales: salesFieldValue(date, "beerSales") || "0",
+      liquorSales: salesFieldValue(date, "liquorSales") || "0",
+      foodSales: salesFieldValue(date, "foodSales") || "0",
+      wineSales: salesFieldValue(date, "wineSales") || "0",
+    };
+    saveSalesDay.mutate({ date, sales });
   };
   const activeRow = activeEntry ? grid.rows.find((row) => row.associate.id === activeEntry.userId) : null;
   const activeCell = activeRow && activeEntry ? activeRow.cells.find((cell) => cell.date === activeEntry.date) : null;
@@ -853,22 +863,39 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
     setDrafts((current) => ({ ...current, [`${activeRow.associate.id}:${activeCell.date}`]: entryModalAmount || "0" }));
     setActiveEntry(null);
   };
+  const renderSalesInput = (date: string, field: "grossSales" | "taxAmount" | "beerSales" | "liquorSales" | "foodSales" | "wineSales", label: string) => (
+    <div>
+      <Label className="text-xs text-[#5f5247]">{label}</Label>
+      <Input
+        className={`${C.field} h-9 text-right`}
+        inputMode="decimal"
+        disabled={grid.locked || !canManageSales}
+        value={salesFieldValue(date, field)}
+        onChange={(event) => setSalesDrafts((current) => ({
+          ...current,
+          [date]: {
+            ...(current[date] || {}),
+            [field]: event.target.value.replace(/[^0-9.]/g, ""),
+          },
+        }))}
+        onBlur={() => commitSales(date)}
+      />
+    </div>
+  );
 
   const renderDayControls = (date: string) => {
     const totalForDay = dayTotal(date);
     return (
       <div className="space-y-2">
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5f5247]">$</span>
-          <Input
-            className={`${C.field} h-11 pl-7 text-right`}
-            inputMode="decimal"
-            disabled={grid.locked}
-            value={grossValue(date)}
-            onChange={(event) => setGrossDrafts((current) => ({ ...current, [date]: event.target.value.replace(/[^0-9.]/g, "") }))}
-            onBlur={() => commitGross(date)}
-            aria-label={`Gross sales ${date}`}
-          />
+        <div className="rounded-md border border-[#e0d3c1] bg-white px-3 py-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-[#5f5247]">Net sales</span>
+            <span className="font-semibold text-[#201814]">{formatMoney(totalForDay?.netSales)}</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-xs text-[#5f5247]">
+            <span>Gross {formatMoney(totalForDay?.grossSales)}</span>
+            <span>Tax {formatMoney(totalForDay?.taxAmount)}</span>
+          </div>
         </div>
         <div className="flex items-center justify-between text-sm text-[#5f5247]">
           <span>Tip % {formatPercent(totalForDay?.tipPercent)}</span>
@@ -999,17 +1026,10 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                       <div className="font-semibold">{isToday ? "Today" : formatDisplayDate(date).split(",")[0]}</div>
                       <div className="text-xs text-[#5f5247]">{formatDisplayDate(date).replace(/^\w+,\s*/, "")}</div>
                       <div className="mt-2 space-y-1">
-                        <div className="relative">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-[#5f5247]">$</span>
-                          <Input
-                            className={`${C.field} h-8 pl-5 text-right text-xs`}
-                            inputMode="decimal"
-                            disabled={grid.locked}
-                            value={grossValue(date)}
-                            onChange={(event) => setGrossDrafts((current) => ({ ...current, [date]: event.target.value.replace(/[^0-9.]/g, "") }))}
-                            onBlur={() => commitGross(date)}
-                            aria-label={`Gross sales ${date}`}
-                          />
+                        <div className="rounded-md border border-[#e0d3c1] bg-white px-2 py-1 text-xs text-[#5f5247]">
+                          <div className="flex justify-between gap-2"><span>Gross</span><span>{formatMoney(totalForDay?.grossSales)}</span></div>
+                          <div className="flex justify-between gap-2"><span>Tax</span><span>{formatMoney(totalForDay?.taxAmount)}</span></div>
+                          <div className="flex justify-between gap-2 font-semibold text-[#201814]"><span>Net</span><span>{formatMoney(totalForDay?.netSales)}</span></div>
                         </div>
                         <div className="text-center text-xs text-[#5f5247]">Tip % {formatPercent(totalForDay?.tipPercent)}</div>
                         {totalForDay?.splitCount === 2 && (
@@ -1187,6 +1207,79 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
           </CardContent>
         </Card>
       </div>
+
+      <Card className={C.shell}>
+        <CardHeader>
+          <CardTitle className={C.ink}>Bistro sales</CardTitle>
+          <CardDescription className={C.muted}>
+            GM/admin, Bistro Manager, or Bistro Supervisor can enter daily sales. Tip percentage uses net sales after tax.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-4">
+            <StatCard label="Period gross" value={formatMoney(grid.salesTotals.period.grossSales)} />
+            <StatCard label="Tax deducted" value={formatMoney(grid.salesTotals.period.taxAmount)} />
+            <StatCard label="Period net" value={formatMoney(grid.salesTotals.period.netSales)} tone="green" />
+            <StatCard label="Month net" value={formatMoney(grid.salesTotals.month.netSales)} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm">
+              <div className="text-[#5f5247]">Food</div>
+              <div className="text-xl font-semibold text-[#201814]">{formatMoney(grid.salesTotals.period.foodSales)}</div>
+            </div>
+            <div className="rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm">
+              <div className="text-[#5f5247]">Beer</div>
+              <div className="text-xl font-semibold text-[#201814]">{formatMoney(grid.salesTotals.period.beerSales)}</div>
+            </div>
+            <div className="rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm">
+              <div className="text-[#5f5247]">Liquor</div>
+              <div className="text-xl font-semibold text-[#201814]">{formatMoney(grid.salesTotals.period.liquorSales)}</div>
+            </div>
+            <div className="rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm">
+              <div className="text-[#5f5247]">Wine</div>
+              <div className="text-xl font-semibold text-[#201814]">{formatMoney(grid.salesTotals.period.wineSales)}</div>
+            </div>
+          </div>
+          {!canManageSales && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              Sales entry is limited to admin/GM, Bistro Manager, or Bistro Supervisor accounts.
+            </div>
+          )}
+          <div className="grid gap-3 lg:grid-cols-2">
+            {[week1Days, week2Days].map((days, index) => (
+              <div key={index} className="rounded-xl border border-[#ddccb5] bg-white">
+                <div className="border-b border-[#e0d3c1] bg-[#fbf6ee] p-3 font-semibold text-[#201814]">Week {index + 1} sales</div>
+                <div className="divide-y divide-[#e0d3c1]">
+                  {days.map((date) => {
+                    const totalForDay = dayTotal(date);
+                    return (
+                      <div key={date} className="space-y-3 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="font-semibold text-[#201814]">{date === todayKey() ? formatTodayLabel(date) : formatDisplayDate(date, "long")}</div>
+                            <div className="text-xs text-[#5f5247]">Net {formatMoney(totalForDay?.netSales)} | Tip % {formatPercent(totalForDay?.tipPercent)}</div>
+                          </div>
+                          <Button type="button" size="sm" variant="outline" className={C.outline} disabled={grid.locked || !canManageSales || saveSalesDay.isPending} onClick={() => commitSales(date)}>
+                            Save
+                          </Button>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          {renderSalesInput(date, "grossSales", "Gross")}
+                          {renderSalesInput(date, "taxAmount", "Tax")}
+                          {renderSalesInput(date, "foodSales", "Food")}
+                          {renderSalesInput(date, "beerSales", "Beer")}
+                          {renderSalesInput(date, "liquorSales", "Liquor")}
+                          {renderSalesInput(date, "wineSales", "Wine")}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className={C.shell}>
         <CardHeader>

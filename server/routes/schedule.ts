@@ -175,6 +175,11 @@ function hasHousekeepingManagerRole(roles: unknown) {
   });
 }
 
+function hasBistroScheduleRole(value: unknown) {
+  const normalized = String(value || "").toLowerCase();
+  return normalized.includes("bistro") || normalized.includes("breakfast");
+}
+
 function rolesArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
   if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -366,11 +371,18 @@ async function publicScheduleUserWithProfile(user: any) {
   const baseUser = publicScheduleUser(user);
   const isDepartmentManager = Boolean(scheduleEmployee?.isDepartmentManager || hasManagerAccessRole(scheduleEmployee, user));
   const isAdmin = baseUser.isAdmin || isDepartmentManager;
+  const scheduleRoles = rolesArray(scheduleEmployee?.rolesJson || user.position);
+  const canAccessTips = baseUser.isSuperAdmin
+    || hasBistroScheduleRole(user.position)
+    || hasBistroScheduleRole(scheduleEmployee?.department)
+    || hasBistroScheduleRole(scheduleEmployee?.position)
+    || scheduleRoles.some(hasBistroScheduleRole);
   return {
     ...baseUser,
     role: isAdmin && baseUser.role === "employee" ? "manager" : baseUser.role,
     isAdmin,
-    scheduleRoles: rolesArray(scheduleEmployee?.rolesJson || user.position),
+    scheduleRoles,
+    canAccessTips,
     department: scheduleEmployee ? primaryOperationalDepartment(scheduleEmployee, user.position) : null,
     isDepartmentManager,
   };
@@ -419,23 +431,28 @@ async function getScheduleRequestDepartment(user: any) {
 async function getDepartmentManagerEmails(department: string) {
   const users = await db.select().from(tipsUsers);
   const employees = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
-  const employeeByEmail = new Map(employees.map((employee) => [normalizeEmail(String(employee.email || "")), employee]));
   const managerEmails: string[] = [];
   const fallbackEmails = new Set<string>(SCHEDULE_ADMIN_EMAILS);
+  const targetDepartment = normalizeDepartment(department);
 
   for (const user of users) {
     const email = normalizeEmail(String(user.email || ""));
     if (!email || user.disabledAt) continue;
     const publicUser = publicScheduleUser(user);
-    const employee = employeeByEmail.get(email);
+    const employee = findEmployeeForUserInList(user, employees);
     if (!publicUser.isAdmin && !employee?.isDepartmentManager && !hasManagerAccessRole(employee, user)) continue;
-    const managerDepartment = primaryOperationalDepartment(employee, user.position);
-    if (managerDepartment === department) managerEmails.push(email);
+    const managedDepartments = managerDepartmentsForUser(user, employees);
+    if (managedDepartments.includes(targetDepartment)) managerEmails.push(email);
     if (publicUser.isSuperAdmin) fallbackEmails.add(email);
   }
 
   const selected = managerEmails.length > 0 ? managerEmails : Array.from(fallbackEmails);
   return Array.from(new Set(selected.filter(Boolean)));
+}
+
+async function getScheduleRequestDepartmentsForManager(user: any) {
+  const employees = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
+  return managerDepartmentsForUser(user, employees);
 }
 
 async function sendScheduleRequestEmail(request: any, requester: any, managerEmails: string[]) {
@@ -1819,12 +1836,13 @@ export function registerScheduleRoutes(app: Express) {
         .select({ request: scheduleRequests, user: tipsUsers })
         .from(scheduleRequests)
         .innerJoin(tipsUsers, eq(scheduleRequests.requesterUserId, tipsUsers.id));
-      let rows;
+      let rows: Array<{ request: any; user: any }>;
       if (user.isSuperAdmin) {
         rows = await query.orderBy(desc(scheduleRequests.requestDate), desc(scheduleRequests.createdAt));
       } else if (user.isAdmin) {
-        const department = await getScheduleRequestDepartment(req.scheduleUser);
-        rows = await query.where(eq(scheduleRequests.department, department)).orderBy(desc(scheduleRequests.requestDate), desc(scheduleRequests.createdAt));
+        const departments = await getScheduleRequestDepartmentsForManager(req.scheduleUser);
+        if (!departments.length) rows = [];
+        else rows = await query.where(inArray(scheduleRequests.department, departments)).orderBy(desc(scheduleRequests.requestDate), desc(scheduleRequests.createdAt));
       } else {
         rows = await query.where(eq(scheduleRequests.requesterUserId, req.scheduleUser.id)).orderBy(desc(scheduleRequests.requestDate), desc(scheduleRequests.createdAt));
       }
@@ -1886,8 +1904,8 @@ export function registerScheduleRoutes(app: Express) {
       const [existing] = await db.select().from(scheduleRequests).where(eq(scheduleRequests.id, req.params.id)).limit(1);
       if (!existing) return res.status(404).json({ error: "Schedule request not found" });
       if (!user.isSuperAdmin) {
-        const managerDepartment = await getScheduleRequestDepartment(req.scheduleUser);
-        if (existing.department !== managerDepartment) return res.status(403).json({ error: "This request belongs to another department." });
+        const departments = await getScheduleRequestDepartmentsForManager(req.scheduleUser);
+        if (!departments.includes(existing.department)) return res.status(403).json({ error: "This request belongs to another department." });
       }
       const [request] = await db
         .update(scheduleRequests)

@@ -154,6 +154,7 @@ type ScheduleUser = {
   role?: string;
   isAdmin: boolean;
   isSuperAdmin: boolean;
+  canAccessTips?: boolean;
 };
 
 type ScheduleRequest = {
@@ -2114,6 +2115,16 @@ export default function SchedulePage() {
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("Courtyard Schedule Builder")}</h1>
           </div>
           <div className="flex flex-wrap gap-2" data-tour="week-controls">
+            {!shareToken && (
+              <Button asChild variant="outline" className={C.outline}>
+                <a href="/courtyard">Home</a>
+              </Button>
+            )}
+            {!shareToken && user?.canAccessTips && (
+              <Button asChild className={C.green}>
+                <a href="/tips">Tips</a>
+              </Button>
+            )}
             <Button variant="outline" className={C.outline} onClick={() => setSpanish((value) => !value)}>
               {spanish ? "English" : "Espanol"}
             </Button>

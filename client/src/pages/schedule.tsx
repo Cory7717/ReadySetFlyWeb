@@ -1403,7 +1403,7 @@ function HousekeepingSchedulingGuide({ spanish }: { spanish: boolean }) {
   );
 }
 
-function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onHousekeepingBoard, spanish }: { payload: SchedulePayload; editable: boolean; currentUser?: ScheduleUser | null; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, department: string, assignment?: ShiftAssignment) => void; onCopyShift: (assignment: ShiftAssignment, employee: ScheduleEmployee, date: string, department: string) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board?: HousekeepingBoard) => void }) {
+function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onCopyPreviousEmployee, onHousekeepingBoard, spanish }: { payload: SchedulePayload; editable: boolean; currentUser?: ScheduleUser | null; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, department: string, assignment?: ShiftAssignment) => void; onCopyShift: (assignment: ShiftAssignment, employee: ScheduleEmployee, date: string, department: string) => void; onCopyPreviousEmployee: (employee: ScheduleEmployee, department: string) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board?: HousekeepingBoard) => void }) {
   const assignments = useMemo(() => new Map(payload.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment])), [payload.assignments]);
   const housekeepingBoards = useMemo(() => new Map((payload.housekeepingBoards || []).map((board) => [`${board.employeeId}:${board.boardDate}`, board])), [payload.housekeepingBoards]);
   const shiftTypes = useMemo(() => new Map(payload.shiftTypes.map((shift) => [shift.id, shift])), [payload.shiftTypes]);
@@ -1449,7 +1449,19 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onH
                   </tr>,
                   ...employees.map((employee) => (
                     <tr key={employee.id}>
-                      <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-white p-2 align-middle font-medium">{employee.displayName}<div className="text-xs text-[#5f5247]">{employeeScheduleSubtitle(employee)}</div></td>
+                      <td className="sticky left-0 z-10 border border-[#e0d3c1] bg-white p-2 align-middle font-medium">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            {employee.displayName}
+                            <div className="text-xs text-[#5f5247]">{employeeScheduleSubtitle(employee)}</div>
+                          </div>
+                          {editable && editableDepartments.includes(department) && (
+                            <Button type="button" size="sm" variant="outline" className={`h-7 px-2 text-[11px] ${C.outline}`} onClick={() => onCopyPreviousEmployee(employee, department)}>
+                              Copy prior
+                            </Button>
+                          )}
+                        </div>
+                      </td>
                       {payload.days.map((day) => {
                         const rawAssignment = assignments.get(`${employee.id}:${day}`);
                         const hkBoard = housekeepingBoards.get(`${employee.id}:${day}`);
@@ -1533,7 +1545,17 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onH
                 <div className="space-y-3">
                   {employees.map((employee) => (
                     <div key={employee.id} className="rounded-xl border border-[#e0d3c1] bg-white p-3">
-                      <div className="mb-2 flex justify-between"><div className="font-semibold">{employee.displayName}</div><Badge variant="outline">{payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0} hrs</Badge></div>
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-semibold">{employee.displayName}</div>
+                          {editable && editableDepartments.includes(department) && (
+                            <Button type="button" size="sm" variant="outline" className={`mt-1 h-7 px-2 text-xs ${C.outline}`} onClick={() => onCopyPreviousEmployee(employee, department)}>
+                              Copy prior week
+                            </Button>
+                          )}
+                        </div>
+                        <Badge variant="outline">{payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0} hrs</Badge>
+                      </div>
                       <div className="grid gap-2">
                         {payload.days.map((day, index) => {
                           const rawAssignment = assignments.get(`${employee.id}:${day}`);
@@ -2021,6 +2043,18 @@ export default function SchedulePage() {
     },
     onError: (error: Error) => toast({ title: "Shift save failed", description: error.message, variant: "destructive" }),
   });
+  const copyPreviousShifts = useMutation({
+    mutationFn: async (body: { scope: "all" | "employee"; employeeId?: string; department?: string }) => {
+      if (!payload?.schedule.id) throw new Error("Select a schedule before copying previous shifts.");
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload.schedule.id}/copy-previous`, body);
+      return response.json();
+    },
+    onSuccess: (data: SchedulePayload & { copied?: number }) => {
+      toast({ title: "Previous schedule copied", description: `${data.copied || 0} shift(s) copied into this week.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
+    },
+    onError: (error: Error) => toast({ title: "Copy failed", description: error.message, variant: "destructive" }),
+  });
   const saveHousekeepingBoard = useMutation({
     mutationFn: (body: any) => apiRequest("PUT", `/api/schedule/weeks/${payload?.schedule.id}/housekeeping-board`, body),
     onSuccess: () => {
@@ -2158,6 +2192,21 @@ export default function SchedulePage() {
                   {payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "archive" })}><Archive className="mr-2 h-4 w-4" />{t("Archive")}</Button>}
                   {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => shareLink.mutate()}><Share2 className="mr-2 h-4 w-4" />{t("Copy share link")}</Button>}
                   {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} disabled={emailSchedule.isPending} onClick={() => emailSchedule.mutate()}><Mail className="mr-2 h-4 w-4" />{emailSchedule.isPending ? t("Emailing...") : t("Email schedule")}</Button>}
+                  {editable && user?.isAdmin && (
+                    <Button
+                      variant="outline"
+                      className={C.outline}
+                      disabled={copyPreviousShifts.isPending}
+                      onClick={() => {
+                        if (window.confirm("Copy eligible shifts from the previous schedule into this week? Existing cells in the copied scope will be overwritten.")) {
+                          copyPreviousShifts.mutate({ scope: "all" });
+                        }
+                      }}
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      {copyPreviousShifts.isPending ? "Copying..." : "Copy prior shifts"}
+                    </Button>
+                  )}
                   <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/pdf`)}><Download className="mr-2 h-4 w-4" />PDF</a></Button>
                   <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/excel`)}><FileSpreadsheet className="mr-2 h-4 w-4" />Excel</a></Button>
                 </div>
@@ -2361,6 +2410,11 @@ export default function SchedulePage() {
                 managerNote: assignment.managerNote,
                 isOpenShift: assignment.isOpenShift,
               })}
+              onCopyPreviousEmployee={(employee, department) => {
+                if (window.confirm(`Copy ${employee.displayName}'s prior-week ${department} shifts into this schedule? Existing cells for that associate/department will be overwritten.`)) {
+                  copyPreviousShifts.mutate({ scope: "employee", employeeId: employee.id, department });
+                }
+              }}
               onHousekeepingBoard={(employee, date, board) => setSelectedHousekeepingBoard({ employee, date, board })}
             />
             {user?.isAdmin && !shareToken && (

@@ -839,6 +839,12 @@ const shiftAssignmentSchema = z.object({
   clear: z.boolean().default(false),
 });
 
+const copyPreviousScheduleSchema = z.object({
+  scope: z.enum(["all", "employee"]).default("all"),
+  employeeId: z.string().optional().nullable(),
+  department: z.string().trim().max(120).optional().nullable(),
+});
+
 const aiDraftApplySchema = z.object({
   assignments: z.array(z.object({
     employeeId: z.string().min(1),
@@ -2174,6 +2180,80 @@ export function registerScheduleRoutes(app: Express) {
       }
       await audit(schedule.id, req.scheduleUser.id, "shift_updated", { employeeId, shiftDate: parsed.data.shiftDate });
       res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/copy-previous", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      if (schedule.status === "published") return res.status(423).json({ error: "Published schedules are locked. Reopen before copying previous shifts." });
+      const parsed = copyPreviousScheduleSchema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: "Invalid copy request", validation: parsed.error.format() });
+      if (parsed.data.scope === "employee" && !parsed.data.employeeId) return res.status(400).json({ error: "Choose an associate to copy." });
+
+      const [previous] = await db.select().from(weeklySchedules).where(lt(weeklySchedules.weekStartDate, schedule.weekStartDate)).orderBy(desc(weeklySchedules.weekStartDate)).limit(1);
+      if (!previous) return res.status(404).json({ error: "No previous schedule found to copy from." });
+
+      const [employees, shiftTypes, previousAssignments] = await Promise.all([
+        db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true)),
+        db.select().from(scheduleShiftTypes),
+        db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, previous.id)),
+      ]);
+      const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+      const shiftTypeById = new Map(shiftTypes.map((shift) => [shift.id, shift]));
+      const shiftTypeByLabel = new Map(shiftTypes.map((shift) => [String(shift.label || "").toUpperCase(), shift]));
+      const editableDepartments = publicScheduleUser(req.scheduleUser).isSuperAdmin ? DEPARTMENTS : managerDepartmentsForUser(req.scheduleUser, employees);
+      const requestedDepartment = parsed.data.department ? normalizeDepartment(parsed.data.department) : null;
+      if (requestedDepartment && !editableDepartments.includes(requestedDepartment)) return res.status(403).json({ error: "You can only copy shifts for your assigned department." });
+
+      const previousStart = parseDateKey(previous.weekStartDate)!;
+      const nextStart = parseDateKey(schedule.weekStartDate)!;
+      let copied = 0;
+      for (const assignment of previousAssignments) {
+        if (parsed.data.scope === "employee" && assignment.employeeId !== parsed.data.employeeId) continue;
+        const employee = assignment.employeeId ? employeeById.get(assignment.employeeId) : null;
+        const shiftType = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
+        const department = assignmentRenderDepartment(assignment, employee, shiftType);
+        if (requestedDepartment && department !== requestedDepartment) continue;
+        if (!editableDepartments.includes(department)) continue;
+        if (!publicScheduleUser(req.scheduleUser).isSuperAdmin && sectionCompleted(schedule, department)) {
+          return res.status(423).json({ error: `${department} has already been marked completed. Reopen that section before copying previous shifts.` });
+        }
+        const offset = Math.round((parseDateKey(assignment.shiftDate)!.getTime() - previousStart.getTime()) / DAY_MS);
+        const shiftDate = toDateKey(new Date(nextStart.getTime() + offset * DAY_MS));
+        await db.insert(scheduleShiftAssignments).values({
+          scheduleId: schedule.id,
+          employeeId: assignment.employeeId,
+          shiftDate,
+          shiftTypeId: assignment.shiftTypeId,
+          customStartTime: assignment.customStartTime,
+          customEndTime: assignment.customEndTime,
+          unpaidBreakMinutes: assignment.unpaidBreakMinutes,
+          roleNote: assignment.roleNote,
+          roleWorked: assignment.roleWorked,
+          managerNote: assignment.managerNote,
+          isOpenShift: assignment.isOpenShift,
+        } as any).onConflictDoUpdate({
+          target: [scheduleShiftAssignments.scheduleId, scheduleShiftAssignments.employeeId, scheduleShiftAssignments.shiftDate],
+          set: {
+            shiftTypeId: assignment.shiftTypeId,
+            customStartTime: assignment.customStartTime,
+            customEndTime: assignment.customEndTime,
+            unpaidBreakMinutes: assignment.unpaidBreakMinutes,
+            roleNote: assignment.roleNote,
+            roleWorked: assignment.roleWorked,
+            managerNote: assignment.managerNote,
+            isOpenShift: assignment.isOpenShift,
+            updatedAt: new Date(),
+          } as any,
+        });
+        copied += 1;
+      }
+      await audit(schedule.id, req.scheduleUser.id, "schedule_previous_shifts_copied", { previousScheduleId: previous.id, copied, ...parsed.data });
+      res.json({ ...(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser) as any), copied });
     } catch (error) {
       next(error);
     }

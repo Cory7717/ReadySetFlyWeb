@@ -86,6 +86,7 @@ import TipsPage from "@/pages/tips";
 import SchedulePage from "@/pages/schedule";
 import OpsReportPage from "@/pages/ops-report";
 import CourtyardPortalPage from "@/pages/courtyard";
+import CourtyardBudgetPage from "@/pages/courtyard-budget";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -239,6 +240,7 @@ function Router() {
       <Route path="/tips" component={TipsPage} />
       <Route path="/tips/admin" component={TipsPage} />
       <Route path="/courtyard" component={CourtyardPortalPage} />
+      <Route path="/courtyard/budget" component={CourtyardBudgetPage} />
       <Route path="/schedule" component={SchedulePage} />
       <Route path="/opsreport" component={OpsReportPage} />
       <Route path="/404" component={NotFound} />

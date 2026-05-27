@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Coffee, DoorOpen, FileSpreadsheet, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
+import { CalendarDays, Coffee, DollarSign, DoorOpen, FileSpreadsheet, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -361,6 +361,15 @@ export default function CourtyardPortalPage() {
       tone: C.outline,
       disabled: !toolEnabled(user, "opsreport"),
     },
+    ...(user.isAdmin ? [{
+      href: "/courtyard/budget",
+      icon: DollarSign,
+      title: "Budget",
+      description: "View monthly labor, expense, revenue, forecast, and department checkbook budgets.",
+      action: "Open Budget",
+      tone: C.green,
+      disabled: false,
+    }] : []),
   ];
 
   return (
@@ -396,7 +405,7 @@ export default function CourtyardPortalPage() {
           </CardContent>
         </Card>
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-4">
           {tools.map((tool) => {
             const Icon = tool.icon;
             return (

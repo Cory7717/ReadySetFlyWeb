@@ -633,6 +633,85 @@ export const scheduleAuditLog = pgTable("schedule_audit_log", {
   index("idx_schedule_audit_created").on(table.createdAt),
 ]);
 
+export const courtyardBudgetUploads = pgTable("courtyard_budget_uploads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: text("property_id").notNull().default("courtyard-austin-lakeline"),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  originalFileName: text("original_file_name").notNull(),
+  uploadedBy: varchar("uploaded_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+}, (table) => [
+  index("idx_courtyard_budget_upload_period").on(table.propertyId, table.year, table.month),
+]);
+
+export const courtyardBudgetLineItems = pgTable("courtyard_budget_line_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  budgetUploadId: varchar("budget_upload_id").notNull().references(() => courtyardBudgetUploads.id, { onDelete: "cascade" }),
+  propertyId: text("property_id").notNull().default("courtyard-austin-lakeline"),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  department: text("department").notNull(),
+  sourceSheet: text("source_sheet"),
+  lineItem: text("line_item").notNull(),
+  coa: text("coa"),
+  categoryType: text("category_type").notNull().default("controllable"),
+  visibilityLevel: text("visibility_level").notNull().default("department"),
+  actualAmount: numeric("actual_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  actualPercent: numeric("actual_percent", { precision: 9, scale: 4 }).notNull().default("0"),
+  originalBudgetAmount: numeric("original_budget_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  originalBudgetPercent: numeric("original_budget_percent", { precision: 9, scale: 4 }).notNull().default("0"),
+  updatedForecastAmount: numeric("updated_forecast_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  priorYearAmount: numeric("prior_year_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  priorYearPercent: numeric("prior_year_percent", { precision: 9, scale: 4 }).notNull().default("0"),
+  ytdActualAmount: numeric("ytd_actual_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  ytdActualPercent: numeric("ytd_actual_percent", { precision: 9, scale: 4 }).notNull().default("0"),
+  ytdBudgetAmount: numeric("ytd_budget_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  ytdBudgetPercent: numeric("ytd_budget_percent", { precision: 9, scale: 4 }).notNull().default("0"),
+  isSensitive: boolean("is_sensitive").notNull().default(false),
+  isHiddenFromDepartmentHead: boolean("is_hidden_from_department_head").notNull().default(false),
+  isTotal: boolean("is_total").notNull().default(false),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_courtyard_budget_lines_period").on(table.propertyId, table.year, table.month),
+  index("idx_courtyard_budget_lines_department").on(table.department),
+]);
+
+export const courtyardBudgetCheckbookEntries = pgTable("courtyard_budget_checkbook_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: text("property_id").notNull().default("courtyard-austin-lakeline"),
+  department: text("department").notNull(),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  entryDate: date("entry_date").notNull(),
+  vendor: text("vendor").notNull(),
+  category: text("category").notNull(),
+  description: text("description"),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  receiptPath: text("receipt_path"),
+  enteredBy: varchar("entered_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_courtyard_budget_checkbook_period").on(table.propertyId, table.year, table.month),
+  index("idx_courtyard_budget_checkbook_department").on(table.department),
+]);
+
+export const courtyardBudgetAuditLog = pgTable("courtyard_budget_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  actorUserId: varchar("actor_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  action: text("action").notNull(),
+  department: text("department"),
+  month: integer("month"),
+  year: integer("year"),
+  metadataJson: jsonb("metadata_json"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_courtyard_budget_audit_period").on(table.year, table.month),
+  index("idx_courtyard_budget_audit_created").on(table.createdAt),
+]);
+
 // Aircraft Listings (for rent)
 export const aircraftListings = pgTable("aircraft_listings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1847,6 +1926,27 @@ export const insertScheduleHousekeepingBoardSchema = createInsertSchema(schedule
 });
 
 export const insertScheduleAuditLogSchema = createInsertSchema(scheduleAuditLog).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCourtyardBudgetUploadSchema = createInsertSchema(courtyardBudgetUploads).omit({
+  id: true,
+  uploadedAt: true,
+});
+
+export const insertCourtyardBudgetLineItemSchema = createInsertSchema(courtyardBudgetLineItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCourtyardBudgetCheckbookEntrySchema = createInsertSchema(courtyardBudgetCheckbookEntries).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCourtyardBudgetAuditLogSchema = createInsertSchema(courtyardBudgetAuditLog).omit({
   id: true,
   createdAt: true,
 });
@@ -3545,6 +3645,14 @@ export type ScheduleHousekeepingBoard = typeof scheduleHousekeepingBoards.$infer
 export type InsertScheduleHousekeepingBoard = z.infer<typeof insertScheduleHousekeepingBoardSchema>;
 export type ScheduleAuditLog = typeof scheduleAuditLog.$inferSelect;
 export type InsertScheduleAuditLog = z.infer<typeof insertScheduleAuditLogSchema>;
+export type CourtyardBudgetUpload = typeof courtyardBudgetUploads.$inferSelect;
+export type InsertCourtyardBudgetUpload = z.infer<typeof insertCourtyardBudgetUploadSchema>;
+export type CourtyardBudgetLineItem = typeof courtyardBudgetLineItems.$inferSelect;
+export type InsertCourtyardBudgetLineItem = z.infer<typeof insertCourtyardBudgetLineItemSchema>;
+export type CourtyardBudgetCheckbookEntry = typeof courtyardBudgetCheckbookEntries.$inferSelect;
+export type InsertCourtyardBudgetCheckbookEntry = z.infer<typeof insertCourtyardBudgetCheckbookEntrySchema>;
+export type CourtyardBudgetAuditLog = typeof courtyardBudgetAuditLog.$inferSelect;
+export type InsertCourtyardBudgetAuditLog = z.infer<typeof insertCourtyardBudgetAuditLogSchema>;
 
 export type AdminInvite = typeof adminInvites.$inferSelect;
 export type InsertAdminInvite = z.infer<typeof insertAdminInviteSchema>;

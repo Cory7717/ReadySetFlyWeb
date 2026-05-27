@@ -17,11 +17,17 @@ import {
 const PROPERTY_ID = "courtyard-austin-lakeline";
 const PROPERTY_NAME = "Courtyard Austin Lakeline";
 const BUDGET_ADMIN_EMAILS = new Set(
-  (process.env.COURTYARD_BUDGET_ADMIN_EMAILS || "coryarmer@gmail.com,cory.armer@marriott.com")
+  (
+    process.env.COURTYARD_BUDGET_ADMIN_EMAILS ||
+    process.env.SCHEDULE_ADMIN_EMAILS ||
+    process.env.TIPS_SUPER_ADMIN_EMAILS ||
+    "coryarmer@gmail.com,cory.armer@marriott.com"
+  )
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean),
 );
+for (const email of ["coryarmer@gmail.com", "cory.armer@marriott.com"]) BUDGET_ADMIN_EMAILS.add(email);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -103,8 +109,13 @@ function publicUser(user: any) {
 
 async function getUserBySession(req: any) {
   const userId = req.session?.tipsUserId;
-  if (!userId) return null;
-  const [user] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, String(userId))).limit(1);
+  if (userId) {
+    const [user] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, String(userId))).limit(1);
+    if (user) return user;
+  }
+  const authEmail = normalizeEmail(req.user?.claims?.email || req.user?.email || "");
+  if (!authEmail) return null;
+  const [user] = await db.select().from(tipsUsers).where(eq(tipsUsers.email, authEmail)).limit(1);
   return user || null;
 }
 
@@ -385,7 +396,7 @@ export function registerCourtyardBudgetRoutes(app: Express) {
   router.get("/me", async (req: any, res, next) => {
     try {
       const user = await getUserBySession(req);
-      if (!user || user.disabledAt) return res.json({ user: null });
+      if (!user || user.disabledAt) return res.status(401).json({ user: null, error: "Courtyard login required." });
       res.json({ user: await getBudgetAccess(user) });
     } catch (error) {
       next(error);

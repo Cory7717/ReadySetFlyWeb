@@ -75,6 +75,7 @@ function monthLabel(month: number, year: number) {
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(apiUrl(url), { credentials: "include" });
+  if (response.status === 401) return { user: null } as T;
   if (!response.ok) throw new Error(await response.text());
   return response.json();
 }
@@ -151,7 +152,33 @@ export default function CourtyardBudgetPage() {
   });
 
   if (me.isLoading) return <div className={`${C.page} p-8`}>Loading budget dashboard...</div>;
-  if (!me.data?.user?.canAccessBudget) {
+  if (me.isError) {
+    return (
+      <div className={`${C.page} flex items-center justify-center p-4`}>
+        <Card className={`max-w-lg ${C.shell}`}>
+          <CardHeader>
+            <CardTitle>Budget Could Not Load</CardTitle>
+            <CardDescription className={C.muted}>{me.error instanceof Error ? me.error.message : "The budget access check failed."}</CardDescription>
+          </CardHeader>
+          <CardContent><Button asChild className={C.green}><a href="/courtyard">Back to Courtyard</a></Button></CardContent>
+        </Card>
+      </div>
+    );
+  }
+  if (!me.data?.user) {
+    return (
+      <div className={`${C.page} flex items-center justify-center p-4`}>
+        <Card className={`max-w-lg ${C.shell}`}>
+          <CardHeader>
+            <CardTitle>Courtyard Login Required</CardTitle>
+            <CardDescription className={C.muted}>Sign in through the Courtyard portal, then open Budget from the portal card.</CardDescription>
+          </CardHeader>
+          <CardContent><Button asChild className={C.green}><a href="/courtyard">Go to Courtyard Login</a></Button></CardContent>
+        </Card>
+      </div>
+    );
+  }
+  if (!me.data.user.canAccessBudget) {
     return (
       <div className={`${C.page} flex items-center justify-center p-4`}>
         <Card className={`max-w-lg ${C.shell}`}>

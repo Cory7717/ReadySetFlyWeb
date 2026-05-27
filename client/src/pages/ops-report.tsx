@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileSpreadsheet, LockKeyhole, LogOut, Save, Upload } from "lucide-react";
 import { apiUrl } from "@/lib/api";
@@ -15,17 +15,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const C = {
   page: "min-h-screen bg-[#f3efe7] text-[#201814]",
-  shell: "border-[#d7c8b5] bg-[#fffaf2] shadow-[0_18px_45px_rgba(72,52,31,0.10)]",
-  section: "border-[#d7c8b5] bg-white",
-  header: "bg-[#23313d] text-white",
+  shell: "!border-[#d7c8b5] !bg-[#fffaf2] !bg-none !text-[#201814] shadow-[0_18px_45px_rgba(72,52,31,0.10)]",
+  darkShell: "!border-[#4a5360] !bg-[#202833] !bg-none !text-white shadow-[0_18px_45px_rgba(31,24,18,0.18)]",
+  section: "!border-[#d7c8b5] !bg-white !text-[#201814]",
+  header: "bg-[#243746] text-white",
   subheader: "bg-[#d9e6d7] text-[#173c25]",
-  field: "border-[#cdbda8] bg-white text-[#201814] placeholder:text-[#7c6e61]",
-  outline: "border-[#cdbda8] bg-white text-[#201814] hover:bg-[#f8efe2]",
-  green: "bg-[#2f5f46] text-white hover:bg-[#274d39]",
+  field: "!border-[#cdbda8] !bg-white !text-[#201814] placeholder:!text-[#7c6e61]",
+  darkField: "!border-[#d7c8b5] !bg-white !text-[#201814] placeholder:!text-[#7c6e61]",
+  outline: "!border-[#cdbda8] !bg-white !bg-none !text-[#201814] hover:!bg-[#f8efe2]",
+  green: "!bg-[#2f5f46] !bg-none !text-white hover:!bg-[#274d39]",
+  darkButton: "!border-[#4a5360] !bg-[#202833] !bg-none !text-white hover:!bg-[#141b24]",
+  muted: "!text-[#5f5247]",
+  darkMuted: "!text-[#e7dccd]",
+  label: "!text-[#5b4b3b]",
+  darkLabel: "!text-[#f0d9b0]",
 };
 
 type OpsAccess = { unlocked: boolean; user: { employeeDisplayName: string; email: string; isAdmin: boolean } | null; passwordChangeRequired?: boolean };
 type Row = Record<string, string>;
+type LaborHoursResponse = { weekStart: string; scheduleId?: string | null; departments: Record<string, number> };
 
 const emptyRows = (count: number, keys: string[]) =>
   Array.from({ length: count }, (_, index) => keys.reduce<Row>((row, key) => ({ ...row, [key]: key === "no" ? String(index + 1) : "" }), {}));
@@ -45,11 +53,38 @@ function num(value: string | number) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function fmtHours(value: string | number) {
+  const n = num(value);
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function mergeLaborHours(rows: Row[], departments: Record<string, number>, field: "scheduledHours" | "actualHours") {
+  const known = new Set(rows.map((row) => String(row.department || "").trim()));
+  const updated = rows.map((row) => {
+    const department = String(row.department || "").trim();
+    if (!(department in departments)) return row;
+    return { ...row, [field]: fmtHours(departments[department]) };
+  });
+  for (const [department, hours] of Object.entries(departments)) {
+    if (!known.has(department)) updated.push({ department, scheduledHours: "", actualHours: "", budget: "", comments: "", [field]: fmtHours(hours) });
+  }
+  return updated;
+}
+
 function LabeledInput({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
   return (
     <div>
-      <Label className="text-xs font-semibold uppercase tracking-[0.12em] text-[#6b5f54]">{label}</Label>
+      <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>{label}</Label>
       <Input className={`mt-1 ${C.field}`} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+    </div>
+  );
+}
+
+function DarkLabeledInput({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+  return (
+    <div>
+      <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.darkLabel}`}>{label}</Label>
+      <Input className={`mt-1 ${C.darkField}`} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
   );
 }
@@ -85,7 +120,7 @@ function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: stri
               {columns.map((column) => (
                 <td key={column.key} className="border border-[#e0d3c1] p-1 align-top">
                   <Input
-                    className="h-8 border-transparent bg-transparent px-2 text-sm focus:border-[#b98435] focus:bg-white"
+                    className="h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white"
                     value={row[column.key] || ""}
                     onChange={(event) => {
                       const next = rows.map((item, index) => index === rowIndex ? { ...item, [column.key]: event.target.value } : item);
@@ -129,12 +164,13 @@ export default function OpsReportPage() {
   const [ar, setAr] = useState({ current: "90", d30: "150", d60: "220", d90: "1240", comments: "" });
   const [ledger, setLedger] = useState({ balance: "", over1000: "", comment: "" });
   const [labor, setLabor] = useState<Row[]>([
-    { department: "FRONT DESK HOURS", hours: "168", budget: "160", comments: "" },
-    { department: "HOUSEKEEPING HOURS", hours: "140", budget: "45", comments: "" },
-    { department: "BREAKFAST", hours: "42", budget: "41", comments: "" },
-    { department: "MAINTENANCE", hours: "60", budget: "56", comments: "" },
-    { department: "OTHER", hours: "10", budget: "5", comments: "" },
+    { department: "FRONT DESK HOURS", scheduledHours: "", actualHours: "", budget: "160", comments: "" },
+    { department: "HOUSEKEEPING HOURS", scheduledHours: "", actualHours: "", budget: "45", comments: "" },
+    { department: "BREAKFAST", scheduledHours: "", actualHours: "", budget: "41", comments: "" },
+    { department: "MAINTENANCE", scheduledHours: "", actualHours: "", budget: "56", comments: "" },
+    { department: "OTHER", scheduledHours: "", actualHours: "", budget: "5", comments: "" },
   ]);
+  const [laborFile, setLaborFile] = useState<File | null>(null);
   const [staffing, setStaffing] = useState({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
   const [cases, setCases] = useState<Row[]>(emptyRows(5, ["no", "guest", "incidentType", "resolution", "comment"]));
   const [gmOverview, setGmOverview] = useState("");
@@ -169,11 +205,46 @@ export default function OpsReportPage() {
     mutationFn: () => apiRequest("POST", "/api/opsreport/logout"),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/opsreport/access"] }),
   });
+  const scheduledLabor = useQuery<LaborHoursResponse>({
+    queryKey: ["/api/opsreport/labor/scheduled", topMetrics.weekStart],
+    enabled: Boolean(access.data?.unlocked && /^\d{4}-\d{2}-\d{2}$/.test(topMetrics.weekStart)),
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/opsreport/labor/scheduled?weekStart=${encodeURIComponent(topMetrics.weekStart)}`), { credentials: "include" });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+  });
+  const actualLaborUpload = useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append("laborSummary", file);
+      const response = await fetch(apiUrl("/api/opsreport/labor/actual-upload"), { method: "POST", credentials: "include", body: form });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json() as Promise<{ originalFileName: string; departments: Record<string, number> }>;
+    },
+    onSuccess: (data) => {
+      setLabor((rows) => mergeLaborHours(rows, data.departments, "actualHours"));
+      setLaborFile(null);
+      toast({ title: "Actual labor hours imported", description: `${data.originalFileName} was parsed into the Staff Hours table.` });
+    },
+    onError: (error: Error) => toast({ title: "Unable to parse labor summary", description: error.message, variant: "destructive" }),
+  });
+
+  useEffect(() => {
+    if (!scheduledLabor.data?.departments) return;
+    setLabor((rows) => mergeLaborHours(rows, scheduledLabor.data.departments, "scheduledHours"));
+  }, [scheduledLabor.data]);
 
   const adr = useMemo(() => num(topMetrics.roomsSold) ? num(topMetrics.roomRevenue) / num(topMetrics.roomsSold) : 0, [topMetrics]);
-  const laborTotal = useMemo(() => labor.reduce((sum, row) => sum + num(row.hours), 0), [labor]);
+  const scheduledLaborTotal = useMemo(() => labor.reduce((sum, row) => sum + num(row.scheduledHours), 0), [labor]);
+  const actualLaborTotal = useMemo(() => labor.reduce((sum, row) => sum + num(row.actualHours), 0), [labor]);
+  const laborTotal = actualLaborTotal || scheduledLaborTotal;
   const laborBudget = useMemo(() => labor.reduce((sum, row) => sum + num(row.budget), 0), [labor]);
-  const laborVariance = laborTotal - laborBudget;
+  const laborVariance = actualLaborTotal ? actualLaborTotal - scheduledLaborTotal : laborTotal - laborBudget;
+  const laborRows = useMemo(() => labor.map((row) => ({
+    ...row,
+    variance: num(row.actualHours) || num(row.scheduledHours) ? fmtHours(num(row.actualHours) - num(row.scheduledHours)) : "",
+  })), [labor]);
   const adjustmentTotal = useMemo(() => adjustments.reduce((sum, row) => sum + num(row.amount), 0), [adjustments]);
   const arTotal = num(ar.current) + num(ar.d30) + num(ar.d60) + num(ar.d90);
   const weekEnd = useMemo(() => {
@@ -235,23 +306,23 @@ export default function OpsReportPage() {
               <SelectContent>{Array.from({ length: 52 }, (_, index) => <SelectItem key={index + 1} value={`Week ${index + 1}`}>Week {index + 1}</SelectItem>)}</SelectContent>
             </Select>
             <Button variant="outline" className={C.outline} onClick={() => window.print()}><Download className="mr-2 h-4 w-4" />Print</Button>
-            <Button variant="outline" className={C.outline} onClick={() => toast({ title: "Saved locally", description: "Database persistence can be added after import mapping is finalized." })}><Save className="mr-2 h-4 w-4" />Save draft</Button>
-            <Button variant="ghost" className="text-[#5f5247]" onClick={() => lock.mutate()}><LogOut className="mr-2 h-4 w-4" />Lock</Button>
+            <Button className={C.darkButton} onClick={() => toast({ title: "Saved locally", description: "Database persistence can be added after import mapping is finalized." })}><Save className="mr-2 h-4 w-4" />Save draft</Button>
+            <Button variant="ghost" className="text-[#3b2f26] hover:bg-[#f8efe2]" onClick={() => lock.mutate()}><LogOut className="mr-2 h-4 w-4" />Lock</Button>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
-        <Card className={C.shell}>
+        <Card className={C.darkShell}>
           <CardContent className="grid gap-4 p-4 md:grid-cols-[1.2fr_0.8fr]">
             <div className="grid gap-3 sm:grid-cols-2">
-              <LabeledInput label="Property name" value={setup.propertyName} onChange={(propertyName) => setSetup({ ...setup, propertyName })} />
-              <LabeledInput label="General manager" value={setup.generalManager} onChange={(generalManager) => setSetup({ ...setup, generalManager })} />
-              <LabeledInput label="Total rooms" value={setup.totalRooms} onChange={(totalRooms) => setSetup({ ...setup, totalRooms })} type="number" />
-              <LabeledInput label="Monthly room nights" value={setup.monthlyRoomNights} onChange={(monthlyRoomNights) => setSetup({ ...setup, monthlyRoomNights })} type="number" />
+              <DarkLabeledInput label="Property name" value={setup.propertyName} onChange={(propertyName) => setSetup({ ...setup, propertyName })} />
+              <DarkLabeledInput label="General manager" value={setup.generalManager} onChange={(generalManager) => setSetup({ ...setup, generalManager })} />
+              <DarkLabeledInput label="Total rooms" value={setup.totalRooms} onChange={(totalRooms) => setSetup({ ...setup, totalRooms })} type="number" />
+              <DarkLabeledInput label="Monthly room nights" value={setup.monthlyRoomNights} onChange={(monthlyRoomNights) => setSetup({ ...setup, monthlyRoomNights })} type="number" />
             </div>
             <div className="rounded-xl border border-dashed border-[#cdbda8] bg-white p-4">
-              <div className="flex items-center gap-2 font-semibold"><Upload className="h-4 w-4" /> Future parser staging</div>
+              <div className="flex items-center gap-2 font-semibold text-[#201814]"><Upload className="h-4 w-4" /> Future parser staging</div>
               <p className="mt-2 text-sm text-[#5f5247]">Upload mapping will be connected next. This page is structured to receive source reports and populate the matching fields.</p>
               <Input className={`mt-3 ${C.field}`} type="file" accept=".xlsx,.xls,.csv,.pdf" disabled />
             </div>
@@ -289,23 +360,23 @@ export default function OpsReportPage() {
           </TabsContent>
 
           <TabsContent value="weekly" className="space-y-5">
-            <Card className={C.shell}>
+            <Card className={C.darkShell}>
               <CardHeader>
                 <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-[#2f5f46]" /><CardTitle>{week} Report</CardTitle></div>
-                <CardDescription>{setup.propertyName} | {topMetrics.weekStart} to {weekEnd || "week end date"}</CardDescription>
+                <CardDescription className={C.darkMuted}>{setup.propertyName} | {topMetrics.weekStart} to {weekEnd || "week end date"}</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 md:grid-cols-4">
-                <LabeledInput label="Week start date" value={topMetrics.weekStart} onChange={(weekStart) => setTopMetrics({ ...topMetrics, weekStart })} type="date" />
-                <LabeledInput label="Rooms sold" value={topMetrics.roomsSold} onChange={(roomsSold) => setTopMetrics({ ...topMetrics, roomsSold })} type="number" />
-                <LabeledInput label="Room revenue" value={topMetrics.roomRevenue} onChange={(roomRevenue) => setTopMetrics({ ...topMetrics, roomRevenue })} type="number" />
+                <DarkLabeledInput label="Week start date" value={topMetrics.weekStart} onChange={(weekStart) => setTopMetrics({ ...topMetrics, weekStart })} type="date" />
+                <DarkLabeledInput label="Rooms sold" value={topMetrics.roomsSold} onChange={(roomsSold) => setTopMetrics({ ...topMetrics, roomsSold })} type="number" />
+                <DarkLabeledInput label="Room revenue" value={topMetrics.roomRevenue} onChange={(roomRevenue) => setTopMetrics({ ...topMetrics, roomRevenue })} type="number" />
                 <div className="rounded-lg border border-[#d7c8b5] bg-white p-3">
-                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#6b5f54]">Weekly ADR</div>
-                  <div className="mt-2 text-2xl font-semibold">{money(adr)}</div>
+                  <div className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>Weekly ADR</div>
+                  <div className="mt-2 text-2xl font-semibold text-[#201814]">{money(adr)}</div>
                 </div>
-                <LabeledInput label="MTD this year" value={topMetrics.mtdThisYear} onChange={(mtdThisYear) => setTopMetrics({ ...topMetrics, mtdThisYear })} type="number" />
-                <LabeledInput label="MTD last year" value={topMetrics.mtdLastYear} onChange={(mtdLastYear) => setTopMetrics({ ...topMetrics, mtdLastYear })} type="number" />
-                <LabeledInput label="YTD this year" value={topMetrics.ytdThisYear} onChange={(ytdThisYear) => setTopMetrics({ ...topMetrics, ytdThisYear })} type="number" />
-                <LabeledInput label="YTD last year" value={topMetrics.ytdLastYear} onChange={(ytdLastYear) => setTopMetrics({ ...topMetrics, ytdLastYear })} type="number" />
+                <DarkLabeledInput label="MTD this year" value={topMetrics.mtdThisYear} onChange={(mtdThisYear) => setTopMetrics({ ...topMetrics, mtdThisYear })} type="number" />
+                <DarkLabeledInput label="MTD last year" value={topMetrics.mtdLastYear} onChange={(mtdLastYear) => setTopMetrics({ ...topMetrics, mtdLastYear })} type="number" />
+                <DarkLabeledInput label="YTD this year" value={topMetrics.ytdThisYear} onChange={(ytdThisYear) => setTopMetrics({ ...topMetrics, ytdThisYear })} type="number" />
+                <DarkLabeledInput label="YTD last year" value={topMetrics.ytdLastYear} onChange={(ytdLastYear) => setTopMetrics({ ...topMetrics, ytdLastYear })} type="number" />
               </CardContent>
             </Card>
 
@@ -344,7 +415,45 @@ export default function OpsReportPage() {
               </div>
             </Section>
             <Section title="Department Labor Review (Controllable)" right={<Badge variant="outline">Variance {laborVariance}</Badge>}>
-              <EditableTable columns={[{ key: "department", label: "Department", wide: true }, { key: "hours", label: "Hours" }, { key: "budget", label: "Budgeted MPOR/Hours" }, { key: "comments", label: "Comments", wide: true }]} rows={labor} onChange={setLabor} />
+              <div className="flex flex-col gap-3 border-b border-[#e0d3c1] p-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-[#201814]">Scheduled Hours vs Actual Hours</div>
+                  <p className="mt-1 max-w-2xl text-sm text-[#5f5247]">
+                    Scheduled hours pull from the matching week in Schedule. Actual hours come from the payroll labor summary PDF.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-sm">
+                    <Badge variant="outline">Scheduled {fmtHours(scheduledLaborTotal)}</Badge>
+                    <Badge variant="outline">Actual {fmtHours(actualLaborTotal)}</Badge>
+                    {scheduledLabor.data?.scheduleId ? <Badge className="bg-[#2f5f46]">Schedule linked</Badge> : <Badge variant="outline">No schedule found for this week</Badge>}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Button variant="outline" className={C.outline} onClick={() => scheduledLabor.refetch()} disabled={scheduledLabor.isFetching}>
+                    {scheduledLabor.isFetching ? "Refreshing..." : "Refresh scheduled"}
+                  </Button>
+                  <Input
+                    className={`${C.field} sm:w-72`}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    onChange={(event) => setLaborFile(event.target.files?.[0] || null)}
+                  />
+                  <Button className={C.green} onClick={() => laborFile && actualLaborUpload.mutate(laborFile)} disabled={!laborFile || actualLaborUpload.isPending}>
+                    {actualLaborUpload.isPending ? "Parsing..." : "Import actual hours"}
+                  </Button>
+                </div>
+              </div>
+              <EditableTable
+                columns={[
+                  { key: "department", label: "Department", wide: true },
+                  { key: "scheduledHours", label: "Scheduled Hours" },
+                  { key: "actualHours", label: "Actual Hours" },
+                  { key: "variance", label: "Actual - Scheduled" },
+                  { key: "budget", label: "Budgeted MPOR/Hours" },
+                  { key: "comments", label: "Comments", wide: true },
+                ]}
+                rows={laborRows}
+                onChange={(rows) => setLabor(rows.map(({ variance, ...row }) => row))}
+              />
             </Section>
             <Section title="Staffing">
               <div className="grid gap-3 p-4 md:grid-cols-5">

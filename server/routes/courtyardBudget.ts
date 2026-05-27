@@ -178,6 +178,44 @@ function isTotalLine(lineItem: string) {
   return /^total\b|total$|\btotal\b/i.test(lineItem);
 }
 
+function isOperationalBudgetLine(line: any) {
+  const item = String(line.lineItem || "").toLowerCase();
+  const department = String(line.department || "").toLowerCase();
+  if (/credit card|commission|bonus|benefit|paid time off|payroll service|workers comp|epli|dues|subscription|license|permit|uniform|postage|printing|office|training|relocation|transportation|television|cable|vendor discount|employee benefits|supplemental pay|management wages|payroll taxes|franchise|owner|non-operating/.test(item)) return false;
+  if (department.includes("bistro") || department.includes("restaurant")) {
+    return /total restaurant revenue|food revenue|restaurant$|banquet$|beer$|wine$|liquor$|total beverage revenue|food$|beverage$|cost of sales|bartenders|supplies - restaurant|paper supplies|cleaning supplies|total restaurant expenses|restaurant department profit/.test(item);
+  }
+  if (department === "rooms") {
+    return /total rooms revenue|room rev|pet fees|front desk$|night audit|housekeeping$|laundry wages|houseman|guest supplies|cleaning supplies|laundry supplies|linen|key card|total rooms expenses|rooms department profit/.test(item);
+  }
+  if (department.includes("shop")) {
+    return /food & sundries|beer rev|wine rev|total shop revenue|food$|beverage$|total cost of sales|shop supplies|total shop expenses|shop department profit/.test(item);
+  }
+  if (department.includes("meeting")) {
+    return /meeting room rental|audio visual|total meeting room revenue|meeting room supplies|total meeting room expenses|meeting room department profit/.test(item);
+  }
+  if (department.includes("repairs") || department.includes("maintenance")) {
+    return /total repairs|building|hvac|electrical|painting|grounds|plumbing|pool|engineering supplies|kitchen equipment|waste removal|fire life|exterminating/.test(item);
+  }
+  if (department.includes("utilities")) {
+    return /electricity|gas|water|sewer|total utilities/.test(item);
+  }
+  return isTotalLine(item);
+}
+
+function operationalSectionForLine(line: any) {
+  const item = String(line.lineItem || "").toLowerCase();
+  const department = String(line.department || "");
+  if (department === "Rooms") {
+    if (/front desk|night audit|key card/.test(item)) return "Front Desk";
+    if (/housekeeping|laundry|houseman|guest supplies|cleaning supplies|laundry supplies|linen/.test(item)) return "Housekeeping";
+    return "Rooms";
+  }
+  if (department === "Bistro / Restaurant") return "Bistro";
+  if (department === "Shop") return "Market / Pantry";
+  return department;
+}
+
 type ParsedBudgetLine = {
   department: string;
   sourceSheet: string;
@@ -364,11 +402,69 @@ function departmentTotals(lines: any[], checkbook: any[]) {
   };
 }
 
+function sectionTotals(lines: any[]) {
+  const revenue = lines.filter((line) => line.categoryType === "revenue");
+  const expenses = lines.filter((line) => line.categoryType !== "revenue");
+  const sum = (rows: any[], field: string) => rows.reduce((total, row) => total + moneyNumber(row[field]), 0);
+  return {
+    originalBudget: moneyString(Math.abs(sum(lines, "originalBudgetAmount"))),
+    actual: moneyString(Math.abs(sum(lines, "actualAmount"))),
+    forecast: moneyString(Math.abs(sum(lines, "updatedForecastAmount"))),
+    revenue: moneyString(Math.abs(sum(revenue, "updatedForecastAmount"))),
+    expenses: moneyString(Math.abs(sum(expenses, "updatedForecastAmount"))),
+  };
+}
+
+function buildOperationalSections(lines: any[]) {
+  const grouped = new Map<string, any[]>();
+  for (const line of lines.filter(isOperationalBudgetLine)) {
+    const section = operationalSectionForLine(line);
+    if (!grouped.has(section)) grouped.set(section, []);
+    grouped.get(section)!.push(line);
+  }
+  const order = ["Rooms", "Front Desk", "Housekeeping", "Bistro", "Market / Pantry", "Meeting Room", "Repairs & Maintenance", "Utilities"];
+  return Array.from(grouped.entries())
+    .sort(([a], [b]) => (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b)) || a.localeCompare(b))
+    .map(([section, rows]) => ({
+      section,
+      totals: sectionTotals(rows),
+      lines: rows.map((line) => ({
+        id: line.id,
+        lineItem: line.lineItem,
+        coa: line.coa,
+        categoryType: line.categoryType,
+        actualAmount: moneyString(line.actualAmount),
+        originalBudgetAmount: moneyString(line.originalBudgetAmount),
+        updatedForecastAmount: moneyString(line.updatedForecastAmount),
+        isTotal: line.isTotal,
+      })),
+    }));
+}
+
 const uploadSchema = z.object({
-  month: z.coerce.number().int().min(1).max(12),
-  year: z.coerce.number().int().min(2020).max(2100),
+  month: z.coerce.number().int().min(1).max(12).optional(),
+  year: z.coerce.number().int().min(2020).max(2100).optional(),
   confirmOverwrite: z.coerce.boolean().default(false),
 });
+
+function detectBudgetPeriodFromFilename(fileName: string) {
+  const matches = Array.from(fileName.matchAll(/(\d{2})(\d{2})(\d{4})/g));
+  for (const match of matches) {
+    const month = Number(match[1]);
+    const day = Number(match[2]);
+    const year = Number(match[3]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 2020 && year <= 2100) {
+      return { month, year };
+    }
+  }
+  const monthName = fileName.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i)?.[1];
+  const year = Number(fileName.match(/\b(20\d{2})\b/)?.[1]);
+  if (monthName && year >= 2020 && year <= 2100) {
+    const month = new Date(`${monthName} 1, ${year}`).getMonth() + 1;
+    return { month, year };
+  }
+  return null;
+}
 
 const checkbookSchema = z.object({
   department: z.string().trim().min(1),
@@ -423,16 +519,20 @@ export function registerCourtyardBudgetRoutes(app: Express) {
       const parsed = uploadSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid month/year." });
       if (!req.file) return res.status(400).json({ error: "Budget file is required." });
-      const existing = await db.select().from(courtyardBudgetUploads).where(and(eq(courtyardBudgetUploads.propertyId, PROPERTY_ID), eq(courtyardBudgetUploads.month, parsed.data.month), eq(courtyardBudgetUploads.year, parsed.data.year))).limit(1);
+      const detectedPeriod = detectBudgetPeriodFromFilename(req.file.originalname);
+      const month = detectedPeriod?.month ?? parsed.data.month;
+      const year = detectedPeriod?.year ?? parsed.data.year;
+      if (!month || !year) return res.status(400).json({ error: "Could not determine the budget month/year from the file name. Select a month/year before uploading." });
+      const existing = await db.select().from(courtyardBudgetUploads).where(and(eq(courtyardBudgetUploads.propertyId, PROPERTY_ID), eq(courtyardBudgetUploads.month, month), eq(courtyardBudgetUploads.year, year))).limit(1);
       if (existing.length && !parsed.data.confirmOverwrite) return res.status(409).json({ error: "Budget already exists for this month. Confirm overwrite to replace it." });
       if (existing.length) {
-        await db.delete(courtyardBudgetUploads).where(and(eq(courtyardBudgetUploads.propertyId, PROPERTY_ID), eq(courtyardBudgetUploads.month, parsed.data.month), eq(courtyardBudgetUploads.year, parsed.data.year)));
+        await db.delete(courtyardBudgetUploads).where(and(eq(courtyardBudgetUploads.propertyId, PROPERTY_ID), eq(courtyardBudgetUploads.month, month), eq(courtyardBudgetUploads.year, year)));
       }
       const lines = parseBudgetFile(req.file);
       const [uploadRow] = await db.insert(courtyardBudgetUploads).values({
         propertyId: PROPERTY_ID,
-        month: parsed.data.month,
-        year: parsed.data.year,
+        month,
+        year,
         originalFileName: req.file.originalname,
         uploadedBy: req.budgetUser.id,
       }).returning();
@@ -441,12 +541,12 @@ export function registerCourtyardBudgetRoutes(app: Express) {
           ...line,
           budgetUploadId: uploadRow.id,
           propertyId: PROPERTY_ID,
-          month: parsed.data.month,
-          year: parsed.data.year,
+          month,
+          year,
         } as any)));
       }
-      await db.insert(courtyardBudgetAuditLog).values({ actorUserId: req.budgetUser.id, action: "budget_uploaded", month: parsed.data.month, year: parsed.data.year, metadataJson: { file: req.file.originalname, rows: lines.length } });
-      res.status(201).json({ upload: uploadRow, rows: lines.length });
+      await db.insert(courtyardBudgetAuditLog).values({ actorUserId: req.budgetUser.id, action: "budget_uploaded", month, year, metadataJson: { file: req.file.originalname, rows: lines.length, detectedPeriod } });
+      res.status(201).json({ upload: uploadRow, rows: lines.length, detectedPeriod: { month, year } });
     } catch (error) {
       next(error);
     }
@@ -462,6 +562,8 @@ export function registerCourtyardBudgetRoutes(app: Express) {
       let lines = await db.select().from(courtyardBudgetLineItems).where(and(eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID), eq(courtyardBudgetLineItems.month, month), eq(courtyardBudgetLineItems.year, year), departments ? inArray(courtyardBudgetLineItems.department, departments) : sql`true`)).orderBy(asc(courtyardBudgetLineItems.department), asc(courtyardBudgetLineItems.lineItem));
       if (department) lines = lines.filter((line) => line.department === department);
       if (!req.budgetAccess.allDepartments) lines = lines.filter((line) => !line.isHiddenFromDepartmentHead && !line.isSensitive);
+      const detail = req.query.detail === "1" && req.budgetAccess.allDepartments;
+      const displayLines = detail ? lines : lines.filter(isOperationalBudgetLine);
       const checkbook = await db.select().from(courtyardBudgetCheckbookEntries).where(and(eq(courtyardBudgetCheckbookEntries.propertyId, PROPERTY_ID), eq(courtyardBudgetCheckbookEntries.month, month), eq(courtyardBudgetCheckbookEntries.year, year), eq(courtyardBudgetCheckbookEntries.department, department))).orderBy(asc(courtyardBudgetCheckbookEntries.entryDate));
       const allDepartmentRows = await db.selectDistinct({ department: courtyardBudgetLineItems.department }).from(courtyardBudgetLineItems).where(and(eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID), eq(courtyardBudgetLineItems.month, month), eq(courtyardBudgetLineItems.year, year))).orderBy(asc(courtyardBudgetLineItems.department));
       const visibleDepartments = req.budgetAccess.allDepartments ? allDepartmentRows.map((row) => row.department) : req.budgetAccess.departments;
@@ -473,7 +575,8 @@ export function registerCourtyardBudgetRoutes(app: Express) {
         departments: visibleDepartments,
         user: req.budgetAccess,
         totals: departmentTotals(lines, checkbook),
-        lines: lines.map((line) => ({
+        operationalSections: buildOperationalSections(req.budgetAccess.allDepartments ? await db.select().from(courtyardBudgetLineItems).where(and(eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID), eq(courtyardBudgetLineItems.month, month), eq(courtyardBudgetLineItems.year, year))) : lines),
+        lines: displayLines.map((line) => ({
           ...line,
           actualAmount: moneyString(line.actualAmount),
           originalBudgetAmount: moneyString(line.originalBudgetAmount),

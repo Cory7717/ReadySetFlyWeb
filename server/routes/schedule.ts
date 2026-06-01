@@ -1,10 +1,12 @@
 import express, { type Express, type RequestHandler } from "express";
 import crypto from "crypto";
 import multer from "multer";
+import AdmZip from "adm-zip";
 import OpenAI from "openai";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import bcrypt from "bcrypt";
+import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
 import { and, asc, desc, eq, inArray, isNull, lte, lt } from "drizzle-orm";
 import { db } from "../db";
@@ -624,6 +626,19 @@ const payrollUpload = multer({
     const name = file.originalname.toLowerCase();
     if (file.mimetype === "application/pdf" || name.endsWith(".pdf") || file.mimetype === "text/plain" || name.endsWith(".txt")) return cb(null, true);
     cb(new Error("Only PDF or text payroll register files are supported."));
+  },
+});
+
+const hoursDetailUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    const name = file.originalname.toLowerCase();
+    if (
+      name.endsWith(".xlsx") ||
+      file.mimetype === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ) return cb(null, true);
+    cb(new Error("Only XLSX hours detail files are supported."));
   },
 });
 
@@ -1266,6 +1281,153 @@ function payrollNameMatches(employee: any, payrollName: string) {
   const direct = normalizePersonName(`${employee.lastName}, ${employee.firstName}`);
   const display = normalizePersonName(employee.displayName || "");
   return normalized === direct || normalized === display || normalized.includes(direct) || direct.includes(normalized);
+}
+
+function colIndex(ref: string) {
+  const letters = (ref || "").match(/[A-Z]+/)?.[0] || "";
+  let n = 0;
+  for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
+}
+
+function readInlineText(value: any): string {
+  if (!value) return "";
+  const runs = value.r ? (Array.isArray(value.r) ? value.r : [value.r]) : [];
+  if (runs.length) return runs.map((run: any) => typeof run.t === "string" ? run.t : run.t?.["#text"] || "").join("");
+  return typeof value.t === "string" ? value.t : value.t?.["#text"] || "";
+}
+
+function parseWorkbookRows(buffer: Buffer) {
+  const zip = new AdmZip(buffer);
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", parseTagValue: false });
+  const entry = (name: string) => zip.getEntry(name)?.getData().toString("utf8") || "";
+  const workbook = parser.parse(entry("xl/workbook.xml"));
+  const rels = parser.parse(entry("xl/_rels/workbook.xml.rels"));
+  const sharedXml = entry("xl/sharedStrings.xml");
+  const shared = sharedXml ? ([] as any[]).concat(parser.parse(sharedXml).sst?.si || []).map((si) => readInlineText(si) || String(si.t || "")) : [];
+  const relMap = new Map(([] as any[]).concat(rels.Relationships?.Relationship || []).map((rel) => [rel["@_Id"], String(rel["@_Target"]).replace(/^\//, "")]));
+  const sheet = ([] as any[]).concat(workbook.workbook?.sheets?.sheet || [])[0];
+  const target = sheet ? relMap.get(sheet["@_r:id"]) : "worksheets/sheet1.xml";
+  const worksheetPath = String(target || "worksheets/sheet1.xml").replace(/^xl\//, "");
+  const xml = entry(`xl/${worksheetPath}`);
+  if (!xml) return [];
+  const parsed = parser.parse(xml);
+  return ([] as any[]).concat(parsed.worksheet?.sheetData?.row || []).map((row) => {
+    const cells: string[] = [];
+    for (const cell of ([] as any[]).concat(row.c || [])) {
+      const value = cell["@_t"] === "s" ? shared[Number(cell.v)] || "" : cell["@_t"] === "inlineStr" ? readInlineText(cell.is) : String(cell.v ?? "");
+      cells[colIndex(cell["@_r"])] = value;
+    }
+    return cells;
+  });
+}
+
+function excelDateToKey(value: string) {
+  const serial = Number(value);
+  if (Number.isFinite(serial) && serial > 20000) {
+    const date = new Date(Date.UTC(1899, 11, 30));
+    date.setUTCDate(date.getUTCDate() + Math.floor(serial));
+    return toDateKey(date);
+  }
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) return toDateKey(new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())));
+  return "";
+}
+
+function parseHoursDetailWorkbook(buffer: Buffer) {
+  const rows = parseWorkbookRows(buffer);
+  const header = (rows[0] || []).map((cell) => String(cell || "").trim().toLowerCase());
+  const index = (label: string) => header.findIndex((cell) => cell === label.toLowerCase());
+  const idx = {
+    employeeNumber: index("employee number"),
+    lastName: index("employee last name"),
+    firstName: index("employee first name"),
+    date: index("date"),
+    hours: index("hours"),
+    department: index("department"),
+    position: index("position"),
+    notes: index("notes"),
+  };
+  if (idx.firstName < 0 || idx.lastName < 0 || idx.date < 0 || idx.hours < 0) return [];
+  return rows.slice(1).map((row) => {
+    const firstName = String(row[idx.firstName] || "").trim();
+    const lastName = String(row[idx.lastName] || "").trim();
+    const hours = Number(row[idx.hours] || 0);
+    return {
+      employeeNumber: String(row[idx.employeeNumber] || "").trim(),
+      firstName,
+      lastName,
+      payrollName: `${lastName}, ${firstName}`.trim(),
+      displayName: [firstName, lastName].filter(Boolean).join(" "),
+      date: excelDateToKey(String(row[idx.date] || "")),
+      hours: Number.isFinite(hours) ? hours : 0,
+      department: String(row[idx.department] || "").trim(),
+      position: String(row[idx.position] || "").trim(),
+      notes: String(row[idx.notes] || "").trim(),
+    };
+  }).filter((row) => row.firstName && row.lastName && row.date && row.hours > 0);
+}
+
+function addHours(target: Record<string, number>, key: string, hours: number) {
+  target[key] = Number(((target[key] || 0) + hours).toFixed(2));
+}
+
+function compareScheduledToActualHours(schedule: any, employees: any[], shiftTypes: any[], assignments: any[], actualRows: ReturnType<typeof parseHoursDetailWorkbook>) {
+  const days = weekDays(schedule.weekStartDate);
+  const daySet = new Set(days);
+  const shiftTypeById = new Map(shiftTypes.map((shift) => [shift.id, shift]));
+  const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+  const results = new Map<string, any>();
+  const ensure = (key: string, defaults: any) => {
+    if (!results.has(key)) results.set(key, { scheduledByDay: {}, actualByDay: {}, notes: [], ...defaults });
+    return results.get(key);
+  };
+
+  for (const assignment of assignments) {
+    if (assignment.isOpenShift || !assignment.employeeId || !daySet.has(assignment.shiftDate)) continue;
+    const employee = employeeById.get(assignment.employeeId);
+    if (!employee) continue;
+    const shiftType = assignment.shiftTypeId ? shiftTypeById.get(assignment.shiftTypeId) : null;
+    const hours = hoursForShift(assignment, shiftType);
+    if (hours <= 0) continue;
+    const row = ensure(employee.id, {
+      employeeId: employee.id,
+      employeeName: employee.displayName,
+      department: employee.department,
+      matched: true,
+      scheduledHours: 0,
+      actualHours: 0,
+    });
+    row.scheduledHours += hours;
+    addHours(row.scheduledByDay, assignment.shiftDate, hours);
+  }
+
+  for (const actual of actualRows) {
+    if (!daySet.has(actual.date)) continue;
+    const employee = employees.find((item) => payrollNameMatches(item, actual.payrollName));
+    const key = employee?.id || `actual:${normalizePersonName(actual.payrollName)}`;
+    const row = ensure(key, {
+      employeeId: employee?.id || null,
+      employeeName: employee?.displayName || actual.displayName,
+      department: employee?.department || [actual.department, actual.position].filter(Boolean).join(" / ") || "Unmatched",
+      matched: Boolean(employee),
+      scheduledHours: 0,
+      actualHours: 0,
+    });
+    row.actualHours += actual.hours;
+    addHours(row.actualByDay, actual.date, actual.hours);
+    if (actual.notes) row.notes.push(`${actual.date}: ${actual.notes}`);
+  }
+
+  return Array.from(results.values()).map((row) => ({
+    ...row,
+    scheduledHours: Number(row.scheduledHours.toFixed(2)),
+    actualHours: Number(row.actualHours.toFixed(2)),
+    variance: Number((row.actualHours - row.scheduledHours).toFixed(2)),
+    scheduledByDay: roundRecord(row.scheduledByDay),
+    actualByDay: roundRecord(row.actualByDay),
+    notes: Array.from(new Set(row.notes)).slice(0, 5),
+  })).sort((a, b) => a.department.localeCompare(b.department) || a.employeeName.localeCompare(b.employeeName));
 }
 
 function parsePayrollRegisterText(text: string) {
@@ -2116,6 +2278,42 @@ export function registerScheduleRoutes(app: Express) {
         actualizedDays: actualizedDays.length,
       });
       res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/hours-detail", requireScheduleManager, hoursDetailUpload.single("hoursDetail"), async (req: any, res, next) => {
+    try {
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      if (!req.file) return res.status(400).json({ error: "Hours detail XLSX report is required." });
+      const actualRows = parseHoursDetailWorkbook(req.file.buffer);
+      if (actualRows.length === 0) return res.status(400).json({ error: "No associate hour rows were found in the uploaded report." });
+      const [employees, shiftTypes, assignments] = await Promise.all([
+        db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true)),
+        db.select().from(scheduleShiftTypes),
+        db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, schedule.id)),
+      ]);
+      const rows = compareScheduledToActualHours(schedule, employees, shiftTypes, assignments, actualRows);
+      await audit(schedule.id, req.scheduleUser.id, "schedule_hours_detail_imported", {
+        fileName: req.file.originalname,
+        actualRows: actualRows.length,
+        comparedEmployees: rows.length,
+        unmatched: rows.filter((row) => !row.matched).length,
+      });
+      res.json({
+        fileName: req.file.originalname,
+        weekStartDate: schedule.weekStartDate,
+        weekEndDate: schedule.weekEndDate,
+        rows,
+        totals: {
+          scheduledHours: Number(rows.reduce((sum, row) => sum + row.scheduledHours, 0).toFixed(2)),
+          actualHours: Number(rows.reduce((sum, row) => sum + row.actualHours, 0).toFixed(2)),
+          variance: Number(rows.reduce((sum, row) => sum + row.variance, 0).toFixed(2)),
+          unmatched: rows.filter((row) => !row.matched).length,
+        },
+      });
     } catch (error) {
       next(error);
     }

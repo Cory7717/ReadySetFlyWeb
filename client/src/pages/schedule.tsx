@@ -327,6 +327,27 @@ type SchedulePayload = {
   currentUserPermissions?: { editableDepartments: string[]; canPublishFinal: boolean };
 };
 
+type HoursComparisonRow = {
+  employeeId?: string | null;
+  employeeName: string;
+  department: string;
+  scheduledHours: number;
+  actualHours: number;
+  variance: number;
+  scheduledByDay: Record<string, number>;
+  actualByDay: Record<string, number>;
+  matched: boolean;
+  notes?: string[];
+};
+
+type HoursComparison = {
+  fileName: string;
+  weekStartDate: string;
+  weekEndDate: string;
+  rows: HoursComparisonRow[];
+  totals: { scheduledHours: number; actualHours: number; variance: number; unmatched: number };
+};
+
 type LaborMetrics = {
   targets: { hpor: number; hkMporMin: number; hkMporMax: number };
   daily: Record<string, {
@@ -551,6 +572,11 @@ function metricTone(value: number, target: number, higherIsBad = true) {
 function numberValue(value: unknown) {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function fmtHours(value: unknown) {
+  const n = numberValue(value);
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, "");
 }
 
 function rolesArray(value: unknown): string[] {
@@ -928,6 +954,123 @@ function ForecastPanel({
               <Input className={C.field} value={groupForm.popupGroupNotes} onChange={(event) => setGroupForm({ ...groupForm, popupGroupNotes: event.target.value })} placeholder={t("Group notes")} />
               <Button className={C.green} onClick={() => onPopupGroupSave({ forecastDate: groupForm.forecastDate, popupGroupRooms: Number(groupForm.popupGroupRooms || 0), popupGroupNotes: groupForm.popupGroupNotes })}>{t("Save group")}</Button>
             </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function HoursComparisonPanel({
+  payload,
+  comparison,
+  importing,
+  onImport,
+  spanish,
+}: {
+  payload: SchedulePayload;
+  comparison: HoursComparison | null;
+  importing: boolean;
+  onImport: (file: File) => void;
+  spanish: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const rows = comparison?.rows || [];
+  const exceptionRows = rows.filter((row) => Math.abs(numberValue(row.variance)) >= 0.25 || !row.matched);
+  return (
+    <Card className={`${C.shell} print:hidden`}>
+      <CardHeader>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <CardTitle className={C.ink}>{spanish ? "Horas programadas vs reales" : "Scheduled vs Actual Hours"}</CardTitle>
+            <CardDescription className={C.muted}>
+              {spanish
+                ? "Suba el reporte Hours Detail despues de cerrar la semana para comparar los turnos programados contra las horas reales por asociado."
+                : "Upload the Hours Detail report after the week closes to compare scheduled shifts against actual associate hours."}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) onImport(file);
+                event.target.value = "";
+              }}
+            />
+            <Button variant="outline" className={C.outline} onClick={() => setExpanded((value) => !value)}>
+              {expanded ? <ChevronUp className="mr-2 h-4 w-4" /> : <ChevronDown className="mr-2 h-4 w-4" />}
+              {expanded ? (spanish ? "Ocultar" : "Collapse") : (spanish ? "Mostrar" : "Expand")}
+            </Button>
+            <Button className={C.green} disabled={importing} onClick={() => inputRef.current?.click()}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              {importing ? (spanish ? "Importando..." : "Importing...") : (spanish ? "Subir horas reales" : "Upload actual hours")}
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {comparison ? (
+          <>
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Scheduled</div><div className="text-2xl font-semibold">{fmtHours(comparison.totals.scheduledHours)}</div></div>
+              <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Actual</div><div className="text-2xl font-semibold">{fmtHours(comparison.totals.actualHours)}</div></div>
+              <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Variance</div><div className={`text-2xl font-semibold ${Math.abs(comparison.totals.variance) >= 1 ? "text-amber-800" : "text-emerald-800"}`}>{comparison.totals.variance > 0 ? "+" : ""}{fmtHours(comparison.totals.variance)}</div></div>
+              <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Unmatched</div><div className={`text-2xl font-semibold ${comparison.totals.unmatched ? "text-red-700" : "text-emerald-800"}`}>{comparison.totals.unmatched}</div></div>
+            </div>
+            <div className="text-xs text-[#5f5247]">Source: {comparison.fileName} | Schedule: {formatWeek(payload.schedule.weekStartDate, payload.schedule.weekEndDate)}</div>
+            {!expanded && exceptionRows.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                {exceptionRows.length} associate(s) have a variance of 0.25+ hours or were not matched to the schedule employee list. Expand to review.
+              </div>
+            )}
+            {expanded && (
+              <div className="overflow-x-auto rounded-xl border border-[#e0d3c1]">
+                <table className="w-full min-w-[980px] border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-[#2a211c] text-white">
+                      <th className="border border-[#d8c8b2] p-2 text-left">Associate</th>
+                      <th className="border border-[#d8c8b2] p-2 text-left">Department</th>
+                      <th className="border border-[#d8c8b2] p-2 text-right">Scheduled</th>
+                      <th className="border border-[#d8c8b2] p-2 text-right">Actual</th>
+                      <th className="border border-[#d8c8b2] p-2 text-right">Variance</th>
+                      {payload.days.map((day, index) => <th key={day} className="border border-[#d8c8b2] p-2 text-center">{DAY_LABELS[index]}<br />{formatDate(day)}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={`${row.employeeId || row.employeeName}`} className={!row.matched ? "bg-red-50" : Math.abs(row.variance) >= 0.25 ? "bg-amber-50" : "odd:bg-white even:bg-[#fbf6ee]"}>
+                        <td className="border border-[#e0d3c1] p-2 font-semibold">
+                          {row.employeeName}
+                          {!row.matched && <div className="text-xs text-red-700">Not matched to schedule employee</div>}
+                          {row.notes?.length ? <div className="mt-1 text-xs font-normal text-[#5f5247]">{row.notes.join("; ")}</div> : null}
+                        </td>
+                        <td className="border border-[#e0d3c1] p-2">{row.department}</td>
+                        <td className="border border-[#e0d3c1] p-2 text-right">{fmtHours(row.scheduledHours)}</td>
+                        <td className="border border-[#e0d3c1] p-2 text-right">{fmtHours(row.actualHours)}</td>
+                        <td className={`border border-[#e0d3c1] p-2 text-right font-semibold ${Math.abs(row.variance) >= 0.25 ? "text-amber-900" : "text-emerald-800"}`}>{row.variance > 0 ? "+" : ""}{fmtHours(row.variance)}</td>
+                        {payload.days.map((day) => (
+                          <td key={day} className="border border-[#e0d3c1] p-2 text-center text-xs">
+                            <div>S {fmtHours(row.scheduledByDay?.[day] || 0)}</div>
+                            <div>A {fmtHours(row.actualByDay?.[day] || 0)}</div>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="rounded-xl border border-[#e0d3c1] bg-white p-4 text-sm text-[#5f5247]">
+            {spanish
+              ? "Suba el reporte Hours Detail para ver las horas reales por asociado contra el horario publicado."
+              : "Upload the Hours Detail report to see actual associate hours compared with the published schedule."}
           </div>
         )}
       </CardContent>
@@ -1956,6 +2099,7 @@ export default function SchedulePage() {
   const [selectedShift, setSelectedShift] = useState<{ employee: ScheduleEmployee; date: string; department: string; assignment?: ShiftAssignment } | null>(null);
   const [selectedHousekeepingBoard, setSelectedHousekeepingBoard] = useState<{ employee: ScheduleEmployee; date: string; board?: HousekeepingBoard } | null>(null);
   const [aiDraft, setAiDraft] = useState<AiScheduleDraft | null>(null);
+  const [hoursComparison, setHoursComparison] = useState<HoursComparison | null>(null);
   const [spanish, setSpanish] = useState(false);
   const dailyHporToastKey = useRef("");
 
@@ -1988,6 +2132,10 @@ export default function SchedulePage() {
       variant: "destructive",
     });
   }, [payload, shareToken, toast, user?.isAdmin]);
+
+  useEffect(() => {
+    setHoursComparison(null);
+  }, [payload?.schedule.id]);
 
   const createWeek = useMutation({
     mutationFn: async (mode: "blank" | "copyPrevious") => {
@@ -2083,6 +2231,25 @@ export default function SchedulePage() {
       if (weekId) queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
     },
     onError: (error: Error) => toast({ title: "Payroll import failed", description: error.message, variant: "destructive" }),
+  });
+  const importHoursDetail = useMutation({
+    mutationFn: async (file: File) => {
+      if (!payload?.schedule.id) throw new Error("Select a schedule before uploading hours detail.");
+      const formData = new FormData();
+      formData.append("hoursDetail", file);
+      const response = await fetch(apiUrl(`/api/schedule/weeks/${payload.schedule.id}/hours-detail`), {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json() as Promise<HoursComparison>;
+    },
+    onSuccess: (data) => {
+      setHoursComparison(data);
+      toast({ title: "Actual hours imported", description: `${data.rows.length} associate(s) compared against the schedule.` });
+    },
+    onError: (error: Error) => toast({ title: "Hours import failed", description: error.message, variant: "destructive" }),
   });
   const generateAiSchedule = useMutation({
     mutationFn: async () => {
@@ -2467,6 +2634,15 @@ export default function SchedulePage() {
               canActualize={canActualizeForecast}
               spanish={spanish}
             />
+            {user?.isAdmin && !shareToken && (
+              <HoursComparisonPanel
+                payload={payload}
+                comparison={hoursComparison}
+                importing={importHoursDetail.isPending}
+                onImport={(file) => importHoursDetail.mutate(file)}
+                spanish={spanish}
+              />
+            )}
             <ScheduleGrid
               payload={payload}
               editable={editable}

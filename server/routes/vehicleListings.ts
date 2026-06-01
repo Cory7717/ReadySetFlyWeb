@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import multer from "multer";
 import OpenAI from "openai";
+import { pipeline } from "stream/promises";
 import { z } from "zod";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db";
@@ -32,6 +33,7 @@ const photoUpload = multer({
 const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 const openaiBaseUrl = (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || "").trim();
 const openai = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey, ...(openaiBaseUrl.startsWith("http") ? { baseURL: openaiBaseUrl } : {}) }) : null;
+const VW_PHOTO_PREFIX = "vehicle-listings/vw-beetle";
 
 const defaultListing = {
   id: VW_LISTING_ID,
@@ -177,6 +179,21 @@ function toAbsolutePublicUrl(url: string, baseUrl: string) {
   return new URL(url.startsWith("/") ? url : `/${url}`, baseUrl).toString();
 }
 
+function vehiclePhotoUrl(filename: string) {
+  return `/api/vehicle-listings/vw-beetle/photos/${encodeURIComponent(filename)}`;
+}
+
+function extractVehiclePhotoFilename(rawUrl: string) {
+  try {
+    const parsed = /^https?:\/\//i.test(rawUrl) ? new URL(rawUrl) : null;
+    const pathname = parsed ? parsed.pathname : rawUrl;
+    const match = pathname.match(/\/(?:uploads\/vw-beetle|api\/vehicle-listings\/vw-beetle\/photos)\/([^/?#]+)$/i);
+    return match ? decodeURIComponent(match[1]) : "";
+  } catch {
+    return "";
+  }
+}
+
 async function generateAiJson(prompt: string, fallback: any) {
   if (!openai) return { ...fallback, aiAvailable: false };
   const completion = await openai.chat.completions.create({
@@ -271,6 +288,39 @@ export function registerVehicleListingRoutes(app: Express) {
     }
   });
 
+  router.get("/vw-beetle/photos/:filename", async (req, res, next) => {
+    try {
+      const filename = path.basename(String(req.params.filename || ""));
+      if (!filename || filename !== req.params.filename || filename.includes("..")) {
+        return res.status(400).json({ error: "Invalid photo filename" });
+      }
+
+      if (process.env.AWS_S3_BUCKET) {
+        const { S3StorageService } = await import("../s3Storage.js");
+        const s3Service = new S3StorageService();
+        const { stream, contentType, contentLength } = await s3Service.getObjectStream({ key: `${VW_PHOTO_PREFIX}/${filename}` });
+        res.setHeader("Content-Type", contentType || "image/jpeg");
+        if (contentLength) res.setHeader("Content-Length", String(contentLength));
+        res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+        await pipeline(stream, res);
+        return;
+      }
+
+      const filePath = path.resolve(uploadDir, filename);
+      if (!filePath.startsWith(`${uploadDir}${path.sep}`) || !fs.existsSync(filePath)) {
+        return res.status(404).json({ error: "Photo not found" });
+      }
+      res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+      return res.sendFile(filePath);
+    } catch (error: any) {
+      const statusCode = error?.$metadata?.httpStatusCode;
+      if (error?.name === "NoSuchKey" || statusCode === 404) {
+        return res.status(404).json({ error: "Photo not found" });
+      }
+      next(error);
+    }
+  });
+
   router.post("/vw-beetle/leads", async (req, res, next) => {
     try {
       const parsed = leadSchema.safeParse(req.body);
@@ -321,12 +371,25 @@ export function registerVehicleListingRoutes(app: Express) {
         if (error) return res.status(400).json({ error: error.message || "Photo upload failed." });
         const listing = await getListing();
         const files = ((req as any).files || []) as Express.Multer.File[];
-        const nextPhotos = files.map((file, index) => ({
-          id: `${Date.now()}-${index}-${file.filename}`,
-          url: `/uploads/vw-beetle/${file.filename}`,
-          caption: "",
-          category: "Exterior",
-          uploadedAt: new Date().toISOString(),
+        const nextPhotos = await Promise.all(files.map(async (file, index) => {
+          if (process.env.AWS_S3_BUCKET) {
+            const { S3StorageService } = await import("../s3Storage.js");
+            const s3Service = new S3StorageService();
+            await s3Service.uploadFile({
+              key: `${VW_PHOTO_PREFIX}/${file.filename}`,
+              filePath: file.path,
+              contentType: file.mimetype,
+            });
+            fs.unlink(file.path, () => {});
+          }
+
+          return {
+            id: `${Date.now()}-${index}-${file.filename}`,
+            url: vehiclePhotoUrl(file.filename),
+            caption: "",
+            category: "Exterior",
+            uploadedAt: new Date().toISOString(),
+          };
         }));
         const photos = [...(((listing.photosJson as any[]) || [])), ...nextPhotos];
         const heroPhotoUrl = listing.heroPhotoUrl || nextPhotos[0]?.url || "";
@@ -345,7 +408,10 @@ export function registerVehicleListingRoutes(app: Express) {
       const imageUrls = (((listing.photosJson as any[]) || []) as Array<{ url?: string }>)
         .map((photo) => photo.url || "")
         .filter(Boolean)
-        .map((url) => toAbsolutePublicUrl(url, baseUrl));
+        .map((url) => {
+          const filename = extractVehiclePhotoFilename(url);
+          return toAbsolutePublicUrl(filename ? vehiclePhotoUrl(filename) : url, baseUrl);
+        });
       const result = await generateAiJsonWithImages(`Analyze this private-party classic vehicle listing and uploaded photos, then return the requested valuation JSON shape. Focus comps on 1973-1979 Volkswagen Super Beetle Convertibles with curved windshield, not flat windshield standard Beetles, hardtops, or project cars unless noted as weaker comps. If photos are inaccessible, base the estimate on vehicle details and set confidence accordingly.\n\nListing data:\n${JSON.stringify({ ...listing, notes: req.body?.notes || "" }, null, 2)}\n\nReturn JSON with estimatedConditionCategory, suggestedLowValue, suggestedHighValue, suggestedAskingPrice, curvedWindshieldValueImpact, visibleStrengths, visibleConcerns, recommendedRepairsBeforeSale, listingHighlights, confidence, disclaimer.`, listing.aiValuationJson || defaultListing.aiValuationJson, imageUrls);
       res.json({ valuation: result });
     } catch (error) {

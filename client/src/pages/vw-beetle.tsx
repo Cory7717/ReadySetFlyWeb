@@ -79,6 +79,20 @@ function money(value: unknown) {
 
 function publicPhotoUrl(url?: string | null) {
   if (!url) return "";
+  const vehiclePhotoPath = (value: string) => {
+    try {
+      const parsed = /^https?:\/\//i.test(value) ? new URL(value) : null;
+      const pathname = parsed ? parsed.pathname : value;
+      const match = pathname.match(/\/(?:uploads\/vw-beetle|api\/vehicle-listings\/vw-beetle\/photos)\/([^/?#]+)$/i);
+      return match ? `/api/vehicle-listings/vw-beetle/photos/${encodeURIComponent(decodeURIComponent(match[1]))}` : "";
+    } catch {
+      return "";
+    }
+  };
+
+  const normalizedVehiclePhoto = vehiclePhotoPath(url);
+  if (normalizedVehiclePhoto) return apiUrl(normalizedVehiclePhoto);
+
   if (/^https?:\/\//i.test(url)) {
     try {
       const parsed = new URL(url);

@@ -405,7 +405,6 @@ export default function VwBeetlePage() {
                 <CardDescription className="!text-[#eadfce]">{listing.location || "Location TBD"} | Manual | Drivable</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="rounded-xl border border-white/15 bg-white/5 p-3 text-sm leading-6">{listing.story}</div>
                 <div className="grid gap-2">
                   <Button className={C.amber} onClick={() => document.getElementById("contact-seller")?.scrollIntoView({ behavior: "smooth" })}><Mail className="mr-2 h-4 w-4" />Contact Seller</Button>
                   <Button variant="outline" className="border-white/25 bg-white/10 text-white hover:bg-white/15" onClick={() => setLead((v) => ({ ...v, interestType: "request_more_photos" }))}>Request More Photos</Button>
@@ -443,7 +442,7 @@ export default function VwBeetlePage() {
               <CardHeader><CardTitle>Market Value Ranges</CardTitle><CardDescription>General private-party guide. Verify with current curved windshield Super Beetle Convertible comps.</CardDescription></CardHeader>
               <CardContent>
                 <table className="w-full table-fixed text-[12px] leading-5 md:text-sm">
-                  <thead><tr className="bg-[#251914] text-white"><th className="w-[22%] p-2 text-left">Condition</th><th className="w-[28%] p-2 text-left">Description</th><th className="w-[20%] p-2">Range</th><th className="w-[30%] p-2 text-left">Notes</th></tr></thead>
+                  <thead><tr className="bg-[#251914] text-white"><th className="w-[21%] p-2 text-left">Condition</th><th className="w-[27%] p-2 text-left">Description</th><th className="w-[26%] p-2">Range</th><th className="w-[26%] p-2 text-left">Notes</th></tr></thead>
                   <tbody>{ranges.map((row) => {
                     const isCurrent = (row.condition || "").includes("Good Driver");
                     return (
@@ -455,7 +454,7 @@ export default function VwBeetlePage() {
                           </div>
                         </td>
                         <td className="break-words p-2 align-top">{row.description}</td>
-                        <td className="break-words p-2 text-center align-top font-semibold">{row.range}</td>
+                        <td className="whitespace-nowrap p-2 text-center align-top font-semibold tabular-nums">{row.range}</td>
                         <td className="break-words p-2 align-top">{isCurrent ? "Current category: restored engine, drivable, good body/interior, minor needs." : row.notes}</td>
                       </tr>
                     );
@@ -659,6 +658,18 @@ function AdminPanel(props: {
                 <div className="mt-1 font-semibold">{valuation.confidence || "Not provided"}</div>
               </div>
             </div>
+            {!!valuation.photoConditionSummary && (
+              <div className="mt-4 rounded-lg border border-[#ead9bf] bg-white p-3 text-sm leading-6 text-[#4d3d32]">
+                <div className="font-semibold text-[#251914]">Photo-based condition analysis</div>
+                <p className="mt-1">{String(valuation.photoConditionSummary)}</p>
+              </div>
+            )}
+            {!!valuation.confidenceReason && (
+              <div className="mt-3 rounded-lg border border-[#ead9bf] bg-white p-3 text-sm leading-6 text-[#4d3d32]">
+                <div className="font-semibold text-[#251914]">Why confidence is {String(valuation.confidence || "not provided").toLowerCase()}</div>
+                <p className="mt-1">{String(valuation.confidenceReason)}</p>
+              </div>
+            )}
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
                 <div className="text-sm font-semibold text-[#251914]">Visible strengths</div>

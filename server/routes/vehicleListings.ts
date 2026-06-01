@@ -485,7 +485,18 @@ export function registerVehicleListingRoutes(app: Express) {
           const filename = extractVehiclePhotoFilename(url);
           return toAbsolutePublicUrl(filename ? vehiclePhotoUrl(filename) : url, baseUrl);
         });
-      const result = await generateAiJsonWithImages(`Analyze this private-party classic vehicle listing and every uploaded photo provided in this request, then return the requested valuation JSON shape. You are receiving ${imageUrls.length} uploaded photo${imageUrls.length === 1 ? "" : "s"}; consider all of them when judging condition, strengths, concerns, and price. Focus comps on 1973-1979 Volkswagen Super Beetle Convertibles with curved windshield, not flat windshield standard Beetles, hardtops, or project cars unless noted as weaker comps. If photos are inaccessible, base the estimate on vehicle details and set confidence accordingly.\n\nListing data:\n${JSON.stringify({ ...listing, notes: req.body?.notes || "" }, null, 2)}\n\nReturn JSON with estimatedConditionCategory, suggestedLowValue, suggestedHighValue, suggestedAskingPrice, curvedWindshieldValueImpact, visibleStrengths, visibleConcerns, recommendedRepairsBeforeSale, listingHighlights, imagesAnalyzed, confidence, disclaimer.`, listing.aiValuationJson || defaultListing.aiValuationJson, imageUrls);
+      const result = await generateAiJsonWithImages(`Analyze this private-party classic vehicle listing and every uploaded photo provided in this request, then return the requested valuation JSON shape. You are receiving ${imageUrls.length} uploaded photo${imageUrls.length === 1 ? "" : "s"}; consider all of them when judging condition, strengths, concerns, and price. Focus comps on 1973-1979 Volkswagen Super Beetle Convertibles with curved windshield, not flat windshield standard Beetles, hardtops, or project cars unless noted as weaker comps.
+
+Confidence rules:
+- High only if photos clearly show exterior, interior, engine bay, top, floors/undercarriage or rust-prone areas, plus the listing has mileage/title/documentation.
+- Medium if photos show most major areas but some high-value inspection items are missing.
+- Low if price still depends on missing inspection data such as mileage, title, undercarriage/floor pans, convertible top condition, seal/rust closeups, or restoration documentation.
+Always include confidenceReason explaining why you chose the confidence level.
+
+Listing data:
+${JSON.stringify({ ...listing, notes: req.body?.notes || "" }, null, 2)}
+
+Return JSON with estimatedConditionCategory, suggestedLowValue, suggestedHighValue, suggestedAskingPrice, curvedWindshieldValueImpact, visibleStrengths, visibleConcerns, recommendedRepairsBeforeSale, listingHighlights, photoConditionSummary, confidence, confidenceReason, imagesAnalyzed, disclaimer.`, listing.aiValuationJson || defaultListing.aiValuationJson, imageUrls);
       res.json({ valuation: result });
     } catch (error) {
       next(error);
@@ -495,7 +506,19 @@ export function registerVehicleListingRoutes(app: Express) {
   router.post("/vw-beetle/admin/ai/listing", isAuthenticated, isAdmin, async (req, res, next) => {
     try {
       const listing = await getListing();
-      const result = await generateAiJson(`Draft listing copy for a 1974 Volkswagen Super Beetle Convertible curved windshield model. Be transparent about known issues. Return JSON with exactly these string fields: professional, friendlyMarketplace, facebookShort, collectorFocused, transparentKnownIssues. Each value must be plain listing text, not an object or nested structure.\n\nListing data:\n${JSON.stringify({ ...listing, style: req.body?.style || "all" }, null, 2)}`, {
+      const result = await generateAiJson(`Write compelling, buyer-focused listing copy for a 1974 Volkswagen Super Beetle Convertible curved windshield model. Make it sound attractive and memorable for classic-car buyers while staying honest and transparent. Lead with what makes it desirable: curved windshield Super Beetle Convertible, manual transmission, drivable, restored engine, good body/interior, final-era convertible Beetle appeal. Do not sound generic. Do not overpromise show-car quality. Mention known needs in a confident, transparent way, not as a warning label.
+
+Return JSON with exactly these string fields:
+- professional: polished private-party listing suitable for the website, 2-4 short paragraphs plus concise highlights.
+- friendlyMarketplace: warmer Facebook Marketplace style, inviting but not cheesy.
+- facebookShort: short punchy post under 700 characters.
+- collectorFocused: aimed at VW/classic collectors, emphasizing curved windshield Super Beetle convertible context.
+- transparentKnownIssues: honest condition-focused version that still frames the car positively.
+
+Each value must be plain listing text, not an object or nested structure.
+
+Listing data:
+${JSON.stringify({ ...listing, style: req.body?.style || "all" }, null, 2)}`, {
         professional: listing.description,
         friendlyMarketplace: listing.description,
         facebookShort: listing.description,

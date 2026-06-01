@@ -676,6 +676,7 @@ function ForecastPanel({
   onPopupGroupSave,
   importing,
   actualizing,
+  canActualize,
   spanish,
 }: {
   payload: SchedulePayload;
@@ -686,6 +687,7 @@ function ForecastPanel({
   onPopupGroupSave: (body: { forecastDate: string; popupGroupRooms: number; popupGroupNotes: string }) => void;
   importing: boolean;
   actualizing: boolean;
+  canActualize: boolean;
   spanish: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -739,22 +741,24 @@ function ForecastPanel({
               {spanish ? "Cuartos, ocupacion, llegadas, salidas y notas controlan alertas de personal." : "Rooms, occupancy, arrivals, departures, and notes drive staffing warnings."}
             </CardDescription>
           </div>
-          {editable && (
+          {(editable || canActualize) && (
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" className={C.outline} disabled={importing} onClick={() => fileInputRef.current?.click()}>
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                {importing ? (spanish ? "Importando..." : "Importing...") : t("Import OTB CSV")}
-              </Button>
-              <Button variant="outline" className={C.outline} disabled={actualizing} onClick={() => actualizedInputRef.current?.click()}>
+              {editable && (
+                <Button variant="outline" className={C.outline} disabled={importing} onClick={() => fileInputRef.current?.click()}>
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  {importing ? (spanish ? "Importando..." : "Importing...") : t("Import OTB CSV")}
+                </Button>
+              )}
+              {canActualize && <Button variant="outline" className={C.outline} disabled={actualizing} onClick={() => actualizedInputRef.current?.click()}>
                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                 {actualizing ? (spanish ? "Subiendo..." : "Uploading...") : (spanish ? "Subir pickup real" : "Upload actual pickup")}
-              </Button>
+              </Button>}
             </div>
           )}
         </div>
       </CardHeader>
       <CardContent className="overflow-x-auto">
-        {editable && (
+        {canActualize && (
           <div className="mb-4 rounded-xl border border-[#bdd5c3] bg-[#e8f1ea] p-3 text-sm text-[#173c25]">
             <div className="font-semibold">{spanish ? "Actualizar pickup despues de cerrar la semana" : "Ended-week actual pickup upload"}</div>
             <p className="mt-1">
@@ -763,6 +767,19 @@ function ForecastPanel({
                 : "After the schedule week closes, upload the updated On the Books CSV here. The system compares actual rooms against the original upload so pickup accuracy can be tracked for future AI scheduling."}
             </p>
           </div>
+        )}
+        {canActualize && (
+          <input
+            ref={actualizedInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) onActualizedImport(file);
+              event.target.value = "";
+            }}
+          />
         )}
         {hasOriginalUpload && (
           <div className="mb-5 rounded-xl border border-[#d9c9b4] bg-[#fbf6ee] p-3">
@@ -875,21 +892,10 @@ function ForecastPanel({
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               {importing ? (spanish ? "Importando..." : "Importing...") : t("Import OTB CSV")}
             </Button>
-            <input
-              ref={actualizedInputRef}
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) onActualizedImport(file);
-                event.target.value = "";
-              }}
-            />
-            <Button variant="outline" className={C.outline} disabled={actualizing} onClick={() => actualizedInputRef.current?.click()}>
+            {canActualize && <Button variant="outline" className={C.outline} disabled={actualizing} onClick={() => actualizedInputRef.current?.click()}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               {actualizing ? (spanish ? "Subiendo..." : "Uploading...") : (spanish ? "Subir pickup real" : "Upload actual pickup")}
-            </Button>
+            </Button>}
           </div>
         )}
         {editable && (
@@ -1944,6 +1950,7 @@ export default function SchedulePage() {
   const payload = shareToken ? share.data : detail.data;
   const user = auth.data?.user;
   const editable = Boolean(user?.isAdmin && payload?.schedule.status === "draft" && !shareToken);
+  const canActualizeForecast = Boolean(user?.isAdmin && payload && !shareToken);
   const t = (value: string) => tr(spanish, value);
   const hasHousekeepingBoardData = Boolean(payload?.housekeepingBoards?.some((board) => Number(board.actualHours || 0) > 0));
 
@@ -2439,6 +2446,7 @@ export default function SchedulePage() {
               onPopupGroupSave={(body) => savePopupGroup.mutate(body)}
               importing={importForecast.isPending}
               actualizing={importActualized.isPending}
+              canActualize={canActualizeForecast}
               spanish={spanish}
             />
             <ScheduleGrid

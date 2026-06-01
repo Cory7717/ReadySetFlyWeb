@@ -5,7 +5,7 @@ import multer from "multer";
 import OpenAI from "openai";
 import { pipeline } from "stream/promises";
 import { z } from "zod";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { isAdmin, isAuthenticated } from "../auth";
 import { getUncachableResendClient } from "../resendClient";
@@ -99,6 +99,7 @@ const defaultListing = {
     showPhone: false,
   },
   aiListingDraftsJson: {},
+  viewCount: 1530,
 };
 
 const listingUpdateSchema = z.object({
@@ -328,7 +329,12 @@ export function registerVehicleListingRoutes(app: Express) {
 
   router.get("/vw-beetle", async (_req, res, next) => {
     try {
-      res.json({ listing: await getListing() });
+      await getListing();
+      const [listing] = await db.update(vehicleListings).set({
+        viewCount: sql`${vehicleListings.viewCount} + 1`,
+        updatedAt: new Date(),
+      } as any).where(eq(vehicleListings.id, VW_LISTING_ID)).returning();
+      res.json({ listing: sanitizeListing(listing) });
     } catch (error) {
       next(error);
     }

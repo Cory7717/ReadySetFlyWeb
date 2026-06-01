@@ -43,6 +43,7 @@ type VehicleListing = {
   heroPhotoUrl?: string | null;
   sellerContactJson?: Record<string, any>;
   aiListingDraftsJson?: Record<string, any>;
+  viewCount?: number;
 };
 
 const C = {
@@ -120,6 +121,11 @@ function publicPhotoUrl(url?: string | null) {
 
 function spec(label: string, value?: unknown) {
   return { label, value: value == null || value === "" ? "TBD" : String(value) };
+}
+
+function integer(value: unknown) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? new Intl.NumberFormat().format(Math.max(0, Math.round(n))) : "0";
 }
 
 function draftToText(value: unknown): string {
@@ -330,6 +336,9 @@ export default function VwBeetlePage() {
                 )}
               </div>
             )}
+            <div className="mt-3 inline-flex items-center rounded-full border border-[#2f5f46]/25 bg-[#edf7f0] px-4 py-2 text-sm font-semibold text-[#244b37]">
+              {integer(listing.viewCount || 1530)} listing views
+            </div>
           </div>
           <div className="flex gap-2">
             {isAdminPage && <Badge className="bg-[#251914]">Admin edit mode</Badge>}

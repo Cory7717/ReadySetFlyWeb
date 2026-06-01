@@ -26,11 +26,13 @@ CREATE TABLE IF NOT EXISTS "vehicle_listings" (
   "hero_photo_url" text,
   "seller_contact_json" jsonb,
   "ai_listing_drafts_json" jsonb,
+  "view_count" integer DEFAULT 1530 NOT NULL,
   "created_at" timestamp DEFAULT now(),
   "updated_at" timestamp DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS "idx_vehicle_listings_status" ON "vehicle_listings" ("status");
+CREATE INDEX IF NOT EXISTS "idx_vehicle_listings_view_count" ON "vehicle_listings" ("view_count");
 
 CREATE TABLE IF NOT EXISTS "vehicle_listing_leads" (
   "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

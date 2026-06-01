@@ -740,10 +740,12 @@ export const vehicleListings = pgTable("vehicle_listings", {
   heroPhotoUrl: text("hero_photo_url"),
   sellerContactJson: jsonb("seller_contact_json"),
   aiListingDraftsJson: jsonb("ai_listing_drafts_json"),
+  viewCount: integer("view_count").notNull().default(1530),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("idx_vehicle_listings_status").on(table.status),
+  index("idx_vehicle_listings_view_count").on(table.viewCount),
 ]);
 
 export const vehicleListingLeads = pgTable("vehicle_listing_leads", {

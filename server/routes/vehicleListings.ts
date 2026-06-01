@@ -160,7 +160,20 @@ function getPublicApiBaseUrl(req: express.Request) {
 }
 
 function toAbsolutePublicUrl(url: string, baseUrl: string) {
-  if (/^https?:\/\//i.test(url)) return url;
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const parsed = new URL(url);
+      if (
+        (parsed.hostname === "readysetfly.us" || parsed.hostname === "www.readysetfly.us") &&
+        parsed.pathname.startsWith("/uploads/")
+      ) {
+        return new URL(`${parsed.pathname}${parsed.search}`, baseUrl).toString();
+      }
+    } catch {
+      return url;
+    }
+    return url;
+  }
   return new URL(url.startsWith("/") ? url : `/${url}`, baseUrl).toString();
 }
 

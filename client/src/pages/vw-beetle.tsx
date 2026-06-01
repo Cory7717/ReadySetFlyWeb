@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ArrowLeft, ArrowRight, Camera, Car, CheckCircle2, Copy, DollarSign, Mail, Phone, Sparkles, Upload, X } from "lucide-react";
@@ -46,7 +46,7 @@ type VehicleListing = {
 };
 
 const C = {
-  page: "min-h-screen bg-[#f5efe7] text-[#251914]",
+  page: "min-h-screen bg-[#f5efe7] text-[#251914] [&_.text-muted-foreground]:!text-[#67564a]",
   shell: "!border-[#dcc8aa] !bg-[#fffaf3] !bg-none shadow-[0_18px_45px_rgba(69,45,25,0.13)]",
   dark: "!border-[#3f3128] !bg-[#251914] !bg-none !text-white shadow-[0_18px_45px_rgba(37,25,20,0.25)]",
   field: "!border-[#cdb894] !bg-white !text-[#251914]",
@@ -79,7 +79,21 @@ function money(value: unknown) {
 
 function publicPhotoUrl(url?: string | null) {
   if (!url) return "";
-  return url.startsWith("http") ? url : apiUrl(url);
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const parsed = new URL(url);
+      if (
+        (parsed.hostname === "readysetfly.us" || parsed.hostname === "www.readysetfly.us") &&
+        parsed.pathname.startsWith("/uploads/")
+      ) {
+        return apiUrl(`${parsed.pathname}${parsed.search}`);
+      }
+    } catch {
+      return url;
+    }
+    return url;
+  }
+  return apiUrl(url);
 }
 
 function spec(label: string, value?: unknown) {
@@ -96,6 +110,23 @@ export default function VwBeetlePage() {
   const [lead, setLead] = useState({ name: "", email: "", phone: "", interestType: "general_inquiry", offerAmount: "", preferredContactMethod: "email", message: "", website: "" });
   const [edit, setEdit] = useState<Partial<VehicleListing>>({});
   const [selectedPhotos, setSelectedPhotos] = useState<FileList | null>(null);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const hadDark = root.classList.contains("dark");
+    const hadLight = root.classList.contains("light");
+    const previousColorScheme = root.style.colorScheme;
+
+    root.classList.remove("dark");
+    root.classList.add("light");
+    root.style.colorScheme = "light";
+
+    return () => {
+      root.classList.toggle("dark", hadDark);
+      root.classList.toggle("light", hadLight);
+      root.style.colorScheme = previousColorScheme;
+    };
+  }, []);
 
   const listingQuery = useQuery<{ listing: VehicleListing }>({
     queryKey: ["/api/vehicle-listings/vw-beetle"],

@@ -4,6 +4,8 @@ import {
   AlertTriangle,
   Archive,
   CalendarDays,
+  ChevronDown,
+  ChevronUp,
   CheckCircle2,
   Copy,
   Download,
@@ -730,10 +732,38 @@ function ForecastPanel({
   return (
     <Card className={C.shell} data-tour="forecast">
       <CardHeader>
-        <CardTitle className={C.ink}>{t("Forecast")}</CardTitle>
-        <CardDescription className={C.muted}>{spanish ? "Cuartos, ocupacion, llegadas, salidas y notas controlan alertas de personal." : "Rooms, occupancy, arrivals, departures, and notes drive staffing warnings."}</CardDescription>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <CardTitle className={C.ink}>{t("Forecast")}</CardTitle>
+            <CardDescription className={C.muted}>
+              {spanish ? "Cuartos, ocupacion, llegadas, salidas y notas controlan alertas de personal." : "Rooms, occupancy, arrivals, departures, and notes drive staffing warnings."}
+            </CardDescription>
+          </div>
+          {editable && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" className={C.outline} disabled={importing} onClick={() => fileInputRef.current?.click()}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                {importing ? (spanish ? "Importando..." : "Importing...") : t("Import OTB CSV")}
+              </Button>
+              <Button variant="outline" className={C.outline} disabled={actualizing} onClick={() => actualizedInputRef.current?.click()}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                {actualizing ? (spanish ? "Subiendo..." : "Uploading...") : (spanish ? "Subir pickup real" : "Upload actual pickup")}
+              </Button>
+            </div>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="overflow-x-auto">
+        {editable && (
+          <div className="mb-4 rounded-xl border border-[#bdd5c3] bg-[#e8f1ea] p-3 text-sm text-[#173c25]">
+            <div className="font-semibold">{spanish ? "Actualizar pickup despues de cerrar la semana" : "Ended-week actual pickup upload"}</div>
+            <p className="mt-1">
+              {spanish
+                ? "Despues de terminar el horario, suba el reporte On the Books actualizado aqui. El sistema compara cuartos reales contra la carga original para medir pickup y mejorar el pronostico."
+                : "After the schedule week closes, upload the updated On the Books CSV here. The system compares actual rooms against the original upload so pickup accuracy can be tracked for future AI scheduling."}
+            </p>
+          </div>
+        )}
         {hasOriginalUpload && (
           <div className="mb-5 rounded-xl border border-[#d9c9b4] bg-[#fbf6ee] p-3">
             <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -858,7 +888,7 @@ function ForecastPanel({
             />
             <Button variant="outline" className={C.outline} disabled={actualizing} onClick={() => actualizedInputRef.current?.click()}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
-              {actualizing ? (spanish ? "Subiendo..." : "Uploading...") : t("Upload actualized CSV")}
+              {actualizing ? (spanish ? "Subiendo..." : "Uploading...") : (spanish ? "Subir pickup real" : "Upload actual pickup")}
             </Button>
           </div>
         )}
@@ -1812,18 +1842,37 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
 
 function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus }: { requests: ScheduleRequest[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => void; onStatus: (request: ScheduleRequest, status: string) => void }) {
   const [form, setForm] = useState({ requestDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+  const [expanded, setExpanded] = useState(!isAdmin);
   const t = (value: string) => tr(spanish, value);
   const submit = () => {
     onSubmit({ ...form, startTime: form.startTime || null, endTime: form.endTime || null });
     setForm({ requestDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
   };
+  const pendingCount = requests.filter((request) => request.status === "submitted").length;
+  const approvedCount = requests.filter((request) => request.status === "approved").length;
+  const deniedCount = requests.filter((request) => request.status === "denied").length;
   return (
     <Card className={`${C.shell} print:hidden`} data-tour="requests">
       <CardHeader>
-        <CardTitle className={C.ink}>{t("Schedule requests")}</CardTitle>
-        <CardDescription className={C.muted}>{t("Requests must be submitted at least 14 days before the requested date.")}</CardDescription>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle className={C.ink}>{t("Schedule requests")}</CardTitle>
+            <CardDescription className={C.muted}>{t("Requests must be submitted at least 14 days before the requested date.")}</CardDescription>
+            {isAdmin && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">{pendingCount} {spanish ? "pendiente(s)" : "pending"}</Badge>
+                <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800">{approvedCount} {spanish ? "aprobada(s)" : "approved"}</Badge>
+                <Badge variant="outline" className="border-red-300 bg-red-50 text-red-800">{deniedCount} {spanish ? "negada(s)" : "denied"}</Badge>
+              </div>
+            )}
+          </div>
+          <Button variant="outline" className={`${C.outline} w-fit`} onClick={() => setExpanded((value) => !value)}>
+            {expanded ? <ChevronUp className="mr-2 h-4 w-4" /> : <ChevronDown className="mr-2 h-4 w-4" />}
+            {expanded ? (spanish ? "Ocultar" : "Collapse") : (spanish ? "Mostrar" : "Expand")}
+          </Button>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      {expanded && <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-[160px_180px_120px_120px_1fr_auto]">
           <div><Label>{t("Date")}</Label><Input className={C.field} type="date" value={form.requestDate} onChange={(event) => setForm({ ...form, requestDate: event.target.value })} /></div>
           <div>
@@ -1868,7 +1917,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus 
           ))}
           {requests.length === 0 && <div className="text-sm text-[#5f5247]">{t("No schedule requests yet.")}</div>}
         </div>
-      </CardContent>
+      </CardContent>}
     </Card>
   );
 }

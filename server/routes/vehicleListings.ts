@@ -301,8 +301,11 @@ async function generateAiJsonWithImages(prompt: string, fallback: any, imageUrls
 }
 
 async function emailLead(listing: any, lead: any) {
-  const to = process.env.VEHICLE_SELLER_EMAIL || "coryarmer@gmail.com";
-  if (!to) return false;
+  const to = (process.env.VEHICLE_SELLER_EMAIL || "coryarmer@gmail.com,bentley.amy24@gmail.com")
+    .split(",")
+    .map((email) => email.trim())
+    .filter(Boolean);
+  if (!to.length) return false;
   const { client, fromEmail } = await getUncachableResendClient();
   await client.emails.send({
     from: fromEmail,

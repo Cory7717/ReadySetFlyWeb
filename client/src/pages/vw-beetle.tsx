@@ -169,14 +169,14 @@ export default function VwBeetlePage() {
   });
 
   const saveListing = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("PUT", "/api/vehicle-listings/vw-beetle/admin", edit);
+    mutationFn: async (override?: Partial<VehicleListing>) => {
+      const response = await apiRequest("PUT", "/api/vehicle-listings/vw-beetle/admin", override || edit);
       return response.json();
     },
-    onSuccess: () => {
-      setEdit({});
+    onSuccess: (_data, override) => {
+      if (!override) setEdit({});
       queryClient.invalidateQueries({ queryKey: ["/api/vehicle-listings/vw-beetle"] });
-      toast({ title: "Listing saved" });
+      toast({ title: override?.heroPhotoUrl ? "Hero image updated" : "Listing saved" });
     },
     onError: (error: Error) => toast({ title: "Save failed", description: error.message, variant: "destructive" }),
   });
@@ -387,7 +387,9 @@ export default function VwBeetlePage() {
               setEdit={setEdit}
               selectedPhotos={selectedPhotos}
               setSelectedPhotos={setSelectedPhotos}
-              saveListing={() => saveListing.mutate()}
+              activeHeroUrl={listing.heroPhotoUrl || ""}
+              setHeroPhoto={(url) => saveListing.mutate({ heroPhotoUrl: url } as any)}
+              saveListing={() => saveListing.mutate(undefined)}
               saving={saveListing.isPending}
               uploadPhotos={() => uploadPhotos.mutate()}
               uploading={uploadPhotos.isPending}
@@ -455,6 +457,8 @@ function AdminPanel(props: {
   setEdit: (value: Partial<VehicleListing> | ((current: Partial<VehicleListing>) => Partial<VehicleListing>)) => void;
   selectedPhotos: FileList | null;
   setSelectedPhotos: (files: FileList | null) => void;
+  activeHeroUrl: string;
+  setHeroPhoto: (url: string) => void;
   saveListing: () => void;
   saving: boolean;
   uploadPhotos: () => void;
@@ -516,6 +520,26 @@ function AdminPanel(props: {
             <Input className={C.field} type="file" accept="image/*" multiple onChange={(e) => props.setSelectedPhotos(e.target.files)} />
             <Button className={C.amber} disabled={props.uploading || !props.selectedPhotos?.length} onClick={props.uploadPhotos}><Upload className="mr-2 h-4 w-4" />{props.uploading ? "Uploading..." : "Upload Photos"}</Button>
           </div>
+          {!!(listing.photosJson || []).length && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {(listing.photosJson || []).map((photo, index) => {
+                const isHero = photo.url === props.activeHeroUrl || (!props.activeHeroUrl && index === 0);
+                return (
+                  <div key={photo.id || photo.url} className={`overflow-hidden rounded-xl border ${isHero ? "border-[#b98435] ring-2 ring-[#b98435]/30" : "border-[#dcc8aa]"} bg-[#fffaf3]`}>
+                    <img src={publicPhotoUrl(photo.url)} className="h-28 w-full object-cover" alt={photo.caption || `VW Beetle photo ${index + 1}`} />
+                    <div className="flex items-center justify-between gap-2 p-2">
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${isHero ? "bg-[#b98435] text-white" : "bg-[#ead9bf] text-[#4d3d32]"}`}>
+                        {isHero ? "Hero image" : `Photo ${index + 1}`}
+                      </span>
+                      <Button size="sm" variant="outline" className={C.outline} disabled={isHero || props.saving} onClick={() => props.setHeroPhoto(photo.url)}>
+                        Use as Hero
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

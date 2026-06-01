@@ -33,7 +33,9 @@ const photoUpload = multer({
 const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 const openaiBaseUrl = (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || "").trim();
 const openai = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey, ...(openaiBaseUrl.startsWith("http") ? { baseURL: openaiBaseUrl } : {}) }) : null;
-const VW_PHOTO_PREFIX = "vehicle-listings/vw-beetle";
+// Keep VW photos under the existing RSF uploads prefix so the production S3 IAM
+// policy can write them without requiring a new bucket policy rollout.
+const VW_PHOTO_PREFIX = "uploads/vw-beetle";
 
 const defaultListing = {
   id: VW_LISTING_ID,
@@ -214,6 +216,7 @@ async function generateAiJson(prompt: string, fallback: any) {
 async function generateAiJsonWithImages(prompt: string, fallback: any, imageUrls: string[]) {
   if (!openai || imageUrls.length === 0) return generateAiJson(prompt, fallback);
   try {
+    const imageContent = imageUrls.map((url) => ({ type: "image_url", image_url: { url } }));
     const completion = await openai.chat.completions.create({
       model: process.env.VEHICLE_AI_VISION_MODEL || process.env.VEHICLE_AI_MODEL || "gpt-4o-mini",
       messages: [
@@ -222,16 +225,20 @@ async function generateAiJsonWithImages(prompt: string, fallback: any, imageUrls
           role: "user",
           content: [
             { type: "text", text: prompt },
-            ...imageUrls.slice(0, 8).map((url) => ({ type: "image_url", image_url: { url } })),
+            ...imageContent,
           ] as any,
         },
       ],
       temperature: 0.3,
     });
     try {
-      return { ...extractJson(completion.choices[0]?.message?.content || "{}"), aiAvailable: true };
+      return {
+        ...extractJson(completion.choices[0]?.message?.content || "{}"),
+        aiAvailable: true,
+        imagesAnalyzed: imageUrls.length,
+      };
     } catch {
-      return { ...fallback, aiAvailable: true, rawText: completion.choices[0]?.message?.content || "" };
+      return { ...fallback, aiAvailable: true, imagesAnalyzed: imageUrls.length, rawText: completion.choices[0]?.message?.content || "" };
     }
   } catch (error: any) {
     console.warn("vehicle_ai_image_analysis_failed", {
@@ -243,6 +250,8 @@ async function generateAiJsonWithImages(prompt: string, fallback: any, imageUrls
       {
         ...fallback,
         confidence: "Low",
+        imagesAnalyzed: 0,
+        attemptedImageCount: imageUrls.length,
         imageAnalysisUnavailable: true,
         visibleConcerns: [
           ...((fallback?.visibleConcerns as string[] | undefined) || []),
@@ -443,7 +452,7 @@ export function registerVehicleListingRoutes(app: Express) {
           const filename = extractVehiclePhotoFilename(url);
           return toAbsolutePublicUrl(filename ? vehiclePhotoUrl(filename) : url, baseUrl);
         });
-      const result = await generateAiJsonWithImages(`Analyze this private-party classic vehicle listing and uploaded photos, then return the requested valuation JSON shape. Focus comps on 1973-1979 Volkswagen Super Beetle Convertibles with curved windshield, not flat windshield standard Beetles, hardtops, or project cars unless noted as weaker comps. If photos are inaccessible, base the estimate on vehicle details and set confidence accordingly.\n\nListing data:\n${JSON.stringify({ ...listing, notes: req.body?.notes || "" }, null, 2)}\n\nReturn JSON with estimatedConditionCategory, suggestedLowValue, suggestedHighValue, suggestedAskingPrice, curvedWindshieldValueImpact, visibleStrengths, visibleConcerns, recommendedRepairsBeforeSale, listingHighlights, confidence, disclaimer.`, listing.aiValuationJson || defaultListing.aiValuationJson, imageUrls);
+      const result = await generateAiJsonWithImages(`Analyze this private-party classic vehicle listing and every uploaded photo provided in this request, then return the requested valuation JSON shape. You are receiving ${imageUrls.length} uploaded photo${imageUrls.length === 1 ? "" : "s"}; consider all of them when judging condition, strengths, concerns, and price. Focus comps on 1973-1979 Volkswagen Super Beetle Convertibles with curved windshield, not flat windshield standard Beetles, hardtops, or project cars unless noted as weaker comps. If photos are inaccessible, base the estimate on vehicle details and set confidence accordingly.\n\nListing data:\n${JSON.stringify({ ...listing, notes: req.body?.notes || "" }, null, 2)}\n\nReturn JSON with estimatedConditionCategory, suggestedLowValue, suggestedHighValue, suggestedAskingPrice, curvedWindshieldValueImpact, visibleStrengths, visibleConcerns, recommendedRepairsBeforeSale, listingHighlights, imagesAnalyzed, confidence, disclaimer.`, listing.aiValuationJson || defaultListing.aiValuationJson, imageUrls);
       res.json({ valuation: result });
     } catch (error) {
       next(error);

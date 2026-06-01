@@ -46,8 +46,8 @@ type VehicleListing = {
 };
 
 const C = {
-  page: "min-h-screen bg-[#f5efe7] text-[#251914] [&_.text-muted-foreground]:!text-[#67564a]",
-  shell: "!border-[#dcc8aa] !bg-[#fffaf3] !bg-none shadow-[0_18px_45px_rgba(69,45,25,0.13)]",
+  page: "min-h-screen bg-[#f5efe7] !text-[#251914] [&_.text-card-foreground]:!text-[#251914] [&_.text-muted-foreground]:!text-[#67564a]",
+  shell: "!border-[#dcc8aa] !bg-[#fffaf3] !bg-none !text-[#251914] shadow-[0_18px_45px_rgba(69,45,25,0.13)]",
   dark: "!border-[#3f3128] !bg-[#251914] !bg-none !text-white shadow-[0_18px_45px_rgba(37,25,20,0.25)]",
   field: "!border-[#cdb894] !bg-white !text-[#251914]",
   green: "!bg-[#2f5f46] !bg-none !text-white hover:!bg-[#264d38]",
@@ -430,10 +430,23 @@ export default function VwBeetlePage() {
               <div className="space-y-3 text-sm leading-7 text-[#4d3d32]">
                 {["Curved panoramic windshield", "MacPherson strut front suspension", "Improved handling and ride quality", "Larger front cargo area", "More desirable collector variant", "One of the final years of convertible Beetle production"].map((item) => <div key={item} className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 text-[#2f5f46]" />{item}</div>)}
               </div>
-              <table className="w-full overflow-hidden rounded-xl border border-[#dcc8aa] text-sm">
-                <thead><tr className="bg-[#251914] text-white"><th className="p-3 text-left">Feature</th><th className="p-3 text-left">Standard Beetle</th><th className="p-3 text-left">Super Beetle Convertible</th></tr></thead>
-                <tbody>{comparison.map((row) => <tr key={row[0]} className="odd:bg-white even:bg-[#fbf1e4]"><td className="p-3 font-semibold">{row[0]}</td><td className="p-3">{row[1]}</td><td className="p-3 font-semibold text-[#2f5f46]">{row[2]}</td></tr>)}</tbody>
-              </table>
+              <div className="hidden md:block">
+                <table className="w-full overflow-hidden rounded-xl border border-[#dcc8aa] text-sm">
+                  <thead><tr className="bg-[#251914] text-white"><th className="p-3 text-left">Feature</th><th className="p-3 text-left">Standard Beetle</th><th className="p-3 text-left">Super Beetle Convertible</th></tr></thead>
+                  <tbody>{comparison.map((row) => <tr key={row[0]} className="odd:bg-white even:bg-[#fbf1e4]"><td className="p-3 font-semibold text-[#251914]">{row[0]}</td><td className="p-3 text-[#4d3d32]">{row[1]}</td><td className="p-3 font-semibold text-[#2f5f46]">{row[2]}</td></tr>)}</tbody>
+                </table>
+              </div>
+              <div className="grid gap-3 md:hidden">
+                {comparison.map((row) => (
+                  <div key={row[0]} className="rounded-xl border border-[#dcc8aa] bg-white p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#8a6532]">{row[0]}</div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                      <div><div className="text-[#67564a]">Standard</div><div className="font-semibold text-[#251914]">{row[1]}</div></div>
+                      <div><div className="text-[#67564a]">Super Convertible</div><div className="font-semibold text-[#2f5f46]">{row[2]}</div></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
 
@@ -441,7 +454,7 @@ export default function VwBeetlePage() {
             <Card className={C.shell}>
               <CardHeader><CardTitle>Market Value Ranges</CardTitle><CardDescription>General private-party guide. Verify with current curved windshield Super Beetle Convertible comps.</CardDescription></CardHeader>
               <CardContent>
-                <table className="w-full table-fixed text-[12px] leading-5 md:text-sm">
+                <table className="hidden w-full table-fixed text-sm leading-5 md:table">
                   <thead><tr className="bg-[#251914] text-white"><th className="w-[21%] p-2 text-left">Condition</th><th className="w-[27%] p-2 text-left">Description</th><th className="w-[26%] p-2">Range</th><th className="w-[26%] p-2 text-left">Notes</th></tr></thead>
                   <tbody>{ranges.map((row) => {
                     const isCurrent = (row.condition || "").includes("Good Driver");
@@ -460,6 +473,22 @@ export default function VwBeetlePage() {
                     );
                   })}</tbody>
                 </table>
+                <div className="grid gap-3 md:hidden">
+                  {ranges.map((row) => {
+                    const isCurrent = (row.condition || "").includes("Good Driver");
+                    return (
+                      <div key={row.condition} className={`rounded-xl border p-4 ${isCurrent ? "border-[#2f5f46] bg-[#dff0e5]" : "border-[#dcc8aa] bg-white"}`}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="font-semibold text-[#251914]">{row.condition}</div>
+                          {isCurrent && <Badge className="bg-[#2f5f46] text-white">This car</Badge>}
+                        </div>
+                        <div className="mt-2 text-2xl font-bold tabular-nums text-[#2f5f46]">{row.range}</div>
+                        <p className="mt-2 text-sm leading-6 text-[#4d3d32]">{row.description}</p>
+                        <p className="mt-2 text-sm leading-6 text-[#67564a]">{isCurrent ? "Current category: restored engine, drivable, good body/interior, minor needs." : row.notes}</p>
+                      </div>
+                    );
+                  })}
+                </div>
                 <div className="mt-3 rounded-xl border border-[#2f5f46]/30 bg-[#edf7f0] p-3 text-sm leading-6 text-[#244b37]">
                   <strong>Estimated current position:</strong> Good Driver / Good Condition with minor needs. Current AI-supported range: <strong>{money(currentLow)}-{money(currentHigh)}</strong>.
                 </div>
@@ -476,10 +505,21 @@ export default function VwBeetlePage() {
           <Card className={C.shell}>
             <CardHeader><CardTitle>Current Value vs. Mint-Condition Path</CardTitle><CardDescription>What it may take to move from current good-driver condition toward a higher-end presentation.</CardDescription></CardHeader>
             <CardContent className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-              <table className="w-full text-sm">
+              <table className="hidden w-full text-sm md:table">
                 <thead><tr className="bg-[#251914] text-white"><th className="p-2 text-left">Improvement</th><th className="p-2 text-left">Scope</th><th className="p-2">Estimated Cost</th></tr></thead>
-                <tbody>{mintPrep.map((item) => <tr key={item.item} className="odd:bg-white even:bg-[#fbf1e4]"><td className="p-2 font-semibold">{item.item}</td><td className="p-2">{item.scope}</td><td className="p-2 text-center font-semibold">{item.cost}</td></tr>)}</tbody>
+                <tbody>{mintPrep.map((item) => <tr key={item.item} className="odd:bg-white even:bg-[#fbf1e4]"><td className="p-2 font-semibold text-[#251914]">{item.item}</td><td className="p-2 text-[#4d3d32]">{item.scope}</td><td className="p-2 text-center font-semibold text-[#251914]">{item.cost}</td></tr>)}</tbody>
               </table>
+              <div className="grid gap-3 md:hidden">
+                {mintPrep.map((item) => (
+                  <div key={item.item} className="rounded-xl border border-[#dcc8aa] bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="font-semibold text-[#251914]">{item.item}</div>
+                      <div className="whitespace-nowrap font-semibold text-[#2f5f46]">{item.cost}</div>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-[#4d3d32]">{item.scope}</p>
+                  </div>
+                ))}
+              </div>
               <div className="rounded-2xl border border-[#dcc8aa] bg-white p-4">
                 <div className="text-sm font-semibold text-[#67564a]">Current estimated value</div>
                 <div className="mt-1 text-3xl font-bold text-[#2f5f46]">{money(currentLow)} - {money(currentHigh)}</div>

@@ -557,16 +557,43 @@ export default function VwBeetlePage() {
           </Card>
 
           <Card id="contact-seller" className={C.dark}>
-            <CardHeader><CardTitle>Contact Seller</CardTitle><CardDescription className="!text-[#eadfce]">Ask a question, request photos, schedule a viewing, or make an offer.</CardDescription></CardHeader>
+            <CardHeader>
+              <CardTitle>Contact Seller</CardTitle>
+              <CardDescription className="!text-[#eadfce]">Ask a question, request photos, schedule a viewing, or make an offer. Required fields are name and email.</CardDescription>
+            </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2">
               <input className="hidden" value={lead.website} onChange={(event) => setLead({ ...lead, website: event.target.value })} tabIndex={-1} autoComplete="off" />
-              <div><Label>Name</Label><Input className={C.field} value={lead.name} onChange={(e) => setLead({ ...lead, name: e.target.value })} /></div>
-              <div><Label>Email</Label><Input className={C.field} type="email" value={lead.email} onChange={(e) => setLead({ ...lead, email: e.target.value })} /></div>
-              <div><Label>Phone</Label><Input className={C.field} value={lead.phone} onChange={(e) => setLead({ ...lead, phone: e.target.value })} /></div>
-              <div><Label>Interest</Label><Select value={lead.interestType} onValueChange={(interestType) => setLead({ ...lead, interestType })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="general_inquiry">General inquiry</SelectItem><SelectItem value="request_more_photos">Request more photos</SelectItem><SelectItem value="schedule_viewing">Schedule viewing</SelectItem><SelectItem value="make_an_offer">Make an offer</SelectItem></SelectContent></Select></div>
-              <div><Label>Offer amount</Label><Input className={C.field} value={lead.offerAmount} onChange={(e) => setLead({ ...lead, offerAmount: e.target.value })} /></div>
-              <div><Label>Preferred contact</Label><Select value={lead.preferredContactMethod} onValueChange={(preferredContactMethod) => setLead({ ...lead, preferredContactMethod })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="email">Email</SelectItem><SelectItem value="phone">Phone</SelectItem><SelectItem value="text">Text</SelectItem></SelectContent></Select></div>
-              <div className="md:col-span-2"><Label>Message</Label><Textarea className={`${C.field} min-h-28`} value={lead.message} onChange={(e) => setLead({ ...lead, message: e.target.value })} /></div>
+              <div>
+                <Label className="!text-[#f7ead8]">Name *</Label>
+                <Input className={C.field} placeholder="Your name" value={lead.name} onChange={(e) => setLead({ ...lead, name: e.target.value })} />
+                <p className="mt-1 text-xs text-[#d8c7b5]">Who should I respond to?</p>
+              </div>
+              <div>
+                <Label className="!text-[#f7ead8]">Email *</Label>
+                <Input className={C.field} type="email" placeholder="name@example.com" value={lead.email} onChange={(e) => setLead({ ...lead, email: e.target.value })} />
+                <p className="mt-1 text-xs text-[#d8c7b5]">Used only to reply to your inquiry.</p>
+              </div>
+              <div>
+                <Label className="!text-[#f7ead8]">Phone</Label>
+                <Input className={C.field} placeholder="Best number for call or text" value={lead.phone} onChange={(e) => setLead({ ...lead, phone: e.target.value })} />
+              </div>
+              <div>
+                <Label className="!text-[#f7ead8]">Interest type</Label>
+                <Select value={lead.interestType} onValueChange={(interestType) => setLead({ ...lead, interestType })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="general_inquiry">General inquiry</SelectItem><SelectItem value="request_more_photos">Request more photos</SelectItem><SelectItem value="schedule_viewing">Schedule viewing</SelectItem><SelectItem value="make_an_offer">Make an offer</SelectItem></SelectContent></Select>
+                <p className="mt-1 text-xs text-[#d8c7b5]">Choose what you’re contacting me about.</p>
+              </div>
+              <div>
+                <Label className="!text-[#f7ead8]">Offer amount</Label>
+                <Input className={C.field} placeholder="Optional, for offers only" value={lead.offerAmount} onChange={(e) => setLead({ ...lead, offerAmount: e.target.value })} />
+              </div>
+              <div>
+                <Label className="!text-[#f7ead8]">Preferred contact method</Label>
+                <Select value={lead.preferredContactMethod} onValueChange={(preferredContactMethod) => setLead({ ...lead, preferredContactMethod })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="email">Email</SelectItem><SelectItem value="phone">Phone</SelectItem><SelectItem value="text">Text</SelectItem></SelectContent></Select>
+              </div>
+              <div className="md:col-span-2">
+                <Label className="!text-[#f7ead8]">Message</Label>
+                <Textarea className={`${C.field} min-h-28`} placeholder="Ask a question, request a viewing, or include details about your offer." value={lead.message} onChange={(e) => setLead({ ...lead, message: e.target.value })} />
+              </div>
               <div className="md:col-span-2"><Button className={C.amber} disabled={submitLead.isPending || !lead.name || !lead.email} onClick={() => submitLead.mutate()}>{submitLead.isPending ? "Sending..." : "Send Inquiry"}</Button></div>
             </CardContent>
           </Card>

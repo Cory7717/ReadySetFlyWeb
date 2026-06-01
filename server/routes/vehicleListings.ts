@@ -301,8 +301,7 @@ async function generateAiJsonWithImages(prompt: string, fallback: any, imageUrls
 }
 
 async function emailLead(listing: any, lead: any) {
-  const contact = (listing.sellerContactJson || {}) as any;
-  const to = contact.email || process.env.VEHICLE_SELLER_EMAIL;
+  const to = process.env.VEHICLE_SELLER_EMAIL || "coryarmer@gmail.com";
   if (!to) return false;
   const { client, fromEmail } = await getUncachableResendClient();
   await client.emails.send({
@@ -389,8 +388,13 @@ export function registerVehicleListingRoutes(app: Express) {
         offerAmount: parsed.data.offerAmount ? String(parsed.data.offerAmount) : null,
         preferredContactMethod: parsed.data.preferredContactMethod || null,
       } as any).returning();
-      emailLead(listing, lead).catch((error) => console.error("vehicle_lead_email_failed", error?.message || error));
-      res.status(201).json({ lead: { id: lead.id, createdAt: lead.createdAt } });
+      let emailSent = false;
+      try {
+        emailSent = await emailLead(listing, lead);
+      } catch (error: any) {
+        console.error("vehicle_lead_email_failed", error?.message || error);
+      }
+      res.status(201).json({ lead: { id: lead.id, createdAt: lead.createdAt }, emailSent });
     } catch (error) {
       next(error);
     }

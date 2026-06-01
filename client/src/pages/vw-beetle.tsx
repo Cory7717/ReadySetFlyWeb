@@ -181,7 +181,9 @@ export default function VwBeetlePage() {
 
   const listing = listingQuery.data?.listing;
   const photos = listing?.photosJson || [];
-  const heroUrl = publicPhotoUrl(photos[activePhoto]?.url || listing?.heroPhotoUrl || photos[0]?.url);
+  const savedHeroIndex = photos.findIndex((photo) => photo.url === listing?.heroPhotoUrl);
+  const heroUrl = publicPhotoUrl(listing?.heroPhotoUrl || photos[0]?.url);
+  const previewUrl = publicPhotoUrl(photos[activePhoto]?.url || listing?.heroPhotoUrl || photos[0]?.url);
   const specs = listing?.specsJson || {};
   const valuation = listing?.aiValuationJson || {};
   const ranges = listing?.marketValueRangesJson || [];
@@ -189,9 +191,16 @@ export default function VwBeetlePage() {
 
   useEffect(() => {
     if (!photos.length) return;
-    const heroIndex = photos.findIndex((photo) => photo.url === listing?.heroPhotoUrl);
-    setActivePhoto((current) => current >= 0 && current < photos.length ? current : Math.max(heroIndex, 0));
+    setActivePhoto(Math.max(savedHeroIndex, 0));
   }, [listing?.heroPhotoUrl, photos.length]);
+
+  useEffect(() => {
+    if (photos.length <= 1 || lightbox != null) return;
+    const timer = window.setInterval(() => {
+      setActivePhoto((current) => (current + 1) % photos.length);
+    }, 5500);
+    return () => window.clearInterval(timer);
+  }, [photos.length, lightbox]);
 
   const submitLead = useMutation({
     mutationFn: async () => apiRequest("POST", "/api/vehicle-listings/vw-beetle/leads", lead),
@@ -320,7 +329,7 @@ export default function VwBeetlePage() {
             <div className="relative overflow-hidden rounded-3xl border border-[#d7c2a0] bg-[#120d0b]">
               {listing.status === "sold" && <div className="absolute left-4 top-4 z-10 rounded-full bg-red-700 px-4 py-2 text-sm font-bold text-white">SOLD</div>}
               {heroUrl ? (
-                <button className="block h-[54vh] min-h-[340px] w-full cursor-zoom-in bg-[#120d0b] md:min-h-[430px]" onClick={() => setLightbox(activePhoto)} aria-label="Open selected VW Beetle photo full screen">
+                <button className="block h-[42vh] min-h-[300px] w-full cursor-zoom-in bg-[#120d0b] md:min-h-[380px]" onClick={() => setLightbox(Math.max(savedHeroIndex, 0))} aria-label="Open hero VW Beetle photo full screen">
                   <img
                     key={heroUrl}
                     src={heroUrl}
@@ -332,7 +341,7 @@ export default function VwBeetlePage() {
                   />
                 </button>
               ) : (
-                <div className="flex h-[54vh] min-h-[340px] items-center justify-center text-[#f1dfca]"><Camera className="mr-2 h-6 w-6" /> Photos coming soon</div>
+                <div className="flex h-[42vh] min-h-[300px] items-center justify-center text-[#f1dfca]"><Camera className="mr-2 h-6 w-6" /> Photos coming soon</div>
               )}
               <div className="pointer-events-none absolute bottom-4 left-4 right-4 rounded-2xl bg-black/55 p-4 text-white backdrop-blur">
                 <Badge className="mb-3 bg-[#b98435]">Curved Windshield Super Beetle</Badge>
@@ -369,6 +378,22 @@ export default function VwBeetlePage() {
                   </button>
                 ))}
                 </div>
+                {previewUrl && (
+                  <button
+                    className="mt-3 block h-64 w-full cursor-zoom-in overflow-hidden rounded-2xl border border-[#dcc8aa] bg-[#120d0b] md:h-72"
+                    onClick={() => setLightbox(activePhoto)}
+                    aria-label="Open rotating gallery preview full screen"
+                  >
+                    <img
+                      key={previewUrl}
+                      src={previewUrl}
+                      className="h-full w-full object-contain"
+                      loading="lazy"
+                      decoding="async"
+                      alt={photos[activePhoto]?.caption || `Selected VW Beetle photo ${activePhoto + 1}`}
+                    />
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -416,27 +441,27 @@ export default function VwBeetlePage() {
           <div className="grid gap-6 lg:grid-cols-2">
             <Card className={C.shell}>
               <CardHeader><CardTitle>Market Value Ranges</CardTitle><CardDescription>General private-party guide. Verify with current curved windshield Super Beetle Convertible comps.</CardDescription></CardHeader>
-              <CardContent className="overflow-x-auto">
-                <table className="w-full min-w-[620px] text-sm">
-                  <thead><tr className="bg-[#251914] text-white"><th className="p-2 text-left">Condition</th><th className="p-2 text-left">Description</th><th className="p-2">Range</th><th className="p-2 text-left">Notes</th></tr></thead>
+              <CardContent>
+                <table className="w-full table-fixed text-[12px] leading-5 md:text-sm">
+                  <thead><tr className="bg-[#251914] text-white"><th className="w-[22%] p-2 text-left">Condition</th><th className="w-[28%] p-2 text-left">Description</th><th className="w-[20%] p-2">Range</th><th className="w-[30%] p-2 text-left">Notes</th></tr></thead>
                   <tbody>{ranges.map((row) => {
                     const isCurrent = (row.condition || "").includes("Good Driver");
                     return (
                       <tr key={row.condition} className={isCurrent ? "bg-[#dff0e5] outline outline-2 outline-[#2f5f46]" : "odd:bg-white even:bg-[#fbf1e4]"}>
-                        <td className="p-2 font-semibold">
+                        <td className="break-words p-2 align-top font-semibold">
                           <div className="flex flex-wrap items-center gap-2">
                             {row.condition}
                             {isCurrent && <Badge className="bg-[#2f5f46] text-white">This car</Badge>}
                           </div>
                         </td>
-                        <td className="p-2">{row.description}</td>
-                        <td className="p-2 text-center font-semibold">{row.range}</td>
-                        <td className="p-2">{isCurrent ? "Current estimated category based on restored engine, drivable condition, good body/interior, and minor needs." : row.notes}</td>
+                        <td className="break-words p-2 align-top">{row.description}</td>
+                        <td className="break-words p-2 text-center align-top font-semibold">{row.range}</td>
+                        <td className="break-words p-2 align-top">{isCurrent ? "Current category: restored engine, drivable, good body/interior, minor needs." : row.notes}</td>
                       </tr>
                     );
                   })}</tbody>
                 </table>
-                <div className="mt-3 rounded-xl border border-[#2f5f46]/30 bg-[#edf7f0] p-3 text-sm text-[#244b37]">
+                <div className="mt-3 rounded-xl border border-[#2f5f46]/30 bg-[#edf7f0] p-3 text-sm leading-6 text-[#244b37]">
                   <strong>Estimated current position:</strong> Good Driver / Good Condition with minor needs. Current AI-supported range: <strong>{money(currentLow)}-{money(currentHigh)}</strong>.
                 </div>
               </CardContent>
@@ -491,7 +516,11 @@ export default function VwBeetlePage() {
               selectedPhotos={selectedPhotos}
               setSelectedPhotos={setSelectedPhotos}
               activeHeroUrl={listing.heroPhotoUrl || ""}
-              setHeroPhoto={(url) => saveListing.mutate({ heroPhotoUrl: url } as any)}
+              setHeroPhoto={(url) => {
+                const nextIndex = photos.findIndex((photo) => photo.url === url);
+                if (nextIndex >= 0) setActivePhoto(nextIndex);
+                saveListing.mutate({ heroPhotoUrl: url } as any);
+              }}
               saveListing={() => saveListing.mutate(undefined)}
               saving={saveListing.isPending}
               uploadPhotos={() => uploadPhotos.mutate()}

@@ -570,6 +570,10 @@ function SpecGrid({ listing }: { listing: VehicleListing }) {
     spec("Exterior/body", specs.exterior),
     spec("Title status", specs.titleStatus),
     spec("Mileage", listing.mileage),
+    spec("Convertible top", specs.convertibleTop),
+    spec("Floor pans / structure", specs.floorPans),
+    spec("Undercarriage", specs.undercarriage),
+    spec("Restoration docs", specs.restorationDocumentation),
     ...(listing.vinPublic ? [spec("VIN", listing.vin)] : []),
   ];
   return (
@@ -603,6 +607,8 @@ function AdminPanel(props: {
   const { listing, edit, setEdit } = props;
   const set = (patch: Partial<VehicleListing>) => setEdit((current) => ({ ...current, ...patch }));
   const contact = listing.sellerContactJson || {};
+  const specs = listing.specsJson || {};
+  const setSpec = (patch: Record<string, unknown>) => set({ specsJson: { ...specs, ...patch } });
   const valuation = listing.aiValuationJson || {};
   const hasValuation = Object.keys(valuation).length > 0;
   const listItems = (value: unknown) => Array.isArray(value) ? value.filter(Boolean).map(String) : [];
@@ -615,6 +621,19 @@ function AdminPanel(props: {
           <div><Label>Asking price</Label><Input className={C.field} value={String(listing.askingPrice || "")} onChange={(e) => set({ askingPrice: e.target.value as any })} /></div>
           <div><Label>Mileage</Label><Input className={C.field} value={listing.mileage || ""} onChange={(e) => set({ mileage: e.target.value })} /></div>
           <div><Label>Location</Label><Input className={C.field} value={listing.location || ""} onChange={(e) => set({ location: e.target.value })} /></div>
+        </div>
+        <div className="rounded-xl border border-[#dcc8aa] bg-white p-4">
+          <Label>Condition and confidence details</Label>
+          <p className="mt-1 text-sm text-[#67564a]">These details improve the AI valuation confidence and populate the public Vehicle Details card.</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div><Label>Title status</Label><Input className={C.field} placeholder="Clean, unknown, bonded, rebuilt..." value={String(specs.titleStatus || "")} onChange={(e) => setSpec({ titleStatus: e.target.value })} /></div>
+            <div><Label>Convertible top</Label><Input className={C.field} placeholder="Good, needs inspection, replaced..." value={String(specs.convertibleTop || "")} onChange={(e) => setSpec({ convertibleTop: e.target.value })} /></div>
+            <div><Label>Floor pans / structure</Label><Input className={C.field} placeholder="Solid, surface rust only, unknown..." value={String(specs.floorPans || "")} onChange={(e) => setSpec({ floorPans: e.target.value })} /></div>
+            <div><Label>Undercarriage</Label><Input className={C.field} placeholder="Good, needs photos, unknown..." value={String(specs.undercarriage || "")} onChange={(e) => setSpec({ undercarriage: e.target.value })} /></div>
+            <div><Label>Engine documentation</Label><Input className={C.field} placeholder="Receipts, photos, verbal only..." value={String(specs.restorationDocumentation || "")} onChange={(e) => setSpec({ restorationDocumentation: e.target.value })} /></div>
+            <div><Label>VIN</Label><Input className={C.field} value={listing.vin || ""} onChange={(e) => set({ vin: e.target.value })} /></div>
+            <div><Label>Show VIN publicly</Label><Select value={String(Boolean(listing.vinPublic))} onValueChange={(v) => set({ vinPublic: v === "true" })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="false">Hidden</SelectItem><SelectItem value="true">Public</SelectItem></SelectContent></Select></div>
+          </div>
         </div>
         <div><Label>Description</Label><Textarea className={`${C.field} min-h-36`} value={listing.description || ""} onChange={(e) => set({ description: e.target.value })} /></div>
         <div><Label>Known issues</Label><Textarea className={`${C.field} min-h-20`} value={listing.knownIssues || ""} onChange={(e) => set({ knownIssues: e.target.value })} /></div>

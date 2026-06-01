@@ -64,6 +64,10 @@ const defaultListing = {
     interior: "Good condition",
     exterior: "Good shape",
     titleStatus: "",
+    convertibleTop: "",
+    floorPans: "",
+    undercarriage: "",
+    restorationDocumentation: "",
   },
   marketValueRangesJson: [
     { condition: "Project / Needs Significant Work", description: "Non-running or major mechanical/body needs.", range: "$5,000-$9,000", notes: "Weaker comp for this car." },

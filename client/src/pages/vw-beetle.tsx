@@ -195,7 +195,7 @@ export default function VwBeetlePage() {
       <header className="border-b border-[#dcc8aa] bg-[#fffaf3]/95 px-4 py-4">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6532]">Ready Set Fly Private Listing</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6532]">Private Vehicle Listing</div>
             <h1 className="text-2xl font-bold tracking-tight">1974 Volkswagen Super Beetle Convertible</h1>
           </div>
           <div className="flex gap-2">

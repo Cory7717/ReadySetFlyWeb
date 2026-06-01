@@ -373,7 +373,15 @@ function AppShell() {
   const isSchedulePage = location.startsWith("/schedule");
   const isCourtyardPage = location.startsWith("/courtyard");
   const isOpsReportPage = location.startsWith("/opsreport");
-  const isStandalonePage = isNoiseAndFuryPage || isCoryArmerPage || isTipsPage || isSchedulePage || isCourtyardPage || isOpsReportPage;
+  const isVwBeetlePage = location.startsWith("/vw-beetle");
+  const isStandalonePage =
+    isNoiseAndFuryPage ||
+    isCoryArmerPage ||
+    isTipsPage ||
+    isSchedulePage ||
+    isCourtyardPage ||
+    isOpsReportPage ||
+    isVwBeetlePage;
   useEffect(() => {
     setAuthState(isAuthenticated);
     if (!isAuthenticated && isSoftAuthEnabled()) {

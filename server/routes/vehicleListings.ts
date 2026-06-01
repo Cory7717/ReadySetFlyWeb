@@ -144,6 +144,26 @@ function extractJson(text: string) {
   return JSON.parse(candidate);
 }
 
+function getPublicApiBaseUrl(req: express.Request) {
+  const configured = (
+    process.env.VEHICLE_PUBLIC_UPLOAD_BASE_URL ||
+    process.env.PUBLIC_API_BASE_URL ||
+    process.env.API_BASE_URL ||
+    ""
+  ).trim();
+  if (/^https?:\/\//i.test(configured)) return configured.replace(/\/+$/, "");
+
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const proto = forwardedProto || req.protocol || "https";
+  const host = req.get("host");
+  return `${proto}://${host}`.replace(/\/+$/, "");
+}
+
+function toAbsolutePublicUrl(url: string, baseUrl: string) {
+  if (/^https?:\/\//i.test(url)) return url;
+  return new URL(url.startsWith("/") ? url : `/${url}`, baseUrl).toString();
+}
+
 async function generateAiJson(prompt: string, fallback: any) {
   if (!openai) return { ...fallback, aiAvailable: false };
   const completion = await openai.chat.completions.create({
@@ -163,24 +183,43 @@ async function generateAiJson(prompt: string, fallback: any) {
 
 async function generateAiJsonWithImages(prompt: string, fallback: any, imageUrls: string[]) {
   if (!openai || imageUrls.length === 0) return generateAiJson(prompt, fallback);
-  const completion = await openai.chat.completions.create({
-    model: process.env.VEHICLE_AI_VISION_MODEL || process.env.VEHICLE_AI_MODEL || "gpt-4o-mini",
-    messages: [
-      { role: "system", content: "Return only valid JSON. You help draft transparent private-party classic vehicle listing and valuation content. Do not claim to be a certified appraiser." },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: prompt },
-          ...imageUrls.slice(0, 8).map((url) => ({ type: "image_url", image_url: { url } })),
-        ] as any,
-      },
-    ],
-    temperature: 0.3,
-  });
   try {
-    return { ...extractJson(completion.choices[0]?.message?.content || "{}"), aiAvailable: true };
-  } catch {
-    return { ...fallback, aiAvailable: true, rawText: completion.choices[0]?.message?.content || "" };
+    const completion = await openai.chat.completions.create({
+      model: process.env.VEHICLE_AI_VISION_MODEL || process.env.VEHICLE_AI_MODEL || "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "Return only valid JSON. You help draft transparent private-party classic vehicle listing and valuation content. Do not claim to be a certified appraiser." },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            ...imageUrls.slice(0, 8).map((url) => ({ type: "image_url", image_url: { url } })),
+          ] as any,
+        },
+      ],
+      temperature: 0.3,
+    });
+    try {
+      return { ...extractJson(completion.choices[0]?.message?.content || "{}"), aiAvailable: true };
+    } catch {
+      return { ...fallback, aiAvailable: true, rawText: completion.choices[0]?.message?.content || "" };
+    }
+  } catch (error: any) {
+    console.warn("vehicle_ai_image_analysis_failed", {
+      message: error?.message || "Unknown image analysis error",
+      imageCount: imageUrls.length,
+    });
+    return generateAiJson(
+      `${prompt}\n\nThe photo URLs could not be downloaded by the AI image analysis service. Return a conservative valuation based on the written listing details only, set confidence to Low, and include imageAnalysisUnavailable: true.`,
+      {
+        ...fallback,
+        confidence: "Low",
+        imageAnalysisUnavailable: true,
+        visibleConcerns: [
+          ...((fallback?.visibleConcerns as string[] | undefined) || []),
+          "AI photo analysis unavailable because image download failed.",
+        ],
+      },
+    );
   }
 }
 
@@ -289,11 +328,11 @@ export function registerVehicleListingRoutes(app: Express) {
   router.post("/vw-beetle/admin/ai/valuation", isAuthenticated, isAdmin, async (req, res, next) => {
     try {
       const listing = await getListing();
-      const baseUrl = (process.env.FRONTEND_BASE_URL || "https://readysetfly.us").replace(/\/$/, "");
+      const baseUrl = getPublicApiBaseUrl(req);
       const imageUrls = (((listing.photosJson as any[]) || []) as Array<{ url?: string }>)
         .map((photo) => photo.url || "")
         .filter(Boolean)
-        .map((url) => url.startsWith("http") ? url : `${baseUrl}${url}`);
+        .map((url) => toAbsolutePublicUrl(url, baseUrl));
       const result = await generateAiJsonWithImages(`Analyze this private-party classic vehicle listing and uploaded photos, then return the requested valuation JSON shape. Focus comps on 1973-1979 Volkswagen Super Beetle Convertibles with curved windshield, not flat windshield standard Beetles, hardtops, or project cars unless noted as weaker comps. If photos are inaccessible, base the estimate on vehicle details and set confidence accordingly.\n\nListing data:\n${JSON.stringify({ ...listing, notes: req.body?.notes || "" }, null, 2)}\n\nReturn JSON with estimatedConditionCategory, suggestedLowValue, suggestedHighValue, suggestedAskingPrice, curvedWindshieldValueImpact, visibleStrengths, visibleConcerns, recommendedRepairsBeforeSale, listingHighlights, confidence, disclaimer.`, listing.aiValuationJson || defaultListing.aiValuationJson, imageUrls);
       res.json({ valuation: result });
     } catch (error) {

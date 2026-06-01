@@ -153,11 +153,17 @@ export default function VwBeetlePage() {
 
   const listing = listingQuery.data?.listing;
   const photos = listing?.photosJson || [];
-  const heroUrl = publicPhotoUrl(listing?.heroPhotoUrl || photos[0]?.url);
+  const heroUrl = publicPhotoUrl(photos[activePhoto]?.url || listing?.heroPhotoUrl || photos[0]?.url);
   const specs = listing?.specsJson || {};
   const valuation = listing?.aiValuationJson || {};
   const ranges = listing?.marketValueRangesJson || [];
   const draftValue = useMemo(() => ({ ...listing, ...edit }), [listing, edit]);
+
+  useEffect(() => {
+    if (!photos.length) return;
+    const heroIndex = photos.findIndex((photo) => photo.url === listing?.heroPhotoUrl);
+    setActivePhoto((current) => current >= 0 && current < photos.length ? current : Math.max(heroIndex, 0));
+  }, [listing?.heroPhotoUrl, photos.length]);
 
   const submitLead = useMutation({
     mutationFn: async () => apiRequest("POST", "/api/vehicle-listings/vw-beetle/leads", lead),
@@ -284,8 +290,17 @@ export default function VwBeetlePage() {
             {photos.length > 0 && (
               <div className="flex gap-3 overflow-x-auto pb-2">
                 {photos.map((photo, index) => (
-                  <button key={photo.id || photo.url} className={`h-24 w-32 shrink-0 overflow-hidden rounded-xl border-2 ${activePhoto === index ? "border-[#b98435]" : "border-[#d7c2a0]"}`} onClick={() => setActivePhoto(index)}>
+                  <button
+                    key={photo.id || photo.url}
+                    className={`group relative h-24 w-32 shrink-0 overflow-hidden rounded-xl border-2 ${activePhoto === index ? "border-[#b98435]" : "border-[#d7c2a0]"}`}
+                    onClick={() => {
+                      setActivePhoto(index);
+                      setLightbox(index);
+                    }}
+                    aria-label={`Open VW Beetle photo ${index + 1}`}
+                  >
                     <img src={publicPhotoUrl(photo.url)} className="h-full w-full object-cover" loading="lazy" alt={photo.caption || `VW Beetle photo ${index + 1}`} />
+                    <span className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-[11px] font-semibold text-white opacity-0 transition group-hover:opacity-100">View full screen</span>
                   </button>
                 ))}
               </div>
@@ -472,6 +487,9 @@ function AdminPanel(props: {
   const { listing, edit, setEdit } = props;
   const set = (patch: Partial<VehicleListing>) => setEdit((current) => ({ ...current, ...patch }));
   const contact = listing.sellerContactJson || {};
+  const valuation = listing.aiValuationJson || {};
+  const hasValuation = Object.keys(valuation).length > 0;
+  const listItems = (value: unknown) => Array.isArray(value) ? value.filter(Boolean).map(String) : [];
   return (
     <Card className={C.shell}>
       <CardHeader><CardTitle>Admin Listing Tools</CardTitle><CardDescription>Edit content, upload photos, and generate AI drafts. Save before public changes are final.</CardDescription></CardHeader>
@@ -495,6 +513,59 @@ function AdminPanel(props: {
           <Button variant="outline" className={C.outline} disabled={props.aiBusy} onClick={props.generateValuation}><Sparkles className="mr-2 h-4 w-4" />Generate AI Valuation</Button>
           <Button variant="outline" className={C.outline} disabled={props.aiBusy} onClick={props.generateListing}><Sparkles className="mr-2 h-4 w-4" />Generate Listing Text</Button>
         </div>
+        {hasValuation && (
+          <div className="rounded-xl border border-[#dcc8aa] bg-[#fff7ea] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <Label>AI Valuation Results</Label>
+                <p className="mt-1 text-sm text-[#67564a]">Review these results, edit the listing if needed, then click Save Listing to publish them.</p>
+              </div>
+              <Badge className="bg-[#251914] text-white">
+                {valuation.imagesAnalyzed ?? 0} image{valuation.imagesAnalyzed === 1 ? "" : "s"} analyzed
+              </Badge>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <div className="rounded-lg border border-[#ead9bf] bg-white p-3">
+                <div className="text-xs uppercase tracking-wide text-[#8a6532]">Condition</div>
+                <div className="mt-1 font-semibold">{valuation.estimatedConditionCategory || "Not provided"}</div>
+              </div>
+              <div className="rounded-lg border border-[#ead9bf] bg-white p-3">
+                <div className="text-xs uppercase tracking-wide text-[#8a6532]">Suggested Range</div>
+                <div className="mt-1 font-semibold">{money(valuation.suggestedLowValue)} - {money(valuation.suggestedHighValue)}</div>
+              </div>
+              <div className="rounded-lg border border-[#ead9bf] bg-white p-3">
+                <div className="text-xs uppercase tracking-wide text-[#8a6532]">Suggested Ask</div>
+                <div className="mt-1 font-semibold">{money(valuation.suggestedAskingPrice)}</div>
+              </div>
+              <div className="rounded-lg border border-[#ead9bf] bg-white p-3">
+                <div className="text-xs uppercase tracking-wide text-[#8a6532]">Confidence</div>
+                <div className="mt-1 font-semibold">{valuation.confidence || "Not provided"}</div>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div>
+                <div className="text-sm font-semibold text-[#251914]">Visible strengths</div>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[#4d3d32]">
+                  {listItems(valuation.visibleStrengths).map((item) => <li key={item}>{item}</li>)}
+                  {!listItems(valuation.visibleStrengths).length && <li>No strengths returned.</li>}
+                </ul>
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-[#251914]">Visible concerns</div>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[#4d3d32]">
+                  {listItems(valuation.visibleConcerns).map((item) => <li key={item}>{item}</li>)}
+                  {!listItems(valuation.visibleConcerns).length && <li>No concerns returned.</li>}
+                </ul>
+              </div>
+            </div>
+            {!!valuation.curvedWindshieldValueImpact && (
+              <p className="mt-4 rounded-lg border border-[#ead9bf] bg-white p-3 text-sm text-[#4d3d32]">
+                <span className="font-semibold">Curved windshield impact: </span>{String(valuation.curvedWindshieldValueImpact)}
+              </p>
+            )}
+            {!!valuation.disclaimer && <p className="mt-3 text-xs text-[#67564a]">{String(valuation.disclaimer)}</p>}
+          </div>
+        )}
         {listing.aiListingDraftsJson && Object.keys(listing.aiListingDraftsJson).length > 0 && (
           <div className="grid gap-2">
             <Label>AI listing drafts</Label>

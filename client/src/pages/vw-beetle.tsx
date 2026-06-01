@@ -272,42 +272,65 @@ export default function VwBeetlePage() {
       </header>
 
       <main>
-        <section className="mx-auto grid max-w-7xl gap-6 px-4 py-8 lg:grid-cols-[1.25fr_0.75fr]">
-          <div className="space-y-3">
-            <div className="relative overflow-hidden rounded-3xl border border-[#d7c2a0] bg-[#231814]">
+        <section className="mx-auto grid max-w-7xl gap-6 overflow-hidden px-4 py-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+          <div className="min-w-0 space-y-3">
+            <div className="relative overflow-hidden rounded-3xl border border-[#d7c2a0] bg-[#120d0b]">
               {listing.status === "sold" && <div className="absolute left-4 top-4 z-10 rounded-full bg-red-700 px-4 py-2 text-sm font-bold text-white">SOLD</div>}
               {heroUrl ? (
-                <img src={heroUrl} className="h-[56vh] min-h-[360px] w-full object-cover" loading="eager" alt={listing.title} onClick={() => setLightbox(activePhoto)} />
+                <button className="block h-[54vh] min-h-[340px] w-full cursor-zoom-in bg-[#120d0b] md:min-h-[430px]" onClick={() => setLightbox(activePhoto)} aria-label="Open selected VW Beetle photo full screen">
+                  <img
+                    key={heroUrl}
+                    src={heroUrl}
+                    className="h-full w-full object-contain"
+                    loading="eager"
+                    fetchPriority="high"
+                    decoding="async"
+                    alt={listing.title}
+                  />
+                </button>
               ) : (
-                <div className="flex h-[56vh] min-h-[360px] items-center justify-center text-[#f1dfca]"><Camera className="mr-2 h-6 w-6" /> Photos coming soon</div>
+                <div className="flex h-[54vh] min-h-[340px] items-center justify-center text-[#f1dfca]"><Camera className="mr-2 h-6 w-6" /> Photos coming soon</div>
               )}
-              <div className="absolute bottom-4 left-4 right-4 rounded-2xl bg-black/55 p-4 text-white backdrop-blur">
+              <div className="pointer-events-none absolute bottom-4 left-4 right-4 rounded-2xl bg-black/55 p-4 text-white backdrop-blur">
                 <Badge className="mb-3 bg-[#b98435]">Curved Windshield Super Beetle</Badge>
                 <h2 className="text-3xl font-bold md:text-5xl">{listing.title}</h2>
                 <p className="mt-2 max-w-3xl text-sm text-[#f4e4d2] md:text-base">Curved windshield model, manual transmission, restored engine, drivable condition</p>
               </div>
             </div>
             {photos.length > 0 && (
-              <div className="flex gap-3 overflow-x-auto pb-2">
+              <div className="rounded-2xl border border-[#dcc8aa] bg-[#fffaf3] p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold text-[#251914]">Photo Gallery</div>
+                  <div className="text-xs text-[#67564a]">Click any photo to view full screen</div>
+                </div>
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6">
                 {photos.map((photo, index) => (
                   <button
                     key={photo.id || photo.url}
-                    className={`group relative h-24 w-32 shrink-0 overflow-hidden rounded-xl border-2 ${activePhoto === index ? "border-[#b98435]" : "border-[#d7c2a0]"}`}
+                    className={`group relative aspect-[4/3] min-w-0 overflow-hidden rounded-xl border-2 bg-[#120d0b] ${activePhoto === index ? "border-[#b98435]" : "border-[#d7c2a0]"}`}
                     onClick={() => {
                       setActivePhoto(index);
                       setLightbox(index);
                     }}
                     aria-label={`Open VW Beetle photo ${index + 1}`}
                   >
-                    <img src={publicPhotoUrl(photo.url)} className="h-full w-full object-cover" loading="lazy" alt={photo.caption || `VW Beetle photo ${index + 1}`} />
+                    <img
+                      src={publicPhotoUrl(photo.url)}
+                      className="h-full w-full object-cover"
+                      loading={index < 6 ? "eager" : "lazy"}
+                      fetchPriority={index < 2 ? "high" : "low"}
+                      decoding="async"
+                      alt={photo.caption || `VW Beetle photo ${index + 1}`}
+                    />
                     <span className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-[11px] font-semibold text-white opacity-0 transition group-hover:opacity-100">View full screen</span>
                   </button>
                 ))}
+                </div>
               </div>
             )}
           </div>
 
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <Card className={C.dark}>
               <CardHeader>
                 <CardTitle className="text-3xl">{listing.askingPrice ? money(listing.askingPrice) : "Accepting Offers"}</CardTitle>

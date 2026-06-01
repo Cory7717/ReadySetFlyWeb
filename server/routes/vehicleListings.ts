@@ -213,6 +213,39 @@ async function generateAiJson(prompt: string, fallback: any) {
   }
 }
 
+function aiDraftToText(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) return value.map(aiDraftToText).filter(Boolean).join("\n\n").trim();
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    for (const key of ["text", "copy", "listing", "description", "body", "content", "draft"]) {
+      const text = aiDraftToText(obj[key]);
+      if (text) return text;
+    }
+    return Object.entries(obj)
+      .map(([key, nested]) => {
+        const text = aiDraftToText(nested);
+        return text ? `${key}: ${text}` : "";
+      })
+      .filter(Boolean)
+      .join("\n\n")
+      .trim();
+  }
+  return "";
+}
+
+function normalizeAiListingDrafts(drafts: any, fallbackDescription: string) {
+  const source = drafts && typeof drafts === "object" ? drafts : {};
+  const normalized = {
+    professional: aiDraftToText(source.professional) || fallbackDescription,
+    friendlyMarketplace: aiDraftToText(source.friendlyMarketplace) || fallbackDescription,
+    facebookShort: aiDraftToText(source.facebookShort) || fallbackDescription,
+    collectorFocused: aiDraftToText(source.collectorFocused) || fallbackDescription,
+    transparentKnownIssues: aiDraftToText(source.transparentKnownIssues) || fallbackDescription,
+  };
+  return normalized;
+}
+
 async function generateAiJsonWithImages(prompt: string, fallback: any, imageUrls: string[]) {
   if (!openai || imageUrls.length === 0) return generateAiJson(prompt, fallback);
   try {
@@ -462,14 +495,15 @@ export function registerVehicleListingRoutes(app: Express) {
   router.post("/vw-beetle/admin/ai/listing", isAuthenticated, isAdmin, async (req, res, next) => {
     try {
       const listing = await getListing();
-      const result = await generateAiJson(`Draft listing copy for a 1974 Volkswagen Super Beetle Convertible curved windshield model. Be transparent about known issues. Return JSON with professional, friendlyMarketplace, facebookShort, collectorFocused, transparentKnownIssues.\n\nListing data:\n${JSON.stringify({ ...listing, style: req.body?.style || "all" }, null, 2)}`, {
+      const result = await generateAiJson(`Draft listing copy for a 1974 Volkswagen Super Beetle Convertible curved windshield model. Be transparent about known issues. Return JSON with exactly these string fields: professional, friendlyMarketplace, facebookShort, collectorFocused, transparentKnownIssues. Each value must be plain listing text, not an object or nested structure.\n\nListing data:\n${JSON.stringify({ ...listing, style: req.body?.style || "all" }, null, 2)}`, {
         professional: listing.description,
         friendlyMarketplace: listing.description,
         facebookShort: listing.description,
         collectorFocused: listing.description,
         transparentKnownIssues: listing.description,
       });
-      res.json({ drafts: result });
+      const drafts = normalizeAiListingDrafts(result, listing.description || defaultListing.description);
+      res.json({ drafts });
     } catch (error) {
       next(error);
     }

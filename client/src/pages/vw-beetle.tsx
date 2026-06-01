@@ -71,6 +71,14 @@ const repairs = [
   { repair: "Paint correction", costLow: 500, costHigh: 2000, valueLow: 500, valueHigh: 3000 },
 ];
 
+const mintPrep = [
+  { item: "Windshield seals", scope: "Replace dry seals and confirm no surrounding corrosion", cost: "$200-$500" },
+  { item: "Surface rust correction", scope: "Treat visible surface rust and protect affected areas", cost: "$300-$1,500" },
+  { item: "Interior/exterior detailing", scope: "Deep detail interior, trim, engine bay, and convertible presentation", cost: "$250-$700" },
+  { item: "Paint correction", scope: "Polish/correct paint where practical without full repaint", cost: "$500-$2,000" },
+  { item: "Documentation/photos", scope: "Document restored engine, floor boards, undercarriage, and known needs", cost: "$0-$300" },
+];
+
 function money(value: unknown) {
   const n = Number(value || 0);
   if (!Number.isFinite(n) || n <= 0) return "Accepting Offers";
@@ -112,6 +120,26 @@ function publicPhotoUrl(url?: string | null) {
 
 function spec(label: string, value?: unknown) {
   return { label, value: value == null || value === "" ? "TBD" : String(value) };
+}
+
+function draftToText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(draftToText).filter(Boolean).join("\n\n");
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    for (const key of ["text", "copy", "listing", "description", "body", "content", "draft"]) {
+      const text = draftToText(obj[key]);
+      if (text) return text;
+    }
+    return Object.entries(obj)
+      .map(([key, nested]) => {
+        const text = draftToText(nested);
+        return text ? `${key}: ${text}` : "";
+      })
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  return "";
 }
 
 export default function VwBeetlePage() {
@@ -237,8 +265,16 @@ export default function VwBeetlePage() {
       return response.json();
     },
     onSuccess: (data) => {
-      setEdit((current) => ({ ...current, aiListingDraftsJson: data.drafts, description: data.drafts.professional || current.description }));
-      toast({ title: "AI listing drafts generated" });
+      const drafts = Object.fromEntries(
+        Object.entries(data.drafts || {}).map(([key, value]) => [key, draftToText(value)])
+      );
+      const professional = draftToText((drafts as any).professional);
+      setEdit((current) => ({
+        ...current,
+        aiListingDraftsJson: drafts,
+        description: professional || current.description,
+      }));
+      toast({ title: "AI listing drafts generated", description: "The professional draft has been placed into the Description field. Review, edit, then save." });
     },
     onError: (error: Error) => toast({ title: "AI draft failed", description: error.message, variant: "destructive" }),
   });
@@ -249,6 +285,12 @@ export default function VwBeetlePage() {
     valueLow: sum.valueLow + item.valueLow,
     valueHigh: sum.valueHigh + item.valueHigh,
   }), { costLow: 0, costHigh: 0, valueLow: 0, valueHigh: 0 });
+  const currentLow = Number(valuation.suggestedLowValue || 13000);
+  const currentHigh = Number(valuation.suggestedHighValue || 19000);
+  const excellentLow = 25000;
+  const excellentHigh = 35000;
+  const prepCostLow = repairTotals.costLow;
+  const prepCostHigh = repairTotals.costHigh + 300;
 
   if (listingQuery.isLoading) return <div className={`${C.page} p-8`}>Loading Volkswagen listing...</div>;
   if (!listing) return <div className={`${C.page} p-8`}>Listing unavailable.</div>;
@@ -263,6 +305,7 @@ export default function VwBeetlePage() {
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6532]">Private Vehicle Listing</div>
             <h1 className="text-2xl font-bold tracking-tight">1974 Volkswagen Super Beetle Convertible</h1>
+            <div className="mt-2 text-3xl font-bold text-[#2f5f46]">{listing.askingPrice ? money(listing.askingPrice) : "Accepting Offers"}</div>
           </div>
           <div className="flex gap-2">
             {isAdminPage && <Badge className="bg-[#251914]">Admin edit mode</Badge>}
@@ -376,8 +419,26 @@ export default function VwBeetlePage() {
               <CardContent className="overflow-x-auto">
                 <table className="w-full min-w-[620px] text-sm">
                   <thead><tr className="bg-[#251914] text-white"><th className="p-2 text-left">Condition</th><th className="p-2 text-left">Description</th><th className="p-2">Range</th><th className="p-2 text-left">Notes</th></tr></thead>
-                  <tbody>{ranges.map((row) => <tr key={row.condition} className={(row.condition || "").includes("Good Driver") ? "bg-[#e8f1ea]" : "odd:bg-white even:bg-[#fbf1e4]"}><td className="p-2 font-semibold">{row.condition}</td><td className="p-2">{row.description}</td><td className="p-2 text-center font-semibold">{row.range}</td><td className="p-2">{row.notes}</td></tr>)}</tbody>
+                  <tbody>{ranges.map((row) => {
+                    const isCurrent = (row.condition || "").includes("Good Driver");
+                    return (
+                      <tr key={row.condition} className={isCurrent ? "bg-[#dff0e5] outline outline-2 outline-[#2f5f46]" : "odd:bg-white even:bg-[#fbf1e4]"}>
+                        <td className="p-2 font-semibold">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {row.condition}
+                            {isCurrent && <Badge className="bg-[#2f5f46] text-white">This car</Badge>}
+                          </div>
+                        </td>
+                        <td className="p-2">{row.description}</td>
+                        <td className="p-2 text-center font-semibold">{row.range}</td>
+                        <td className="p-2">{isCurrent ? "Current estimated category based on restored engine, drivable condition, good body/interior, and minor needs." : row.notes}</td>
+                      </tr>
+                    );
+                  })}</tbody>
                 </table>
+                <div className="mt-3 rounded-xl border border-[#2f5f46]/30 bg-[#edf7f0] p-3 text-sm text-[#244b37]">
+                  <strong>Estimated current position:</strong> Good Driver / Good Condition with minor needs. Current AI-supported range: <strong>{money(currentLow)}-{money(currentHigh)}</strong>.
+                </div>
               </CardContent>
             </Card>
             <Card className={C.shell}>
@@ -389,16 +450,20 @@ export default function VwBeetlePage() {
           </div>
 
           <Card className={C.shell}>
-            <CardHeader><CardTitle>Should I Restore Before Selling?</CardTitle><CardDescription>Minor work calculator. Estimates are planning guidance, not guaranteed sale-price increases.</CardDescription></CardHeader>
+            <CardHeader><CardTitle>Current Value vs. Mint-Condition Path</CardTitle><CardDescription>What it may take to move from current good-driver condition toward a higher-end presentation.</CardDescription></CardHeader>
             <CardContent className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
               <table className="w-full text-sm">
-                <thead><tr className="bg-[#251914] text-white"><th className="p-2 text-left">Repair</th><th className="p-2">Estimated Cost</th><th className="p-2">Estimated Value Added</th></tr></thead>
-                <tbody>{repairs.map((item) => <tr key={item.repair} className="odd:bg-white even:bg-[#fbf1e4]"><td className="p-2 font-semibold">{item.repair}</td><td className="p-2 text-center">{money(item.costLow)}-{money(item.costHigh)}</td><td className="p-2 text-center">{money(item.valueLow)}-{money(item.valueHigh)}</td></tr>)}</tbody>
+                <thead><tr className="bg-[#251914] text-white"><th className="p-2 text-left">Improvement</th><th className="p-2 text-left">Scope</th><th className="p-2">Estimated Cost</th></tr></thead>
+                <tbody>{mintPrep.map((item) => <tr key={item.item} className="odd:bg-white even:bg-[#fbf1e4]"><td className="p-2 font-semibold">{item.item}</td><td className="p-2">{item.scope}</td><td className="p-2 text-center font-semibold">{item.cost}</td></tr>)}</tbody>
               </table>
               <div className="rounded-2xl border border-[#dcc8aa] bg-white p-4">
-                <div className="text-sm text-[#67564a]">Estimated net gain/loss</div>
-                <div className="mt-1 text-3xl font-bold text-[#2f5f46]">{money(repairTotals.valueLow - repairTotals.costHigh)} to {money(repairTotals.valueHigh - repairTotals.costLow)}</div>
-                <p className="mt-3 text-sm leading-6 text-[#5d4c40]">Best practical prep: replace windshield seals, treat surface rust, and detail the car before broad marketplace listing. Sell as-is can still be reasonable if priced transparently.</p>
+                <div className="text-sm font-semibold text-[#67564a]">Current estimated value</div>
+                <div className="mt-1 text-3xl font-bold text-[#2f5f46]">{money(currentLow)} - {money(currentHigh)}</div>
+                <div className="mt-4 text-sm font-semibold text-[#67564a]">Excellent / mint-presentation market</div>
+                <div className="mt-1 text-2xl font-bold text-[#251914]">{money(excellentLow)} - {money(excellentHigh)}+</div>
+                <div className="mt-4 text-sm font-semibold text-[#67564a]">Estimated prep investment</div>
+                <div className="mt-1 text-xl font-bold text-[#8a6532]">{money(prepCostLow)} - {money(prepCostHigh)}</div>
+                <p className="mt-3 text-sm leading-6 text-[#5d4c40]">This does not guarantee show-level value. The most practical lift is addressing seals, surface rust, detailing, paint correction, and documentation before marketing the car broadly.</p>
               </div>
             </CardContent>
           </Card>
@@ -592,7 +657,13 @@ function AdminPanel(props: {
         {listing.aiListingDraftsJson && Object.keys(listing.aiListingDraftsJson).length > 0 && (
           <div className="grid gap-2">
             <Label>AI listing drafts</Label>
-            {Object.entries(listing.aiListingDraftsJson).map(([key, value]) => <Textarea key={key} className={`${C.field} min-h-24`} value={`${key}:\n${String(value)}`} readOnly />)}
+            <p className="text-sm text-[#67564a]">The professional draft is copied into Description above. Use the other versions for Facebook Marketplace or collector-focused listings.</p>
+            {Object.entries(listing.aiListingDraftsJson).map(([key, value]) => (
+              <div key={key} className="grid gap-1">
+                <Label className="capitalize">{key.replace(/([A-Z])/g, " $1")}</Label>
+                <Textarea className={`${C.field} min-h-28`} value={draftToText(value)} readOnly />
+              </div>
+            ))}
           </div>
         )}
         <div className="rounded-xl border border-[#dcc8aa] bg-white p-4">

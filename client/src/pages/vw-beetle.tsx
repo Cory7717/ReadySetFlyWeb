@@ -198,6 +198,21 @@ export default function VwBeetlePage() {
     onError: (error: Error) => toast({ title: "Upload failed", description: error.message, variant: "destructive" }),
   });
 
+  const clearPhotos = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("DELETE", "/api/vehicle-listings/vw-beetle/admin/photos");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setActivePhoto(0);
+      setLightbox(null);
+      setSelectedPhotos(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicle-listings/vw-beetle"] });
+      toast({ title: "Photos cleared", description: `${data.deletedCount || 0} stored photo reference${data.deletedCount === 1 ? "" : "s"} removed.` });
+    },
+    onError: (error: Error) => toast({ title: "Clear photos failed", description: error.message, variant: "destructive" }),
+  });
+
   const aiValuation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/vehicle-listings/vw-beetle/admin/ai/valuation", { notes: edit.conditionSummary || listing?.conditionSummary });
@@ -376,6 +391,12 @@ export default function VwBeetlePage() {
               saving={saveListing.isPending}
               uploadPhotos={() => uploadPhotos.mutate()}
               uploading={uploadPhotos.isPending}
+              clearPhotos={() => {
+                if (window.confirm("Remove all current VW Beetle photos from this listing? You can re-upload after this clears.")) {
+                  clearPhotos.mutate();
+                }
+              }}
+              clearingPhotos={clearPhotos.isPending}
               generateValuation={() => aiValuation.mutate()}
               generateListing={() => aiListing.mutate()}
               aiBusy={aiValuation.isPending || aiListing.isPending}
@@ -438,6 +459,8 @@ function AdminPanel(props: {
   saving: boolean;
   uploadPhotos: () => void;
   uploading: boolean;
+  clearPhotos: () => void;
+  clearingPhotos: boolean;
   generateValuation: () => void;
   generateListing: () => void;
   aiBusy: boolean;
@@ -475,7 +498,20 @@ function AdminPanel(props: {
           </div>
         )}
         <div className="rounded-xl border border-[#dcc8aa] bg-white p-4">
-          <Label>Upload photos</Label>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <Label>Upload photos</Label>
+              <p className="mt-1 text-sm text-[#67564a]">Clear the current local/broken photo references before re-uploading a fresh gallery.</p>
+            </div>
+            <Button
+              variant="outline"
+              className="!border-red-300 !bg-red-50 !text-red-800 hover:!bg-red-100"
+              disabled={props.clearingPhotos || !(listing.photosJson || []).length}
+              onClick={props.clearPhotos}
+            >
+              {props.clearingPhotos ? "Clearing..." : "Clear Current Photos"}
+            </Button>
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <Input className={C.field} type="file" accept="image/*" multiple onChange={(e) => props.setSelectedPhotos(e.target.files)} />
             <Button className={C.amber} disabled={props.uploading || !props.selectedPhotos?.length} onClick={props.uploadPhotos}><Upload className="mr-2 h-4 w-4" />{props.uploading ? "Uploading..." : "Upload Photos"}</Button>

@@ -401,6 +401,37 @@ export function registerVehicleListingRoutes(app: Express) {
     });
   });
 
+  router.delete("/vw-beetle/admin/photos", isAuthenticated, isAdmin, async (_req, res, next) => {
+    try {
+      const listing = await getListing();
+      const photos = (((listing.photosJson as any[]) || []) as Array<{ url?: string }>);
+      const filenames = Array.from(new Set(photos.map((photo) => extractVehiclePhotoFilename(photo.url || "")).filter(Boolean)));
+
+      if (process.env.AWS_S3_BUCKET && filenames.length) {
+        const { S3StorageService } = await import("../s3Storage.js");
+        const s3Service = new S3StorageService();
+        await Promise.allSettled(filenames.map((filename) => s3Service.deleteObject(`${VW_PHOTO_PREFIX}/${filename}`)));
+      }
+
+      await Promise.allSettled(filenames.map(async (filename) => {
+        const filePath = path.resolve(uploadDir, filename);
+        if (filePath.startsWith(`${uploadDir}${path.sep}`) && fs.existsSync(filePath)) {
+          await fs.promises.unlink(filePath);
+        }
+      }));
+
+      const [updated] = await db.update(vehicleListings).set({
+        photosJson: [],
+        heroPhotoUrl: "",
+        updatedAt: new Date(),
+      } as any).where(eq(vehicleListings.id, VW_LISTING_ID)).returning();
+
+      res.json({ listing: updated, deletedCount: filenames.length });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/vw-beetle/admin/ai/valuation", isAuthenticated, isAdmin, async (req, res, next) => {
     try {
       const listing = await getListing();

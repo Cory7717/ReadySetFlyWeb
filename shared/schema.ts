@@ -712,6 +712,57 @@ export const courtyardBudgetAuditLog = pgTable("courtyard_budget_audit_log", {
   index("idx_courtyard_budget_audit_created").on(table.createdAt),
 ]);
 
+export const vehicleListings = pgTable("vehicle_listings", {
+  id: varchar("id").primaryKey(),
+  title: text("title").notNull(),
+  year: integer("year").notNull(),
+  make: text("make").notNull(),
+  model: text("model").notNull(),
+  trim: text("trim"),
+  bodyStyle: text("body_style"),
+  windshieldType: text("windshield_type"),
+  transmission: text("transmission"),
+  mileage: text("mileage"),
+  vin: text("vin"),
+  vinPublic: boolean("vin_public").notNull().default(false),
+  location: text("location"),
+  askingPrice: numeric("asking_price", { precision: 12, scale: 2 }),
+  priceType: text("price_type").notNull().default("accepting_offers"),
+  status: text("status").notNull().default("available"),
+  story: text("story"),
+  description: text("description"),
+  conditionSummary: text("condition_summary"),
+  knownIssues: text("known_issues"),
+  specsJson: jsonb("specs_json"),
+  marketValueRangesJson: jsonb("market_value_ranges_json"),
+  aiValuationJson: jsonb("ai_valuation_json"),
+  photosJson: jsonb("photos_json"),
+  heroPhotoUrl: text("hero_photo_url"),
+  sellerContactJson: jsonb("seller_contact_json"),
+  aiListingDraftsJson: jsonb("ai_listing_drafts_json"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_vehicle_listings_status").on(table.status),
+]);
+
+export const vehicleListingLeads = pgTable("vehicle_listing_leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  listingId: varchar("listing_id").notNull().references(() => vehicleListings.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  message: text("message"),
+  interestType: text("interest_type").notNull().default("general_inquiry"),
+  offerAmount: numeric("offer_amount", { precision: 12, scale: 2 }),
+  preferredContactMethod: text("preferred_contact_method"),
+  status: text("status").notNull().default("new"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_vehicle_listing_leads_listing").on(table.listingId),
+  index("idx_vehicle_listing_leads_created").on(table.createdAt),
+]);
+
 // Aircraft Listings (for rent)
 export const aircraftListings = pgTable("aircraft_listings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

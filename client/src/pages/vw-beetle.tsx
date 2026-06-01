@@ -1,0 +1,442 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { ArrowLeft, ArrowRight, Camera, Car, CheckCircle2, Copy, DollarSign, Mail, Phone, Sparkles, Upload, X } from "lucide-react";
+import { apiUrl } from "@/lib/api";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+
+type VehiclePhoto = { id: string; url: string; caption?: string; category?: string };
+type VehicleListing = {
+  id: string;
+  title: string;
+  year: number;
+  make: string;
+  model: string;
+  trim?: string | null;
+  bodyStyle?: string | null;
+  windshieldType?: string | null;
+  transmission?: string | null;
+  mileage?: string | null;
+  vin?: string | null;
+  vinPublic?: boolean;
+  location?: string | null;
+  askingPrice?: string | null;
+  priceType: string;
+  status: "available" | "pending" | "sold";
+  story?: string | null;
+  description?: string | null;
+  conditionSummary?: string | null;
+  knownIssues?: string | null;
+  specsJson?: Record<string, any>;
+  marketValueRangesJson?: Array<Record<string, any>>;
+  aiValuationJson?: Record<string, any>;
+  photosJson?: VehiclePhoto[];
+  heroPhotoUrl?: string | null;
+  sellerContactJson?: Record<string, any>;
+  aiListingDraftsJson?: Record<string, any>;
+};
+
+const C = {
+  page: "min-h-screen bg-[#f5efe7] text-[#251914]",
+  shell: "!border-[#dcc8aa] !bg-[#fffaf3] !bg-none shadow-[0_18px_45px_rgba(69,45,25,0.13)]",
+  dark: "!border-[#3f3128] !bg-[#251914] !bg-none !text-white shadow-[0_18px_45px_rgba(37,25,20,0.25)]",
+  field: "!border-[#cdb894] !bg-white !text-[#251914]",
+  green: "!bg-[#2f5f46] !bg-none !text-white hover:!bg-[#264d38]",
+  amber: "!bg-[#b98435] !bg-none !text-white hover:!bg-[#966928]",
+  outline: "!border-[#cdb894] !bg-white !bg-none !text-[#251914] hover:!bg-[#f8ead8]",
+  muted: "!text-[#67564a]",
+};
+
+const comparison = [
+  ["Windshield", "Flat", "Curved Panoramic"],
+  ["Front Suspension", "Torsion Bar", "MacPherson Strut"],
+  ["Ride Quality", "Good", "Improved"],
+  ["Front Storage", "Smaller", "Larger"],
+  ["Collector Appeal", "Strong", "Stronger"],
+];
+
+const repairs = [
+  { repair: "Replace windshield seals", costLow: 200, costHigh: 500, valueLow: 500, valueHigh: 1000 },
+  { repair: "Treat surface rust", costLow: 300, costHigh: 1500, valueLow: 500, valueHigh: 2500 },
+  { repair: "Interior detailing", costLow: 150, costHigh: 500, valueLow: 300, valueHigh: 1000 },
+  { repair: "Paint correction", costLow: 500, costHigh: 2000, valueLow: 500, valueHigh: 3000 },
+];
+
+function money(value: unknown) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n) || n <= 0) return "Accepting Offers";
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+}
+
+function publicPhotoUrl(url?: string | null) {
+  if (!url) return "";
+  return url.startsWith("http") ? url : apiUrl(url);
+}
+
+function spec(label: string, value?: unknown) {
+  return { label, value: value == null || value === "" ? "TBD" : String(value) };
+}
+
+export default function VwBeetlePage() {
+  const [location] = useLocation();
+  const isAdminPage = location.startsWith("/vw-beetle/admin");
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [activePhoto, setActivePhoto] = useState(0);
+  const [lightbox, setLightbox] = useState<number | null>(null);
+  const [lead, setLead] = useState({ name: "", email: "", phone: "", interestType: "general_inquiry", offerAmount: "", preferredContactMethod: "email", message: "", website: "" });
+  const [edit, setEdit] = useState<Partial<VehicleListing>>({});
+  const [selectedPhotos, setSelectedPhotos] = useState<FileList | null>(null);
+
+  const listingQuery = useQuery<{ listing: VehicleListing }>({
+    queryKey: ["/api/vehicle-listings/vw-beetle"],
+    queryFn: async () => {
+      const response = await fetch(apiUrl("/api/vehicle-listings/vw-beetle"), { credentials: "include" });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+  });
+
+  const listing = listingQuery.data?.listing;
+  const photos = listing?.photosJson || [];
+  const heroUrl = publicPhotoUrl(listing?.heroPhotoUrl || photos[0]?.url);
+  const specs = listing?.specsJson || {};
+  const valuation = listing?.aiValuationJson || {};
+  const ranges = listing?.marketValueRangesJson || [];
+  const draftValue = useMemo(() => ({ ...listing, ...edit }), [listing, edit]);
+
+  const submitLead = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/vehicle-listings/vw-beetle/leads", lead),
+    onSuccess: () => {
+      setLead({ name: "", email: "", phone: "", interestType: "general_inquiry", offerAmount: "", preferredContactMethod: "email", message: "", website: "" });
+      toast({ title: "Message sent", description: "Your inquiry was sent to the seller." });
+    },
+    onError: (error: Error) => toast({ title: "Unable to send", description: error.message, variant: "destructive" }),
+  });
+
+  const saveListing = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("PUT", "/api/vehicle-listings/vw-beetle/admin", edit);
+      return response.json();
+    },
+    onSuccess: () => {
+      setEdit({});
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicle-listings/vw-beetle"] });
+      toast({ title: "Listing saved" });
+    },
+    onError: (error: Error) => toast({ title: "Save failed", description: error.message, variant: "destructive" }),
+  });
+
+  const uploadPhotos = useMutation({
+    mutationFn: async () => {
+      if (!selectedPhotos?.length) throw new Error("Choose photos first.");
+      const form = new FormData();
+      Array.from(selectedPhotos).forEach((file) => form.append("photos", file));
+      const response = await fetch(apiUrl("/api/vehicle-listings/vw-beetle/admin/photos"), { method: "POST", credentials: "include", body: form });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+    onSuccess: () => {
+      setSelectedPhotos(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicle-listings/vw-beetle"] });
+      toast({ title: "Photos uploaded" });
+    },
+    onError: (error: Error) => toast({ title: "Upload failed", description: error.message, variant: "destructive" }),
+  });
+
+  const aiValuation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/vehicle-listings/vw-beetle/admin/ai/valuation", { notes: edit.conditionSummary || listing?.conditionSummary });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setEdit((current) => ({ ...current, aiValuationJson: data.valuation }));
+      toast({ title: "AI valuation generated", description: "Review and save before publishing." });
+    },
+    onError: (error: Error) => toast({ title: "AI valuation failed", description: error.message, variant: "destructive" }),
+  });
+
+  const aiListing = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/vehicle-listings/vw-beetle/admin/ai/listing", {});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setEdit((current) => ({ ...current, aiListingDraftsJson: data.drafts, description: data.drafts.professional || current.description }));
+      toast({ title: "AI listing drafts generated" });
+    },
+    onError: (error: Error) => toast({ title: "AI draft failed", description: error.message, variant: "destructive" }),
+  });
+
+  const repairTotals = repairs.reduce((sum, item) => ({
+    costLow: sum.costLow + item.costLow,
+    costHigh: sum.costHigh + item.costHigh,
+    valueLow: sum.valueLow + item.valueLow,
+    valueHigh: sum.valueHigh + item.valueHigh,
+  }), { costLow: 0, costHigh: 0, valueLow: 0, valueHigh: 0 });
+
+  if (listingQuery.isLoading) return <div className={`${C.page} p-8`}>Loading Volkswagen listing...</div>;
+  if (!listing) return <div className={`${C.page} p-8`}>Listing unavailable.</div>;
+
+  return (
+    <div className={C.page}>
+      <title>1974 Volkswagen Super Beetle Convertible For Sale</title>
+      <meta name="description" content="Classic 1974 Volkswagen Super Beetle Convertible, curved windshield model, manual transmission, restored engine, drivable, good body and interior condition." />
+
+      <header className="border-b border-[#dcc8aa] bg-[#fffaf3]/95 px-4 py-4">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6532]">Ready Set Fly Private Listing</div>
+            <h1 className="text-2xl font-bold tracking-tight">1974 Volkswagen Super Beetle Convertible</h1>
+          </div>
+          <div className="flex gap-2">
+            {isAdminPage && <Badge className="bg-[#251914]">Admin edit mode</Badge>}
+            <Badge variant="outline" className={listing.status === "sold" ? "border-red-300 bg-red-50 text-red-800" : "border-emerald-300 bg-emerald-50 text-emerald-800"}>{listing.status}</Badge>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section className="mx-auto grid max-w-7xl gap-6 px-4 py-8 lg:grid-cols-[1.25fr_0.75fr]">
+          <div className="space-y-3">
+            <div className="relative overflow-hidden rounded-3xl border border-[#d7c2a0] bg-[#231814]">
+              {listing.status === "sold" && <div className="absolute left-4 top-4 z-10 rounded-full bg-red-700 px-4 py-2 text-sm font-bold text-white">SOLD</div>}
+              {heroUrl ? (
+                <img src={heroUrl} className="h-[56vh] min-h-[360px] w-full object-cover" loading="eager" alt={listing.title} onClick={() => setLightbox(activePhoto)} />
+              ) : (
+                <div className="flex h-[56vh] min-h-[360px] items-center justify-center text-[#f1dfca]"><Camera className="mr-2 h-6 w-6" /> Photos coming soon</div>
+              )}
+              <div className="absolute bottom-4 left-4 right-4 rounded-2xl bg-black/55 p-4 text-white backdrop-blur">
+                <Badge className="mb-3 bg-[#b98435]">Curved Windshield Super Beetle</Badge>
+                <h2 className="text-3xl font-bold md:text-5xl">{listing.title}</h2>
+                <p className="mt-2 max-w-3xl text-sm text-[#f4e4d2] md:text-base">Curved windshield model, manual transmission, restored engine, drivable condition</p>
+              </div>
+            </div>
+            {photos.length > 0 && (
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {photos.map((photo, index) => (
+                  <button key={photo.id || photo.url} className={`h-24 w-32 shrink-0 overflow-hidden rounded-xl border-2 ${activePhoto === index ? "border-[#b98435]" : "border-[#d7c2a0]"}`} onClick={() => setActivePhoto(index)}>
+                    <img src={publicPhotoUrl(photo.url)} className="h-full w-full object-cover" loading="lazy" alt={photo.caption || `VW Beetle photo ${index + 1}`} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <Card className={C.dark}>
+              <CardHeader>
+                <CardTitle className="text-3xl">{listing.askingPrice ? money(listing.askingPrice) : "Accepting Offers"}</CardTitle>
+                <CardDescription className="!text-[#eadfce]">{listing.location || "Location TBD"} | Manual | Drivable</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="rounded-xl border border-white/15 bg-white/5 p-3 text-sm leading-6">{listing.story}</div>
+                <div className="grid gap-2">
+                  <Button className={C.amber} onClick={() => document.getElementById("contact-seller")?.scrollIntoView({ behavior: "smooth" })}><Mail className="mr-2 h-4 w-4" />Contact Seller</Button>
+                  <Button variant="outline" className="border-white/25 bg-white/10 text-white hover:bg-white/15" onClick={() => setLead((v) => ({ ...v, interestType: "request_more_photos" }))}>Request More Photos</Button>
+                  <Button variant="outline" className="border-white/25 bg-white/10 text-white hover:bg-white/15" onClick={() => setLead((v) => ({ ...v, interestType: "make_an_offer" }))}><DollarSign className="mr-2 h-4 w-4" />Make an Offer</Button>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button variant="ghost" className="text-white hover:bg-white/10" onClick={() => navigator.clipboard?.writeText(window.location.href)}><Copy className="mr-2 h-4 w-4" />Copy Link</Button>
+                  {listing.sellerContactJson?.showPhone && listing.sellerContactJson?.phone && <Button asChild variant="ghost" className="text-white hover:bg-white/10"><a href={`tel:${listing.sellerContactJson.phone}`}><Phone className="mr-2 h-4 w-4" />Call/Text</a></Button>}
+                </div>
+              </CardContent>
+            </Card>
+            <SpecGrid listing={listing} />
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl space-y-6 px-4 pb-10">
+          <Card className={C.shell}>
+            <CardHeader>
+              <CardTitle>Why This Beetle Is Different</CardTitle>
+              <CardDescription>1974 Super Beetle Convertible values should be compared against 1973-1979 curved windshield convertibles, not earlier flat windshield hardtops or project cars.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+              <div className="space-y-3 text-sm leading-7 text-[#4d3d32]">
+                {["Curved panoramic windshield", "MacPherson strut front suspension", "Improved handling and ride quality", "Larger front cargo area", "More desirable collector variant", "One of the final years of convertible Beetle production"].map((item) => <div key={item} className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 text-[#2f5f46]" />{item}</div>)}
+              </div>
+              <table className="w-full overflow-hidden rounded-xl border border-[#dcc8aa] text-sm">
+                <thead><tr className="bg-[#251914] text-white"><th className="p-3 text-left">Feature</th><th className="p-3 text-left">Standard Beetle</th><th className="p-3 text-left">Super Beetle Convertible</th></tr></thead>
+                <tbody>{comparison.map((row) => <tr key={row[0]} className="odd:bg-white even:bg-[#fbf1e4]"><td className="p-3 font-semibold">{row[0]}</td><td className="p-3">{row[1]}</td><td className="p-3 font-semibold text-[#2f5f46]">{row[2]}</td></tr>)}</tbody>
+              </table>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className={C.shell}>
+              <CardHeader><CardTitle>Market Value Ranges</CardTitle><CardDescription>General private-party guide. Verify with current curved windshield Super Beetle Convertible comps.</CardDescription></CardHeader>
+              <CardContent className="overflow-x-auto">
+                <table className="w-full min-w-[620px] text-sm">
+                  <thead><tr className="bg-[#251914] text-white"><th className="p-2 text-left">Condition</th><th className="p-2 text-left">Description</th><th className="p-2">Range</th><th className="p-2 text-left">Notes</th></tr></thead>
+                  <tbody>{ranges.map((row) => <tr key={row.condition} className={(row.condition || "").includes("Good Driver") ? "bg-[#e8f1ea]" : "odd:bg-white even:bg-[#fbf1e4]"}><td className="p-2 font-semibold">{row.condition}</td><td className="p-2">{row.description}</td><td className="p-2 text-center font-semibold">{row.range}</td><td className="p-2">{row.notes}</td></tr>)}</tbody>
+                </table>
+              </CardContent>
+            </Card>
+            <Card className={C.shell}>
+              <CardHeader><CardTitle>Our Super Beetle’s Current Condition</CardTitle><CardDescription>{listing.conditionSummary}</CardDescription></CardHeader>
+              <CardContent className="grid gap-2 text-sm">
+                {[spec("Drivable", specs.drivable), spec("Transmission", listing.transmission), spec("Engine", specs.engine), spec("Body", specs.exterior), spec("Interior", specs.interior), spec("Windshield", listing.windshieldType), spec("Known needs", listing.knownIssues), spec("Suggested range", `${money(valuation.suggestedLowValue)}-${money(valuation.suggestedHighValue)}`)].map((item) => <div key={item.label} className="flex justify-between gap-4 rounded-lg border border-[#ead9bf] bg-white px-3 py-2"><span className="font-semibold">{item.label}</span><span className="text-right text-[#5d4c40]">{item.value}</span></div>)}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className={C.shell}>
+            <CardHeader><CardTitle>Should I Restore Before Selling?</CardTitle><CardDescription>Minor work calculator. Estimates are planning guidance, not guaranteed sale-price increases.</CardDescription></CardHeader>
+            <CardContent className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-[#251914] text-white"><th className="p-2 text-left">Repair</th><th className="p-2">Estimated Cost</th><th className="p-2">Estimated Value Added</th></tr></thead>
+                <tbody>{repairs.map((item) => <tr key={item.repair} className="odd:bg-white even:bg-[#fbf1e4]"><td className="p-2 font-semibold">{item.repair}</td><td className="p-2 text-center">{money(item.costLow)}-{money(item.costHigh)}</td><td className="p-2 text-center">{money(item.valueLow)}-{money(item.valueHigh)}</td></tr>)}</tbody>
+              </table>
+              <div className="rounded-2xl border border-[#dcc8aa] bg-white p-4">
+                <div className="text-sm text-[#67564a]">Estimated net gain/loss</div>
+                <div className="mt-1 text-3xl font-bold text-[#2f5f46]">{money(repairTotals.valueLow - repairTotals.costHigh)} to {money(repairTotals.valueHigh - repairTotals.costLow)}</div>
+                <p className="mt-3 text-sm leading-6 text-[#5d4c40]">Best practical prep: replace windshield seals, treat surface rust, and detail the car before broad marketplace listing. Sell as-is can still be reasonable if priced transparently.</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card id="contact-seller" className={C.dark}>
+            <CardHeader><CardTitle>Contact Seller</CardTitle><CardDescription className="!text-[#eadfce]">Ask a question, request photos, schedule a viewing, or make an offer.</CardDescription></CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2">
+              <input className="hidden" value={lead.website} onChange={(event) => setLead({ ...lead, website: event.target.value })} tabIndex={-1} autoComplete="off" />
+              <div><Label>Name</Label><Input className={C.field} value={lead.name} onChange={(e) => setLead({ ...lead, name: e.target.value })} /></div>
+              <div><Label>Email</Label><Input className={C.field} type="email" value={lead.email} onChange={(e) => setLead({ ...lead, email: e.target.value })} /></div>
+              <div><Label>Phone</Label><Input className={C.field} value={lead.phone} onChange={(e) => setLead({ ...lead, phone: e.target.value })} /></div>
+              <div><Label>Interest</Label><Select value={lead.interestType} onValueChange={(interestType) => setLead({ ...lead, interestType })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="general_inquiry">General inquiry</SelectItem><SelectItem value="request_more_photos">Request more photos</SelectItem><SelectItem value="schedule_viewing">Schedule viewing</SelectItem><SelectItem value="make_an_offer">Make an offer</SelectItem></SelectContent></Select></div>
+              <div><Label>Offer amount</Label><Input className={C.field} value={lead.offerAmount} onChange={(e) => setLead({ ...lead, offerAmount: e.target.value })} /></div>
+              <div><Label>Preferred contact</Label><Select value={lead.preferredContactMethod} onValueChange={(preferredContactMethod) => setLead({ ...lead, preferredContactMethod })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="email">Email</SelectItem><SelectItem value="phone">Phone</SelectItem><SelectItem value="text">Text</SelectItem></SelectContent></Select></div>
+              <div className="md:col-span-2"><Label>Message</Label><Textarea className={`${C.field} min-h-28`} value={lead.message} onChange={(e) => setLead({ ...lead, message: e.target.value })} /></div>
+              <div className="md:col-span-2"><Button className={C.amber} disabled={submitLead.isPending || !lead.name || !lead.email} onClick={() => submitLead.mutate()}>{submitLead.isPending ? "Sending..." : "Send Inquiry"}</Button></div>
+            </CardContent>
+          </Card>
+
+          {isAdminPage && (
+            <AdminPanel
+              listing={draftValue as VehicleListing}
+              edit={edit}
+              setEdit={setEdit}
+              selectedPhotos={selectedPhotos}
+              setSelectedPhotos={setSelectedPhotos}
+              saveListing={() => saveListing.mutate()}
+              saving={saveListing.isPending}
+              uploadPhotos={() => uploadPhotos.mutate()}
+              uploading={uploadPhotos.isPending}
+              generateValuation={() => aiValuation.mutate()}
+              generateListing={() => aiListing.mutate()}
+              aiBusy={aiValuation.isPending || aiListing.isPending}
+            />
+          )}
+        </section>
+      </main>
+
+      <Dialog open={lightbox != null} onOpenChange={(open) => !open && setLightbox(null)}>
+        <DialogContent className="max-w-6xl border-0 bg-black p-0 text-white">
+          <DialogHeader className="sr-only"><DialogTitle>Vehicle photo viewer</DialogTitle></DialogHeader>
+          {lightbox != null && photos[lightbox] && (
+            <div className="relative flex h-[88vh] items-center justify-center">
+              <Button size="icon" variant="ghost" className="absolute right-3 top-3 z-10 text-white" onClick={() => setLightbox(null)}><X /></Button>
+              <Button size="icon" variant="ghost" className="absolute left-3 z-10 text-white" onClick={() => setLightbox((i) => i == null ? 0 : Math.max(0, i - 1))}><ArrowLeft /></Button>
+              <img src={publicPhotoUrl(photos[lightbox].url)} className="max-h-full max-w-full touch-pan-x object-contain" alt={`VW Beetle ${lightbox + 1}`} />
+              <Button size="icon" variant="ghost" className="absolute right-3 z-10 text-white" onClick={() => setLightbox((i) => i == null ? 0 : Math.min(photos.length - 1, i + 1))}><ArrowRight /></Button>
+              <div className="absolute bottom-4 rounded-full bg-black/70 px-4 py-2 text-sm">{lightbox + 1} of {photos.length}</div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function SpecGrid({ listing }: { listing: VehicleListing }) {
+  const specs = listing.specsJson || {};
+  const rows = [
+    spec("Year", listing.year),
+    spec("Make", listing.make),
+    spec("Model", listing.model),
+    spec("Windshield", listing.windshieldType),
+    spec("Transmission", listing.transmission),
+    spec("Drivable", specs.drivable),
+    spec("Engine", specs.engine),
+    spec("Interior", specs.interior),
+    spec("Exterior/body", specs.exterior),
+    spec("Title status", specs.titleStatus),
+    spec("Mileage", listing.mileage),
+    ...(listing.vinPublic ? [spec("VIN", listing.vin)] : []),
+  ];
+  return (
+    <Card className={C.shell}>
+      <CardHeader><CardTitle className="flex items-center gap-2"><Car className="h-5 w-5" />Vehicle Details</CardTitle></CardHeader>
+      <CardContent className="grid gap-2 sm:grid-cols-2">
+        {rows.map((row) => <div key={row.label} className="rounded-lg border border-[#ead9bf] bg-white p-3"><div className="text-xs uppercase tracking-wide text-[#8a6532]">{row.label}</div><div className="font-semibold">{row.value}</div></div>)}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdminPanel(props: {
+  listing: VehicleListing;
+  edit: Partial<VehicleListing>;
+  setEdit: (value: Partial<VehicleListing> | ((current: Partial<VehicleListing>) => Partial<VehicleListing>)) => void;
+  selectedPhotos: FileList | null;
+  setSelectedPhotos: (files: FileList | null) => void;
+  saveListing: () => void;
+  saving: boolean;
+  uploadPhotos: () => void;
+  uploading: boolean;
+  generateValuation: () => void;
+  generateListing: () => void;
+  aiBusy: boolean;
+}) {
+  const { listing, edit, setEdit } = props;
+  const set = (patch: Partial<VehicleListing>) => setEdit((current) => ({ ...current, ...patch }));
+  const contact = listing.sellerContactJson || {};
+  return (
+    <Card className={C.shell}>
+      <CardHeader><CardTitle>Admin Listing Tools</CardTitle><CardDescription>Edit content, upload photos, and generate AI drafts. Save before public changes are final.</CardDescription></CardHeader>
+      <CardContent className="grid gap-4">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div><Label>Status</Label><Select value={listing.status} onValueChange={(status: any) => set({ status })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="available">Available</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="sold">Sold</SelectItem></SelectContent></Select></div>
+          <div><Label>Asking price</Label><Input className={C.field} value={String(listing.askingPrice || "")} onChange={(e) => set({ askingPrice: e.target.value as any })} /></div>
+          <div><Label>Mileage</Label><Input className={C.field} value={listing.mileage || ""} onChange={(e) => set({ mileage: e.target.value })} /></div>
+          <div><Label>Location</Label><Input className={C.field} value={listing.location || ""} onChange={(e) => set({ location: e.target.value })} /></div>
+        </div>
+        <div><Label>Description</Label><Textarea className={`${C.field} min-h-36`} value={listing.description || ""} onChange={(e) => set({ description: e.target.value })} /></div>
+        <div><Label>Known issues</Label><Textarea className={`${C.field} min-h-20`} value={listing.knownIssues || ""} onChange={(e) => set({ knownIssues: e.target.value })} /></div>
+        <div className="grid gap-3 md:grid-cols-4">
+          <div><Label>Seller email</Label><Input className={C.field} value={contact.email || ""} onChange={(e) => set({ sellerContactJson: { ...contact, email: e.target.value } })} /></div>
+          <div><Label>Seller phone</Label><Input className={C.field} value={contact.phone || ""} onChange={(e) => set({ sellerContactJson: { ...contact, phone: e.target.value } })} /></div>
+          <div><Label>Show email</Label><Select value={String(Boolean(contact.showEmail))} onValueChange={(v) => set({ sellerContactJson: { ...contact, showEmail: v === "true" } })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="false">Hidden</SelectItem><SelectItem value="true">Public</SelectItem></SelectContent></Select></div>
+          <div><Label>Show phone</Label><Select value={String(Boolean(contact.showPhone))} onValueChange={(v) => set({ sellerContactJson: { ...contact, showPhone: v === "true" } })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="false">Hidden</SelectItem><SelectItem value="true">Public</SelectItem></SelectContent></Select></div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button className={C.green} disabled={props.saving || Object.keys(edit).length === 0} onClick={props.saveListing}>{props.saving ? "Saving..." : "Save Listing"}</Button>
+          <Button variant="outline" className={C.outline} disabled={props.aiBusy} onClick={props.generateValuation}><Sparkles className="mr-2 h-4 w-4" />Generate AI Valuation</Button>
+          <Button variant="outline" className={C.outline} disabled={props.aiBusy} onClick={props.generateListing}><Sparkles className="mr-2 h-4 w-4" />Generate Listing Text</Button>
+        </div>
+        {listing.aiListingDraftsJson && Object.keys(listing.aiListingDraftsJson).length > 0 && (
+          <div className="grid gap-2">
+            <Label>AI listing drafts</Label>
+            {Object.entries(listing.aiListingDraftsJson).map(([key, value]) => <Textarea key={key} className={`${C.field} min-h-24`} value={`${key}:\n${String(value)}`} readOnly />)}
+          </div>
+        )}
+        <div className="rounded-xl border border-[#dcc8aa] bg-white p-4">
+          <Label>Upload photos</Label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Input className={C.field} type="file" accept="image/*" multiple onChange={(e) => props.setSelectedPhotos(e.target.files)} />
+            <Button className={C.amber} disabled={props.uploading || !props.selectedPhotos?.length} onClick={props.uploadPhotos}><Upload className="mr-2 h-4 w-4" />{props.uploading ? "Uploading..." : "Upload Photos"}</Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

@@ -87,6 +87,7 @@ import SchedulePage from "@/pages/schedule";
 import OpsReportPage from "@/pages/ops-report";
 import CourtyardPortalPage from "@/pages/courtyard";
 import CourtyardBudgetPage from "@/pages/courtyard-budget";
+import VwBeetlePage from "@/pages/vw-beetle";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -243,6 +244,8 @@ function Router() {
       <Route path="/courtyard/budget" component={CourtyardBudgetPage} />
       <Route path="/schedule" component={SchedulePage} />
       <Route path="/opsreport" component={OpsReportPage} />
+      <Route path="/vw-beetle" component={VwBeetlePage} />
+      <Route path="/vw-beetle/admin" component={VwBeetlePage} />
       <Route path="/404" component={NotFound} />
       
       {/* Protected routes - require authentication */}

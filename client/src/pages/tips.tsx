@@ -1443,7 +1443,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
             {(grid.banquetReports || []).length ? (
               <div className="divide-y divide-[#e0d3c1]">
                 {(grid.banquetReports || []).map((report) => (
-                  <div key={report.id} role="button" tabIndex={0} className="grid w-full cursor-pointer gap-2 p-3 text-left text-sm hover:bg-[#fbf6ee] md:grid-cols-[140px_150px_1fr_120px_120px_auto]" onClick={() => startEditBanquetReport(report)} onKeyDown={(event) => event.key === "Enter" && startEditBanquetReport(report)}>
+                  <div key={report.id} className="grid w-full gap-2 p-3 text-left text-sm hover:bg-[#fbf6ee] md:grid-cols-[140px_150px_1fr_120px_120px_auto_auto]">
                     <div className="font-medium">{formatDisplayDate(report.eventDate)}</div>
                     <div>{report.reportType === "group_breakfast" ? "Group breakfast" : "Meeting service"}</div>
                     <div>
@@ -1458,10 +1458,11 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                     <div>Sales {formatMoney(report.grossSales)}</div>
                     <div>Tips {formatMoney(report.banquetTips)}</div>
                     {report.originalFileName ? (
-                      <a className="font-medium text-[#2f5f46] underline" href={apiUrl(`/api/tips/grid/banquet-reports/${report.id}/view`)} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>View report</a>
+                      <a className="font-medium text-[#2f5f46] underline" href={apiUrl(`/api/tips/grid/banquet-reports/${report.id}/view`)} target="_blank" rel="noreferrer">View report</a>
                     ) : (
                       <span className="text-[#5f5247]">No file</span>
                     )}
+                    <Button type="button" size="sm" variant="outline" className={C.outline} onClick={() => startEditBanquetReport(report)}>Edit</Button>
                   </div>
                 ))}
               </div>

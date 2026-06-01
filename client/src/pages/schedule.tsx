@@ -797,6 +797,8 @@ function ForecastPanel({
         {canActualize && (
           <input
             ref={actualizedInputRef}
+            aria-label={spanish ? "Subir archivo CSV de pickup real" : "Upload actual pickup CSV"}
+            title={spanish ? "Subir archivo CSV de pickup real" : "Upload actual pickup CSV"}
             type="file"
             accept=".csv,text/csv"
             className="hidden"
@@ -923,6 +925,8 @@ function ForecastPanel({
             <Button className={C.green} onClick={() => onSave(days)}><Save className="mr-2 h-4 w-4" />{t("Save forecast")}</Button>
             <input
               ref={fileInputRef}
+              aria-label={spanish ? "Importar archivo CSV OTB" : "Import OTB CSV"}
+              title={spanish ? "Importar archivo CSV OTB" : "Import OTB CSV"}
               type="file"
               accept=".csv,text/csv"
               className="hidden"
@@ -993,6 +997,8 @@ function HoursComparisonPanel({
           <div className="flex flex-wrap gap-2">
             <input
               ref={inputRef}
+              aria-label={spanish ? "Subir reporte XLSX de horas reales" : "Upload actual hours XLSX"}
+              title={spanish ? "Subir reporte XLSX de horas reales" : "Upload actual hours XLSX"}
               type="file"
               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               className="hidden"
@@ -1884,6 +1890,8 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
             <>
               <input
                 ref={payrollInputRef}
+                aria-label={t("Import payroll rates")}
+                title={t("Import payroll rates")}
                 type="file"
                 accept=".pdf,.txt,application/pdf,text/plain"
                 className="hidden"

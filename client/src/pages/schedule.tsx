@@ -822,17 +822,35 @@ function ForecastPanel({
                   </tr>
                 ))}
                 {days.some((day) => day.actualRoomsSold != null) && (
-                  <tr>
-                    <td className="border border-[#e0d3c1] bg-[#f4eadb] p-2 font-medium">{spanish ? "Pickup actual" : "Actual pickup"}</td>
-                    {days.map((day) => {
-                      const pickup = day.actualRoomsSold != null && day.otbRoomsSold != null ? Number(day.actualRoomsSold || 0) - Number(day.otbRoomsSold || 0) : null;
-                      return (
-                        <td key={day.forecastDate} className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center font-semibold">
-                          {pickup == null ? "-" : pickup > 0 ? `+${pickup}` : pickup}
-                        </td>
-                      );
-                    })}
-                  </tr>
+                  <>
+                    {[
+                      ["actualRoomsSold", spanish ? "Cuartos reales" : "Actual rooms sold"],
+                      ["actualOccupancyPercent", spanish ? "Occ real %" : "Actual occ %"],
+                      ["actualArrivals", spanish ? "Llegadas reales" : "Actual arrivals"],
+                      ["actualDepartures", spanish ? "Salidas reales" : "Actual departures"],
+                      ["actualRoomRevenue", spanish ? "Ingresos reales" : "Actual room rev"],
+                    ].map(([key, label]) => (
+                      <tr key={key}>
+                        <td className="border border-[#e0d3c1] bg-[#edf5ef] p-2 font-medium text-[#173c25]">{label}</td>
+                        {days.map((day) => (
+                          <td key={day.forecastDate} className="border border-[#e0d3c1] bg-[#edf5ef] p-2 text-center font-semibold text-[#173c25]">
+                            {(day as any)[key] ?? "-"}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                    <tr>
+                      <td className="border border-[#e0d3c1] bg-[#f4eadb] p-2 font-medium">{spanish ? "Pickup actual" : "Actual pickup"}</td>
+                      {days.map((day) => {
+                        const pickup = day.actualRoomsSold != null && day.otbRoomsSold != null ? Number(day.actualRoomsSold || 0) - Number(day.otbRoomsSold || 0) : null;
+                        return (
+                          <td key={day.forecastDate} className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center font-semibold">
+                            {pickup == null ? "-" : pickup > 0 ? `+${pickup}` : pickup}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </>
                 )}
               </tbody>
             </table>

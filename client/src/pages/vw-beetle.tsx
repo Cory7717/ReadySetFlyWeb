@@ -187,6 +187,7 @@ export default function VwBeetlePage() {
   const specs = listing?.specsJson || {};
   const valuation = listing?.aiValuationJson || {};
   const ranges = listing?.marketValueRangesJson || [];
+  const sellerContact = listing?.sellerContactJson || {};
   const draftValue = useMemo(() => ({ ...listing, ...edit }), [listing, edit]);
 
   useEffect(() => {
@@ -315,6 +316,20 @@ export default function VwBeetlePage() {
             <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6532]">Private Vehicle Listing</div>
             <h1 className="text-2xl font-bold tracking-tight">1974 Volkswagen Super Beetle Convertible</h1>
             <div className="mt-2 text-3xl font-bold text-[#2f5f46]">{listing.askingPrice ? money(listing.askingPrice) : "Accepting Offers"}</div>
+            {(sellerContact.showPhone || sellerContact.showEmail) && (
+              <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                {sellerContact.showPhone && sellerContact.phone && (
+                  <a className="rounded-full border border-[#dcc8aa] bg-white px-3 py-1.5 font-semibold text-[#251914] hover:bg-[#f8ead8]" href={`tel:${sellerContact.phone}`}>
+                    {sellerContact.phone}
+                  </a>
+                )}
+                {sellerContact.showEmail && sellerContact.email && (
+                  <a className="rounded-full border border-[#dcc8aa] bg-white px-3 py-1.5 font-semibold text-[#251914] hover:bg-[#f8ead8]" href={`mailto:${sellerContact.email}`}>
+                    {sellerContact.email}
+                  </a>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             {isAdminPage && <Badge className="bg-[#251914]">Admin edit mode</Badge>}

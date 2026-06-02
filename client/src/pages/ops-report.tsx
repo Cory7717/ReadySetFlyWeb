@@ -34,12 +34,21 @@ const C = {
 type OpsAccess = { unlocked: boolean; user: { employeeDisplayName: string; email: string; isAdmin: boolean } | null; passwordChangeRequired?: boolean };
 type Row = Record<string, string>;
 type LaborHoursResponse = { weekStart: string; scheduleId?: string | null; departments: Record<string, number> };
+type OpsImportResponse = {
+  originalFileName: string;
+  reportType: "otb_weekly" | "otb_month" | "gss_summary" | "gss_responses";
+  weekly?: { weekStart: string; weekEnd: string; roomsSold: number; occupancy: number; arrivals: number; departures: number; adr: number; roomRevenue: number };
+  monthly?: { monthStart: string; monthEnd: string; rooms: number; occupancy: number; adr: number; revenue: number; arrivals: number; departures: number };
+  gssRows?: Row[];
+  positiveReviews?: Row[];
+  negativeReviews?: Row[];
+};
 
 const emptyRows = (count: number, keys: string[]) =>
   Array.from({ length: count }, (_, index) => keys.reduce<Row>((row, key) => ({ ...row, [key]: key === "no" ? String(index + 1) : "" }), {}));
 
 function money(value: string | number) {
-  const n = Number(value || 0);
+  const n = num(value);
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(Number.isFinite(n) ? n : 0);
 }
 
@@ -49,8 +58,20 @@ function pct(value: string | number) {
 }
 
 function num(value: string | number) {
-  const n = Number(value || 0);
+  const n = Number(String(value || "").replace(/[$,%(),]/g, "").replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
+}
+
+function accounting(value: string | number) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const n = num(raw);
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: Number.isInteger(n) ? 0 : 2 }).format(n);
+}
+
+function isMoneyColumn(key: string, label: string) {
+  const text = `${key} ${label}`.toLowerCase();
+  return text.includes("amount") || text.includes("revenue") || text.includes("adr") || text.includes("balance");
 }
 
 function fmtHours(value: string | number) {
@@ -71,20 +92,27 @@ function mergeLaborHours(rows: Row[], departments: Record<string, number>, field
   return updated;
 }
 
-function LabeledInput({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+function rowValue(value: string | number | undefined, digits = 2) {
+  if (value == null || value === "") return "";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  return n.toFixed(digits).replace(/\.?0+$/, "");
+}
+
+function LabeledInput({ label, value, onChange, type = "text", moneyFormat = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; moneyFormat?: boolean }) {
   return (
     <div>
       <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>{label}</Label>
-      <Input className={`mt-1 ${C.field}`} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      <Input className={`mt-1 ${C.field}`} type={type} value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => moneyFormat && onChange(accounting(value))} />
     </div>
   );
 }
 
-function DarkLabeledInput({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+function DarkLabeledInput({ label, value, onChange, type = "text", moneyFormat = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; moneyFormat?: boolean }) {
   return (
     <div>
       <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.darkLabel}`}>{label}</Label>
-      <Input className={`mt-1 ${C.darkField}`} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      <Input className={`mt-1 ${C.darkField}`} type={type} value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => moneyFormat && onChange(accounting(value))} />
     </div>
   );
 }
@@ -92,9 +120,9 @@ function DarkLabeledInput({ label, value, onChange, type = "text" }: { label: st
 function Section({ title, children, right }: { title: string; children: ReactNode; right?: ReactNode }) {
   return (
     <Card className={C.section}>
-      <CardHeader className="border-b border-[#d7c8b5] py-3">
+      <CardHeader className="border-b border-[#d7c8b5] bg-[#fffaf2] py-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="text-base font-semibold">{title}</CardTitle>
+          <CardTitle className="text-base font-semibold text-[#201814]">{title}</CardTitle>
           {right}
         </div>
       </CardHeader>
@@ -126,6 +154,11 @@ function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: stri
                       const next = rows.map((item, index) => index === rowIndex ? { ...item, [column.key]: event.target.value } : item);
                       onChange(next);
                     }}
+                    onBlur={() => {
+                      if (!isMoneyColumn(column.key, column.label)) return;
+                      const next = rows.map((item, index) => index === rowIndex ? { ...item, [column.key]: accounting(item[column.key] || "") } : item);
+                      onChange(next);
+                    }}
                   />
                 </td>
               ))}
@@ -143,7 +176,7 @@ export default function OpsReportPage() {
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [week, setWeek] = useState("Week 1");
   const [setup, setSetup] = useState({ propertyName: "Please enter Hotel name", generalManager: "Please enter General Manager name", totalRooms: "50", monthlyRoomNights: "1550" });
-  const [topMetrics, setTopMetrics] = useState({ weekStart: "2026-01-03", roomsSold: "200", roomRevenue: "20000", mtdThisYear: "80000", mtdLastYear: "100000", ytdThisYear: "150000", ytdLastYear: "200000" });
+  const [topMetrics, setTopMetrics] = useState({ weekStart: "2026-01-03", occupancy: "0", roomsSold: "200", roomRevenue: "20000", mtdThisYear: "80000", mtdLastYear: "100000", ytdThisYear: "150000", ytdLastYear: "200000" });
   const [monthRows, setMonthRows] = useState<Row[]>([
     { label: "MONTH TO DATE", occupancy: "0.60", rooms: "400", adr: "169", revenue: "80000", comments: "" },
     { label: "FUTURE BOOKED", occupancy: "0.05", rooms: "100", adr: "15", revenue: "12000", comments: "" },
@@ -164,13 +197,14 @@ export default function OpsReportPage() {
   const [ar, setAr] = useState({ current: "90", d30: "150", d60: "220", d90: "1240", comments: "" });
   const [ledger, setLedger] = useState({ balance: "", over1000: "", comment: "" });
   const [labor, setLabor] = useState<Row[]>([
-    { department: "FRONT DESK HOURS", scheduledHours: "", actualHours: "", budget: "160", comments: "" },
+    { department: "FRONT DESK / NIGHT AUDIT HOURS", scheduledHours: "", actualHours: "", budget: "168", comments: "112 FD + 56 Night Audit" },
     { department: "HOUSEKEEPING HOURS", scheduledHours: "", actualHours: "", budget: "45", comments: "" },
-    { department: "BREAKFAST", scheduledHours: "", actualHours: "", budget: "41", comments: "" },
-    { department: "MAINTENANCE", scheduledHours: "", actualHours: "", budget: "56", comments: "" },
+    { department: "BREAKFAST / BISTRO HOURS", scheduledHours: "", actualHours: "", budget: "41", comments: "" },
+    { department: "MAINTENANCE HOURS", scheduledHours: "", actualHours: "", budget: "56", comments: "" },
     { department: "OTHER", scheduledHours: "", actualHours: "", budget: "5", comments: "" },
   ]);
   const [laborFile, setLaborFile] = useState<File | null>(null);
+  const [opsReportFile, setOpsReportFile] = useState<File | null>(null);
   const [staffing, setStaffing] = useState({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
   const [cases, setCases] = useState<Row[]>(emptyRows(5, ["no", "guest", "incidentType", "resolution", "comment"]));
   const [gmOverview, setGmOverview] = useState("");
@@ -228,6 +262,56 @@ export default function OpsReportPage() {
       toast({ title: "Actual labor hours imported", description: `${data.originalFileName} was parsed into the Staff Hours table.` });
     },
     onError: (error: Error) => toast({ title: "Unable to parse labor summary", description: error.message, variant: "destructive" }),
+  });
+  const opsReportUpload = useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append("opsReport", file);
+      const response = await fetch(apiUrl("/api/opsreport/import"), { method: "POST", credentials: "include", body: form });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json() as Promise<OpsImportResponse>;
+    },
+    onSuccess: (data) => {
+      if (data.weekly) {
+        setTopMetrics((current) => ({
+          ...current,
+          weekStart: data.weekly!.weekStart || current.weekStart,
+          occupancy: rowValue(data.weekly!.occupancy),
+          roomsSold: rowValue(data.weekly!.roomsSold, 0),
+          roomRevenue: accounting(data.weekly!.roomRevenue),
+          mtdThisYear: accounting(data.weekly!.roomRevenue),
+        }));
+      }
+      if (data.monthly) {
+        const monthly = data.monthly;
+        setMonthRows((rows) => rows.map((row) => {
+          if (row.label === "MONTH TO DATE" || row.label === "MONTHLY TOTAL") {
+            return {
+              ...row,
+              occupancy: rowValue(monthly.occupancy, 4),
+              rooms: rowValue(monthly.rooms, 0),
+              adr: accounting(monthly.adr),
+              revenue: accounting(monthly.revenue),
+              comments: `Imported ${monthly.monthStart} to ${monthly.monthEnd}`,
+            };
+          }
+          return row;
+        }));
+        setTopMetrics((current) => ({ ...current, mtdThisYear: accounting(monthly.revenue) }));
+      }
+      if (data.gssRows?.length) {
+        setGssRows((rows) => rows.map((row) => data.gssRows!.find((incoming) => incoming.label === row.label) || row));
+      }
+      if (data.positiveReviews?.length) {
+        setPositiveReviews([...data.positiveReviews, ...emptyRows(Math.max(0, 5 - data.positiveReviews.length), ["source", "score", "comment"])].slice(0, 5));
+      }
+      if (data.negativeReviews?.length) {
+        setNegativeReviews([...data.negativeReviews, ...emptyRows(Math.max(0, 5 - data.negativeReviews.length), ["source", "score", "comment"])].slice(0, 5));
+      }
+      setOpsReportFile(null);
+      toast({ title: "Ops report imported", description: `${data.originalFileName} was mapped as ${data.reportType.replace(/_/g, " ")}.` });
+    },
+    onError: (error: Error) => toast({ title: "Unable to import report", description: error.message, variant: "destructive" }),
   });
 
   useEffect(() => {
@@ -322,9 +406,16 @@ export default function OpsReportPage() {
               <DarkLabeledInput label="Monthly room nights" value={setup.monthlyRoomNights} onChange={(monthlyRoomNights) => setSetup({ ...setup, monthlyRoomNights })} type="number" />
             </div>
             <div className="rounded-xl border border-dashed border-[#cdbda8] bg-white p-4">
-              <div className="flex items-center gap-2 font-semibold text-[#201814]"><Upload className="h-4 w-4" /> Future parser staging</div>
-              <p className="mt-2 text-sm text-[#5f5247]">Upload mapping will be connected next. This page is structured to receive source reports and populate the matching fields.</p>
-              <Input className={`mt-3 ${C.field}`} type="file" accept=".xlsx,.xls,.csv,.pdf" disabled />
+              <div className="flex items-center gap-2 font-semibold text-[#201814]"><Upload className="h-4 w-4" /> Import ops source report</div>
+              <p className="mt-2 text-sm text-[#5f5247]">
+                Upload weekly/monthly OTB CSV, GSS score summary, or Marriott response export. Recognized fields populate the matching worksheet sections.
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <Input className={C.field} type="file" accept=".xlsx,.xls,.csv" onChange={(event) => setOpsReportFile(event.target.files?.[0] || null)} />
+                <Button className={C.green} onClick={() => opsReportFile && opsReportUpload.mutate(opsReportFile)} disabled={!opsReportFile || opsReportUpload.isPending}>
+                  {opsReportUpload.isPending ? "Importing..." : "Import"}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -341,7 +432,7 @@ export default function OpsReportPage() {
                 columns={[
                   { key: "week", label: "Week" }, { key: "rooms", label: "Rooms Sold" }, { key: "revenue", label: "Room Revenue" }, { key: "adr", label: "ADR" }, { key: "occupancy", label: "Occupancy %" }, { key: "labor", label: "Labor Hours" }, { key: "variance", label: "Labor Variance" },
                 ]}
-                rows={Array.from({ length: 10 }, (_, index) => ({ week: `Week ${index + 1}`, rooms: index === 0 ? topMetrics.roomsSold : "", revenue: index === 0 ? topMetrics.roomRevenue : "", adr: index === 0 ? adr.toFixed(0) : "", occupancy: index === 0 ? monthRows[0].occupancy : "", labor: index === 0 ? String(laborTotal) : "", variance: index === 0 ? String(laborVariance) : "" }))}
+                rows={Array.from({ length: 10 }, (_, index) => ({ week: `Week ${index + 1}`, rooms: index === 0 ? topMetrics.roomsSold : "", revenue: index === 0 ? topMetrics.roomRevenue : "", adr: index === 0 ? adr.toFixed(0) : "", occupancy: index === 0 ? topMetrics.occupancy : "", labor: index === 0 ? String(laborTotal) : "", variance: index === 0 ? String(laborVariance) : "" }))}
                 onChange={() => undefined}
               />
             </Section>
@@ -350,7 +441,7 @@ export default function OpsReportPage() {
                 columns={[{ key: "kpi", label: "KPI", wide: true }, { key: "current", label: "Current" }, { key: "target", label: "Target" }, { key: "variance", label: "Variance" }]}
                 rows={[
                   { kpi: "Avg Weekly Revenue", current: topMetrics.roomRevenue, target: "25000", variance: String(num(topMetrics.roomRevenue) - 25000) },
-                  { kpi: "Avg Occupancy %", current: monthRows[0].occupancy, target: "0.65", variance: String(num(monthRows[0].occupancy) - 0.65) },
+                  { kpi: "Avg Occupancy %", current: topMetrics.occupancy, target: "65", variance: String(num(topMetrics.occupancy) - 65) },
                   { kpi: "Avg ADR", current: adr.toFixed(0), target: "120", variance: String(Math.round(adr - 120)) },
                   { kpi: "Labor Efficiency (Hrs/Room)", current: num(topMetrics.roomsSold) ? (laborTotal / num(topMetrics.roomsSold)).toFixed(2) : "0", target: "1.50", variance: num(topMetrics.roomsSold) ? ((laborTotal / num(topMetrics.roomsSold)) - 1.5).toFixed(2) : "0" },
                 ]}
@@ -367,16 +458,18 @@ export default function OpsReportPage() {
               </CardHeader>
               <CardContent className="grid gap-3 md:grid-cols-4">
                 <DarkLabeledInput label="Week start date" value={topMetrics.weekStart} onChange={(weekStart) => setTopMetrics({ ...topMetrics, weekStart })} type="date" />
+                <DarkLabeledInput label="Week end date" value={weekEnd} onChange={() => undefined} type="date" />
                 <DarkLabeledInput label="Rooms sold" value={topMetrics.roomsSold} onChange={(roomsSold) => setTopMetrics({ ...topMetrics, roomsSold })} type="number" />
-                <DarkLabeledInput label="Room revenue" value={topMetrics.roomRevenue} onChange={(roomRevenue) => setTopMetrics({ ...topMetrics, roomRevenue })} type="number" />
+                <DarkLabeledInput label="Occupancy %" value={topMetrics.occupancy} onChange={(occupancy) => setTopMetrics({ ...topMetrics, occupancy })} type="number" />
+                <DarkLabeledInput label="Room revenue" value={topMetrics.roomRevenue} onChange={(roomRevenue) => setTopMetrics({ ...topMetrics, roomRevenue })} moneyFormat />
                 <div className="rounded-lg border border-[#d7c8b5] bg-white p-3">
                   <div className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>Weekly ADR</div>
                   <div className="mt-2 text-2xl font-semibold text-[#201814]">{money(adr)}</div>
                 </div>
-                <DarkLabeledInput label="MTD this year" value={topMetrics.mtdThisYear} onChange={(mtdThisYear) => setTopMetrics({ ...topMetrics, mtdThisYear })} type="number" />
-                <DarkLabeledInput label="MTD last year" value={topMetrics.mtdLastYear} onChange={(mtdLastYear) => setTopMetrics({ ...topMetrics, mtdLastYear })} type="number" />
-                <DarkLabeledInput label="YTD this year" value={topMetrics.ytdThisYear} onChange={(ytdThisYear) => setTopMetrics({ ...topMetrics, ytdThisYear })} type="number" />
-                <DarkLabeledInput label="YTD last year" value={topMetrics.ytdLastYear} onChange={(ytdLastYear) => setTopMetrics({ ...topMetrics, ytdLastYear })} type="number" />
+                <DarkLabeledInput label="MTD this year" value={topMetrics.mtdThisYear} onChange={(mtdThisYear) => setTopMetrics({ ...topMetrics, mtdThisYear })} moneyFormat />
+                <DarkLabeledInput label="MTD last year" value={topMetrics.mtdLastYear} onChange={(mtdLastYear) => setTopMetrics({ ...topMetrics, mtdLastYear })} moneyFormat />
+                <DarkLabeledInput label="YTD this year" value={topMetrics.ytdThisYear} onChange={(ytdThisYear) => setTopMetrics({ ...topMetrics, ytdThisYear })} moneyFormat />
+                <DarkLabeledInput label="YTD last year" value={topMetrics.ytdLastYear} onChange={(ytdLastYear) => setTopMetrics({ ...topMetrics, ytdLastYear })} moneyFormat />
               </CardContent>
             </Card>
 
@@ -400,17 +493,17 @@ export default function OpsReportPage() {
             </Section>
             <Section title="Accounts Receivable / Aging" right={<Badge variant="outline">Total {money(arTotal)}</Badge>}>
               <div className="grid gap-3 p-4 sm:grid-cols-5">
-                <LabeledInput label="Current" value={ar.current} onChange={(current) => setAr({ ...ar, current })} />
-                <LabeledInput label="30" value={ar.d30} onChange={(d30) => setAr({ ...ar, d30 })} />
-                <LabeledInput label="60" value={ar.d60} onChange={(d60) => setAr({ ...ar, d60 })} />
-                <LabeledInput label="90+" value={ar.d90} onChange={(d90) => setAr({ ...ar, d90 })} />
+                <LabeledInput label="Current" value={ar.current} onChange={(current) => setAr({ ...ar, current })} moneyFormat />
+                <LabeledInput label="30" value={ar.d30} onChange={(d30) => setAr({ ...ar, d30 })} moneyFormat />
+                <LabeledInput label="60" value={ar.d60} onChange={(d60) => setAr({ ...ar, d60 })} moneyFormat />
+                <LabeledInput label="90+" value={ar.d90} onChange={(d90) => setAr({ ...ar, d90 })} moneyFormat />
                 <LabeledInput label="Comments" value={ar.comments} onChange={(comments) => setAr({ ...ar, comments })} />
               </div>
             </Section>
             <Section title="Guest Ledger Balance">
               <div className="grid gap-3 p-4 sm:grid-cols-3">
-                <LabeledInput label="Total balance" value={ledger.balance} onChange={(balance) => setLedger({ ...ledger, balance })} />
-                <LabeledInput label="Any guest over $1000" value={ledger.over1000} onChange={(over1000) => setLedger({ ...ledger, over1000 })} />
+                <LabeledInput label="Total balance" value={ledger.balance} onChange={(balance) => setLedger({ ...ledger, balance })} moneyFormat />
+                <LabeledInput label="Any guest over $1000" value={ledger.over1000} onChange={(over1000) => setLedger({ ...ledger, over1000 })} moneyFormat />
                 <LabeledInput label="Comment" value={ledger.comment} onChange={(comment) => setLedger({ ...ledger, comment })} />
               </div>
             </Section>
@@ -448,7 +541,7 @@ export default function OpsReportPage() {
                   { key: "scheduledHours", label: "Scheduled Hours" },
                   { key: "actualHours", label: "Actual Hours" },
                   { key: "variance", label: "Actual - Scheduled" },
-                  { key: "budget", label: "Budgeted MPOR/Hours" },
+                  { key: "budget", label: "Budgeted Hours" },
                   { key: "comments", label: "Comments", wide: true },
                 ]}
                 rows={laborRows}

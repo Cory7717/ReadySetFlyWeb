@@ -31,7 +31,7 @@ const C = {
   darkLabel: "!text-[#f0d9b0]",
 };
 
-type OpsAccess = { unlocked: boolean; user: { employeeDisplayName: string; email: string; isAdmin: boolean } | null; passwordChangeRequired?: boolean };
+type OpsAccess = { unlocked: boolean; user: { employeeDisplayName: string; email: string; isAdmin: boolean } | null; hasPin?: boolean; passwordChangeRequired?: boolean };
 type Row = Record<string, string>;
 type LaborHoursResponse = { weekStart: string; scheduleId?: string | null; departments: Record<string, number> };
 type OpsImportResponse = {
@@ -98,6 +98,23 @@ function isMoneyColumn(key: string, label: string) {
 function isPercentColumn(key: string, label: string) {
   const text = `${key} ${label}`.toLowerCase();
   return text.includes("occupancy") || text.includes("%");
+}
+
+function isLongTextColumn(key: string, label: string) {
+  const text = `${key} ${label}`.toLowerCase();
+  return [
+    "comment",
+    "comments",
+    "notes",
+    "strategy",
+    "action",
+    "support",
+    "direction",
+    "resolution",
+    "incident",
+    "reason",
+    "discussion",
+  ].some((word) => text.includes(word));
 }
 
 function fmtHours(value: string | number) {
@@ -172,7 +189,7 @@ function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: stri
           {rows.map((row, rowIndex) => (
             <tr key={rowIndex} className="odd:bg-white even:bg-[#fbf6ee]">
               {columns.map((column) => (
-                <td key={column.key} className="border border-[#e0d3c1] p-1 align-top">
+                <td key={column.key} className="group relative border border-[#e0d3c1] p-1 align-top">
                   <Input
                     className="h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white"
                     value={row[column.key] || ""}
@@ -189,6 +206,12 @@ function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: stri
                       onChange(next);
                     }}
                   />
+                  {isLongTextColumn(column.key, column.label) && String(row[column.key] || "").trim() && (
+                    <div className="pointer-events-none absolute left-2 top-10 z-30 hidden max-w-[420px] rounded-lg border border-[#cdbda8] bg-[#201814] px-3 py-2 text-xs font-medium leading-relaxed text-white shadow-xl group-hover:block group-focus-within:block">
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#f0d9b0]">{column.label}</div>
+                      <div className="max-h-48 overflow-y-auto whitespace-pre-wrap">{row[column.key]}</div>
+                    </div>
+                  )}
                 </td>
               ))}
             </tr>
@@ -202,7 +225,7 @@ function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: stri
 export default function OpsReportPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  const [pin, setPin] = useState("");
   const [week, setWeek] = useState("Week 1");
   const [setup, setSetup] = useState({ propertyName: "Please enter Hotel name", generalManager: "Please enter General Manager name", totalRooms: "50", monthlyRoomNights: "1550" });
   const [topMetrics, setTopMetrics] = useState({ weekStart: "2026-01-03", occupancy: "0", roomsSold: "200", roomRevenue: "20000", mtdThisYear: "80000", mtdLastYear: "100000", ytdThisYear: "150000", ytdLastYear: "200000" });
@@ -268,12 +291,12 @@ export default function OpsReportPage() {
     },
   });
   const unlock = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/tips/auth/login", loginForm),
+    mutationFn: () => apiRequest("POST", "/api/opsreport/pin-login", { pin }),
     onSuccess: () => {
-      setLoginForm({ email: "", password: "" });
+      setPin("");
       queryClient.invalidateQueries({ queryKey: ["/api/opsreport/access"] });
     },
-    onError: (error: Error) => toast({ title: "Unable to sign in", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Unable to unlock Ops Report", description: error.message, variant: "destructive" }),
   });
   const lock = useMutation({
     mutationFn: () => apiRequest("POST", "/api/opsreport/logout"),
@@ -464,30 +487,27 @@ export default function OpsReportPage() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <LockKeyhole className="h-5 w-5 text-[#2f5f46]" />
-              <CardTitle>Courtyard Login Required</CardTitle>
+              <CardTitle>Ops Report PIN Required</CardTitle>
             </div>
-            <CardDescription>Use the same Courtyard account used for Tips and Schedule. Manager access is required.</CardDescription>
+            <CardDescription>Enter the 5 digit operations PIN to open the weekly report worksheet.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <Label>Email</Label>
-              <Input className={C.field} type="email" value={loginForm.email} onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })} />
-            </div>
-            <div>
-              <Label>Password</Label>
+              <Label>Operations PIN</Label>
               <Input
-                className={C.field}
+                className={`${C.field} text-center text-2xl tracking-[0.4em]`}
                 type="password"
-                value={loginForm.password}
-                onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
-                onKeyDown={(event) => event.key === "Enter" && unlock.mutate()}
+                inputMode="numeric"
+                maxLength={5}
+                value={pin}
+                onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 5))}
+                onKeyDown={(event) => event.key === "Enter" && pin.length === 5 && unlock.mutate()}
               />
             </div>
-            <Button className={`w-full ${C.green}`} onClick={() => unlock.mutate()} disabled={unlock.isPending || !loginForm.email.trim() || !loginForm.password}>
-              {unlock.isPending ? "Signing in..." : "Sign in"}
+            <Button className={`w-full ${C.green}`} onClick={() => unlock.mutate()} disabled={unlock.isPending || pin.length !== 5}>
+              {unlock.isPending ? "Checking PIN..." : "Open Ops Report"}
             </Button>
-            {access.data?.passwordChangeRequired && <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Password change is required before opening Ops Report. Use /tips to complete the password change.</div>}
-            {access.data?.user && !access.data.user.isAdmin && <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">This account is signed in but does not have manager access for Ops Report.</div>}
+            {!access.data?.hasPin && <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">No Ops Report PIN is configured yet. Set `OPS_REPORT_PIN` or use the existing Tips team PIN.</div>}
           </CardContent>
         </Card>
       </div>

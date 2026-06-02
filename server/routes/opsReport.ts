@@ -3,6 +3,7 @@ import multer from "multer";
 import AdmZip from "adm-zip";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
+import bcrypt from "bcrypt";
 import { and, desc, eq } from "drizzle-orm";
 import { createRequire } from "module";
 import { db } from "../db";
@@ -12,6 +13,7 @@ import {
   scheduleShiftTypes,
   courtyardOpsReportDrafts,
   courtyardOpsReportUserSettings,
+  tipsKioskSettings,
   tipsUsers,
   weeklySchedules,
 } from "@shared/schema";
@@ -38,6 +40,9 @@ const reportUpload = multer({
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+});
+const pinSchema = z.object({
+  pin: z.string().regex(/^\d{5}$/, "PIN must be exactly 5 digits"),
 });
 const draftSchema = z.object({
   weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -93,15 +98,39 @@ async function getUserBySession(req: any) {
   return user || null;
 }
 
+async function getStoredPinHash() {
+  const [opsRow] = await db.select().from(tipsKioskSettings).where(eq(tipsKioskSettings.key, "ops_report_pin_hash")).limit(1);
+  if (opsRow?.value) return opsRow.value;
+  const [tipsRow] = await db.select().from(tipsKioskSettings).where(eq(tipsKioskSettings.key, "pin_hash")).limit(1);
+  return tipsRow?.value || "";
+}
+
+async function hasOpsPin() {
+  return Boolean(await getStoredPinHash() || process.env.OPS_REPORT_PIN || process.env.TIPS_KIOSK_PIN);
+}
+
+async function verifyOpsPin(pin: string) {
+  const hash = await getStoredPinHash();
+  if (hash) return bcrypt.compare(pin, hash);
+  return Boolean((process.env.OPS_REPORT_PIN && process.env.OPS_REPORT_PIN === pin) || (process.env.TIPS_KIOSK_PIN && process.env.TIPS_KIOSK_PIN === pin));
+}
+
 async function requireOpsManager(req: any, res: any, next: any) {
   try {
     const user = await getUserBySession(req);
-    if (!user || user.disabledAt) return res.status(401).json({ error: "Courtyard login required." });
-    const publicUser = publicOpsUser(user);
-    if (publicUser.mustChangePassword) return res.status(403).json({ error: "Password change required." });
-    if (!publicUser.isAdmin) return res.status(403).json({ error: "Ops report manager access required." });
-    req.opsUser = publicUser;
-    next();
+    if (user && !user.disabledAt) {
+      const publicUser = publicOpsUser(user);
+      if (publicUser.mustChangePassword) return res.status(403).json({ error: "Password change required." });
+      if (publicUser.isAdmin) {
+        req.opsUser = publicUser;
+        return next();
+      }
+    }
+    if (req.session?.opsReportUnlocked) {
+      req.opsUser = null;
+      return next();
+    }
+    return res.status(401).json({ error: "Ops report PIN required." });
   } catch (error) {
     next(error);
   }
@@ -425,10 +454,22 @@ export function registerOpsReportRoutes(app: Express) {
   router.get("/access", async (req: any, res, next) => {
     try {
       const user = await getUserBySession(req);
-      if (!user || user.disabledAt) return res.json({ unlocked: false, user: null });
+      if (!user || user.disabledAt) return res.json({ unlocked: Boolean(req.session?.opsReportUnlocked), user: null, hasPin: await hasOpsPin() });
       const publicUser = publicOpsUser(user);
       if (publicUser.mustChangePassword) return res.json({ unlocked: false, user: publicUser, passwordChangeRequired: true });
-      res.json({ unlocked: publicUser.isAdmin, user: publicUser });
+      res.json({ unlocked: Boolean(req.session?.opsReportUnlocked || publicUser.isAdmin), user: publicUser, hasPin: await hasOpsPin() });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/pin-login", async (req: any, res, next) => {
+    try {
+      const parsed = pinSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Enter the 5 digit PIN." });
+      if (!(await verifyOpsPin(parsed.data.pin))) return res.status(401).json({ error: "Invalid PIN." });
+      req.session.opsReportUnlocked = true;
+      req.session.save(() => res.json({ unlocked: true }));
     } catch (error) {
       next(error);
     }
@@ -451,7 +492,7 @@ export function registerOpsReportRoutes(app: Express) {
   });
 
   router.post("/logout", (req: any, res) => {
-    if (req.session) delete req.session.tipsUserId;
+    if (req.session) delete req.session.opsReportUnlocked;
     req.session?.save(() => res.json({ ok: true }));
   });
 
@@ -460,8 +501,12 @@ export function registerOpsReportRoutes(app: Express) {
       const requestedWeekStart = typeof req.query.weekStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.weekStart) ? req.query.weekStart : "";
       let weekStart = requestedWeekStart;
       if (!weekStart) {
-        const [settings] = await db.select().from(courtyardOpsReportUserSettings).where(eq(courtyardOpsReportUserSettings.userId, req.opsUser.id)).limit(1);
-        weekStart = settings?.lastWeekStart || "";
+        if (req.opsUser?.id) {
+          const [settings] = await db.select().from(courtyardOpsReportUserSettings).where(eq(courtyardOpsReportUserSettings.userId, req.opsUser.id)).limit(1);
+          weekStart = settings?.lastWeekStart || "";
+        } else {
+          weekStart = req.session?.opsReportLastWeekStart || "";
+        }
       }
       let draft: any = null;
       if (weekStart) {
@@ -494,7 +539,7 @@ export function registerOpsReportRoutes(app: Express) {
           weekLabel: data.weekLabel,
           payloadJson: data.payload,
           uploadedReportsJson: data.uploadedReports,
-          updatedBy: req.opsUser.id,
+          updatedBy: req.opsUser?.id || null,
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
@@ -504,18 +549,23 @@ export function registerOpsReportRoutes(app: Express) {
             weekLabel: data.weekLabel,
             payloadJson: data.payload,
             uploadedReportsJson: data.uploadedReports,
-            updatedBy: req.opsUser.id,
+            updatedBy: req.opsUser?.id || null,
             updatedAt: new Date(),
           },
         })
         .returning();
-      await db
-        .insert(courtyardOpsReportUserSettings)
-        .values({ userId: req.opsUser.id, lastWeekStart: data.weekStart, updatedAt: new Date() })
-        .onConflictDoUpdate({
-          target: courtyardOpsReportUserSettings.userId,
-          set: { lastWeekStart: data.weekStart, updatedAt: new Date() },
-        });
+      if (req.opsUser?.id) {
+        await db
+          .insert(courtyardOpsReportUserSettings)
+          .values({ userId: req.opsUser.id, lastWeekStart: data.weekStart, updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: courtyardOpsReportUserSettings.userId,
+            set: { lastWeekStart: data.weekStart, updatedAt: new Date() },
+          });
+      } else {
+        req.session.opsReportLastWeekStart = data.weekStart;
+        req.session.save(() => undefined);
+      }
       res.json({ draft: publicDraft(draft) });
     } catch (error) {
       next(error);

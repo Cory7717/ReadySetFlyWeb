@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileSpreadsheet, LockKeyhole, LogOut, Save, Upload } from "lucide-react";
+import { Download, FileSpreadsheet, LockKeyhole, LogOut, Upload } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const C = {
   page: "min-h-screen bg-[#f3efe7] text-[#201814]",
@@ -40,6 +41,7 @@ type OpsImportResponse = {
   weekly?: { weekStart: string; weekEnd: string; roomsSold: number; occupancy: number; arrivals: number; departures: number; adr: number; roomRevenue: number };
   monthly?: { monthStart: string; monthEnd: string; rooms: number; occupancy: number; adr: number; revenue: number; arrivals: number; departures: number };
   gssRows?: Row[];
+  gssWaveRows?: Row[];
   positiveReviews?: Row[];
   negativeReviews?: Row[];
 };
@@ -142,6 +144,25 @@ function rowValue(value: string | number | undefined, digits = 2) {
   return n.toFixed(digits).replace(/\.?0+$/, "");
 }
 
+function addDaysIso(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function monthKeyFromDate(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabelFromKey(value: string) {
+  const [year, month] = value.split("-").map(Number);
+  if (!year || !month) return value;
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
 function LabeledInput({ label, value, onChange, type = "text", moneyFormat = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; moneyFormat?: boolean }) {
   return (
     <div>
@@ -175,8 +196,9 @@ function Section({ title, children, right }: { title: string; children: ReactNod
 }
 
 function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: string; label: string; wide?: boolean }>; rows: Row[]; onChange: (rows: Row[]) => void }) {
+  const [preview, setPreview] = useState<{ label: string; text: string; x: number; y: number } | null>(null);
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <table className="w-full min-w-[720px] border-collapse text-sm">
         <thead>
           <tr className={C.header}>
@@ -189,15 +211,25 @@ function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: stri
           {rows.map((row, rowIndex) => (
             <tr key={rowIndex} className="odd:bg-white even:bg-[#fbf6ee]">
               {columns.map((column) => (
-                <td key={column.key} className="group relative border border-[#e0d3c1] p-1 align-top">
+                <td key={column.key} className="border border-[#e0d3c1] p-1 align-top">
                   <Input
                     className="h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white"
                     value={row[column.key] || ""}
-                    onChange={(event) => {
-                      const next = rows.map((item, index) => index === rowIndex ? { ...item, [column.key]: event.target.value } : item);
-                      onChange(next);
+                    onMouseEnter={(event) => {
+                      const text = String(row[column.key] || "").trim();
+                      if (!isLongTextColumn(column.key, column.label) || !text) return;
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setPreview({ label: column.label, text, x: Math.min(rect.left, window.innerWidth - 460), y: rect.bottom + 8 });
+                    }}
+                    onMouseLeave={() => setPreview(null)}
+                    onFocus={(event) => {
+                      const text = String(row[column.key] || "").trim();
+                      if (!isLongTextColumn(column.key, column.label) || !text) return;
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setPreview({ label: column.label, text, x: Math.min(rect.left, window.innerWidth - 460), y: rect.bottom + 8 });
                     }}
                     onBlur={() => {
+                      setPreview(null);
                       if (!isMoneyColumn(column.key, column.label) && !isPercentColumn(column.key, column.label)) return;
                       const next = rows.map((item, index) => {
                         if (index !== rowIndex) return item;
@@ -205,19 +237,26 @@ function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: stri
                       });
                       onChange(next);
                     }}
+                    onChange={(event) => {
+                      const next = rows.map((item, index) => index === rowIndex ? { ...item, [column.key]: event.target.value } : item);
+                      onChange(next);
+                    }}
                   />
-                  {isLongTextColumn(column.key, column.label) && String(row[column.key] || "").trim() && (
-                    <div className="pointer-events-none absolute left-2 top-10 z-30 hidden max-w-[420px] rounded-lg border border-[#cdbda8] bg-[#201814] px-3 py-2 text-xs font-medium leading-relaxed text-white shadow-xl group-hover:block group-focus-within:block">
-                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#f0d9b0]">{column.label}</div>
-                      <div className="max-h-48 overflow-y-auto whitespace-pre-wrap">{row[column.key]}</div>
-                    </div>
-                  )}
                 </td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
+      {preview && (
+        <div
+          className="pointer-events-none fixed z-[100] max-w-[440px] rounded-lg border border-[#cdbda8] bg-[#201814] px-3 py-2 text-xs font-medium leading-relaxed text-white shadow-2xl"
+          style={{ left: preview.x, top: preview.y }}
+        >
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#f0d9b0]">{preview.label}</div>
+          <div className="max-h-56 overflow-y-auto whitespace-pre-wrap">{preview.text}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -259,10 +298,15 @@ export default function OpsReportPage() {
   const [opsReportFiles, setOpsReportFiles] = useState<File[]>([]);
   const [uploadedReports, setUploadedReports] = useState<Array<Record<string, any>>>([]);
   const [draftHydrated, setDraftHydrated] = useState(false);
+  const [budgetModalOpen, setBudgetModalOpen] = useState(false);
+  const [monthlyBudgets, setMonthlyBudgets] = useState<Row[]>([]);
+  const [budgetForm, setBudgetForm] = useState({ month: monthKeyFromDate(new Date().toISOString().slice(0, 10)), rooms: "", occupancy: "", adr: "", revenue: "" });
+  const [lastSavedAt, setLastSavedAt] = useState<string>("");
   const [staffing, setStaffing] = useState({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
   const [cases, setCases] = useState<Row[]>(emptyRows(5, ["no", "guest", "incidentType", "resolution", "comment"]));
-  const [gmOverview, setGmOverview] = useState("");
-  const [gssRows, setGssRows] = useState<Row[]>(["ITR", "Elite Appreciation", "Cleanliness", "Staff Service", "Maintenance", "Food & Beverage", "Internet"].map((label) => ({ label, hotel: "", brand: "", variance: "", sply: "", comments: "" })));
+  const [gmOverviewRows, setGmOverviewRows] = useState<Row[]>(emptyRows(6, ["no", "bullet"]));
+  const [gssRows, setGssRows] = useState<Row[]>(["ITR", "Elite Appreciation", "Cleanliness", "Staff Service", "Maintenance", "Food & Beverage", "Internet"].map((label) => ({ label, hotel: "", brand: "", variance: "", priorWeek: "", weekVariance: "", sply: "", comments: "" })));
+  const [gssWaveRows, setGssWaveRows] = useState<Row[]>(["ITR", "Elite Appreciation", "Cleanliness", "Staff Service", "Maintenance", "Food & Beverage", "Internet"].map((label) => ({ label, hotel: "", brand: "", variance: "", sply: "", comments: "" })));
   const [reputationRows, setReputationRows] = useState<Row[]>(["GOOGLE", "BOOKING.COM", "EXPEDIA", "TRIPADVISOR", "YELP"].map((label) => ({ label, reviews: "", score: "", outOf: "", goal: "", variance: "", strategy: "" })));
   const [positiveReviews, setPositiveReviews] = useState<Row[]>(emptyRows(5, ["source", "score", "comment"]));
   const [negativeReviews, setNegativeReviews] = useState<Row[]>(emptyRows(5, ["source", "score", "comment"]));
@@ -286,6 +330,16 @@ export default function OpsReportPage() {
     enabled: Boolean(access.data?.unlocked),
     queryFn: async () => {
       const response = await fetch(apiUrl("/api/opsreport/draft"), { credentials: "include" });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+  });
+  const previousWeekStart = useMemo(() => addDaysIso(topMetrics.weekStart, -7), [topMetrics.weekStart]);
+  const previousDraft = useQuery<OpsDraftResponse>({
+    queryKey: ["/api/opsreport/draft", previousWeekStart],
+    enabled: Boolean(access.data?.unlocked && draftHydrated && previousWeekStart),
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/opsreport/draft?weekStart=${encodeURIComponent(previousWeekStart)}`), { credentials: "include" });
       if (!response.ok) throw new Error(await response.text());
       return response.json();
     },
@@ -367,6 +421,9 @@ export default function OpsReportPage() {
       if (report.gssRows?.length) {
         setGssRows((rows) => rows.map((row) => report.gssRows!.find((incoming) => incoming.label === row.label) || row));
       }
+      if (report.gssWaveRows?.length) {
+        setGssWaveRows((rows) => rows.map((row) => report.gssWaveRows!.find((incoming) => incoming.label === row.label) || row));
+      }
       if (report.positiveReviews?.length) {
         setPositiveReviews([...report.positiveReviews, ...emptyRows(Math.max(0, 5 - report.positiveReviews.length), ["source", "score", "comment"])].slice(0, 5));
       }
@@ -385,6 +442,7 @@ export default function OpsReportPage() {
   });
   const saveDraft = useMutation({
     mutationFn: async (payload: Record<string, any>) => apiRequest("POST", "/api/opsreport/draft", payload),
+    onSuccess: () => setLastSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })),
     onError: (error: Error) => toast({ title: "Unable to save ops report draft", description: error.message, variant: "destructive" }),
   });
 
@@ -405,12 +463,33 @@ export default function OpsReportPage() {
   })), [labor]);
   const adjustmentTotal = useMemo(() => adjustments.reduce((sum, row) => sum + num(row.amount), 0), [adjustments]);
   const arTotal = num(ar.current) + num(ar.d30) + num(ar.d60) + num(ar.d90);
+  const previousGssRows = (previousDraft.data?.draft?.payload?.gssRows || []) as Row[];
+  const gssRowsWithPrevious = useMemo(() => gssRows.map((row) => {
+    const prior = previousGssRows.find((item) => item.label === row.label);
+    const priorScore = prior?.hotel || "";
+    const currentScore = row.hotel || "";
+    const weekVariance = priorScore && currentScore ? rowValue(num(currentScore) - num(priorScore), 1) : "";
+    return { ...row, priorWeek: priorScore, weekVariance };
+  }), [gssRows, previousGssRows]);
+  const currentMonthKey = useMemo(() => monthKeyFromDate(topMetrics.weekStart), [topMetrics.weekStart]);
   const weekEnd = useMemo(() => {
     const start = new Date(`${topMetrics.weekStart}T00:00:00`);
     if (Number.isNaN(start.getTime())) return "";
     start.setDate(start.getDate() + 6);
     return start.toISOString().slice(0, 10);
   }, [topMetrics.weekStart]);
+  const saveMonthlyBudget = () => {
+    const normalized = {
+      month: budgetForm.month,
+      rooms: rowValue(budgetForm.rooms, 0),
+      occupancy: percentDisplay(budgetForm.occupancy),
+      adr: accounting(budgetForm.adr),
+      revenue: accounting(budgetForm.revenue),
+    };
+    setMonthlyBudgets((rows) => [...rows.filter((row) => row.month !== normalized.month), normalized]);
+    setBudgetModalOpen(false);
+    toast({ title: "Monthly budget saved", description: `${monthLabelFromKey(normalized.month)} budget will populate matching weekly reports.` });
+  };
   const currentDraftPayload = useMemo(() => ({
     setup,
     topMetrics,
@@ -423,16 +502,18 @@ export default function OpsReportPage() {
     ar,
     ledger,
     labor,
+    monthlyBudgets,
     staffing,
     cases,
-    gmOverview,
+    gmOverviewRows,
     gssRows,
+    gssWaveRows,
     reputationRows,
     positiveReviews,
     negativeReviews,
     followUp,
     priorities,
-  }), [setup, topMetrics, monthRows, nextMonthRows, chargebacks, maintenance, oooRooms, adjustments, ar, ledger, labor, staffing, cases, gmOverview, gssRows, reputationRows, positiveReviews, negativeReviews, followUp, priorities]);
+  }), [setup, topMetrics, monthRows, nextMonthRows, chargebacks, maintenance, oooRooms, adjustments, ar, ledger, labor, monthlyBudgets, staffing, cases, gmOverviewRows, gssRows, gssWaveRows, reputationRows, positiveReviews, negativeReviews, followUp, priorities]);
 
   useEffect(() => {
     if (!access.data?.unlocked || draft.isLoading || draftHydrated) return;
@@ -451,10 +532,13 @@ export default function OpsReportPage() {
       if (payload.ar) setAr(payload.ar);
       if (payload.ledger) setLedger(payload.ledger);
       if (payload.labor) setLabor(payload.labor);
+      if (payload.monthlyBudgets) setMonthlyBudgets(payload.monthlyBudgets);
       if (payload.staffing) setStaffing(payload.staffing);
       if (payload.cases) setCases(payload.cases);
-      if (typeof payload.gmOverview === "string") setGmOverview(payload.gmOverview);
+      if (Array.isArray(payload.gmOverviewRows)) setGmOverviewRows(payload.gmOverviewRows);
+      else if (typeof payload.gmOverview === "string") setGmOverviewRows(payload.gmOverview.split(/\n+/).filter(Boolean).slice(0, 6).map((bullet: string, index: number) => ({ no: String(index + 1), bullet: bullet.replace(/^[-*•\s]+/, "") })));
       if (payload.gssRows) setGssRows(payload.gssRows);
+      if (payload.gssWaveRows) setGssWaveRows(payload.gssWaveRows);
       if (payload.reputationRows) setReputationRows(payload.reputationRows);
       if (payload.positiveReviews) setPositiveReviews(payload.positiveReviews);
       if (payload.negativeReviews) setNegativeReviews(payload.negativeReviews);
@@ -475,9 +559,19 @@ export default function OpsReportPage() {
         payload: currentDraftPayload,
         uploadedReports,
       });
-    }, 900);
+    }, 500);
     return () => window.clearTimeout(timeout);
   }, [access.data?.unlocked, draftHydrated, weekEnd, week, topMetrics.weekStart, currentDraftPayload, uploadedReports]);
+
+  useEffect(() => {
+    const budget = monthlyBudgets.find((row) => row.month === currentMonthKey);
+    if (!budget) return;
+    setMonthRows((rows) => rows.map((row) => {
+      if (row.label !== "CURRENT MONTH BUDGET") return row;
+      const next = { ...row, occupancy: budget.occupancy || "", rooms: budget.rooms || "", adr: budget.adr || "", revenue: budget.revenue || "", comments: `Budget for ${monthLabelFromKey(currentMonthKey)}` };
+      return JSON.stringify(row) === JSON.stringify(next) ? row : next;
+    }));
+  }, [monthlyBudgets, currentMonthKey]);
 
   if (access.isLoading) return <div className={`${C.page} p-8`}>Loading operations report...</div>;
   if (!access.data?.unlocked) {
@@ -527,14 +621,21 @@ export default function OpsReportPage() {
               <SelectTrigger className={`w-32 ${C.field}`}><SelectValue /></SelectTrigger>
               <SelectContent>{Array.from({ length: 52 }, (_, index) => <SelectItem key={index + 1} value={`Week ${index + 1}`}>Week {index + 1}</SelectItem>)}</SelectContent>
             </Select>
-            <Button variant="outline" className={C.outline} onClick={() => window.print()}><Download className="mr-2 h-4 w-4" />Print</Button>
             <Button
-              className={C.darkButton}
-              onClick={() => saveDraft.mutate({ weekStart: topMetrics.weekStart, weekEnd, weekLabel: week, payload: currentDraftPayload, uploadedReports })}
-              disabled={saveDraft.isPending || !weekEnd}
+              variant="outline"
+              className={C.outline}
+              onClick={() => {
+                const existing = monthlyBudgets.find((row) => row.month === currentMonthKey);
+                setBudgetForm({ month: currentMonthKey || budgetForm.month, rooms: existing?.rooms || "", occupancy: existing?.occupancy || "", adr: existing?.adr || "", revenue: existing?.revenue || "" });
+                setBudgetModalOpen(true);
+              }}
             >
-              <Save className="mr-2 h-4 w-4" />{saveDraft.isPending ? "Saving..." : "Save draft"}
+              Monthly Budget
             </Button>
+            <Button variant="outline" className={C.outline} onClick={() => window.print()}><Download className="mr-2 h-4 w-4" />Print</Button>
+            <Badge className={`${saveDraft.isPending ? "bg-[#b98435]" : "bg-[#2f5f46]"} px-3 py-2 text-white`}>
+              {saveDraft.isPending ? "Autosaving..." : lastSavedAt ? `Saved ${lastSavedAt}` : "Autosave on"}
+            </Badge>
             <Button variant="ghost" className="text-[#3b2f26] hover:bg-[#f8efe2]" onClick={() => lock.mutate()}><LogOut className="mr-2 h-4 w-4" />Lock</Button>
           </div>
         </div>
@@ -718,10 +819,13 @@ export default function OpsReportPage() {
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "guest", label: "Guest Name" }, { key: "incidentType", label: "Incident Type" }, { key: "resolution", label: "Resolution / Compensation" }, { key: "comment", label: "Incident / Comment", wide: true }]} rows={cases} onChange={setCases} />
             </Section>
             <Section title="GM Weekly Overview">
-              <div className="p-4"><Textarea className={`${C.field} min-h-40`} value={gmOverview} onChange={(event) => setGmOverview(event.target.value)} placeholder="Please provide detailed summary of your week" /></div>
+              <EditableTable columns={[{ key: "no", label: "No" }, { key: "bullet", label: "Weekly overview bullet", wide: true }]} rows={gmOverviewRows} onChange={setGmOverviewRows} />
             </Section>
             <Section title="Guest Satisfaction Scores">
-              <EditableTable columns={[{ key: "label", label: "GSS MTD", wide: true }, { key: "hotel", label: "Hotel" }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance" }, { key: "sply", label: "SPLY Variance" }, { key: "comments", label: "Comments", wide: true }]} rows={gssRows} onChange={setGssRows} />
+              <EditableTable columns={[{ key: "label", label: "GSS MTD", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior" }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance" }, { key: "sply", label: "SPLY Variance" }, { key: "comments", label: "Comments", wide: true }]} rows={gssRowsWithPrevious} onChange={setGssRows} />
+            </Section>
+            <Section title="GSS Wave To Date">
+              <EditableTable columns={[{ key: "label", label: "GSS Wave To Date", wide: true }, { key: "hotel", label: "Hotel" }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance" }, { key: "sply", label: "SPLY Variance" }, { key: "comments", label: "Comments", wide: true }]} rows={gssWaveRows} onChange={setGssWaveRows} />
             </Section>
             <Section title="Online Reputation">
               <EditableTable columns={[{ key: "label", label: "Name", wide: true }, { key: "reviews", label: "Total Reviews" }, { key: "score", label: "Rank / Score" }, { key: "outOf", label: "Out Of" }, { key: "goal", label: "Goal Rank" }, { key: "variance", label: "Variance" }, { key: "strategy", label: "Strategy / Action Plan", wide: true }]} rows={reputationRows} onChange={setReputationRows} />
@@ -743,6 +847,42 @@ export default function OpsReportPage() {
           </TabsContent>
         </Tabs>
       </main>
+      <Dialog open={budgetModalOpen} onOpenChange={setBudgetModalOpen}>
+        <DialogContent className="max-w-2xl border-[#d7c8b5] bg-[#fffaf2] text-[#201814]">
+          <DialogHeader>
+            <DialogTitle>Monthly Budget Inputs</DialogTitle>
+            <DialogDescription>
+              Enter monthly budgeted rooms, occupancy, ADR, and room revenue. The matching report month will populate the Current Month Budget row.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>Month</Label>
+              <Select value={budgetForm.month} onValueChange={(month) => {
+                const existing = monthlyBudgets.find((row) => row.month === month);
+                setBudgetForm({ month, rooms: existing?.rooms || "", occupancy: existing?.occupancy || "", adr: existing?.adr || "", revenue: existing?.revenue || "" });
+              }}>
+                <SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 12 }, (_, index) => {
+                    const year = new Date().getFullYear();
+                    const value = `${year}-${String(index + 1).padStart(2, "0")}`;
+                    return <SelectItem key={value} value={value}>{monthLabelFromKey(value)}</SelectItem>;
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+            <LabeledInput label="Budgeted rooms sold" value={budgetForm.rooms} onChange={(rooms) => setBudgetForm({ ...budgetForm, rooms })} type="number" />
+            <LabeledInput label="Budgeted occupancy %" value={budgetForm.occupancy} onChange={(occupancy) => setBudgetForm({ ...budgetForm, occupancy })} />
+            <LabeledInput label="Budgeted ADR" value={budgetForm.adr} onChange={(adr) => setBudgetForm({ ...budgetForm, adr })} moneyFormat />
+            <LabeledInput label="Budgeted room revenue" value={budgetForm.revenue} onChange={(revenue) => setBudgetForm({ ...budgetForm, revenue })} moneyFormat />
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" className={C.outline} onClick={() => setBudgetModalOpen(false)}>Cancel</Button>
+            <Button className={C.green} onClick={saveMonthlyBudget} disabled={!budgetForm.month}>Save budget</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

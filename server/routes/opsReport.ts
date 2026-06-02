@@ -332,7 +332,7 @@ function parseGssSummary(rows: string[][], weekStart?: string) {
     "Internet": "Internet",
   };
   const monthIndex = monthColumnForWeek(rows, weekStart);
-  const gssRows = rows.flatMap((row) => {
+  const parsedRows = rows.flatMap((row) => {
     const metric = String(row[0] || "").trim();
     const label = wanted[metric];
     if (!label) return [];
@@ -341,9 +341,22 @@ function parseGssSummary(rows: string[][], weekStart?: string) {
     const benchmark = numeric(row[8]);
     const difference = String(row[9] ?? "").trim() ? numeric(row[9]) : total - benchmark;
     const monthNote = monthIndex != null && weekStart ? `${new Date(`${weekStart}T00:00:00`).toLocaleString("en-US", { month: "long", timeZone: "UTC" })} score` : "Latest month score";
-    return [{ label, hotel: round(hotel, 1).toString(), brand: round(benchmark, 1).toString(), variance: round(hotel - benchmark, 1).toString(), sply: round(difference, 1).toString(), comments: total ? `${monthNote}; YTD total ${round(total, 1)}` : monthNote }];
+    return [{
+      label,
+      hotel: round(hotel, 1).toString(),
+      brand: round(benchmark, 1).toString(),
+      variance: round(hotel - benchmark, 1).toString(),
+      sply: round(difference, 1).toString(),
+      comments: total ? `${monthNote}; YTD total ${round(total, 1)}` : monthNote,
+      waveHotel: round(total, 1).toString(),
+      waveBrand: round(benchmark, 1).toString(),
+      waveVariance: round(total - benchmark, 1).toString(),
+      waveSply: round(difference, 1).toString(),
+    }];
   });
-  return gssRows.length ? { reportType: "gss_summary", gssRows } : null;
+  const gssRows = parsedRows.map(({ waveHotel, waveBrand, waveVariance, waveSply, ...row }) => row);
+  const gssWaveRows = parsedRows.map((row) => ({ label: row.label, hotel: row.waveHotel, brand: row.waveBrand, variance: row.waveVariance, sply: row.waveSply, comments: "Wave to date / YTD score" }));
+  return gssRows.length ? { reportType: "gss_summary", gssRows, gssWaveRows } : null;
 }
 
 function isWithinReportWeek(value: unknown, weekStart?: string, weekEnd?: string) {

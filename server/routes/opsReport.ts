@@ -3,13 +3,15 @@ import multer from "multer";
 import AdmZip from "adm-zip";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { createRequire } from "module";
 import { db } from "../db";
 import {
   scheduleEmployees,
   scheduleShiftAssignments,
   scheduleShiftTypes,
+  courtyardOpsReportDrafts,
+  courtyardOpsReportUserSettings,
   tipsUsers,
   weeklySchedules,
 } from "@shared/schema";
@@ -36,6 +38,13 @@ const reportUpload = multer({
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+});
+const draftSchema = z.object({
+  weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  weekEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  weekLabel: z.string().min(1).default("Week 1"),
+  payload: z.record(z.unknown()),
+  uploadedReports: z.array(z.record(z.unknown())).default([]),
 });
 
 const OPS_REPORT_ADMIN_EMAILS = new Set(
@@ -336,6 +345,19 @@ function parseOpsReportFile(file: Express.Multer.File) {
   throw new Error("This report format was not recognized. Upload an OTB CSV, GSS summary XLSX, or Marriott responses XLSX.");
 }
 
+function publicDraft(row: any) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    weekStart: row.weekStart,
+    weekEnd: row.weekEnd,
+    weekLabel: row.weekLabel,
+    payload: row.payloadJson || {},
+    uploadedReports: row.uploadedReportsJson || [],
+    updatedAt: row.updatedAt,
+  };
+}
+
 function parseLaborSummaryText(text: string) {
   const departments: Record<string, number> = {
     "FRONT DESK / NIGHT AUDIT HOURS": 0,
@@ -413,13 +435,80 @@ export function registerOpsReportRoutes(app: Express) {
     req.session?.save(() => res.json({ ok: true }));
   });
 
+  router.get("/draft", requireOpsManager as RequestHandler, async (req: any, res, next) => {
+    try {
+      const requestedWeekStart = typeof req.query.weekStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.weekStart) ? req.query.weekStart : "";
+      let weekStart = requestedWeekStart;
+      if (!weekStart) {
+        const [settings] = await db.select().from(courtyardOpsReportUserSettings).where(eq(courtyardOpsReportUserSettings.userId, req.opsUser.id)).limit(1);
+        weekStart = settings?.lastWeekStart || "";
+      }
+      let draft: any = null;
+      if (weekStart) {
+        [draft] = await db
+          .select()
+          .from(courtyardOpsReportDrafts)
+          .where(and(eq(courtyardOpsReportDrafts.propertyId, "courtyard-austin-lakeline"), eq(courtyardOpsReportDrafts.weekStart, weekStart)))
+          .limit(1);
+      }
+      if (!draft) {
+        [draft] = await db.select().from(courtyardOpsReportDrafts).where(eq(courtyardOpsReportDrafts.propertyId, "courtyard-austin-lakeline")).orderBy(desc(courtyardOpsReportDrafts.updatedAt)).limit(1);
+      }
+      res.json({ draft: publicDraft(draft) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/draft", requireOpsManager as RequestHandler, async (req: any, res, next) => {
+    try {
+      const parsed = draftSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+      const data = parsed.data;
+      const [draft] = await db
+        .insert(courtyardOpsReportDrafts)
+        .values({
+          propertyId: "courtyard-austin-lakeline",
+          weekStart: data.weekStart,
+          weekEnd: data.weekEnd,
+          weekLabel: data.weekLabel,
+          payloadJson: data.payload,
+          uploadedReportsJson: data.uploadedReports,
+          updatedBy: req.opsUser.id,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [courtyardOpsReportDrafts.propertyId, courtyardOpsReportDrafts.weekStart],
+          set: {
+            weekEnd: data.weekEnd,
+            weekLabel: data.weekLabel,
+            payloadJson: data.payload,
+            uploadedReportsJson: data.uploadedReports,
+            updatedBy: req.opsUser.id,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+      await db
+        .insert(courtyardOpsReportUserSettings)
+        .values({ userId: req.opsUser.id, lastWeekStart: data.weekStart, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: courtyardOpsReportUserSettings.userId,
+          set: { lastWeekStart: data.weekStart, updatedAt: new Date() },
+        });
+      res.json({ draft: publicDraft(draft) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/import", requireOpsManager as RequestHandler, (req, res, next) => {
-    reportUpload.single("opsReport")(req, res, (error: any) => {
+    reportUpload.array("opsReport", 8)(req, res, (error: any) => {
       try {
         if (error) return res.status(400).json({ error: error.message || "Unable to upload ops report." });
-        const file = (req as any).file as Express.Multer.File | undefined;
-        if (!file) return res.status(400).json({ error: "Ops report file is required." });
-        res.json(parseOpsReportFile(file));
+        const files = (req as any).files as Express.Multer.File[] | undefined;
+        if (!files?.length) return res.status(400).json({ error: "At least one ops report file is required." });
+        res.json({ reports: files.map(parseOpsReportFile) });
       } catch (uploadError) {
         next(uploadError);
       }

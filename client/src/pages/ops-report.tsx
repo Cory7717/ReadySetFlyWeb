@@ -43,6 +43,18 @@ type OpsImportResponse = {
   positiveReviews?: Row[];
   negativeReviews?: Row[];
 };
+type OpsImportBatchResponse = { reports: OpsImportResponse[] };
+type OpsDraftResponse = {
+  draft: null | {
+    id: string;
+    weekStart: string;
+    weekEnd: string;
+    weekLabel: string;
+    payload: Record<string, any>;
+    uploadedReports: Array<Record<string, any>>;
+    updatedAt: string;
+  };
+};
 
 const emptyRows = (count: number, keys: string[]) =>
   Array.from({ length: count }, (_, index) => keys.reduce<Row>((row, key) => ({ ...row, [key]: key === "no" ? String(index + 1) : "" }), {}));
@@ -221,7 +233,9 @@ export default function OpsReportPage() {
     { department: "OTHER", scheduledHours: "", actualHours: "", budget: "5", comments: "" },
   ]);
   const [laborFile, setLaborFile] = useState<File | null>(null);
-  const [opsReportFile, setOpsReportFile] = useState<File | null>(null);
+  const [opsReportFiles, setOpsReportFiles] = useState<File[]>([]);
+  const [uploadedReports, setUploadedReports] = useState<Array<Record<string, any>>>([]);
+  const [draftHydrated, setDraftHydrated] = useState(false);
   const [staffing, setStaffing] = useState({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
   const [cases, setCases] = useState<Row[]>(emptyRows(5, ["no", "guest", "incidentType", "resolution", "comment"]));
   const [gmOverview, setGmOverview] = useState("");
@@ -240,6 +254,15 @@ export default function OpsReportPage() {
     queryKey: ["/api/opsreport/access"],
     queryFn: async () => {
       const response = await fetch(apiUrl("/api/opsreport/access"), { credentials: "include" });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+  });
+  const draft = useQuery<OpsDraftResponse>({
+    queryKey: ["/api/opsreport/draft"],
+    enabled: Boolean(access.data?.unlocked),
+    queryFn: async () => {
+      const response = await fetch(apiUrl("/api/opsreport/draft"), { credentials: "include" });
       if (!response.ok) throw new Error(await response.text());
       return response.json();
     },
@@ -281,26 +304,26 @@ export default function OpsReportPage() {
     onError: (error: Error) => toast({ title: "Unable to parse labor summary", description: error.message, variant: "destructive" }),
   });
   const opsReportUpload = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (files: File[]) => {
       const form = new FormData();
-      form.append("opsReport", file);
+      files.forEach((file) => form.append("opsReport", file));
       const response = await fetch(apiUrl("/api/opsreport/import"), { method: "POST", credentials: "include", body: form });
       if (!response.ok) throw new Error(await response.text());
-      return response.json() as Promise<OpsImportResponse>;
+      return response.json() as Promise<OpsImportBatchResponse>;
     },
     onSuccess: (data) => {
-      if (data.weekly) {
+      for (const report of data.reports) {
+      if (report.weekly) {
         setTopMetrics((current) => ({
           ...current,
-          weekStart: data.weekly!.weekStart || current.weekStart,
-          occupancy: percentDisplay(data.weekly!.occupancy),
-          roomsSold: rowValue(data.weekly!.roomsSold, 0),
-          roomRevenue: accounting(data.weekly!.roomRevenue),
-          mtdThisYear: accounting(data.weekly!.roomRevenue),
+          weekStart: report.weekly!.weekStart || current.weekStart,
+          occupancy: percentDisplay(report.weekly!.occupancy),
+          roomsSold: rowValue(report.weekly!.roomsSold, 0),
+          roomRevenue: accounting(report.weekly!.roomRevenue),
         }));
       }
-      if (data.monthly) {
-        const monthly = data.monthly;
+      if (report.monthly) {
+        const monthly = report.monthly;
         setMonthRows((rows) => rows.map((row) => {
           if (row.label === "MONTH TO DATE" || row.label === "MONTHLY TOTAL") {
             return {
@@ -316,19 +339,28 @@ export default function OpsReportPage() {
         }));
         setTopMetrics((current) => ({ ...current, mtdThisYear: accounting(monthly.revenue) }));
       }
-      if (data.gssRows?.length) {
-        setGssRows((rows) => rows.map((row) => data.gssRows!.find((incoming) => incoming.label === row.label) || row));
+      if (report.gssRows?.length) {
+        setGssRows((rows) => rows.map((row) => report.gssRows!.find((incoming) => incoming.label === row.label) || row));
       }
-      if (data.positiveReviews?.length) {
-        setPositiveReviews([...data.positiveReviews, ...emptyRows(Math.max(0, 5 - data.positiveReviews.length), ["source", "score", "comment"])].slice(0, 5));
+      if (report.positiveReviews?.length) {
+        setPositiveReviews([...report.positiveReviews, ...emptyRows(Math.max(0, 5 - report.positiveReviews.length), ["source", "score", "comment"])].slice(0, 5));
       }
-      if (data.negativeReviews?.length) {
-        setNegativeReviews([...data.negativeReviews, ...emptyRows(Math.max(0, 5 - data.negativeReviews.length), ["source", "score", "comment"])].slice(0, 5));
+      if (report.negativeReviews?.length) {
+        setNegativeReviews([...report.negativeReviews, ...emptyRows(Math.max(0, 5 - report.negativeReviews.length), ["source", "score", "comment"])].slice(0, 5));
       }
-      setOpsReportFile(null);
-      toast({ title: "Ops report imported", description: `${data.originalFileName} was mapped as ${data.reportType.replace(/_/g, " ")}.` });
+      }
+      setUploadedReports((current) => [
+        ...current,
+        ...data.reports.map((report) => ({ originalFileName: report.originalFileName, reportType: report.reportType, importedAt: new Date().toISOString() })),
+      ]);
+      setOpsReportFiles([]);
+      toast({ title: "Ops reports imported", description: `${data.reports.length} report${data.reports.length === 1 ? "" : "s"} mapped into the worksheet.` });
     },
     onError: (error: Error) => toast({ title: "Unable to import report", description: error.message, variant: "destructive" }),
+  });
+  const saveDraft = useMutation({
+    mutationFn: async (payload: Record<string, any>) => apiRequest("POST", "/api/opsreport/draft", payload),
+    onError: (error: Error) => toast({ title: "Unable to save ops report draft", description: error.message, variant: "destructive" }),
   });
 
   useEffect(() => {
@@ -354,6 +386,73 @@ export default function OpsReportPage() {
     start.setDate(start.getDate() + 6);
     return start.toISOString().slice(0, 10);
   }, [topMetrics.weekStart]);
+  const currentDraftPayload = useMemo(() => ({
+    setup,
+    topMetrics,
+    monthRows,
+    nextMonthRows,
+    chargebacks,
+    maintenance,
+    oooRooms,
+    adjustments,
+    ar,
+    ledger,
+    labor,
+    staffing,
+    cases,
+    gmOverview,
+    gssRows,
+    reputationRows,
+    positiveReviews,
+    negativeReviews,
+    followUp,
+    priorities,
+  }), [setup, topMetrics, monthRows, nextMonthRows, chargebacks, maintenance, oooRooms, adjustments, ar, ledger, labor, staffing, cases, gmOverview, gssRows, reputationRows, positiveReviews, negativeReviews, followUp, priorities]);
+
+  useEffect(() => {
+    if (!access.data?.unlocked || draft.isLoading || draftHydrated) return;
+    const loaded = draft.data?.draft;
+    if (loaded?.payload) {
+      const payload = loaded.payload;
+      setWeek(loaded.weekLabel || "Week 1");
+      if (payload.setup) setSetup(payload.setup);
+      if (payload.topMetrics) setTopMetrics(payload.topMetrics);
+      if (payload.monthRows) setMonthRows(payload.monthRows);
+      if (payload.nextMonthRows) setNextMonthRows(payload.nextMonthRows);
+      if (payload.chargebacks) setChargebacks(payload.chargebacks);
+      if (payload.maintenance) setMaintenance(payload.maintenance);
+      if (payload.oooRooms) setOooRooms(payload.oooRooms);
+      if (payload.adjustments) setAdjustments(payload.adjustments);
+      if (payload.ar) setAr(payload.ar);
+      if (payload.ledger) setLedger(payload.ledger);
+      if (payload.labor) setLabor(payload.labor);
+      if (payload.staffing) setStaffing(payload.staffing);
+      if (payload.cases) setCases(payload.cases);
+      if (typeof payload.gmOverview === "string") setGmOverview(payload.gmOverview);
+      if (payload.gssRows) setGssRows(payload.gssRows);
+      if (payload.reputationRows) setReputationRows(payload.reputationRows);
+      if (payload.positiveReviews) setPositiveReviews(payload.positiveReviews);
+      if (payload.negativeReviews) setNegativeReviews(payload.negativeReviews);
+      if (payload.followUp) setFollowUp(payload.followUp);
+      if (payload.priorities) setPriorities(payload.priorities);
+      setUploadedReports(loaded.uploadedReports || []);
+    }
+    setDraftHydrated(true);
+  }, [access.data?.unlocked, draft.data, draft.isLoading, draftHydrated]);
+
+  useEffect(() => {
+    if (!access.data?.unlocked || !draftHydrated || !weekEnd) return;
+    const timeout = window.setTimeout(() => {
+      saveDraft.mutate({
+        weekStart: topMetrics.weekStart,
+        weekEnd,
+        weekLabel: week,
+        payload: currentDraftPayload,
+        uploadedReports,
+      });
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [access.data?.unlocked, draftHydrated, weekEnd, week, topMetrics.weekStart, currentDraftPayload, uploadedReports]);
 
   if (access.isLoading) return <div className={`${C.page} p-8`}>Loading operations report...</div>;
   if (!access.data?.unlocked) {
@@ -407,7 +506,13 @@ export default function OpsReportPage() {
               <SelectContent>{Array.from({ length: 52 }, (_, index) => <SelectItem key={index + 1} value={`Week ${index + 1}`}>Week {index + 1}</SelectItem>)}</SelectContent>
             </Select>
             <Button variant="outline" className={C.outline} onClick={() => window.print()}><Download className="mr-2 h-4 w-4" />Print</Button>
-            <Button className={C.darkButton} onClick={() => toast({ title: "Saved locally", description: "Database persistence can be added after import mapping is finalized." })}><Save className="mr-2 h-4 w-4" />Save draft</Button>
+            <Button
+              className={C.darkButton}
+              onClick={() => saveDraft.mutate({ weekStart: topMetrics.weekStart, weekEnd, weekLabel: week, payload: currentDraftPayload, uploadedReports })}
+              disabled={saveDraft.isPending || !weekEnd}
+            >
+              <Save className="mr-2 h-4 w-4" />{saveDraft.isPending ? "Saving..." : "Save draft"}
+            </Button>
             <Button variant="ghost" className="text-[#3b2f26] hover:bg-[#f8efe2]" onClick={() => lock.mutate()}><LogOut className="mr-2 h-4 w-4" />Lock</Button>
           </div>
         </div>
@@ -428,11 +533,24 @@ export default function OpsReportPage() {
                 Upload weekly/monthly OTB CSV, GSS score summary, or Marriott response export. Recognized fields populate the matching worksheet sections.
               </p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <Input className={C.field} type="file" accept=".xlsx,.xls,.csv" onChange={(event) => setOpsReportFile(event.target.files?.[0] || null)} />
-                <Button className={C.green} onClick={() => opsReportFile && opsReportUpload.mutate(opsReportFile)} disabled={!opsReportFile || opsReportUpload.isPending}>
+                <Input className={C.field} type="file" accept=".xlsx,.xls,.csv" multiple onChange={(event) => setOpsReportFiles(Array.from(event.target.files || []))} />
+                <Button className={C.green} onClick={() => opsReportFiles.length && opsReportUpload.mutate(opsReportFiles)} disabled={!opsReportFiles.length || opsReportUpload.isPending}>
                   {opsReportUpload.isPending ? "Importing..." : "Import"}
                 </Button>
               </div>
+              {uploadedReports.length > 0 && (
+                <div className="mt-3 rounded-lg border border-[#eadcc9] bg-[#fffaf2] p-2 text-xs text-[#5f5247]">
+                  <div className="mb-1 font-semibold text-[#201814]">Imported reports</div>
+                  <div className="space-y-1">
+                    {uploadedReports.slice(-5).map((report, index) => (
+                      <div key={`${report.originalFileName}-${index}`} className="flex justify-between gap-2">
+                        <span className="truncate">{String(report.originalFileName || "Report")}</span>
+                        <span className="shrink-0 uppercase tracking-wide">{String(report.reportType || "").replace(/_/g, " ")}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

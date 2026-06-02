@@ -712,6 +712,28 @@ export const courtyardBudgetAuditLog = pgTable("courtyard_budget_audit_log", {
   index("idx_courtyard_budget_audit_created").on(table.createdAt),
 ]);
 
+export const courtyardOpsReportDrafts = pgTable("courtyard_ops_report_drafts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: text("property_id").notNull().default("courtyard-austin-lakeline"),
+  weekStart: date("week_start").notNull(),
+  weekEnd: date("week_end").notNull(),
+  weekLabel: text("week_label").notNull().default("Week 1"),
+  payloadJson: jsonb("payload_json").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  uploadedReportsJson: jsonb("uploaded_reports_json").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
+  updatedBy: varchar("updated_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_courtyard_ops_report_week").on(table.propertyId, table.weekStart),
+  index("idx_courtyard_ops_report_updated").on(table.updatedAt),
+]);
+
+export const courtyardOpsReportUserSettings = pgTable("courtyard_ops_report_user_settings", {
+  userId: varchar("user_id").primaryKey().references(() => tipsUsers.id, { onDelete: "cascade" }),
+  lastWeekStart: date("last_week_start"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const vehicleListings = pgTable("vehicle_listings", {
   id: varchar("id").primaryKey(),
   title: text("title").notNull(),

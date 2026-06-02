@@ -57,6 +57,15 @@ function pct(value: string | number) {
   return `${((Number.isFinite(n) ? n : 0) * 100).toFixed(1)}%`;
 }
 
+function percentDisplay(value: string | number | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const n = num(raw);
+  if (!Number.isFinite(n)) return raw;
+  const percent = Math.abs(n) <= 1 ? n * 100 : n;
+  return `${percent.toFixed(2).replace(/\.?0+$/, "")}%`;
+}
+
 function num(value: string | number) {
   const n = Number(String(value || "").replace(/[$,%(),]/g, "").replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
@@ -72,6 +81,11 @@ function accounting(value: string | number) {
 function isMoneyColumn(key: string, label: string) {
   const text = `${key} ${label}`.toLowerCase();
   return text.includes("amount") || text.includes("revenue") || text.includes("adr") || text.includes("balance");
+}
+
+function isPercentColumn(key: string, label: string) {
+  const text = `${key} ${label}`.toLowerCase();
+  return text.includes("occupancy") || text.includes("%");
 }
 
 function fmtHours(value: string | number) {
@@ -155,8 +169,11 @@ function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: stri
                       onChange(next);
                     }}
                     onBlur={() => {
-                      if (!isMoneyColumn(column.key, column.label)) return;
-                      const next = rows.map((item, index) => index === rowIndex ? { ...item, [column.key]: accounting(item[column.key] || "") } : item);
+                      if (!isMoneyColumn(column.key, column.label) && !isPercentColumn(column.key, column.label)) return;
+                      const next = rows.map((item, index) => {
+                        if (index !== rowIndex) return item;
+                        return { ...item, [column.key]: isMoneyColumn(column.key, column.label) ? accounting(item[column.key] || "") : percentDisplay(item[column.key] || "") };
+                      });
                       onChange(next);
                     }}
                   />
@@ -276,7 +293,7 @@ export default function OpsReportPage() {
         setTopMetrics((current) => ({
           ...current,
           weekStart: data.weekly!.weekStart || current.weekStart,
-          occupancy: rowValue(data.weekly!.occupancy),
+          occupancy: percentDisplay(data.weekly!.occupancy),
           roomsSold: rowValue(data.weekly!.roomsSold, 0),
           roomRevenue: accounting(data.weekly!.roomRevenue),
           mtdThisYear: accounting(data.weekly!.roomRevenue),
@@ -288,7 +305,7 @@ export default function OpsReportPage() {
           if (row.label === "MONTH TO DATE" || row.label === "MONTHLY TOTAL") {
             return {
               ...row,
-              occupancy: rowValue(monthly.occupancy, 4),
+              occupancy: percentDisplay(monthly.occupancy),
               rooms: rowValue(monthly.rooms, 0),
               adr: accounting(monthly.adr),
               revenue: accounting(monthly.revenue),

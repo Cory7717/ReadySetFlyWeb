@@ -195,6 +195,10 @@ function parseXlsxSheets(buffer: Buffer) {
   const zip = new AdmZip(buffer);
   const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", parseTagValue: false });
   const entry = (name: string) => zip.getEntry(name)?.getData().toString("utf8") || "";
+  const workbookEntry = (target: unknown) => {
+    const normalized = String(target || "").replace(/^\//, "");
+    return entry(normalized) || entry(`xl/${normalized}`);
+  };
   const workbook = parser.parse(entry("xl/workbook.xml"));
   const rels = parser.parse(entry("xl/_rels/workbook.xml.rels"));
   const sharedXml = entry("xl/sharedStrings.xml");
@@ -204,7 +208,7 @@ function parseXlsxSheets(buffer: Buffer) {
   return sheets.map((sheet) => {
     const sheetName = String(sheet["@_name"] || "");
     const target = relMap.get(sheet["@_r:id"]);
-    const xml = target ? entry(String(target)) : "";
+    const xml = target ? workbookEntry(target) : "";
     const parsed = xml ? parser.parse(xml) : null;
     const rows = ([] as any[]).concat(parsed?.worksheet?.sheetData?.row || []).map((row) => {
       const cells: string[] = [];

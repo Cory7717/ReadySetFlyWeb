@@ -307,6 +307,8 @@ export default function OpsReportPage() {
     mutationFn: async (files: File[]) => {
       const form = new FormData();
       files.forEach((file) => form.append("opsReport", file));
+      form.append("weekStart", topMetrics.weekStart);
+      form.append("weekEnd", weekEnd);
       const response = await fetch(apiUrl("/api/opsreport/import"), { method: "POST", credentials: "include", body: form });
       if (!response.ok) throw new Error(await response.text());
       return response.json() as Promise<OpsImportBatchResponse>;

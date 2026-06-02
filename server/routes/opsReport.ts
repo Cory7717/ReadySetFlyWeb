@@ -281,7 +281,18 @@ function latestMonthValue(row: string[]) {
   return 0;
 }
 
-function parseGssSummary(rows: string[][]) {
+function monthColumnForWeek(rows: string[][], weekStart?: string) {
+  if (!weekStart) return null;
+  const date = new Date(`${weekStart}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  const monthLabel = date.toLocaleString("en-US", { month: "short", timeZone: "UTC" }).toLowerCase();
+  const header = rows.find((row) => row.some((cell) => String(cell || "").trim().toLowerCase() === monthLabel));
+  if (!header) return null;
+  const index = header.findIndex((cell) => String(cell || "").trim().toLowerCase() === monthLabel);
+  return index >= 0 ? index : null;
+}
+
+function parseGssSummary(rows: string[][], weekStart?: string) {
   const wanted: Record<string, string> = {
     "Intent to Recommend (Property)": "ITR",
     "Elite Appreciation": "Elite Appreciation",
@@ -291,32 +302,41 @@ function parseGssSummary(rows: string[][]) {
     "Food and Beverage": "Food & Beverage",
     "Internet": "Internet",
   };
+  const monthIndex = monthColumnForWeek(rows, weekStart);
   const gssRows = rows.flatMap((row) => {
     const metric = String(row[0] || "").trim();
     const label = wanted[metric];
     if (!label) return [];
-    const hotel = latestMonthValue(row);
+    const hotel = monthIndex != null ? numeric(row[monthIndex]) : latestMonthValue(row);
     const total = numeric(row[7]);
     const benchmark = numeric(row[8]);
     const difference = String(row[9] ?? "").trim() ? numeric(row[9]) : total - benchmark;
-    return [{ label, hotel: round(hotel, 1).toString(), brand: round(benchmark, 1).toString(), variance: round(hotel - benchmark, 1).toString(), sply: round(difference, 1).toString(), comments: total ? `YTD total ${round(total, 1)}` : "" }];
+    const monthNote = monthIndex != null && weekStart ? `${new Date(`${weekStart}T00:00:00`).toLocaleString("en-US", { month: "long", timeZone: "UTC" })} score` : "Latest month score";
+    return [{ label, hotel: round(hotel, 1).toString(), brand: round(benchmark, 1).toString(), variance: round(hotel - benchmark, 1).toString(), sply: round(difference, 1).toString(), comments: total ? `${monthNote}; YTD total ${round(total, 1)}` : monthNote }];
   });
   return gssRows.length ? { reportType: "gss_summary", gssRows } : null;
 }
 
-function parseGssResponses(rows: string[][]) {
+function isWithinReportWeek(value: unknown, weekStart?: string, weekEnd?: string) {
+  if (!weekStart || !weekEnd) return true;
+  const iso = excelDateToIso(value);
+  return Boolean(iso && iso >= weekStart && iso <= weekEnd);
+}
+
+function parseGssResponses(rows: string[][], weekStart?: string, weekEnd?: string) {
   const headerIndex = rows.findIndex((row) => row.some((cell) => String(cell || "").trim() === "Intent to Recommend (Property)") && row.some((cell) => String(cell || "").trim() === "Overall Comment"));
   if (headerIndex < 0) return null;
   const header = rows[headerIndex].map((value) => String(value || "").trim());
   const find = (...labels: string[]) => header.findIndex((h) => labels.some((label) => h.toLowerCase() === label.toLowerCase()));
   const idx = {
     name: find("Name", "Guest Name"),
+    responseDate: find("Response Date"),
     source: find("Social Media Source", "Source"),
     score: find("Intent to Recommend (Property)", "Overall Score"),
     comment: find("Overall Comment", "Social Comment"),
     problem: find("Problems Comment"),
   };
-  const parsed = rows.slice(headerIndex + 1).map((row) => {
+  const parsed = rows.slice(headerIndex + 1).filter((row) => isWithinReportWeek(row[idx.responseDate], weekStart, weekEnd)).map((row) => {
     const score = numeric(row[idx.score]);
     const comment = String(row[idx.comment] || row[idx.problem] || "").trim();
     return {
@@ -330,7 +350,7 @@ function parseGssResponses(rows: string[][]) {
   return { reportType: "gss_responses", positiveReviews, negativeReviews };
 }
 
-function parseOpsReportFile(file: Express.Multer.File) {
+function parseOpsReportFile(file: Express.Multer.File, context: { weekStart?: string; weekEnd?: string } = {}) {
   const name = file.originalname.toLowerCase();
   if (name.endsWith(".csv")) {
     const otb = parseOtbCsv(file.buffer.toString("utf8"));
@@ -338,9 +358,9 @@ function parseOpsReportFile(file: Express.Multer.File) {
   }
   const sheets = parseXlsxSheets(file.buffer);
   const allRows = sheets.flatMap((sheet) => sheet.rows);
-  const summary = parseGssSummary(allRows);
+  const summary = parseGssSummary(allRows, context.weekStart);
   if (summary) return { originalFileName: file.originalname, ...summary };
-  const responses = parseGssResponses(allRows);
+  const responses = parseGssResponses(allRows, context.weekStart, context.weekEnd);
   if (responses) return { originalFileName: file.originalname, ...responses };
   throw new Error("This report format was not recognized. Upload an OTB CSV, GSS summary XLSX, or Marriott responses XLSX.");
 }
@@ -508,7 +528,11 @@ export function registerOpsReportRoutes(app: Express) {
         if (error) return res.status(400).json({ error: error.message || "Unable to upload ops report." });
         const files = (req as any).files as Express.Multer.File[] | undefined;
         if (!files?.length) return res.status(400).json({ error: "At least one ops report file is required." });
-        res.json({ reports: files.map(parseOpsReportFile) });
+        const context = {
+          weekStart: typeof req.body?.weekStart === "string" ? req.body.weekStart : undefined,
+          weekEnd: typeof req.body?.weekEnd === "string" ? req.body.weekEnd : undefined,
+        };
+        res.json({ reports: files.map((file) => parseOpsReportFile(file, context)) });
       } catch (uploadError) {
         next(uploadError);
       }

@@ -4,9 +4,54 @@ import path from 'path';
 
 const { Client } = pg;
 
-const client = new Client({
-  connectionString: process.env.DATABASE_URL,
-});
+const DATABASE_URL = process.env.DATABASE_URL;
+const MAX_CONNECT_ATTEMPTS = Number(process.env.DB_MIGRATION_CONNECT_ATTEMPTS || 5);
+const CONNECT_TIMEOUT_MS = Number(process.env.DB_CONNECT_TIMEOUT_MS || 20000);
+let client;
+
+function shouldUseSsl(connectionString) {
+  if (!connectionString) return false;
+  return !/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(connectionString);
+}
+
+function makeClient() {
+  return new Client({
+    connectionString: DATABASE_URL,
+    connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+    keepAlive: true,
+    ssl: shouldUseSsl(DATABASE_URL) ? { rejectUnauthorized: false } : undefined,
+  });
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function connectWithRetry() {
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_CONNECT_ATTEMPTS; attempt += 1) {
+    client = makeClient();
+    try {
+      await client.connect();
+      if (attempt > 1) console.log(`Connected to database on attempt ${attempt}`);
+      else console.log('Connected to database');
+      return;
+    } catch (error) {
+      lastError = error;
+      const message = error?.message || String(error);
+      try {
+        await client.end();
+      } catch {
+        // Ignore cleanup errors after failed connection attempts.
+      }
+      if (attempt >= MAX_CONNECT_ATTEMPTS) break;
+      const delay = Math.min(30000, 1500 * attempt * attempt);
+      console.error(`Database connection attempt ${attempt}/${MAX_CONNECT_ATTEMPTS} failed: ${message}. Retrying in ${delay}ms...`);
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
 
 async function ensureMigrationsTable() {
   await client.query(`
@@ -36,8 +81,10 @@ async function tableExists(schema, table) {
 
 async function runMigrationsFolder() {
   try {
-    await client.connect();
-    console.log('Connected to database');
+    if (!DATABASE_URL) {
+      throw new Error('DATABASE_URL must be set before running migrations.');
+    }
+    await connectWithRetry();
     await ensureMigrationsTable();
 
     // Seed migration records when core tables already exist to avoid reapplying base migrations
@@ -80,7 +127,7 @@ async function runMigrationsFolder() {
     console.error('Migration failed:', details);
     process.exit(1);
   } finally {
-    await client.end();
+    if (client) await client.end();
   }
 }
 runMigrationsFolder();

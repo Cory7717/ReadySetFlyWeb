@@ -157,11 +157,141 @@ function shiftHours(assignment: any, shiftType: any) {
 
 function opsDepartmentForSchedule(employee: any, assignment: any, shiftType: any) {
   const value = String(assignment?.roleWorked || shiftType?.departmentHint || shiftType?.label || employee?.department || "").toLowerCase();
-  if (value.includes("audit") || value.includes("night") || value.includes("front") || value.includes("fd ") || value.includes("desk")) return "FRONT DESK / NIGHT AUDIT HOURS";
-  if (value.includes("house") || value.includes("hk") || value.includes("laundry") || value.includes("room attendant") || value.includes("inspector")) return "HOUSEKEEPING HOURS";
-  if (value.includes("bistro") || value.includes("breakfast") || value.includes("barista") || value.includes("cook") || value.includes("f&b") || value.includes("restaurant")) return "BREAKFAST / BISTRO HOURS";
-  if (value.includes("maintenance") || value.includes("engineer") || value.includes("r&m")) return "MAINTENANCE HOURS";
+  return opsDepartmentFromText(value);
+}
+
+function opsDepartmentFromText(value: string) {
+  const text = String(value || "").toLowerCase();
+  if (text.includes("audit") || text.includes("night") || text.includes("front") || text.includes("fd ") || text.includes("desk")) return "FRONT DESK / NIGHT AUDIT HOURS";
+  if (text.includes("house") || text.includes("hk") || text.includes("laundry") || text.includes("room attendant") || text.includes("inspector")) return "HOUSEKEEPING HOURS";
+  if (text.includes("bistro") || text.includes("breakfast") || text.includes("barista") || text.includes("cook") || text.includes("f&b") || text.includes("restaurant")) return "BREAKFAST / BISTRO HOURS";
+  if (text.includes("maintenance") || text.includes("engineer") || text.includes("r&m")) return "MAINTENANCE HOURS";
   return "OTHER";
+}
+
+function opsDepartmentForEmployee(employee: any) {
+  const roles = Array.isArray(employee?.rolesJson) ? employee.rolesJson.join(" ") : "";
+  const value = [employee?.department, employee?.position, employee?.displayName, roles].filter(Boolean).join(" ");
+  return opsDepartmentFromText(value);
+}
+
+function normalizePersonName(value: unknown) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z,\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function employeeNameKeys(employee: any) {
+  const first = normalizePersonName(employee?.firstName).replace(/,/g, "");
+  const last = normalizePersonName(employee?.lastName).replace(/,/g, "");
+  const display = normalizePersonName(employee?.displayName);
+  return new Set([
+    display,
+    `${first} ${last}`.trim(),
+    `${last}, ${first}`.trim(),
+    `${last} ${first}`.trim(),
+  ].filter((key) => key.length >= 3));
+}
+
+function laborReportNameKeys(name: string) {
+  const normalized = normalizePersonName(name);
+  const [lastName, rest = ""] = normalized.split(",").map((part) => part.trim());
+  const firstName = rest.split(" ").filter(Boolean)[0] || "";
+  return new Set([
+    normalized,
+    `${firstName} ${lastName}`.trim(),
+    `${lastName}, ${firstName}`.trim(),
+    `${lastName} ${firstName}`.trim(),
+  ].filter((key) => key.length >= 3));
+}
+
+function findLaborEmployeeMatch(name: string, employees: any[]) {
+  const reportKeys = laborReportNameKeys(name);
+  for (const employee of employees) {
+    const keys = employeeNameKeys(employee);
+    for (const key of Array.from(reportKeys)) {
+      if (keys.has(key)) return employee;
+    }
+  }
+  const [lastName, rest = ""] = normalizePersonName(name).split(",").map((part) => part.trim().replace(/,/g, ""));
+  const firstInitial = rest.trim()[0] || "";
+  if (lastName) {
+    const sameLastName = employees.filter((employee) => normalizePersonName(employee?.lastName).replace(/,/g, "") === lastName);
+    const sameInitial = sameLastName.filter((employee) => normalizePersonName(employee?.firstName).replace(/,/g, "")[0] === firstInitial);
+    if (sameInitial.length === 1) return sameInitial[0];
+    if (sameLastName.length === 1) return sameLastName[0];
+  }
+  return null;
+}
+
+function emptyLaborDepartments() {
+  return {
+    "FRONT DESK / NIGHT AUDIT HOURS": 0,
+    "HOUSEKEEPING HOURS": 0,
+    "BREAKFAST / BISTRO HOURS": 0,
+    "MAINTENANCE HOURS": 0,
+    OTHER: 0,
+  } as Record<string, number>;
+}
+
+function parseEmployeeLaborTotals(text: string, employees: any[], departments: Record<string, number>) {
+  const employeeHours: Array<{ name: string; employeeNumber: string; hours: number; department: string; matchedEmployeeId: string | null }> = [];
+  const unmatchedEmployees: Array<{ name: string; employeeNumber: string; hours: number }> = [];
+  const regex = /([^\n]+?)\s+Emp#:\s*(\d+)[\s\S]*?Total Earnings\s*([0-9,]+\.[0-9]{2})/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text))) {
+    const name = String(match[1] || "").trim();
+    const employeeNumber = String(match[2] || "").trim();
+    const hours = numberFromText(match[3] || "");
+    if (!name || !Number.isFinite(hours) || hours <= 0) continue;
+    const employee = findLaborEmployeeMatch(name, employees);
+    const department = employee ? opsDepartmentForEmployee(employee) : "OTHER";
+    addDepartmentHours(departments, department, hours);
+    employeeHours.push({
+      name,
+      employeeNumber,
+      hours,
+      department,
+      matchedEmployeeId: employee?.id || null,
+    });
+    if (!employee) unmatchedEmployees.push({ name, employeeNumber, hours });
+  }
+  return { employeeHours, unmatchedEmployees };
+}
+
+function parseLaborSummaryText(text: string, employees: any[] = []) {
+  const departments: Record<string, number> = emptyLaborDepartments();
+  const seenBlocks = new Set<string>();
+  let blockHoursFound = false;
+  const blockRegex = /Department\(([^)]+)\)(?:\s*~\s*Position\(([^)]+)\))?\s+Totals([\s\S]*?)(?=Department\(|Grand Totals|$)/g;
+  let match: RegExpExecArray | null;
+  while ((match = blockRegex.exec(text))) {
+    const departmentLabel = match[1] || "";
+    const positionLabel = match[2] || "";
+    const body = match[3] || "";
+    const key = `${departmentLabel}|${positionLabel}`;
+    if (seenBlocks.has(key)) continue;
+    if (!positionLabel) continue;
+    const totalMatch = body.match(/Total Earnings\s*([0-9,]+\.[0-9]{2})/);
+    if (!totalMatch) continue;
+    seenBlocks.add(key);
+    const hours = numberFromText(totalMatch[1]);
+    if (!Number.isFinite(hours) || hours <= 0) continue;
+
+    blockHoursFound = true;
+    addDepartmentHours(departments, opsDepartmentFromText(`${departmentLabel} ${positionLabel}`), hours);
+  }
+
+  const employeeResult = blockHoursFound
+    ? { employeeHours: [], unmatchedEmployees: [] }
+    : parseEmployeeLaborTotals(text, employees, departments);
+  return {
+    departments,
+    employeeHours: employeeResult.employeeHours,
+    unmatchedEmployees: employeeResult.unmatchedEmployees,
+  };
 }
 
 function addDepartmentHours(target: Record<string, number>, department: string, hours: number) {
@@ -420,41 +550,6 @@ function publicDraft(row: any) {
   };
 }
 
-function parseLaborSummaryText(text: string) {
-  const departments: Record<string, number> = {
-    "FRONT DESK / NIGHT AUDIT HOURS": 0,
-    "HOUSEKEEPING HOURS": 0,
-    "BREAKFAST / BISTRO HOURS": 0,
-    "MAINTENANCE HOURS": 0,
-    OTHER: 0,
-  };
-  const seenBlocks = new Set<string>();
-  const blockRegex = /Department\(([^)]+)\)(?:\s*~\s*Position\(([^)]+)\))?\s+Totals([\s\S]*?)(?=Department\(|Grand Totals|$)/g;
-  let match: RegExpExecArray | null;
-  while ((match = blockRegex.exec(text))) {
-    const departmentLabel = match[1] || "";
-    const positionLabel = match[2] || "";
-    const body = match[3] || "";
-    const key = `${departmentLabel}|${positionLabel}`;
-    if (seenBlocks.has(key)) continue;
-    if (!positionLabel) continue;
-    const totalMatch = body.match(/Total Earnings\s*([0-9,]+\.[0-9]{2})/);
-    if (!totalMatch) continue;
-    seenBlocks.add(key);
-    const hours = numberFromText(totalMatch[1]);
-    if (!Number.isFinite(hours) || hours <= 0) continue;
-
-    const department = departmentLabel.toLowerCase();
-    const position = positionLabel.toLowerCase();
-    if (department.includes("f&b") || department.includes("restaurant")) addDepartmentHours(departments, "BREAKFAST / BISTRO HOURS", hours);
-    else if (department.includes("r&m") || department.includes("maintenance") || department.includes("engineering")) addDepartmentHours(departments, "MAINTENANCE HOURS", hours);
-    else if (position.includes("front desk") || position.includes("night audit")) addDepartmentHours(departments, "FRONT DESK / NIGHT AUDIT HOURS", hours);
-    else if (position.includes("room attendant") || position.includes("housekeeping") || position.includes("houseman") || position.includes("laundry")) addDepartmentHours(departments, "HOUSEKEEPING HOURS", hours);
-    else addDepartmentHours(departments, "OTHER", hours);
-  }
-  return departments;
-}
-
 async function parsePdfText(buffer: Buffer) {
   const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (buffer: Buffer) => Promise<{ text?: string }>;
   const parsed = await pdfParse(buffer);
@@ -644,8 +739,9 @@ export function registerOpsReportRoutes(app: Express) {
         const file = (req as any).file as Express.Multer.File | undefined;
         if (!file) return res.status(400).json({ error: "Labor summary PDF is required." });
         const text = await parsePdfText(file.buffer);
-        const departments = parseLaborSummaryText(text);
-        res.json({ originalFileName: file.originalname, departments });
+        const employees = await db.select().from(scheduleEmployees);
+        const parsed = parseLaborSummaryText(text, employees);
+        res.json({ originalFileName: file.originalname, ...parsed });
       } catch (uploadError) {
         next(uploadError);
       }

@@ -195,6 +195,37 @@ function Section({ title, children, right }: { title: string; children: ReactNod
   );
 }
 
+function BulletRowsEditor({ rows, onChange }: { rows: Row[]; onChange: (rows: Row[]) => void }) {
+  const normalizedRows = rows.length ? rows : [{ no: "1", bullet: "" }];
+  const updateBullet = (index: number, bullet: string) => {
+    onChange(normalizedRows.map((row, rowIndex) => rowIndex === index ? { ...row, no: String(rowIndex + 1), bullet } : { ...row, no: String(rowIndex + 1) }));
+  };
+  const addRow = () => onChange([...normalizedRows, { no: String(normalizedRows.length + 1), bullet: "" }]);
+  const removeRow = (index: number) => {
+    const next = normalizedRows.filter((_row, rowIndex) => rowIndex !== index).map((row, rowIndex) => ({ ...row, no: String(rowIndex + 1) }));
+    onChange(next.length ? next : [{ no: "1", bullet: "" }]);
+  };
+  return (
+    <div className="space-y-3 p-4">
+      {normalizedRows.map((row, index) => (
+        <div key={index} className="grid gap-2 sm:grid-cols-[3rem_1fr_auto] sm:items-start">
+          <div className="rounded-md border border-[#d7c8b5] bg-[#fffaf2] px-3 py-2 text-center text-sm font-semibold text-[#5b4b3b]">{index + 1}</div>
+          <Textarea
+            className={`${C.field} min-h-[70px] resize-y`}
+            value={row.bullet || ""}
+            onChange={(event) => updateBullet(index, event.target.value)}
+            placeholder="Add a concise weekly overview bullet..."
+          />
+          <Button variant="outline" className={C.outline} onClick={() => removeRow(index)} disabled={normalizedRows.length === 1 && !(row.bullet || "").trim()}>
+            Remove
+          </Button>
+        </div>
+      ))}
+      <Button className={C.green} onClick={addRow}>+ Add overview bullet</Button>
+    </div>
+  );
+}
+
 function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: string; label: string; wide?: boolean }>; rows: Row[]; onChange: (rows: Row[]) => void }) {
   const [preview, setPreview] = useState<{ label: string; text: string; x: number; y: number } | null>(null);
   return (
@@ -300,7 +331,7 @@ export default function OpsReportPage() {
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [budgetModalOpen, setBudgetModalOpen] = useState(false);
   const [monthlyBudgets, setMonthlyBudgets] = useState<Row[]>([]);
-  const [budgetForm, setBudgetForm] = useState({ month: monthKeyFromDate(new Date().toISOString().slice(0, 10)), rooms: "", occupancy: "", adr: "", revenue: "" });
+  const [budgetForm, setBudgetForm] = useState({ month: monthKeyFromDate(new Date().toISOString().slice(0, 10)), rooms: "", occupancy: "", adr: "", revenue: "", lyRooms: "", lyOccupancy: "", lyAdr: "", lyRevenue: "" });
   const [lastSavedAt, setLastSavedAt] = useState<string>("");
   const [staffing, setStaffing] = useState({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
   const [cases, setCases] = useState<Row[]>(emptyRows(5, ["no", "guest", "incidentType", "resolution", "comment"]));
@@ -371,12 +402,22 @@ export default function OpsReportPage() {
       form.append("laborSummary", file);
       const response = await fetch(apiUrl("/api/opsreport/labor/actual-upload"), { method: "POST", credentials: "include", body: form });
       if (!response.ok) throw new Error(await response.text());
-      return response.json() as Promise<{ originalFileName: string; departments: Record<string, number> }>;
+      return response.json() as Promise<{
+        originalFileName: string;
+        departments: Record<string, number>;
+        unmatchedEmployees?: Array<{ name: string; employeeNumber: string; hours: number }>;
+      }>;
     },
     onSuccess: (data) => {
       setLabor((rows) => mergeLaborHours(rows, data.departments, "actualHours"));
       setLaborFile(null);
-      toast({ title: "Actual labor hours imported", description: `${data.originalFileName} was parsed into the Staff Hours table.` });
+      const unmatched = data.unmatchedEmployees?.length || 0;
+      toast({
+        title: "Actual labor hours imported",
+        description: unmatched
+          ? `${data.originalFileName} was parsed. ${unmatched} unmatched associate${unmatched === 1 ? "" : "s"} mapped to Other.`
+          : `${data.originalFileName} was parsed into the Staff Hours table.`,
+      });
     },
     onError: (error: Error) => toast({ title: "Unable to parse labor summary", description: error.message, variant: "destructive" }),
   });
@@ -485,6 +526,10 @@ export default function OpsReportPage() {
       occupancy: percentDisplay(budgetForm.occupancy),
       adr: accounting(budgetForm.adr),
       revenue: accounting(budgetForm.revenue),
+      lyRooms: rowValue(budgetForm.lyRooms, 0),
+      lyOccupancy: percentDisplay(budgetForm.lyOccupancy),
+      lyAdr: accounting(budgetForm.lyAdr),
+      lyRevenue: accounting(budgetForm.lyRevenue),
     };
     setMonthlyBudgets((rows) => [...rows.filter((row) => row.month !== normalized.month), normalized]);
     setBudgetModalOpen(false);
@@ -567,8 +612,10 @@ export default function OpsReportPage() {
     const budget = monthlyBudgets.find((row) => row.month === currentMonthKey);
     if (!budget) return;
     setMonthRows((rows) => rows.map((row) => {
-      if (row.label !== "CURRENT MONTH BUDGET") return row;
-      const next = { ...row, occupancy: budget.occupancy || "", rooms: budget.rooms || "", adr: budget.adr || "", revenue: budget.revenue || "", comments: `Budget for ${monthLabelFromKey(currentMonthKey)}` };
+      if (row.label !== "CURRENT MONTH BUDGET" && row.label !== "LY SAME MONTH") return row;
+      const next = row.label === "CURRENT MONTH BUDGET"
+        ? { ...row, occupancy: budget.occupancy || "", rooms: budget.rooms || "", adr: budget.adr || "", revenue: budget.revenue || "", comments: `Budget for ${monthLabelFromKey(currentMonthKey)}` }
+        : { ...row, occupancy: budget.lyOccupancy || "", rooms: budget.lyRooms || "", adr: budget.lyAdr || "", revenue: budget.lyRevenue || "", comments: `Last year actual for ${monthLabelFromKey(currentMonthKey)}` };
       return JSON.stringify(row) === JSON.stringify(next) ? row : next;
     }));
   }, [monthlyBudgets, currentMonthKey]);
@@ -626,7 +673,7 @@ export default function OpsReportPage() {
               className={C.outline}
               onClick={() => {
                 const existing = monthlyBudgets.find((row) => row.month === currentMonthKey);
-                setBudgetForm({ month: currentMonthKey || budgetForm.month, rooms: existing?.rooms || "", occupancy: existing?.occupancy || "", adr: existing?.adr || "", revenue: existing?.revenue || "" });
+                setBudgetForm({ month: currentMonthKey || budgetForm.month, rooms: existing?.rooms || "", occupancy: existing?.occupancy || "", adr: existing?.adr || "", revenue: existing?.revenue || "", lyRooms: existing?.lyRooms || "", lyOccupancy: existing?.lyOccupancy || "", lyAdr: existing?.lyAdr || "", lyRevenue: existing?.lyRevenue || "" });
                 setBudgetModalOpen(true);
               }}
             >
@@ -819,7 +866,7 @@ export default function OpsReportPage() {
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "guest", label: "Guest Name" }, { key: "incidentType", label: "Incident Type" }, { key: "resolution", label: "Resolution / Compensation" }, { key: "comment", label: "Incident / Comment", wide: true }]} rows={cases} onChange={setCases} />
             </Section>
             <Section title="GM Weekly Overview">
-              <EditableTable columns={[{ key: "no", label: "No" }, { key: "bullet", label: "Weekly overview bullet", wide: true }]} rows={gmOverviewRows} onChange={setGmOverviewRows} />
+              <BulletRowsEditor rows={gmOverviewRows} onChange={setGmOverviewRows} />
             </Section>
             <Section title="Guest Satisfaction Scores">
               <EditableTable columns={[{ key: "label", label: "GSS MTD", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior" }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance" }, { key: "sply", label: "SPLY Variance" }, { key: "comments", label: "Comments", wide: true }]} rows={gssRowsWithPrevious} onChange={setGssRows} />
@@ -860,7 +907,7 @@ export default function OpsReportPage() {
               <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>Month</Label>
               <Select value={budgetForm.month} onValueChange={(month) => {
                 const existing = monthlyBudgets.find((row) => row.month === month);
-                setBudgetForm({ month, rooms: existing?.rooms || "", occupancy: existing?.occupancy || "", adr: existing?.adr || "", revenue: existing?.revenue || "" });
+                setBudgetForm({ month, rooms: existing?.rooms || "", occupancy: existing?.occupancy || "", adr: existing?.adr || "", revenue: existing?.revenue || "", lyRooms: existing?.lyRooms || "", lyOccupancy: existing?.lyOccupancy || "", lyAdr: existing?.lyAdr || "", lyRevenue: existing?.lyRevenue || "" });
               }}>
                 <SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -872,10 +919,20 @@ export default function OpsReportPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
+              <div className="text-sm font-semibold text-[#201814]">Current Month Budget</div>
+            </div>
             <LabeledInput label="Budgeted rooms sold" value={budgetForm.rooms} onChange={(rooms) => setBudgetForm({ ...budgetForm, rooms })} type="number" />
             <LabeledInput label="Budgeted occupancy %" value={budgetForm.occupancy} onChange={(occupancy) => setBudgetForm({ ...budgetForm, occupancy })} />
             <LabeledInput label="Budgeted ADR" value={budgetForm.adr} onChange={(adr) => setBudgetForm({ ...budgetForm, adr })} moneyFormat />
             <LabeledInput label="Budgeted room revenue" value={budgetForm.revenue} onChange={(revenue) => setBudgetForm({ ...budgetForm, revenue })} moneyFormat />
+            <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
+              <div className="text-sm font-semibold text-[#201814]">Last Year Same Month Actuals</div>
+            </div>
+            <LabeledInput label="LY rooms sold" value={budgetForm.lyRooms} onChange={(lyRooms) => setBudgetForm({ ...budgetForm, lyRooms })} type="number" />
+            <LabeledInput label="LY occupancy %" value={budgetForm.lyOccupancy} onChange={(lyOccupancy) => setBudgetForm({ ...budgetForm, lyOccupancy })} />
+            <LabeledInput label="LY ADR" value={budgetForm.lyAdr} onChange={(lyAdr) => setBudgetForm({ ...budgetForm, lyAdr })} moneyFormat />
+            <LabeledInput label="LY room revenue" value={budgetForm.lyRevenue} onChange={(lyRevenue) => setBudgetForm({ ...budgetForm, lyRevenue })} moneyFormat />
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="outline" className={C.outline} onClick={() => setBudgetModalOpen(false)}>Cancel</Button>

@@ -932,14 +932,17 @@ export default function OpsReportPage() {
         </Tabs>
       </main>
       <Dialog open={budgetModalOpen} onOpenChange={setBudgetModalOpen}>
-        <DialogContent className="max-w-2xl border-[#d7c8b5] bg-[#fffaf2] text-[#201814]">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-hidden border-[#d7c8b5] bg-[#fffaf2] p-0 text-[#201814]">
+          <div className="flex max-h-[90vh] flex-col">
+          <div className="border-b border-[#d7c8b5] px-6 py-4">
           <DialogHeader>
             <DialogTitle>Monthly Budget Inputs</DialogTitle>
             <DialogDescription>
               Enter monthly budget, closed-month actuals, and last year actuals. The matching report month will populate the related rows automatically.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 sm:grid-cols-2">
+          </div>
+          <div className="grid flex-1 gap-4 overflow-y-auto px-6 py-4 sm:grid-cols-2">
             <div>
               <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>Month</Label>
               <Select value={budgetForm.month} onValueChange={(month) => {
@@ -979,9 +982,10 @@ export default function OpsReportPage() {
             <LabeledInput label="LY ADR" value={budgetForm.lyAdr} onChange={(lyAdr) => setBudgetForm({ ...budgetForm, lyAdr })} moneyFormat />
             <LabeledInput label="LY room revenue" value={budgetForm.lyRevenue} onChange={(lyRevenue) => setBudgetForm({ ...budgetForm, lyRevenue })} moneyFormat />
           </div>
-          <div className="mt-4 flex justify-end gap-2">
+          <div className="flex justify-end gap-2 border-t border-[#d7c8b5] px-6 py-4">
             <Button variant="outline" className={C.outline} onClick={() => setBudgetModalOpen(false)}>Cancel</Button>
             <Button className={C.green} onClick={saveMonthlyBudget} disabled={!budgetForm.month}>Save monthly inputs</Button>
+          </div>
           </div>
         </DialogContent>
       </Dialog>

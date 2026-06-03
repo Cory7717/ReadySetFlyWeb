@@ -331,7 +331,21 @@ export default function OpsReportPage() {
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [budgetModalOpen, setBudgetModalOpen] = useState(false);
   const [monthlyBudgets, setMonthlyBudgets] = useState<Row[]>([]);
-  const [budgetForm, setBudgetForm] = useState({ month: monthKeyFromDate(new Date().toISOString().slice(0, 10)), rooms: "", occupancy: "", adr: "", revenue: "", lyRooms: "", lyOccupancy: "", lyAdr: "", lyRevenue: "" });
+  const [budgetForm, setBudgetForm] = useState({
+    month: monthKeyFromDate(new Date().toISOString().slice(0, 10)),
+    rooms: "",
+    occupancy: "",
+    adr: "",
+    revenue: "",
+    actualRooms: "",
+    actualOccupancy: "",
+    actualAdr: "",
+    actualRevenue: "",
+    lyRooms: "",
+    lyOccupancy: "",
+    lyAdr: "",
+    lyRevenue: "",
+  });
   const [lastSavedAt, setLastSavedAt] = useState<string>("");
   const [staffing, setStaffing] = useState({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
   const [cases, setCases] = useState<Row[]>(emptyRows(5, ["no", "guest", "incidentType", "resolution", "comment"]));
@@ -526,6 +540,10 @@ export default function OpsReportPage() {
       occupancy: percentDisplay(budgetForm.occupancy),
       adr: accounting(budgetForm.adr),
       revenue: accounting(budgetForm.revenue),
+      actualRooms: rowValue(budgetForm.actualRooms, 0),
+      actualOccupancy: percentDisplay(budgetForm.actualOccupancy),
+      actualAdr: accounting(budgetForm.actualAdr),
+      actualRevenue: accounting(budgetForm.actualRevenue),
       lyRooms: rowValue(budgetForm.lyRooms, 0),
       lyOccupancy: percentDisplay(budgetForm.lyOccupancy),
       lyAdr: accounting(budgetForm.lyAdr),
@@ -535,6 +553,21 @@ export default function OpsReportPage() {
     setBudgetModalOpen(false);
     toast({ title: "Monthly budget saved", description: `${monthLabelFromKey(normalized.month)} budget will populate matching weekly reports.` });
   };
+  const budgetFormFromRow = (month: string, existing?: Row) => ({
+    month,
+    rooms: existing?.rooms || "",
+    occupancy: existing?.occupancy || "",
+    adr: existing?.adr || "",
+    revenue: existing?.revenue || "",
+    actualRooms: existing?.actualRooms || "",
+    actualOccupancy: existing?.actualOccupancy || "",
+    actualAdr: existing?.actualAdr || "",
+    actualRevenue: existing?.actualRevenue || "",
+    lyRooms: existing?.lyRooms || "",
+    lyOccupancy: existing?.lyOccupancy || "",
+    lyAdr: existing?.lyAdr || "",
+    lyRevenue: existing?.lyRevenue || "",
+  });
   const currentDraftPayload = useMemo(() => ({
     setup,
     topMetrics,
@@ -612,10 +645,14 @@ export default function OpsReportPage() {
     const budget = monthlyBudgets.find((row) => row.month === currentMonthKey);
     if (!budget) return;
     setMonthRows((rows) => rows.map((row) => {
-      if (row.label !== "CURRENT MONTH BUDGET" && row.label !== "LY SAME MONTH") return row;
+      if (row.label !== "CURRENT MONTH BUDGET" && row.label !== "MONTHLY TOTAL" && row.label !== "LY SAME MONTH") return row;
       const next = row.label === "CURRENT MONTH BUDGET"
         ? { ...row, occupancy: budget.occupancy || "", rooms: budget.rooms || "", adr: budget.adr || "", revenue: budget.revenue || "", comments: `Budget for ${monthLabelFromKey(currentMonthKey)}` }
-        : { ...row, occupancy: budget.lyOccupancy || "", rooms: budget.lyRooms || "", adr: budget.lyAdr || "", revenue: budget.lyRevenue || "", comments: `Last year actual for ${monthLabelFromKey(currentMonthKey)}` };
+        : row.label === "MONTHLY TOTAL" && (budget.actualRooms || budget.actualOccupancy || budget.actualAdr || budget.actualRevenue)
+          ? { ...row, occupancy: budget.actualOccupancy || "", rooms: budget.actualRooms || "", adr: budget.actualAdr || "", revenue: budget.actualRevenue || "", comments: `Actuals for ${monthLabelFromKey(currentMonthKey)}` }
+          : row.label === "LY SAME MONTH"
+            ? { ...row, occupancy: budget.lyOccupancy || "", rooms: budget.lyRooms || "", adr: budget.lyAdr || "", revenue: budget.lyRevenue || "", comments: `Last year actual for ${monthLabelFromKey(currentMonthKey)}` }
+            : row;
       return JSON.stringify(row) === JSON.stringify(next) ? row : next;
     }));
   }, [monthlyBudgets, currentMonthKey]);
@@ -673,7 +710,7 @@ export default function OpsReportPage() {
               className={C.outline}
               onClick={() => {
                 const existing = monthlyBudgets.find((row) => row.month === currentMonthKey);
-                setBudgetForm({ month: currentMonthKey || budgetForm.month, rooms: existing?.rooms || "", occupancy: existing?.occupancy || "", adr: existing?.adr || "", revenue: existing?.revenue || "", lyRooms: existing?.lyRooms || "", lyOccupancy: existing?.lyOccupancy || "", lyAdr: existing?.lyAdr || "", lyRevenue: existing?.lyRevenue || "" });
+                setBudgetForm(budgetFormFromRow(currentMonthKey || budgetForm.month, existing));
                 setBudgetModalOpen(true);
               }}
             >
@@ -899,7 +936,7 @@ export default function OpsReportPage() {
           <DialogHeader>
             <DialogTitle>Monthly Budget Inputs</DialogTitle>
             <DialogDescription>
-              Enter monthly budgeted rooms, occupancy, ADR, and room revenue. The matching report month will populate the Current Month Budget row.
+              Enter monthly budget, closed-month actuals, and last year actuals. The matching report month will populate the related rows automatically.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -907,7 +944,7 @@ export default function OpsReportPage() {
               <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>Month</Label>
               <Select value={budgetForm.month} onValueChange={(month) => {
                 const existing = monthlyBudgets.find((row) => row.month === month);
-                setBudgetForm({ month, rooms: existing?.rooms || "", occupancy: existing?.occupancy || "", adr: existing?.adr || "", revenue: existing?.revenue || "", lyRooms: existing?.lyRooms || "", lyOccupancy: existing?.lyOccupancy || "", lyAdr: existing?.lyAdr || "", lyRevenue: existing?.lyRevenue || "" });
+                setBudgetForm(budgetFormFromRow(month, existing));
               }}>
                 <SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -927,6 +964,14 @@ export default function OpsReportPage() {
             <LabeledInput label="Budgeted ADR" value={budgetForm.adr} onChange={(adr) => setBudgetForm({ ...budgetForm, adr })} moneyFormat />
             <LabeledInput label="Budgeted room revenue" value={budgetForm.revenue} onChange={(revenue) => setBudgetForm({ ...budgetForm, revenue })} moneyFormat />
             <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
+              <div className="text-sm font-semibold text-[#201814]">Closed Month Actuals</div>
+              <p className="mt-1 text-xs text-[#5f5247]">Use this after the month closes. These values populate the Monthly Total row.</p>
+            </div>
+            <LabeledInput label="Actual rooms sold" value={budgetForm.actualRooms} onChange={(actualRooms) => setBudgetForm({ ...budgetForm, actualRooms })} type="number" />
+            <LabeledInput label="Actual occupancy %" value={budgetForm.actualOccupancy} onChange={(actualOccupancy) => setBudgetForm({ ...budgetForm, actualOccupancy })} />
+            <LabeledInput label="Actual ADR" value={budgetForm.actualAdr} onChange={(actualAdr) => setBudgetForm({ ...budgetForm, actualAdr })} moneyFormat />
+            <LabeledInput label="Actual room revenue" value={budgetForm.actualRevenue} onChange={(actualRevenue) => setBudgetForm({ ...budgetForm, actualRevenue })} moneyFormat />
+            <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
               <div className="text-sm font-semibold text-[#201814]">Last Year Same Month Actuals</div>
             </div>
             <LabeledInput label="LY rooms sold" value={budgetForm.lyRooms} onChange={(lyRooms) => setBudgetForm({ ...budgetForm, lyRooms })} type="number" />
@@ -936,7 +981,7 @@ export default function OpsReportPage() {
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="outline" className={C.outline} onClick={() => setBudgetModalOpen(false)}>Cancel</Button>
-            <Button className={C.green} onClick={saveMonthlyBudget} disabled={!budgetForm.month}>Save budget</Button>
+            <Button className={C.green} onClick={saveMonthlyBudget} disabled={!budgetForm.month}>Save monthly inputs</Button>
           </div>
         </DialogContent>
       </Dialog>

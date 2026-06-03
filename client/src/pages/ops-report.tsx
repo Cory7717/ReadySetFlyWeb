@@ -144,6 +144,21 @@ function rowValue(value: string | number | undefined, digits = 2) {
   return n.toFixed(digits).replace(/\.?0+$/, "");
 }
 
+function monthlyRoomsValue(rooms: string | number | undefined, adr: string | number | undefined, revenue: string | number | undefined) {
+  const enteredRooms = num(rooms || "");
+  const adrValue = num(adr || "");
+  const revenueValue = num(revenue || "");
+  const impliedRooms = adrValue > 0 && revenueValue > 0 ? Math.round(revenueValue / adrValue) : 0;
+  if (enteredRooms > 0 && impliedRooms >= 1000 && enteredRooms < 1000 && Math.abs(impliedRooms - enteredRooms * 10) <= 20) {
+    return rowValue(impliedRooms, 0);
+  }
+  return rowValue(rooms, 0);
+}
+
+function monthlyRoomsNumber(rooms: string | number | undefined, adr: string | number | undefined, revenue: string | number | undefined) {
+  return num(monthlyRoomsValue(rooms, adr, revenue));
+}
+
 function addDaysIso(value: string, days: number) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return "";
@@ -167,7 +182,7 @@ function LabeledInput({ label, value, onChange, type = "text", moneyFormat = fal
   return (
     <div>
       <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>{label}</Label>
-      <Input className={`mt-1 ${C.field}`} type={type} value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => moneyFormat && onChange(accounting(value))} />
+      <Input className={`mt-1 ${C.field}`} type={type} inputMode={type === "number" ? "numeric" : undefined} value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => moneyFormat && onChange(accounting(value))} />
     </div>
   );
 }
@@ -638,9 +653,9 @@ export default function OpsReportPage() {
       const values = rows.map((row) => num(row[key])).filter((value) => Number.isFinite(value) && value !== 0);
       return values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
     };
-    const budgetRooms = sum("rooms");
-    const actualRooms = sum("actualRooms");
-    const lyRooms = sum("lyRooms");
+    const budgetRooms = rows.reduce((total, row) => total + monthlyRoomsNumber(row.rooms, row.adr, row.revenue), 0);
+    const actualRooms = rows.reduce((total, row) => total + monthlyRoomsNumber(row.actualRooms, row.actualAdr, row.actualRevenue), 0);
+    const lyRooms = rows.reduce((total, row) => total + monthlyRoomsNumber(row.lyRooms, row.lyAdr, row.lyRevenue), 0);
     const budgetRevenue = sum("revenue");
     const actualRevenue = sum("actualRevenue");
     const lyRevenue = sum("lyRevenue");
@@ -699,9 +714,9 @@ export default function OpsReportPage() {
     const meetingActual = total(meeting, ["roomRental", "avRevenue", "setupFees", "serviceFees", "groupBreakfastRevenue", "otherRevenue"]);
     return {
       month,
-      roomsActual: num(budget?.actualRooms || ""),
-      roomsBudget: num(budget?.rooms || ""),
-      roomsLy: num(budget?.lyRooms || ""),
+      roomsActual: monthlyRoomsNumber(budget?.actualRooms || "", budget?.actualAdr || "", budget?.actualRevenue || ""),
+      roomsBudget: monthlyRoomsNumber(budget?.rooms || "", budget?.adr || "", budget?.revenue || ""),
+      roomsLy: monthlyRoomsNumber(budget?.lyRooms || "", budget?.lyAdr || "", budget?.lyRevenue || ""),
       revenueActual: num(budget?.actualRevenue || ""),
       revenueBudget: num(budget?.revenue || ""),
       revenueLy: num(budget?.lyRevenue || ""),
@@ -728,15 +743,15 @@ export default function OpsReportPage() {
   const saveMonthlyBudget = () => {
     const normalized = {
       month: budgetForm.month,
-      rooms: rowValue(budgetForm.rooms, 0),
+      rooms: monthlyRoomsValue(budgetForm.rooms, budgetForm.adr, budgetForm.revenue),
       occupancy: percentDisplay(budgetForm.occupancy),
       adr: accounting(budgetForm.adr),
       revenue: accounting(budgetForm.revenue),
-      actualRooms: rowValue(budgetForm.actualRooms, 0),
+      actualRooms: monthlyRoomsValue(budgetForm.actualRooms, budgetForm.actualAdr, budgetForm.actualRevenue),
       actualOccupancy: percentDisplay(budgetForm.actualOccupancy),
       actualAdr: accounting(budgetForm.actualAdr),
       actualRevenue: accounting(budgetForm.actualRevenue),
-      lyRooms: rowValue(budgetForm.lyRooms, 0),
+      lyRooms: monthlyRoomsValue(budgetForm.lyRooms, budgetForm.lyAdr, budgetForm.lyRevenue),
       lyOccupancy: percentDisplay(budgetForm.lyOccupancy),
       lyAdr: accounting(budgetForm.lyAdr),
       lyRevenue: accounting(budgetForm.lyRevenue),
@@ -781,15 +796,15 @@ export default function OpsReportPage() {
   };
   const budgetFormFromRow = (month: string, existing?: Row) => ({
     month,
-    rooms: existing?.rooms || "",
+    rooms: monthlyRoomsValue(existing?.rooms || "", existing?.adr || "", existing?.revenue || ""),
     occupancy: existing?.occupancy || "",
     adr: existing?.adr || "",
     revenue: existing?.revenue || "",
-    actualRooms: existing?.actualRooms || "",
+    actualRooms: monthlyRoomsValue(existing?.actualRooms || "", existing?.actualAdr || "", existing?.actualRevenue || ""),
     actualOccupancy: existing?.actualOccupancy || "",
     actualAdr: existing?.actualAdr || "",
     actualRevenue: existing?.actualRevenue || "",
-    lyRooms: existing?.lyRooms || "",
+    lyRooms: monthlyRoomsValue(existing?.lyRooms || "", existing?.lyAdr || "", existing?.lyRevenue || ""),
     lyOccupancy: existing?.lyOccupancy || "",
     lyAdr: existing?.lyAdr || "",
     lyRevenue: existing?.lyRevenue || "",
@@ -964,7 +979,7 @@ export default function OpsReportPage() {
       const monthlyTotal = hasActuals
         ? {
             occupancy: budget.actualOccupancy || "",
-            rooms: budget.actualRooms || "",
+            rooms: monthlyRoomsValue(budget.actualRooms || "", budget.actualAdr || "", budget.actualRevenue || ""),
             adr: budget.actualAdr || "",
             revenue: budget.actualRevenue || "",
           }
@@ -973,11 +988,11 @@ export default function OpsReportPage() {
       const nextRows = rows.map((row) => {
       const label = String(row.label || "").trim().toUpperCase();
       const next = label === "CURRENT MONTH BUDGET" || label === "CURRENT MONTHLY BUDGET"
-        ? { ...row, occupancy: budget.occupancy || "", rooms: budget.rooms || "", adr: budget.adr || "", revenue: budget.revenue || "", comments: `Budget for ${monthLabelFromKey(currentMonthKey)}` }
+        ? { ...row, occupancy: budget.occupancy || "", rooms: monthlyRoomsValue(budget.rooms || "", budget.adr || "", budget.revenue || ""), adr: budget.adr || "", revenue: budget.revenue || "", comments: `Budget for ${monthLabelFromKey(currentMonthKey)}` }
         : label === "MONTHLY TOTAL" && hasActuals
-          ? { ...row, occupancy: budget.actualOccupancy || "", rooms: budget.actualRooms || "", adr: budget.actualAdr || "", revenue: budget.actualRevenue || "", comments: `Actuals for ${monthLabelFromKey(currentMonthKey)}` }
+          ? { ...row, occupancy: budget.actualOccupancy || "", rooms: monthlyRoomsValue(budget.actualRooms || "", budget.actualAdr || "", budget.actualRevenue || ""), adr: budget.actualAdr || "", revenue: budget.actualRevenue || "", comments: `Actuals for ${monthLabelFromKey(currentMonthKey)}` }
           : label === "LY SAME MONTH"
-            ? { ...row, occupancy: budget.lyOccupancy || "", rooms: budget.lyRooms || "", adr: budget.lyAdr || "", revenue: budget.lyRevenue || "", comments: `Last year actual for ${monthLabelFromKey(currentMonthKey)}` }
+            ? { ...row, occupancy: budget.lyOccupancy || "", rooms: monthlyRoomsValue(budget.lyRooms || "", budget.lyAdr || "", budget.lyRevenue || ""), adr: budget.lyAdr || "", revenue: budget.lyRevenue || "", comments: `Last year actual for ${monthLabelFromKey(currentMonthKey)}` }
             : label === "VARIANCE"
               ? {
                   ...row,
@@ -1492,7 +1507,7 @@ export default function OpsReportPage() {
             <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
               <div className="text-sm font-semibold text-[#201814]">Current Month Budget</div>
             </div>
-            <LabeledInput label="Budgeted rooms sold" value={budgetForm.rooms} onChange={(rooms) => setBudgetForm({ ...budgetForm, rooms })} type="number" />
+            <LabeledInput label="Budgeted rooms sold" value={budgetForm.rooms} onChange={(rooms) => setBudgetForm({ ...budgetForm, rooms })} />
             <LabeledInput label="Budgeted occupancy %" value={budgetForm.occupancy} onChange={(occupancy) => setBudgetForm({ ...budgetForm, occupancy })} />
             <LabeledInput label="Budgeted ADR" value={budgetForm.adr} onChange={(adr) => setBudgetForm({ ...budgetForm, adr })} moneyFormat />
             <LabeledInput label="Budgeted room revenue" value={budgetForm.revenue} onChange={(revenue) => setBudgetForm({ ...budgetForm, revenue })} moneyFormat />
@@ -1500,14 +1515,14 @@ export default function OpsReportPage() {
               <div className="text-sm font-semibold text-[#201814]">Closed Month Actuals</div>
               <p className="mt-1 text-xs text-[#5f5247]">Use this after the month closes. These values populate the Monthly Total row.</p>
             </div>
-            <LabeledInput label="Actual rooms sold" value={budgetForm.actualRooms} onChange={(actualRooms) => setBudgetForm({ ...budgetForm, actualRooms })} type="number" />
+            <LabeledInput label="Actual rooms sold" value={budgetForm.actualRooms} onChange={(actualRooms) => setBudgetForm({ ...budgetForm, actualRooms })} />
             <LabeledInput label="Actual occupancy %" value={budgetForm.actualOccupancy} onChange={(actualOccupancy) => setBudgetForm({ ...budgetForm, actualOccupancy })} />
             <LabeledInput label="Actual ADR" value={budgetForm.actualAdr} onChange={(actualAdr) => setBudgetForm({ ...budgetForm, actualAdr })} moneyFormat />
             <LabeledInput label="Actual room revenue" value={budgetForm.actualRevenue} onChange={(actualRevenue) => setBudgetForm({ ...budgetForm, actualRevenue })} moneyFormat />
             <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
               <div className="text-sm font-semibold text-[#201814]">Last Year Same Month Actuals</div>
             </div>
-            <LabeledInput label="LY rooms sold" value={budgetForm.lyRooms} onChange={(lyRooms) => setBudgetForm({ ...budgetForm, lyRooms })} type="number" />
+            <LabeledInput label="LY rooms sold" value={budgetForm.lyRooms} onChange={(lyRooms) => setBudgetForm({ ...budgetForm, lyRooms })} />
             <LabeledInput label="LY occupancy %" value={budgetForm.lyOccupancy} onChange={(lyOccupancy) => setBudgetForm({ ...budgetForm, lyOccupancy })} />
             <LabeledInput label="LY ADR" value={budgetForm.lyAdr} onChange={(lyAdr) => setBudgetForm({ ...budgetForm, lyAdr })} moneyFormat />
             <LabeledInput label="LY room revenue" value={budgetForm.lyRevenue} onChange={(lyRevenue) => setBudgetForm({ ...budgetForm, lyRevenue })} moneyFormat />

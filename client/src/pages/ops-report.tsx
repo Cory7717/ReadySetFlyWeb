@@ -765,7 +765,17 @@ export default function OpsReportPage() {
       lyAdr: accounting(budgetForm.lyAdr),
       lyRevenue: accounting(budgetForm.lyRevenue),
     };
-    setMonthlyBudgets((rows) => [...rows.filter((row) => row.month !== normalized.month), normalizeMonthlyBudgetRow(normalized)]);
+    const nextMonthlyBudgets = [...monthlyBudgets.filter((row) => row.month !== normalized.month), normalizeMonthlyBudgetRow(normalized)].map(normalizeMonthlyBudgetRow);
+    setMonthlyBudgets(nextMonthlyBudgets);
+    if (access.data?.unlocked && weekEnd) {
+      saveDraft.mutate({
+        weekStart: topMetrics.weekStart,
+        weekEnd,
+        weekLabel: week,
+        payload: { ...currentDraftPayload, monthlyBudgets: nextMonthlyBudgets },
+        uploadedReports,
+      });
+    }
     setBudgetModalOpen(false);
     toast({ title: "Monthly budget saved", description: `${monthLabelFromKey(normalized.month)} budget will populate matching weekly reports.` });
   };

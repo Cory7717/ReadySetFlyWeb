@@ -139,7 +139,7 @@ function mergeLaborHours(rows: Row[], departments: Record<string, number>, field
 
 function rowValue(value: string | number | undefined, digits = 2) {
   if (value == null || value === "") return "";
-  const n = Number(value);
+  const n = num(value);
   if (!Number.isFinite(n)) return String(value);
   return n.toFixed(digits).replace(/\.?0+$/, "");
 }
@@ -395,6 +395,7 @@ export default function OpsReportPage() {
   const [budgetModalOpen, setBudgetModalOpen] = useState(false);
   const [bistroModalOpen, setBistroModalOpen] = useState(false);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
+  const [summaryMonthKey, setSummaryMonthKey] = useState(monthKeyFromDate(new Date().toISOString().slice(0, 10)));
   const [monthlyBudgets, setMonthlyBudgets] = useState<Row[]>([]);
   const [bistroProductions, setBistroProductions] = useState<Row[]>([]);
   const [meetingProductions, setMeetingProductions] = useState<Row[]>([]);
@@ -415,6 +416,8 @@ export default function OpsReportPage() {
   });
   const [bistroForm, setBistroForm] = useState({
     month: monthKeyFromDate(new Date().toISOString().slice(0, 10)),
+    budgetRevenue: "",
+    lyRevenue: "",
     foodRevenue: "",
     beerRevenue: "",
     wineRevenue: "",
@@ -425,6 +428,8 @@ export default function OpsReportPage() {
   });
   const [meetingForm, setMeetingForm] = useState({
     month: monthKeyFromDate(new Date().toISOString().slice(0, 10)),
+    budgetRevenue: "",
+    lyRevenue: "",
     roomRental: "",
     avRevenue: "",
     setupFees: "",
@@ -675,11 +680,45 @@ export default function OpsReportPage() {
       bistroCurrent: currentBistro ? rowTotal(currentBistro, bistroKeys) : 0,
       bistroYtd: bistroRows.reduce((total, row) => total + rowTotal(row, bistroKeys), 0),
       bistroMonths: bistroRows.length,
+      bistroBudget: currentBistro ? num(currentBistro.budgetRevenue) : 0,
+      bistroLy: currentBistro ? num(currentBistro.lyRevenue) : 0,
       meetingCurrent: currentMeeting ? rowTotal(currentMeeting, meetingKeys) : 0,
       meetingYtd: meetingRows.reduce((total, row) => total + rowTotal(row, meetingKeys), 0),
       meetingMonths: meetingRows.length,
+      meetingBudget: currentMeeting ? num(currentMeeting.budgetRevenue) : 0,
+      meetingLy: currentMeeting ? num(currentMeeting.lyRevenue) : 0,
     };
   }, [bistroProductions, meetingProductions, currentMonthKey]);
+  const selectedMonthSummary = useMemo(() => {
+    const month = summaryMonthKey || currentMonthKey;
+    const budget = monthlyBudgets.find((row) => row.month === month);
+    const bistro = bistroProductions.find((row) => row.month === month);
+    const meeting = meetingProductions.find((row) => row.month === month);
+    const total = (row: Row | undefined, keys: string[]) => row ? keys.reduce((sum, key) => sum + num(row[key]), 0) : 0;
+    const bistroActual = total(bistro, ["foodRevenue", "beerRevenue", "wineRevenue", "liquorRevenue", "breakfastRevenue", "otherRevenue"]);
+    const meetingActual = total(meeting, ["roomRental", "avRevenue", "setupFees", "serviceFees", "groupBreakfastRevenue", "otherRevenue"]);
+    return {
+      month,
+      roomsActual: num(budget?.actualRooms || ""),
+      roomsBudget: num(budget?.rooms || ""),
+      roomsLy: num(budget?.lyRooms || ""),
+      revenueActual: num(budget?.actualRevenue || ""),
+      revenueBudget: num(budget?.revenue || ""),
+      revenueLy: num(budget?.lyRevenue || ""),
+      occupancyActual: num(budget?.actualOccupancy || ""),
+      occupancyBudget: num(budget?.occupancy || ""),
+      occupancyLy: num(budget?.lyOccupancy || ""),
+      adrActual: num(budget?.actualAdr || ""),
+      adrBudget: num(budget?.adr || ""),
+      adrLy: num(budget?.lyAdr || ""),
+      bistroActual,
+      bistroBudget: num(bistro?.budgetRevenue || ""),
+      bistroLy: num(bistro?.lyRevenue || ""),
+      meetingActual,
+      meetingBudget: num(meeting?.budgetRevenue || ""),
+      meetingLy: num(meeting?.lyRevenue || ""),
+    };
+  }, [summaryMonthKey, currentMonthKey, monthlyBudgets, bistroProductions, meetingProductions]);
   const weekEnd = useMemo(() => {
     const start = new Date(`${topMetrics.weekStart}T00:00:00`);
     if (Number.isNaN(start.getTime())) return "";
@@ -709,6 +748,8 @@ export default function OpsReportPage() {
   const saveBistroProduction = () => {
     const normalized = {
       month: bistroForm.month,
+      budgetRevenue: accounting(bistroForm.budgetRevenue),
+      lyRevenue: accounting(bistroForm.lyRevenue),
       foodRevenue: accounting(bistroForm.foodRevenue),
       beerRevenue: accounting(bistroForm.beerRevenue),
       wineRevenue: accounting(bistroForm.wineRevenue),
@@ -724,6 +765,8 @@ export default function OpsReportPage() {
   const saveMeetingProduction = () => {
     const normalized = {
       month: meetingForm.month,
+      budgetRevenue: accounting(meetingForm.budgetRevenue),
+      lyRevenue: accounting(meetingForm.lyRevenue),
       roomRental: accounting(meetingForm.roomRental),
       avRevenue: accounting(meetingForm.avRevenue),
       setupFees: accounting(meetingForm.setupFees),
@@ -753,6 +796,8 @@ export default function OpsReportPage() {
   });
   const bistroFormFromRow = (month: string, existing?: Row) => ({
     month,
+    budgetRevenue: existing?.budgetRevenue || "",
+    lyRevenue: existing?.lyRevenue || "",
     foodRevenue: existing?.foodRevenue || "",
     beerRevenue: existing?.beerRevenue || "",
     wineRevenue: existing?.wineRevenue || "",
@@ -763,6 +808,8 @@ export default function OpsReportPage() {
   });
   const meetingFormFromRow = (month: string, existing?: Row) => ({
     month,
+    budgetRevenue: existing?.budgetRevenue || "",
+    lyRevenue: existing?.lyRevenue || "",
     roomRental: existing?.roomRental || "",
     avRevenue: existing?.avRevenue || "",
     setupFees: existing?.setupFees || "",
@@ -1082,6 +1129,84 @@ export default function OpsReportPage() {
           </TabsList>
 
           <TabsContent value="summary" className="space-y-5">
+            <Section
+              title="Selected Month Performance"
+              right={
+                <Select value={summaryMonthKey || currentMonthKey} onValueChange={setSummaryMonthKey}>
+                  <SelectTrigger className={`w-44 ${C.field}`}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, index) => {
+                      const year = new Date(`${topMetrics.weekStart || new Date().toISOString().slice(0, 10)}T00:00:00`).getUTCFullYear() || new Date().getFullYear();
+                      const value = `${year}-${String(index + 1).padStart(2, "0")}`;
+                      return <SelectItem key={value} value={value}>{monthLabelFromKey(value)}</SelectItem>;
+                    })}
+                  </SelectContent>
+                </Select>
+              }
+            >
+              <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
+                <YtdMetricCard
+                  label="Room Revenue"
+                  actual={money(selectedMonthSummary.revenueActual)}
+                  budget={money(selectedMonthSummary.revenueBudget)}
+                  lastYear={money(selectedMonthSummary.revenueLy)}
+                  varianceToBudget={signedValue(selectedMonthSummary.revenueActual - selectedMonthSummary.revenueBudget, money)}
+                  varianceToLastYear={signedValue(selectedMonthSummary.revenueActual - selectedMonthSummary.revenueLy, money)}
+                  budgetVarianceValue={selectedMonthSummary.revenueActual - selectedMonthSummary.revenueBudget}
+                  lastYearVarianceValue={selectedMonthSummary.revenueActual - selectedMonthSummary.revenueLy}
+                />
+                <YtdMetricCard
+                  label="Rooms Sold"
+                  actual={rowValue(selectedMonthSummary.roomsActual, 0) || "0"}
+                  budget={rowValue(selectedMonthSummary.roomsBudget, 0) || "0"}
+                  lastYear={rowValue(selectedMonthSummary.roomsLy, 0) || "0"}
+                  varianceToBudget={signedValue(selectedMonthSummary.roomsActual - selectedMonthSummary.roomsBudget, (value) => rowValue(value, 0) || "0")}
+                  varianceToLastYear={signedValue(selectedMonthSummary.roomsActual - selectedMonthSummary.roomsLy, (value) => rowValue(value, 0) || "0")}
+                  budgetVarianceValue={selectedMonthSummary.roomsActual - selectedMonthSummary.roomsBudget}
+                  lastYearVarianceValue={selectedMonthSummary.roomsActual - selectedMonthSummary.roomsLy}
+                />
+                <YtdMetricCard
+                  label="Occupancy"
+                  actual={percentDisplay(selectedMonthSummary.occupancyActual) || "0%"}
+                  budget={percentDisplay(selectedMonthSummary.occupancyBudget) || "0%"}
+                  lastYear={percentDisplay(selectedMonthSummary.occupancyLy) || "0%"}
+                  varianceToBudget={signedValue(selectedMonthSummary.occupancyActual - selectedMonthSummary.occupancyBudget, (value) => `${rowValue(value, 1) || "0"} pts`)}
+                  varianceToLastYear={signedValue(selectedMonthSummary.occupancyActual - selectedMonthSummary.occupancyLy, (value) => `${rowValue(value, 1) || "0"} pts`)}
+                  budgetVarianceValue={selectedMonthSummary.occupancyActual - selectedMonthSummary.occupancyBudget}
+                  lastYearVarianceValue={selectedMonthSummary.occupancyActual - selectedMonthSummary.occupancyLy}
+                />
+                <YtdMetricCard
+                  label="ADR"
+                  actual={money(selectedMonthSummary.adrActual)}
+                  budget={money(selectedMonthSummary.adrBudget)}
+                  lastYear={money(selectedMonthSummary.adrLy)}
+                  varianceToBudget={signedValue(selectedMonthSummary.adrActual - selectedMonthSummary.adrBudget, money)}
+                  varianceToLastYear={signedValue(selectedMonthSummary.adrActual - selectedMonthSummary.adrLy, money)}
+                  budgetVarianceValue={selectedMonthSummary.adrActual - selectedMonthSummary.adrBudget}
+                  lastYearVarianceValue={selectedMonthSummary.adrActual - selectedMonthSummary.adrLy}
+                />
+                <YtdMetricCard
+                  label="Bistro / Bar Production"
+                  actual={money(selectedMonthSummary.bistroActual)}
+                  budget={money(selectedMonthSummary.bistroBudget)}
+                  lastYear={money(selectedMonthSummary.bistroLy)}
+                  varianceToBudget={signedValue(selectedMonthSummary.bistroActual - selectedMonthSummary.bistroBudget, money)}
+                  varianceToLastYear={signedValue(selectedMonthSummary.bistroActual - selectedMonthSummary.bistroLy, money)}
+                  budgetVarianceValue={selectedMonthSummary.bistroActual - selectedMonthSummary.bistroBudget}
+                  lastYearVarianceValue={selectedMonthSummary.bistroActual - selectedMonthSummary.bistroLy}
+                />
+                <YtdMetricCard
+                  label="Meeting Space Production"
+                  actual={money(selectedMonthSummary.meetingActual)}
+                  budget={money(selectedMonthSummary.meetingBudget)}
+                  lastYear={money(selectedMonthSummary.meetingLy)}
+                  varianceToBudget={signedValue(selectedMonthSummary.meetingActual - selectedMonthSummary.meetingBudget, money)}
+                  varianceToLastYear={signedValue(selectedMonthSummary.meetingActual - selectedMonthSummary.meetingLy, money)}
+                  budgetVarianceValue={selectedMonthSummary.meetingActual - selectedMonthSummary.meetingBudget}
+                  lastYearVarianceValue={selectedMonthSummary.meetingActual - selectedMonthSummary.meetingLy}
+                />
+              </div>
+            </Section>
             <Section
               title="YTD Budget / Actual / Last Year"
               right={<Badge variant="outline">{ytdMonthlySummary.actualMonths} actual month{ytdMonthlySummary.actualMonths === 1 ? "" : "s"} entered</Badge>}
@@ -1423,6 +1548,11 @@ export default function OpsReportPage() {
                 </Select>
               </div>
               <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
+                <div className="text-sm font-semibold text-[#201814]">Budget / Prior Year</div>
+              </div>
+              <LabeledInput label="Budgeted total production" value={bistroForm.budgetRevenue} onChange={(budgetRevenue) => setBistroForm({ ...bistroForm, budgetRevenue })} moneyFormat />
+              <LabeledInput label="LY same month production" value={bistroForm.lyRevenue} onChange={(lyRevenue) => setBistroForm({ ...bistroForm, lyRevenue })} moneyFormat />
+              <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
                 <div className="text-sm font-semibold text-[#201814]">Production Categories</div>
               </div>
               <LabeledInput label="Food revenue" value={bistroForm.foodRevenue} onChange={(foodRevenue) => setBistroForm({ ...bistroForm, foodRevenue })} moneyFormat />
@@ -1471,6 +1601,11 @@ export default function OpsReportPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
+                <div className="text-sm font-semibold text-[#201814]">Budget / Prior Year</div>
+              </div>
+              <LabeledInput label="Budgeted total production" value={meetingForm.budgetRevenue} onChange={(budgetRevenue) => setMeetingForm({ ...meetingForm, budgetRevenue })} moneyFormat />
+              <LabeledInput label="LY same month production" value={meetingForm.lyRevenue} onChange={(lyRevenue) => setMeetingForm({ ...meetingForm, lyRevenue })} moneyFormat />
               <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
                 <div className="text-sm font-semibold text-[#201814]">Production Categories</div>
               </div>

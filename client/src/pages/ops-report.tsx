@@ -467,13 +467,8 @@ export default function OpsReportPage() {
   const [bistroForm, setBistroForm] = useState({
     month: monthKeyFromDate(new Date().toISOString().slice(0, 10)),
     budgetRevenue: "",
+    actualRevenue: "",
     lyRevenue: "",
-    foodRevenue: "",
-    beerRevenue: "",
-    wineRevenue: "",
-    liquorRevenue: "",
-    breakfastRevenue: "",
-    otherRevenue: "",
     notes: "",
   });
   const [meetingForm, setMeetingForm] = useState({
@@ -735,12 +730,13 @@ export default function OpsReportPage() {
     const meetingRows = meetingProductions.filter((row) => row.month && (!currentMonthKey || row.month <= currentMonthKey));
     const rowTotal = (row: Row, keys: string[]) => keys.reduce((total, key) => total + num(row[key]), 0);
     const bistroKeys = ["foodRevenue", "beerRevenue", "wineRevenue", "liquorRevenue", "breakfastRevenue", "otherRevenue"];
+    const bistroActualTotal = (row: Row | undefined) => row ? num(row.actualRevenue || "") || rowTotal(row, bistroKeys) : 0;
     const meetingKeys = ["roomRental", "avRevenue", "setupFees", "serviceFees", "groupBreakfastRevenue", "otherRevenue"];
     const currentBistro = bistroProductions.find((row) => row.month === currentMonthKey);
     const currentMeeting = meetingProductions.find((row) => row.month === currentMonthKey);
     return {
-      bistroCurrent: currentBistro ? rowTotal(currentBistro, bistroKeys) : 0,
-      bistroYtd: bistroRows.reduce((total, row) => total + rowTotal(row, bistroKeys), 0),
+      bistroCurrent: bistroActualTotal(currentBistro),
+      bistroYtd: bistroRows.reduce((total, row) => total + bistroActualTotal(row), 0),
       bistroMonths: bistroRows.length,
       bistroBudget: currentBistro ? num(currentBistro.budgetRevenue) : 0,
       bistroLy: currentBistro ? num(currentBistro.lyRevenue) : 0,
@@ -757,7 +753,7 @@ export default function OpsReportPage() {
     const bistro = bistroProductions.find((row) => row.month === month);
     const meeting = meetingProductions.find((row) => row.month === month);
     const total = (row: Row | undefined, keys: string[]) => row ? keys.reduce((sum, key) => sum + num(row[key]), 0) : 0;
-    const bistroActual = total(bistro, ["foodRevenue", "beerRevenue", "wineRevenue", "liquorRevenue", "breakfastRevenue", "otherRevenue"]);
+    const bistroActual = bistro ? num(bistro.actualRevenue || "") || total(bistro, ["foodRevenue", "beerRevenue", "wineRevenue", "liquorRevenue", "breakfastRevenue", "otherRevenue"]) : 0;
     const meetingActual = total(meeting, ["roomRental", "avRevenue", "setupFees", "serviceFees", "groupBreakfastRevenue", "otherRevenue"]);
     return {
       month,
@@ -821,13 +817,8 @@ export default function OpsReportPage() {
     const normalized = {
       month: bistroForm.month,
       budgetRevenue: accounting(bistroForm.budgetRevenue),
+      actualRevenue: accounting(bistroForm.actualRevenue),
       lyRevenue: accounting(bistroForm.lyRevenue),
-      foodRevenue: accounting(bistroForm.foodRevenue),
-      beerRevenue: accounting(bistroForm.beerRevenue),
-      wineRevenue: accounting(bistroForm.wineRevenue),
-      liquorRevenue: accounting(bistroForm.liquorRevenue),
-      breakfastRevenue: accounting(bistroForm.breakfastRevenue),
-      otherRevenue: accounting(bistroForm.otherRevenue),
       notes: bistroForm.notes,
     };
     setBistroProductions((rows) => [...rows.filter((row) => row.month !== normalized.month), normalized]);
@@ -869,13 +860,8 @@ export default function OpsReportPage() {
   const bistroFormFromRow = (month: string, existing?: Row) => ({
     month,
     budgetRevenue: existing?.budgetRevenue || "",
+    actualRevenue: existing?.actualRevenue || accounting(num(existing?.foodRevenue || "") + num(existing?.beerRevenue || "") + num(existing?.wineRevenue || "") + num(existing?.liquorRevenue || "") + num(existing?.breakfastRevenue || "") + num(existing?.otherRevenue || "")),
     lyRevenue: existing?.lyRevenue || "",
-    foodRevenue: existing?.foodRevenue || "",
-    beerRevenue: existing?.beerRevenue || "",
-    wineRevenue: existing?.wineRevenue || "",
-    liquorRevenue: existing?.liquorRevenue || "",
-    breakfastRevenue: existing?.breakfastRevenue || "",
-    otherRevenue: existing?.otherRevenue || "",
     notes: existing?.notes || "",
   });
   const meetingFormFromRow = (month: string, existing?: Row) => ({
@@ -1598,7 +1584,7 @@ export default function OpsReportPage() {
               <DialogHeader>
                 <DialogTitle>Bistro / Bar Production</DialogTitle>
                 <DialogDescription>
-                  Enter monthly Bistro, Bar, and Breakfast production. These totals feed the Summary Dashboard separately from Rooms revenue.
+                  Enter monthly Bistro / Bar totals. These feed the Summary Dashboard separately from Rooms revenue.
                 </DialogDescription>
               </DialogHeader>
             </div>
@@ -1620,19 +1606,11 @@ export default function OpsReportPage() {
                 </Select>
               </div>
               <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
-                <div className="text-sm font-semibold text-[#201814]">Budget / Prior Year</div>
+                <div className="text-sm font-semibold text-[#201814]">Monthly Totals</div>
               </div>
               <LabeledInput label="Budgeted total production" value={bistroForm.budgetRevenue} onChange={(budgetRevenue) => setBistroForm({ ...bistroForm, budgetRevenue })} moneyFormat />
+              <LabeledInput label="Actual total production" value={bistroForm.actualRevenue} onChange={(actualRevenue) => setBistroForm({ ...bistroForm, actualRevenue })} moneyFormat />
               <LabeledInput label="LY same month production" value={bistroForm.lyRevenue} onChange={(lyRevenue) => setBistroForm({ ...bistroForm, lyRevenue })} moneyFormat />
-              <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
-                <div className="text-sm font-semibold text-[#201814]">Production Categories</div>
-              </div>
-              <LabeledInput label="Food revenue" value={bistroForm.foodRevenue} onChange={(foodRevenue) => setBistroForm({ ...bistroForm, foodRevenue })} moneyFormat />
-              <LabeledInput label="Beer revenue" value={bistroForm.beerRevenue} onChange={(beerRevenue) => setBistroForm({ ...bistroForm, beerRevenue })} moneyFormat />
-              <LabeledInput label="Wine revenue" value={bistroForm.wineRevenue} onChange={(wineRevenue) => setBistroForm({ ...bistroForm, wineRevenue })} moneyFormat />
-              <LabeledInput label="Liquor revenue" value={bistroForm.liquorRevenue} onChange={(liquorRevenue) => setBistroForm({ ...bistroForm, liquorRevenue })} moneyFormat />
-              <LabeledInput label="Breakfast revenue" value={bistroForm.breakfastRevenue} onChange={(breakfastRevenue) => setBistroForm({ ...bistroForm, breakfastRevenue })} moneyFormat />
-              <LabeledInput label="Other revenue" value={bistroForm.otherRevenue} onChange={(otherRevenue) => setBistroForm({ ...bistroForm, otherRevenue })} moneyFormat />
               <div className="sm:col-span-2">
                 <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>Notes</Label>
                 <Textarea className={`mt-1 min-h-[90px] ${C.field}`} value={bistroForm.notes} onChange={(event) => setBistroForm({ ...bistroForm, notes: event.target.value })} />

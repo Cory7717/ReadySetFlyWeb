@@ -474,6 +474,7 @@ export default function OpsReportPage() {
   const [meetingForm, setMeetingForm] = useState({
     month: monthKeyFromDate(new Date().toISOString().slice(0, 10)),
     budgetRevenue: "",
+    actualRevenue: "",
     lyRevenue: "",
     roomRental: "",
     avRevenue: "",
@@ -732,6 +733,7 @@ export default function OpsReportPage() {
     const bistroKeys = ["foodRevenue", "beerRevenue", "wineRevenue", "liquorRevenue", "breakfastRevenue", "otherRevenue"];
     const bistroActualTotal = (row: Row | undefined) => row ? num(row.actualRevenue || "") || rowTotal(row, bistroKeys) : 0;
     const meetingKeys = ["roomRental", "avRevenue", "setupFees", "serviceFees", "groupBreakfastRevenue", "otherRevenue"];
+    const meetingActualTotal = (row: Row | undefined) => row ? num(row.actualRevenue || "") || rowTotal(row, meetingKeys) : 0;
     const currentBistro = bistroProductions.find((row) => row.month === currentMonthKey);
     const currentMeeting = meetingProductions.find((row) => row.month === currentMonthKey);
     return {
@@ -740,8 +742,8 @@ export default function OpsReportPage() {
       bistroMonths: bistroRows.length,
       bistroBudget: currentBistro ? num(currentBistro.budgetRevenue) : 0,
       bistroLy: currentBistro ? num(currentBistro.lyRevenue) : 0,
-      meetingCurrent: currentMeeting ? rowTotal(currentMeeting, meetingKeys) : 0,
-      meetingYtd: meetingRows.reduce((total, row) => total + rowTotal(row, meetingKeys), 0),
+      meetingCurrent: meetingActualTotal(currentMeeting),
+      meetingYtd: meetingRows.reduce((total, row) => total + meetingActualTotal(row), 0),
       meetingMonths: meetingRows.length,
       meetingBudget: currentMeeting ? num(currentMeeting.budgetRevenue) : 0,
       meetingLy: currentMeeting ? num(currentMeeting.lyRevenue) : 0,
@@ -754,7 +756,7 @@ export default function OpsReportPage() {
     const meeting = meetingProductions.find((row) => row.month === month);
     const total = (row: Row | undefined, keys: string[]) => row ? keys.reduce((sum, key) => sum + num(row[key]), 0) : 0;
     const bistroActual = bistro ? num(bistro.actualRevenue || "") || total(bistro, ["foodRevenue", "beerRevenue", "wineRevenue", "liquorRevenue", "breakfastRevenue", "otherRevenue"]) : 0;
-    const meetingActual = total(meeting, ["roomRental", "avRevenue", "setupFees", "serviceFees", "groupBreakfastRevenue", "otherRevenue"]);
+    const meetingActual = meeting ? num(meeting.actualRevenue || "") || total(meeting, ["roomRental", "avRevenue", "setupFees", "serviceFees", "groupBreakfastRevenue", "otherRevenue"]) : 0;
     return {
       month,
       roomsActual: monthlyRoomsNumber(budget?.actualRooms || "", budget?.actualAdr || "", budget?.actualRevenue || ""),
@@ -829,6 +831,7 @@ export default function OpsReportPage() {
     const normalized = {
       month: meetingForm.month,
       budgetRevenue: accounting(meetingForm.budgetRevenue),
+      actualRevenue: accounting(meetingForm.actualRevenue),
       lyRevenue: accounting(meetingForm.lyRevenue),
       roomRental: accounting(meetingForm.roomRental),
       avRevenue: accounting(meetingForm.avRevenue),
@@ -867,6 +870,7 @@ export default function OpsReportPage() {
   const meetingFormFromRow = (month: string, existing?: Row) => ({
     month,
     budgetRevenue: existing?.budgetRevenue || "",
+    actualRevenue: existing?.actualRevenue || accounting(num(existing?.roomRental || "") + num(existing?.avRevenue || "") + num(existing?.setupFees || "") + num(existing?.serviceFees || "") + num(existing?.groupBreakfastRevenue || "") + num(existing?.otherRevenue || "")),
     lyRevenue: existing?.lyRevenue || "",
     roomRental: existing?.roomRental || "",
     avRevenue: existing?.avRevenue || "",
@@ -1655,6 +1659,7 @@ export default function OpsReportPage() {
                 <div className="text-sm font-semibold text-[#201814]">Budget / Prior Year</div>
               </div>
               <LabeledInput label="Budgeted total production" value={meetingForm.budgetRevenue} onChange={(budgetRevenue) => setMeetingForm({ ...meetingForm, budgetRevenue })} moneyFormat />
+              <LabeledInput label="Actual total production" value={meetingForm.actualRevenue} onChange={(actualRevenue) => setMeetingForm({ ...meetingForm, actualRevenue })} moneyFormat />
               <LabeledInput label="LY same month production" value={meetingForm.lyRevenue} onChange={(lyRevenue) => setMeetingForm({ ...meetingForm, lyRevenue })} moneyFormat />
               <div className="sm:col-span-2 border-t border-[#d7c8b5] pt-3">
                 <div className="text-sm font-semibold text-[#201814]">Production Categories</div>

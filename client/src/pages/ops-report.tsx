@@ -141,6 +141,7 @@ function rowValue(value: string | number | undefined, digits = 2) {
   if (value == null || value === "") return "";
   const n = num(value);
   if (!Number.isFinite(n)) return String(value);
+  if (digits <= 0) return n.toFixed(0);
   return n.toFixed(digits).replace(/\.?0+$/, "");
 }
 

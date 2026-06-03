@@ -46,6 +46,7 @@ type OpsImportResponse = {
   negativeReviews?: Row[];
 };
 type OpsImportBatchResponse = { reports: OpsImportResponse[] };
+type MonthlyOtbReport = NonNullable<OpsImportResponse["monthly"]>;
 type OpsDraftResponse = {
   draft: null | {
     id: string;
@@ -167,6 +168,30 @@ function normalizeMonthlyBudgetRow(row: Row): Row {
     actualRooms: monthlyRoomsValue(row.actualRooms || "", row.actualAdr || "", row.actualRevenue || ""),
     lyRooms: monthlyRoomsValue(row.lyRooms || "", row.lyAdr || "", row.lyRevenue || ""),
   };
+}
+
+function mergeMonthlyActualFromOtb(rows: Row[], monthly: MonthlyOtbReport) {
+  const month = monthKeyFromDate(monthly.monthStart);
+  if (!month) return rows.map(normalizeMonthlyBudgetRow);
+  const actualPatch: Row = {
+    month,
+    actualRooms: rowValue(monthly.rooms, 0),
+    actualOccupancy: percentDisplay(monthly.occupancy),
+    actualAdr: accounting(monthly.adr),
+    actualRevenue: accounting(monthly.revenue),
+    actualSource: `OTB import ${monthly.monthStart} to ${monthly.monthEnd}`,
+  };
+  const existing = rows.find((row) => row.month === month);
+  const merged = normalizeMonthlyBudgetRow({ ...(existing || { month }), ...actualPatch });
+  return [...rows.filter((row) => row.month !== month), merged]
+    .map(normalizeMonthlyBudgetRow)
+    .sort((a, b) => String(a.month || "").localeCompare(String(b.month || "")));
+}
+
+function ytdActualRevenueFromMonthlyBudgets(rows: Row[], throughMonth: string) {
+  return rows
+    .filter((row) => row.month && (!throughMonth || row.month <= throughMonth))
+    .reduce((total, row) => total + num(row.actualRevenue || ""), 0);
 }
 
 function addDaysIso(value: string, days: number) {
@@ -563,6 +588,8 @@ export default function OpsReportPage() {
       return response.json() as Promise<OpsImportBatchResponse>;
     },
     onSuccess: (data) => {
+      let nextMonthlyBudgetRows = monthlyBudgets.map(normalizeMonthlyBudgetRow);
+      let latestMonthlyImport: MonthlyOtbReport | null = null;
       for (const report of data.reports) {
       if (report.weekly) {
         setTopMetrics((current) => ({
@@ -575,6 +602,8 @@ export default function OpsReportPage() {
       }
       if (report.monthly) {
         const monthly = report.monthly;
+        latestMonthlyImport = monthly;
+        nextMonthlyBudgetRows = mergeMonthlyActualFromOtb(nextMonthlyBudgetRows, monthly);
         setMonthRows((rows) => rows.map((row) => {
           if (row.label === "MONTH TO DATE" || row.label === "MONTHLY TOTAL") {
             return {
@@ -588,7 +617,6 @@ export default function OpsReportPage() {
           }
           return row;
         }));
-        setTopMetrics((current) => ({ ...current, mtdThisYear: accounting(monthly.revenue) }));
       }
       if (report.gssRows?.length) {
         setGssRows((rows) => rows.map((row) => report.gssRows!.find((incoming) => incoming.label === row.label) || row));
@@ -602,6 +630,15 @@ export default function OpsReportPage() {
       if (report.negativeReviews?.length) {
         setNegativeReviews([...report.negativeReviews, ...emptyRows(Math.max(0, 5 - report.negativeReviews.length), ["source", "score", "comment"])].slice(0, 5));
       }
+      }
+      if (latestMonthlyImport) {
+        setMonthlyBudgets(nextMonthlyBudgetRows);
+        const latestMonthKey = monthKeyFromDate(latestMonthlyImport.monthStart);
+        setTopMetrics((current) => ({
+          ...current,
+          mtdThisYear: accounting(latestMonthlyImport!.revenue),
+          ytdThisYear: accounting(ytdActualRevenueFromMonthlyBudgets(nextMonthlyBudgetRows, latestMonthKey)),
+        }));
       }
       setUploadedReports((current) => [
         ...current,

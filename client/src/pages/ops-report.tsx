@@ -159,6 +159,15 @@ function monthlyRoomsNumber(rooms: string | number | undefined, adr: string | nu
   return num(monthlyRoomsValue(rooms, adr, revenue));
 }
 
+function normalizeMonthlyBudgetRow(row: Row): Row {
+  return {
+    ...row,
+    rooms: monthlyRoomsValue(row.rooms || "", row.adr || "", row.revenue || ""),
+    actualRooms: monthlyRoomsValue(row.actualRooms || "", row.actualAdr || "", row.actualRevenue || ""),
+    lyRooms: monthlyRoomsValue(row.lyRooms || "", row.lyAdr || "", row.lyRevenue || ""),
+  };
+}
+
 function addDaysIso(value: string, days: number) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return "";
@@ -191,7 +200,7 @@ function DarkLabeledInput({ label, value, onChange, type = "text", moneyFormat =
   return (
     <div>
       <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.darkLabel}`}>{label}</Label>
-      <Input className={`mt-1 ${C.darkField}`} type={type} value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => moneyFormat && onChange(accounting(value))} />
+      <Input className={`mt-1 ${C.darkField}`} type={type} inputMode={type === "number" ? "numeric" : undefined} value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => moneyFormat && onChange(accounting(value))} />
     </div>
   );
 }
@@ -756,7 +765,7 @@ export default function OpsReportPage() {
       lyAdr: accounting(budgetForm.lyAdr),
       lyRevenue: accounting(budgetForm.lyRevenue),
     };
-    setMonthlyBudgets((rows) => [...rows.filter((row) => row.month !== normalized.month), normalized]);
+    setMonthlyBudgets((rows) => [...rows.filter((row) => row.month !== normalized.month), normalizeMonthlyBudgetRow(normalized)]);
     setBudgetModalOpen(false);
     toast({ title: "Monthly budget saved", description: `${monthLabelFromKey(normalized.month)} budget will populate matching weekly reports.` });
   };
@@ -893,7 +902,7 @@ export default function OpsReportPage() {
     if (payload.ar) setAr(payload.ar);
     if (payload.ledger) setLedger(payload.ledger);
     if (payload.labor) setLabor(payload.labor);
-    if (payload.monthlyBudgets) setMonthlyBudgets(payload.monthlyBudgets);
+    if (payload.monthlyBudgets) setMonthlyBudgets(payload.monthlyBudgets.map(normalizeMonthlyBudgetRow));
     if (payload.bistroProductions) setBistroProductions(payload.bistroProductions);
     if (payload.meetingProductions) setMeetingProductions(payload.meetingProductions);
     if (payload.staffing) setStaffing(payload.staffing);
@@ -934,7 +943,7 @@ export default function OpsReportPage() {
     ar,
     ledger,
     labor,
-    monthlyBudgets,
+    monthlyBudgets: monthlyBudgets.map(normalizeMonthlyBudgetRow),
     bistroProductions,
     meetingProductions,
     staffing,
@@ -1347,7 +1356,7 @@ export default function OpsReportPage() {
                 />
                 <DarkLabeledInput label="Week end date" value={weekEnd} onChange={() => undefined} type="date" />
                 <DarkLabeledInput label="Rooms sold" value={topMetrics.roomsSold} onChange={(roomsSold) => setTopMetrics({ ...topMetrics, roomsSold })} type="number" />
-                <DarkLabeledInput label="Occupancy %" value={topMetrics.occupancy} onChange={(occupancy) => setTopMetrics({ ...topMetrics, occupancy })} type="number" />
+                <DarkLabeledInput label="Occupancy %" value={topMetrics.occupancy} onChange={(occupancy) => setTopMetrics({ ...topMetrics, occupancy })} />
                 <DarkLabeledInput label="Room revenue" value={topMetrics.roomRevenue} onChange={(roomRevenue) => setTopMetrics({ ...topMetrics, roomRevenue })} moneyFormat />
                 <div className="rounded-lg border border-[#d7c8b5] bg-white p-3">
                   <div className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>Weekly ADR</div>

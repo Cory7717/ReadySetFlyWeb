@@ -624,6 +624,7 @@ export function registerOpsReportRoutes(app: Express) {
           .where(and(eq(courtyardOpsReportDrafts.propertyId, "courtyard-austin-lakeline"), eq(courtyardOpsReportDrafts.weekStart, weekStart)))
           .limit(1);
       }
+      if (!draft && requestedWeekStart) return res.json({ draft: null });
       if (!draft) {
         [draft] = await db.select().from(courtyardOpsReportDrafts).where(eq(courtyardOpsReportDrafts.propertyId, "courtyard-austin-lakeline")).orderBy(desc(courtyardOpsReportDrafts.updatedAt)).limit(1);
       }

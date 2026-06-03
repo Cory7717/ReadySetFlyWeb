@@ -526,6 +526,14 @@ export default function OpsReportPage() {
     const weekVariance = priorScore && currentScore ? rowValue(num(currentScore) - num(priorScore), 1) : "";
     return { ...row, priorWeek: priorScore, weekVariance };
   }), [gssRows, previousGssRows]);
+  const previousGssWaveRows = (previousDraft.data?.draft?.payload?.gssWaveRows || []) as Row[];
+  const gssWaveRowsWithPrevious = useMemo(() => gssWaveRows.map((row) => {
+    const prior = previousGssWaveRows.find((item) => item.label === row.label);
+    const priorScore = prior?.hotel || "";
+    const currentScore = row.hotel || "";
+    const weekVariance = priorScore && currentScore ? rowValue(num(currentScore) - num(priorScore), 1) : "";
+    return { ...row, priorWeek: priorScore, weekVariance };
+  }), [gssWaveRows, previousGssWaveRows]);
   const currentMonthKey = useMemo(() => monthKeyFromDate(topMetrics.weekStart), [topMetrics.weekStart]);
   const weekEnd = useMemo(() => {
     const start = new Date(`${topMetrics.weekStart}T00:00:00`);
@@ -568,6 +576,93 @@ export default function OpsReportPage() {
     lyAdr: existing?.lyAdr || "",
     lyRevenue: existing?.lyRevenue || "",
   });
+  const resetWeeklyWorksheet = (weekStart: string, weekLabel: string) => {
+    setWeek(weekLabel);
+    setTopMetrics({ weekStart, occupancy: "", roomsSold: "", roomRevenue: "", mtdThisYear: "", mtdLastYear: "", ytdThisYear: "", ytdLastYear: "" });
+    setMonthRows([
+      { label: "MONTH TO DATE", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "FUTURE BOOKED", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "MONTHLY TOTAL", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "CURRENT MONTH BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "VARIANCE", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "LY SAME MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+    ]);
+    setNextMonthRows([
+      { label: "FUTURE BOOKED FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "NEXT MONTH BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "VARIANCE", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+    ]);
+    setChargebacks(emptyRows(5, ["no", "reason", "respondDate", "amount", "comment"]));
+    setMaintenance(emptyRows(5, ["no", "rooms", "area", "hours", "comment"]));
+    setOooRooms(emptyRows(5, ["no", "room", "startDate", "returnDate", "comment"]));
+    setAdjustments(emptyRows(5, ["no", "room", "guest", "amount", "comment"]));
+    setAr({ current: "", d30: "", d60: "", d90: "", comments: "" });
+    setLedger({ balance: "", over1000: "", comment: "" });
+    setLabor([
+      { department: "FRONT DESK / NIGHT AUDIT HOURS", scheduledHours: "", actualHours: "", budget: "168", comments: "112 FD + 56 Night Audit" },
+      { department: "HOUSEKEEPING HOURS", scheduledHours: "", actualHours: "", budget: "45", comments: "" },
+      { department: "BREAKFAST / BISTRO HOURS", scheduledHours: "", actualHours: "", budget: "41", comments: "" },
+      { department: "MAINTENANCE HOURS", scheduledHours: "", actualHours: "", budget: "56", comments: "" },
+      { department: "OTHER", scheduledHours: "", actualHours: "", budget: "5", comments: "" },
+    ]);
+    setStaffing({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
+    setCases(emptyRows(5, ["no", "guest", "incidentType", "resolution", "comment"]));
+    setGmOverviewRows(emptyRows(6, ["no", "bullet"]));
+    setGssRows(["ITR", "Elite Appreciation", "Cleanliness", "Staff Service", "Maintenance", "Food & Beverage", "Internet"].map((label) => ({ label, hotel: "", brand: "", variance: "", priorWeek: "", weekVariance: "", sply: "", comments: "" })));
+    setGssWaveRows(["ITR", "Elite Appreciation", "Cleanliness", "Staff Service", "Maintenance", "Food & Beverage", "Internet"].map((label) => ({ label, hotel: "", brand: "", variance: "", priorWeek: "", weekVariance: "", sply: "", comments: "" })));
+    setReputationRows(["GOOGLE", "BOOKING.COM", "EXPEDIA", "TRIPADVISOR", "YELP"].map((label) => ({ label, reviews: "", score: "", outOf: "", goal: "", variance: "", strategy: "" })));
+    setPositiveReviews(emptyRows(5, ["source", "score", "comment"]));
+    setNegativeReviews(emptyRows(5, ["source", "score", "comment"]));
+    setFollowUp(emptyRows(5, ["point", "direction", "owner", "dueDate", "status", "notes"]));
+    setPriorities([
+      { priority: "High", action: "", owner: "", dueDate: "", status: "Not Started", support: "" },
+      { priority: "Medium", action: "", owner: "", dueDate: "", status: "Not Started", support: "" },
+      { priority: "Low", action: "", owner: "", dueDate: "", status: "Not Started", support: "" },
+    ]);
+    setUploadedReports([]);
+  };
+  const hydrateOpsDraft = (loaded: OpsDraftResponse["draft"]) => {
+    if (!loaded?.payload) return false;
+    const payload = loaded.payload;
+    setWeek(loaded.weekLabel || "Week 1");
+    if (payload.setup) setSetup(payload.setup);
+    if (payload.topMetrics) setTopMetrics(payload.topMetrics);
+    if (payload.monthRows) setMonthRows(payload.monthRows);
+    if (payload.nextMonthRows) setNextMonthRows(payload.nextMonthRows);
+    if (payload.chargebacks) setChargebacks(payload.chargebacks);
+    if (payload.maintenance) setMaintenance(payload.maintenance);
+    if (payload.oooRooms) setOooRooms(payload.oooRooms);
+    if (payload.adjustments) setAdjustments(payload.adjustments);
+    if (payload.ar) setAr(payload.ar);
+    if (payload.ledger) setLedger(payload.ledger);
+    if (payload.labor) setLabor(payload.labor);
+    if (payload.monthlyBudgets) setMonthlyBudgets(payload.monthlyBudgets);
+    if (payload.staffing) setStaffing(payload.staffing);
+    if (payload.cases) setCases(payload.cases);
+    if (Array.isArray(payload.gmOverviewRows)) setGmOverviewRows(payload.gmOverviewRows);
+    else if (typeof payload.gmOverview === "string") setGmOverviewRows(payload.gmOverview.split(/\n+/).filter(Boolean).slice(0, 6).map((bullet: string, index: number) => ({ no: String(index + 1), bullet: bullet.replace(/^[-*•\s]+/, "") })));
+    if (payload.gssRows) setGssRows(payload.gssRows);
+    if (payload.gssWaveRows) setGssWaveRows(payload.gssWaveRows);
+    if (payload.reputationRows) setReputationRows(payload.reputationRows);
+    if (payload.positiveReviews) setPositiveReviews(payload.positiveReviews);
+    if (payload.negativeReviews) setNegativeReviews(payload.negativeReviews);
+    if (payload.followUp) setFollowUp(payload.followUp);
+    if (payload.priorities) setPriorities(payload.priorities);
+    setUploadedReports(loaded.uploadedReports || []);
+    return true;
+  };
+  const loadOpsWeek = async (weekStart: string, weekLabel: string) => {
+    const response = await fetch(apiUrl(`/api/opsreport/draft?weekStart=${encodeURIComponent(weekStart)}`), { credentials: "include" });
+    if (!response.ok) throw new Error(await response.text());
+    const data = await response.json() as OpsDraftResponse;
+    if (!hydrateOpsDraft(data.draft)) resetWeeklyWorksheet(weekStart, weekLabel);
+  };
+  const handleWeekLabelChange = (nextWeek: string) => {
+    const currentNumber = Number((week.match(/\d+/) || [])[0] || 0);
+    const nextNumber = Number((nextWeek.match(/\d+/) || [])[0] || 0);
+    const nextStart = currentNumber && nextNumber ? addDaysIso(topMetrics.weekStart, (nextNumber - currentNumber) * 7) : topMetrics.weekStart;
+    loadOpsWeek(nextStart || topMetrics.weekStart, nextWeek).catch((error) => toast({ title: "Unable to load week", description: error.message, variant: "destructive" }));
+  };
   const currentDraftPayload = useMemo(() => ({
     setup,
     topMetrics,
@@ -596,34 +691,7 @@ export default function OpsReportPage() {
   useEffect(() => {
     if (!access.data?.unlocked || draft.isLoading || draftHydrated) return;
     const loaded = draft.data?.draft;
-    if (loaded?.payload) {
-      const payload = loaded.payload;
-      setWeek(loaded.weekLabel || "Week 1");
-      if (payload.setup) setSetup(payload.setup);
-      if (payload.topMetrics) setTopMetrics(payload.topMetrics);
-      if (payload.monthRows) setMonthRows(payload.monthRows);
-      if (payload.nextMonthRows) setNextMonthRows(payload.nextMonthRows);
-      if (payload.chargebacks) setChargebacks(payload.chargebacks);
-      if (payload.maintenance) setMaintenance(payload.maintenance);
-      if (payload.oooRooms) setOooRooms(payload.oooRooms);
-      if (payload.adjustments) setAdjustments(payload.adjustments);
-      if (payload.ar) setAr(payload.ar);
-      if (payload.ledger) setLedger(payload.ledger);
-      if (payload.labor) setLabor(payload.labor);
-      if (payload.monthlyBudgets) setMonthlyBudgets(payload.monthlyBudgets);
-      if (payload.staffing) setStaffing(payload.staffing);
-      if (payload.cases) setCases(payload.cases);
-      if (Array.isArray(payload.gmOverviewRows)) setGmOverviewRows(payload.gmOverviewRows);
-      else if (typeof payload.gmOverview === "string") setGmOverviewRows(payload.gmOverview.split(/\n+/).filter(Boolean).slice(0, 6).map((bullet: string, index: number) => ({ no: String(index + 1), bullet: bullet.replace(/^[-*•\s]+/, "") })));
-      if (payload.gssRows) setGssRows(payload.gssRows);
-      if (payload.gssWaveRows) setGssWaveRows(payload.gssWaveRows);
-      if (payload.reputationRows) setReputationRows(payload.reputationRows);
-      if (payload.positiveReviews) setPositiveReviews(payload.positiveReviews);
-      if (payload.negativeReviews) setNegativeReviews(payload.negativeReviews);
-      if (payload.followUp) setFollowUp(payload.followUp);
-      if (payload.priorities) setPriorities(payload.priorities);
-      setUploadedReports(loaded.uploadedReports || []);
-    }
+    hydrateOpsDraft(loaded || null);
     setDraftHydrated(true);
   }, [access.data?.unlocked, draft.data, draft.isLoading, draftHydrated]);
 
@@ -701,7 +769,7 @@ export default function OpsReportPage() {
             <h1 className="text-3xl font-semibold tracking-tight">Operations Report</h1>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Select value={week} onValueChange={setWeek}>
+            <Select value={week} onValueChange={handleWeekLabelChange}>
               <SelectTrigger className={`w-32 ${C.field}`}><SelectValue /></SelectTrigger>
               <SelectContent>{Array.from({ length: 52 }, (_, index) => <SelectItem key={index + 1} value={`Week ${index + 1}`}>Week {index + 1}</SelectItem>)}</SelectContent>
             </Select>
@@ -799,7 +867,18 @@ export default function OpsReportPage() {
                 <CardDescription className={C.darkMuted}>{setup.propertyName} | {topMetrics.weekStart} to {weekEnd || "week end date"}</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 md:grid-cols-4">
-                <DarkLabeledInput label="Week start date" value={topMetrics.weekStart} onChange={(weekStart) => setTopMetrics({ ...topMetrics, weekStart })} type="date" />
+                <DarkLabeledInput
+                  label="Week start date"
+                  value={topMetrics.weekStart}
+                  onChange={(weekStart) => {
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
+                      setTopMetrics({ ...topMetrics, weekStart });
+                      return;
+                    }
+                    loadOpsWeek(weekStart, week).catch((error) => toast({ title: "Unable to load week", description: error.message, variant: "destructive" }));
+                  }}
+                  type="date"
+                />
                 <DarkLabeledInput label="Week end date" value={weekEnd} onChange={() => undefined} type="date" />
                 <DarkLabeledInput label="Rooms sold" value={topMetrics.roomsSold} onChange={(roomsSold) => setTopMetrics({ ...topMetrics, roomsSold })} type="number" />
                 <DarkLabeledInput label="Occupancy %" value={topMetrics.occupancy} onChange={(occupancy) => setTopMetrics({ ...topMetrics, occupancy })} type="number" />
@@ -909,7 +988,7 @@ export default function OpsReportPage() {
               <EditableTable columns={[{ key: "label", label: "GSS MTD", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior" }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance" }, { key: "sply", label: "SPLY Variance" }, { key: "comments", label: "Comments", wide: true }]} rows={gssRowsWithPrevious} onChange={setGssRows} />
             </Section>
             <Section title="GSS Wave To Date">
-              <EditableTable columns={[{ key: "label", label: "GSS Wave To Date", wide: true }, { key: "hotel", label: "Hotel" }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance" }, { key: "sply", label: "SPLY Variance" }, { key: "comments", label: "Comments", wide: true }]} rows={gssWaveRows} onChange={setGssWaveRows} />
+              <EditableTable columns={[{ key: "label", label: "GSS Wave To Date", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior" }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance" }, { key: "sply", label: "SPLY Variance" }, { key: "comments", label: "Comments", wide: true }]} rows={gssWaveRowsWithPrevious} onChange={setGssWaveRows} />
             </Section>
             <Section title="Online Reputation">
               <EditableTable columns={[{ key: "label", label: "Name", wide: true }, { key: "reviews", label: "Total Reviews" }, { key: "score", label: "Rank / Score" }, { key: "outOf", label: "Out Of" }, { key: "goal", label: "Goal Rank" }, { key: "variance", label: "Variance" }, { key: "strategy", label: "Strategy / Action Plan", wide: true }]} rows={reputationRows} onChange={setReputationRows} />

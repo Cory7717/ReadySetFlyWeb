@@ -305,6 +305,17 @@ function isNonWorkingShiftLabel(value?: string | null) {
   return ["OFF", "PTO", "CALL OFF"].includes(String(value || "").trim().toUpperCase());
 }
 
+function isRoomAttendantWork(assignment: any, shiftType: any) {
+  const text = [
+    assignment?.roleWorked,
+    assignment?.roleNote,
+    shiftType?.label,
+    shiftType?.departmentHint,
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (/(laundry|houseperson|houseman|inspector)/.test(text)) return false;
+  return text.includes("room attendant") || text.includes("housekeeping");
+}
+
 function coverageKeyForShift(assignment: any, shiftType: any) {
   const label = String(assignment?.roleWorked || shiftType?.label || "").toUpperCase();
   if (label.includes("AUDIT") || label.includes("NIGHT")) return "AUDIT";
@@ -978,6 +989,7 @@ const copyPreviousScheduleSchema = z.object({
 });
 
 const aiDraftApplySchema = z.object({
+  mode: z.enum(["frontDesk", "housekeeping"]).optional(),
   assignments: z.array(z.object({
     employeeId: z.string().min(1),
     shiftDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -1780,6 +1792,7 @@ function buildAiScheduleDraft(payload: any, scopeDepartment?: string | string[])
     ? buildFrontDeskAiAssignments(payload, shiftByLabel, approvedByEmployeeDay, assignedByEmployeeDay, warnings)
     : [];
   assignments.push(...frontDeskAiAssignments);
+  if (allowed && allowed.has("Front Desk") && allowed.size === 1) return { assignments, warnings };
   for (const day of payload.days) {
     const forecast: any = forecastByDay.get(day) || {};
     const rooms = Number(forecast.roomsSold || 0);
@@ -1795,9 +1808,9 @@ function buildAiScheduleDraft(payload: any, scopeDepartment?: string | string[])
       add("Front Desk", "FD PM", day, "Desk");
       if (occ >= 65 || arrivals + departures >= 55) add("Front Desk", "MID", day, "Volume support");
     }
-    if (!allowed || allowed.has("Night Audit")) add("Night Audit", "Night Audit", day, "Audit");
-    if (!allowed || allowed.has("Managers")) add("Managers", "MOD", day, "MOD");
-    if (!allowed || allowed.has("Bistro")) {
+    if (!allowed) add("Night Audit", "Night Audit", day, "Audit");
+    if (!allowed) add("Managers", "MOD", day, "MOD");
+    if (!allowed) {
       add("Bistro", "BREAKFAST", day, "Breakfast");
       if (occ >= 65 || arrivals >= 20) add("Bistro", "BISTRO PM", day, "Evening demand");
     }
@@ -1805,12 +1818,12 @@ function buildAiScheduleDraft(payload: any, scopeDepartment?: string | string[])
       for (let index = 0; index < hkAttendants; index += 1) add("Housekeeping", "HOUSEKEEPING", day, "Room Attendant");
       if (departures >= 45) add("Housekeeping", "LAUNDRY", day, "Laundry");
     }
-    if (!allowed || allowed.has("Maintenance")) {
+    if (!allowed) {
       if (![0, 6].includes(new Date(`${day}T00:00:00Z`).getUTCDay()) || occ >= 75) add("Maintenance", "MAINTENANCE", day, "Property coverage");
     }
   }
 
-  const bistroTarget = payload.totals.bistroLabor;
+  const bistroTarget = !allowed ? payload.totals.bistroLabor : null;
   if (bistroTarget) {
     let pass = 0;
     while (proposedBistroHours() < bistroTarget.targetMinHours && pass < payload.days.length * 2) {
@@ -2745,29 +2758,34 @@ export function registerScheduleRoutes(app: Express) {
       if (normalizeDepartment(employee.department) !== "Housekeeping") {
         return res.status(400).json({ error: "Housekeeping boards can only be entered for Housekeeping associates." });
       }
+      const [assignment] = await db
+        .select()
+        .from(scheduleShiftAssignments)
+        .where(and(eq(scheduleShiftAssignments.scheduleId, schedule.id), eq(scheduleShiftAssignments.employeeId, parsed.data.employeeId), eq(scheduleShiftAssignments.shiftDate, parsed.data.boardDate)))
+        .limit(1);
+      const [shiftType] = assignment?.shiftTypeId
+        ? await db.select().from(scheduleShiftTypes).where(eq(scheduleShiftTypes.id, assignment.shiftTypeId)).limit(1)
+        : [];
+      const trackMpor = isRoomAttendantWork(assignment, shiftType);
+      const boardValues = {
+        actualHours: parsed.data.actualHours.toFixed(2),
+        checkoutRooms: trackMpor ? parsed.data.checkoutRooms : 0,
+        stayoverRooms: trackMpor ? parsed.data.stayoverRooms : 0,
+        dndRooms: trackMpor ? parsed.data.dndRooms : 0,
+        oooRooms: trackMpor ? parsed.data.oooRooms : 0,
+        deepCleanRooms: trackMpor ? parsed.data.deepCleanRooms : 0,
+        notes: parsed.data.notes || null,
+        enteredByUserId: req.scheduleUser.id,
+      };
       await db.insert(scheduleHousekeepingBoards).values({
         scheduleId: schedule.id,
         employeeId: parsed.data.employeeId,
         boardDate: parsed.data.boardDate,
-        actualHours: parsed.data.actualHours.toFixed(2),
-        checkoutRooms: parsed.data.checkoutRooms,
-        stayoverRooms: parsed.data.stayoverRooms,
-        dndRooms: parsed.data.dndRooms,
-        oooRooms: parsed.data.oooRooms,
-        deepCleanRooms: parsed.data.deepCleanRooms,
-        notes: parsed.data.notes || null,
-        enteredByUserId: req.scheduleUser.id,
+        ...boardValues,
       } as any).onConflictDoUpdate({
         target: [scheduleHousekeepingBoards.scheduleId, scheduleHousekeepingBoards.employeeId, scheduleHousekeepingBoards.boardDate],
         set: {
-          actualHours: parsed.data.actualHours.toFixed(2),
-          checkoutRooms: parsed.data.checkoutRooms,
-          stayoverRooms: parsed.data.stayoverRooms,
-          dndRooms: parsed.data.dndRooms,
-          oooRooms: parsed.data.oooRooms,
-          deepCleanRooms: parsed.data.deepCleanRooms,
-          notes: parsed.data.notes || null,
-          enteredByUserId: req.scheduleUser.id,
+          ...boardValues,
           updatedAt: new Date(),
         } as any,
       });
@@ -2788,11 +2806,10 @@ export function registerScheduleRoutes(app: Express) {
       let scope: string | string[] = requestedDepartment;
       if (mode === "frontDesk") {
         scope = "Front Desk";
-      } else if (mode === "operations") {
-        const employees = await db.select().from(scheduleEmployees);
-        const editableDepartments = publicScheduleUser(req.scheduleUser).isSuperAdmin ? DEPARTMENTS : managerDepartmentsForUser(req.scheduleUser, employees);
-        scope = editableDepartments.filter((department) => !["Front Desk", "Night Audit"].includes(department));
-        if (!scope.length) return res.status(403).json({ error: "No non-Front Desk departments are available for this AI scheduler." });
+      } else if (mode === "housekeeping") {
+        scope = "Housekeeping";
+      } else {
+        return res.status(400).json({ error: "Choose Front Desk AI or Housekeeping AI. Other departments do not use AI schedule generation." });
       }
       const departmentsToCheck = Array.isArray(scope) ? scope : [scope];
       for (const department of departmentsToCheck) {
@@ -2821,11 +2838,22 @@ export function registerScheduleRoutes(app: Express) {
       if (!parsed.success) return res.status(400).json({ error: "Invalid AI draft", validation: parsed.error.format() });
 
       let applied = 0;
-      const employees = await db.select().from(scheduleEmployees);
+      const [employees, shiftTypes] = await Promise.all([
+        db.select().from(scheduleEmployees),
+        db.select().from(scheduleShiftTypes),
+      ]);
       const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+      const shiftTypeById = new Map(shiftTypes.map((shift) => [shift.id, shift]));
+      const allowedDepartment = parsed.data.mode === "frontDesk"
+        ? "Front Desk"
+        : parsed.data.mode === "housekeeping"
+          ? "Housekeeping"
+          : null;
       for (const assignment of parsed.data.assignments) {
         const employee = employeeById.get(assignment.employeeId);
-        const department = normalizeDepartment(assignment.roleWorked || employee?.department);
+        const shiftType = shiftTypeById.get(assignment.shiftTypeId);
+        const department = normalizeDepartment(assignment.roleWorked || shiftType?.departmentHint || shiftType?.label || employee?.department);
+        if (allowedDepartment && department !== allowedDepartment) continue;
         if (!(await canManageDepartment(req.scheduleUser, department))) continue;
         if (employee && !employeeApprovedForDepartment(employee, department, assignment.roleWorked)) continue;
         const approvedRequest = await getApprovedRequestForEmployeeDate(assignment.employeeId, assignment.shiftDate);

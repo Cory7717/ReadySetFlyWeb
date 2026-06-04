@@ -388,6 +388,8 @@ type AiScheduleDraft = {
   assignments: ShiftAssignment[];
   warnings: string[];
   laborMetrics?: LaborMetrics;
+  department?: string;
+  mode?: "frontDesk" | "housekeeping";
   ai: {
     aiAvailable: boolean;
     summary: string;
@@ -647,9 +649,29 @@ function inferRoomCapacity(day: ForecastDay) {
 function housekeepingBoardTone(board?: HousekeepingBoard) {
   if (!board || !Number(board.actualHours)) return "border-slate-300 bg-slate-50 text-slate-700";
   const mpor = Number(board.mpor || 0);
+  if (!Number(board.roomCredits || 0)) return "border-sky-300 bg-sky-50 text-sky-800";
   if (mpor >= 25 && mpor <= 30) return "border-emerald-300 bg-emerald-50 text-emerald-800";
   if (mpor >= 20 && mpor <= 34) return "border-amber-300 bg-amber-50 text-amber-900";
   return "border-red-300 bg-red-50 text-red-800";
+}
+
+function isRoomAttendantAssignment(assignment?: ShiftAssignment, shiftType?: ShiftType) {
+  if (!assignment && !shiftType) return false;
+  const text = [
+    assignment?.roleWorked,
+    assignment?.roleNote,
+    shiftType?.label,
+    shiftType?.departmentHint,
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (/(laundry|houseperson|houseman|inspector)/.test(text)) return false;
+  return text.includes("room attendant") || text.includes("housekeeping");
+}
+
+function weeklyRoomAttendantMpor(employeeId: string, boards: HousekeepingBoard[]) {
+  const employeeBoards = boards.filter((board) => board.employeeId === employeeId && Number(board.roomCredits || 0) > 0);
+  const actualHours = employeeBoards.reduce((sum, board) => sum + Number(board.actualHours || 0), 0);
+  const roomCredits = employeeBoards.reduce((sum, board) => sum + Number(board.roomCredits || 0), 0);
+  return roomCredits > 0 ? (actualHours * 60) / roomCredits : null;
 }
 
 function ScheduleAuthGate({ onDone }: { onDone: () => void }) {
@@ -1265,6 +1287,7 @@ function HousekeepingBoardDialog({
   employee,
   date,
   board,
+  trackMpor,
   onSave,
 }: {
   open: boolean;
@@ -1272,6 +1295,7 @@ function HousekeepingBoardDialog({
   employee?: ScheduleEmployee;
   date: string;
   board?: HousekeepingBoard;
+  trackMpor: boolean;
   onSave: (board: any) => void;
 }) {
   const [form, setForm] = useState({
@@ -1307,34 +1331,50 @@ function HousekeepingBoardDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl bg-[#fffaf2] text-[#201814]">
         <DialogHeader>
-          <DialogTitle>Room attendant board - {employee?.displayName || "Associate"}</DialogTitle>
-          <DialogDescription className={C.muted}>{formatDate(date)}. DND rooms are deducted from stayover service count.</DialogDescription>
+          <DialogTitle>{trackMpor ? "Room attendant board" : "Housekeeping actual hours"} - {employee?.displayName || "Associate"}</DialogTitle>
+          <DialogDescription className={C.muted}>
+            {trackMpor
+              ? `${formatDate(date)}. DND rooms are deducted from stayover service count.`
+              : `${formatDate(date)}. Enter actual time worked for Laundry, Houseperson, Inspector, or other non-board HK work.`}
+          </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
           <div><Label>Actual hours worked</Label><Input className={C.field} type="number" step="0.25" value={form.actualHours} onChange={(event) => setForm({ ...form, actualHours: event.target.value })} /></div>
-          <div><Label>Checkout rooms</Label><Input className={C.field} type="number" value={form.checkoutRooms} onChange={(event) => setForm({ ...form, checkoutRooms: event.target.value })} /></div>
-          <div><Label>Stayover rooms</Label><Input className={C.field} type="number" value={form.stayoverRooms} onChange={(event) => setForm({ ...form, stayoverRooms: event.target.value })} /></div>
-          <div><Label>DND / refused service</Label><Input className={C.field} type="number" value={form.dndRooms} onChange={(event) => setForm({ ...form, dndRooms: event.target.value })} /></div>
-          <div><Label>Out of order rooms</Label><Input className={C.field} type="number" value={form.oooRooms} onChange={(event) => setForm({ ...form, oooRooms: event.target.value })} /></div>
-          <div><Label>Deep cleans</Label><Input className={C.field} type="number" value={form.deepCleanRooms} onChange={(event) => setForm({ ...form, deepCleanRooms: event.target.value })} /></div>
+          {trackMpor && (
+            <>
+              <div><Label>Checkout rooms</Label><Input className={C.field} type="number" value={form.checkoutRooms} onChange={(event) => setForm({ ...form, checkoutRooms: event.target.value })} /></div>
+              <div><Label>Stayover rooms</Label><Input className={C.field} type="number" value={form.stayoverRooms} onChange={(event) => setForm({ ...form, stayoverRooms: event.target.value })} /></div>
+              <div><Label>DND / refused service</Label><Input className={C.field} type="number" value={form.dndRooms} onChange={(event) => setForm({ ...form, dndRooms: event.target.value })} /></div>
+              <div><Label>Out of order rooms</Label><Input className={C.field} type="number" value={form.oooRooms} onChange={(event) => setForm({ ...form, oooRooms: event.target.value })} /></div>
+              <div><Label>Deep cleans</Label><Input className={C.field} type="number" value={form.deepCleanRooms} onChange={(event) => setForm({ ...form, deepCleanRooms: event.target.value })} /></div>
+            </>
+          )}
           <div className="sm:col-span-2"><Label>Notes</Label><Textarea className={C.field} rows={2} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></div>
         </div>
-        <div className="grid gap-3 rounded-xl border border-[#e0d3c1] bg-white p-3 sm:grid-cols-3">
-          <div><div className="text-xs uppercase text-[#6d5d50]">Room credits</div><div className="text-xl font-semibold">{roomCredits.toFixed(1)}</div></div>
-          <div><div className="text-xs uppercase text-[#6d5d50]">Standard minutes</div><div className="text-xl font-semibold">{standardMinutes}</div></div>
-          <div><div className="text-xs uppercase text-[#6d5d50]">MPOR</div><div className={`text-xl font-semibold ${mpor >= 25 && mpor <= 30 ? "text-emerald-800" : "text-amber-800"}`}>{mpor.toFixed(1)}</div></div>
-        </div>
+        {trackMpor ? (
+          <div className="grid gap-3 rounded-xl border border-[#e0d3c1] bg-white p-3 sm:grid-cols-3">
+            <div><div className="text-xs uppercase text-[#6d5d50]">Room credits</div><div className="text-xl font-semibold">{roomCredits.toFixed(1)}</div></div>
+            <div><div className="text-xs uppercase text-[#6d5d50]">Standard minutes</div><div className="text-xl font-semibold">{standardMinutes}</div></div>
+            <div><div className="text-xs uppercase text-[#6d5d50]">MPOR</div><div className={`text-xl font-semibold ${mpor >= 25 && mpor <= 30 ? "text-emerald-800" : "text-amber-800"}`}>{mpor.toFixed(1)}</div></div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-[#e0d3c1] bg-white p-3">
+            <div className="text-xs uppercase text-[#6d5d50]">Actual hours</div>
+            <div className="text-xl font-semibold">{actualHours.toFixed(2)}</div>
+            <div className="mt-1 text-sm text-[#5f5247]">MPOR is only calculated for Room Attendant boards.</div>
+          </div>
+        )}
         <div className="flex justify-end gap-2">
           <Button variant="outline" className={C.outline} onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button className={C.green} disabled={!employee} onClick={() => onSave({
             employeeId: employee?.id,
             boardDate: date,
             actualHours,
-            checkoutRooms,
-            stayoverRooms,
-            dndRooms,
-            oooRooms: Number(form.oooRooms || 0),
-            deepCleanRooms,
+            checkoutRooms: trackMpor ? checkoutRooms : 0,
+            stayoverRooms: trackMpor ? stayoverRooms : 0,
+            dndRooms: trackMpor ? dndRooms : 0,
+            oooRooms: trackMpor ? Number(form.oooRooms || 0) : 0,
+            deepCleanRooms: trackMpor ? deepCleanRooms : 0,
             notes: form.notes || null,
           })}>Save board</Button>
         </div>
@@ -1671,7 +1711,7 @@ function HousekeepingSchedulingGuide({ spanish }: { spanish: boolean }) {
   );
 }
 
-function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onCopyPreviousEmployee, onHousekeepingBoard, spanish }: { payload: SchedulePayload; editable: boolean; currentUser?: ScheduleUser | null; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, department: string, assignment?: ShiftAssignment) => void; onCopyShift: (assignment: ShiftAssignment, employee: ScheduleEmployee, date: string, department: string) => void; onCopyPreviousEmployee: (employee: ScheduleEmployee, department: string) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board?: HousekeepingBoard) => void }) {
+function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onCopyPreviousEmployee, onHousekeepingBoard, spanish }: { payload: SchedulePayload; editable: boolean; currentUser?: ScheduleUser | null; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, department: string, assignment?: ShiftAssignment) => void; onCopyShift: (assignment: ShiftAssignment, employee: ScheduleEmployee, date: string, department: string) => void; onCopyPreviousEmployee: (employee: ScheduleEmployee, department: string) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board: HousekeepingBoard | undefined, trackMpor: boolean) => void }) {
   const assignments = useMemo(() => new Map(payload.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment])), [payload.assignments]);
   const housekeepingBoards = useMemo(() => new Map((payload.housekeepingBoards || []).map((board) => [`${board.employeeId}:${board.boardDate}`, board])), [payload.housekeepingBoards]);
   const shiftTypes = useMemo(() => new Map(payload.shiftTypes.map((shift) => [shift.id, shift])), [payload.shiftTypes]);
@@ -1681,6 +1721,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
   const editableDepartments = payload.currentUserPermissions?.editableDepartments || [];
   const currentEmployee = findEmployeeForUser(payload, currentUser);
   const canEditHousekeepingBoards = Boolean(currentUser?.isSuperAdmin || currentUser?.isAdmin || editableDepartments.includes("Housekeeping"));
+  const weeklyMporByEmployee = useMemo(() => new Map(payload.employees.map((employee) => [employee.id, weeklyRoomAttendantMpor(employee.id, payload.housekeepingBoards || [])])), [payload.employees, payload.housekeepingBoards]);
   return (
     <Card className={C.shell} data-tour="schedule-grid">
       <CardHeader>
@@ -1723,6 +1764,9 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                           <div>
                             {employee.displayName}
                             <div className="text-xs text-[#5f5247]">{employeeScheduleSubtitle(employee)}</div>
+                            {department === "Housekeeping" && weeklyMporByEmployee.get(employee.id) != null && (
+                              <div className="mt-1 text-xs font-semibold text-[#28624f]">Weekly MPOR {weeklyMporByEmployee.get(employee.id)!.toFixed(1)}</div>
+                            )}
                           </div>
                           {editable && editableDepartments.includes(department) && (
                             <Button type="button" size="sm" variant="outline" className={`h-7 px-2 text-[11px] ${C.outline}`} onClick={() => onCopyPreviousEmployee(employee, department)}>
@@ -1741,6 +1785,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                         const canEditBoard = isHousekeeping && canEditHousekeepingBoards;
                         const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
                         const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;
+                        const trackMpor = isRoomAttendantAssignment(assignment, shift);
                         const handleShiftDragStart = (event: DragEvent) => {
                           if (!assignment || !canEditCell) return;
                           const payload = JSON.stringify(assignment);
@@ -1776,9 +1821,11 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                                   type="button"
                                   disabled={!canEditBoard}
                                   className={`w-full rounded-md border px-2 py-1 text-center text-[11px] font-semibold disabled:cursor-default ${housekeepingBoardTone(hkBoard)}`}
-                                  onClick={() => onHousekeepingBoard(employee, day, hkBoard)}
+                                  onClick={() => onHousekeepingBoard(employee, day, hkBoard, trackMpor)}
                                 >
-                                  {hkBoard ? `${Number(hkBoard.mpor || 0).toFixed(1)} MPOR` : "Board"}
+                                  {trackMpor
+                                    ? hkBoard ? `${Number(hkBoard.mpor || 0).toFixed(1)} MPOR` : "Board"
+                                    : hkBoard ? `${Number(hkBoard.actualHours || 0).toFixed(2)} hrs` : "Hours"}
                                 </button>
                               )}
                             </div>
@@ -1818,6 +1865,9 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                       <div className="mb-2 flex items-start justify-between gap-2">
                         <div>
                           <div className="font-semibold">{employee.displayName}</div>
+                          {department === "Housekeeping" && weeklyMporByEmployee.get(employee.id) != null && (
+                            <div className="mt-1 text-xs font-semibold text-[#28624f]">Weekly MPOR {weeklyMporByEmployee.get(employee.id)!.toFixed(1)}</div>
+                          )}
                           {editable && editableDepartments.includes(department) && (
                             <Button type="button" size="sm" variant="outline" className={`mt-1 h-7 px-2 text-xs ${C.outline}`} onClick={() => onCopyPreviousEmployee(employee, department)}>
                               Copy prior week
@@ -1837,6 +1887,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                           const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;
                           const canEditCell = editable && (editableDepartments.includes(department) || currentEmployee?.id === employee.id);
                           const canEditBoard = isHousekeeping && canEditHousekeepingBoards;
+                          const trackMpor = isRoomAttendantAssignment(assignment, shift);
                           return (
                             <div key={day} className="rounded-md border border-[#e0d3c1] bg-white p-2">
                               <button disabled={!canEditCell || Boolean(approvedRequest)} className="w-full text-left text-sm disabled:cursor-default" style={{ color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }} onClick={() => onEdit(employee, day, department, assignment)}>
@@ -1847,9 +1898,11 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                                   type="button"
                                   disabled={!canEditBoard}
                                   className={`mt-2 w-full rounded-md border px-2 py-1 text-xs font-semibold disabled:cursor-default ${housekeepingBoardTone(hkBoard)}`}
-                                  onClick={() => onHousekeepingBoard(employee, day, hkBoard)}
+                                  onClick={() => onHousekeepingBoard(employee, day, hkBoard, trackMpor)}
                                 >
-                                  {hkBoard ? `${Number(hkBoard.mpor || 0).toFixed(1)} MPOR` : "Enter board"}
+                                  {trackMpor
+                                    ? hkBoard ? `${Number(hkBoard.mpor || 0).toFixed(1)} MPOR` : "Enter board"
+                                    : hkBoard ? `${Number(hkBoard.actualHours || 0).toFixed(2)} hrs` : "Enter hours"}
                                 </button>
                               )}
                             </div>
@@ -2185,7 +2238,7 @@ export default function SchedulePage() {
   const [selectedWeekId, setSelectedWeekId] = useState<string>("");
   const [weekStartDate, setWeekStartDate] = useState(saturdayFor());
   const [selectedShift, setSelectedShift] = useState<{ employee: ScheduleEmployee; date: string; department: string; assignment?: ShiftAssignment } | null>(null);
-  const [selectedHousekeepingBoard, setSelectedHousekeepingBoard] = useState<{ employee: ScheduleEmployee; date: string; board?: HousekeepingBoard } | null>(null);
+  const [selectedHousekeepingBoard, setSelectedHousekeepingBoard] = useState<{ employee: ScheduleEmployee; date: string; board?: HousekeepingBoard; trackMpor: boolean } | null>(null);
   const [aiDraft, setAiDraft] = useState<AiScheduleDraft | null>(null);
   const [hoursComparison, setHoursComparison] = useState<HoursComparison | null>(null);
   const [teamMessageOpen, setTeamMessageOpen] = useState(false);
@@ -2345,12 +2398,8 @@ export default function SchedulePage() {
     onError: (error: Error) => toast({ title: "Hours import failed", description: error.message, variant: "destructive" }),
   });
   const generateAiSchedule = useMutation({
-    mutationFn: async ({ mode, department }: { mode?: "frontDesk" | "operations"; department?: string }) => {
-      const fallbackDepartment = payload?.currentUserPermissions?.editableDepartments?.find((item) => item !== "Managers" && item !== "Front Desk" && item !== "Night Audit")
-        || payload?.currentUserPermissions?.editableDepartments?.find((item) => item !== "Managers")
-        || payload?.currentUserPermissions?.editableDepartments?.[0]
-        || "Front Desk";
-      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/generate`, { mode, department: department || fallbackDepartment });
+    mutationFn: async ({ mode }: { mode: "frontDesk" | "housekeeping" }) => {
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/generate`, { mode });
       return response.json() as Promise<AiScheduleDraft>;
     },
     onSuccess: (data) => {
@@ -2362,7 +2411,7 @@ export default function SchedulePage() {
   const applyAiSchedule = useMutation({
     mutationFn: async () => {
       if (!aiDraft) throw new Error("Generate an AI draft first.");
-      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/apply`, { assignments: aiDraft.assignments });
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/apply`, { mode: aiDraft.mode, assignments: aiDraft.assignments });
       return response.json();
     },
     onSuccess: () => {
@@ -2504,7 +2553,7 @@ export default function SchedulePage() {
   if (!shareToken && !auth.data?.user) return <ScheduleAuthGate onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/schedule/auth/me"] })} />;
   const editableDepartmentsForAi = payload?.currentUserPermissions?.editableDepartments || [];
   const canGenerateFrontDeskAi = editable && editableDepartmentsForAi.includes("Front Desk");
-  const canGenerateOperationsAi = editable && editableDepartmentsForAi.some((department) => !["Managers", "Front Desk", "Night Audit"].includes(department));
+  const canGenerateHousekeepingAi = editable && editableDepartmentsForAi.includes("Housekeeping");
 
   return (
     <div className={`min-h-screen ${C.page}`}>
@@ -2622,10 +2671,10 @@ export default function SchedulePage() {
                         {generateAiSchedule.isPending ? "Generating..." : "FD Rotation AI"}
                       </Button>
                     )}
-                    {canGenerateOperationsAi && (
-                      <Button variant="outline" className={C.outline} disabled={generateAiSchedule.isPending} onClick={() => generateAiSchedule.mutate({ mode: "operations" })}>
+                    {canGenerateHousekeepingAi && (
+                      <Button variant="outline" className={C.outline} disabled={generateAiSchedule.isPending} onClick={() => generateAiSchedule.mutate({ mode: "housekeeping" })}>
                         <Sparkles className="mr-2 h-4 w-4" />
-                        {generateAiSchedule.isPending ? "Generating..." : "Operations AI"}
+                        {generateAiSchedule.isPending ? "Generating..." : "HK Coverage AI"}
                       </Button>
                     )}
                     <Badge variant="outline" className={statusBadge(payload.schedule.status)}>{payload.schedule.status}</Badge>
@@ -2801,7 +2850,7 @@ export default function SchedulePage() {
                   copyPreviousShifts.mutate({ scope: "employee", employeeId: employee.id, department });
                 }
               }}
-              onHousekeepingBoard={(employee, date, board) => setSelectedHousekeepingBoard({ employee, date, board })}
+              onHousekeepingBoard={(employee, date, board, trackMpor) => setSelectedHousekeepingBoard({ employee, date, board, trackMpor })}
             />
             {user?.isAdmin && !shareToken && (
               <EmployeeManager
@@ -2838,6 +2887,7 @@ export default function SchedulePage() {
           employee={selectedHousekeepingBoard.employee}
           date={selectedHousekeepingBoard.date}
           board={selectedHousekeepingBoard.board}
+          trackMpor={selectedHousekeepingBoard.trackMpor}
           onSave={(body) => saveHousekeepingBoard.mutate(body)}
         />
       )}

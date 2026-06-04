@@ -14,6 +14,7 @@ import { createSoftAuthRateLimiter } from "../middleware/rateLimit";
 import { getUncachableResendClient } from "../resendClient";
 import {
   scheduleAuditLog,
+  scheduleActualHours,
   scheduleEmployees,
   scheduleForecastDays,
   scheduleHousekeepingBoards,
@@ -826,6 +827,13 @@ const housekeepingBoardSchema = z.object({
   notes: z.string().trim().max(2000).optional().nullable(),
 });
 
+const actualHoursSchema = z.object({
+  employeeId: z.string().trim().min(1),
+  workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  actualHours: z.coerce.number().min(0).max(24),
+  notes: z.string().trim().max(2000).optional().nullable(),
+});
+
 const timeInputSchema = z.preprocess((value) => {
   if (typeof value !== "string") return value;
   const trimmed = value.trim();
@@ -1056,12 +1064,13 @@ async function buildSchedulePayload(scheduleId: string) {
   const schedule = await getScheduleOr404(scheduleId);
   if (!schedule) return null;
   const days = weekDays(schedule.weekStartDate);
-  const [employees, shiftTypes, forecast, assignments, housekeepingBoards, approvedRequestRows] = await Promise.all([
+  const [employees, shiftTypes, forecast, assignments, housekeepingBoards, actualHours, approvedRequestRows] = await Promise.all([
     db.select().from(scheduleEmployees).orderBy(asc(scheduleEmployees.department), asc(scheduleEmployees.sortOrder), asc(scheduleEmployees.displayName)),
     db.select().from(scheduleShiftTypes).orderBy(asc(scheduleShiftTypes.sortOrder), asc(scheduleShiftTypes.label)),
     db.select().from(scheduleForecastDays).where(eq(scheduleForecastDays.scheduleId, scheduleId)).orderBy(asc(scheduleForecastDays.forecastDate)),
     db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, scheduleId)).orderBy(asc(scheduleShiftAssignments.shiftDate)),
     db.select().from(scheduleHousekeepingBoards).where(eq(scheduleHousekeepingBoards.scheduleId, scheduleId)).orderBy(asc(scheduleHousekeepingBoards.boardDate)),
+    db.select().from(scheduleActualHours).where(eq(scheduleActualHours.scheduleId, scheduleId)).orderBy(asc(scheduleActualHours.workDate)),
     db
       .select({ request: scheduleRequests, user: tipsUsers })
       .from(scheduleRequests)
@@ -1087,7 +1096,7 @@ async function buildSchedulePayload(scheduleId: string) {
     })
     .filter(Boolean);
   const totals = calculateTotals(days, employees, shiftTypes, forecast, assignments);
-  return { schedule, days, departments: DEPARTMENTS, requiredDepartments: REQUIRED_DEPARTMENTS, employees, shiftTypes, forecast, assignments, housekeepingBoards: housekeepingBoards.map(summarizeHousekeepingBoard), approvedRequests, totals, departmentStatus: schedule.departmentStatusJson || {} };
+  return { schedule, days, departments: DEPARTMENTS, requiredDepartments: REQUIRED_DEPARTMENTS, employees, shiftTypes, forecast, assignments, actualHours, housekeepingBoards: housekeepingBoards.map(summarizeHousekeepingBoard), approvedRequests, totals, departmentStatus: schedule.departmentStatusJson || {} };
 }
 
 function summarizeHousekeepingBoard(board: any) {
@@ -1495,6 +1504,27 @@ function parseHoursDetailWorkbook(buffer: Buffer) {
 
 function addHours(target: Record<string, number>, key: string, hours: number) {
   target[key] = Number(((target[key] || 0) + hours).toFixed(2));
+}
+
+async function upsertScheduleActualHours(scheduleId: string, employeeId: string, workDate: string, actualHours: number, notes: string | null, source: string, enteredByUserId?: string | null) {
+  await db.insert(scheduleActualHours).values({
+    scheduleId,
+    employeeId,
+    workDate,
+    actualHours: actualHours.toFixed(2),
+    notes,
+    source,
+    enteredByUserId: enteredByUserId || null,
+  } as any).onConflictDoUpdate({
+    target: [scheduleActualHours.scheduleId, scheduleActualHours.employeeId, scheduleActualHours.workDate],
+    set: {
+      actualHours: actualHours.toFixed(2),
+      notes,
+      source,
+      enteredByUserId: enteredByUserId || null,
+      updatedAt: new Date(),
+    } as any,
+  });
 }
 
 function compareScheduledToActualHours(schedule: any, employees: any[], shiftTypes: any[], assignments: any[], actualRows: ReturnType<typeof parseHoursDetailWorkbook>) {
@@ -2564,6 +2594,29 @@ export function registerScheduleRoutes(app: Express) {
         db.select().from(scheduleShiftTypes),
         db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, schedule.id)),
       ]);
+      const actualByEmployeeDay = new Map<string, { employee: any; date: string; hours: number; notes: string[] }>();
+      for (const actual of actualRows) {
+        const employee = employees.find((item) => payrollNameMatches(item, actual.payrollName));
+        if (!employee) continue;
+        if (!weekDays(schedule.weekStartDate).includes(actual.date)) continue;
+        const key = `${employee.id}:${actual.date}`;
+        const row = actualByEmployeeDay.get(key) || { employee, date: actual.date, hours: 0, notes: [] };
+        row.hours = Number((row.hours + actual.hours).toFixed(2));
+        const note = actual.notes || [actual.department, actual.position].filter(Boolean).join(" / ");
+        if (note) row.notes.push(note);
+        actualByEmployeeDay.set(key, row);
+      }
+      for (const actual of Array.from(actualByEmployeeDay.values())) {
+        await upsertScheduleActualHours(
+          schedule.id,
+          actual.employee.id,
+          actual.date,
+          actual.hours,
+          Array.from(new Set(actual.notes)).join("; ") || null,
+          "hours_detail_import",
+          req.scheduleUser.id,
+        );
+      }
       const rows = compareScheduledToActualHours(schedule, employees, shiftTypes, assignments, actualRows);
       await audit(schedule.id, req.scheduleUser.id, "schedule_hours_detail_imported", {
         fileName: req.file.originalname,
@@ -2789,7 +2842,54 @@ export function registerScheduleRoutes(app: Express) {
           updatedAt: new Date(),
         } as any,
       });
+      await upsertScheduleActualHours(
+        schedule.id,
+        parsed.data.employeeId,
+        parsed.data.boardDate,
+        parsed.data.actualHours,
+        parsed.data.notes || null,
+        trackMpor ? "housekeeping_board" : "housekeeping_hours",
+        req.scheduleUser.id,
+      );
       await audit(schedule.id, req.scheduleUser.id, "housekeeping_board_updated", { employeeId: parsed.data.employeeId, boardDate: parsed.data.boardDate });
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.put("/weeks/:id/actual-hours", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      const parsed = actualHoursSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid actual hours", validation: parsed.error.format() });
+      const days = weekDays(schedule.weekStartDate);
+      if (!days.includes(parsed.data.workDate)) return res.status(400).json({ error: "Actual hours date is outside this schedule week." });
+      const [employee] = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.id, parsed.data.employeeId)).limit(1);
+      if (!employee) return res.status(404).json({ error: "Schedule employee not found" });
+      const [assignment] = await db
+        .select()
+        .from(scheduleShiftAssignments)
+        .where(and(eq(scheduleShiftAssignments.scheduleId, schedule.id), eq(scheduleShiftAssignments.employeeId, parsed.data.employeeId), eq(scheduleShiftAssignments.shiftDate, parsed.data.workDate)))
+        .limit(1);
+      const [shiftType] = assignment?.shiftTypeId
+        ? await db.select().from(scheduleShiftTypes).where(eq(scheduleShiftTypes.id, assignment.shiftTypeId)).limit(1)
+        : [];
+      const department = assignmentRenderDepartment(assignment, employee, shiftType) || normalizeDepartment(employee.department);
+      if (!(await canManageDepartment(req.scheduleUser, department))) {
+        return res.status(403).json({ error: "You can only enter actual hours for your assigned department." });
+      }
+      await upsertScheduleActualHours(
+        schedule.id,
+        parsed.data.employeeId,
+        parsed.data.workDate,
+        parsed.data.actualHours,
+        parsed.data.notes || null,
+        "manual",
+        req.scheduleUser.id,
+      );
+      await audit(schedule.id, req.scheduleUser.id, "schedule_actual_hours_updated", { employeeId: parsed.data.employeeId, workDate: parsed.data.workDate });
       res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {
       next(error);

@@ -623,6 +623,23 @@ export const scheduleHousekeepingBoards = pgTable("schedule_housekeeping_boards"
   index("idx_schedule_hk_board_employee").on(table.employeeId),
 ]);
 
+export const scheduleActualHours = pgTable("schedule_actual_hours", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scheduleId: varchar("schedule_id").notNull().references(() => weeklySchedules.id, { onDelete: "cascade" }),
+  employeeId: varchar("employee_id").notNull().references(() => scheduleEmployees.id, { onDelete: "cascade" }),
+  workDate: date("work_date").notNull(),
+  actualHours: numeric("actual_hours", { precision: 5, scale: 2 }).notNull().default("0"),
+  notes: text("notes"),
+  source: text("source").notNull().default("manual"),
+  enteredByUserId: varchar("entered_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_schedule_actual_hours_unique").on(table.scheduleId, table.employeeId, table.workDate),
+  index("idx_schedule_actual_hours_schedule_date").on(table.scheduleId, table.workDate),
+  index("idx_schedule_actual_hours_employee").on(table.employeeId),
+]);
+
 export const scheduleAuditLog = pgTable("schedule_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   scheduleId: varchar("schedule_id").references(() => weeklySchedules.id, { onDelete: "cascade" }),

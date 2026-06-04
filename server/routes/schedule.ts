@@ -616,6 +616,63 @@ async function sendPublishedScheduleEmails(schedule: any, url: string, recipient
   return { sent, failed };
 }
 
+function escapeHtml(value: string) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function sendScheduleTeamMessage(schedule: any, url: string, recipients: string[], subjectInput: string, messageInput: string, sender: any) {
+  if (!recipients.length) return { sent: 0, failed: 0 };
+  const { client, fromEmail } = await getUncachableResendClient();
+  const subject = subjectInput || `${schedule.propertyName || PROPERTY_NAME} Schedule Message`;
+  const messageHtml = escapeHtml(messageInput).replace(/\n/g, "<br />");
+  const senderName = escapeHtml(scheduleDisplayName(sender));
+  const html = `
+    <div style="margin:0;padding:0;background:#f6efe6;font-family:Arial,Helvetica,sans-serif;color:#221814;">
+      <div style="max-width:640px;margin:0 auto;padding:28px 18px;">
+        <div style="background:#2a211c;color:#fff;border-radius:14px 14px 0 0;padding:24px 26px;">
+          <div style="font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#d5bd91;">Courtyard Austin Lakeline</div>
+          <h1 style="margin:8px 0 0;font-size:25px;line-height:1.2;">Schedule Team Message</h1>
+          <p style="margin:10px 0 0;color:#eadfce;">${escapeHtml(schedule.weekStartDate)} to ${escapeHtml(schedule.weekEndDate)}</p>
+        </div>
+        <div style="background:#fffaf2;border:1px solid #dbc9b4;border-top:0;border-radius:0 0 14px 14px;padding:24px 26px;">
+          <div style="font-size:15px;line-height:1.55;margin-bottom:20px;">${messageHtml}</div>
+          <a href="${escapeHtml(url)}" style="display:inline-block;background:#28624f;color:#fff;text-decoration:none;border-radius:10px;padding:12px 18px;font-weight:700;">View Schedule</a>
+          <p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#6b5b4d;">Sent by ${senderName}. Contact your supervisor if you have a schedule question.</p>
+        </div>
+      </div>
+    </div>
+  `;
+  const text = [
+    `${schedule.propertyName || PROPERTY_NAME} schedule message`,
+    `Week: ${schedule.weekStartDate} to ${schedule.weekEndDate}`,
+    "",
+    messageInput,
+    "",
+    "View the schedule:",
+    url,
+    "",
+    `Sent by ${scheduleDisplayName(sender)}.`,
+  ].join("\n");
+
+  let sent = 0;
+  let failed = 0;
+  for (const email of recipients) {
+    try {
+      await client.emails.send({ from: fromEmail, to: email, subject, html, text });
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      console.error("schedule_team_message_send_failed", { scheduleId: schedule.id, email, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { sent, failed };
+}
+
 const requireScheduleAuth: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getUserBySession(req);
@@ -946,6 +1003,11 @@ const scheduleRequestSchema = z.object({
 
 const scheduleRequestStatusSchema = z.object({
   status: z.enum(["submitted", "approved", "denied", "cancelled"]),
+});
+
+const scheduleTeamMessageSchema = z.object({
+  subject: z.string().trim().min(3).max(160),
+  message: z.string().trim().min(10).max(5000),
 });
 
 async function seedShiftTypes() {
@@ -2952,6 +3014,29 @@ export function registerScheduleRoutes(app: Express) {
         recipientCount: recipients.length,
         sentCount: result.sent,
         failedCount: result.failed,
+      });
+      res.json({ url, recipientCount: recipients.length, sentCount: result.sent, failedCount: result.failed });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/message-team", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      if (!publicScheduleUser(req.scheduleUser).isSuperAdmin) return res.status(403).json({ error: "Only GM/admin can message the full team." });
+      const parsed = scheduleTeamMessageSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid team message", validation: parsed.error.format() });
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+
+      const { url } = await getOrCreateScheduleShareLink(schedule, req.scheduleUser.id);
+      const recipients = await getActiveScheduleRecipientEmails();
+      const result = await sendScheduleTeamMessage(schedule, url, recipients, parsed.data.subject, parsed.data.message, req.scheduleUser);
+      await audit(schedule.id, req.scheduleUser.id, "schedule_team_message_sent", {
+        recipientCount: recipients.length,
+        sentCount: result.sent,
+        failedCount: result.failed,
+        subject: parsed.data.subject,
       });
       res.json({ url, recipientCount: recipients.length, sentCount: result.sent, failedCount: result.failed });
     } catch (error) {

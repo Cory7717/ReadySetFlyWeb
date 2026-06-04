@@ -2188,6 +2188,11 @@ export default function SchedulePage() {
   const [selectedHousekeepingBoard, setSelectedHousekeepingBoard] = useState<{ employee: ScheduleEmployee; date: string; board?: HousekeepingBoard } | null>(null);
   const [aiDraft, setAiDraft] = useState<AiScheduleDraft | null>(null);
   const [hoursComparison, setHoursComparison] = useState<HoursComparison | null>(null);
+  const [teamMessageOpen, setTeamMessageOpen] = useState(false);
+  const [teamMessage, setTeamMessage] = useState({
+    subject: "Current Week Schedule Catch-Up",
+    message: "Team,\n\nI am publishing the current week's schedule in the system to catch it up. No schedule changes were made. Please continue following the current schedule as already communicated.\n\nThank you.",
+  });
   const [spanish, setSpanish] = useState(false);
   const dailyHporToastKey = useRef("");
 
@@ -2446,6 +2451,20 @@ export default function SchedulePage() {
     },
     onError: (error: Error) => toast({ title: "Email failed", description: error.message, variant: "destructive" }),
   });
+  const messageTeam = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/message-team`, teamMessage);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setTeamMessageOpen(false);
+      toast({
+        title: "Team message sent",
+        description: `${data.sentCount || 0} of ${data.recipientCount || 0} employee email(s) sent.`,
+      });
+    },
+    onError: (error: Error) => toast({ title: "Team message failed", description: error.message, variant: "destructive" }),
+  });
   const submitRequest = useMutation({
     mutationFn: async (request: any) => {
       const response = await apiRequest("POST", "/api/schedule/requests", request);
@@ -2539,6 +2558,7 @@ export default function SchedulePage() {
                   {payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "archive" })}><Archive className="mr-2 h-4 w-4" />{t("Archive")}</Button>}
                   {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => shareLink.mutate()}><Share2 className="mr-2 h-4 w-4" />{t("Copy share link")}</Button>}
                   {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} disabled={emailSchedule.isPending} onClick={() => emailSchedule.mutate()}><Mail className="mr-2 h-4 w-4" />{emailSchedule.isPending ? t("Emailing...") : t("Email schedule")}</Button>}
+                  {payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => setTeamMessageOpen(true)}><Users className="mr-2 h-4 w-4" />Team message</Button>}
                   {editable && user?.isAdmin && (
                     <Button
                       variant="outline"
@@ -2821,6 +2841,46 @@ export default function SchedulePage() {
           onSave={(body) => saveHousekeepingBoard.mutate(body)}
         />
       )}
+      <Dialog open={teamMessageOpen} onOpenChange={setTeamMessageOpen}>
+        <DialogContent className="max-w-2xl bg-[#fffaf2] text-[#201814]">
+          <DialogHeader>
+            <DialogTitle>Message entire team</DialogTitle>
+            <DialogDescription className={C.muted}>
+              Send a one-time email to all active associates with schedule access. The message includes a link to this schedule.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Subject</Label>
+              <Input
+                className={C.field}
+                value={teamMessage.subject}
+                onChange={(event) => setTeamMessage({ ...teamMessage, subject: event.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Message</Label>
+              <Textarea
+                className={C.field}
+                rows={8}
+                value={teamMessage.message}
+                onChange={(event) => setTeamMessage({ ...teamMessage, message: event.target.value })}
+              />
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="outline" className={C.outline} onClick={() => setTeamMessageOpen(false)}>Cancel</Button>
+              <Button
+                className={C.green}
+                disabled={messageTeam.isPending || teamMessage.subject.trim().length < 3 || teamMessage.message.trim().length < 10}
+                onClick={() => messageTeam.mutate()}
+              >
+                <Mail className="mr-2 h-4 w-4" />
+                {messageTeam.isPending ? "Sending..." : "Send team message"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!aiDraft} onOpenChange={(open) => !open && setAiDraft(null)}>
         <DialogContent className="max-w-3xl bg-[#fffaf2] text-[#201814]">
           <DialogHeader>

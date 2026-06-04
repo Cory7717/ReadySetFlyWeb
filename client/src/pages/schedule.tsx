@@ -2330,6 +2330,64 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
   );
 }
 
+function AiDraftPreview({ payload, draft }: { payload: SchedulePayload; draft: AiScheduleDraft }) {
+  const shiftTypes = useMemo(() => new Map(payload.shiftTypes.map((shift) => [shift.id, shift])), [payload.shiftTypes]);
+  const currentAssignments = useMemo(() => new Map(payload.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment])), [payload.assignments]);
+  const draftAssignments = useMemo(() => new Map(draft.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment])), [draft.assignments]);
+  const departments = draft.mode === "housekeeping" ? ["Housekeeping"] : ["Front Desk"];
+  const labels = DAY_LABELS;
+  return (
+    <div className="rounded-xl border border-[#d8c8b2] bg-white p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="font-semibold">AI draft visual preview</h3>
+          <p className="text-sm text-[#5f5247]">Blue outline cells are proposed by AI. This is a preview only until you apply it.</p>
+        </div>
+        <Badge variant="outline" className="border-[#2d6a57] bg-[#e6f4ee] text-[#1f4d3f]">{draft.mode === "housekeeping" ? "Housekeeping" : "Front Desk"} draft</Badge>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-[860px] w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-[#2a211c] text-white">
+              <th className="w-[180px] border border-[#d8c8b2] p-2 text-left">Associate</th>
+              {payload.days.map((day, index) => <th key={day} className="border border-[#d8c8b2] p-2 text-center">{labels[index]}<br /><span className="text-xs font-normal">{formatDate(day)}</span></th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {departments.flatMap((department) => payload.employees
+              .filter((employee) => employee.active && employeeDepartments(employee).includes(department))
+              .sort(scheduleEmployeeSort)
+              .map((employee) => (
+                <tr key={`${department}-${employee.id}`}>
+                  <td className="border border-[#e0d3c1] p-2 font-semibold">
+                    {employee.displayName}
+                    <div className="text-xs font-normal text-[#5f5247]">{employeeScheduleSubtitle(employee)}</div>
+                  </td>
+                  {payload.days.map((day) => {
+                    const draftAssignment = draftAssignments.get(`${employee.id}:${day}`);
+                    const assignment = draftAssignment || currentAssignments.get(`${employee.id}:${day}`);
+                    const shift = assignment ? shiftTypes.get(assignment.shiftTypeId || "") : undefined;
+                    const text = shiftText(assignment, shift) || "-";
+                    return (
+                      <td key={day} className={`h-16 border border-[#e0d3c1] p-1 align-middle ${draftAssignment ? "bg-blue-50" : "bg-white"}`}>
+                        <div
+                          className={`min-h-12 rounded-md border p-2 text-xs whitespace-pre-line ${draftAssignment ? "border-blue-500 ring-1 ring-blue-300" : "border-[#e0d3c1]"}`}
+                          style={{ background: shift?.color || "#fff", color: shift?.textColor || "#201814" }}
+                        >
+                          {text}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              )))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function SchedulePage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -2740,6 +2798,7 @@ export default function SchedulePage() {
                   )}
                   <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/pdf`)}><Download className="mr-2 h-4 w-4" />PDF</a></Button>
                   <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/excel`)}><FileSpreadsheet className="mr-2 h-4 w-4" />Excel</a></Button>
+                  {canManageSchedule && <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/labor-performance`)}><FileSpreadsheet className="mr-2 h-4 w-4" />Labor performance</a></Button>}
                 </div>
               )}
             </CardContent>
@@ -3095,6 +3154,7 @@ export default function SchedulePage() {
                   <div className="text-2xl font-semibold">{aiDraft.mode === "housekeeping" ? (hasHousekeepingBoardData ? aiDraft.laborMetrics?.weekly.hkMpor ?? "-" : "Pending") : "Front Desk only"}</div>
                 </div>
               </div>
+              {payload && <AiDraftPreview payload={payload} draft={aiDraft} />}
               {aiDraft.ai.recommendations.length > 0 && (
                 <div>
                   <h3 className="font-semibold">Recommendations</h3>

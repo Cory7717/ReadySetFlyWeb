@@ -2184,6 +2184,118 @@ function renderScheduleExcelHtml(payload: any) {
   return rows.join("\n");
 }
 
+function htmlEscape(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function numeric(value: unknown) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function renderLaborPerformanceReportHtml(payload: any) {
+  const shiftTypeById = new Map<any, any>(payload.shiftTypes.map((shift: any) => [shift.id, shift]));
+  const shiftTypeByLabel = new Map<string, any>(payload.shiftTypes.map((shift: any) => [String(shift.label || "").toUpperCase(), shift]));
+  const employeeById = new Map<string, any>(payload.employees.map((employee: any) => [employee.id, employee]));
+  const scheduledByEmployee = new Map<string, { employee: any; department: string; hours: number }>();
+  const scheduledByEmployeeDay = new Map<string, number>();
+  for (const assignment of payload.assignments || []) {
+    const employee: any = employeeById.get(assignment.employeeId);
+    if (!employee) continue;
+    const shiftType = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
+    const department = assignmentRenderDepartment(assignment, employee, shiftType);
+    const hours = hoursForShift(assignment, shiftType);
+    if (isSalariedScheduleManager(employee)) continue;
+    const existing = scheduledByEmployee.get(employee.id) || { employee, department, hours: 0 };
+    existing.department = existing.department || department;
+    existing.hours += hours;
+    scheduledByEmployee.set(employee.id, existing);
+    scheduledByEmployeeDay.set(`${employee.id}:${assignment.shiftDate}`, (scheduledByEmployeeDay.get(`${employee.id}:${assignment.shiftDate}`) || 0) + hours);
+  }
+
+  const actualByEmployee = new Map<string, { employee: any; hours: number; byDay: Record<string, number> }>();
+  for (const row of payload.actualHours || []) {
+    const employee: any = employeeById.get(row.employeeId);
+    if (!employee) continue;
+    const existing = actualByEmployee.get(employee.id) || { employee, hours: 0, byDay: {} };
+    const hours = numeric(row.actualHours);
+    existing.hours += hours;
+    existing.byDay[row.workDate] = (existing.byDay[row.workDate] || 0) + hours;
+    actualByEmployee.set(employee.id, existing);
+  }
+
+  const hkMporByEmployee = new Map<string, { employee: any; actualHours: number; roomCredits: number; standardMinutes: number }>();
+  for (const board of payload.housekeepingBoards || []) {
+    const employee: any = employeeById.get(board.employeeId);
+    if (!employee) continue;
+    const serviceStayovers = Math.max(0, numeric(board.stayoverRooms) - numeric(board.dndRooms));
+    const roomCredits = Math.max(0, numeric(board.checkoutRooms) + serviceStayovers * 0.5 + numeric(board.deepCleanRooms));
+    const standardMinutes = Math.max(0, numeric(board.checkoutRooms) * 30 + serviceStayovers * 15 + numeric(board.deepCleanRooms) * 30);
+    const existing = hkMporByEmployee.get(employee.id) || { employee, actualHours: 0, roomCredits: 0, standardMinutes: 0 };
+    existing.actualHours += numeric(board.actualHours);
+    existing.roomCredits += roomCredits;
+    existing.standardMinutes += standardMinutes;
+    hkMporByEmployee.set(employee.id, existing);
+  }
+
+  const allEmployeeIds = Array.from(new Set([...Array.from(scheduledByEmployee.keys()), ...Array.from(actualByEmployee.keys())]));
+  const actualRooms = payload.forecast.reduce((sum: number, day: any) => sum + numeric(day.actualRoomsSold ?? day.roomsSold), 0);
+  const forecastRooms = payload.forecast.reduce((sum: number, day: any) => sum + numeric(day.roomsSold), 0);
+  const actualRoomRevenue = payload.forecast.reduce((sum: number, day: any) => sum + numeric(day.actualRoomRevenue ?? day.roomRevenue), 0);
+  const forecastRoomRevenue = payload.forecast.reduce((sum: number, day: any) => sum + numeric(day.roomRevenue), 0);
+  const scheduledHours = numeric(payload.totals.totalWeeklyLaborHours);
+  const actualHours = Array.from(actualByEmployee.values()).reduce((sum, row) => sum + row.hours, 0);
+  const rows: string[] = [];
+  rows.push(`<!doctype html><html><head><meta charset="utf-8"><style>
+    body{font-family:Arial,sans-serif;color:#201814}
+    h1,h2{margin:8px 0}
+    table{border-collapse:collapse;width:100%;margin:12px 0}
+    th{background:#2a211c;color:#fff;text-align:left}
+    th,td{border:1px solid #d8c8b2;padding:6px;font-size:12px}
+    .good{color:#166534;font-weight:bold}.warn{color:#92400e;font-weight:bold}.bad{color:#991b1b;font-weight:bold}
+  </style></head><body>`);
+  rows.push(`<h1>${htmlEscape(payload.schedule.propertyName || PROPERTY_NAME)} Labor Performance Report</h1>`);
+  rows.push(`<p>${htmlEscape(payload.schedule.weekStartDate)} to ${htmlEscape(payload.schedule.weekEndDate)}</p>`);
+  rows.push("<h2>Production and HPOR</h2><table>");
+  rows.push("<tr><th>Metric</th><th>Scheduled / Forecast</th><th>Actual / Final</th><th>Variance</th></tr>");
+  rows.push(`<tr><td>Rooms sold</td><td>${forecastRooms}</td><td>${actualRooms}</td><td>${actualRooms - forecastRooms}</td></tr>`);
+  rows.push(`<tr><td>Room revenue</td><td>$${forecastRoomRevenue.toFixed(2)}</td><td>$${actualRoomRevenue.toFixed(2)}</td><td>$${(actualRoomRevenue - forecastRoomRevenue).toFixed(2)}</td></tr>`);
+  rows.push(`<tr><td>Labor hours</td><td>${scheduledHours.toFixed(2)}</td><td>${actualHours.toFixed(2)}</td><td>${(actualHours - scheduledHours).toFixed(2)}</td></tr>`);
+  rows.push(`<tr><td>HPOR</td><td>${(forecastRooms > 0 ? scheduledHours / forecastRooms : 0).toFixed(2)}</td><td>${(actualRooms > 0 ? actualHours / actualRooms : 0).toFixed(2)}</td><td>Target ${TARGET_HPOR.toFixed(2)}</td></tr>`);
+  rows.push("</table>");
+
+  rows.push("<h2>Scheduled vs Actual Hours by Associate</h2><table><tr><th>Associate</th><th>Department</th><th>Scheduled</th><th>Actual</th><th>Variance</th>");
+  for (const day of payload.days) rows.push(`<th>${htmlEscape(day)}</th>`);
+  rows.push("</tr>");
+  for (const employeeId of allEmployeeIds.sort((a, b) => String(employeeById.get(a)?.displayName || "").localeCompare(String(employeeById.get(b)?.displayName || "")))) {
+    const scheduled = scheduledByEmployee.get(employeeId);
+    const actual = actualByEmployee.get(employeeId);
+    const employee: any = scheduled?.employee || actual?.employee;
+    const variance = numeric(actual?.hours) - numeric(scheduled?.hours);
+    rows.push(`<tr><td>${htmlEscape(employee?.displayName)}</td><td>${htmlEscape(scheduled?.department || normalizeDepartment(employee?.department))}</td><td>${numeric(scheduled?.hours).toFixed(2)}</td><td>${numeric(actual?.hours).toFixed(2)}</td><td>${variance.toFixed(2)}</td>`);
+    for (const day of payload.days) {
+      const scheduledDay = scheduledByEmployeeDay.get(`${employeeId}:${day}`) || 0;
+      const actualDay = actual?.byDay?.[day] || 0;
+      rows.push(`<td>S ${scheduledDay.toFixed(2)} / A ${actualDay.toFixed(2)}</td>`);
+    }
+    rows.push("</tr>");
+  }
+  rows.push("</table>");
+
+  rows.push("<h2>Housekeeping MPOR by Room Attendant</h2><table><tr><th>Associate</th><th>Actual Hours</th><th>Room Credits</th><th>Standard Minutes</th><th>MPOR</th><th>Target</th></tr>");
+  for (const row of Array.from(hkMporByEmployee.values()).sort((a, b) => String(a.employee.displayName || "").localeCompare(String(b.employee.displayName || "")))) {
+    const mpor = row.roomCredits > 0 ? (row.actualHours * 60) / row.roomCredits : 0;
+    const tone = mpor >= TARGET_HK_MPOR_MIN && mpor <= TARGET_HK_MPOR_MAX ? "good" : "warn";
+    rows.push(`<tr><td>${htmlEscape(row.employee.displayName)}</td><td>${row.actualHours.toFixed(2)}</td><td>${row.roomCredits.toFixed(1)}</td><td>${row.standardMinutes.toFixed(0)}</td><td class="${tone}">${mpor.toFixed(1)}</td><td>${TARGET_HK_MPOR_MIN}-${TARGET_HK_MPOR_MAX}</td></tr>`);
+  }
+  rows.push("</table></body></html>");
+  return rows.join("");
+}
+
 export function registerScheduleRoutes(app: Express) {
   const router = express.Router();
 
@@ -3228,6 +3340,21 @@ export function registerScheduleRoutes(app: Express) {
       res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="courtyard-schedule-${payload.schedule.weekStartDate}.xls"`);
       res.send(renderScheduleExcelHtml(stripPrivateScheduleRates(payload, req.scheduleUser)));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/weeks/:id/labor-performance", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      const payload = await buildSchedulePayload(req.params.id);
+      if (!payload) return res.status(404).json({ error: "Schedule not found" });
+      const actualized = payload.forecast.some((day: any) => day.actualRoomsSold != null || day.actualRoomRevenue != null);
+      if (!actualized) return res.status(409).json({ error: "Upload final actualized OTB production before downloading the labor performance report." });
+      await audit(payload.schedule.id, req.scheduleUser.id, "schedule_labor_performance_exported");
+      res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="courtyard-labor-performance-${payload.schedule.weekStartDate}.xls"`);
+      res.send(renderLaborPerformanceReportHtml(stripPrivateScheduleRates(payload, req.scheduleUser)));
     } catch (error) {
       next(error);
     }

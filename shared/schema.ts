@@ -584,6 +584,8 @@ export const scheduleRequests = pgTable("schedule_requests", {
   requesterUserId: varchar("requester_user_id").notNull().references(() => tipsUsers.id, { onDelete: "cascade" }),
   department: text("department").notNull().default("Front Desk"),
   requestDate: date("request_date").notNull(),
+  requestEndDate: date("request_end_date"),
+  requestGroupId: varchar("request_group_id"),
   requestType: text("request_type").notNull().default("time_off"),
   startTime: time("start_time"),
   endTime: time("end_time"),

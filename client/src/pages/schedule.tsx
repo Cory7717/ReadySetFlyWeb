@@ -115,7 +115,7 @@ const ES: Record<string, string> = {
   Activate: "Activar",
   "No position": "Sin puesto",
   "Schedule requests": "Solicitudes de horario",
-  "Requests must be submitted at least 14 days before the requested date.": "Las solicitudes deben enviarse al menos 14 dias antes de la fecha solicitada.",
+  "Requests inside 14 days are outside hotel policy and subject to manager approval.": "Las solicitudes dentro de 14 dias estan fuera de la politica del hotel y estan sujetas a aprobacion del gerente.",
   Date: "Fecha",
   Type: "Tipo",
   Start: "Inicio",
@@ -167,6 +167,8 @@ type ScheduleRequest = {
   employeeId?: string | null;
   employeeName?: string | null;
   requestDate: string;
+  requestEndDate?: string | null;
+  originalRequestDate?: string | null;
   requestType: string;
   startTime?: string | null;
   endTime?: string | null;
@@ -406,6 +408,13 @@ function localDateKey(date = new Date()) {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+function daysBetweenLocal(start: string, end: string) {
+  const startDate = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return 0;
+  return Math.floor((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
+}
+
 function saturdayFor(date = new Date()) {
   const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const day = next.getDay();
@@ -419,6 +428,12 @@ function formatDate(value: string) {
 
 function formatWeek(start: string, end: string) {
   return `${formatDate(start)} - ${formatDate(end)}`;
+}
+
+function formatRequestDateRange(request: ScheduleRequest) {
+  const start = request.originalRequestDate || request.requestDate;
+  const end = request.requestEndDate || start;
+  return end && end !== start ? `${formatDate(start)} - ${formatDate(end)}` : formatDate(start);
 }
 
 function shiftText(assignment: ShiftAssignment | undefined, shiftType: ShiftType | undefined) {
@@ -554,10 +569,38 @@ function shiftTone(assignment: ShiftAssignment | undefined, shiftType: ShiftType
           || (role.includes("room attendant") && (label === "room attendant" || label === "housekeeping"))
           || (role.includes("laundry") && label === "laundry")
           || ((role.includes("houseperson") || role.includes("houseman")) && label === "houseperson")
-          || (role.includes("inspector") && label === "room inspector");
+          || (role.includes("inspector") && label === "room inspector")
+          || (role.includes("maintenance") && label === "maintenance")
+          || (role.includes("bistro am") && label === "bistro am")
+          || (role.includes("bistro pm") && label === "bistro pm")
+          || (role.includes("breakfast") && label === "breakfast")
+          || (role.includes("fd am") && label === "fd am")
+          || (role.includes("fd pm") && label === "fd pm")
+          || (role.includes("audit") && label === "night audit");
       })
     : undefined;
   return roleShift || shiftType;
+}
+
+function matchingShiftForRole(roleWorked: string, shiftTypes: ShiftType[]) {
+  const role = roleWorked.toLowerCase();
+  return shiftTypes.find((shift) => {
+    const label = shift.label.toLowerCase();
+    return label === role
+      || (role.includes("audit") && (label === "night audit" || label === "audit"))
+      || ((role.includes("dos") || role.includes("sales")) && label === "dos / sales")
+      || (role.includes("room attendant") && (label === "room attendant" || label === "housekeeping"))
+      || (role.includes("laundry") && label === "laundry")
+      || ((role.includes("houseperson") || role.includes("houseman")) && label === "houseperson")
+      || (role.includes("inspector") && label === "room inspector")
+      || (role.includes("maintenance") && label === "maintenance")
+      || (role.includes("bistro am") && label === "bistro am")
+      || (role.includes("bistro pm") && label === "bistro pm")
+      || (role.includes("breakfast") && label === "breakfast")
+      || (role.includes("fd am") && label === "fd am")
+      || (role.includes("fd pm") && label === "fd pm")
+      || (role === "gm" && label === "gm");
+  });
 }
 
 function tr(spanish: boolean, value: string) {
@@ -1127,32 +1170,32 @@ function ShiftEditDialog({
   const selectShiftType = (shiftTypeId: string) => {
     const shift = payload.shiftTypes.find((item) => item.id === shiftTypeId);
     const nonWorking = isNonWorkingShift(shift?.label);
+    const shiftDept = normalizeDepartment(shift?.departmentHint || shift?.label);
+    const currentRoleDept = roleDepartment(form.roleWorked);
+    const shouldUseShiftRole = Boolean(shift && (!form.roleWorked || (shiftDept && currentRoleDept && shiftDept !== currentRoleDept)));
     setForm({
       ...form,
       shiftTypeId: shiftTypeId === "none" ? "" : shiftTypeId,
       customStartTime: nonWorking ? "" : shift?.startTime?.slice(0, 5) || "",
       customEndTime: nonWorking ? "" : shift?.endTime?.slice(0, 5) || "",
       unpaidBreakMinutes: nonWorking ? "" : form.unpaidBreakMinutes,
-      roleWorked: form.roleWorked || shift?.label || "",
+      roleWorked: shouldUseShiftRole ? shift?.label || "" : form.roleWorked || shift?.label || "",
     });
   };
   const selectRoleWorked = (roleWorked: string) => {
     const nextRole = roleWorked === "none" ? "" : roleWorked;
-    const matchingShift = payload.shiftTypes.find((shift) => shift.label.toLowerCase() === nextRole.toLowerCase())
-      || (nextRole.toLowerCase().includes("audit") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "night audit" || shift.label.toLowerCase() === "audit") : undefined)
-      || (nextRole.toLowerCase().includes("dos") || nextRole.toLowerCase().includes("sales") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "dos / sales") : undefined)
-      || (nextRole.toLowerCase().includes("room attendant") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "room attendant" || shift.label.toLowerCase() === "housekeeping") : undefined)
-      || (nextRole.toLowerCase().includes("laundry") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "laundry") : undefined)
-      || (nextRole.toLowerCase().includes("houseperson") || nextRole.toLowerCase().includes("houseman") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "houseperson") : undefined)
-      || (nextRole.toLowerCase().includes("inspector") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "room inspector") : undefined)
-      || (nextRole.toLowerCase() === "gm" ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "gm") : undefined);
+    const matchingShift = matchingShiftForRole(nextRole, payload.shiftTypes);
     const nonWorking = isNonWorkingShift(nextRole) || isNonWorkingShift(matchingShift?.label);
+    const currentShift = payload.shiftTypes.find((shift) => shift.id === form.shiftTypeId);
+    const roleDept = roleDepartment(nextRole);
+    const currentShiftDept = normalizeDepartment(currentShift?.departmentHint || currentShift?.label);
+    const shouldReplaceShift = Boolean(matchingShift && (!form.shiftTypeId || (roleDept && roleDept !== currentShiftDept)));
     setForm({
       ...form,
       roleWorked: nextRole,
-      shiftTypeId: form.shiftTypeId || matchingShift?.id || "",
-      customStartTime: nonWorking ? "" : form.customStartTime || matchingShift?.startTime?.slice(0, 5) || "",
-      customEndTime: nonWorking ? "" : form.customEndTime || matchingShift?.endTime?.slice(0, 5) || "",
+      shiftTypeId: shouldReplaceShift ? matchingShift?.id || "" : form.shiftTypeId || matchingShift?.id || "",
+      customStartTime: nonWorking ? "" : shouldReplaceShift ? matchingShift?.startTime?.slice(0, 5) || "" : form.customStartTime || matchingShift?.startTime?.slice(0, 5) || "",
+      customEndTime: nonWorking ? "" : shouldReplaceShift ? matchingShift?.endTime?.slice(0, 5) || "" : form.customEndTime || matchingShift?.endTime?.slice(0, 5) || "",
       unpaidBreakMinutes: nonWorking ? "" : form.unpaidBreakMinutes,
     });
   };
@@ -1637,6 +1680,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
   const labels = spanish ? DAY_LABELS_ES : DAY_LABELS;
   const editableDepartments = payload.currentUserPermissions?.editableDepartments || [];
   const currentEmployee = findEmployeeForUser(payload, currentUser);
+  const canEditHousekeepingBoards = Boolean(currentUser?.isSuperAdmin || currentUser?.isAdmin || editableDepartments.includes("Housekeeping"));
   return (
     <Card className={C.shell} data-tour="schedule-grid">
       <CardHeader>
@@ -1694,6 +1738,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                         const assignment = assignmentBelongsToDepartment(rawAssignment, employee, rawShift, department) ? rawAssignment : undefined;
                         const isHousekeeping = department === "Housekeeping";
                         const canEditCell = editable && (editableDepartments.includes(department) || currentEmployee?.id === employee.id);
+                        const canEditBoard = isHousekeeping && canEditHousekeepingBoards;
                         const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
                         const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;
                         const handleShiftDragStart = (event: DragEvent) => {
@@ -1729,7 +1774,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                               {isHousekeeping && (
                                 <button
                                   type="button"
-                                  disabled={!canEditCell}
+                                  disabled={!canEditBoard}
                                   className={`w-full rounded-md border px-2 py-1 text-center text-[11px] font-semibold disabled:cursor-default ${housekeepingBoardTone(hkBoard)}`}
                                   onClick={() => onHousekeepingBoard(employee, day, hkBoard)}
                                 >
@@ -1791,6 +1836,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                           const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
                           const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;
                           const canEditCell = editable && (editableDepartments.includes(department) || currentEmployee?.id === employee.id);
+                          const canEditBoard = isHousekeeping && canEditHousekeepingBoards;
                           return (
                             <div key={day} className="rounded-md border border-[#e0d3c1] bg-white p-2">
                               <button disabled={!canEditCell || Boolean(approvedRequest)} className="w-full text-left text-sm disabled:cursor-default" style={{ color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }} onClick={() => onEdit(employee, day, department, assignment)}>
@@ -1799,7 +1845,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                               {isHousekeeping && (
                                 <button
                                   type="button"
-                                  disabled={!canEditCell}
+                                  disabled={!canEditBoard}
                                   className={`mt-2 w-full rounded-md border px-2 py-1 text-xs font-semibold disabled:cursor-default ${housekeepingBoardTone(hkBoard)}`}
                                   onClick={() => onHousekeepingBoard(employee, day, hkBoard)}
                                 >
@@ -2038,12 +2084,18 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
 }
 
 function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus, onCancel }: { requests: ScheduleRequest[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => void; onStatus: (request: ScheduleRequest, status: string) => void; onCancel: (request: ScheduleRequest) => void }) {
-  const [form, setForm] = useState({ requestDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+  const [form, setForm] = useState({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
   const [expanded, setExpanded] = useState(!isAdmin);
   const t = (value: string) => tr(spanish, value);
   const submit = () => {
-    onSubmit({ ...form, startTime: form.startTime || null, endTime: form.endTime || null });
-    setForm({ requestDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+    if (daysBetweenLocal(localDateKey(), form.requestDate) < 14) {
+      const confirmed = window.confirm(spanish
+        ? "Esta solicitud esta dentro de 14 dias. Esta fuera de la politica del hotel y esta sujeta a aprobacion del gerente. Desea enviarla de todos modos?"
+        : "This request is within 14 days. It is outside of the hotel's policy and subject to manager approval. Submit it anyway?");
+      if (!confirmed) return;
+    }
+    onSubmit({ ...form, requestEndDate: form.requestEndDate || form.requestDate, startTime: form.startTime || null, endTime: form.endTime || null });
+    setForm({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
   };
   const pendingCount = requests.filter((request) => request.status === "submitted").length;
   const approvedCount = requests.filter((request) => request.status === "approved").length;
@@ -2055,7 +2107,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle className={C.ink}>{t("Schedule requests")}</CardTitle>
-            <CardDescription className={C.muted}>{t("Requests must be submitted at least 14 days before the requested date.")}</CardDescription>
+            <CardDescription className={C.muted}>{t("Requests inside 14 days are outside hotel policy and subject to manager approval.")}</CardDescription>
             {isAdmin && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">{pendingCount} {spanish ? "pendiente(s)" : "pending"}</Badge>
@@ -2072,8 +2124,9 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
         </div>
       </CardHeader>
       {expanded && <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-[160px_180px_120px_120px_1fr_auto]">
-          <div><Label>{t("Date")}</Label><Input className={C.field} type="date" value={form.requestDate} onChange={(event) => setForm({ ...form, requestDate: event.target.value })} /></div>
+        <div className="grid gap-3 md:grid-cols-[150px_150px_180px_120px_120px_1fr_auto]">
+          <div><Label>{spanish ? "Fecha inicio" : "Start date"}</Label><Input className={C.field} type="date" value={form.requestDate} onChange={(event) => setForm({ ...form, requestDate: event.target.value, requestEndDate: form.requestEndDate || event.target.value })} /></div>
+          <div><Label>{spanish ? "Fecha fin" : "End date"}</Label><Input className={C.field} type="date" min={form.requestDate || undefined} value={form.requestEndDate} onChange={(event) => setForm({ ...form, requestEndDate: event.target.value })} /></div>
           <div>
             <Label>{t("Type")}</Label>
             <Select value={form.requestType} onValueChange={(requestType) => setForm({ ...form, requestType })}>
@@ -2095,7 +2148,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
           {requests.map((request) => (
             <div key={request.id} className="flex flex-col gap-2 rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm md:flex-row md:items-center md:justify-between">
               <div>
-                <div className="font-semibold">{isAdmin ? `${request.requester?.employeeDisplayName || "Associate"} - ` : ""}{formatDate(request.requestDate)} - {request.requestType.replace("_", " ")}</div>
+                <div className="font-semibold">{isAdmin ? `${request.requester?.employeeDisplayName || "Associate"} - ` : ""}{formatRequestDateRange(request)} - {request.requestType.replace("_", " ")}</div>
                 <div className="text-[#5f5247]">{isAdmin && request.department ? `${request.department} - ` : ""}{[request.startTime?.slice(0, 5), request.endTime?.slice(0, 5)].filter(Boolean).join(" - ")} {request.notes}</div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -2398,10 +2451,12 @@ export default function SchedulePage() {
       const response = await apiRequest("POST", "/api/schedule/requests", request);
       return response.json();
     },
-    onSuccess: (data: { emailSent?: boolean }) => {
+    onSuccess: (data: { emailSent?: boolean; policyWarning?: boolean }) => {
       toast({
         title: "Schedule request submitted",
-        description: data.emailSent ? "Your department manager was notified." : "Your request was saved. Manager email could not be sent automatically.",
+        description: data.policyWarning
+          ? "Request saved with policy warning: inside 14 days and subject to manager approval."
+          : data.emailSent ? "Your department manager was notified." : "Your request was saved. Manager email could not be sent automatically.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/schedule/requests"] });
     },
@@ -2517,14 +2572,14 @@ export default function SchedulePage() {
               if (
                 status === "approved" &&
                 Number(request.conflictCount || 0) > 0 &&
-                !window.confirm(`${request.conflictCount} associate(s) in ${request.department || "this department"} are already approved off on ${formatDate(request.requestDate)}. Approve this additional request?`)
+                !window.confirm(`${request.conflictCount} associate(s) in ${request.department || "this department"} are already approved off during ${formatRequestDateRange(request)}. Approve this additional request?`)
               ) {
                 return;
               }
               updateRequestStatus.mutate({ id: request.id, status });
             }}
             onCancel={(request) => {
-              if (window.confirm(`Cancel this request for ${formatDate(request.requestDate)}?`)) cancelRequest.mutate(request.id);
+              if (window.confirm(`Cancel this request for ${formatRequestDateRange(request)}?`)) cancelRequest.mutate(request.id);
             }}
           />
         )}

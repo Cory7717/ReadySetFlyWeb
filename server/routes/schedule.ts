@@ -145,6 +145,12 @@ function weekDays(start: string) {
   return Array.from({ length: 7 }, (_, index) => addDays(start, index));
 }
 
+function dateRange(start: string, end: string) {
+  const span = daysBetween(start, end);
+  if (span < 0) return [];
+  return Array.from({ length: span + 1 }, (_, index) => addDays(start, index));
+}
+
 function todayDateKey() {
   const now = new Date();
   return toDateKey(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
@@ -155,6 +161,18 @@ function daysBetween(start: string, end: string) {
   const endDate = parseDateKey(end);
   if (!startDate || !endDate) return 0;
   return Math.floor((endDate.getTime() - startDate.getTime()) / DAY_MS);
+}
+
+function requestEndDate(request: any) {
+  return request?.requestEndDate || request?.requestDate;
+}
+
+function dateInRequestRange(request: any, dateKey: string) {
+  return dateKey >= request.requestDate && dateKey <= requestEndDate(request);
+}
+
+function requestRangesOverlap(left: any, right: any) {
+  return left.requestDate <= requestEndDate(right) && requestEndDate(left) >= right.requestDate;
 }
 
 function normalizeDepartment(value?: string | null) {
@@ -296,22 +314,37 @@ function coverageKeyForShift(assignment: any, shiftType: any) {
   return "";
 }
 
+function resolveShiftTypeFromRole(role: string, shiftTypeByLabel: Map<string, any>) {
+  const normalized = String(role || "").trim().toUpperCase();
+  if (!normalized) return null;
+  return shiftTypeByLabel.get(normalized)
+    || (normalized.includes("AUDIT") || normalized.includes("NIGHT") ? shiftTypeByLabel.get("NIGHT AUDIT") || shiftTypeByLabel.get("AUDIT") : null)
+    || (normalized.includes("DOS") || normalized.includes("SALES") ? shiftTypeByLabel.get("DOS / SALES") : null)
+    || (normalized.includes("ROOM ATTENDANT") ? shiftTypeByLabel.get("ROOM ATTENDANT") || shiftTypeByLabel.get("HOUSEKEEPING") : null)
+    || (normalized.includes("LAUNDRY") ? shiftTypeByLabel.get("LAUNDRY") : null)
+    || (normalized.includes("HOUSEPERSON") || normalized.includes("HOUSEMAN") ? shiftTypeByLabel.get("HOUSEPERSON") : null)
+    || (normalized.includes("INSPECTOR") ? shiftTypeByLabel.get("ROOM INSPECTOR") : null)
+    || (normalized.includes("MAINTENANCE") ? shiftTypeByLabel.get("MAINTENANCE") : null)
+    || (normalized.includes("BISTRO AM") ? shiftTypeByLabel.get("BISTRO AM") : null)
+    || (normalized.includes("BISTRO PM") ? shiftTypeByLabel.get("BISTRO PM") : null)
+    || (normalized.includes("BREAKFAST") ? shiftTypeByLabel.get("BREAKFAST") : null)
+    || (normalized.includes("FD AM") ? shiftTypeByLabel.get("FD AM") : null)
+    || (normalized.includes("FD PM") ? shiftTypeByLabel.get("FD PM") : null)
+    || (normalized.includes("FRONT DESK") ? shiftTypeByLabel.get("FD AM") || shiftTypeByLabel.get("FRONT DESK") : null)
+    || (normalized.includes("GM") ? shiftTypeByLabel.get("GM") : null)
+    || HOUSEKEEPING_ROLE_SHIFT_FALLBACKS[normalized]
+    || null;
+}
+
 function resolveShiftTypeForAssignment(assignment: any, shiftTypeById: Map<any, any>, shiftTypeByLabel: Map<string, any>) {
   const direct = shiftTypeById.get(assignment?.shiftTypeId);
   const role = String(assignment?.roleWorked || "").trim().toUpperCase();
-  const roleResolved = role
-    ? shiftTypeByLabel.get(role)
-    || (role.includes("AUDIT") || role.includes("NIGHT") ? shiftTypeByLabel.get("NIGHT AUDIT") || shiftTypeByLabel.get("AUDIT") : null)
-    || (role.includes("DOS") || role.includes("SALES") ? shiftTypeByLabel.get("DOS / SALES") : null)
-    || (role.includes("ROOM ATTENDANT") ? shiftTypeByLabel.get("ROOM ATTENDANT") || shiftTypeByLabel.get("HOUSEKEEPING") : null)
-    || (role.includes("LAUNDRY") ? shiftTypeByLabel.get("LAUNDRY") : null)
-    || (role.includes("HOUSEPERSON") || role.includes("HOUSEMAN") ? shiftTypeByLabel.get("HOUSEPERSON") : null)
-    || (role.includes("INSPECTOR") ? shiftTypeByLabel.get("ROOM INSPECTOR") : null)
-    || (role.includes("GM") ? shiftTypeByLabel.get("GM") : null)
-    || HOUSEKEEPING_ROLE_SHIFT_FALLBACKS[role]
-    || null
-    : null;
-  if (roleResolved && normalizeDepartment(roleResolved.departmentHint || roleResolved.label) === "Housekeeping") return roleResolved;
+  const roleResolved = resolveShiftTypeFromRole(role, shiftTypeByLabel);
+  if (roleResolved) {
+    const roleDepartment = normalizeDepartment(roleResolved.departmentHint || roleResolved.label);
+    const directDepartment = normalizeDepartment(direct?.departmentHint || direct?.label);
+    if (!direct || (roleDepartment && roleDepartment !== directDepartment)) return roleResolved;
+  }
   return direct || roleResolved;
 }
 
@@ -482,18 +515,23 @@ async function sendScheduleRequestEmail(request: any, requester: any, managerEma
   const { client, fromEmail } = await getUncachableResendClient();
   const requesterName = scheduleDisplayName(requester);
   const timeWindow = [request.startTime?.slice(0, 5), request.endTime?.slice(0, 5)].filter(Boolean).join(" - ") || "Full day / not specified";
+  const rangeLabel = request.requestEndDate && request.requestEndDate !== request.requestDate
+    ? `${request.requestDate} to ${request.requestEndDate}`
+    : request.requestDate;
+  const latePolicyWarning = daysBetween(todayDateKey(), request.requestDate) < 14;
 
   await client.emails.send({
     from: fromEmail,
     to: managerEmails,
-    subject: `Schedule Request - ${requesterName} - ${request.requestDate}`,
+    subject: `Schedule Request - ${requesterName} - ${rangeLabel}`,
     text: [
       `Associate: ${requesterName}`,
       `Email: ${requester.email}`,
       `Department: ${request.department}`,
-      `Request date: ${request.requestDate}`,
+      `Request date(s): ${rangeLabel}`,
       `Request type: ${String(request.requestType || "").replace(/_/g, " ")}`,
       `Time: ${timeWindow}`,
+      latePolicyWarning ? "Policy warning: This request was submitted inside the hotel's 14-day request window and is subject to manager approval." : "",
       "",
       "Notes:",
       request.notes || "",
@@ -899,6 +937,7 @@ const aiDraftApplySchema = z.object({
 
 const scheduleRequestSchema = z.object({
   requestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  requestEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   requestType: z.enum(["time_off", "preferred_shift", "availability", "other"]).default("time_off"),
   startTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
   endTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
@@ -953,19 +992,24 @@ async function buildSchedulePayload(scheduleId: string) {
       .select({ request: scheduleRequests, user: tipsUsers })
       .from(scheduleRequests)
       .innerJoin(tipsUsers, eq(scheduleRequests.requesterUserId, tipsUsers.id))
-      .where(and(eq(scheduleRequests.status, "approved"), inArray(scheduleRequests.requestDate, days))),
+      .where(eq(scheduleRequests.status, "approved")),
   ]);
   const employeeByEmail = new Map(employees.map((employee) => [normalizeEmail(String(employee.email || "")), employee]));
   const approvedRequests = approvedRequestRows
-    .map((row) => {
+    .flatMap((row) => {
       const employee = employeeByEmail.get(normalizeEmail(String(row.user.email || "")));
-      if (!employee) return null;
-      return {
+      if (!employee) return [];
+      return dateRange(row.request.requestDate, requestEndDate(row.request))
+        .filter((requestDate) => days.includes(requestDate))
+        .map((requestDate) => ({
         ...row.request,
+        requestDate,
+        originalRequestDate: row.request.requestDate,
+        requestEndDate: requestEndDate(row.request),
         employeeId: employee.id,
         employeeName: employee.displayName,
         requester: publicScheduleUser(row.user),
-      };
+      }));
     })
     .filter(Boolean);
   const totals = calculateTotals(days, employees, shiftTypes, forecast, assignments);
@@ -1042,7 +1086,7 @@ async function addRequestConflictInfo(rows: Array<{ request: any; user: any }>) 
   return rows.map((row) => {
     const conflicts = approved.filter((request) =>
       request.department === row.request.department &&
-      request.requestDate === row.request.requestDate &&
+      requestRangesOverlap(request, row.request) &&
       request.id !== row.request.id,
     );
     return {
@@ -1061,8 +1105,11 @@ async function getApprovedRequestForEmployeeDate(employeeId: string, requestDate
     .select({ request: scheduleRequests, user: tipsUsers })
     .from(scheduleRequests)
     .innerJoin(tipsUsers, eq(scheduleRequests.requesterUserId, tipsUsers.id))
-    .where(and(eq(scheduleRequests.status, "approved"), eq(scheduleRequests.requestDate, requestDate)));
-  return rows.find((row) => normalizeEmail(String(row.user.email || "")) === employeeEmail)?.request || null;
+    .where(eq(scheduleRequests.status, "approved"));
+  return rows.find((row) =>
+    normalizeEmail(String(row.user.email || "")) === employeeEmail &&
+    dateInRequestRange(row.request, requestDate)
+  )?.request || null;
 }
 
 function calculateTotals(days: string[], employees: any[], shiftTypes: any[], forecast: any[], assignments: any[]) {
@@ -2153,20 +2200,29 @@ export function registerScheduleRoutes(app: Express) {
     try {
       const parsed = scheduleRequestSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid schedule request", validation: parsed.error.format() });
-      const leadDays = daysBetween(todayDateKey(), parsed.data.requestDate);
-      if (leadDays < 14) {
-        return res.status(400).json({
-          error: "Schedule requests must be submitted at least 14 days before the requested date.",
-          code: "REQUEST_TOO_CLOSE",
-        });
+      const requestEnd = parsed.data.requestEndDate || parsed.data.requestDate;
+      const requestSpan = daysBetween(parsed.data.requestDate, requestEnd);
+      if (requestSpan < 0) {
+        return res.status(400).json({ error: "Request end date must be the same as or after the start date." });
       }
+      if (requestSpan > 30) {
+        return res.status(400).json({ error: "Schedule requests may cover up to 31 consecutive days." });
+      }
+      const leadDays = daysBetween(todayDateKey(), parsed.data.requestDate);
+      const policyWarning = leadDays < 14;
       const department = await getScheduleRequestDepartment(req.scheduleUser);
+      const activeExisting = await db.select().from(scheduleRequests).where(and(eq(scheduleRequests.requesterUserId, req.scheduleUser.id), inArray(scheduleRequests.status, ["submitted", "approved"] as any)));
+      if (activeExisting.some((request) => requestRangesOverlap(request, { requestDate: parsed.data.requestDate, requestEndDate: requestEnd }))) {
+        return res.status(409).json({ error: "You already have a submitted or approved request overlapping those dates." });
+      }
       const [request] = await db
         .insert(scheduleRequests)
         .values({
           requesterUserId: req.scheduleUser.id,
           department,
           requestDate: parsed.data.requestDate,
+          requestEndDate: requestEnd,
+          requestGroupId: crypto.randomUUID(),
           requestType: parsed.data.requestType,
           startTime: parsed.data.startTime || null,
           endTime: parsed.data.endTime || null,
@@ -2174,7 +2230,7 @@ export function registerScheduleRoutes(app: Express) {
           status: "submitted",
         })
         .returning();
-      await audit(null, req.scheduleUser.id, "schedule_request_submitted", { requestId: request.id, requestDate: request.requestDate });
+      await audit(null, req.scheduleUser.id, "schedule_request_submitted", { requestId: request.id, requestDate: request.requestDate, requestEndDate: request.requestEndDate });
       let emailSent = false;
       try {
         const managerEmails = await getDepartmentManagerEmails(department);
@@ -2187,7 +2243,7 @@ export function registerScheduleRoutes(app: Express) {
           error: emailError?.message || emailError,
         });
       }
-      res.status(201).json({ request, emailSent });
+      res.status(201).json({ request, emailSent, policyWarning });
     } catch (error) {
       next(error);
     }
@@ -2621,6 +2677,9 @@ export function registerScheduleRoutes(app: Express) {
       if (!days.includes(parsed.data.boardDate)) return res.status(400).json({ error: "Board date is outside this schedule week." });
       const [employee] = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.id, parsed.data.employeeId)).limit(1);
       if (!employee) return res.status(404).json({ error: "Schedule employee not found" });
+      if (!(await canManageDepartment(req.scheduleUser, "Housekeeping"))) {
+        return res.status(403).json({ error: "Only Housekeeping managers or admins can enter Housekeeping boards." });
+      }
       if (normalizeDepartment(employee.department) !== "Housekeeping") {
         return res.status(400).json({ error: "Housekeeping boards can only be entered for Housekeeping associates." });
       }

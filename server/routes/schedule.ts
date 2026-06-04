@@ -1612,7 +1612,7 @@ function buildFrontDeskAiAssignments(payload: any, shiftByLabel: Map<string, any
   return assignments;
 }
 
-function buildAiScheduleDraft(payload: any, scopeDepartment?: string) {
+function buildAiScheduleDraft(payload: any, scopeDepartment?: string | string[]) {
   const shiftByLabel = new Map<string, any>(payload.shiftTypes.map((shift: any) => [String(shift.label).toUpperCase(), shift]));
   const employeesByDepartment = new Map<string, any[]>();
   for (const department of DEPARTMENTS) {
@@ -1662,7 +1662,11 @@ function buildAiScheduleDraft(payload: any, scopeDepartment?: string) {
   };
 
   const forecastByDay = new Map<string, any>(payload.forecast.map((day: any) => [day.forecastDate, day]));
-  const allowed = scopeDepartment ? new Set([normalizeDepartment(scopeDepartment)]) : null;
+  const allowed = Array.isArray(scopeDepartment)
+    ? new Set(scopeDepartment.map((department) => normalizeDepartment(department)))
+    : scopeDepartment
+      ? new Set([normalizeDepartment(scopeDepartment)])
+      : null;
   const frontDeskAiAssignments = (!allowed || allowed.has("Front Desk"))
     ? buildFrontDeskAiAssignments(payload, shiftByLabel, approvedByEmployeeDay, assignedByEmployeeDay, warnings)
     : [];
@@ -2658,16 +2662,30 @@ export function registerScheduleRoutes(app: Express) {
       const payload = await buildSchedulePayload(req.params.id);
       if (!payload) return res.status(404).json({ error: "Schedule not found" });
       if (payload.schedule.status === "published") return res.status(423).json({ error: "Published schedules are locked. Reopen before generating a draft." });
+      const mode = String(req.body?.mode || "").trim();
       const requestedDepartment = normalizeDepartment(String(req.body?.department || ""));
-      if (!(await canManageDepartment(req.scheduleUser, requestedDepartment))) return res.status(403).json({ error: "You can only generate AI schedules for your assigned department." });
-      const draft = buildAiScheduleDraft(payload, requestedDepartment);
+      let scope: string | string[] = requestedDepartment;
+      if (mode === "frontDesk") {
+        scope = "Front Desk";
+      } else if (mode === "operations") {
+        const employees = await db.select().from(scheduleEmployees);
+        const editableDepartments = publicScheduleUser(req.scheduleUser).isSuperAdmin ? DEPARTMENTS : managerDepartmentsForUser(req.scheduleUser, employees);
+        scope = editableDepartments.filter((department) => !["Front Desk", "Night Audit"].includes(department));
+        if (!scope.length) return res.status(403).json({ error: "No non-Front Desk departments are available for this AI scheduler." });
+      }
+      const departmentsToCheck = Array.isArray(scope) ? scope : [scope];
+      for (const department of departmentsToCheck) {
+        if (!(await canManageDepartment(req.scheduleUser, department))) return res.status(403).json({ error: "You can only generate AI schedules for your assigned department." });
+      }
+      const draft = buildAiScheduleDraft(payload, scope);
       const ai = await summarizeAiSchedule(payload, draft);
       await audit(payload.schedule.id, req.scheduleUser.id, "schedule_ai_draft_generated", {
         proposedAssignments: draft.assignments.length,
-        department: requestedDepartment,
+        department: Array.isArray(scope) ? scope.join(", ") : scope,
+        mode: mode || "department",
         aiAvailable: ai.aiAvailable,
       });
-      res.json({ ...draft, ai, laborMetrics: payload.totals.laborMetrics, department: requestedDepartment });
+      res.json({ ...draft, ai, laborMetrics: payload.totals.laborMetrics, department: Array.isArray(scope) ? scope.join(", ") : scope, mode: mode || "department" });
     } catch (error) {
       next(error);
     }

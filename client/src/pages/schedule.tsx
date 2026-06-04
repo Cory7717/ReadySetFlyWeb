@@ -2287,9 +2287,12 @@ export default function SchedulePage() {
     onError: (error: Error) => toast({ title: "Hours import failed", description: error.message, variant: "destructive" }),
   });
   const generateAiSchedule = useMutation({
-    mutationFn: async () => {
-      const department = payload?.currentUserPermissions?.editableDepartments?.find((item) => item !== "Managers") || payload?.currentUserPermissions?.editableDepartments?.[0] || "Front Desk";
-      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/generate`, { department });
+    mutationFn: async ({ mode, department }: { mode?: "frontDesk" | "operations"; department?: string }) => {
+      const fallbackDepartment = payload?.currentUserPermissions?.editableDepartments?.find((item) => item !== "Managers" && item !== "Front Desk" && item !== "Night Audit")
+        || payload?.currentUserPermissions?.editableDepartments?.find((item) => item !== "Managers")
+        || payload?.currentUserPermissions?.editableDepartments?.[0]
+        || "Front Desk";
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/generate`, { mode, department: department || fallbackDepartment });
       return response.json() as Promise<AiScheduleDraft>;
     },
     onSuccess: (data) => {
@@ -2425,6 +2428,9 @@ export default function SchedulePage() {
 
   if (!shareToken && auth.isLoading) return <div className={`min-h-screen p-8 ${C.page}`}>Loading Schedule...</div>;
   if (!shareToken && !auth.data?.user) return <ScheduleAuthGate onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/schedule/auth/me"] })} />;
+  const editableDepartmentsForAi = payload?.currentUserPermissions?.editableDepartments || [];
+  const canGenerateFrontDeskAi = editable && editableDepartmentsForAi.includes("Front Desk");
+  const canGenerateOperationsAi = editable && editableDepartmentsForAi.some((department) => !["Managers", "Front Desk", "Night Audit"].includes(department));
 
   return (
     <div className={`min-h-screen ${C.page}`}>
@@ -2535,10 +2541,16 @@ export default function SchedulePage() {
                     <CardDescription className={C.muted}>{formatWeek(payload.schedule.weekStartDate, payload.schedule.weekEndDate)}</CardDescription>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {editable && (
-                      <Button className={C.accent} disabled={generateAiSchedule.isPending} onClick={() => generateAiSchedule.mutate()}>
+                    {canGenerateFrontDeskAi && (
+                      <Button className={C.accent} disabled={generateAiSchedule.isPending} onClick={() => generateAiSchedule.mutate({ mode: "frontDesk" })}>
                         <Sparkles className="mr-2 h-4 w-4" />
-                        {generateAiSchedule.isPending ? "Generating..." : (spanish ? ES["Generate AI schedule"] : "Generate AI schedule")}
+                        {generateAiSchedule.isPending ? "Generating..." : "FD Rotation AI"}
+                      </Button>
+                    )}
+                    {canGenerateOperationsAi && (
+                      <Button variant="outline" className={C.outline} disabled={generateAiSchedule.isPending} onClick={() => generateAiSchedule.mutate({ mode: "operations" })}>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        {generateAiSchedule.isPending ? "Generating..." : "Operations AI"}
                       </Button>
                     )}
                     <Badge variant="outline" className={statusBadge(payload.schedule.status)}>{payload.schedule.status}</Badge>

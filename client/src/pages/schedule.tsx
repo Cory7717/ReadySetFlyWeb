@@ -2032,7 +2032,13 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
   const t = (value: string) => tr(spanish, value);
   const toggleRole = (role: string) => setForm((current) => ({ ...current, rolesJson: current.rolesJson.includes(role) ? current.rolesJson.filter((item) => item !== role) : [...current.rolesJson, role] }));
   const employeePatch = (employee: ScheduleEmployee) => editing[employee.id] || employee;
-  const saveEmployee = (employee: ScheduleEmployee) => onUpdate(employee.id, employeePatch(employee));
+  const saveEmployee = (employee: ScheduleEmployee) => {
+    const patch = employeePatch(employee);
+    onUpdate(employee.id, {
+      ...patch,
+      hourlyRate: patch.hourlyRate === "" || patch.hourlyRate == null ? null : Number(patch.hourlyRate),
+    });
+  };
   const toggleEmployeeRole = (employee: ScheduleEmployee, role: string) => {
     const draft = employeePatch(employee);
     const roles = rolesArray(draft.rolesJson);
@@ -2101,7 +2107,21 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
               {SCHEDULE_ROLES.map((role) => <Button key={role} type="button" size="sm" variant="outline" className={form.rolesJson.includes(role) ? C.green : C.outline} onClick={() => toggleRole(role)}>{role}</Button>)}
             </div>
           </div>
-          {canViewRates && <Input className={C.field} placeholder={t("Hourly rate")} type="number" value={form.hourlyRate} onChange={(event) => setForm({ ...form, hourlyRate: event.target.value })} />}
+          {canViewRates && (
+            <div>
+              <Label>{form.isSalaried ? "Salary labor rate" : "Hourly rate"}</Label>
+              <Input
+                className={C.field}
+                placeholder={form.isSalaried ? "Salary hourly equivalent" : t("Hourly rate")}
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.hourlyRate}
+                onChange={(event) => setForm({ ...form, hourlyRate: event.target.value })}
+              />
+              <div className="mt-1 text-xs text-[#5f5247]">Used for labor dollar calculations. Manual edits override missing payroll import data.</div>
+            </div>
+          )}
           <Input className={C.field} placeholder={t("Email")} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
           <Input className={C.field} placeholder={t("Phone")} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isSalaried} onChange={(event) => setForm({ ...form, isSalaried: event.target.checked })} /> Salaried</label>
@@ -2200,6 +2220,30 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
                   <Input className={C.field} placeholder="Phone" value={draft.phone || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, phone: event.target.value } })} />
                   <Input className={C.field} placeholder="Email" value={draft.email || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, email: event.target.value } })} />
                 </div>
+                {canViewRates && (
+                  <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <div>
+                      <Label>{draft.isSalaried ? "Salary labor rate" : "Hourly rate"}</Label>
+                      <Input
+                        className={C.field}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={draft.hourlyRate ?? ""}
+                        placeholder={draft.isSalaried ? "Salary hourly equivalent" : "Hourly rate"}
+                        onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, hourlyRate: event.target.value } })}
+                      />
+                    </div>
+                    <label className="mt-6 flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(draft.isSalaried)}
+                        onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, isSalaried: event.target.checked } })}
+                      />
+                      Salaried
+                    </label>
+                  </div>
+                )}
                 {(!draft.phone || !draft.email) && <Badge variant="outline" className="mt-2 border-amber-300 bg-amber-50 text-amber-900">Missing phone/email</Badge>}
                 <div className="mt-3">
                   <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Approved roles / cross-department access</div>
@@ -2798,7 +2842,7 @@ export default function SchedulePage() {
                   )}
                   <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/pdf`)}><Download className="mr-2 h-4 w-4" />PDF</a></Button>
                   <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/excel`)}><FileSpreadsheet className="mr-2 h-4 w-4" />Excel</a></Button>
-                  {canManageSchedule && <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/labor-performance`)}><FileSpreadsheet className="mr-2 h-4 w-4" />Labor performance</a></Button>}
+                  {canManageSchedule && <Button asChild variant="outline" className={C.outline}><a href={apiUrl(`/api/schedule/weeks/${payload.schedule.id}/labor-performance`)}><Download className="mr-2 h-4 w-4" />Labor PDF</a></Button>}
                 </div>
               )}
             </CardContent>

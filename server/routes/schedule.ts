@@ -1805,6 +1805,11 @@ function buildFrontDeskAiAssignments(payload: any, shiftByLabel: Map<string, any
     addCoverage(day, dayIndex, "FD AM", fdAm);
     addCoverage(day, dayIndex, "FD PM", fdPm);
   });
+  const proposedHours = assignments.reduce((sum, assignment) => {
+    const shift = assignment.shiftTypeId === fdAm.id ? fdAm : assignment.shiftTypeId === fdPm.id ? fdPm : null;
+    return sum + hoursForShift(assignment, shift);
+  }, 0);
+  if (proposedHours > 112) warnings.push(`Front Desk AI proposed ${proposedHours.toFixed(1)} hours. Budget is 112 hours: 8 AM + 8 PM daily. Review before applying.`);
 
   for (const employee of employees) {
     const daysOff = offByEmployee.get(employee.id) || new Set();
@@ -2296,6 +2301,181 @@ function renderLaborPerformanceReportHtml(payload: any) {
   return rows.join("");
 }
 
+async function renderLaborPerformanceReportPdf(payload: any) {
+  const shiftTypeById = new Map<any, any>(payload.shiftTypes.map((shift: any) => [shift.id, shift]));
+  const shiftTypeByLabel = new Map<string, any>(payload.shiftTypes.map((shift: any) => [String(shift.label || "").toUpperCase(), shift]));
+  const employeeById = new Map<string, any>(payload.employees.map((employee: any) => [employee.id, employee]));
+  const scheduledByEmployee = new Map<string, { employee: any; department: string; hours: number }>();
+  const scheduledByEmployeeDay = new Map<string, number>();
+  for (const assignment of payload.assignments || []) {
+    const employee: any = employeeById.get(assignment.employeeId);
+    if (!employee || isSalariedScheduleManager(employee)) continue;
+    const shiftType = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
+    const department = assignmentRenderDepartment(assignment, employee, shiftType);
+    const hours = hoursForShift(assignment, shiftType);
+    const existing = scheduledByEmployee.get(employee.id) || { employee, department, hours: 0 };
+    existing.department = existing.department || department;
+    existing.hours += hours;
+    scheduledByEmployee.set(employee.id, existing);
+    scheduledByEmployeeDay.set(`${employee.id}:${assignment.shiftDate}`, (scheduledByEmployeeDay.get(`${employee.id}:${assignment.shiftDate}`) || 0) + hours);
+  }
+
+  const actualByEmployee = new Map<string, { employee: any; hours: number; byDay: Record<string, number> }>();
+  for (const row of payload.actualHours || []) {
+    const employee: any = employeeById.get(row.employeeId);
+    if (!employee) continue;
+    const existing = actualByEmployee.get(employee.id) || { employee, hours: 0, byDay: {} };
+    const hours = numeric(row.actualHours);
+    existing.hours += hours;
+    existing.byDay[row.workDate] = (existing.byDay[row.workDate] || 0) + hours;
+    actualByEmployee.set(employee.id, existing);
+  }
+
+  const hkRows: any[] = Array.from((payload.housekeepingBoards || []).reduce((map: Map<string, any>, board: any) => {
+    const employee = employeeById.get(board.employeeId);
+    if (!employee) return map;
+    const serviceStayovers = Math.max(0, numeric(board.stayoverRooms) - numeric(board.dndRooms));
+    const roomCredits = Math.max(0, numeric(board.checkoutRooms) + serviceStayovers * 0.5 + numeric(board.deepCleanRooms));
+    const standardMinutes = Math.max(0, numeric(board.checkoutRooms) * 30 + serviceStayovers * 15 + numeric(board.deepCleanRooms) * 30);
+    const row = map.get(employee.id) || { employee, actualHours: 0, roomCredits: 0, standardMinutes: 0 };
+    row.actualHours += numeric(board.actualHours);
+    row.roomCredits += roomCredits;
+    row.standardMinutes += standardMinutes;
+    map.set(employee.id, row);
+    return map;
+  }, new Map<string, any>()).values() as Iterable<any>).sort((a: any, b: any) => String(a.employee.displayName || "").localeCompare(String(b.employee.displayName || "")));
+
+  const allEmployeeIds = Array.from(new Set([...Array.from(scheduledByEmployee.keys()), ...Array.from(actualByEmployee.keys())]))
+    .sort((a, b) => String(employeeById.get(a)?.displayName || "").localeCompare(String(employeeById.get(b)?.displayName || "")));
+  const actualRooms = payload.forecast.reduce((sum: number, day: any) => sum + numeric(day.actualRoomsSold ?? day.roomsSold), 0);
+  const forecastRooms = payload.forecast.reduce((sum: number, day: any) => sum + numeric(day.roomsSold), 0);
+  const actualRoomRevenue = payload.forecast.reduce((sum: number, day: any) => sum + numeric(day.actualRoomRevenue ?? day.roomRevenue), 0);
+  const forecastRoomRevenue = payload.forecast.reduce((sum: number, day: any) => sum + numeric(day.roomRevenue), 0);
+  const scheduledHours = numeric(payload.totals.totalWeeklyLaborHours);
+  const actualHours = Array.from(actualByEmployee.values()).reduce((sum, row) => sum + row.hours, 0);
+  const scheduledHpor = forecastRooms > 0 ? scheduledHours / forecastRooms : 0;
+  const actualHpor = actualRooms > 0 ? actualHours / actualRooms : 0;
+
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const pageSize: [number, number] = [792, 612];
+  const margin = 34;
+  const dark = rgb(0.16, 0.12, 0.10);
+  const tan = rgb(0.96, 0.92, 0.86);
+  const white = rgb(1, 1, 1);
+  const ink = rgb(0.12, 0.09, 0.07);
+  const muted = rgb(0.38, 0.32, 0.27);
+  const border = rgb(0.84, 0.78, 0.69);
+  const green = rgb(0.12, 0.42, 0.30);
+  const amber = rgb(0.57, 0.25, 0.05);
+  let page = pdf.addPage(pageSize);
+  let y = 568;
+
+  const drawText = (text: string, x: number, yPos: number, size = 8, isBold = false, color = ink) => {
+    page.drawText(String(text || "").slice(0, 180), { x, y: yPos, size, font: isBold ? bold : font, color });
+  };
+  const drawBox = (x: number, yTop: number, w: number, h: number, fill = white, stroke = border) => {
+    page.drawRectangle({ x, y: yTop - h, width: w, height: h, color: fill, borderColor: stroke, borderWidth: 0.7 });
+  };
+  const header = () => {
+    page.drawRectangle({ x: 0, y: 546, width: pageSize[0], height: 66, color: dark });
+    drawText("Labor Performance Report", margin, 584, 20, true, white);
+    drawText(`${payload.schedule.propertyName || PROPERTY_NAME} | ${payload.schedule.weekStartDate} to ${payload.schedule.weekEndDate}`, margin, 563, 9, false, rgb(0.90, 0.84, 0.75));
+    y = 526;
+  };
+  const newPage = () => {
+    page = pdf.addPage(pageSize);
+    header();
+  };
+  const ensure = (height: number) => {
+    if (y - height < 34) newPage();
+  };
+  header();
+
+  const cardW = (pageSize[0] - margin * 2 - 36) / 4;
+  const cards = [
+    ["Forecast rooms", forecastRooms.toFixed(0), `Final ${actualRooms.toFixed(0)}`],
+    ["Room revenue", `$${forecastRoomRevenue.toFixed(0)}`, `Final $${actualRoomRevenue.toFixed(0)}`],
+    ["Labor hours", scheduledHours.toFixed(2), `Actual ${actualHours.toFixed(2)}`],
+    ["HPOR", scheduledHpor.toFixed(2), `Actual ${actualHpor.toFixed(2)}`],
+  ];
+  cards.forEach((card, index) => {
+    const x = margin + index * (cardW + 12);
+    drawBox(x, y, cardW, 62, tan);
+    drawText(card[0], x + 10, y - 16, 8, true, muted);
+    drawText(card[1], x + 10, y - 38, 18, true, ink);
+    drawText(card[2], x + 10, y - 52, 8, false, muted);
+  });
+  y -= 84;
+
+  drawText("Scheduled vs Actual Hours", margin, y, 13, true);
+  y -= 18;
+  const cols = [170, 95, 70, 70, 70, 220];
+  const headers = ["Associate", "Dept", "Sched", "Actual", "Var", "Daily detail"];
+  let x = margin;
+  headers.forEach((heading, index) => {
+    drawBox(x, y, cols[index], 20, dark, dark);
+    drawText(heading, x + 5, y - 13, 7, true, white);
+    x += cols[index];
+  });
+  y -= 20;
+  for (const employeeId of allEmployeeIds) {
+    ensure(22);
+    const scheduled = scheduledByEmployee.get(employeeId);
+    const actual = actualByEmployee.get(employeeId);
+    const employee: any = scheduled?.employee || actual?.employee;
+    const variance = numeric(actual?.hours) - numeric(scheduled?.hours);
+    const detail = payload.days.map((day: string) => {
+      const scheduledDay = scheduledByEmployeeDay.get(`${employeeId}:${day}`) || 0;
+      const actualDay = actual?.byDay?.[day] || 0;
+      return `${day.slice(5)} S${scheduledDay.toFixed(1)}/A${actualDay.toFixed(1)}`;
+    }).join("  ");
+    const values = [
+      employee?.displayName || "",
+      scheduled?.department || normalizeDepartment(employee?.department),
+      numeric(scheduled?.hours).toFixed(2),
+      numeric(actual?.hours).toFixed(2),
+      `${variance >= 0 ? "+" : ""}${variance.toFixed(2)}`,
+      detail,
+    ];
+    x = margin;
+    values.forEach((value, index) => {
+      drawBox(x, y, cols[index], 20, white);
+      drawText(String(value), x + 5, y - 13, index >= 2 && index <= 4 ? 7 : 6.5, index === 0 || index === 4, index === 4 && Math.abs(variance) > 0.25 ? amber : ink);
+      x += cols[index];
+    });
+    y -= 20;
+  }
+
+  ensure(70);
+  y -= 10;
+  drawText("Housekeeping MPOR by Room Attendant", margin, y, 13, true);
+  y -= 18;
+  const hkCols = [210, 95, 95, 110, 80, 80];
+  const hkHeaders = ["Associate", "Actual hrs", "Room credits", "Std minutes", "MPOR", "Target"];
+  x = margin;
+  hkHeaders.forEach((heading, index) => {
+    drawBox(x, y, hkCols[index], 20, dark, dark);
+    drawText(heading, x + 5, y - 13, 7, true, white);
+    x += hkCols[index];
+  });
+  y -= 20;
+  for (const row of hkRows) {
+    ensure(22);
+    const mpor = row.roomCredits > 0 ? (row.actualHours * 60) / row.roomCredits : 0;
+    const values = [row.employee.displayName, row.actualHours.toFixed(2), row.roomCredits.toFixed(1), row.standardMinutes.toFixed(0), mpor.toFixed(1), `${TARGET_HK_MPOR_MIN}-${TARGET_HK_MPOR_MAX}`];
+    x = margin;
+    values.forEach((value, index) => {
+      drawBox(x, y, hkCols[index], 20, white);
+      drawText(String(value), x + 5, y - 13, 7, index === 0 || index === 4, index === 4 ? (mpor >= TARGET_HK_MPOR_MIN && mpor <= TARGET_HK_MPOR_MAX ? green : amber) : ink);
+      x += hkCols[index];
+    });
+    y -= 20;
+  }
+  return Buffer.from(await pdf.save());
+}
+
 export function registerScheduleRoutes(app: Express) {
   const router = express.Router();
 
@@ -2417,7 +2597,9 @@ export function registerScheduleRoutes(app: Express) {
       const isSuperAdmin = publicScheduleUser(req.scheduleUser).isSuperAdmin;
       const [employee] = await db.update(scheduleEmployees).set({
         ...parsed.data,
-        hourlyRate: isSuperAdmin && parsed.data.hourlyRate != null ? parsed.data.hourlyRate.toFixed(2) : undefined,
+        hourlyRate: isSuperAdmin && Object.prototype.hasOwnProperty.call(parsed.data, "hourlyRate")
+          ? parsed.data.hourlyRate == null ? null : parsed.data.hourlyRate.toFixed(2)
+          : undefined,
         department: parsed.data.department ? normalizeDepartment(parsed.data.department) : undefined,
         rolesJson: parsed.data.rolesJson === null ? null : parsed.data.rolesJson,
         isSalaried: parsed.data.isSalaried,
@@ -3180,6 +3362,20 @@ export function registerScheduleRoutes(app: Express) {
         : parsed.data.mode === "housekeeping"
           ? "Housekeeping"
           : null;
+      if (allowedDepartment) {
+        if (!(await canManageDepartment(req.scheduleUser, allowedDepartment))) {
+          return res.status(403).json({ error: `You can only apply AI drafts for your assigned department.` });
+        }
+        const existingAssignments = await db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, schedule.id));
+        for (const existing of existingAssignments) {
+          const employee = employeeById.get(existing.employeeId || "");
+          const shiftType = shiftTypeById.get(existing.shiftTypeId || "");
+          const department = assignmentRenderDepartment(existing, employee, shiftType);
+          if (department === allowedDepartment) {
+            await db.delete(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.id, existing.id));
+          }
+        }
+      }
       for (const assignment of parsed.data.assignments) {
         const employee = employeeById.get(assignment.employeeId);
         const shiftType = shiftTypeById.get(assignment.shiftTypeId);
@@ -3352,9 +3548,10 @@ export function registerScheduleRoutes(app: Express) {
       const actualized = payload.forecast.some((day: any) => day.actualRoomsSold != null || day.actualRoomRevenue != null);
       if (!actualized) return res.status(409).json({ error: "Upload final actualized OTB production before downloading the labor performance report." });
       await audit(payload.schedule.id, req.scheduleUser.id, "schedule_labor_performance_exported");
-      res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="courtyard-labor-performance-${payload.schedule.weekStartDate}.xls"`);
-      res.send(renderLaborPerformanceReportHtml(stripPrivateScheduleRates(payload, req.scheduleUser)));
+      const bytes = await renderLaborPerformanceReportPdf(stripPrivateScheduleRates(payload, req.scheduleUser));
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="courtyard-labor-performance-${payload.schedule.weekStartDate}.pdf"`);
+      res.send(bytes);
     } catch (error) {
       next(error);
     }

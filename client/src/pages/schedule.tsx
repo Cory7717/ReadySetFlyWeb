@@ -157,6 +157,8 @@ type ScheduleUser = {
   role?: string;
   isAdmin: boolean;
   isSuperAdmin: boolean;
+  isDepartmentManager?: boolean;
+  department?: string | null;
   canAccessTips?: boolean;
 };
 
@@ -374,6 +376,10 @@ type LaborMetrics = {
     hkMpor: number;
     targetHousekeepingHoursMin: number;
     targetHousekeepingHoursMax: number;
+    targetRoomAttendantHours?: number;
+    targetLaundryHours?: number;
+    targetHousepersonHours?: number;
+    targetTotalHousekeepingOperatingHours?: number;
     pickupRooms?: number | null;
     popupGroupRooms?: number;
     serviceStayovers?: number;
@@ -392,6 +398,11 @@ type LaborMetrics = {
     hkMpor: number;
     targetHousekeepingHoursMin: number;
     targetHousekeepingHoursMax: number;
+    standardHousekeepingMinutes?: number;
+    targetRoomAttendantHours?: number;
+    targetLaundryHours?: number;
+    targetHousepersonHours?: number;
+    targetTotalHousekeepingOperatingHours?: number;
   };
 };
 
@@ -1895,14 +1906,16 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                                     : hkBoard ? `${Number(hkBoard.actualHours || 0).toFixed(2)} hrs` : "Hours"}
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                disabled={!canEditActual}
-                                className={`w-full rounded-md border px-2 py-1 text-center text-[11px] font-semibold disabled:cursor-default ${actual ? "border-blue-300 bg-blue-50 text-blue-800" : "border-slate-300 bg-slate-50 text-slate-700"}`}
-                                onClick={() => onActualHours(employee, day, actual)}
-                              >
-                                {actual ? `Actual ${Number(actual.actualHours || 0).toFixed(2)} hrs` : "Actual"}
-                              </button>
+                              {!isHousekeeping && (
+                                <button
+                                  type="button"
+                                  disabled={!canEditActual}
+                                  className={`w-full rounded-md border px-2 py-1 text-center text-[11px] font-semibold disabled:cursor-default ${actual ? "border-blue-300 bg-blue-50 text-blue-800" : "border-slate-300 bg-slate-50 text-slate-700"}`}
+                                  onClick={() => onActualHours(employee, day, actual)}
+                                >
+                                  {actual ? `Actual ${Number(actual.actualHours || 0).toFixed(2)} hrs` : "Actual"}
+                                </button>
+                              )}
                             </div>
                           </td>
                         );
@@ -1982,14 +1995,16 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                                     : hkBoard ? `${Number(hkBoard.actualHours || 0).toFixed(2)} hrs` : "Enter hours"}
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                disabled={!canEditActual}
-                                className={`mt-2 w-full rounded-md border px-2 py-1 text-xs font-semibold disabled:cursor-default ${actual ? "border-blue-300 bg-blue-50 text-blue-800" : "border-slate-300 bg-slate-50 text-slate-700"}`}
-                                onClick={() => onActualHours(employee, day, actual)}
-                              >
-                                {actual ? `Actual ${Number(actual.actualHours || 0).toFixed(2)} hrs` : "Enter actual"}
-                              </button>
+                              {!isHousekeeping && (
+                                <button
+                                  type="button"
+                                  disabled={!canEditActual}
+                                  className={`mt-2 w-full rounded-md border px-2 py-1 text-xs font-semibold disabled:cursor-default ${actual ? "border-blue-300 bg-blue-50 text-blue-800" : "border-slate-300 bg-slate-50 text-slate-700"}`}
+                                  onClick={() => onActualHours(employee, day, actual)}
+                                >
+                                  {actual ? `Actual ${Number(actual.actualHours || 0).toFixed(2)} hrs` : "Enter actual"}
+                                </button>
+                              )}
                             </div>
                           );
                         })}
@@ -2326,6 +2341,7 @@ export default function SchedulePage() {
   const [selectedHousekeepingBoard, setSelectedHousekeepingBoard] = useState<{ employee: ScheduleEmployee; date: string; board?: HousekeepingBoard; trackMpor: boolean } | null>(null);
   const [selectedActualHours, setSelectedActualHours] = useState<{ employee: ScheduleEmployee; date: string; actual?: ScheduleActualHours } | null>(null);
   const [aiDraft, setAiDraft] = useState<AiScheduleDraft | null>(null);
+  const [aiGeneratingMode, setAiGeneratingMode] = useState<"frontDesk" | "housekeeping" | null>(null);
   const [hoursComparison, setHoursComparison] = useState<HoursComparison | null>(null);
   const [teamMessageOpen, setTeamMessageOpen] = useState(false);
   const [teamMessage, setTeamMessage] = useState({
@@ -2343,13 +2359,14 @@ export default function SchedulePage() {
   const detail = useQuery<SchedulePayload>({ queryKey: ["/api/schedule/weeks", weekId], queryFn: () => fetchJson(`/api/schedule/weeks/${weekId}`), enabled: !!weekId && !shareToken });
   const payload = shareToken ? share.data : detail.data;
   const user = auth.data?.user;
-  const editable = Boolean(user?.isAdmin && payload?.schedule.status === "draft" && !shareToken);
+  const canManageSchedule = Boolean(user?.isAdmin || user?.isDepartmentManager || user?.role === "manager");
+  const editable = Boolean(canManageSchedule && payload?.schedule.status === "draft" && !shareToken);
   const canActualizeForecast = Boolean(user?.isAdmin && payload && !shareToken);
   const t = (value: string) => tr(spanish, value);
   const hasHousekeepingBoardData = Boolean(payload?.housekeepingBoards?.some((board) => Number(board.actualHours || 0) > 0));
 
   useEffect(() => {
-    if (!payload || !user?.isAdmin || shareToken) return;
+    if (!payload || !canManageSchedule || shareToken) return;
     const daily = payload.totals.laborMetrics?.daily || {};
     const overTarget = payload.days
       .map((day) => ({ day, hpor: Number(daily[day]?.hpor || 0) }))
@@ -2363,7 +2380,7 @@ export default function SchedulePage() {
       description: overTarget.map((item) => `${formatDate(item.day)} ${item.hpor.toFixed(2)} HPOR`).join(", "),
       variant: "destructive",
     });
-  }, [payload, shareToken, toast, user?.isAdmin]);
+  }, [canManageSchedule, payload, shareToken, toast]);
 
   useEffect(() => {
     setHoursComparison(null);
@@ -2489,10 +2506,12 @@ export default function SchedulePage() {
       const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/generate`, { mode });
       return response.json() as Promise<AiScheduleDraft>;
     },
+    onMutate: ({ mode }) => setAiGeneratingMode(mode),
     onSuccess: (data) => {
       setAiDraft(data);
       toast({ title: "AI draft generated", description: `${data.assignments.length} proposed shifts are ready to review.` });
     },
+    onSettled: () => setAiGeneratingMode(null),
     onError: (error: Error) => toast({ title: "AI draft failed", description: error.message, variant: "destructive" }),
   });
   const applyAiSchedule = useMutation({
@@ -2673,9 +2692,9 @@ export default function SchedulePage() {
             <Button variant="outline" className={C.outline} onClick={() => setSpanish((value) => !value)}>
               {spanish ? "English" : "Espanol"}
             </Button>
-            {!shareToken && user?.isAdmin && <Input className={`${C.field} w-[160px]`} type="date" value={weekStartDate} onChange={(event) => setWeekStartDate(event.target.value)} />}
-            {!shareToken && user?.isAdmin && <Button className={C.green} onClick={() => createWeek.mutate("blank")}><CalendarDays className="mr-2 h-4 w-4" />{t("Blank week")}</Button>}
-            {!shareToken && user?.isAdmin && <Button variant="outline" className={C.outline} onClick={() => createWeek.mutate("copyPrevious")}><Copy className="mr-2 h-4 w-4" />{t("Copy previous")}</Button>}
+            {!shareToken && canManageSchedule && <Input className={`${C.field} w-[160px]`} type="date" value={weekStartDate} onChange={(event) => setWeekStartDate(event.target.value)} />}
+            {!shareToken && canManageSchedule && <Button className={C.green} onClick={() => createWeek.mutate("blank")}><CalendarDays className="mr-2 h-4 w-4" />{t("Blank week")}</Button>}
+            {!shareToken && canManageSchedule && <Button variant="outline" className={C.outline} onClick={() => createWeek.mutate("copyPrevious")}><Copy className="mr-2 h-4 w-4" />{t("Copy previous")}</Button>}
             <Button variant="outline" className={C.outline} onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" />{t("Print")}</Button>
           </div>
         </div>
@@ -2704,7 +2723,7 @@ export default function SchedulePage() {
                   {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => shareLink.mutate()}><Share2 className="mr-2 h-4 w-4" />{t("Copy share link")}</Button>}
                   {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} disabled={emailSchedule.isPending} onClick={() => emailSchedule.mutate()}><Mail className="mr-2 h-4 w-4" />{emailSchedule.isPending ? t("Emailing...") : t("Email schedule")}</Button>}
                   {payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => setTeamMessageOpen(true)}><Users className="mr-2 h-4 w-4" />Team message</Button>}
-                  {editable && user?.isAdmin && (
+                  {editable && canManageSchedule && (
                     <Button
                       variant="outline"
                       className={C.outline}
@@ -2730,7 +2749,7 @@ export default function SchedulePage() {
         {!shareToken && user && (
           <ScheduleRequestsPanel
             requests={requests.data?.requests || []}
-            isAdmin={Boolean(user.isAdmin)}
+            isAdmin={canManageSchedule}
             spanish={spanish}
             onSubmit={(request) => submitRequest.mutate(request)}
             onStatus={(request, status) => {
@@ -2762,15 +2781,15 @@ export default function SchedulePage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {canGenerateFrontDeskAi && (
-                      <Button className={C.accent} disabled={generateAiSchedule.isPending} onClick={() => generateAiSchedule.mutate({ mode: "frontDesk" })}>
+                      <Button className={C.accent} disabled={Boolean(aiGeneratingMode)} onClick={() => generateAiSchedule.mutate({ mode: "frontDesk" })}>
                         <Sparkles className="mr-2 h-4 w-4" />
-                        {generateAiSchedule.isPending ? "Generating..." : "FD Rotation AI"}
+                        {aiGeneratingMode === "frontDesk" ? "Generating FD..." : "FD Rotation AI"}
                       </Button>
                     )}
                     {canGenerateHousekeepingAi && (
-                      <Button variant="outline" className={C.outline} disabled={generateAiSchedule.isPending} onClick={() => generateAiSchedule.mutate({ mode: "housekeeping" })}>
+                      <Button variant="outline" className={C.outline} disabled={Boolean(aiGeneratingMode)} onClick={() => generateAiSchedule.mutate({ mode: "housekeeping" })}>
                         <Sparkles className="mr-2 h-4 w-4" />
-                        {generateAiSchedule.isPending ? "Generating..." : "HK Coverage AI"}
+                        {aiGeneratingMode === "housekeeping" ? "Generating HK..." : "HK Coverage AI"}
                       </Button>
                     )}
                     <Badge variant="outline" className={statusBadge(payload.schedule.status)}>{payload.schedule.status}</Badge>
@@ -2825,7 +2844,7 @@ export default function SchedulePage() {
                   <CardTitle className={C.ink}>Labor targets</CardTitle>
                   <CardDescription className={C.muted}>HPOR is total labor hours per occupied room. HK MPOR is room-attendant minutes per weighted room credit.</CardDescription>
                 </CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-3">
+                <CardContent className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
                     <div className="text-sm text-[#5f5247]">Forecast rooms</div>
                     <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.roomsSold}</div>
@@ -2835,8 +2854,24 @@ export default function SchedulePage() {
                     <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.roomCredits}</div>
                   </div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
-                    <div className="text-sm text-[#5f5247]">Target HK hours</div>
-                    <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.targetHousekeepingHoursMin}-{payload.totals.laborMetrics.weekly.targetHousekeepingHoursMax}</div>
+                    <div className="text-sm text-[#5f5247]">Room Attendant target</div>
+                    <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.targetRoomAttendantHours ?? payload.totals.laborMetrics.weekly.targetHousekeepingHoursMax}</div>
+                    <div className="text-xs text-[#5f5247]">30-min checkout / 15-min stayover model</div>
+                  </div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                    <div className="text-sm text-[#5f5247]">Laundry coverage</div>
+                    <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.targetLaundryHours ?? 49}</div>
+                    <div className="text-xs text-[#5f5247]">7 hrs daily x 7 days</div>
+                  </div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                    <div className="text-sm text-[#5f5247]">Houseperson coverage</div>
+                    <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.targetHousepersonHours ?? 49}</div>
+                    <div className="text-xs text-[#5f5247]">7 hrs daily x 7 days</div>
+                  </div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                    <div className="text-sm text-[#5f5247]">Total HK target</div>
+                    <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.targetTotalHousekeepingOperatingHours ?? payload.totals.laborMetrics.weekly.targetHousekeepingHoursMax}</div>
+                    <div className="text-xs text-[#5f5247]">Room Attendant + Laundry + Houseperson</div>
                   </div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
                     <div className="text-sm text-[#5f5247]">Room revenue</div>
@@ -2853,7 +2888,7 @@ export default function SchedulePage() {
                 </CardContent>
               </Card>
             )}
-            {user?.isAdmin && (
+            {canManageSchedule && (
               <Card className={C.shell}>
                 <CardHeader>
                   <CardTitle className={C.ink}>Department completion</CardTitle>
@@ -2914,7 +2949,7 @@ export default function SchedulePage() {
               canActualize={canActualizeForecast}
               spanish={spanish}
             />
-            {user?.isAdmin && !shareToken && (
+            {canManageSchedule && !shareToken && (
               <HoursComparisonPanel
                 payload={payload}
                 comparison={hoursComparison}
@@ -2949,7 +2984,7 @@ export default function SchedulePage() {
               onHousekeepingBoard={(employee, date, board, trackMpor) => setSelectedHousekeepingBoard({ employee, date, board, trackMpor })}
               onActualHours={(employee, date, actual) => setSelectedActualHours({ employee, date, actual })}
             />
-            {user?.isAdmin && !shareToken && (
+            {canManageSchedule && !shareToken && (
               <EmployeeManager
                 employees={payload.employees}
                 canViewRates={Boolean(user?.isSuperAdmin)}
@@ -3055,7 +3090,10 @@ export default function SchedulePage() {
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Proposed shifts</div><div className="text-2xl font-semibold">{aiDraft.assignments.length}</div></div>
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Current HPOR</div><div className="text-2xl font-semibold">{aiDraft.laborMetrics?.weekly.hpor ?? "-"}</div></div>
-                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Current HK MPOR</div><div className="text-2xl font-semibold">{hasHousekeepingBoardData ? aiDraft.laborMetrics?.weekly.hkMpor ?? "-" : "Pending"}</div></div>
+                <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                  <div className="text-sm text-[#5f5247]">{aiDraft.mode === "housekeeping" ? "Current HK MPOR" : "Draft scope"}</div>
+                  <div className="text-2xl font-semibold">{aiDraft.mode === "housekeeping" ? (hasHousekeepingBoardData ? aiDraft.laborMetrics?.weekly.hkMpor ?? "-" : "Pending") : "Front Desk only"}</div>
+                </div>
               </div>
               {aiDraft.ai.recommendations.length > 0 && (
                 <div>
@@ -3083,7 +3121,7 @@ export default function SchedulePage() {
           )}
         </DialogContent>
       </Dialog>
-      {!shareToken && user && <ScheduleTutorial spanish={spanish} isAdmin={Boolean(user.isAdmin)} userId={user.id} />}
+      {!shareToken && user && <ScheduleTutorial spanish={spanish} isAdmin={canManageSchedule} userId={user.id} />}
     </div>
   );
 }

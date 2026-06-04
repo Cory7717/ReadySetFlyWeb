@@ -317,6 +317,28 @@ function isRoomAttendantWork(assignment: any, shiftType: any) {
   return text.includes("room attendant") || text.includes("housekeeping");
 }
 
+function assignmentRoleText(assignment: any, shiftType: any) {
+  return [assignment?.roleWorked, assignment?.roleNote, shiftType?.label, shiftType?.departmentHint].filter(Boolean).join(" ").toLowerCase();
+}
+
+function isRoomInspectorWork(assignment: any, shiftType: any) {
+  return assignmentRoleText(assignment, shiftType).includes("inspector");
+}
+
+function isLaundryWork(assignment: any, shiftType: any) {
+  return assignmentRoleText(assignment, shiftType).includes("laundry");
+}
+
+function isHousepersonWork(assignment: any, shiftType: any) {
+  const text = assignmentRoleText(assignment, shiftType);
+  return text.includes("houseperson") || text.includes("houseman");
+}
+
+function isExecutiveHousekeeperEmployee(employee: any) {
+  const text = [employee?.department, employee?.position, ...rolesArray(employee?.rolesJson)].filter(Boolean).join(" ").toLowerCase();
+  return text.includes("executive housekeeper") || text.includes("exec hk") || text.includes("housekeeping manager");
+}
+
 function coverageKeyForShift(assignment: any, shiftType: any) {
   const label = String(assignment?.roleWorked || shiftType?.label || "").toUpperCase();
   if (label.includes("AUDIT") || label.includes("NIGHT")) return "AUDIT";
@@ -1320,6 +1342,7 @@ function calculateLaborMetrics(days: string[], forecast: any[], dailyLaborHours:
   let weeklyLaborHours = 0;
   let weeklyRooms = 0;
   let weeklyRoomCredits = 0;
+  let weeklyStandardHousekeepingMinutes = 0;
   let weeklyHkHours = 0;
   let weeklyRoomRevenue = 0;
   let weeklyActualRoomRevenue = 0;
@@ -1338,6 +1361,9 @@ function calculateLaborMetrics(days: string[], forecast: any[], dailyLaborHours:
     const serviceStayovers = Math.max(0, stayovers - dndRooms);
     const roomCredits = Math.max(0, departures + serviceStayovers * 0.5);
     const standardMinutes = Math.max(0, departures * 30 + serviceStayovers * 15);
+    const targetRoomAttendantHours = standardMinutes / 60;
+    const targetLaundryHours = 7;
+    const targetHousepersonHours = 7;
     const hpor = roomsSold > 0 ? laborHours / roomsSold : 0;
     const hkMpor = roomCredits > 0 ? (hkHours * 60) / roomCredits : 0;
     const roomRevenue = Number(forecastDay.roomRevenue || 0);
@@ -1357,11 +1383,16 @@ function calculateLaborMetrics(days: string[], forecast: any[], dailyLaborHours:
       hkMpor: Number(hkMpor.toFixed(1)),
       targetHousekeepingHoursMin: Number(((roomCredits * TARGET_HK_MPOR_MIN) / 60).toFixed(2)),
       targetHousekeepingHoursMax: Number(((roomCredits * TARGET_HK_MPOR_MAX) / 60).toFixed(2)),
+      targetRoomAttendantHours: Number(targetRoomAttendantHours.toFixed(2)),
+      targetLaundryHours,
+      targetHousepersonHours,
+      targetTotalHousekeepingOperatingHours: Number((targetRoomAttendantHours + targetLaundryHours + targetHousepersonHours).toFixed(2)),
     };
     weeklyLaborHours += laborHours;
     weeklyLaborDollars += laborDollars;
     weeklyRooms += roomsSold;
     weeklyRoomCredits += roomCredits;
+    weeklyStandardHousekeepingMinutes += standardMinutes;
     weeklyHkHours += hkHours;
     weeklyRoomRevenue += roomRevenue;
     weeklyActualRoomRevenue += actualRoomRevenue;
@@ -1382,6 +1413,11 @@ function calculateLaborMetrics(days: string[], forecast: any[], dailyLaborHours:
       hkMpor: Number((weeklyRoomCredits > 0 ? (weeklyHkHours * 60) / weeklyRoomCredits : 0).toFixed(1)),
       targetHousekeepingHoursMin: Number(((weeklyRoomCredits * TARGET_HK_MPOR_MIN) / 60).toFixed(2)),
       targetHousekeepingHoursMax: Number(((weeklyRoomCredits * TARGET_HK_MPOR_MAX) / 60).toFixed(2)),
+      standardHousekeepingMinutes: Number(weeklyStandardHousekeepingMinutes.toFixed(0)),
+      targetRoomAttendantHours: Number((weeklyStandardHousekeepingMinutes / 60).toFixed(2)),
+      targetLaundryHours: Number((days.length * 7).toFixed(2)),
+      targetHousepersonHours: Number((days.length * 7).toFixed(2)),
+      targetTotalHousekeepingOperatingHours: Number(((weeklyStandardHousekeepingMinutes / 60) + (days.length * 14)).toFixed(2)),
     },
   };
 }
@@ -1521,6 +1557,25 @@ async function upsertScheduleActualHours(scheduleId: string, employeeId: string,
       actualHours: actualHours.toFixed(2),
       notes,
       source,
+      enteredByUserId: enteredByUserId || null,
+      updatedAt: new Date(),
+    } as any,
+  });
+}
+
+async function upsertHousekeepingBoardActualHours(scheduleId: string, employeeId: string, boardDate: string, actualHours: number, notes: string | null, enteredByUserId?: string | null) {
+  await db.insert(scheduleHousekeepingBoards).values({
+    scheduleId,
+    employeeId,
+    boardDate,
+    actualHours: String(actualHours),
+    notes,
+    enteredByUserId: enteredByUserId || null,
+  } as any).onConflictDoUpdate({
+    target: [scheduleHousekeepingBoards.scheduleId, scheduleHousekeepingBoards.employeeId, scheduleHousekeepingBoards.boardDate],
+    set: {
+      actualHours: String(actualHours),
+      notes,
       enteredByUserId: enteredByUserId || null,
       updatedAt: new Date(),
     } as any,
@@ -2460,9 +2515,20 @@ export function registerScheduleRoutes(app: Express) {
         const [previous] = await db.select().from(weeklySchedules).where(lt(weeklySchedules.weekStartDate, weekStartDate)).orderBy(desc(weeklySchedules.weekStartDate)).limit(1);
         if (previous) {
           const previousAssignments = await db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, previous.id));
+          const employees = await db.select().from(scheduleEmployees);
+          const employeesById = new Map(employees.map((employee) => [employee.id, employee]));
+          const shiftTypes = await db.select().from(scheduleShiftTypes);
+          const shiftTypeById = new Map(shiftTypes.map((shiftType) => [shiftType.id, shiftType]));
+          const allowedDepartments = publicScheduleUser(req.scheduleUser).isSuperAdmin
+            ? null
+            : new Set(managerDepartmentsForUser(req.scheduleUser, employees));
           const previousStart = parseDateKey(previous.weekStartDate)!;
           const nextStart = parseDateKey(weekStartDate)!;
           for (const assignment of previousAssignments) {
+            const employee = employeesById.get(assignment.employeeId || "");
+            const shiftType = shiftTypeById.get(assignment.shiftTypeId || "");
+            const assignmentDepartment = assignmentRenderDepartment(assignment, employee, shiftType);
+            if (allowedDepartments && !allowedDepartments.has(assignmentDepartment)) continue;
             const offset = Math.round((parseDateKey(assignment.shiftDate)!.getTime() - previousStart.getTime()) / DAY_MS);
             await db.insert(scheduleShiftAssignments).values({
               scheduleId: schedule.id,
@@ -2616,6 +2682,16 @@ export function registerScheduleRoutes(app: Express) {
           "hours_detail_import",
           req.scheduleUser.id,
         );
+        if (employeeScheduleDepartments(actual.employee).includes("Housekeeping")) {
+          await upsertHousekeepingBoardActualHours(
+            schedule.id,
+            actual.employee.id,
+            actual.date,
+            actual.hours,
+            Array.from(new Set(actual.notes)).join("; ") || null,
+            req.scheduleUser.id,
+          );
+        }
       }
       const rows = compareScheduledToActualHours(schedule, employees, shiftTypes, assignments, actualRows);
       await audit(schedule.id, req.scheduleUser.id, "schedule_hours_detail_imported", {
@@ -2681,6 +2757,49 @@ export function registerScheduleRoutes(app: Express) {
         await db.delete(scheduleShiftAssignments).where(and(eq(scheduleShiftAssignments.scheduleId, schedule.id), eq(scheduleShiftAssignments.shiftDate, parsed.data.shiftDate), employeeId ? eq(scheduleShiftAssignments.employeeId, employeeId) : eq(scheduleShiftAssignments.isOpenShift, true)));
       } else {
         const [selectedShiftType] = parsed.data.shiftTypeId ? await db.select().from(scheduleShiftTypes).where(eq(scheduleShiftTypes.id, parsed.data.shiftTypeId)).limit(1) : [];
+        const proposedAssignment = {
+          roleWorked: parsed.data.roleWorked || selectedShiftType?.label || null,
+          roleNote: parsed.data.roleNote || null,
+        };
+        const proposedIsInspector = isRoomInspectorWork(proposedAssignment, selectedShiftType);
+        const proposedIsLaundry = isLaundryWork(proposedAssignment, selectedShiftType);
+        const proposedIsHouseperson = isHousepersonWork(proposedAssignment, selectedShiftType);
+        const proposedIsExecHk = isExecutiveHousekeeperEmployee(targetEmployee);
+        if (proposedIsInspector || proposedIsExecHk || (targetDepartment === "Housekeeping" && (proposedIsLaundry || proposedIsHouseperson))) {
+          const [sameDayAssignments, allEmployees, allShiftTypes] = await Promise.all([
+            db.select().from(scheduleShiftAssignments).where(and(eq(scheduleShiftAssignments.scheduleId, schedule.id), eq(scheduleShiftAssignments.shiftDate, parsed.data.shiftDate))),
+            db.select().from(scheduleEmployees),
+            db.select().from(scheduleShiftTypes),
+          ]);
+          const employeeById = new Map(allEmployees.map((employee) => [employee.id, employee]));
+          const shiftTypeById = new Map(allShiftTypes.map((shift) => [shift.id, shift]));
+          let laundryCount = proposedIsLaundry ? 1 : 0;
+          let housepersonCount = proposedIsHouseperson ? 1 : 0;
+          let inspectorAlreadyScheduled = false;
+          let execHkAlreadyScheduled = false;
+          for (const existing of sameDayAssignments) {
+            if (existing.employeeId === employeeId) continue;
+            const existingEmployee = employeeById.get(existing.employeeId || "");
+            const existingShift = shiftTypeById.get(existing.shiftTypeId || "");
+            if (isExecutiveHousekeeperEmployee(existingEmployee)) execHkAlreadyScheduled = true;
+            if (assignmentRenderDepartment(existing, existingEmployee, existingShift) !== "Housekeeping") continue;
+            if (isLaundryWork(existing, existingShift)) laundryCount += 1;
+            if (isHousepersonWork(existing, existingShift)) housepersonCount += 1;
+            if (isRoomInspectorWork(existing, existingShift)) inspectorAlreadyScheduled = true;
+          }
+          if (proposedIsInspector && execHkAlreadyScheduled) {
+            return res.status(409).json({ error: "Room Inspector is already covered because the Executive Housekeeper is scheduled that day." });
+          }
+          if (proposedIsExecHk && inspectorAlreadyScheduled) {
+            return res.status(409).json({ error: "A Room Inspector is already scheduled that day. Remove that inspector shift before scheduling the Executive Housekeeper." });
+          }
+          if (laundryCount > 1) {
+            return res.status(409).json({ error: "Laundry coverage already exists for this day. Review before scheduling a second Laundry attendant." });
+          }
+          if (housepersonCount > 1) {
+            return res.status(409).json({ error: "Houseperson coverage already exists for this day. Review before scheduling a second Houseperson." });
+          }
+        }
         const nonWorkingShift = isNonWorkingShiftLabel(selectedShiftType?.label) || isNonWorkingShiftLabel(parsed.data.roleWorked);
         const shiftValues = {
           shiftTypeId: parsed.data.shiftTypeId || null,

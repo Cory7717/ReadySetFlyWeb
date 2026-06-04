@@ -283,6 +283,10 @@ function hoursForShift(assignment: any, shiftType: any) {
   return Math.max(0, (duration - breakMinutes) / 60);
 }
 
+function isNonWorkingShiftLabel(value?: string | null) {
+  return ["OFF", "PTO", "CALL OFF"].includes(String(value || "").trim().toUpperCase());
+}
+
 function coverageKeyForShift(assignment: any, shiftType: any) {
   const label = String(assignment?.roleWorked || shiftType?.label || "").toUpperCase();
   if (label.includes("AUDIT") || label.includes("NIGHT")) return "AUDIT";
@@ -1509,13 +1513,112 @@ function formatTimeCompact(value?: string | null) {
   return mm === 0 ? `${hour} ${period}` : `${hour}:${String(mm).padStart(2, "0")} ${period}`;
 }
 
+function frontDeskShiftPreference(employee: any) {
+  const text = [employee?.displayName, employee?.position, employee?.department, ...rolesArray(employee?.rolesJson)].join(" ").toLowerCase();
+  if (text.includes("fd pm") || text.includes("front desk pm") || text.includes(" pm")) return "FD PM";
+  return "FD AM";
+}
+
+function weekRotationNumber(weekStart: string) {
+  const parsed = parseDateKey(weekStart);
+  return parsed ? Math.floor(parsed.getTime() / (DAY_MS * 7)) : 0;
+}
+
+function buildFrontDeskAiAssignments(payload: any, shiftByLabel: Map<string, any>, approvedByEmployeeDay: Set<string>, assignedByEmployeeDay: Set<string>, warnings: string[]) {
+  const fdAm = shiftByLabel.get("FD AM") || shiftByLabel.get("AM");
+  const fdPm = shiftByLabel.get("FD PM") || shiftByLabel.get("PM");
+  if (!fdAm || !fdPm) {
+    warnings.push("Front Desk AI needs FD AM and FD PM shift types before it can generate coverage.");
+    return [];
+  }
+  const employees = payload.employees
+    .filter((employee: any) => employee.active && employeeScheduleDepartments(employee).includes("Front Desk") && normalizeDepartment(employee.department) !== "Managers")
+    .sort((a: any, b: any) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || String(a.displayName || "").localeCompare(String(b.displayName || "")));
+  if (employees.length < 3) {
+    warnings.push("Front Desk AI needs at least 3 available Front Desk associates to cover AM/PM while giving two back-to-back days off.");
+  }
+
+  const rotation = weekRotationNumber(payload.schedule.weekStartDate);
+  const offByEmployee = new Map<string, Set<string>>();
+  const weekendPair = payload.days.length >= 2 ? [payload.days[0], payload.days[1]] : [];
+  const weekdayPairs = payload.days.slice(2, -1).map((day: string, index: number) => [day, payload.days[index + 3]]).filter((pair: string[]) => pair[0] && pair[1]);
+  const maxWeekendOff = Math.max(0, employees.length - 2);
+  employees.forEach((employee: any, index: number) => {
+    const weekendGroup = (index % 2) === (rotation % 2);
+    const canTakeWeekendOff = weekendPair.length === 2 && weekendGroup && Array.from(offByEmployee.values()).filter((days) => days.has(weekendPair[0]) || days.has(weekendPair[1])).length < maxWeekendOff;
+    const pair = canTakeWeekendOff
+      ? weekendPair
+      : weekdayPairs[(rotation + index) % Math.max(weekdayPairs.length, 1)] || [];
+    offByEmployee.set(employee.id, new Set(pair));
+  });
+
+  const assignments: any[] = [];
+  const workedCount = new Map<string, number>();
+  const labelByEmployeeDay = new Map<string, string>();
+  const hasTurnaround = (employeeId: string, dayIndex: number, shiftLabel: string) => {
+    if (shiftLabel !== "FD AM" || dayIndex <= 0) return false;
+    return labelByEmployeeDay.get(`${employeeId}:${payload.days[dayIndex - 1]}`) === "FD PM";
+  };
+  const addCoverage = (day: string, dayIndex: number, shiftLabel: "FD AM" | "FD PM", shift: any) => {
+    const candidates = employees
+      .filter((employee: any) => {
+        const employeeDayKey = `${employee.id}:${day}`;
+        return !approvedByEmployeeDay.has(employeeDayKey)
+          && !assignedByEmployeeDay.has(employeeDayKey)
+          && !offByEmployee.get(employee.id)?.has(day)
+          && !hasTurnaround(employee.id, dayIndex, shiftLabel);
+      })
+      .sort((a: any, b: any) => {
+        const aPref = frontDeskShiftPreference(a) === shiftLabel ? 0 : 1;
+        const bPref = frontDeskShiftPreference(b) === shiftLabel ? 0 : 1;
+        return aPref - bPref || (workedCount.get(a.id) || 0) - (workedCount.get(b.id) || 0) || String(a.displayName || "").localeCompare(String(b.displayName || ""));
+      });
+    const employee = candidates[0];
+    if (!employee) {
+      warnings.push(`Front Desk AI could not cover ${shiftLabel} on ${day} without using an approved request, scheduled day off, duplicate day, or PM-to-AM turnaround.`);
+      return;
+    }
+    assignedByEmployeeDay.add(`${employee.id}:${day}`);
+    workedCount.set(employee.id, (workedCount.get(employee.id) || 0) + 1);
+    labelByEmployeeDay.set(`${employee.id}:${day}`, shiftLabel);
+    assignments.push({
+      employeeId: employee.id,
+      shiftDate: day,
+      shiftTypeId: shift.id,
+      customStartTime: null,
+      customEndTime: null,
+      unpaidBreakMinutes: shift.unpaidBreakMinutes ?? 0,
+      roleWorked: shiftLabel,
+      roleNote: null,
+      managerNote: "AI draft - Front Desk rotation",
+      isOpenShift: false,
+    });
+  };
+
+  payload.days.forEach((day: string, dayIndex: number) => {
+    addCoverage(day, dayIndex, "FD AM", fdAm);
+    addCoverage(day, dayIndex, "FD PM", fdPm);
+  });
+
+  for (const employee of employees) {
+    const daysOff = offByEmployee.get(employee.id) || new Set();
+    const approvedDays = payload.days.filter((day: string) => approvedByEmployeeDay.has(`${employee.id}:${day}`));
+    if (approvedDays.length) continue;
+    if (daysOff.size < 2) warnings.push(`${employee.displayName} does not have two back-to-back days off in this AI draft.`);
+  }
+  if (weekendPair.length === 2 && employees.length >= 4) {
+    warnings.push("Front Desk AI alternates Saturday/Sunday weekend-off groups by week while preserving AM/PM coverage.");
+  }
+  return assignments;
+}
+
 function buildAiScheduleDraft(payload: any, scopeDepartment?: string) {
   const shiftByLabel = new Map<string, any>(payload.shiftTypes.map((shift: any) => [String(shift.label).toUpperCase(), shift]));
   const employeesByDepartment = new Map<string, any[]>();
   for (const department of DEPARTMENTS) {
     employeesByDepartment.set(department, payload.employees.filter((employee: any) => employee.active && employeeScheduleDepartments(employee).includes(department)));
   }
-  const approvedByEmployeeDay = new Set((payload.approvedRequests || []).map((request: any) => `${request.employeeId}:${request.requestDate}`));
+  const approvedByEmployeeDay = new Set<string>((payload.approvedRequests || []).map((request: any) => `${request.employeeId}:${request.requestDate}`));
   const assignedByEmployeeDay = new Set<string>();
   const assignments: any[] = [];
   const warnings: string[] = [];
@@ -1560,6 +1663,10 @@ function buildAiScheduleDraft(payload: any, scopeDepartment?: string) {
 
   const forecastByDay = new Map<string, any>(payload.forecast.map((day: any) => [day.forecastDate, day]));
   const allowed = scopeDepartment ? new Set([normalizeDepartment(scopeDepartment)]) : null;
+  const frontDeskAiAssignments = (!allowed || allowed.has("Front Desk"))
+    ? buildFrontDeskAiAssignments(payload, shiftByLabel, approvedByEmployeeDay, assignedByEmployeeDay, warnings)
+    : [];
+  assignments.push(...frontDeskAiAssignments);
   for (const day of payload.days) {
     const forecast: any = forecastByDay.get(day) || {};
     const rooms = Number(forecast.roomsSold || 0);
@@ -1570,7 +1677,7 @@ function buildAiScheduleDraft(payload: any, scopeDepartment?: string) {
     const roomCredits = Math.max(0, departures + stayovers * 0.5);
     const hkAttendants = Math.max(1, Math.ceil(((roomCredits * 28) / 60) / 8));
 
-    if (!allowed || allowed.has("Front Desk")) {
+    if (!allowed && !frontDeskAiAssignments.length) {
       add("Front Desk", "FD AM", day, "Desk");
       add("Front Desk", "FD PM", day, "Desk");
       if (occ >= 65 || arrivals + departures >= 55) add("Front Desk", "MID", day, "Volume support");
@@ -2107,6 +2214,33 @@ export function registerScheduleRoutes(app: Express) {
     }
   });
 
+  router.patch("/requests/:id/cancel", requireScheduleAuth, async (req: any, res, next) => {
+    try {
+      const [existing] = await db.select().from(scheduleRequests).where(eq(scheduleRequests.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ error: "Schedule request not found" });
+      const user = publicScheduleUser(req.scheduleUser);
+      let canCancel = existing.requesterUserId === req.scheduleUser.id || user.isSuperAdmin;
+      if (!canCancel && user.isAdmin) {
+        const departments = await getScheduleRequestDepartmentsForManager(req.scheduleUser);
+        canCancel = departments.includes(existing.department);
+      }
+      if (!canCancel) return res.status(403).json({ error: "You can only cancel your own request." });
+      if (existing.status === "cancelled") return res.json({ request: existing });
+      if (existing.status === "denied") return res.status(409).json({ error: "Denied requests are already closed." });
+      const [request] = await db
+        .update(scheduleRequests)
+        .set({ status: "cancelled", reviewedByUserId: req.scheduleUser.id, reviewedAt: new Date(), updatedAt: new Date() })
+        .where(eq(scheduleRequests.id, req.params.id))
+        .returning();
+      await audit(null, req.scheduleUser.id, "schedule_request_cancelled", { requestId: request.id, previousStatus: existing.status });
+      const [requester] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, request.requesterUserId)).limit(1);
+      const [requestWithConflicts] = await addRequestConflictInfo([{ request, user: requester }]);
+      res.json({ request: requestWithConflicts });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/shift-types", requireScheduleManager, async (req: any, res, next) => {
     try {
       const parsed = shiftTypeSchema.safeParse(req.body);
@@ -2358,6 +2492,18 @@ export function registerScheduleRoutes(app: Express) {
       if (parsed.data.clear) {
         await db.delete(scheduleShiftAssignments).where(and(eq(scheduleShiftAssignments.scheduleId, schedule.id), eq(scheduleShiftAssignments.shiftDate, parsed.data.shiftDate), employeeId ? eq(scheduleShiftAssignments.employeeId, employeeId) : eq(scheduleShiftAssignments.isOpenShift, true)));
       } else {
+        const [selectedShiftType] = parsed.data.shiftTypeId ? await db.select().from(scheduleShiftTypes).where(eq(scheduleShiftTypes.id, parsed.data.shiftTypeId)).limit(1) : [];
+        const nonWorkingShift = isNonWorkingShiftLabel(selectedShiftType?.label) || isNonWorkingShiftLabel(parsed.data.roleWorked);
+        const shiftValues = {
+          shiftTypeId: parsed.data.shiftTypeId || null,
+          customStartTime: nonWorkingShift ? null : parsed.data.customStartTime || null,
+          customEndTime: nonWorkingShift ? null : parsed.data.customEndTime || null,
+          unpaidBreakMinutes: nonWorkingShift ? null : parsed.data.unpaidBreakMinutes ?? null,
+          roleNote: parsed.data.roleNote || null,
+          roleWorked: parsed.data.roleWorked || selectedShiftType?.label || null,
+          managerNote: parsed.data.managerNote || null,
+          isOpenShift: parsed.data.isOpenShift,
+        };
         if (employeeId) {
           const approvedRequest = await getApprovedRequestForEmployeeDate(employeeId, parsed.data.shiftDate);
           if (approvedRequest) {
@@ -2371,25 +2517,11 @@ export function registerScheduleRoutes(app: Express) {
           scheduleId: schedule.id,
           employeeId,
           shiftDate: parsed.data.shiftDate,
-          shiftTypeId: parsed.data.shiftTypeId || null,
-          customStartTime: parsed.data.customStartTime || null,
-          customEndTime: parsed.data.customEndTime || null,
-          unpaidBreakMinutes: parsed.data.unpaidBreakMinutes ?? null,
-          roleNote: parsed.data.roleNote || null,
-          roleWorked: parsed.data.roleWorked || null,
-          managerNote: parsed.data.managerNote || null,
-          isOpenShift: parsed.data.isOpenShift,
+          ...shiftValues,
         } as any).onConflictDoUpdate({
           target: [scheduleShiftAssignments.scheduleId, scheduleShiftAssignments.employeeId, scheduleShiftAssignments.shiftDate],
           set: {
-            shiftTypeId: parsed.data.shiftTypeId || null,
-            customStartTime: parsed.data.customStartTime || null,
-            customEndTime: parsed.data.customEndTime || null,
-            unpaidBreakMinutes: parsed.data.unpaidBreakMinutes ?? null,
-            roleNote: parsed.data.roleNote || null,
-            roleWorked: parsed.data.roleWorked || null,
-            managerNote: parsed.data.managerNote || null,
-            isOpenShift: parsed.data.isOpenShift,
+            ...shiftValues,
             updatedAt: new Date(),
           } as any,
         });

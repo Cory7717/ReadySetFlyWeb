@@ -128,6 +128,7 @@ const ES: Record<string, string> = {
   Other: "Otro",
   Approve: "Aprobar",
   Deny: "Negar",
+  Cancel: "Cancelar",
   "No schedule requests yet.": "Todavia no hay solicitudes de horario.",
   "Published schedules are read-only until reopened.": "Los horarios publicados son de solo lectura hasta que se reabran.",
   "Schedule tutorial": "Tutorial del horario",
@@ -422,10 +423,15 @@ function formatWeek(start: string, end: string) {
 
 function shiftText(assignment: ShiftAssignment | undefined, shiftType: ShiftType | undefined) {
   if (!assignment || !shiftType) return "";
+  if (isNonWorkingShift(shiftType.label) || isNonWorkingShift(assignment.roleWorked)) return shiftType.label;
   const start = assignment.customStartTime || shiftType.startTime;
   const end = assignment.customEndTime || shiftType.endTime;
   const base = start && end ? `${formatTimeCompact(start)} - ${formatTimeCompact(end)}` : shiftType.label;
   return [base, usefulRoleWorkedLabel(assignment.roleWorked, shiftType), usefulShiftNote(assignment.roleNote, assignment.roleWorked, shiftType)].filter(Boolean).join("\n");
+}
+
+function isNonWorkingShift(value?: string | null) {
+  return ["OFF", "PTO", "CALL OFF"].includes(String(value || "").trim().toUpperCase());
 }
 
 function usefulRoleWorkedLabel(roleWorked: string | null | undefined, shiftType: ShiftType | undefined) {
@@ -1120,11 +1126,13 @@ function ShiftEditDialog({
   });
   const selectShiftType = (shiftTypeId: string) => {
     const shift = payload.shiftTypes.find((item) => item.id === shiftTypeId);
+    const nonWorking = isNonWorkingShift(shift?.label);
     setForm({
       ...form,
       shiftTypeId: shiftTypeId === "none" ? "" : shiftTypeId,
-      customStartTime: shift?.startTime?.slice(0, 5) || "",
-      customEndTime: shift?.endTime?.slice(0, 5) || "",
+      customStartTime: nonWorking ? "" : shift?.startTime?.slice(0, 5) || "",
+      customEndTime: nonWorking ? "" : shift?.endTime?.slice(0, 5) || "",
+      unpaidBreakMinutes: nonWorking ? "" : form.unpaidBreakMinutes,
       roleWorked: form.roleWorked || shift?.label || "",
     });
   };
@@ -1138,12 +1146,14 @@ function ShiftEditDialog({
       || (nextRole.toLowerCase().includes("houseperson") || nextRole.toLowerCase().includes("houseman") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "houseperson") : undefined)
       || (nextRole.toLowerCase().includes("inspector") ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "room inspector") : undefined)
       || (nextRole.toLowerCase() === "gm" ? payload.shiftTypes.find((shift) => shift.label.toLowerCase() === "gm") : undefined);
+    const nonWorking = isNonWorkingShift(nextRole) || isNonWorkingShift(matchingShift?.label);
     setForm({
       ...form,
       roleWorked: nextRole,
       shiftTypeId: form.shiftTypeId || matchingShift?.id || "",
-      customStartTime: form.customStartTime || matchingShift?.startTime?.slice(0, 5) || "",
-      customEndTime: form.customEndTime || matchingShift?.endTime?.slice(0, 5) || "",
+      customStartTime: nonWorking ? "" : form.customStartTime || matchingShift?.startTime?.slice(0, 5) || "",
+      customEndTime: nonWorking ? "" : form.customEndTime || matchingShift?.endTime?.slice(0, 5) || "",
+      unpaidBreakMinutes: nonWorking ? "" : form.unpaidBreakMinutes,
     });
   };
   const roleOptions = employee
@@ -1185,7 +1195,19 @@ function ShiftEditDialog({
           <div><Label>Role / station note</Label><Input className={C.field} value={form.roleNote} onChange={(event) => setForm({ ...form, roleNote: event.target.value })} placeholder="Breakfast, MOD, desk, etc." /></div>
           <div><Label>Manager note</Label><Textarea className={C.field} value={form.managerNote} onChange={(event) => setForm({ ...form, managerNote: event.target.value })} rows={2} /></div>
           <div className="flex gap-2">
-            <Button className={C.green} onClick={() => onSave({ employeeId: employee?.id || null, shiftDate: date, ...form, roleWorked: form.roleWorked || null, unpaidBreakMinutes: form.unpaidBreakMinutes === "" ? null : Number(form.unpaidBreakMinutes) })}>Save shift</Button>
+            <Button className={C.green} onClick={() => {
+              const shift = payload.shiftTypes.find((item) => item.id === form.shiftTypeId);
+              const nonWorking = isNonWorkingShift(shift?.label) || isNonWorkingShift(form.roleWorked);
+              onSave({
+                employeeId: employee?.id || null,
+                shiftDate: date,
+                ...form,
+                customStartTime: nonWorking ? null : form.customStartTime || null,
+                customEndTime: nonWorking ? null : form.customEndTime || null,
+                roleWorked: form.roleWorked || null,
+                unpaidBreakMinutes: nonWorking || form.unpaidBreakMinutes === "" ? null : Number(form.unpaidBreakMinutes),
+              });
+            }}>Save shift</Button>
             <Button variant="outline" className={C.outline} onClick={onClear}>Clear</Button>
           </div>
         </div>
@@ -2015,7 +2037,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
   );
 }
 
-function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus }: { requests: ScheduleRequest[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => void; onStatus: (request: ScheduleRequest, status: string) => void }) {
+function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus, onCancel }: { requests: ScheduleRequest[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => void; onStatus: (request: ScheduleRequest, status: string) => void; onCancel: (request: ScheduleRequest) => void }) {
   const [form, setForm] = useState({ requestDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
   const [expanded, setExpanded] = useState(!isAdmin);
   const t = (value: string) => tr(spanish, value);
@@ -2026,6 +2048,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus 
   const pendingCount = requests.filter((request) => request.status === "submitted").length;
   const approvedCount = requests.filter((request) => request.status === "approved").length;
   const deniedCount = requests.filter((request) => request.status === "denied").length;
+  const cancelledCount = requests.filter((request) => request.status === "cancelled").length;
   return (
     <Card className={`${C.shell} print:hidden`} data-tour="requests">
       <CardHeader>
@@ -2038,6 +2061,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus 
                 <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">{pendingCount} {spanish ? "pendiente(s)" : "pending"}</Badge>
                 <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800">{approvedCount} {spanish ? "aprobada(s)" : "approved"}</Badge>
                 <Badge variant="outline" className="border-red-300 bg-red-50 text-red-800">{deniedCount} {spanish ? "negada(s)" : "denied"}</Badge>
+                <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">{cancelledCount} {spanish ? "cancelada(s)" : "cancelled"}</Badge>
               </div>
             )}
           </div>
@@ -2080,12 +2104,15 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus 
                     {request.conflictCount} {spanish ? "ya aprobado(s)" : "already approved"}
                   </Badge>
                 )}
-                <Badge variant="outline" className={request.status === "approved" ? "border-emerald-300 bg-emerald-50 text-emerald-800" : request.status === "denied" ? "border-red-300 bg-red-50 text-red-800" : "border-amber-300 bg-amber-50 text-amber-900"}>{request.status}</Badge>
+                <Badge variant="outline" className={request.status === "approved" ? "border-emerald-300 bg-emerald-50 text-emerald-800" : request.status === "denied" ? "border-red-300 bg-red-50 text-red-800" : request.status === "cancelled" ? "border-slate-300 bg-slate-50 text-slate-700" : "border-amber-300 bg-amber-50 text-amber-900"}>{request.status}</Badge>
                 {isAdmin && request.status === "submitted" && (
                   <>
                     <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "approved")}>{t("Approve")}</Button>
                     <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "denied")}>{t("Deny")}</Button>
                   </>
+                )}
+                {(request.status === "submitted" || request.status === "approved") && (
+                  <Button size="sm" variant="outline" className={C.outline} onClick={() => onCancel(request)}>{t("Cancel")}</Button>
                 )}
               </div>
             </div>
@@ -2382,8 +2409,18 @@ export default function SchedulePage() {
     onSuccess: () => {
       toast({ title: "Request updated" });
       queryClient.invalidateQueries({ queryKey: ["/api/schedule/requests"] });
+      if (weekId) queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
     },
     onError: (error: Error) => toast({ title: "Request update failed", description: error.message, variant: "destructive" }),
+  });
+  const cancelRequest = useMutation({
+    mutationFn: (id: string) => apiRequest("PATCH", `/api/schedule/requests/${id}/cancel`, {}),
+    onSuccess: () => {
+      toast({ title: "Request cancelled" });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/requests"] });
+      if (weekId) queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
+    },
+    onError: (error: Error) => toast({ title: "Request cancellation failed", description: error.message, variant: "destructive" }),
   });
 
   if (!shareToken && auth.isLoading) return <div className={`min-h-screen p-8 ${C.page}`}>Loading Schedule...</div>;
@@ -2479,6 +2516,9 @@ export default function SchedulePage() {
                 return;
               }
               updateRequestStatus.mutate({ id: request.id, status });
+            }}
+            onCancel={(request) => {
+              if (window.confirm(`Cancel this request for ${formatDate(request.requestDate)}?`)) cancelRequest.mutate(request.id);
             }}
           />
         )}

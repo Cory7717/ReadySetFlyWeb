@@ -2345,8 +2345,6 @@ async function renderLaborPerformanceReportPdf(payload: any) {
     return map;
   }, new Map<string, any>()).values() as Iterable<any>).sort((a: any, b: any) => String(a.employee.displayName || "").localeCompare(String(b.employee.displayName || "")));
 
-  const allEmployeeIds = Array.from(new Set([...Array.from(scheduledByEmployee.keys()), ...Array.from(actualByEmployee.keys())]))
-    .sort((a, b) => String(employeeById.get(a)?.displayName || "").localeCompare(String(employeeById.get(b)?.displayName || "")));
   const actualRooms = payload.forecast.reduce((sum: number, day: any) => sum + numeric(day.actualRoomsSold ?? day.roomsSold), 0);
   const forecastRooms = payload.forecast.reduce((sum: number, day: any) => sum + numeric(day.roomsSold), 0);
   const actualRoomRevenue = payload.forecast.reduce((sum: number, day: any) => sum + numeric(day.actualRoomRevenue ?? day.roomRevenue), 0);
@@ -2355,6 +2353,22 @@ async function renderLaborPerformanceReportPdf(payload: any) {
   const actualHours = Array.from(actualByEmployee.values()).reduce((sum, row) => sum + row.hours, 0);
   const scheduledHpor = forecastRooms > 0 ? scheduledHours / forecastRooms : 0;
   const actualHpor = actualRooms > 0 ? actualHours / actualRooms : 0;
+  const scheduledByDepartment = new Map<string, number>();
+  for (const row of Array.from(scheduledByEmployee.values())) {
+    scheduledByDepartment.set(row.department, (scheduledByDepartment.get(row.department) || 0) + row.hours);
+  }
+  const actualByDepartment = new Map<string, number>();
+  for (const [employeeId, row] of Array.from(actualByEmployee.entries())) {
+    const department = scheduledByEmployee.get(employeeId)?.department || normalizeDepartment(row.employee?.department);
+    actualByDepartment.set(department, (actualByDepartment.get(department) || 0) + row.hours);
+  }
+  const departmentRows = DEPARTMENTS
+    .filter((department) => numeric(scheduledByDepartment.get(department)) > 0 || numeric(actualByDepartment.get(department)) > 0)
+    .map((department) => {
+      const scheduled = numeric(scheduledByDepartment.get(department));
+      const actual = numeric(actualByDepartment.get(department));
+      return { department, scheduled, actual, variance: actual - scheduled };
+    });
 
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -2395,10 +2409,10 @@ async function renderLaborPerformanceReportPdf(payload: any) {
 
   const cardW = (pageSize[0] - margin * 2 - 36) / 4;
   const cards = [
-    ["Forecast rooms", forecastRooms.toFixed(0), `Final ${actualRooms.toFixed(0)}`],
-    ["Room revenue", `$${forecastRoomRevenue.toFixed(0)}`, `Final $${actualRoomRevenue.toFixed(0)}`],
-    ["Labor hours", scheduledHours.toFixed(2), `Actual ${actualHours.toFixed(2)}`],
-    ["HPOR", scheduledHpor.toFixed(2), `Actual ${actualHpor.toFixed(2)}`],
+    ["Rooms", actualRooms.toFixed(0), `Forecast ${forecastRooms.toFixed(0)} | ${actualRooms - forecastRooms >= 0 ? "+" : ""}${(actualRooms - forecastRooms).toFixed(0)}`],
+    ["Room revenue", `$${actualRoomRevenue.toFixed(0)}`, `Forecast $${forecastRoomRevenue.toFixed(0)}`],
+    ["Labor hours", actualHours.toFixed(2), `Scheduled ${scheduledHours.toFixed(2)} | ${actualHours - scheduledHours >= 0 ? "+" : ""}${(actualHours - scheduledHours).toFixed(2)}`],
+    ["Actual HPOR", actualHpor.toFixed(2), `Target ${TARGET_HPOR.toFixed(2)} | Planned ${scheduledHpor.toFixed(2)}`],
   ];
   cards.forEach((card, index) => {
     const x = margin + index * (cardW + 12);
@@ -2409,58 +2423,23 @@ async function renderLaborPerformanceReportPdf(payload: any) {
   });
   y -= 84;
 
-  drawText("Scheduled vs Actual Hours", margin, y, 13, true);
+  drawText("Housekeeping Room Attendant MPOR", margin, y, 13, true);
   y -= 18;
-  const cols = [170, 95, 70, 70, 70, 220];
-  const headers = ["Associate", "Dept", "Sched", "Actual", "Var", "Daily detail"];
+  const hkCols = [230, 95, 100, 105, 80, 80];
+  const hkHeaders = ["Room Attendant", "Actual hrs", "Room credits", "Std minutes", "MPOR", "Target"];
   let x = margin;
-  headers.forEach((heading, index) => {
-    drawBox(x, y, cols[index], 20, dark, dark);
-    drawText(heading, x + 5, y - 13, 7, true, white);
-    x += cols[index];
-  });
-  y -= 20;
-  for (const employeeId of allEmployeeIds) {
-    ensure(22);
-    const scheduled = scheduledByEmployee.get(employeeId);
-    const actual = actualByEmployee.get(employeeId);
-    const employee: any = scheduled?.employee || actual?.employee;
-    const variance = numeric(actual?.hours) - numeric(scheduled?.hours);
-    const detail = payload.days.map((day: string) => {
-      const scheduledDay = scheduledByEmployeeDay.get(`${employeeId}:${day}`) || 0;
-      const actualDay = actual?.byDay?.[day] || 0;
-      return `${day.slice(5)} S${scheduledDay.toFixed(1)}/A${actualDay.toFixed(1)}`;
-    }).join("  ");
-    const values = [
-      employee?.displayName || "",
-      scheduled?.department || normalizeDepartment(employee?.department),
-      numeric(scheduled?.hours).toFixed(2),
-      numeric(actual?.hours).toFixed(2),
-      `${variance >= 0 ? "+" : ""}${variance.toFixed(2)}`,
-      detail,
-    ];
-    x = margin;
-    values.forEach((value, index) => {
-      drawBox(x, y, cols[index], 20, white);
-      drawText(String(value), x + 5, y - 13, index >= 2 && index <= 4 ? 7 : 6.5, index === 0 || index === 4, index === 4 && Math.abs(variance) > 0.25 ? amber : ink);
-      x += cols[index];
-    });
-    y -= 20;
-  }
-
-  ensure(70);
-  y -= 10;
-  drawText("Housekeeping MPOR by Room Attendant", margin, y, 13, true);
-  y -= 18;
-  const hkCols = [210, 95, 95, 110, 80, 80];
-  const hkHeaders = ["Associate", "Actual hrs", "Room credits", "Std minutes", "MPOR", "Target"];
-  x = margin;
   hkHeaders.forEach((heading, index) => {
     drawBox(x, y, hkCols[index], 20, dark, dark);
     drawText(heading, x + 5, y - 13, 7, true, white);
     x += hkCols[index];
   });
   y -= 20;
+  if (!hkRows.length) {
+    ensure(22);
+    drawBox(margin, y, pageSize[0] - margin * 2, 24, rgb(0.99, 0.96, 0.91));
+    drawText("No room-attendant board data has been entered yet. Enter HK boards after the schedule closes to calculate individual MPOR.", margin + 8, y - 15, 8, false, muted);
+    y -= 30;
+  }
   for (const row of hkRows) {
     ensure(22);
     const mpor = row.roomCredits > 0 ? (row.actualHours * 60) / row.roomCredits : 0;
@@ -2473,6 +2452,33 @@ async function renderLaborPerformanceReportPdf(payload: any) {
     });
     y -= 20;
   }
+
+  ensure(70);
+  y -= 10;
+  drawText("Department Labor Performance", margin, y, 13, true);
+  y -= 18;
+  const deptCols = [220, 140, 140, 140];
+  const deptHeaders = ["Department", "Scheduled hours", "Actual hours", "Variance"];
+  x = margin;
+  deptHeaders.forEach((heading, index) => {
+    drawBox(x, y, deptCols[index], 22, dark, dark);
+    drawText(heading, x + 5, y - 13, 7, true, white);
+    x += deptCols[index];
+  });
+  y -= 22;
+  for (const row of departmentRows) {
+    ensure(24);
+    const values = [row.department, row.scheduled.toFixed(2), row.actual.toFixed(2), `${row.variance >= 0 ? "+" : ""}${row.variance.toFixed(2)}`];
+    x = margin;
+    values.forEach((value, index) => {
+      drawBox(x, y, deptCols[index], 22, white);
+      drawText(String(value), x + 5, y - 14, 8, index === 0 || index === 3, index === 3 && Math.abs(row.variance) >= 1 ? amber : ink);
+      x += deptCols[index];
+    });
+    y -= 22;
+  }
+  y -= 8;
+  drawText("Note: Department actual hours are assigned from scheduled department where available; otherwise the associate's primary department is used.", margin, y, 7, false, muted);
   return Buffer.from(await pdf.save());
 }
 

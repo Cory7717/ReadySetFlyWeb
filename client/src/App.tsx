@@ -81,6 +81,7 @@ import FlyingClubsPage from "@/pages/flying-clubs";
 import FlyingClubDetailPage from "@/pages/flying-club-detail";
 import InvestorDeck, { INVESTOR_DECK_SHARE_PATH } from "@/pages/investor-deck";
 import NoiseAndFuryPage from "@/pages/noise-and-fury";
+import GravesidePage from "@/pages/graveside";
 import CoryArmer from "@/pages/CoryArmer";
 import TipsPage from "@/pages/tips";
 import SchedulePage from "@/pages/schedule";
@@ -237,6 +238,7 @@ function Router() {
       <Route path="/investor-deck" component={InvestorDeck} />
       <Route path={INVESTOR_DECK_SHARE_PATH} component={InvestorDeck} />
       <Route path="/noiseandfury" component={NoiseAndFuryPage} />
+      <Route path="/graveside" component={GravesidePage} />
       <Route path="/coryarmer" component={CoryArmer} />
       <Route path="/tips" component={TipsPage} />
       <Route path="/tips/admin" component={TipsPage} />
@@ -368,6 +370,7 @@ function AppShell() {
   const { isAuthenticated } = useAuth();
   const [location] = useLocation();
   const isNoiseAndFuryPage = location.startsWith("/noiseandfury");
+  const isGravesidePage = location.startsWith("/graveside");
   const isCoryArmerPage = location.startsWith("/coryarmer");
   const isTipsPage = location.startsWith("/tips");
   const isSchedulePage = location.startsWith("/schedule");
@@ -376,6 +379,7 @@ function AppShell() {
   const isVwBeetlePage = location.startsWith("/vw-beetle");
   const isStandalonePage =
     isNoiseAndFuryPage ||
+    isGravesidePage ||
     isCoryArmerPage ||
     isTipsPage ||
     isSchedulePage ||

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   ArrowDown,
   BookOpen,
   ChevronDown,
@@ -19,8 +20,9 @@ import { PatriotScriptExcerptDialog } from "@/components/patriot-protocol/Patrio
 import { trackEvent } from "@/lib/analytics";
 
 const CONCEPT_ART_PATH = "/downloads/patriot-protocol-concept-art.png";
+const COVERT_RESPONSE_PATH = "/downloads/patriot-protocol-covert-response.png";
 const SEASON_GUIDE_PATH = "/downloads/patriot-protocol-season-one-guide.pdf";
-const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
+const CORY_BIO_IMAGE_PATH = "/downloads/cory-armer-creator-bio.png";
 
 type SystemNode = {
   id: string;
@@ -277,16 +279,17 @@ export default function PatriotProtocolPage() {
   );
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#080a0b] text-[#ece9e1] selection:bg-[#9f2822] selection:text-white">
+    <div className="min-h-screen overflow-hidden bg-[#070a08] text-[#e7e6d8] selection:bg-[#65734b] selection:text-white">
       <section className="relative min-h-screen overflow-hidden border-b border-white/10">
         <img
           src={CONCEPT_ART_PATH}
           alt="The Patriot Protocol concept art showing the resistance, the Fourth Foundation, and an authoritarian Washington"
           className="absolute inset-0 h-full w-full object-cover object-[53%_center]"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(4,6,7,0.98)_0%,rgba(4,6,7,0.88)_31%,rgba(4,6,7,0.3)_66%,rgba(4,6,7,0.72)_100%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,6,7,0.22)_0%,rgba(4,6,7,0.08)_43%,rgba(4,6,7,0.98)_100%)]" />
-        <div className="absolute inset-0 opacity-25 [background-image:repeating-linear-gradient(0deg,transparent,transparent_3px,rgba(255,255,255,0.025)_3px,rgba(255,255,255,0.025)_4px)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(3,7,5,0.98)_0%,rgba(3,7,5,0.9)_31%,rgba(6,10,7,0.32)_66%,rgba(3,7,5,0.78)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,7,5,0.2)_0%,rgba(3,7,5,0.08)_43%,rgba(3,7,5,0.99)_100%)]" />
+        <div className="absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(151,166,119,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(151,166,119,0.12)_1px,transparent_1px)] [background-size:80px_80px]" />
+        <div className="absolute inset-0 opacity-20 [background-image:repeating-linear-gradient(0deg,transparent,transparent_3px,rgba(216,205,170,0.035)_3px,rgba(216,205,170,0.035)_4px)]" />
 
         <div className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col px-5 py-6 sm:px-8 lg:px-12">
           <header className="flex items-center justify-between border-b border-white/15 pb-5">
@@ -298,7 +301,7 @@ export default function PatriotProtocolPage() {
               <button onClick={() => scrollTo("system")} className="transition hover:text-white">The System</button>
               <button onClick={() => scrollTo("episodes")} className="transition hover:text-white">Episodes</button>
               <button onClick={() => scrollTo("creator")} className="transition hover:text-white">Creator</button>
-              <span className="border border-[#a52e27]/65 bg-[#551513]/45 px-3 py-1.5 text-[#e4b5ae]">Confidential</span>
+              <span className="border border-[#a88a50]/65 bg-[#342d1d]/65 px-3 py-1.5 text-[#ddc38f]">Classified / Eyes Only</span>
             </nav>
           </header>
 
@@ -314,17 +317,17 @@ export default function PatriotProtocolPage() {
               <div className="text-[11px] font-semibold uppercase tracking-[0.42em] text-[#d4cfc6]">
                 They didn't steal the country.
               </div>
-              <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.42em] text-[#cf3c32]">
+              <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.42em] text-[#c7a35d]">
                 We handed it to them.
               </div>
 
               <h1 className="mt-7 font-display text-[clamp(4.2rem,10.5vw,9rem)] font-semibold uppercase leading-[0.78] tracking-[-0.085em] text-[#f2efe8] drop-shadow-[0_18px_45px_rgba(0,0,0,0.75)]">
                 Patriot
                 <br />
-                <span className="text-[#b9322a]">Protocol</span>
+                <span className="text-[#9ba776]">Protocol</span>
               </h1>
 
-              <p className="mt-8 max-w-2xl border-l-2 border-[#b9322a] pl-5 text-base leading-8 text-[#d4d0c7] sm:text-lg">
+              <p className="mt-8 max-w-2xl border-l-2 border-[#9ba776] pl-5 text-base leading-8 text-[#d4d0c7] sm:text-lg">
                 A decades-long authoritarian takeover reaches its final phase. The only countermeasure is a resistance
                 built in the shadows: more than thirty six-person cells preparing for one synchronized night that can
                 dismantle the operating network before the republic disappears.
@@ -334,7 +337,7 @@ export default function PatriotProtocolPage() {
                 <Button
                   size="lg"
                   onClick={() => setScriptOpen(true)}
-                  className="border-[#a92f28] bg-[#a92f28] text-white [background-image:none] hover:bg-[#c23c33]"
+                  className="border-[#768356] bg-[#667449] text-white [background-image:none] hover:bg-[#78875a]"
                 >
                   <ScrollText className="mr-2 h-4 w-4" />
                   Read pilot excerpt
@@ -378,10 +381,10 @@ export default function PatriotProtocolPage() {
 
       <main>
         <section id="series" className="relative mx-auto max-w-[1500px] px-5 py-24 sm:px-8 lg:px-12 lg:py-32">
-          <div className="pointer-events-none absolute -left-20 top-20 h-80 w-80 rounded-full bg-[#85231e]/10 blur-[120px]" />
+          <div className="pointer-events-none absolute -left-20 top-20 h-80 w-80 rounded-full bg-[#6f7d50]/10 blur-[120px]" />
           <div className="grid gap-14 lg:grid-cols-[0.76fr_1.24fr] lg:gap-20">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c43b32]">Series Overview</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c4a263]">Mission Overview</div>
               <h2 className="mt-5 font-display text-5xl font-semibold leading-[0.98] tracking-[-0.06em] text-white sm:text-7xl">
                 The coup already happened.
               </h2>
@@ -408,7 +411,7 @@ export default function PatriotProtocolPage() {
                   ["03", "Activation", "Thirty-plus cells prepare for one coordinated national operation."],
                 ].map(([number, title, text]) => (
                   <div key={number} className="bg-[#0c0f10] p-6">
-                    <div className="font-mono text-xs text-[#b9322a]">{number}</div>
+                    <div className="font-mono text-xs text-[#9ba776]">{number}</div>
                     <h3 className="mt-8 font-display text-2xl font-semibold tracking-[-0.04em] text-white">{title}</h3>
                     <p className="mt-3 text-sm leading-7 text-[#9d9a93]">{text}</p>
                   </div>
@@ -418,11 +421,14 @@ export default function PatriotProtocolPage() {
           </div>
         </section>
 
-        <section id="system" className="border-y border-white/10 bg-[#0b0e0f] scroll-mt-8">
+        <section
+          id="system"
+          className="border-y border-[#929d73]/15 bg-[#0a0e0b] scroll-mt-8 [background-image:linear-gradient(rgba(130,145,99,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(130,145,99,0.055)_1px,transparent_1px)] [background-size:48px_48px]"
+        >
           <div className="mx-auto max-w-[1500px] px-5 py-24 sm:px-8 lg:px-12 lg:py-32">
             <div className="grid gap-10 lg:grid-cols-[0.72fr_1.28fr] lg:gap-16">
               <div>
-                <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c43b32]">
+                <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c4a263]">
                   <Fingerprint className="h-4 w-4" />
                   Capture Architecture
                 </div>
@@ -442,36 +448,37 @@ export default function PatriotProtocolPage() {
                       onClick={() => setActiveSystemId(node.id)}
                       className={`border p-4 text-left transition ${
                         activeSystemId === node.id
-                          ? "border-[#a92f28] bg-[#2b100f] text-white"
-                          : "border-white/10 bg-black/20 text-[#8f8c85] hover:border-white/25 hover:text-white"
+                          ? "border-[#8d9b68] bg-[#1b2117] text-white"
+                          : "border-[#8c9674]/15 bg-black/25 text-[#8f9385] hover:border-[#9da980]/45 hover:text-white"
                       }`}
                     >
-                      <div className="font-mono text-[10px] text-[#b9322a]">{node.number}</div>
+                      <div className="font-mono text-[10px] text-[#9ba776]">{node.number}</div>
                       <div className="mt-2 text-sm font-semibold uppercase tracking-[0.12em]">{node.title}</div>
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="relative min-h-[520px] overflow-hidden border border-[#8d2d27]/35 bg-[radial-gradient(circle_at_70%_30%,rgba(126,34,29,0.17),transparent_36%),#080a0b] p-7 sm:p-10">
+              <div className="relative min-h-[520px] overflow-hidden border border-[#8f9b70]/30 bg-[radial-gradient(circle_at_70%_30%,rgba(105,120,76,0.18),transparent_36%),#070a08] p-7 sm:p-10">
+                <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:repeating-linear-gradient(135deg,transparent,transparent_18px,rgba(189,166,105,0.06)_18px,rgba(189,166,105,0.06)_19px)]" />
                 <div className="absolute right-5 top-3 font-display text-[10rem] font-semibold leading-none text-white/[0.025]">
                   {activeSystem.number}
                 </div>
                 <div className="relative">
                   <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
                     <div>
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#c43b32]">Active domain</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#c4a263]">Active domain</div>
                       <h3 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
                         {activeSystem.title}
                       </h3>
                     </div>
-                    <span className="border border-[#9f302a]/45 bg-[#481512]/45 px-3 py-2 text-[10px] uppercase tracking-[0.22em] text-[#d59b95]">
+                    <span className="border border-[#8d9b68]/45 bg-[#202718]/75 px-3 py-2 text-[10px] uppercase tracking-[0.22em] text-[#c8d1aa]">
                       {activeSystem.status}
                     </span>
                   </div>
                   <p className="mt-10 max-w-2xl text-xl leading-9 text-[#e0dcd3]">{activeSystem.summary}</p>
-                  <div className="mt-10 border-l-2 border-[#a92f28] bg-black/25 px-6 py-5">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[#9a5c57]">Method</div>
+                  <div className="mt-10 border-l-2 border-[#9ba776] bg-black/30 px-6 py-5">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[#b3955c]">Method</div>
                     <p className="mt-3 text-base leading-8 text-[#aaa79f]">{activeSystem.method}</p>
                   </div>
                   <div className="mt-10 grid grid-cols-3 gap-px bg-white/10">
@@ -490,7 +497,7 @@ export default function PatriotProtocolPage() {
 
         <section className="mx-auto max-w-[1500px] px-5 py-24 sm:px-8 lg:px-12 lg:py-32">
           <div className="max-w-3xl">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c43b32]">The Countermeasure</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c4a263]">Operational Structure</div>
             <h2 className="mt-5 font-display text-5xl font-semibold tracking-[-0.06em] text-white sm:text-7xl">
               Thirty-plus cells. Six people each. One night.
             </h2>
@@ -504,8 +511,8 @@ export default function PatriotProtocolPage() {
             {resistanceRoles.map((role) => {
               const Icon = role.icon;
               return (
-                <article key={role.title} className="border border-white/10 bg-[#0d1011] p-6 transition hover:border-[#9b342e]/55">
-                  <Icon className="h-5 w-5 text-[#c43b32]" />
+                <article key={role.title} className="border border-[#8d9872]/15 bg-[#0c100d] p-6 transition hover:border-[#9ba776]/55">
+                  <Icon className="h-5 w-5 text-[#9ba776]" />
                   <div className="mt-8 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#817e77]">{role.lead}</div>
                   <h3 className="mt-3 font-display text-2xl font-semibold tracking-[-0.04em] text-white">{role.title}</h3>
                   <p className="mt-4 text-sm leading-7 text-[#aaa79f]">{role.text}</p>
@@ -521,7 +528,7 @@ export default function PatriotProtocolPage() {
               ["1", "Coordinated night", "A narrow window to sever the system before Phase IV becomes irreversible."],
             ].map(([value, title, text]) => (
               <div key={value} className="bg-[#090c0d] p-7">
-                <div className="font-display text-5xl font-semibold tracking-[-0.06em] text-[#c43b32]">{value}</div>
+                <div className="font-display text-5xl font-semibold tracking-[-0.06em] text-[#c4a263]">{value}</div>
                 <div className="mt-4 text-sm font-semibold uppercase tracking-[0.15em] text-white">{title}</div>
                 <p className="mt-3 text-sm leading-7 text-[#99968f]">{text}</p>
               </div>
@@ -529,11 +536,58 @@ export default function PatriotProtocolPage() {
           </div>
         </section>
 
-        <section className="border-y border-white/10 bg-[radial-gradient(circle_at_18%_30%,rgba(126,34,29,0.14),transparent_32%),#0b0e0f]">
+        <section className="relative overflow-hidden border-y border-[#929d73]/15 bg-[#060907]">
+          <img
+            src={COVERT_RESPONSE_PATH}
+            alt="Covert response helicopters and black government SUVs staging at a remote airfield"
+            className="absolute inset-0 h-full w-full object-cover object-center"
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(4,8,5,0.97)_0%,rgba(4,8,5,0.8)_42%,rgba(4,8,5,0.18)_72%,rgba(4,8,5,0.62)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,8,5,0.15)_0%,rgba(4,8,5,0.28)_55%,rgba(4,8,5,0.96)_100%)]" />
+          <div className="absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(153,171,116,0.11)_1px,transparent_1px),linear-gradient(90deg,rgba(153,171,116,0.11)_1px,transparent_1px)] [background-size:64px_64px]" />
+
+          <div className="relative mx-auto max-w-[1500px] px-5 py-24 sm:px-8 lg:px-12 lg:py-36">
+            <div className="h-44 sm:hidden" aria-hidden="true" />
+            <div className="max-w-2xl border-l-2 border-[#9ba776] bg-black/35 p-6 backdrop-blur-sm sm:p-8">
+              <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c4a263]">
+                <Activity className="h-4 w-4" />
+                Activation Package / QRF
+              </div>
+              <h2 className="mt-5 font-display text-5xl font-semibold leading-none tracking-[-0.06em] text-white sm:text-7xl">
+                Quiet lift. Black convoy. No insignia.
+              </h2>
+              <p className="mt-6 text-base leading-8 text-[#d0d2c4] sm:text-lg">
+                Compact quick-response aircraft move strike cells between austere staging sites while armored,
+                blacked-out SUVs carry operators through the final ground approach. Every platform is deniable,
+                compartmentalized, and visible only during the narrow activation window.
+              </p>
+
+              <div className="mt-8 grid gap-px bg-[#9ba776]/20 sm:grid-cols-3">
+                {[
+                  ["AIR", "Low-profile rotorcraft", "Rapid insertion and extraction"],
+                  ["GROUND", "Armored black SUVs", "Low-visibility urban movement"],
+                  ["COMMS", "Burst transmission", "No persistent network signature"],
+                ].map(([code, title, detail]) => (
+                  <div key={code} className="bg-[#0a0e0b]/90 p-4">
+                    <div className="font-mono text-[10px] text-[#b79c66]">{code}</div>
+                    <div className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-white">{title}</div>
+                    <div className="mt-2 text-xs leading-5 text-[#929789]">{detail}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="absolute bottom-5 right-5 hidden border border-[#9ba776]/35 bg-black/55 px-4 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#b9c49b] backdrop-blur md:block">
+            Package 04-A / Wheels up 02:10 / Status: compartmented
+          </div>
+        </section>
+
+        <section className="border-y border-[#929d73]/15 bg-[radial-gradient(circle_at_18%_30%,rgba(104,120,75,0.14),transparent_32%),#0a0e0b]">
           <div className="mx-auto max-w-[1500px] px-5 py-24 sm:px-8 lg:px-12 lg:py-32">
             <div className="grid gap-10 lg:grid-cols-[0.72fr_1.28fr]">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c43b32]">Core Ensemble</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c4a263]">Personnel Roster</div>
                 <h2 className="mt-5 font-display text-5xl font-semibold tracking-[-0.06em] text-white sm:text-7xl">
                   Different oaths. One line they will not cross.
                 </h2>
@@ -546,8 +600,8 @@ export default function PatriotProtocolPage() {
 
             <div className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {characters.map((character) => (
-                <article key={character.name} className="min-h-64 border border-white/10 bg-black/25 p-6 transition hover:border-[#9b342e]/55">
-                  <div className="text-[10px] uppercase tracking-[0.24em] text-[#a25b55]">{character.role}</div>
+                <article key={character.name} className="min-h-64 border border-[#8d9872]/15 bg-black/25 p-6 transition hover:border-[#9ba776]/55">
+                  <div className="text-[10px] uppercase tracking-[0.24em] text-[#b3955c]">{character.role}</div>
                   <h3 className="mt-5 font-display text-2xl font-semibold tracking-[-0.04em] text-white">{character.name}</h3>
                   <p className="mt-4 text-sm leading-7 text-[#aaa79f]">{character.summary}</p>
                 </article>
@@ -559,7 +613,7 @@ export default function PatriotProtocolPage() {
         <section id="episodes" className="mx-auto max-w-[1500px] px-5 py-24 sm:px-8 lg:px-12 lg:py-32">
           <div className="grid gap-10 lg:grid-cols-[0.75fr_1.25fr]">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c43b32]">Season One</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c4a263]">Season One / Mission Progression</div>
               <h2 className="mt-5 font-display text-5xl font-semibold tracking-[-0.06em] text-white sm:text-7xl">
                 From quiet coup to activation.
               </h2>
@@ -578,10 +632,10 @@ export default function PatriotProtocolPage() {
                   key={episode.number}
                   className={`border transition ${
                     episode.featured
-                      ? "border-[#a43a32]/75 bg-[linear-gradient(90deg,rgba(74,18,15,0.5),rgba(14,17,18,0.98))]"
+                      ? "border-[#a58c59]/65 bg-[linear-gradient(90deg,rgba(51,46,29,0.72),rgba(12,16,13,0.98))]"
                       : isOpen
-                        ? "border-[#8f3730]/70 bg-[#101415]"
-                        : "border-white/10 bg-[#0b0e0f] hover:border-white/25"
+                        ? "border-[#839064]/65 bg-[#101510]"
+                        : "border-[#8d9872]/15 bg-[#0a0e0b] hover:border-[#9ba776]/40"
                   }`}
                 >
                   <button
@@ -589,27 +643,27 @@ export default function PatriotProtocolPage() {
                     onClick={() => setOpenEpisode(isOpen ? 0 : episode.number)}
                     className="grid w-full items-center gap-5 p-5 text-left sm:grid-cols-[72px_1fr_auto] sm:p-6"
                   >
-                    <div className="font-mono text-sm text-[#c43b32]">EP {String(episode.number).padStart(2, "0")}</div>
+                    <div className="font-mono text-sm text-[#9ba776]">EP {String(episode.number).padStart(2, "0")}</div>
                     <div>
                       <div className="flex flex-wrap items-center gap-3">
                         <h3 className="font-display text-2xl font-semibold tracking-[-0.04em] text-white sm:text-3xl">
                           {episode.title}
                         </h3>
                         {episode.featured ? (
-                          <span className="border border-[#c43b32]/55 bg-[#4a1512]/60 px-2 py-1 text-[9px] uppercase tracking-[0.2em] text-[#e4a49e]">
+                          <span className="border border-[#b09257]/55 bg-[#352d1b]/75 px-2 py-1 text-[9px] uppercase tracking-[0.2em] text-[#dbc28d]">
                             Structural centerpiece
                           </span>
                         ) : null}
                       </div>
                       <div className="mt-2 text-xs uppercase tracking-[0.18em] text-[#77746e]">{episode.phase}</div>
                     </div>
-                    <ChevronDown className={`h-5 w-5 text-[#c43b32] transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                    <ChevronDown className={`h-5 w-5 text-[#9ba776] transition-transform ${isOpen ? "rotate-180" : ""}`} />
                   </button>
                   {isOpen ? (
                     <div className="grid gap-6 border-t border-white/10 px-5 py-6 sm:px-6 lg:grid-cols-[1.2fr_0.8fr]">
                       <p className="text-base leading-8 text-[#d0ccc3]">{episode.summary}</p>
-                      <div className="border-l border-[#9f302a] bg-black/20 px-5 py-4">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[#a96761]">Escalation</div>
+                      <div className="border-l border-[#9ba776] bg-black/20 px-5 py-4">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[#b3955c]">Escalation</div>
                         <p className="mt-3 text-sm leading-7 text-[#aaa79f]">{episode.escalation}</p>
                       </div>
                     </div>
@@ -620,11 +674,11 @@ export default function PatriotProtocolPage() {
           </div>
         </section>
 
-        <section className="border-y border-white/10 bg-[#050708]">
+        <section className="border-y border-[#929d73]/15 bg-[#050806]">
           <div className="mx-auto max-w-[1600px] px-3 py-20 sm:px-6 lg:px-10 lg:py-28">
             <div className="mx-auto mb-8 grid max-w-[1500px] gap-5 px-2 lg:grid-cols-[1fr_auto] lg:items-end">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c43b32]">Concept Art</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c4a263]">Strategic Visual</div>
                 <h2 className="mt-4 font-display text-4xl font-semibold tracking-[-0.055em] text-white sm:text-6xl">
                   The republic under pressure.
                 </h2>
@@ -657,26 +711,26 @@ export default function PatriotProtocolPage() {
           </div>
         </section>
 
-        <section id="creator" className="border-b border-white/10 bg-[#080a0b] scroll-mt-8">
+        <section id="creator" className="border-b border-[#929d73]/15 bg-[#070a08] scroll-mt-8">
           <div className="mx-auto max-w-[1500px] px-5 py-24 sm:px-8 lg:px-12 lg:py-32">
             <div className="mx-auto max-w-3xl text-center">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c43b32]">Creator / Writer</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c4a263]">Creator / Writer</div>
               <h2 className="mt-5 font-display text-5xl font-semibold tracking-[-0.06em] text-white sm:text-7xl">
                 The creator behind the Protocol.
               </h2>
             </div>
 
-            <article className="group mx-auto mt-12 max-w-5xl rounded-[28px] border border-[#8f3730]/25 bg-[linear-gradient(180deg,rgba(16,19,20,0.98)_0%,rgba(8,10,11,1)_100%)] p-5 transition hover:border-[#b13a32]/55 sm:p-7">
+            <article className="group mx-auto mt-12 max-w-5xl border border-[#8d9872]/20 bg-[linear-gradient(180deg,rgba(14,18,14,0.98)_0%,rgba(7,10,8,1)_100%)] p-5 transition hover:border-[#9ba776]/55 sm:p-7">
               <div className="grid gap-7 lg:grid-cols-[0.72fr_1.28fr] lg:gap-10">
                 <div className="overflow-hidden rounded-[22px] border border-white/10 bg-black/20 shadow-[0_22px_50px_rgba(0,0,0,0.38)]">
                   <img
                     src={CORY_BIO_IMAGE_PATH}
                     alt="Cory Armer profile"
-                    className="h-80 w-full scale-[1.34] object-cover object-[center_10%] transition duration-500 group-hover:scale-[1.38] sm:h-[30rem]"
+                    className="h-80 w-full object-cover object-[42%_center] transition duration-500 group-hover:scale-[1.02] sm:h-[30rem]"
                   />
                 </div>
                 <div className="flex flex-col justify-center py-1 sm:py-4">
-                  <div className="text-[11px] uppercase tracking-[0.28em] text-[#ad5a53]">Creator / Writer</div>
+                  <div className="text-[11px] uppercase tracking-[0.28em] text-[#b3955c]">Creator / Writer</div>
                   <h3 className="mt-3 font-display text-4xl font-semibold tracking-[-0.055em] text-white sm:text-5xl">
                     Cory Armer
                   </h3>
@@ -693,11 +747,11 @@ export default function PatriotProtocolPage() {
           </div>
         </section>
 
-        <section className="bg-[#0c0f10]">
+        <section className="bg-[#0a0e0b]">
           <div className="mx-auto max-w-[1500px] px-5 py-20 sm:px-8 lg:px-12">
             <div className="grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
               <div className="max-w-4xl">
-                <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c43b32]">
+                <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c4a263]">
                   <Eye className="h-4 w-4" />
                   Series Promise
                 </div>
@@ -714,7 +768,7 @@ export default function PatriotProtocolPage() {
                   type="button"
                   size="lg"
                   onClick={() => setScriptOpen(true)}
-                  className="border-[#a92f28] bg-[#a92f28] text-white [background-image:none] hover:bg-[#c23c33]"
+                  className="border-[#768356] bg-[#667449] text-white [background-image:none] hover:bg-[#78875a]"
                 >
                   <BookOpen className="mr-2 h-4 w-4" />
                   Read pilot excerpt

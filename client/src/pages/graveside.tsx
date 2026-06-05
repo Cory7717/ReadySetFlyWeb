@@ -18,7 +18,7 @@ import { trackEvent } from "@/lib/analytics";
 
 const HERO_IMAGE_PATH = "/downloads/graveside-hero.png";
 const CONCEPT_ART_PATH = "/downloads/graveside-concept-art.png";
-const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
+const CORY_BIO_IMAGE_PATH = "/downloads/cory-armer-creator-bio.png";
 const ONE_PAGER_PATH = "/downloads/graveside-one-pager.pdf";
 const SERIES_BIBLE_PATH = "/downloads/graveside-series-bible.pdf";
 
@@ -682,7 +682,7 @@ export default function GravesidePage() {
                   <img
                     src={CORY_BIO_IMAGE_PATH}
                     alt="Cory Armer profile"
-                    className="h-80 w-full scale-[1.34] object-cover object-[center_10%] transition duration-500 group-hover:scale-[1.38] sm:h-[30rem]"
+                    className="h-80 w-full object-cover object-[42%_center] transition duration-500 group-hover:scale-[1.02] sm:h-[30rem]"
                   />
                 </div>
 

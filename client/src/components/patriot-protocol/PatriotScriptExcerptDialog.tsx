@@ -185,7 +185,7 @@ function ScriptPage({ blocks, pageNumber }: { blocks: ScriptBlock[]; pageNumber:
   return (
     <article className="relative mx-auto min-h-[760px] w-full max-w-[650px] bg-[#f0ede5] px-7 py-10 text-[#111] shadow-[0_25px_90px_rgba(0,0,0,0.55)] sm:min-h-[820px] sm:px-14 sm:py-12">
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-        <span className="-rotate-[24deg] select-none whitespace-nowrap text-5xl font-bold uppercase tracking-[0.17em] text-[#8f1f19]/[0.045] sm:text-7xl">
+        <span className="-rotate-[24deg] select-none whitespace-nowrap text-5xl font-bold uppercase tracking-[0.17em] text-[#65734b]/[0.055] sm:text-7xl">
           Confidential
         </span>
       </div>
@@ -233,11 +233,11 @@ export function PatriotScriptExcerptDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[94vh] w-[96vw] max-w-5xl flex-col gap-0 overflow-hidden border-white/15 bg-[#080a0b] p-0 text-[#ece9df] shadow-[0_30px_120px_rgba(0,0,0,0.85)] sm:rounded-none">
+      <DialogContent className="flex h-[94vh] w-[96vw] max-w-5xl flex-col gap-0 overflow-hidden border-[#8d9872]/25 bg-[#070a08] p-0 text-[#ece9df] shadow-[0_30px_120px_rgba(0,0,0,0.85)] sm:rounded-none">
         <DialogHeader className="shrink-0 border-b border-white/10 px-5 py-4 pr-14 text-left sm:px-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#c64438]">
+              <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#c4a263]">
                 <RadioTower className="h-4 w-4" />
                 Pilot Script Excerpt
               </div>
@@ -255,11 +255,11 @@ export function PatriotScriptExcerptDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-[#181b1c] px-3 py-6 sm:px-8 sm:py-8">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-[#151a16] px-3 py-6 sm:px-8 sm:py-8">
           <ScriptPage blocks={excerptPages[pageIndex]} pageNumber={pageIndex + 1} />
         </div>
 
-        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-white/10 bg-[#080a0b] px-4 py-3 sm:px-7">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[#8d9872]/20 bg-[#070a08] px-4 py-3 sm:px-7">
           <Button
             type="button"
             variant="outline"
@@ -281,7 +281,7 @@ export function PatriotScriptExcerptDialog({
                 aria-label={`Go to script page ${index + 1}`}
                 onClick={() => goToPage(index)}
                 className={`h-1.5 transition-all ${
-                  index === pageIndex ? "w-8 bg-[#bc3027]" : "w-3 bg-white/20 hover:bg-white/40"
+                  index === pageIndex ? "w-8 bg-[#9ba776]" : "w-3 bg-white/20 hover:bg-white/40"
                 }`}
               />
             ))}
@@ -296,7 +296,7 @@ export function PatriotScriptExcerptDialog({
             aria-label="Next script page"
             disabled={pageIndex === excerptPages.length - 1}
             onClick={() => goToPage(pageIndex + 1)}
-            className="border-[#a42d26] bg-[#a42d26] text-white [background-image:none] hover:bg-[#bd3d34]"
+            className="border-[#768356] bg-[#667449] text-white [background-image:none] hover:bg-[#78875a]"
           >
             <span className="hidden sm:inline">Next page</span>
             <ArrowRight className="h-4 w-4" />

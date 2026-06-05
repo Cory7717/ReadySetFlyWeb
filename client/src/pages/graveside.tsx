@@ -5,6 +5,7 @@ import {
   Clock3,
   Download,
   Eye,
+  Expand,
   FileText,
   Fingerprint,
   MapPin,
@@ -16,6 +17,8 @@ import { ScriptExcerptDialog } from "@/components/graveside/ScriptExcerptDialog"
 import { trackEvent } from "@/lib/analytics";
 
 const HERO_IMAGE_PATH = "/downloads/graveside-hero.png";
+const CONCEPT_ART_PATH = "/downloads/graveside-concept-art.png";
+const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
 const ONE_PAGER_PATH = "/downloads/graveside-one-pager.pdf";
 const SERIES_BIBLE_PATH = "/downloads/graveside-series-bible.pdf";
 
@@ -257,6 +260,19 @@ const seasonArc = [
   },
 ];
 
+const creatorBio = {
+  role: "Creator / Writer",
+  name: "Cory Armer",
+  teaser:
+    "Creator and writer of Graveside and founder of RSF, bringing operational discipline, entrepreneurial vision, and a character-first approach to development.",
+  paragraphs: [
+    "Cory Armer is the creator and writer of Graveside, a TV-MA prestige drama-horror anthology built around dark American history, a central relationship under extraordinary pressure, and a present-day conspiracy driven by the evidence the dead leave behind. Designed as a closed three-season story, the series combines a repeatable anthology engine with an escalating mythology and definitive ending.",
+    "Cory brings a distinct, non-traditional path into the entertainment industry. With over 15 years of experience leading large-scale, branded hospitality operations, he has built a career grounded in execution, leadership, and performance. Managing high-volume environments and delivering consistent results within structured systems has shaped a disciplined, solutions-oriented approach that now carries into his creative work.",
+    "He is also the founder of Ready Set Fly (RSF), an aviation platform built to modernize how pilots plan, train, and access aircraft. The platform reflects his ability to identify gaps in traditional industries and build scalable, real-world solutions, with early traction validating both the concept and execution.",
+    "As a creator, Cory represents a combination of operational discipline, entrepreneurial vision, and creative ambition. His focus is on developing character-driven projects that are culturally resonant, commercially viable, and constructed with a clear path from concept through market-ready execution.",
+  ],
+};
+
 function scrollTo(sectionId: string) {
   const section = document.getElementById(sectionId);
   if (!section) return;
@@ -301,7 +317,9 @@ export default function GravesidePage() {
             </div>
             <div className="hidden items-center gap-6 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#aaa496] sm:flex">
               <button onClick={() => scrollTo("series")} className="transition hover:text-white">Series</button>
+              <button onClick={() => scrollTo("concept-art")} className="transition hover:text-white">Concept</button>
               <button onClick={() => scrollTo("season-one")} className="transition hover:text-white">Episodes</button>
+              <button onClick={() => scrollTo("creator")} className="transition hover:text-white">Creator</button>
               <span className="border border-[#a33a32]/60 bg-[#571c18]/35 px-3 py-1.5 text-[#dfc4bd]">Confidential</span>
             </div>
           </header>
@@ -405,6 +423,51 @@ export default function GravesidePage() {
                     <p className="mt-3 text-sm leading-7 text-[#9e9b94]">{track.text}</p>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="concept-art" className="border-y border-white/10 bg-[#050708] scroll-mt-8">
+          <div className="mx-auto max-w-[1600px] px-3 py-16 sm:px-6 lg:px-10 lg:py-24">
+            <div className="mx-auto mb-8 grid max-w-[1500px] gap-5 px-2 sm:px-0 lg:grid-cols-[1fr_auto] lg:items-end">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#a94137]">
+                  Series Concept Art
+                </div>
+                <h2 className="mt-4 font-display text-4xl font-semibold tracking-[-0.055em] text-white sm:text-6xl">
+                  The world at a glance.
+                </h2>
+              </div>
+              <p className="max-w-xl text-sm leading-7 text-[#99968e] lg:text-right">
+                A visual statement of the series engine, central couple, historical scope, and collision between the
+                evidence of the past and the danger building in the present.
+              </p>
+            </div>
+
+            <div className="group relative overflow-hidden border border-white/15 bg-[#0b0e0f] shadow-[0_34px_100px_rgba(0,0,0,0.55)]">
+              <img
+                src={CONCEPT_ART_PATH}
+                alt="Graveside concept art featuring Eli Cole, Mara Voss, historic cemetery imagery, and series overview copy"
+                className="h-auto w-full"
+              />
+              <div className="absolute inset-x-0 bottom-0 flex justify-end bg-gradient-to-t from-black/75 via-black/20 to-transparent p-4 pt-20 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+                <Button
+                  asChild
+                  size="sm"
+                  variant="outline"
+                  className="border-white/25 bg-black/65 text-white [background-image:none] backdrop-blur hover:bg-black/85"
+                >
+                  <a
+                    href={CONCEPT_ART_PATH}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => downloadTracked("graveside_concept_art_full_size", CONCEPT_ART_PATH)}
+                  >
+                    <Expand className="mr-2 h-4 w-4" />
+                    Open full size
+                  </a>
+                </Button>
               </div>
             </div>
           </div>
@@ -596,6 +659,47 @@ export default function GravesidePage() {
                 </article>
               );
             })}
+          </div>
+        </section>
+
+        <section id="creator" className="border-t border-white/10 bg-[#080b0c] scroll-mt-8">
+          <div className="mx-auto max-w-[1500px] px-5 py-24 sm:px-8 lg:px-12 lg:py-32">
+            <div className="mx-auto max-w-3xl text-center">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#a94137]">
+                Creator / Writer
+              </div>
+              <h2 className="mt-5 font-display text-5xl font-semibold tracking-[-0.06em] text-white sm:text-7xl">
+                The person behind the door.
+              </h2>
+              <p className="mt-6 text-base leading-8 text-[#aaa79f] sm:text-lg">
+                The creative and operating background shaping Graveside from concept through industry-facing development.
+              </p>
+            </div>
+
+            <article className="group mx-auto mt-12 max-w-5xl rounded-[26px] border border-[#8f3730]/25 bg-[linear-gradient(180deg,rgba(16,19,20,0.98)_0%,rgba(8,10,11,1)_100%)] p-5 transition hover:border-[#a94137]/55 sm:rounded-[30px] sm:p-7">
+              <div className="grid gap-7 lg:grid-cols-[0.72fr_1.28fr] lg:gap-10">
+                <div className="overflow-hidden rounded-[22px] border border-white/10 bg-black/20 shadow-[0_22px_50px_rgba(0,0,0,0.36)]">
+                  <img
+                    src={CORY_BIO_IMAGE_PATH}
+                    alt="Cory Armer profile"
+                    className="h-80 w-full scale-[1.34] object-cover object-[center_10%] transition duration-500 group-hover:scale-[1.38] sm:h-[30rem]"
+                  />
+                </div>
+
+                <div className="flex flex-col justify-center py-1 sm:py-4">
+                  <div className="text-[11px] uppercase tracking-[0.28em] text-[#a95a52]">{creatorBio.role}</div>
+                  <h3 className="mt-3 font-display text-4xl font-semibold tracking-[-0.055em] text-white sm:text-5xl">
+                    {creatorBio.name}
+                  </h3>
+                  <p className="mt-5 text-base leading-8 text-[#c6c0b5]">{creatorBio.teaser}</p>
+                  <div className="mt-6 space-y-4 border-t border-white/10 pt-6 text-sm leading-7 text-[#ddd7cc]">
+                    {creatorBio.paragraphs.map((paragraph) => (
+                      <p key={paragraph}>{paragraph}</p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </article>
           </div>
         </section>
 

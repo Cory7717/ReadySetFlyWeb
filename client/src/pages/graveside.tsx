@@ -10,6 +10,7 @@ import {
   Fingerprint,
   MapPin,
   ScrollText,
+  ShieldCheck,
   Skull,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -347,6 +348,18 @@ export default function GravesidePage() {
                 Two people obsessed with cemetery history get exactly what they wished for - and spend three seasons
                 trying to survive what they found.
               </p>
+
+              <div className="mt-7 flex w-fit items-center gap-4 border border-[#a94137]/65 bg-[linear-gradient(90deg,rgba(79,22,18,0.82),rgba(9,12,13,0.78))] px-5 py-4 shadow-[0_18px_55px_rgba(0,0,0,0.42)] backdrop-blur">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center border border-[#c65a4f]/55 bg-black/25 text-[#d86a5f]">
+                  <ShieldCheck className="h-6 w-6" />
+                </span>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.34em] text-[#d86a5f]">WGA Registered</div>
+                  <div className="mt-1 font-mono text-base font-semibold tracking-[0.1em] text-white sm:text-lg">
+                    WGA #2339596
+                  </div>
+                </div>
+              </div>
 
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button

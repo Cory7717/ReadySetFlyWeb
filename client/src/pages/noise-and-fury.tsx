@@ -22,7 +22,7 @@ const SCOTT_BIO_IMAGE_PATH = "/downloads/noise-and-fury-scott.jpg";
 const highlightStats = [
   { value: "8", label: "Prestige episodes", detail: "Season one mapped end-to-end" },
   { value: "7 of 8", label: "Scripts written", detail: "Series bible and scripts already underway" },
-  { value: "2", label: "WGA registrations", detail: "Scripts and series bible registered" },
+  { value: "2", label: "WGA registrations", detail: "#2317225 / #2333978" },
   { value: "Open", label: "Strategic round", detail: "Packaging with pilot-financing flexibility" },
 ];
 
@@ -286,6 +286,22 @@ export default function NoiseAndFuryPage() {
                   <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur sm:min-h-[112px]">
                     <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">STRATEGIC FUNDING ROUND</div>
                     <div className="mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Open for packaging and pilot financing</div>
+                  </div>
+                </div>
+
+                <div className="flex max-w-2xl flex-col gap-3 border border-[#D3A869]/45 bg-[linear-gradient(90deg,rgba(30,22,15,0.92),rgba(9,9,10,0.72))] px-5 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.3)] backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-[#D3A869]/55 bg-[#D3A869]/10 text-[#E0BF84]">
+                      <Shield className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.34em] text-[#B89258]">WGA Registered</div>
+                      <div className="mt-1 text-sm text-[#E9DED2]">Writers Guild of America registrations</div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 font-mono text-sm font-semibold tracking-[0.08em] text-white">
+                    <span className="border border-[#D3A869]/35 bg-black/35 px-3 py-2">WGA #2317225</span>
+                    <span className="border border-[#D3A869]/35 bg-black/35 px-3 py-2">WGA #2333978</span>
                   </div>
                 </div>
 

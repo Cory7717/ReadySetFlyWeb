@@ -8,9 +8,11 @@ import {
   FileText,
   Fingerprint,
   MapPin,
+  ScrollText,
   Skull,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ScriptExcerptDialog } from "@/components/graveside/ScriptExcerptDialog";
 import { trackEvent } from "@/lib/analytics";
 
 const HERO_IMAGE_PATH = "/downloads/graveside-hero.png";
@@ -268,6 +270,7 @@ function downloadTracked(label: string, target: string) {
 export default function GravesidePage() {
   const [activeType, setActiveType] = useState<"All" | EpisodeType>("All");
   const [openEpisode, setOpenEpisode] = useState(1);
+  const [scriptExcerptOpen, setScriptExcerptOpen] = useState(false);
 
   useEffect(() => {
     document.title = "Graveside | A Television Series";
@@ -330,8 +333,17 @@ export default function GravesidePage() {
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button
                   size="lg"
-                  onClick={() => scrollTo("series")}
+                  onClick={() => setScriptExcerptOpen(true)}
                   className="border-[#a43d34] bg-[#a43d34] text-white [background-image:none] hover:bg-[#bb4a40]"
+                >
+                  <ScrollText className="mr-2 h-4 w-4" />
+                  Read pilot excerpt
+                </Button>
+                <Button
+                  size="lg"
+                  onClick={() => scrollTo("series")}
+                  variant="outline"
+                  className="border-white/20 bg-black/35 text-white [background-image:none] backdrop-blur hover:bg-black/55"
                 >
                   Enter the story
                   <ArrowDown className="ml-2 h-4 w-4" />
@@ -340,7 +352,7 @@ export default function GravesidePage() {
                   asChild
                   size="lg"
                   variant="outline"
-                  className="border-white/20 bg-black/35 text-white [background-image:none] backdrop-blur hover:bg-black/55"
+                  className="border-white/20 bg-transparent text-white [background-image:none] backdrop-blur hover:bg-black/55"
                 >
                   <a
                     href={ONE_PAGER_PATH}
@@ -638,6 +650,7 @@ export default function GravesidePage() {
           </div>
         </section>
       </main>
+      <ScriptExcerptDialog open={scriptExcerptOpen} onOpenChange={setScriptExcerptOpen} />
     </div>
   );
 }

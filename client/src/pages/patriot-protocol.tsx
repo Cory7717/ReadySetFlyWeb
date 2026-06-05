@@ -21,7 +21,7 @@ import { trackEvent } from "@/lib/analytics";
 
 const CONCEPT_ART_PATH = "/downloads/patriot-protocol-concept-art.png";
 const COVERT_RESPONSE_PATH = "/downloads/patriot-protocol-covert-response.png";
-const SEASON_GUIDE_PATH = "/downloads/patriot-protocol-season-one-guide.pdf";
+const SERIES_BIBLE_PATH = "/downloads/patriot-protocol-series-bible.docx";
 const CORY_BIO_IMAGE_PATH = "/downloads/cory-armer-creator-bio.png";
 
 type SystemNode = {
@@ -358,13 +358,12 @@ export default function PatriotProtocolPage() {
                   className="border-white/20 bg-transparent text-white [background-image:none] backdrop-blur hover:bg-black/60"
                 >
                   <a
-                    href={SEASON_GUIDE_PATH}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => trackDownload("patriot_protocol_season_guide", SEASON_GUIDE_PATH)}
+                    href={SERIES_BIBLE_PATH}
+                    download
+                    onClick={() => trackDownload("patriot_protocol_series_bible", SERIES_BIBLE_PATH)}
                   >
                     <Download className="mr-2 h-4 w-4" />
-                    Season guide
+                    Download series bible
                   </a>
                 </Button>
               </div>
@@ -780,13 +779,12 @@ export default function PatriotProtocolPage() {
                   className="border-white/15 bg-transparent text-white [background-image:none] hover:bg-white/5"
                 >
                   <a
-                    href={SEASON_GUIDE_PATH}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => trackDownload("patriot_protocol_footer_season_guide", SEASON_GUIDE_PATH)}
+                    href={SERIES_BIBLE_PATH}
+                    download
+                    onClick={() => trackDownload("patriot_protocol_footer_series_bible", SERIES_BIBLE_PATH)}
                   >
                     <FileText className="mr-2 h-4 w-4" />
-                    Season guide
+                    Download series bible
                   </a>
                 </Button>
               </div>

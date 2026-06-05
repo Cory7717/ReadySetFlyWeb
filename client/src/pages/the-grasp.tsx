@@ -8,6 +8,7 @@ import {
   Infinity,
   MapPin,
   Shell,
+  ShieldCheck,
   Waves,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -170,6 +171,19 @@ export default function TheGraspPage() {
                 A man travels to a remote Norwegian island to save his relationship, only to discover the community
                 does not believe in letting outsiders go.
               </p>
+              <div className="mt-7 flex w-fit items-center gap-4 border border-[#536d76]/35 bg-[#e6ecea]/70 px-5 py-4 shadow-[0_18px_50px_rgba(46,65,71,0.12)] backdrop-blur">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center border border-[#536d76]/30 bg-white/30 text-[#536d76]">
+                  <ShieldCheck className="h-6 w-6" />
+                </span>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.34em] text-[#607881]">
+                    WGA Registered
+                  </div>
+                  <div className="mt-1 font-mono text-base font-semibold tracking-[0.1em] text-[#30464d] sm:text-lg">
+                    WGA #2316023
+                  </div>
+                </div>
+              </div>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button
                   size="lg"

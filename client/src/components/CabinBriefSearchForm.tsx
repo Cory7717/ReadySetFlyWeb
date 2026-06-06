@@ -58,6 +58,8 @@ export default function CabinBriefSearchForm({
   const [toSuggestions, setToSuggestions] = useState<CabinBriefAirportOption[]>([]);
   const [loadingFrom, setLoadingFrom] = useState(false);
   const [loadingTo, setLoadingTo] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [date, setDate] = useState(initialDate || today);
 
   useEffect(() => {
@@ -135,7 +137,61 @@ export default function CabinBriefSearchForm({
     return () => window.clearTimeout(timer);
   }, [toInput, selectedTo]);
 
-  const canSubmit = Boolean(selectedFrom?.icao && selectedTo?.icao);
+  const canSubmit = Boolean(fromInput.trim() && toInput.trim()) && !submitting;
+
+  const resolveAirport = async (
+    input: string,
+    selected: CabinBriefAirportOption | null,
+  ): Promise<CabinBriefAirportOption | null> => {
+    if (selected?.icao) return selected;
+
+    const query = input.trim();
+    if (!query) return null;
+    const results = await lookupAirports(query);
+    const normalizedQuery = query.toUpperCase();
+    const exactMatch = results.find((option) => option.icao.toUpperCase() === normalizedQuery);
+    if (exactMatch) return exactMatch;
+
+    if (/^[A-Z0-9]{3}$/.test(normalizedQuery)) {
+      const suffixMatches = results.filter((option) => option.icao.toUpperCase().endsWith(normalizedQuery));
+      if (suffixMatches.length === 1) return suffixMatches[0];
+    }
+
+    return null;
+  };
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      const [resolvedFrom, resolvedTo] = await Promise.all([
+        resolveAirport(fromInput, selectedFrom),
+        resolveAirport(toInput, selectedTo),
+      ]);
+
+      if (!resolvedFrom || !resolvedTo) {
+        setSubmitError(
+          "Choose each airport from the search results, or enter an exact airport code such as KDFW.",
+        );
+        return;
+      }
+
+      setSelectedFrom(resolvedFrom);
+      setFromInput(formatAirportOption(resolvedFrom));
+      setSelectedTo(resolvedTo);
+      setToInput(formatAirportOption(resolvedTo));
+      onSubmit({
+        from: resolvedFrom,
+        to: resolvedTo,
+        date: date || today,
+      });
+    } catch {
+      setSubmitError("Airport search is temporarily unavailable. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className={className}>
@@ -150,6 +206,7 @@ export default function CabinBriefSearchForm({
               onChange={(event) => {
                 setFromInput(event.target.value);
                 setSelectedFrom(null);
+                setSubmitError("");
               }}
               placeholder="Flying from - city or airport"
               className={inputClassName}
@@ -191,6 +248,7 @@ export default function CabinBriefSearchForm({
               onChange={(event) => {
                 setToInput(event.target.value);
                 setSelectedTo(null);
+                setSubmitError("");
               }}
               placeholder="Flying to - city or airport"
               className={inputClassName}
@@ -238,19 +296,18 @@ export default function CabinBriefSearchForm({
           <Button
             className={buttonClassName}
             disabled={!canSubmit}
-            onClick={() => {
-              if (!selectedFrom || !selectedTo) return;
-              onSubmit({
-                from: selectedFrom,
-                to: selectedTo,
-                date: date || today,
-              });
-            }}
+            type="button"
+            onClick={() => void handleSubmit()}
           >
-            {submitLabel}
+            {submitting ? "Finding airports..." : submitLabel}
           </Button>
         </div>
       </div>
+      {submitError ? (
+        <div role="alert" className={`mt-3 text-sm ${isDark ? "text-[#ffb4a9]" : "text-destructive"}`}>
+          {submitError}
+        </div>
+      ) : null}
       <div className={hintClassName}>
         Start with city names or airport names. Pick the airport you mean from the list so the briefing uses the right route.
       </div>

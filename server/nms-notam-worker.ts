@@ -29,6 +29,10 @@ const NMS_REQUEST_MAX_RETRIES = Number(process.env.NMS_REQUEST_MAX_RETRIES || 3)
 const NMS_RETRY_BASE_DELAY_MS = Number(process.env.NMS_RETRY_BASE_DELAY_MS || 2000);
 const NMS_SOURCE = "nms_api";
 const MAX_DELTA_LOOKBACK_HOURS = Number(process.env.NMS_MAX_DELTA_LOOKBACK_HOURS || 24);
+const DELTA_LOOKBACK_SAFETY_MINUTES = Math.max(
+  1,
+  Number(process.env.NMS_DELTA_LOOKBACK_SAFETY_MINUTES || 5),
+);
 const UPSERT_BATCH_SIZE = 500;
 
 let workerStarted = false;
@@ -368,9 +372,12 @@ async function setStateValue(key: string, value: string) {
 }
 
 function clampLookback(date: Date) {
-  const maxLookbackMs = MAX_DELTA_LOOKBACK_HOURS * 60 * 60 * 1000;
+  const maxLookbackMs = Math.max(
+    60 * 1000,
+    MAX_DELTA_LOOKBACK_HOURS * 60 * 60 * 1000 - DELTA_LOOKBACK_SAFETY_MINUTES * 60 * 1000,
+  );
   const earliest = Date.now() - maxLookbackMs;
-  if (date.getTime() < earliest) return new Date(earliest);
+  if (Number.isNaN(date.getTime()) || date.getTime() < earliest) return new Date(earliest);
   return date;
 }
 
@@ -421,6 +428,7 @@ async function runDeltaSync() {
   if (activeSync) return;
   activeSync = true;
   const started = Date.now();
+  const syncStartedAt = new Date(started);
   try {
     const lastUpdatedRaw = await getStateValue("lastUpdatedDate");
     const fallback = new Date(Date.now() - 60 * 60 * 1000);
@@ -455,12 +463,15 @@ async function runDeltaSync() {
       }
     }
 
-    if (latestUpdated) {
-      await setStateValue("lastUpdatedDate", latestUpdated.toISOString());
-    }
+    const nextCursor =
+      latestUpdated && latestUpdated > syncStartedAt
+        ? latestUpdated
+        : syncStartedAt;
+    await setStateValue("lastUpdatedDate", nextCursor.toISOString());
     logEvent({
       phase: "delta_complete",
       total,
+      lastUpdatedDate: nextCursor.toISOString(),
       durationMs: Date.now() - started,
     });
   } catch (error: any) {

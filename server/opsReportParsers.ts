@@ -332,23 +332,26 @@ function parseDetailedFlash(file: Express.Multer.File, rows: string[][], context
   const find = (group: string, category: string) => rows.slice(headerIndex + 1).find((row) =>
     normalizedHeader(row[groupIndex]) === normalizedHeader(group) && normalizedHeader(row[categoryIndex]) === normalizedHeader(category));
   const roomsOccupied = find("Availability", "Rooms Occupied");
+  const roomsAvailable = find("Availability", "Rooms available");
   const roomsSold = find("Availability", "Total rooms sold");
   const transientRevenue = find("Revenue", "Room Revenue Transient");
   const groupRevenue = find("Revenue", "Room Revenue Group");
   const adr = find("Revenue", "ADR Sold");
-  for (const [label, row] of [["Rooms Occupied", roomsOccupied], ["Total rooms sold", roomsSold], ["Room Revenue Transient", transientRevenue], ["Room Revenue Group", groupRevenue], ["ADR Sold", adr]] as const) {
+  for (const [label, row] of [["Rooms Occupied", roomsOccupied], ["Rooms available", roomsAvailable], ["Total rooms sold", roomsSold], ["Room Revenue Transient", transientRevenue], ["Room Revenue Group", groupRevenue], ["ADR Sold", adr]] as const) {
     if (!row) warnings.push(`Detailed Flash row not found: ${label}.`);
   }
   const mapping = {
     mtd: {
       adr: numeric(adr?.[mtdRooms]),
       roomsSold: numeric(roomsSold?.[mtdRooms]),
+      availableRooms: numeric(roomsAvailable?.[mtdRooms]),
       occupancy: numeric(roomsOccupied?.[mtdRatio]),
       roomRevenue: numeric(transientRevenue?.[mtdRooms]) + numeric(groupRevenue?.[mtdRooms]),
     },
     ytd: {
       adr: numeric(adr?.[ytdRooms]),
       roomsSold: numeric(roomsSold?.[ytdRooms]),
+      availableRooms: numeric(roomsAvailable?.[ytdRooms]),
       occupancy: numeric(roomsOccupied?.[ytdRatio]),
       roomRevenue: numeric(transientRevenue?.[ytdRooms]) + numeric(groupRevenue?.[ytdRooms]),
     },

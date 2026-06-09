@@ -283,6 +283,7 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
         rooms: rowValue(total.roomsSold, 0),
         adr: accounting(total.adr),
         revenue: accounting(total.roomRevenue),
+        availableRoomNights: rowValue(total.roomsActive || total.roomsAvailable, 0),
         comments: `Remaining month OTB ${mapping.dateStart} to ${mapping.dateEnd}`,
       };
     });
@@ -310,7 +311,7 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
       ytdThisYear: accounting(ytd.roomRevenue),
     };
     next.monthRows = (next.monthRows || []).map((row: Row) => String(row.label || "").toUpperCase() === "MONTH TO DATE"
-      ? { ...row, occupancy: percentDisplay(mtd.occupancy), rooms: rowValue(mtd.roomsSold, 0), adr: accounting(mtd.adr), revenue: accounting(mtd.roomRevenue), comments: "Detailed Flash MTD" }
+      ? { ...row, occupancy: percentDisplay(mtd.occupancy), rooms: rowValue(mtd.roomsSold, 0), adr: accounting(mtd.adr), revenue: accounting(mtd.roomRevenue), availableRoomNights: rowValue(mtd.availableRooms, 0), comments: "Detailed Flash MTD" }
       : row);
     const reportMonth = report.reportMonth;
     if (reportMonth) {
@@ -543,7 +544,7 @@ function YtdMetricCard({
   );
 }
 
-function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: string; label: string; wide?: boolean }>; rows: Row[]; onChange: (rows: Row[]) => void }) {
+function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: string; label: string; wide?: boolean; readOnly?: boolean }>; rows: Row[]; onChange: (rows: Row[]) => void }) {
   const [preview, setPreview] = useState<{ label: string; text: string; x: number; y: number } | null>(null);
   return (
     <div className="relative overflow-x-auto">
@@ -561,8 +562,8 @@ function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: stri
               {columns.map((column) => (
                 <td key={column.key} className="border border-[#e0d3c1] p-1 align-top">
                   <Input
-                    readOnly={column.key === "priorWeek" || column.key === "weekVariance"}
-                    className={`h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white ${column.key === "priorWeek" || column.key === "weekVariance" ? "!bg-[#f3efe7] !text-[#5f5247]" : ""}`}
+                    readOnly={column.readOnly || column.key === "priorWeek" || column.key === "weekVariance"}
+                    className={`h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white ${column.readOnly || column.key === "priorWeek" || column.key === "weekVariance" ? "!bg-[#f3efe7] !text-[#5f5247]" : ""}`}
                     value={row[column.key] || ""}
                     onMouseEnter={(event) => {
                       const text = String(row[column.key] || "").trim();
@@ -587,7 +588,7 @@ function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: stri
                       onChange(next);
                     }}
                     onChange={(event) => {
-                      if (column.key === "priorWeek" || column.key === "weekVariance") return;
+                      if (column.readOnly || column.key === "priorWeek" || column.key === "weekVariance") return;
                       const next = rows.map((item, index) => index === rowIndex ? { ...item, [column.key]: event.target.value } : item);
                       onChange(next);
                     }}
@@ -857,15 +858,30 @@ export default function OpsReportPage() {
   }, [scheduledLabor.data]);
 
   const adr = useMemo(() => num(topMetrics.roomsSold) ? num(topMetrics.roomRevenue) / num(topMetrics.roomsSold) : 0, [topMetrics]);
-  const scheduledLaborTotal = useMemo(() => labor.reduce((sum, row) => sum + num(row.scheduledHours), 0), [labor]);
-  const actualLaborTotal = useMemo(() => labor.reduce((sum, row) => sum + num(row.actualHours), 0), [labor]);
+  const effectiveLabor = useMemo(() => labor.map((row) => {
+    const department = String(row.department || "").trim().toUpperCase();
+    if (department !== "HOUSEKEEPING HOURS") return row;
+    const roomsSold = num(topMetrics.roomsSold);
+    const budgetHours = roomsSold * 30 / 60;
+    const actualMpor = roomsSold > 0 && num(row.actualHours) > 0 ? num(row.actualHours) * 60 / roomsSold : 0;
+    return {
+      ...row,
+      budget: fmtHours(budgetHours),
+      calculatedMpor: actualMpor ? actualMpor.toFixed(1) : "",
+      comments: actualMpor
+        ? `Actual MPOR ${actualMpor.toFixed(1)} min | Target 30 min`
+        : "Target MPOR 30 min",
+    };
+  }), [labor, topMetrics.roomsSold]);
+  const scheduledLaborTotal = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.scheduledHours), 0), [effectiveLabor]);
+  const actualLaborTotal = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.actualHours), 0), [effectiveLabor]);
   const laborTotal = actualLaborTotal || scheduledLaborTotal;
-  const laborBudget = useMemo(() => labor.reduce((sum, row) => sum + num(row.budget), 0), [labor]);
-  const laborVariance = actualLaborTotal ? actualLaborTotal - scheduledLaborTotal : laborTotal - laborBudget;
-  const laborRows = useMemo(() => labor.map((row) => ({
+  const laborBudget = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.budget), 0), [effectiveLabor]);
+  const laborVariance = actualLaborTotal ? actualLaborTotal - laborBudget : 0;
+  const laborRows = useMemo(() => effectiveLabor.map((row) => ({
     ...row,
-    variance: num(row.actualHours) || num(row.scheduledHours) ? fmtHours(num(row.actualHours) - num(row.scheduledHours)) : "",
-  })), [labor]);
+    variance: num(row.actualHours) ? fmtHours(num(row.actualHours) - num(row.budget)) : "",
+  })), [effectiveLabor]);
   const adjustmentTotal = useMemo(() => adjustments.reduce((sum, row) => sum + num(row.amount), 0), [adjustments]);
   const arTotal = num(ar.current) + num(ar.d30) + num(ar.d60) + num(ar.d90);
   const previousGssRows = (previousDraft.data?.draft?.payload?.gssRows || []) as Row[];
@@ -1240,34 +1256,40 @@ export default function OpsReportPage() {
 
   useEffect(() => {
     const budget = monthlyBudgets.find((row) => row.month === currentMonthKey);
-    if (!budget) return;
     setMonthRows((rows) => {
-      const existingMonthlyTotal = rows.find((item) => String(item.label || "").trim().toUpperCase() === "MONTHLY TOTAL") || {};
-      const hasActuals = Boolean(budget.actualRooms || budget.actualOccupancy || budget.actualAdr || budget.actualRevenue);
-      const monthlyTotal = hasActuals
-        ? {
-            occupancy: budget.actualOccupancy || "",
-            rooms: monthlyRoomsValue(budget.actualRooms || "", budget.actualAdr || "", budget.actualRevenue || ""),
-            adr: budget.actualAdr || "",
-            revenue: budget.actualRevenue || "",
-          }
-        : existingMonthlyTotal;
+      const mtd = rows.find((item) => String(item.label || "").trim().toUpperCase() === "MONTH TO DATE") || {};
+      const future = rows.find((item) => String(item.label || "").trim().toUpperCase() === "FUTURE BOOKED") || {};
+      const totalRooms = num(mtd.rooms || "") + num(future.rooms || "");
+      const totalRevenue = num(mtd.revenue || "") + num(future.revenue || "");
+      const inferredAvailable = (row: Row) => {
+        const explicit = num(row.availableRoomNights || "");
+        if (explicit) return explicit;
+        const occupancy = num(row.occupancy || "");
+        return occupancy > 0 ? num(row.rooms || "") / (occupancy > 1 ? occupancy / 100 : occupancy) : 0;
+      };
+      const totalAvailable = inferredAvailable(mtd) + inferredAvailable(future);
+      const monthlyTotal = {
+        occupancy: totalAvailable ? percentDisplay(totalRooms / totalAvailable) : "",
+        rooms: rowValue(totalRooms, 0),
+        adr: totalRooms ? accounting(totalRevenue / totalRooms) : "",
+        revenue: accounting(totalRevenue),
+      };
       let changed = false;
       const nextRows = rows.map((row) => {
       const label = String(row.label || "").trim().toUpperCase();
-      const next = label === "CURRENT MONTH BUDGET" || label === "CURRENT MONTHLY BUDGET"
+      const next = (label === "CURRENT MONTH BUDGET" || label === "CURRENT MONTHLY BUDGET") && budget
         ? { ...row, occupancy: budget.occupancy || "", rooms: monthlyRoomsValue(budget.rooms || "", budget.adr || "", budget.revenue || ""), adr: budget.adr || "", revenue: budget.revenue || "", comments: `Budget for ${monthLabelFromKey(currentMonthKey)}` }
-        : label === "MONTHLY TOTAL" && hasActuals
-          ? { ...row, occupancy: budget.actualOccupancy || "", rooms: monthlyRoomsValue(budget.actualRooms || "", budget.actualAdr || "", budget.actualRevenue || ""), adr: budget.actualAdr || "", revenue: budget.actualRevenue || "", comments: `Actuals for ${monthLabelFromKey(currentMonthKey)}` }
-          : label === "LY SAME MONTH"
+        : label === "MONTHLY TOTAL"
+          ? { ...row, ...monthlyTotal, comments: "Month to date plus future booked" }
+          : label === "LY SAME MONTH" && budget
             ? { ...row, occupancy: budget.lyOccupancy || "", rooms: monthlyRoomsValue(budget.lyRooms || "", budget.lyAdr || "", budget.lyRevenue || ""), adr: budget.lyAdr || "", revenue: budget.lyRevenue || "", comments: `Last year actual for ${monthLabelFromKey(currentMonthKey)}` }
-            : label === "VARIANCE"
+            : label === "VARIANCE" && budget
               ? {
                   ...row,
-                  occupancy: rowValue(num(monthlyTotal?.occupancy || "") - num(budget.occupancy || ""), 2),
-                  rooms: rowValue(num(monthlyTotal?.rooms || "") - num(budget.rooms || ""), 0),
-                  adr: accounting(num(monthlyTotal?.adr || "") - num(budget.adr || "")),
-                  revenue: accounting(num(monthlyTotal?.revenue || "") - num(budget.revenue || "")),
+                  occupancy: rowValue(num(monthlyTotal.occupancy) - num(budget.occupancy || ""), 2),
+                  rooms: rowValue(num(monthlyTotal.rooms) - num(budget.rooms || ""), 0),
+                  adr: accounting(num(monthlyTotal.adr) - num(budget.adr || "")),
+                  revenue: accounting(num(monthlyTotal.revenue) - num(budget.revenue || "")),
                   comments: `Monthly total minus budget for ${monthLabelFromKey(currentMonthKey)}`,
                 }
             : row;
@@ -1740,12 +1762,12 @@ export default function OpsReportPage() {
                 onChange={setLedgerExceptions}
               />
             </Section>
-            <Section title="Department Labor Review (Controllable)" right={<Badge variant="outline">Variance {laborVariance}</Badge>}>
+            <Section title="Department Labor Review (Controllable)" right={<Badge variant="outline">Actual vs Budget {fmtHours(laborVariance)}</Badge>}>
               <div className="flex flex-col gap-3 border-b border-[#e0d3c1] p-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
-                  <div className="text-sm font-semibold text-[#201814]">Scheduled Hours vs Actual Hours</div>
+                  <div className="text-sm font-semibold text-[#201814]">Scheduled, Actual, and Budgeted Hours</div>
                   <p className="mt-1 max-w-2xl text-sm text-[#5f5247]">
-                    Scheduled hours pull from the matching week in Schedule. Actual hours come from the payroll labor summary PDF.
+                    Housekeeping budget uses a 30-minute MPOR target based on weekly rooms sold. Variance is Actual Hours minus Budgeted Hours.
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2 text-sm">
                     <Badge variant="outline">Scheduled {fmtHours(scheduledLaborTotal)}</Badge>
@@ -1773,12 +1795,13 @@ export default function OpsReportPage() {
                   { key: "department", label: "Department", wide: true },
                   { key: "scheduledHours", label: "Scheduled Hours" },
                   { key: "actualHours", label: "Actual Hours" },
-                  { key: "variance", label: "Actual - Scheduled" },
+                  { key: "calculatedMpor", label: "Actual MPOR", readOnly: true },
+                  { key: "variance", label: "Variance", readOnly: true },
                   { key: "budget", label: "Budgeted Hours" },
                   { key: "comments", label: "Comments", wide: true },
                 ]}
                 rows={laborRows}
-                onChange={(rows) => setLabor(rows.map(({ variance, ...row }) => row))}
+                onChange={(rows) => setLabor(rows.map(({ variance, calculatedMpor, ...row }) => row))}
               />
             </Section>
             <Section title="Staffing">

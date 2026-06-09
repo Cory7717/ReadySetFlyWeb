@@ -20,11 +20,19 @@ test("Excel serial dates normalize without time-zone drift", () => {
 test("OTB reports are classified by selected and next report month", async () => {
   const header = "Date,Rms Active,Rms Available,Rms Sold,Group PU,Group UnPU,Occ %,Guests (A/C),Arr,Dept,OOO,OTM,Hold,ADR Occupied ($),ADR Sold ($),RevPAR ($),Rm Rev ($)";
   const june = await parseOpsReportFile(csvFile("June Month OTB.csv", `${header}\n\"Jun 01, 2026\",118,64,49,10,0,43.4,77/0,25,19,5,0,0,98.02,98.02,40.70,4802.77\nTOTAL,118,118,49,10,0,Avg: 43.4,77/0,25,19,5,0,0,98.02,98.02,40.70,4802.77`), context);
-  const july = await parseOpsReportFile(csvFile("July Month OTB.csv", `${header}\n\"Jul 01, 2026\",118,98,19,0,11,16.2,11/0,3,0,1,0,0,93.32,93.32,15.03,1773.06\nTOTAL,118,118,19,0,11,Avg: 16.2,11/0,3,0,1,0,0,93.32,93.32,15.03,1773.06`), context);
+  const july = await parseOpsReportFile(csvFile("06092026_July OTB.csv", `${header}\n\"Jul 01, 2026\",118,98,19,0,11,16.2,11/0,3,0,1,0,0,93.32,93.32,15.03,1773.06\nTOTAL,118,118,19,0,11,Avg: 16.2,11/0,3,0,1,0,0,93.32,93.32,15.03,1773.06`), context);
   assert.equal(june.reportType, "current_month_otb");
   assert.equal(july.reportType, "next_month_otb");
   assert.equal((june.mapping.total as any).roomsSold, 49);
   assert.equal((july.mapping.total as any).roomRevenue, 1773.06);
+});
+
+test("Remaining Month OTB is kept separate from the full current-month report", async () => {
+  const header = "Date,Rms Active,Rms Available,Rms Sold,Group PU,Group UnPU,Occ %,Guests (A/C),Arr,Dept,OOO,OTM,Hold,ADR Occupied ($),ADR Sold ($),RevPAR ($),Rm Rev ($)";
+  const report = await parseOpsReportFile(csvFile("06092026_Remaining Month OTB.csv", `${header}\n" Jun 09, 2026",118,63,53,10,0,45.7,77/3,20,5,2,0,0,102.14,102.14,45.88,5413.45\n" Jun 30, 2026",118,112,5,0,0,4.27,8/0,1,11,1,0,0,107.93,107.93,4.57,539.64\nTOTAL,236,236,58,10,0,Avg: 24.58,85/3,21,16,3,0,0,102.64,102.64,25.22,5953.09`), context);
+  assert.equal(report.reportType, "remaining_month_otb");
+  assert.equal((report.mapping.total as any).roomsSold, 58);
+  assert.equal((report.mapping as any).dateStart, "2026-06-09");
 });
 
 test("Detailed Flash maps MTD and YTD room revenue from transient plus group", async () => {

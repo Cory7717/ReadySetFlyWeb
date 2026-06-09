@@ -40,7 +40,7 @@ type OpsImportResponse = {
   uploadId: string;
   originalFileName: string;
   sourceFileName: string;
-  reportType: "previous_week_otb" | "current_month_otb" | "next_month_otb" | "detailed_flash" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "ar_aging" | "unknown";
+  reportType: "previous_week_otb" | "current_month_otb" | "remaining_month_otb" | "next_month_otb" | "detailed_flash" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "ar_aging" | "credit_limit" | "unknown";
   status: "parsed" | "warning" | "failed";
   warnings: string[];
   selectedWeek: string;
@@ -68,12 +68,14 @@ type OpsDraftResponse = {
 const REPORT_TYPE_LABELS: Record<OpsImportResponse["reportType"], string> = {
   previous_week_otb: "Previous Week OTB",
   current_month_otb: "Current Month OTB",
+  remaining_month_otb: "Remaining Month OTB",
   next_month_otb: "Next Month OTB",
   detailed_flash: "Detailed Flash",
   ooo_rooms: "OOO Rooms",
   gss_scores: "GSS Scores",
   marriott_responses: "Marriott Responses",
   ar_aging: "AR Aging",
+  credit_limit: "Credit Limit / Guest Ledger",
   unknown: "Unrecognized / Failed",
 };
 
@@ -210,12 +212,14 @@ function mergeMonthlyActualFromOtb(rows: Row[], monthly: Record<string, any>) {
 const REPORT_PAYLOAD_KEYS: Record<OpsImportResponse["reportType"], string[]> = {
   previous_week_otb: ["topMetrics"],
   current_month_otb: ["monthRows", "monthlyBudgets"],
+  remaining_month_otb: ["monthRows"],
   next_month_otb: ["nextMonthRows"],
   detailed_flash: ["topMetrics", "monthRows", "monthlyBudgets"],
   ooo_rooms: ["oooRooms"],
   gss_scores: ["gssRows", "gssWaveRows"],
   marriott_responses: ["positiveReviews", "negativeReviews"],
   ar_aging: ["ar"],
+  credit_limit: ["ledger", "ledgerExceptions"],
   unknown: [],
 };
 
@@ -234,7 +238,16 @@ function fillRows(rows: Row[], count = 5) {
 function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImportResponse) {
   const next = cloneValue(payload);
   const mapping = report.mapping || {};
-  if (report.reportType === "previous_week_otb") {
+  const reportMonth = String(report.reportMonth || monthKeyFromDate(report.weekStartDate || ""));
+  const mappingMonth = monthKeyFromDate(String(mapping.dateStart || ""));
+  const resolvedReportType = report.reportType === "remaining_month_otb"
+    ? "remaining_month_otb"
+    : mapping.total && mappingMonth === nextMonthKey(reportMonth)
+    ? "next_month_otb"
+    : mapping.total && mappingMonth === reportMonth && (mapping.daily?.length || 0) > 10
+      ? "current_month_otb"
+      : report.reportType;
+  if (resolvedReportType === "previous_week_otb") {
     const total = mapping.total || {};
     next.topMetrics = {
       ...next.topMetrics,
@@ -243,11 +256,11 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
       roomRevenue: accounting(total.roomRevenue),
     };
   }
-  if (report.reportType === "current_month_otb") {
+  if (resolvedReportType === "current_month_otb") {
     const total = mapping.total || {};
     next.monthRows = (next.monthRows || []).map((row: Row) => {
       const label = String(row.label || "").toUpperCase();
-      if (label !== "FUTURE BOOKED" && label !== "MONTHLY TOTAL") return row;
+      if (label !== "MONTHLY TOTAL") return row;
       return {
         ...row,
         occupancy: percentDisplay(total.occupancy),
@@ -259,7 +272,21 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
     });
     next.monthlyBudgets = mergeMonthlyActualFromOtb(next.monthlyBudgets || [], mapping);
   }
-  if (report.reportType === "next_month_otb") {
+  if (resolvedReportType === "remaining_month_otb") {
+    const total = mapping.total || {};
+    next.monthRows = (next.monthRows || []).map((row: Row) => {
+      if (String(row.label || "").toUpperCase() !== "FUTURE BOOKED") return row;
+      return {
+        ...row,
+        occupancy: percentDisplay(total.occupancy),
+        rooms: rowValue(total.roomsSold, 0),
+        adr: accounting(total.adr),
+        revenue: accounting(total.roomRevenue),
+        comments: `Remaining month OTB ${mapping.dateStart} to ${mapping.dateEnd}`,
+      };
+    });
+  }
+  if (resolvedReportType === "next_month_otb") {
     const total = mapping.total || {};
     next.nextMonthRows = (next.nextMonthRows || []).map((row: Row) => {
       if (String(row.label || "").toUpperCase() !== "FUTURE BOOKED FOR NEXT MONTH") return row;
@@ -326,6 +353,37 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
       comments: `Imported AR total ${accounting(summary.total)}; 120+ ${accounting(summary.d120)}`,
     };
   }
+  if (report.reportType === "credit_limit") {
+    const summary = mapping.summary || {};
+    next.ledger = {
+      balance: accounting(summary.totalProjected),
+      over1000: accounting(summary.over1000Balance),
+      uncovered: accounting(summary.totalUncovered),
+      comment: `${summary.over1000Count || 0} over $1,000; ${summary.noAuthCount || 0} with zero/no card authorization; ${summary.exceptionCount || 0} listed`,
+    };
+    next.ledgerExceptions = (mapping.entries || []).map((entry: Record<string, any>, index: number) => ({
+      no: String(index + 1),
+      room: String(entry.room || ""),
+      guest: String(entry.guest || ""),
+      paymentMethod: String(entry.paymentMethod || ""),
+      projected: accounting(entry.projected),
+      authAmount: accounting(entry.authAmount),
+      uncovered: accounting(entry.uncovered),
+      action: String(entry.action || ""),
+    }));
+  }
+  return next;
+}
+
+function reconcileMonthlyOtbUploads(payload: Record<string, any>, reports: Array<Record<string, any>>, reportMonth: string) {
+  let next = cloneValue(payload);
+  const monthlyReports = reports.filter((report) => {
+    const mappingMonth = monthKeyFromDate(String(report.mapping?.dateStart || ""));
+    return report.mapping?.total && (mappingMonth === reportMonth || mappingMonth === nextMonthKey(reportMonth));
+  });
+  for (const report of monthlyReports) {
+    next = applyOpsReportToPayload(next, { ...report, reportMonth } as OpsImportResponse);
+  }
   return next;
 }
 
@@ -346,6 +404,12 @@ function monthKeyFromDate(value: string) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return "";
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function nextMonthKey(value: string) {
+  const [year, month] = value.split("-").map(Number);
+  if (!year || !month) return "";
+  return new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7);
 }
 
 function monthLabelFromKey(value: string) {
@@ -571,7 +635,8 @@ export default function OpsReportPage() {
   const [oooRooms, setOooRooms] = useState<Row[]>(emptyRows(5, ["no", "room", "startDate", "returnDate", "comment"]));
   const [adjustments, setAdjustments] = useState<Row[]>(emptyRows(5, ["no", "room", "guest", "amount", "comment"]));
   const [ar, setAr] = useState({ current: "", d30: "", d60: "", d90: "", comments: "" });
-  const [ledger, setLedger] = useState({ balance: "", over1000: "", comment: "" });
+  const [ledger, setLedger] = useState({ balance: "", over1000: "", uncovered: "", comment: "" });
+  const [ledgerExceptions, setLedgerExceptions] = useState<Row[]>([]);
   const [labor, setLabor] = useState<Row[]>([
     { department: "FRONT DESK / NIGHT AUDIT HOURS", scheduledHours: "", actualHours: "", budget: "168", comments: "112 FD + 56 Night Audit" },
     { department: "HOUSEKEEPING HOURS", scheduledHours: "", actualHours: "", budget: "45", comments: "" },
@@ -1046,7 +1111,8 @@ export default function OpsReportPage() {
     setOooRooms(emptyRows(5, ["no", "room", "startDate", "returnDate", "comment"]));
     setAdjustments(emptyRows(5, ["no", "room", "guest", "amount", "comment"]));
     setAr({ current: "", d30: "", d60: "", d90: "", comments: "" });
-    setLedger({ balance: "", over1000: "", comment: "" });
+    setLedger({ balance: "", over1000: "", uncovered: "", comment: "" });
+    setLedgerExceptions([]);
     setLabor([
       { department: "FRONT DESK / NIGHT AUDIT HOURS", scheduledHours: "", actualHours: "", budget: "168", comments: "112 FD + 56 Night Audit" },
       { department: "HOUSEKEEPING HOURS", scheduledHours: "", actualHours: "", budget: "45", comments: "" },
@@ -1081,6 +1147,7 @@ export default function OpsReportPage() {
     if (payload.adjustments) setAdjustments(payload.adjustments);
     if (payload.ar) setAr(payload.ar);
     if (payload.ledger) setLedger(payload.ledger);
+    if (payload.ledgerExceptions) setLedgerExceptions(payload.ledgerExceptions);
     if (payload.labor) setLabor(payload.labor);
     if (payload.monthlyBudgets) setMonthlyBudgets(payload.monthlyBudgets.map(normalizeMonthlyBudgetRow));
     if (payload.bistroProductions) setBistroProductions(payload.bistroProductions);
@@ -1099,12 +1166,14 @@ export default function OpsReportPage() {
   }
   const hydrateOpsDraft = (loaded: OpsDraftResponse["draft"]) => {
     if (!loaded?.payload) return false;
-    setWeek(loaded.weekLabel || "Week 1");
-    applyPayloadState(loaded.payload);
-    setUploadedReports((loaded.uploadedReports || []).filter((report) => {
+    const currentReports = (loaded.uploadedReports || []).filter((report) => {
       const sourceWeekStart = String(report.weekStartDate || "").trim();
       return !sourceWeekStart || sourceWeekStart === loaded.weekStart;
-    }));
+    });
+    const reconciledPayload = reconcileMonthlyOtbUploads(loaded.payload, currentReports, monthKeyFromDate(loaded.weekStart));
+    setWeek(loaded.weekLabel || "Week 1");
+    applyPayloadState(reconciledPayload);
+    setUploadedReports(currentReports);
     return true;
   };
   const loadOpsWeek = async (weekStart: string, weekLabel: string) => {
@@ -1130,6 +1199,7 @@ export default function OpsReportPage() {
     adjustments,
     ar,
     ledger,
+    ledgerExceptions,
     labor,
     monthlyBudgets: monthlyBudgets.map(normalizeMonthlyBudgetRow),
     bistroProductions,
@@ -1144,7 +1214,7 @@ export default function OpsReportPage() {
     negativeReviews,
     followUp,
     priorities,
-  }), [setup, topMetrics, monthRows, nextMonthRows, chargebacks, maintenance, oooRooms, adjustments, ar, ledger, labor, monthlyBudgets, bistroProductions, meetingProductions, staffing, cases, gmOverviewRows, gssRows, gssWaveRows, reputationRows, positiveReviews, negativeReviews, followUp, priorities]);
+  }), [setup, topMetrics, monthRows, nextMonthRows, chargebacks, maintenance, oooRooms, adjustments, ar, ledger, ledgerExceptions, labor, monthlyBudgets, bistroProductions, meetingProductions, staffing, cases, gmOverviewRows, gssRows, gssWaveRows, reputationRows, positiveReviews, negativeReviews, followUp, priorities]);
 
   useEffect(() => {
     if (!access.data?.unlocked || draft.isLoading || draftHydrated) return;
@@ -1307,25 +1377,28 @@ export default function OpsReportPage() {
           </CardContent>
         </Card>
 
-        <Card className={C.section}>
+        <Card
+          className="border-[#d7c8b5] text-[#201814] shadow-[0_12px_30px_rgba(72,52,31,0.08)]"
+          style={{ backgroundColor: "#fffaf2", backgroundImage: "none", color: "#201814" }}
+        >
           <Accordion type="single" collapsible>
-            <AccordionItem value="ops-import" className="border-0">
-              <AccordionTrigger className="px-4 py-3 hover:no-underline">
+            <AccordionItem value="ops-import" className="border-0 bg-[#fffaf2] text-[#201814]">
+              <AccordionTrigger className="px-4 py-3 text-[#201814] hover:no-underline hover:bg-[#f8efe2] [&>svg]:text-[#5b4b3b]">
                 <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
                   <div className="rounded-lg bg-[#e8f0e9] p-2 text-[#2f5f46]"><Upload className="h-4 w-4" /></div>
                   <div className="min-w-0">
                     <div className="font-semibold text-[#201814]">Import ops source reports</div>
-                    <div className="truncate text-xs font-normal text-[#5f5247]">
+                    <div className="truncate text-xs font-normal text-[#6b5d50]">
                       {uploadedReports.length} current-week file{uploadedReports.length === 1 ? "" : "s"} · {previousWeekReports.length} previous-week variance reference{previousWeekReports.length === 1 ? "" : "s"}
                     </div>
                   </div>
                 </div>
               </AccordionTrigger>
-              <AccordionContent className="border-t border-[#eadcc9] px-4 pb-4 pt-3">
+              <AccordionContent className="border-t border-[#d7c8b5] bg-white px-4 pb-4 pt-3 text-[#201814]">
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                   <div>
-                    <p className="text-sm text-[#5f5247]">
-                      Select OTB, Detailed Flash, OOO Rooms, GSS, Marriott responses, or AR Aging files.
+                    <p className="text-sm font-medium text-[#5f5247]">
+                      Select OTB, Detailed Flash, OOO Rooms, GSS, Marriott responses, AR Aging, or Credit Limit files.
                     </p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <Input className={C.field} type="file" accept=".xlsx,.xls,.csv,.pdf" multiple onChange={(event) => setOpsReportFiles(Array.from(event.target.files || []))} />
@@ -1334,27 +1407,29 @@ export default function OpsReportPage() {
                       </Button>
                     </div>
                     <Accordion type="single" collapsible className="mt-3">
-                      <AccordionItem value="file-guide" className="rounded-lg border border-[#eadcc9] px-3">
-                        <AccordionTrigger className="py-2 text-sm hover:no-underline">Required files and suggested names</AccordionTrigger>
-                        <AccordionContent className="pb-3 text-xs text-[#5f5247]">
+                      <AccordionItem value="file-guide" className="rounded-lg border border-[#d7c8b5] bg-[#fffaf2] px-3 text-[#201814]">
+                        <AccordionTrigger className="py-2 text-sm font-semibold text-[#201814] hover:no-underline [&>svg]:text-[#5b4b3b]">Required files and suggested names</AccordionTrigger>
+                        <AccordionContent className="pb-3 text-xs leading-5 text-[#5f5247]">
                           <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
                             <div><b>Previous Week OTB:</b> <code>MMDDYYYY_Previous Week OTB.csv</code></div>
                             <div><b>Current Month OTB:</b> <code>MMDDYYYY_June Month OTB.csv</code></div>
+                            <div><b>Remaining Month OTB:</b> <code>MMDDYYYY_Remaining Month OTB.csv</code></div>
                             <div><b>Next Month OTB:</b> <code>MMDDYYYY_July Month OTB.csv</code></div>
                             <div><b>Detailed Flash:</b> <code>Detailed Flash_AUSNL_YYYY-MM-DD.csv</code></div>
                             <div><b>OOO Rooms:</b> <code>MMDDYYYY_OOO Rooms.pdf</code></div>
                             <div><b>GSS Scores:</b> <code>MMDDYYYY_GSS Scores.xlsx</code></div>
                             <div><b>Marriott Responses:</b> <code>Marriott_Responses_Export_MM_DD_YYYY.xlsx</code></div>
                             <div><b>AR Aging:</b> <code>MMDDYYYY_AR Aging.xlsx</code></div>
+                            <div><b>Credit Limit:</b> <code>MMDDYYYY_CreditLimit.pdf</code></div>
                           </div>
                         </AccordionContent>
                       </AccordionItem>
                     </Accordion>
                   </div>
                   <Accordion type="multiple" className="space-y-2">
-                    <AccordionItem value="current-files" className="rounded-lg border border-[#eadcc9] px-3">
-                      <AccordionTrigger className="py-2 text-sm hover:no-underline">Current week files ({uploadedReports.length})</AccordionTrigger>
-                      <AccordionContent className="max-h-72 space-y-2 overflow-y-auto pb-3">
+                    <AccordionItem value="current-files" className="rounded-lg border border-[#cdbda8] bg-[#fffaf2] px-3 text-[#201814]">
+                      <AccordionTrigger className="py-2 text-sm font-semibold text-[#201814] hover:no-underline [&>svg]:text-[#5b4b3b]">Current week files ({uploadedReports.length})</AccordionTrigger>
+                      <AccordionContent className="max-h-72 space-y-2 overflow-y-auto pb-3 text-[#201814]">
                         {!uploadedReports.length && <div className="text-xs text-[#7c6e61]">No files imported for {week}.</div>}
                         {uploadedReportsByType.map(([reportType, reports]) => (
                           <div key={reportType} className="rounded-md border border-[#eadcc9] bg-[#fffaf2] p-2 text-xs">
@@ -1376,8 +1451,8 @@ export default function OpsReportPage() {
                         ))}
                       </AccordionContent>
                     </AccordionItem>
-                    <AccordionItem value="previous-files" className="rounded-lg border border-[#d6dee4] px-3">
-                      <AccordionTrigger className="py-2 text-sm hover:no-underline">Previous week variance files ({previousWeekReports.length})</AccordionTrigger>
+                    <AccordionItem value="previous-files" className="rounded-lg border border-[#bfcbd3] bg-[#f4f7f9] px-3 text-[#243746]">
+                      <AccordionTrigger className="py-2 text-sm font-semibold text-[#243746] hover:no-underline [&>svg]:text-[#52616c]">Previous week variance files ({previousWeekReports.length})</AccordionTrigger>
                       <AccordionContent className="max-h-72 space-y-1 overflow-y-auto pb-3 text-xs">
                         {!previousWeekReports.length && <div className="text-[#667681]">No previous-week source files found.</div>}
                         {previousWeekReports.map((report, index) => (
@@ -1646,11 +1721,26 @@ export default function OpsReportPage() {
               </div>
             </Section>
             <Section title="Guest Ledger Balance">
-              <div className="grid gap-3 p-4 sm:grid-cols-3">
+              <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
                 <LabeledInput label="Total balance" value={ledger.balance} onChange={(balance) => setLedger({ ...ledger, balance })} moneyFormat />
-                <LabeledInput label="Any guest over $1000" value={ledger.over1000} onChange={(over1000) => setLedger({ ...ledger, over1000 })} moneyFormat />
+                <LabeledInput label="Uncovered authorization" value={ledger.uncovered || ""} onChange={(uncovered) => setLedger({ ...ledger, uncovered })} moneyFormat />
+                <LabeledInput label="Balance over $1000" value={ledger.over1000} onChange={(over1000) => setLedger({ ...ledger, over1000 })} moneyFormat />
                 <LabeledInput label="Comment" value={ledger.comment} onChange={(comment) => setLedger({ ...ledger, comment })} />
               </div>
+              <EditableTable
+                columns={[
+                  { key: "no", label: "S No" },
+                  { key: "room", label: "Room" },
+                  { key: "guest", label: "Guest" },
+                  { key: "paymentMethod", label: "Payment Method" },
+                  { key: "projected", label: "Projected Balance" },
+                  { key: "authAmount", label: "CC Authorization" },
+                  { key: "uncovered", label: "Uncovered" },
+                  { key: "action", label: "Required FD Action", wide: true },
+                ]}
+                rows={ledgerExceptions}
+                onChange={setLedgerExceptions}
+              />
             </Section>
             <Section title="Department Labor Review (Controllable)" right={<Badge variant="outline">Variance {laborVariance}</Badge>}>
               <div className="flex flex-col gap-3 border-b border-[#e0d3c1] p-4 lg:flex-row lg:items-end lg:justify-between">

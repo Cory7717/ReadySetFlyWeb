@@ -9,12 +9,14 @@ const require = createRequire(import.meta.url);
 export type OpsReportType =
   | "previous_week_otb"
   | "current_month_otb"
+  | "remaining_month_otb"
   | "next_month_otb"
   | "detailed_flash"
   | "ooo_rooms"
   | "gss_scores"
   | "marriott_responses"
-  | "ar_aging";
+  | "ar_aging"
+  | "credit_limit";
 
 export type OpsParserContext = {
   weekStart?: string;
@@ -216,6 +218,7 @@ export function detectOpsReportType(fileName: string, rows: string[][], context:
   if (/ar\s*aging|aged\s*receivables?|accounts?\s*receivable/.test(name) || flattenedHeaders.some((value) => value.includes("120+")) && flattenedHeaders.some((value) => value.includes("current"))) return "ar_aging";
   const otbHeader = findHeader(rows, ["Date", "Rms Sold", "Occ %", "Rm Rev ($)"]);
   if (/previous\s*week\s*otb/.test(name)) return "previous_week_otb";
+  if (/remaining\s*month\s*otb/.test(name)) return "remaining_month_otb";
   if (otbHeader >= 0 || /month\s*otb/.test(name)) {
     const reportMonth = context.reportMonth || (context.weekStart ? monthKey(context.weekStart) : "");
     const reportYear = Number(reportMonth.slice(0, 4)) || new Date().getUTCFullYear();
@@ -531,10 +534,102 @@ async function parseOoo(file: Express.Multer.File, context: OpsParserContext): P
   return { ...baseReport(file, "ooo_rooms", context, warnings), preview: rooms.slice(0, 10), mapping: { rooms, reportRange } };
 }
 
+function moneyValuesFromCreditTail(value: string) {
+  const compact = value.replace(/\s+/g, "");
+  const decimalIndexes = Array.from(compact.matchAll(/\./g)).map((match) => match.index || 0);
+  if (decimalIndexes.length < 3) return null;
+  const [firstDecimal, secondDecimal, thirdDecimal] = decimalIndexes.slice(-3);
+  const projectedIntegerWithCard = compact.slice(0, firstDecimal).replace(/\D/g, "");
+  const projectedCents = compact.slice(firstDecimal + 1, firstDecimal + 3);
+  const authInteger = compact.slice(firstDecimal + 3, secondDecimal);
+  const authCents = compact.slice(secondDecimal + 1, secondDecimal + 3);
+  const differenceInteger = compact.slice(secondDecimal + 3, thirdDecimal);
+  const differenceCents = compact.slice(thirdDecimal + 1, thirdDecimal + 3);
+  const authAmount = numeric(`${authInteger}.${authCents}`);
+  const difference = numeric(`${differenceInteger}.${differenceCents}`);
+  for (let cardDigits = 0; cardDigits <= Math.min(4, projectedIntegerWithCard.length - 1); cardDigits += 1) {
+    const projected = numeric(`${projectedIntegerWithCard.slice(cardDigits)}.${projectedCents}`);
+    if (Math.abs(projected - authAmount - difference) < 0.02) return { projected, authAmount, difference };
+  }
+  return null;
+}
+
+async function parseCreditLimit(file: Express.Multer.File, context: OpsParserContext): Promise<ParsedReport> {
+  const warnings: string[] = [];
+  const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (buffer: Buffer) => Promise<{ text?: string }>;
+  const source = String((await pdfParse(file.buffer)).text || "")
+    .replace(/\r/g, "")
+    .replace(/(\d{4}-\d{2})-\s*\n(\d{2})/g, "$1-$2");
+  const body = source.split(/Notes On Report:|Printed On:/i)[0];
+  const roomMatches = Array.from(body.matchAll(/\n(\d{3})(?:\n|(?=[A-Za-z]))/g));
+  const entries: Array<Record<string, unknown>> = [];
+  for (let index = 0; index < roomMatches.length; index += 1) {
+    const match = roomMatches[index];
+    const start = (match.index || 0) + match[0].length;
+    const end = roomMatches[index + 1]?.index || body.length;
+    const block = body.slice(start, end).trim();
+    const dates = Array.from(block.matchAll(/\d{4}-\d{2}-\d{2}/g));
+    if (dates.length < 2) continue;
+    const thresholdExceeded = /Threshold Exceeded/i.test(block);
+    const beforeArrival = block.slice(0, dates[0].index).replace(/Threshold Exceeded/ig, "").trim();
+    const guest = beforeArrival
+      .split(/\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !/Marriott|Bonvoy|VIP/i.test(line))
+      .join(" ")
+      .replace(/\s+/g, " ");
+    const afterDeparture = block.slice((dates[1].index || 0) + dates[1][0].length).replace(/\s+/g, " ").trim();
+    const paymentMatch = afterDeparture.match(/(Cash Payment|Do Not Use|American Express|MasterCard|Visa)/i);
+    const paymentMethod = paymentMatch?.[1] || "Unknown";
+    const creditTail = (paymentMatch ? afterDeparture.slice((paymentMatch.index || 0) + paymentMatch[0].length) : afterDeparture)
+      .split(/Agilysys Stay|https?:|ROOM NUMBER/i)[0];
+    const amounts = moneyValuesFromCreditTail(creditTail);
+    if (!amounts) {
+      warnings.push(`Room ${match[1]} monetary fields could not be parsed.`);
+      continue;
+    }
+    const uncovered = Math.max(0, amounts.difference);
+    const noCardAuthorization = amounts.authAmount <= 0 || /Cash Payment|Do Not Use/i.test(paymentMethod);
+    const over1000 = amounts.projected > 1000;
+    entries.push({
+      room: match[1],
+      guest,
+      paymentMethod,
+      arrivalDate: dates[0][0],
+      departureDate: dates[1][0],
+      projected: round(amounts.projected, 2),
+      authAmount: round(amounts.authAmount, 2),
+      uncovered: round(uncovered, 2),
+      noCardAuthorization,
+      over1000,
+      thresholdExceeded,
+      action: over1000
+        ? "Finalize charges over $1,000 and reauthorize the remaining balance"
+        : "Obtain or increase authorization to cover the outstanding balance",
+    });
+  }
+  if (!entries.length) warnings.push("No credit-limit exceptions were extracted from the PDF.");
+  const exceptions = entries.filter((entry) => entry.over1000 || entry.noCardAuthorization);
+  const totalProjected = exceptions.reduce((sum, entry) => sum + Number(entry.projected || 0), 0);
+  const totalUncovered = exceptions.reduce((sum, entry) => sum + Number(entry.uncovered || 0), 0);
+  const over1000Entries = exceptions.filter((entry) => entry.over1000);
+  const noAuthEntries = exceptions.filter((entry) => entry.noCardAuthorization);
+  const summary = {
+    totalProjected: round(totalProjected, 2),
+    totalUncovered: round(totalUncovered, 2),
+    over1000Balance: round(over1000Entries.reduce((sum, entry) => sum + Number(entry.projected || 0), 0), 2),
+    exceptionCount: exceptions.length,
+    over1000Count: over1000Entries.length,
+    noAuthCount: noAuthEntries.length,
+  };
+  return { ...baseReport(file, "credit_limit", context, warnings), preview: exceptions.slice(0, 10), mapping: { entries: exceptions, summary } };
+}
+
 export async function parseOpsReportFile(file: Express.Multer.File, context: OpsParserContext = {}): Promise<ParsedReport> {
   const isPdf = /\.pdf$/i.test(file.originalname) || file.mimetype === "application/pdf";
   if (isPdf) {
-    if (!/ooo\s*rooms|out\s*of\s*order/i.test(file.originalname)) throw new Error("Only OOO Rooms PDFs are supported in the ops report uploader.");
+    if (/credit\s*limit|creditlimit/i.test(file.originalname)) return parseCreditLimit(file, context);
+    if (!/ooo\s*rooms|out\s*of\s*order/i.test(file.originalname)) throw new Error("Only OOO Rooms and Credit Limit PDFs are supported in the ops report uploader.");
     return parseOoo(file, context);
   }
   const isCsv = /\.csv$/i.test(file.originalname) || file.mimetype === "text/csv";
@@ -542,7 +637,7 @@ export async function parseOpsReportFile(file: Express.Multer.File, context: Ops
   const rows = sheets.flatMap((sheet) => sheet.rows);
   const reportType = detectOpsReportType(file.originalname, rows, context);
   if (!reportType) throw new Error("This report format was not recognized.");
-  if (["previous_week_otb", "current_month_otb", "next_month_otb"].includes(reportType)) return parseOtb(file, rows, reportType, context);
+  if (["previous_week_otb", "current_month_otb", "remaining_month_otb", "next_month_otb"].includes(reportType)) return parseOtb(file, rows, reportType, context);
   if (reportType === "detailed_flash") return parseDetailedFlash(file, rows, context);
   if (reportType === "gss_scores") return parseGss(file, sheets, context);
   if (reportType === "marriott_responses") return parseResponses(file, rows, context);

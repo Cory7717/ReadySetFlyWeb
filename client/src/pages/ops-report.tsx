@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileSpreadsheet, LockKeyhole, LogOut, Upload } from "lucide-react";
+import { Download, FileSpreadsheet, LockKeyhole, LogOut, Trash2, Upload } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -36,17 +36,22 @@ type OpsAccess = { unlocked: boolean; user: { employeeDisplayName: string; email
 type Row = Record<string, string>;
 type LaborHoursResponse = { weekStart: string; scheduleId?: string | null; departments: Record<string, number> };
 type OpsImportResponse = {
+  uploadId: string;
   originalFileName: string;
-  reportType: "otb_weekly" | "otb_month" | "gss_summary" | "gss_responses";
-  weekly?: { weekStart: string; weekEnd: string; roomsSold: number; occupancy: number; arrivals: number; departures: number; adr: number; roomRevenue: number };
-  monthly?: { monthStart: string; monthEnd: string; rooms: number; occupancy: number; adr: number; revenue: number; arrivals: number; departures: number };
-  gssRows?: Row[];
-  gssWaveRows?: Row[];
-  positiveReviews?: Row[];
-  negativeReviews?: Row[];
+  sourceFileName: string;
+  reportType: "previous_week_otb" | "current_month_otb" | "next_month_otb" | "detailed_flash" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "ar_aging" | "unknown";
+  status: "parsed" | "warning" | "failed";
+  warnings: string[];
+  selectedWeek: string;
+  weekStartDate: string;
+  weekEndDate: string;
+  reportMonth: string;
+  createdAt: string;
+  preview: Array<Record<string, unknown>>;
+  mapping: Record<string, any>;
+  beforePatch?: Record<string, any>;
 };
 type OpsImportBatchResponse = { reports: OpsImportResponse[] };
-type MonthlyOtbReport = NonNullable<OpsImportResponse["monthly"]>;
 type OpsDraftResponse = {
   draft: null | {
     id: string;
@@ -57,6 +62,18 @@ type OpsDraftResponse = {
     uploadedReports: Array<Record<string, any>>;
     updatedAt: string;
   };
+};
+
+const REPORT_TYPE_LABELS: Record<OpsImportResponse["reportType"], string> = {
+  previous_week_otb: "Previous Week OTB",
+  current_month_otb: "Current Month OTB",
+  next_month_otb: "Next Month OTB",
+  detailed_flash: "Detailed Flash",
+  ooo_rooms: "OOO Rooms",
+  gss_scores: "GSS Scores",
+  marriott_responses: "Marriott Responses",
+  ar_aging: "AR Aging",
+  unknown: "Unrecognized / Failed",
 };
 
 const emptyRows = (count: number, keys: string[]) =>
@@ -170,22 +187,145 @@ function normalizeMonthlyBudgetRow(row: Row): Row {
   };
 }
 
-function mergeMonthlyActualFromOtb(rows: Row[], monthly: MonthlyOtbReport) {
-  const month = monthKeyFromDate(monthly.monthStart);
+function mergeMonthlyActualFromOtb(rows: Row[], monthly: Record<string, any>) {
+  const month = monthKeyFromDate(monthly.dateStart);
   if (!month) return rows.map(normalizeMonthlyBudgetRow);
+  const total = monthly.total || {};
   const actualPatch: Row = {
     month,
-    actualRooms: rowValue(monthly.rooms, 0),
-    actualOccupancy: percentDisplay(monthly.occupancy),
-    actualAdr: accounting(monthly.adr),
-    actualRevenue: accounting(monthly.revenue),
-    actualSource: `OTB import ${monthly.monthStart} to ${monthly.monthEnd}`,
+    actualRooms: rowValue(total.roomsSold, 0),
+    actualOccupancy: percentDisplay(total.occupancy),
+    actualAdr: accounting(total.adr),
+    actualRevenue: accounting(total.roomRevenue),
+    actualSource: `OTB import ${monthly.dateStart} to ${monthly.dateEnd}`,
   };
   const existing = rows.find((row) => row.month === month);
   const merged = normalizeMonthlyBudgetRow({ ...(existing || { month }), ...actualPatch });
   return [...rows.filter((row) => row.month !== month), merged]
     .map(normalizeMonthlyBudgetRow)
     .sort((a, b) => String(a.month || "").localeCompare(String(b.month || "")));
+}
+
+const REPORT_PAYLOAD_KEYS: Record<OpsImportResponse["reportType"], string[]> = {
+  previous_week_otb: ["topMetrics"],
+  current_month_otb: ["monthRows", "monthlyBudgets"],
+  next_month_otb: ["nextMonthRows"],
+  detailed_flash: ["topMetrics", "monthRows", "monthlyBudgets"],
+  ooo_rooms: ["oooRooms"],
+  gss_scores: ["gssRows", "gssWaveRows"],
+  marriott_responses: ["positiveReviews", "negativeReviews"],
+  ar_aging: ["ar"],
+  unknown: [],
+};
+
+function cloneValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function captureReportPatch(payload: Record<string, any>, reportType: OpsImportResponse["reportType"]) {
+  return Object.fromEntries(REPORT_PAYLOAD_KEYS[reportType].map((key) => [key, cloneValue(payload[key])]));
+}
+
+function fillRows(rows: Row[], count = 5) {
+  return [...rows, ...emptyRows(Math.max(0, count - rows.length), ["source", "score", "comment"])].slice(0, count);
+}
+
+function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImportResponse) {
+  const next = cloneValue(payload);
+  const mapping = report.mapping || {};
+  if (report.reportType === "previous_week_otb") {
+    const total = mapping.total || {};
+    next.topMetrics = {
+      ...next.topMetrics,
+      occupancy: percentDisplay(total.occupancy),
+      roomsSold: rowValue(total.roomsSold, 0),
+      roomRevenue: accounting(total.roomRevenue),
+    };
+  }
+  if (report.reportType === "current_month_otb") {
+    const total = mapping.total || {};
+    next.monthRows = (next.monthRows || []).map((row: Row) => {
+      const label = String(row.label || "").toUpperCase();
+      if (label !== "FUTURE BOOKED" && label !== "MONTHLY TOTAL") return row;
+      return {
+        ...row,
+        occupancy: percentDisplay(total.occupancy),
+        rooms: rowValue(total.roomsSold, 0),
+        adr: accounting(total.adr),
+        revenue: accounting(total.roomRevenue),
+        comments: `Imported ${mapping.dateStart} to ${mapping.dateEnd}`,
+      };
+    });
+    next.monthlyBudgets = mergeMonthlyActualFromOtb(next.monthlyBudgets || [], mapping);
+  }
+  if (report.reportType === "next_month_otb") {
+    const total = mapping.total || {};
+    next.nextMonthRows = (next.nextMonthRows || []).map((row: Row) => {
+      if (String(row.label || "").toUpperCase() !== "FUTURE BOOKED FOR NEXT MONTH") return row;
+      return {
+        ...row,
+        occupancy: percentDisplay(total.occupancy),
+        rooms: rowValue(total.roomsSold, 0),
+        adr: accounting(total.adr),
+        revenue: accounting(total.roomRevenue),
+        comments: `Imported ${mapping.dateStart} to ${mapping.dateEnd}`,
+      };
+    });
+  }
+  if (report.reportType === "detailed_flash") {
+    const mtd = mapping.mtd || {};
+    const ytd = mapping.ytd || {};
+    next.topMetrics = {
+      ...next.topMetrics,
+      mtdThisYear: accounting(mtd.roomRevenue),
+      ytdThisYear: accounting(ytd.roomRevenue),
+    };
+    next.monthRows = (next.monthRows || []).map((row: Row) => String(row.label || "").toUpperCase() === "MONTH TO DATE"
+      ? { ...row, occupancy: percentDisplay(mtd.occupancy), rooms: rowValue(mtd.roomsSold, 0), adr: accounting(mtd.adr), revenue: accounting(mtd.roomRevenue), comments: "Detailed Flash MTD" }
+      : row);
+    const reportMonth = report.reportMonth;
+    if (reportMonth) {
+      const existing = (next.monthlyBudgets || []).find((row: Row) => row.month === reportMonth);
+      next.monthlyBudgets = [
+        ...(next.monthlyBudgets || []).filter((row: Row) => row.month !== reportMonth),
+        normalizeMonthlyBudgetRow({
+          ...(existing || { month: reportMonth }),
+          actualRooms: rowValue(mtd.roomsSold, 0),
+          actualOccupancy: percentDisplay(mtd.occupancy),
+          actualAdr: accounting(mtd.adr),
+          actualRevenue: accounting(mtd.roomRevenue),
+          actualSource: "Detailed Flash MTD",
+        }),
+      ];
+    }
+  }
+  if (report.reportType === "ooo_rooms") {
+    const rooms = (mapping.rooms || []) as Row[];
+    next.oooRooms = rooms.length ? rooms : emptyRows(5, ["no", "room", "startDate", "returnDate", "comment"]);
+  }
+  if (report.reportType === "gss_scores") {
+    const merge = (existing: Row[], incoming: Row[]) => {
+      const labels = new Set(incoming.map((row) => row.label));
+      return [...existing.filter((row) => !labels.has(row.label)), ...incoming];
+    };
+    next.gssRows = merge(next.gssRows || [], mapping.gssRows || []);
+    next.gssWaveRows = merge(next.gssWaveRows || [], mapping.gssWaveRows || []);
+  }
+  if (report.reportType === "marriott_responses") {
+    next.positiveReviews = fillRows(mapping.positiveReviews || []);
+    next.negativeReviews = fillRows(mapping.negativeReviews || []);
+  }
+  if (report.reportType === "ar_aging") {
+    const summary = mapping.summary || {};
+    next.ar = {
+      current: accounting(summary.current),
+      d30: accounting(summary.d30),
+      d60: accounting(summary.d60),
+      d90: accounting(num(summary.d90) + num(summary.d120)),
+      comments: `Imported AR total ${accounting(summary.total)}; 120+ ${accounting(summary.d120)}`,
+    };
+  }
+  return next;
 }
 
 function ytdActualRevenueFromMonthlyBudgets(rows: Row[], throughMonth: string) {
@@ -579,69 +719,27 @@ export default function OpsReportPage() {
       files.forEach((file) => form.append("opsReport", file));
       form.append("weekStart", topMetrics.weekStart);
       form.append("weekEnd", weekEnd);
+      form.append("reportMonth", monthKeyFromDate(topMetrics.weekStart));
       const response = await fetch(apiUrl("/api/opsreport/import"), { method: "POST", credentials: "include", body: form });
       if (!response.ok) throw new Error(await response.text());
       return response.json() as Promise<OpsImportBatchResponse>;
     },
     onSuccess: (data) => {
-      let nextMonthlyBudgetRows = monthlyBudgets.map(normalizeMonthlyBudgetRow);
-      let latestMonthlyImport: MonthlyOtbReport | null = null;
-      for (const report of data.reports) {
-      if (report.weekly) {
-        setTopMetrics((current) => ({
-          ...current,
-          weekStart: report.weekly!.weekStart || current.weekStart,
-          occupancy: percentDisplay(report.weekly!.occupancy),
-          roomsSold: rowValue(report.weekly!.roomsSold, 0),
-          roomRevenue: accounting(report.weekly!.roomRevenue),
-        }));
-      }
-      if (report.monthly) {
-        const monthly = report.monthly;
-        latestMonthlyImport = monthly;
-        nextMonthlyBudgetRows = mergeMonthlyActualFromOtb(nextMonthlyBudgetRows, monthly);
-        setMonthRows((rows) => rows.map((row) => {
-          if (row.label === "MONTH TO DATE" || row.label === "MONTHLY TOTAL") {
-            return {
-              ...row,
-              occupancy: percentDisplay(monthly.occupancy),
-              rooms: rowValue(monthly.rooms, 0),
-              adr: accounting(monthly.adr),
-              revenue: accounting(monthly.revenue),
-              comments: `Imported ${monthly.monthStart} to ${monthly.monthEnd}`,
-            };
-          }
-          return row;
-        }));
-      }
-      if (report.gssRows?.length) {
-        setGssRows((rows) => rows.map((row) => report.gssRows!.find((incoming) => incoming.label === row.label) || row));
-      }
-      if (report.gssWaveRows?.length) {
-        setGssWaveRows((rows) => rows.map((row) => report.gssWaveRows!.find((incoming) => incoming.label === row.label) || row));
-      }
-      if (report.positiveReviews?.length) {
-        setPositiveReviews([...report.positiveReviews, ...emptyRows(Math.max(0, 5 - report.positiveReviews.length), ["source", "score", "comment"])].slice(0, 5));
-      }
-      if (report.negativeReviews?.length) {
-        setNegativeReviews([...report.negativeReviews, ...emptyRows(Math.max(0, 5 - report.negativeReviews.length), ["source", "score", "comment"])].slice(0, 5));
-      }
-      }
-      if (latestMonthlyImport) {
-        setMonthlyBudgets(nextMonthlyBudgetRows);
-        const latestMonthKey = monthKeyFromDate(latestMonthlyImport.monthStart);
-        setTopMetrics((current) => ({
-          ...current,
-          mtdThisYear: accounting(latestMonthlyImport!.revenue),
-          ytdThisYear: accounting(ytdActualRevenueFromMonthlyBudgets(nextMonthlyBudgetRows, latestMonthKey)),
-        }));
-      }
-      setUploadedReports((current) => [
-        ...current,
-        ...data.reports.map((report) => ({ originalFileName: report.originalFileName, reportType: report.reportType, importedAt: new Date().toISOString() })),
-      ]);
+      let nextPayload: Record<string, any> = cloneValue(currentDraftPayload);
+      const reports = data.reports.map((report) => {
+        const beforePatch = captureReportPatch(nextPayload, report.reportType);
+        if (report.status !== "failed") nextPayload = applyOpsReportToPayload(nextPayload, report);
+        return { ...report, beforePatch };
+      });
+      applyPayloadState(nextPayload);
+      setUploadedReports((current) => [...current, ...reports]);
       setOpsReportFiles([]);
-      toast({ title: "Ops reports imported", description: `${data.reports.length} report${data.reports.length === 1 ? "" : "s"} mapped into the worksheet.` });
+      const warnings = reports.reduce((total, report) => total + report.warnings.length, 0);
+      const failed = reports.filter((report) => report.status === "failed").length;
+      toast({
+        title: "Ops reports imported",
+        description: `${reports.length - failed} mapped, ${failed} failed.${warnings ? ` ${warnings} parser message${warnings === 1 ? "" : "s"} need review.` : ""}`,
+      });
     },
     onError: (error: Error) => toast({ title: "Unable to import report", description: error.message, variant: "destructive" }),
   });
@@ -649,6 +747,41 @@ export default function OpsReportPage() {
     mutationFn: async (payload: Record<string, any>) => apiRequest("POST", "/api/opsreport/draft", payload),
     onSuccess: () => setLastSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })),
     onError: (error: Error) => toast({ title: "Unable to save ops report draft", description: error.message, variant: "destructive" }),
+  });
+  const removeOpsReportUpload = useMutation({
+    mutationFn: async (uploadId: string) => {
+      const selectedIndex = uploadedReports.findIndex((report) => report.uploadId === uploadId);
+      if (selectedIndex < 0) throw new Error("Upload was not found.");
+      const selected = uploadedReports[selectedIndex] as OpsImportResponse;
+      const hasLaterSameType = uploadedReports.slice(selectedIndex + 1).some((report) => report.reportType === selected.reportType);
+      let transferredRollback = false;
+      const remaining = uploadedReports
+        .filter((report) => report.uploadId !== uploadId)
+        .map((report) => {
+          if (!hasLaterSameType || transferredRollback || report.reportType !== selected.reportType) return report;
+          if (uploadedReports.findIndex((item) => item.uploadId === report.uploadId) <= selectedIndex) return report;
+          transferredRollback = true;
+          return { ...report, beforePatch: selected.beforePatch };
+        });
+      let payload: Record<string, any> = cloneValue(currentDraftPayload);
+      if (!hasLaterSameType) {
+        const previous = [...uploadedReports.slice(0, selectedIndex)].reverse().find((report) => report.reportType === selected.reportType) as OpsImportResponse | undefined;
+        payload = previous ? applyOpsReportToPayload(payload, previous) : { ...payload, ...(selected.beforePatch || {}) };
+      }
+      const response = await fetch(apiUrl(`/api/opsreport/uploads/${encodeURIComponent(uploadId)}`), {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ weekStart: topMetrics.weekStart, weekEnd, weekLabel: week, payload, uploadedReports: remaining }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json() as Promise<OpsDraftResponse>;
+    },
+    onSuccess: (data) => {
+      hydrateOpsDraft(data.draft);
+      toast({ title: "Report removed", description: "Its mapped values were recalculated from the remaining uploads." });
+    },
+    onError: (error: Error) => toast({ title: "Unable to remove report", description: error.message, variant: "destructive" }),
   });
 
   useEffect(() => {
@@ -685,6 +818,13 @@ export default function OpsReportPage() {
     return { ...row, priorWeek: priorScore, weekVariance };
   }), [gssWaveRows, previousGssWaveRows]);
   const currentMonthKey = useMemo(() => monthKeyFromDate(topMetrics.weekStart), [topMetrics.weekStart]);
+  const uploadedReportsByType = useMemo(() => Object.entries(
+    uploadedReports.reduce<Record<string, Array<Record<string, any>>>>((groups, report) => {
+      const key = String(report.reportType || "unknown");
+      (groups[key] ||= []).push(report);
+      return groups;
+    }, {}),
+  ), [uploadedReports]);
   const ytdMonthlySummary = useMemo(() => {
     const availableRows = monthlyBudgets
       .filter((row) => row.month && (!currentMonthKey || row.month <= currentMonthKey))
@@ -925,10 +1065,7 @@ export default function OpsReportPage() {
     ]);
     setUploadedReports([]);
   };
-  const hydrateOpsDraft = (loaded: OpsDraftResponse["draft"]) => {
-    if (!loaded?.payload) return false;
-    const payload = loaded.payload;
-    setWeek(loaded.weekLabel || "Week 1");
+  function applyPayloadState(payload: Record<string, any>) {
     if (payload.setup) setSetup(payload.setup);
     if (payload.topMetrics) setTopMetrics(payload.topMetrics);
     if (payload.monthRows) setMonthRows(payload.monthRows);
@@ -954,6 +1091,11 @@ export default function OpsReportPage() {
     if (payload.negativeReviews) setNegativeReviews(payload.negativeReviews);
     if (payload.followUp) setFollowUp(payload.followUp);
     if (payload.priorities) setPriorities(payload.priorities);
+  }
+  const hydrateOpsDraft = (loaded: OpsDraftResponse["draft"]) => {
+    if (!loaded?.payload) return false;
+    setWeek(loaded.weekLabel || "Week 1");
+    applyPayloadState(loaded.payload);
     setUploadedReports(loaded.uploadedReports || []);
     return true;
   };
@@ -1159,25 +1301,64 @@ export default function OpsReportPage() {
             <div className="rounded-xl border border-dashed border-[#cdbda8] bg-white p-4">
               <div className="flex items-center gap-2 font-semibold text-[#201814]"><Upload className="h-4 w-4" /> Import ops source report</div>
               <p className="mt-2 text-sm text-[#5f5247]">
-                Upload weekly/monthly OTB CSV, GSS score summary, or Marriott response export. Recognized fields populate the matching worksheet sections.
+                Upload OTB, Detailed Flash, OOO Rooms, GSS, Marriott responses, or AR Aging reports. Files are matched by name and report headers.
               </p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <Input className={C.field} type="file" accept=".xlsx,.xls,.csv" multiple onChange={(event) => setOpsReportFiles(Array.from(event.target.files || []))} />
+                <Input className={C.field} type="file" accept=".xlsx,.xls,.csv,.pdf" multiple onChange={(event) => setOpsReportFiles(Array.from(event.target.files || []))} />
                 <Button className={C.green} onClick={() => opsReportFiles.length && opsReportUpload.mutate(opsReportFiles)} disabled={!opsReportFiles.length || opsReportUpload.isPending}>
                   {opsReportUpload.isPending ? "Importing..." : "Import"}
                 </Button>
               </div>
               {uploadedReports.length > 0 && (
-                <div className="mt-3 rounded-lg border border-[#eadcc9] bg-[#fffaf2] p-2 text-xs text-[#5f5247]">
-                  <div className="mb-1 font-semibold text-[#201814]">Imported reports</div>
-                  <div className="space-y-1">
-                    {uploadedReports.slice(-5).map((report, index) => (
-                      <div key={`${report.originalFileName}-${index}`} className="flex justify-between gap-2">
-                        <span className="truncate">{String(report.originalFileName || "Report")}</span>
-                        <span className="shrink-0 uppercase tracking-wide">{String(report.reportType || "").replace(/_/g, " ")}</span>
+                <div className="mt-3 space-y-2 rounded-lg border border-[#eadcc9] bg-[#fffaf2] p-2 text-xs text-[#5f5247]">
+                  <div className="font-semibold text-[#201814]">Imported reports</div>
+                  {uploadedReportsByType.map(([reportType, reports]) => (
+                    <div key={reportType} className="rounded-md border border-[#eadcc9] bg-white p-2">
+                      <div className="mb-1 font-semibold text-[#201814]">{REPORT_TYPE_LABELS[reportType as OpsImportResponse["reportType"]] || reportType}</div>
+                      <div className="space-y-2">
+                        {reports.map((report) => (
+                          <div key={String(report.uploadId)} className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="truncate font-medium text-[#201814]">{String(report.originalFileName || "Report")}</div>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                <Badge
+                                  variant={report.status === "parsed" ? "default" : "outline"}
+                                  className={report.status === "failed" ? "border-rose-400 text-rose-800" : report.status === "warning" ? "border-amber-400 text-amber-800" : "bg-[#2f5f46]"}
+                                >
+                                  {report.status === "failed" ? "Failed" : report.status === "warning" ? "Warning" : "Parsed"}
+                                </Badge>
+                                <Badge variant="outline">{Array.isArray(report.preview) ? report.preview.length : 0} preview rows</Badge>
+                              </div>
+                              {Array.isArray(report.warnings) && report.warnings.length > 0 && (
+                                <div className="mt-1 text-amber-800">{report.warnings.join(" ")}</div>
+                              )}
+                              {Array.isArray(report.preview) && report.preview.length > 0 && (
+                                <details className="mt-1">
+                                  <summary className="cursor-pointer font-medium text-[#5b4b3b]">Parsed preview</summary>
+                                  <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-[#f3efe7] p-2 text-[10px]">
+                                    {JSON.stringify(report.preview.slice(0, 3), null, 2)}
+                                  </pre>
+                                </details>
+                              )}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className={`${C.outline} shrink-0`}
+                              disabled={removeOpsReportUpload.isPending}
+                              onClick={() => {
+                                if (window.confirm(`Remove ${String(report.originalFileName || "this report")} and recalculate its mapped data?`)) {
+                                  removeOpsReportUpload.mutate(String(report.uploadId));
+                                }
+                              }}
+                            >
+                              <Trash2 className="mr-1 h-3.5 w-3.5" />Remove
+                            </Button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

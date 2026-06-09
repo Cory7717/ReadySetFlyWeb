@@ -1,0 +1,311 @@
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Download, FileWarning, LockKeyhole, Plus, ShieldCheck } from "lucide-react";
+import { Link } from "wouter";
+import { apiUrl } from "@/lib/api";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+
+const C = {
+  page: "min-h-screen bg-[#f3efe7] text-[#201814]",
+  shell: "!border-[#d7c8b5] !bg-[#fffaf2] !bg-none !text-[#201814] shadow-[0_18px_45px_rgba(72,52,31,0.10)]",
+  field: "!border-[#cdbda8] !bg-white !text-[#201814] placeholder:!text-[#7c6e61]",
+  outline: "!border-[#cdbda8] !bg-white !bg-none !text-[#201814] hover:!bg-[#f8efe2]",
+  green: "!bg-[#2f5f46] !bg-none !text-white hover:!bg-[#274d39]",
+  muted: "!text-[#5f5247]",
+};
+
+type Incident = {
+  id: string;
+  incidentNumber: string;
+  incidentDate: string;
+  incidentTime: string;
+  location: string;
+  category: string;
+  severity: "low" | "moderate" | "high" | "critical";
+  status: "open" | "under_review" | "closed";
+  reportedByName: string;
+  reportedByPosition: string;
+  peopleInvolved: string;
+  guestRooms: string;
+  witnesses: string;
+  description: string;
+  immediateActions: string;
+  injuries: string;
+  propertyDamage: string;
+  vehicleDetails: string;
+  emergencyServices: string;
+  policeReportNumber: string;
+  notifications: string;
+  followUpRequired: string;
+  managerNotes: string;
+  createdAt: string;
+};
+
+type AccessResponse = {
+  unlocked: boolean;
+  hasPin: boolean;
+  user: { employeeDisplayName: string; position?: string } | null;
+};
+
+const emptyForm = () => ({
+  incidentDate: new Date().toISOString().slice(0, 10),
+  incidentTime: new Date().toTimeString().slice(0, 5),
+  location: "",
+  category: "Vehicle / Parking Lot",
+  severity: "moderate",
+  reportedByName: "",
+  reportedByPosition: "",
+  peopleInvolved: "",
+  guestRooms: "",
+  witnesses: "",
+  description: "",
+  immediateActions: "",
+  injuries: "No injuries reported.",
+  propertyDamage: "",
+  vehicleDetails: "",
+  emergencyServices: "",
+  policeReportNumber: "",
+  notifications: "",
+  followUpRequired: "",
+  managerNotes: "",
+});
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(apiUrl(url), { credentials: "include" });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+
+function Field({ label, value, onChange, type = "text", required = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean }) {
+  return (
+    <div>
+      <Label className="text-xs font-semibold uppercase tracking-[0.12em] text-[#5b4b3b]">{label}{required ? " *" : ""}</Label>
+      <Input className={`mt-1 ${C.field}`} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+    </div>
+  );
+}
+
+function TextField({ label, value, onChange, required = false, placeholder = "" }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; placeholder?: string }) {
+  return (
+    <div>
+      <Label className="text-xs font-semibold uppercase tracking-[0.12em] text-[#5b4b3b]">{label}{required ? " *" : ""}</Label>
+      <Textarea className={`mt-1 min-h-[95px] ${C.field}`} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    </div>
+  );
+}
+
+function severityClass(severity: Incident["severity"]) {
+  if (severity === "critical") return "bg-rose-700 text-white";
+  if (severity === "high") return "bg-orange-600 text-white";
+  if (severity === "moderate") return "bg-amber-500 text-white";
+  return "bg-[#2f5f46] text-white";
+}
+
+export default function IncidentReportPage() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [pin, setPin] = useState("");
+  const [showForm, setShowForm] = useState(true);
+  const [form, setForm] = useState(emptyForm);
+
+  const access = useQuery<AccessResponse>({
+    queryKey: ["/api/incidentreport/access"],
+    queryFn: () => fetchJson("/api/incidentreport/access"),
+  });
+  const incidents = useQuery<{ incidents: Incident[] }>({
+    queryKey: ["/api/incidentreport"],
+    enabled: Boolean(access.data?.unlocked),
+    queryFn: () => fetchJson("/api/incidentreport"),
+  });
+  const unlock = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/incidentreport/pin-login", { pin }),
+    onSuccess: () => {
+      setPin("");
+      queryClient.invalidateQueries({ queryKey: ["/api/incidentreport/access"] });
+    },
+    onError: (error: Error) => toast({ title: "Unable to unlock incident reports", description: error.message, variant: "destructive" }),
+  });
+  const createIncident = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/incidentreport", form);
+      return response.json() as Promise<{ incident: Incident }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/incidentreport"] });
+      setForm({ ...emptyForm(), reportedByName: form.reportedByName, reportedByPosition: form.reportedByPosition });
+      setShowForm(false);
+      toast({ title: "Incident report saved", description: `${data.incident.incidentNumber} is ready for PDF download.` });
+    },
+    onError: (error: Error) => toast({ title: "Unable to save incident report", description: error.message, variant: "destructive" }),
+  });
+  const updateStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: Incident["status"] }) => apiRequest("PATCH", `/api/incidentreport/${id}/status`, { status }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/incidentreport"] }),
+    onError: (error: Error) => toast({ title: "Unable to update status", description: error.message, variant: "destructive" }),
+  });
+
+  useEffect(() => {
+    if (!access.data?.user) return;
+    setForm((current) => ({
+      ...current,
+      reportedByName: current.reportedByName || access.data!.user!.employeeDisplayName || "",
+      reportedByPosition: current.reportedByPosition || access.data!.user!.position || "",
+    }));
+  }, [access.data?.user]);
+
+  if (access.isLoading) return <div className={`${C.page} p-8`}>Loading incident reports...</div>;
+  if (!access.data?.unlocked) {
+    return (
+      <div className={`${C.page} flex items-center justify-center p-4`}>
+        <Card className={`w-full max-w-md ${C.shell}`}>
+          <CardHeader>
+            <div className="flex items-center gap-2"><LockKeyhole className="h-5 w-5 text-[#2f5f46]" /><CardTitle>Incident Report PIN</CardTitle></div>
+            <CardDescription className={C.muted}>Enter the established five-digit Courtyard team PIN.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Input className={`${C.field} text-center text-2xl tracking-[0.4em]`} type="password" inputMode="numeric" maxLength={5} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 5))} onKeyDown={(event) => event.key === "Enter" && pin.length === 5 && unlock.mutate()} />
+            <Button className={`w-full ${C.green}`} disabled={pin.length !== 5 || unlock.isPending} onClick={() => unlock.mutate()}>{unlock.isPending ? "Checking..." : "Open Incident Reports"}</Button>
+            {!access.data?.hasPin && <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">No shared Courtyard PIN is configured.</div>}
+            <Button asChild variant="outline" className={`w-full ${C.outline}`}><Link href="/courtyard">Back to Associate Portal</Link></Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const requiredReady = form.incidentDate && form.incidentTime && form.location.trim() && form.reportedByName.trim() && form.description.trim().length >= 10 && form.immediateActions.trim().length >= 2;
+
+  return (
+    <div className={C.page}>
+      <header className="border-b border-[#d7c8b5] bg-[#fffaf2] px-4 py-4">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">Courtyard Austin Lakeline</div>
+            <h1 className="text-3xl font-semibold tracking-tight">Incident Reports</h1>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild variant="outline" className={C.outline}><Link href="/courtyard"><ArrowLeft className="mr-2 h-4 w-4" />Portal</Link></Button>
+            <Button className={C.green} onClick={() => setShowForm(!showForm)}><Plus className="mr-2 h-4 w-4" />{showForm ? "Hide form" : "New incident"}</Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          <b>Emergency reminder:</b> Call 911 first for immediate threats, serious injuries, fire, or active criminal activity. Preserve video and evidence; record facts without speculation.
+        </div>
+
+        {showForm && (
+          <Card className={C.shell}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><FileWarning className="h-5 w-5 text-[#8a6b3f]" />New Hospitality Incident Report</CardTitle>
+              <CardDescription className={C.muted}>Fields marked with an asterisk are required. Include objective facts, actions taken, and available case numbers.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Field label="Incident date" type="date" required value={form.incidentDate} onChange={(incidentDate) => setForm({ ...form, incidentDate })} />
+                <Field label="Incident time" type="time" required value={form.incidentTime} onChange={(incidentTime) => setForm({ ...form, incidentTime })} />
+                <Field label="Location" required value={form.location} onChange={(location) => setForm({ ...form, location })} />
+                <div>
+                  <Label className="text-xs font-semibold uppercase tracking-[0.12em] text-[#5b4b3b]">Category *</Label>
+                  <Select value={form.category} onValueChange={(category) => setForm({ ...form, category })}>
+                    <SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["Vehicle / Parking Lot", "Guest Injury / Medical", "Employee Injury", "Theft / Missing Property", "Security / Disturbance", "Property Damage", "Fire / Life Safety", "Food Safety", "Privacy / Guest Information", "Other"].map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold uppercase tracking-[0.12em] text-[#5b4b3b]">Severity *</Label>
+                  <Select value={form.severity} onValueChange={(severity) => setForm({ ...form, severity })}>
+                    <SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="moderate">Moderate</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Field label="Reported by" required value={form.reportedByName} onChange={(reportedByName) => setForm({ ...form, reportedByName })} />
+                <Field label="Reporter position" value={form.reportedByPosition} onChange={(reportedByPosition) => setForm({ ...form, reportedByPosition })} />
+                <Field label="Guest room(s)" value={form.guestRooms} onChange={(guestRooms) => setForm({ ...form, guestRooms })} />
+              </section>
+
+              <section className="grid gap-4 lg:grid-cols-2">
+                <TextField label="People involved" value={form.peopleInvolved} onChange={(peopleInvolved) => setForm({ ...form, peopleInvolved })} placeholder="Names, contact information, guest/employee/vendor relationship..." />
+                <TextField label="Witnesses" value={form.witnesses} onChange={(witnesses) => setForm({ ...form, witnesses })} placeholder="Names and contact information; note if written statements were obtained." />
+                <TextField label="Detailed incident narrative" required value={form.description} onChange={(description) => setForm({ ...form, description })} placeholder="Describe what was observed, where each party was located, sequence of events, and time references." />
+                <TextField label="Immediate actions taken" required value={form.immediateActions} onChange={(immediateActions) => setForm({ ...form, immediateActions })} placeholder="Safety actions, guest assistance, scene preservation, keys/video secured, manager response..." />
+                <TextField label="Injuries / medical response" value={form.injuries} onChange={(injuries) => setForm({ ...form, injuries })} />
+                <TextField label="Property damage" value={form.propertyDamage} onChange={(propertyDamage) => setForm({ ...form, propertyDamage })} />
+                <TextField label="Vehicle details" value={form.vehicleDetails} onChange={(vehicleDetails) => setForm({ ...form, vehicleDetails })} placeholder="Make, model, color, plate, damage location, owner, suspect vehicle..." />
+                <TextField label="Police / fire / EMS involvement" value={form.emergencyServices} onChange={(emergencyServices) => setForm({ ...form, emergencyServices })} />
+              </section>
+
+              <section className="grid gap-3 md:grid-cols-2">
+                <Field label="Police / case report number" value={form.policeReportNumber} onChange={(policeReportNumber) => setForm({ ...form, policeReportNumber })} />
+                <Field label="Notifications made" value={form.notifications} onChange={(notifications) => setForm({ ...form, notifications })} />
+                <TextField label="Required follow-up" value={form.followUpRequired} onChange={(followUpRequired) => setForm({ ...form, followUpRequired })} />
+                <TextField label="Manager notes" value={form.managerNotes} onChange={(managerNotes) => setForm({ ...form, managerNotes })} />
+              </section>
+
+              <div className="flex justify-end">
+                <Button className={C.green} disabled={!requiredReady || createIncident.isPending} onClick={() => createIncident.mutate()}>
+                  <ShieldCheck className="mr-2 h-4 w-4" />{createIncident.isPending ? "Saving..." : "Submit Incident Report"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className={C.shell}>
+          <CardHeader>
+            <CardTitle>Saved Incident Reports</CardTitle>
+            <CardDescription className={C.muted}>The most recent 100 reports are retained here for review and PDF download.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {incidents.isLoading ? <div className="text-sm text-[#5f5247]">Loading reports...</div> : !incidents.data?.incidents.length ? (
+              <div className="rounded-lg border border-dashed border-[#cdbda8] p-6 text-center text-sm text-[#5f5247]">No incident reports have been submitted.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] border-collapse text-sm">
+                  <thead><tr className="bg-[#243746] text-left text-white">
+                    <th className="p-2">Incident</th><th className="p-2">Date / Time</th><th className="p-2">Category</th><th className="p-2">Location</th><th className="p-2">Reported By</th><th className="p-2">Severity</th><th className="p-2">Status</th><th className="p-2">PDF</th>
+                  </tr></thead>
+                  <tbody>
+                    {incidents.data.incidents.map((incident) => (
+                      <tr key={incident.id} className="border-b border-[#e0d3c1] odd:bg-white even:bg-[#fbf6ee]">
+                        <td className="p-2 font-semibold">{incident.incidentNumber}</td>
+                        <td className="p-2">{incident.incidentDate}<br /><span className="text-xs text-[#5f5247]">{incident.incidentTime}</span></td>
+                        <td className="p-2">{incident.category}</td>
+                        <td className="p-2">{incident.location}</td>
+                        <td className="p-2">{incident.reportedByName}</td>
+                        <td className="p-2"><Badge className={severityClass(incident.severity)}>{incident.severity}</Badge></td>
+                        <td className="p-2">
+                          <Select value={incident.status} onValueChange={(status: Incident["status"]) => updateStatus.mutate({ id: incident.id, status })}>
+                            <SelectTrigger className={`w-36 ${C.field}`}><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="open">Open</SelectItem><SelectItem value="under_review">Under Review</SelectItem><SelectItem value="closed">Closed</SelectItem></SelectContent>
+                          </Select>
+                        </td>
+                        <td className="p-2"><Button asChild size="sm" variant="outline" className={C.outline}><a href={apiUrl(`/api/incidentreport/${incident.id}/pdf`)}><Download className="mr-1 h-4 w-4" />PDF</a></Button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </main>
+    </div>
+  );
+}

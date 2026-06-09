@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Coffee, DollarSign, DoorOpen, FileSpreadsheet, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
+import { CalendarDays, ClipboardPlus, Coffee, DollarSign, DoorOpen, FileSpreadsheet, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -360,6 +360,15 @@ export default function CourtyardPortalPage() {
       action: "Open ops report",
       tone: C.outline,
       disabled: !toolEnabled(user, "opsreport"),
+    },
+    {
+      href: "/incidentreport",
+      icon: ClipboardPlus,
+      title: "Incident Report",
+      description: "Document guest, vehicle, injury, security, property damage, or other hotel incidents and download a professional PDF.",
+      action: "Create incident report",
+      tone: C.green,
+      disabled: false,
     },
     ...(user.isAdmin ? [{
       href: "/courtyard/budget",

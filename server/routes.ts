@@ -54,6 +54,7 @@ import { aiToolsRouter } from "./routes/aiTools";
 import { registerTipsRoutes } from "./routes/tips";
 import { registerScheduleRoutes } from "./routes/schedule";
 import { registerOpsReportRoutes } from "./routes/opsReport";
+import { registerIncidentReportRoutes } from "./routes/incidentReport";
 import { registerCourtyardBudgetRoutes } from "./routes/courtyardBudget";
 import { registerVehicleListingRoutes } from "./routes/vehicleListings";
 import {
@@ -4395,6 +4396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerTipsRoutes(app);
   registerScheduleRoutes(app);
   registerOpsReportRoutes(app);
+  registerIncidentReportRoutes(app);
   registerCourtyardBudgetRoutes(app);
   registerVehicleListingRoutes(app);
   app.use("/api/fuel-prices", fuelPricesRouter);

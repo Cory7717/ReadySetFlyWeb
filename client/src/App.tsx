@@ -90,6 +90,7 @@ import SchedulePage from "@/pages/schedule";
 import OpsReportPage from "@/pages/ops-report";
 import CourtyardPortalPage from "@/pages/courtyard";
 import CourtyardBudgetPage from "@/pages/courtyard-budget";
+import IncidentReportPage from "@/pages/incident-report";
 import VwBeetlePage from "@/pages/vw-beetle";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
@@ -250,6 +251,7 @@ function Router() {
       <Route path="/courtyard/budget" component={CourtyardBudgetPage} />
       <Route path="/schedule" component={SchedulePage} />
       <Route path="/opsreport" component={OpsReportPage} />
+      <Route path="/incidentreport" component={IncidentReportPage} />
       <Route path="/vw-beetle" component={VwBeetlePage} />
       <Route path="/vw-beetle/admin" component={VwBeetlePage} />
       <Route path="/404" component={NotFound} />
@@ -382,6 +384,7 @@ function AppShell() {
   const isSchedulePage = location.startsWith("/schedule");
   const isCourtyardPage = location.startsWith("/courtyard");
   const isOpsReportPage = location.startsWith("/opsreport");
+  const isIncidentReportPage = location.startsWith("/incidentreport");
   const isVwBeetlePage = location.startsWith("/vw-beetle");
   const isStandalonePage =
     isNoiseAndFuryPage ||
@@ -393,6 +396,7 @@ function AppShell() {
     isSchedulePage ||
     isCourtyardPage ||
     isOpsReportPage ||
+    isIncidentReportPage ||
     isVwBeetlePage;
   useEffect(() => {
     setAuthState(isAuthenticated);

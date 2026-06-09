@@ -753,6 +753,41 @@ export const courtyardOpsReportUserSettings = pgTable("courtyard_ops_report_user
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const courtyardIncidentReports = pgTable("courtyard_incident_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: text("property_id").notNull().default("courtyard-austin-lakeline"),
+  incidentNumber: text("incident_number").notNull(),
+  incidentDate: date("incident_date").notNull(),
+  incidentTime: text("incident_time").notNull(),
+  location: text("location").notNull(),
+  category: text("category").notNull(),
+  severity: text("severity").notNull().default("moderate"),
+  status: text("status").notNull().default("open"),
+  reportedByName: text("reported_by_name").notNull(),
+  reportedByPosition: text("reported_by_position"),
+  reportedByUserId: varchar("reported_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  peopleInvolved: text("people_involved"),
+  guestRooms: text("guest_rooms"),
+  witnesses: text("witnesses"),
+  description: text("description").notNull(),
+  immediateActions: text("immediate_actions").notNull(),
+  injuries: text("injuries"),
+  propertyDamage: text("property_damage"),
+  vehicleDetails: text("vehicle_details"),
+  emergencyServices: text("emergency_services"),
+  policeReportNumber: text("police_report_number"),
+  notifications: text("notifications"),
+  followUpRequired: text("follow_up_required"),
+  managerNotes: text("manager_notes"),
+  payloadJson: jsonb("payload_json").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_courtyard_incident_number").on(table.incidentNumber),
+  index("idx_courtyard_incident_date").on(table.incidentDate),
+  index("idx_courtyard_incident_status").on(table.status),
+]);
+
 export const vehicleListings = pgTable("vehicle_listings", {
   id: varchar("id").primaryKey(),
   title: text("title").notNull(),

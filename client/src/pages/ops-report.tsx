@@ -818,6 +818,10 @@ export default function OpsReportPage() {
     return { ...row, priorWeek: priorScore, weekVariance };
   }), [gssWaveRows, previousGssWaveRows]);
   const currentMonthKey = useMemo(() => monthKeyFromDate(topMetrics.weekStart), [topMetrics.weekStart]);
+  const previousWeekReports = useMemo(
+    () => (previousDraft.data?.draft?.uploadedReports || []).filter((report) => report.status !== "removed"),
+    [previousDraft.data?.draft?.uploadedReports],
+  );
   const uploadedReportsByType = useMemo(() => Object.entries(
     uploadedReports.reduce<Record<string, Array<Record<string, any>>>>((groups, report) => {
       const key = String(report.reportType || "unknown");
@@ -1096,7 +1100,10 @@ export default function OpsReportPage() {
     if (!loaded?.payload) return false;
     setWeek(loaded.weekLabel || "Week 1");
     applyPayloadState(loaded.payload);
-    setUploadedReports(loaded.uploadedReports || []);
+    setUploadedReports((loaded.uploadedReports || []).filter((report) => {
+      const sourceWeekStart = String(report.weekStartDate || "").trim();
+      return !sourceWeekStart || sourceWeekStart === loaded.weekStart;
+    }));
     return true;
   };
   const loadOpsWeek = async (weekStart: string, weekLabel: string) => {
@@ -1303,6 +1310,22 @@ export default function OpsReportPage() {
               <p className="mt-2 text-sm text-[#5f5247]">
                 Upload OTB, Detailed Flash, OOO Rooms, GSS, Marriott responses, or AR Aging reports. Files are matched by name and report headers.
               </p>
+              <div className="mt-3 rounded-lg border border-[#eadcc9] bg-[#fffaf2] p-3 text-xs text-[#5f5247]">
+                <div className="font-semibold text-[#201814]">Files needed and suggested names</div>
+                <div className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                  <div><span className="font-medium text-[#201814]">Previous Week OTB:</span> <code>MMDDYYYY_Previous Week OTB.csv</code></div>
+                  <div><span className="font-medium text-[#201814]">Current Month OTB:</span> <code>MMDDYYYY_June Month OTB.csv</code></div>
+                  <div><span className="font-medium text-[#201814]">Next Month OTB:</span> <code>MMDDYYYY_July Month OTB.csv</code></div>
+                  <div><span className="font-medium text-[#201814]">Detailed Flash:</span> <code>Detailed Flash_AUSNL_YYYY-MM-DD.csv</code></div>
+                  <div><span className="font-medium text-[#201814]">OOO Rooms:</span> <code>MMDDYYYY_OOO Rooms.pdf</code></div>
+                  <div><span className="font-medium text-[#201814]">GSS Scores:</span> <code>MMDDYYYY_GSS Scores.xlsx</code></div>
+                  <div><span className="font-medium text-[#201814]">Marriott Responses:</span> <code>Marriott_Responses_Export_MM_DD_YYYY.xlsx</code></div>
+                  <div><span className="font-medium text-[#201814]">AR Aging:</span> <code>MMDDYYYY_AR Aging.xlsx</code></div>
+                </div>
+                <div className="mt-2 text-[#7c6e61]">
+                  Replace the dates and month names with the reporting period. The current-month and next-month OTB files must use their actual month names.
+                </div>
+              </div>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <Input className={C.field} type="file" accept=".xlsx,.xls,.csv,.pdf" multiple onChange={(event) => setOpsReportFiles(Array.from(event.target.files || []))} />
                 <Button className={C.green} onClick={() => opsReportFiles.length && opsReportUpload.mutate(opsReportFiles)} disabled={!opsReportFiles.length || opsReportUpload.isPending}>
@@ -1311,7 +1334,7 @@ export default function OpsReportPage() {
               </div>
               {uploadedReports.length > 0 && (
                 <div className="mt-3 space-y-2 rounded-lg border border-[#eadcc9] bg-[#fffaf2] p-2 text-xs text-[#5f5247]">
-                  <div className="font-semibold text-[#201814]">Imported reports</div>
+                  <div className="font-semibold text-[#201814]">Files imported for {week}</div>
                   {uploadedReportsByType.map(([reportType, reports]) => (
                     <div key={reportType} className="rounded-md border border-[#eadcc9] bg-white p-2">
                       <div className="mb-1 font-semibold text-[#201814]">{REPORT_TYPE_LABELS[reportType as OpsImportResponse["reportType"]] || reportType}</div>
@@ -1359,6 +1382,24 @@ export default function OpsReportPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+              {previousWeekReports.length > 0 && (
+                <div className="mt-3 rounded-lg border border-[#d6dee4] bg-[#f4f7f9] p-3 text-xs text-[#52616c]">
+                  <div className="font-semibold text-[#243746]">Previous week files used for variances</div>
+                  <div className="mt-1 text-[#667681]">
+                    Reference only from {previousDraft.data?.draft?.weekLabel || "the previous week"} ({previousDraft.data?.draft?.weekStart} to {previousDraft.data?.draft?.weekEnd}). These are not current-week imports.
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {previousWeekReports.map((report, index) => (
+                      <div key={String(report.uploadId || `${report.originalFileName}-${index}`)} className="flex items-center justify-between gap-2 rounded border border-[#d6dee4] bg-white px-2 py-1.5">
+                        <span className="truncate">{String(report.originalFileName || "Report")}</span>
+                        <span className="shrink-0 font-medium text-[#243746]">
+                          {REPORT_TYPE_LABELS[report.reportType as OpsImportResponse["reportType"]] || String(report.reportType || "Report").replace(/_/g, " ")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

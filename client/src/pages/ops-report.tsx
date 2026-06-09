@@ -240,7 +240,8 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
   const mapping = report.mapping || {};
   const reportMonth = String(report.reportMonth || monthKeyFromDate(report.weekStartDate || ""));
   const mappingMonth = monthKeyFromDate(String(mapping.dateStart || ""));
-  const resolvedReportType = report.reportType === "remaining_month_otb"
+  const isRemainingMonthFile = /remaining[\s_-]*month[\s_-]*otb/i.test(String(report.originalFileName || report.sourceFileName || ""));
+  const resolvedReportType = report.reportType === "remaining_month_otb" || isRemainingMonthFile
     ? "remaining_month_otb"
     : mapping.total && mappingMonth === nextMonthKey(reportMonth)
     ? "next_month_otb"
@@ -275,7 +276,7 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
   if (resolvedReportType === "remaining_month_otb") {
     const total = mapping.total || {};
     next.monthRows = (next.monthRows || []).map((row: Row) => {
-      if (String(row.label || "").toUpperCase() !== "FUTURE BOOKED") return row;
+      if (String(row.label || "").trim().toUpperCase() !== "FUTURE BOOKED") return row;
       return {
         ...row,
         occupancy: percentDisplay(total.occupancy),
@@ -1377,10 +1378,7 @@ export default function OpsReportPage() {
           </CardContent>
         </Card>
 
-        <Card
-          className="border-[#d7c8b5] text-[#201814] shadow-[0_12px_30px_rgba(72,52,31,0.08)]"
-          style={{ backgroundColor: "#fffaf2", backgroundImage: "none", color: "#201814" }}
-        >
+        <div className="overflow-hidden rounded-xl border border-[#cdbda8] bg-[#fffaf2] text-[#201814] shadow-[0_12px_30px_rgba(72,52,31,0.08)]">
           <Accordion type="single" collapsible>
             <AccordionItem value="ops-import" className="border-0 bg-[#fffaf2] text-[#201814]">
               <AccordionTrigger className="px-4 py-3 text-[#201814] hover:no-underline hover:bg-[#f8efe2] [&>svg]:text-[#5b4b3b]">
@@ -1402,7 +1400,7 @@ export default function OpsReportPage() {
                     </p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <Input className={C.field} type="file" accept=".xlsx,.xls,.csv,.pdf" multiple onChange={(event) => setOpsReportFiles(Array.from(event.target.files || []))} />
-                      <Button className={`${C.green} shrink-0`} onClick={() => opsReportFiles.length && opsReportUpload.mutate(opsReportFiles)} disabled={!opsReportFiles.length || opsReportUpload.isPending}>
+                      <Button className={`${C.green} shrink-0 disabled:!bg-[#9aab9f] disabled:!text-white disabled:opacity-100`} onClick={() => opsReportFiles.length && opsReportUpload.mutate(opsReportFiles)} disabled={!opsReportFiles.length || opsReportUpload.isPending}>
                         {opsReportUpload.isPending ? "Importing..." : "Import files"}
                       </Button>
                     </div>
@@ -1468,7 +1466,7 @@ export default function OpsReportPage() {
               </AccordionContent>
             </AccordionItem>
           </Accordion>
-        </Card>
+        </div>
 
         <Tabs defaultValue="weekly" className="space-y-5">
           <TabsList className="bg-[#fffaf2]">

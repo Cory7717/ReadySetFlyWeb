@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const C = {
   page: "min-h-screen bg-[#f3efe7] text-[#201814]",
@@ -1298,112 +1299,100 @@ export default function OpsReportPage() {
 
       <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
         <Card className={C.darkShell}>
-          <CardContent className="grid gap-4 p-4 md:grid-cols-[1.2fr_0.8fr]">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <DarkLabeledInput label="Property name" value={setup.propertyName} onChange={(propertyName) => setSetup({ ...setup, propertyName })} />
-              <DarkLabeledInput label="General manager" value={setup.generalManager} onChange={(generalManager) => setSetup({ ...setup, generalManager })} />
-              <DarkLabeledInput label="Total rooms" value={setup.totalRooms} onChange={(totalRooms) => setSetup({ ...setup, totalRooms })} type="number" />
-              <DarkLabeledInput label="Monthly room nights" value={setup.monthlyRoomNights} onChange={(monthlyRoomNights) => setSetup({ ...setup, monthlyRoomNights })} type="number" />
-            </div>
-            <div className="rounded-xl border border-dashed border-[#cdbda8] bg-white p-4">
-              <div className="flex items-center gap-2 font-semibold text-[#201814]"><Upload className="h-4 w-4" /> Import ops source report</div>
-              <p className="mt-2 text-sm text-[#5f5247]">
-                Upload OTB, Detailed Flash, OOO Rooms, GSS, Marriott responses, or AR Aging reports. Files are matched by name and report headers.
-              </p>
-              <div className="mt-3 rounded-lg border border-[#eadcc9] bg-[#fffaf2] p-3 text-xs text-[#5f5247]">
-                <div className="font-semibold text-[#201814]">Files needed and suggested names</div>
-                <div className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
-                  <div><span className="font-medium text-[#201814]">Previous Week OTB:</span> <code>MMDDYYYY_Previous Week OTB.csv</code></div>
-                  <div><span className="font-medium text-[#201814]">Current Month OTB:</span> <code>MMDDYYYY_June Month OTB.csv</code></div>
-                  <div><span className="font-medium text-[#201814]">Next Month OTB:</span> <code>MMDDYYYY_July Month OTB.csv</code></div>
-                  <div><span className="font-medium text-[#201814]">Detailed Flash:</span> <code>Detailed Flash_AUSNL_YYYY-MM-DD.csv</code></div>
-                  <div><span className="font-medium text-[#201814]">OOO Rooms:</span> <code>MMDDYYYY_OOO Rooms.pdf</code></div>
-                  <div><span className="font-medium text-[#201814]">GSS Scores:</span> <code>MMDDYYYY_GSS Scores.xlsx</code></div>
-                  <div><span className="font-medium text-[#201814]">Marriott Responses:</span> <code>Marriott_Responses_Export_MM_DD_YYYY.xlsx</code></div>
-                  <div><span className="font-medium text-[#201814]">AR Aging:</span> <code>MMDDYYYY_AR Aging.xlsx</code></div>
+          <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+            <DarkLabeledInput label="Property name" value={setup.propertyName} onChange={(propertyName) => setSetup({ ...setup, propertyName })} />
+            <DarkLabeledInput label="General manager" value={setup.generalManager} onChange={(generalManager) => setSetup({ ...setup, generalManager })} />
+            <DarkLabeledInput label="Total rooms" value={setup.totalRooms} onChange={(totalRooms) => setSetup({ ...setup, totalRooms })} type="number" />
+            <DarkLabeledInput label="Monthly room nights" value={setup.monthlyRoomNights} onChange={(monthlyRoomNights) => setSetup({ ...setup, monthlyRoomNights })} type="number" />
+          </CardContent>
+        </Card>
+
+        <Card className={C.section}>
+          <Accordion type="single" collapsible>
+            <AccordionItem value="ops-import" className="border-0">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                  <div className="rounded-lg bg-[#e8f0e9] p-2 text-[#2f5f46]"><Upload className="h-4 w-4" /></div>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-[#201814]">Import ops source reports</div>
+                    <div className="truncate text-xs font-normal text-[#5f5247]">
+                      {uploadedReports.length} current-week file{uploadedReports.length === 1 ? "" : "s"} · {previousWeekReports.length} previous-week variance reference{previousWeekReports.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-2 text-[#7c6e61]">
-                  Replace the dates and month names with the reporting period. The current-month and next-month OTB files must use their actual month names.
-                </div>
-              </div>
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <Input className={C.field} type="file" accept=".xlsx,.xls,.csv,.pdf" multiple onChange={(event) => setOpsReportFiles(Array.from(event.target.files || []))} />
-                <Button className={C.green} onClick={() => opsReportFiles.length && opsReportUpload.mutate(opsReportFiles)} disabled={!opsReportFiles.length || opsReportUpload.isPending}>
-                  {opsReportUpload.isPending ? "Importing..." : "Import"}
-                </Button>
-              </div>
-              {uploadedReports.length > 0 && (
-                <div className="mt-3 space-y-2 rounded-lg border border-[#eadcc9] bg-[#fffaf2] p-2 text-xs text-[#5f5247]">
-                  <div className="font-semibold text-[#201814]">Files imported for {week}</div>
-                  {uploadedReportsByType.map(([reportType, reports]) => (
-                    <div key={reportType} className="rounded-md border border-[#eadcc9] bg-white p-2">
-                      <div className="mb-1 font-semibold text-[#201814]">{REPORT_TYPE_LABELS[reportType as OpsImportResponse["reportType"]] || reportType}</div>
-                      <div className="space-y-2">
-                        {reports.map((report) => (
-                          <div key={String(report.uploadId)} className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="truncate font-medium text-[#201814]">{String(report.originalFileName || "Report")}</div>
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                <Badge
-                                  variant={report.status === "parsed" ? "default" : "outline"}
-                                  className={report.status === "failed" ? "border-rose-400 text-rose-800" : report.status === "warning" ? "border-amber-400 text-amber-800" : "bg-[#2f5f46]"}
-                                >
-                                  {report.status === "failed" ? "Failed" : report.status === "warning" ? "Warning" : "Parsed"}
-                                </Badge>
-                                <Badge variant="outline">{Array.isArray(report.preview) ? report.preview.length : 0} preview rows</Badge>
+              </AccordionTrigger>
+              <AccordionContent className="border-t border-[#eadcc9] px-4 pb-4 pt-3">
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                  <div>
+                    <p className="text-sm text-[#5f5247]">
+                      Select OTB, Detailed Flash, OOO Rooms, GSS, Marriott responses, or AR Aging files.
+                    </p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <Input className={C.field} type="file" accept=".xlsx,.xls,.csv,.pdf" multiple onChange={(event) => setOpsReportFiles(Array.from(event.target.files || []))} />
+                      <Button className={`${C.green} shrink-0`} onClick={() => opsReportFiles.length && opsReportUpload.mutate(opsReportFiles)} disabled={!opsReportFiles.length || opsReportUpload.isPending}>
+                        {opsReportUpload.isPending ? "Importing..." : "Import files"}
+                      </Button>
+                    </div>
+                    <Accordion type="single" collapsible className="mt-3">
+                      <AccordionItem value="file-guide" className="rounded-lg border border-[#eadcc9] px-3">
+                        <AccordionTrigger className="py-2 text-sm hover:no-underline">Required files and suggested names</AccordionTrigger>
+                        <AccordionContent className="pb-3 text-xs text-[#5f5247]">
+                          <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                            <div><b>Previous Week OTB:</b> <code>MMDDYYYY_Previous Week OTB.csv</code></div>
+                            <div><b>Current Month OTB:</b> <code>MMDDYYYY_June Month OTB.csv</code></div>
+                            <div><b>Next Month OTB:</b> <code>MMDDYYYY_July Month OTB.csv</code></div>
+                            <div><b>Detailed Flash:</b> <code>Detailed Flash_AUSNL_YYYY-MM-DD.csv</code></div>
+                            <div><b>OOO Rooms:</b> <code>MMDDYYYY_OOO Rooms.pdf</code></div>
+                            <div><b>GSS Scores:</b> <code>MMDDYYYY_GSS Scores.xlsx</code></div>
+                            <div><b>Marriott Responses:</b> <code>Marriott_Responses_Export_MM_DD_YYYY.xlsx</code></div>
+                            <div><b>AR Aging:</b> <code>MMDDYYYY_AR Aging.xlsx</code></div>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </div>
+                  <Accordion type="multiple" className="space-y-2">
+                    <AccordionItem value="current-files" className="rounded-lg border border-[#eadcc9] px-3">
+                      <AccordionTrigger className="py-2 text-sm hover:no-underline">Current week files ({uploadedReports.length})</AccordionTrigger>
+                      <AccordionContent className="max-h-72 space-y-2 overflow-y-auto pb-3">
+                        {!uploadedReports.length && <div className="text-xs text-[#7c6e61]">No files imported for {week}.</div>}
+                        {uploadedReportsByType.map(([reportType, reports]) => (
+                          <div key={reportType} className="rounded-md border border-[#eadcc9] bg-[#fffaf2] p-2 text-xs">
+                            <div className="mb-1 font-semibold text-[#201814]">{REPORT_TYPE_LABELS[reportType as OpsImportResponse["reportType"]] || reportType}</div>
+                            {reports.map((report) => (
+                              <div key={String(report.uploadId)} className="flex items-center justify-between gap-2 border-t border-[#eadcc9] py-1.5 first:border-0">
+                                <div className="min-w-0">
+                                  <div className="truncate font-medium text-[#201814]">{String(report.originalFileName || "Report")}</div>
+                                  <div className={report.status === "failed" ? "text-rose-700" : report.status === "warning" ? "text-amber-700" : "text-[#2f5f46]"}>{String(report.status || "parsed")}</div>
+                                </div>
+                                <Button size="sm" variant="outline" className={`${C.outline} h-7 shrink-0 px-2`} disabled={removeOpsReportUpload.isPending} onClick={() => {
+                                  if (window.confirm(`Remove ${String(report.originalFileName || "this report")} and recalculate its mapped data?`)) removeOpsReportUpload.mutate(String(report.uploadId));
+                                }}>
+                                  <Trash2 className="mr-1 h-3 w-3" />Remove
+                                </Button>
                               </div>
-                              {Array.isArray(report.warnings) && report.warnings.length > 0 && (
-                                <div className="mt-1 text-amber-800">{report.warnings.join(" ")}</div>
-                              )}
-                              {Array.isArray(report.preview) && report.preview.length > 0 && (
-                                <details className="mt-1">
-                                  <summary className="cursor-pointer font-medium text-[#5b4b3b]">Parsed preview</summary>
-                                  <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-[#f3efe7] p-2 text-[10px]">
-                                    {JSON.stringify(report.preview.slice(0, 3), null, 2)}
-                                  </pre>
-                                </details>
-                              )}
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className={`${C.outline} shrink-0`}
-                              disabled={removeOpsReportUpload.isPending}
-                              onClick={() => {
-                                if (window.confirm(`Remove ${String(report.originalFileName || "this report")} and recalculate its mapped data?`)) {
-                                  removeOpsReportUpload.mutate(String(report.uploadId));
-                                }
-                              }}
-                            >
-                              <Trash2 className="mr-1 h-3.5 w-3.5" />Remove
-                            </Button>
+                            ))}
                           </div>
                         ))}
-                      </div>
-                    </div>
-                  ))}
+                      </AccordionContent>
+                    </AccordionItem>
+                    <AccordionItem value="previous-files" className="rounded-lg border border-[#d6dee4] px-3">
+                      <AccordionTrigger className="py-2 text-sm hover:no-underline">Previous week variance files ({previousWeekReports.length})</AccordionTrigger>
+                      <AccordionContent className="max-h-72 space-y-1 overflow-y-auto pb-3 text-xs">
+                        {!previousWeekReports.length && <div className="text-[#667681]">No previous-week source files found.</div>}
+                        {previousWeekReports.map((report, index) => (
+                          <div key={String(report.uploadId || `${report.originalFileName}-${index}`)} className="flex items-center justify-between gap-2 rounded border border-[#d6dee4] bg-[#f4f7f9] px-2 py-1.5">
+                            <span className="truncate">{String(report.originalFileName || "Report")}</span>
+                            <span className="shrink-0 font-medium text-[#243746]">{REPORT_TYPE_LABELS[report.reportType as OpsImportResponse["reportType"]] || String(report.reportType || "Report").replace(/_/g, " ")}</span>
+                          </div>
+                        ))}
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
                 </div>
-              )}
-              {previousWeekReports.length > 0 && (
-                <div className="mt-3 rounded-lg border border-[#d6dee4] bg-[#f4f7f9] p-3 text-xs text-[#52616c]">
-                  <div className="font-semibold text-[#243746]">Previous week files used for variances</div>
-                  <div className="mt-1 text-[#667681]">
-                    Reference only from {previousDraft.data?.draft?.weekLabel || "the previous week"} ({previousDraft.data?.draft?.weekStart} to {previousDraft.data?.draft?.weekEnd}). These are not current-week imports.
-                  </div>
-                  <div className="mt-2 space-y-1">
-                    {previousWeekReports.map((report, index) => (
-                      <div key={String(report.uploadId || `${report.originalFileName}-${index}`)} className="flex items-center justify-between gap-2 rounded border border-[#d6dee4] bg-white px-2 py-1.5">
-                        <span className="truncate">{String(report.originalFileName || "Report")}</span>
-                        <span className="shrink-0 font-medium text-[#243746]">
-                          {REPORT_TYPE_LABELS[report.reportType as OpsImportResponse["reportType"]] || String(report.reportType || "Report").replace(/_/g, " ")}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </Card>
 
         <Tabs defaultValue="weekly" className="space-y-5">

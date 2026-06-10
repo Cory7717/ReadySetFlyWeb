@@ -19,7 +19,7 @@ const C = {
   page: "min-h-screen bg-[#f3efe7] text-[#201814]",
   shell: "!border-[#d7c8b5] !bg-[#fffaf2] !bg-none !text-[#201814] shadow-[0_18px_45px_rgba(72,52,31,0.10)]",
   darkShell: "!border-[#4a5360] !bg-[#202833] !bg-none !text-white shadow-[0_18px_45px_rgba(31,24,18,0.18)]",
-  section: "!border-[#d7c8b5] !bg-white !text-[#201814]",
+  section: "!border-[#d7c8b5] !bg-white !bg-none !text-[#201814]",
   header: "bg-[#243746] text-white",
   subheader: "bg-[#d9e6d7] text-[#173c25]",
   field: "!border-[#cdbda8] !bg-white !text-[#201814] placeholder:!text-[#7c6e61]",

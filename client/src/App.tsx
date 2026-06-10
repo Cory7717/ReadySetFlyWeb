@@ -91,6 +91,7 @@ import OpsReportPage from "@/pages/ops-report";
 import CourtyardPortalPage from "@/pages/courtyard";
 import CourtyardBudgetPage from "@/pages/courtyard-budget";
 import IncidentReportPage from "@/pages/incident-report";
+import IncidentReportSharePage from "@/pages/incident-report-share";
 import VwBeetlePage from "@/pages/vw-beetle";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
@@ -252,6 +253,7 @@ function Router() {
       <Route path="/schedule" component={SchedulePage} />
       <Route path="/opsreport" component={OpsReportPage} />
       <Route path="/incidentreport" component={IncidentReportPage} />
+      <Route path="/incidentreport/share/:token" component={IncidentReportSharePage} />
       <Route path="/vw-beetle" component={VwBeetlePage} />
       <Route path="/vw-beetle/admin" component={VwBeetlePage} />
       <Route path="/404" component={NotFound} />

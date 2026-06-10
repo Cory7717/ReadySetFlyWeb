@@ -5,11 +5,11 @@ import fs from "fs";
 import path from "path";
 import multer from "multer";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
 import { pipeline } from "stream/promises";
 import { z } from "zod";
 import { db } from "../db";
-import { courtyardIncidentEvidence, courtyardIncidentReports, tipsKioskSettings, tipsUsers } from "@shared/schema";
+import { courtyardIncidentEvidence, courtyardIncidentReports, courtyardIncidentShareLinks, tipsKioskSettings, tipsUsers } from "@shared/schema";
 import { getUncachableResendClient } from "../resendClient";
 
 const PROPERTY_ID = "courtyard-austin-lakeline";
@@ -149,6 +149,29 @@ function publicEvidence(row: any) {
 function incidentNumber(date: string) {
   const compact = date.replace(/-/g, "");
   return `CY-AUSNL-${compact}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+}
+
+function shareTokenHash(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function publicBaseUrl(req: express.Request) {
+  const configured = (process.env.FRONTEND_BASE_URL || process.env.APP_BASE_URL || process.env.WEB_BASE_URL || "").trim();
+  if (/^https?:\/\//i.test(configured)) return configured.replace(/\/+$/, "");
+  const protocol = String(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0].trim();
+  return `${protocol}://${req.get("host")}`.replace(/\/+$/, "");
+}
+
+async function activeShare(token: string) {
+  if (!/^[a-f0-9]{64}$/i.test(token)) return null;
+  const [share] = await db.select().from(courtyardIncidentShareLinks)
+    .where(and(
+      eq(courtyardIncidentShareLinks.tokenHash, shareTokenHash(token)),
+      isNull(courtyardIncidentShareLinks.revokedAt),
+      gt(courtyardIncidentShareLinks.expiresAt, new Date()),
+    ))
+    .limit(1);
+  return share || null;
 }
 
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
@@ -406,6 +429,69 @@ async function sendAndTrackIncidentEmail(row: any) {
 export function registerIncidentReportRoutes(app: Express) {
   const router = express.Router();
 
+  router.get("/share/:token", requireIncidentAccess as RequestHandler, async (req, res, next) => {
+    try {
+      const share = await activeShare(req.params.token);
+      if (!share) return res.status(404).json({ error: "This incident report link is invalid, expired, or revoked." });
+      const [row] = await db.select().from(courtyardIncidentReports).where(eq(courtyardIncidentReports.id, share.incidentId)).limit(1);
+      if (!row) return res.status(404).json({ error: "Incident report not found." });
+      res.setHeader("Cache-Control", "private, no-store");
+      res.json({ incident: publicIncident(await incidentWithEvidence(row)), expiresAt: share.expiresAt });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/share/:token/pdf", requireIncidentAccess as RequestHandler, async (req, res, next) => {
+    try {
+      const share = await activeShare(req.params.token);
+      if (!share) return res.status(404).json({ error: "This incident report link is invalid, expired, or revoked." });
+      const [row] = await db.select().from(courtyardIncidentReports).where(eq(courtyardIncidentReports.id, share.incidentId)).limit(1);
+      if (!row) return res.status(404).json({ error: "Incident report not found." });
+      const pdf = await buildIncidentPdf(publicIncident(await incidentWithEvidence(row)));
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${row.incidentNumber}.pdf"`);
+      res.setHeader("Cache-Control", "private, no-store");
+      res.send(pdf);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/share/:token/evidence/:evidenceId", requireIncidentAccess as RequestHandler, async (req, res, next) => {
+    try {
+      const share = await activeShare(req.params.token);
+      if (!share) return res.status(404).json({ error: "This incident report link is invalid, expired, or revoked." });
+      const [row] = await db.select().from(courtyardIncidentEvidence)
+        .where(and(
+          eq(courtyardIncidentEvidence.id, req.params.evidenceId),
+          eq(courtyardIncidentEvidence.incidentId, share.incidentId),
+        ))
+        .limit(1);
+      if (!row) return res.status(404).json({ error: "Evidence file not found." });
+      res.setHeader("Content-Type", row.mimeType);
+      res.setHeader("Content-Disposition", `inline; filename="${path.basename(row.originalFileName).replace(/"/g, "")}"`);
+      res.setHeader("Cache-Control", "private, no-store");
+      if (process.env.AWS_S3_BUCKET) {
+        const { S3StorageService } = await import("../s3Storage.js");
+        const { stream, contentLength } = await new S3StorageService().getObjectStream({ key: row.storagePath });
+        if (contentLength) res.setHeader("Content-Length", String(contentLength));
+        await pipeline(stream, res);
+        return;
+      }
+      const filePath = path.resolve(process.cwd(), row.storagePath);
+      if (!filePath.startsWith(`${incidentEvidenceDir}${path.sep}`) || !fs.existsSync(filePath)) {
+        return res.status(404).json({ error: "Evidence file not found." });
+      }
+      res.sendFile(filePath);
+    } catch (error: any) {
+      if (error?.name === "NoSuchKey" || error?.$metadata?.httpStatusCode === 404) {
+        return res.status(404).json({ error: "Evidence file not found." });
+      }
+      next(error);
+    }
+  });
+
   router.get("/access", async (req: any, res, next) => {
     try {
       const user = await getSessionUser(req);
@@ -558,6 +644,47 @@ export function registerIncidentReportRoutes(app: Express) {
       const delivery = await sendAndTrackIncidentEmail(row);
       if (!delivery.sent) return res.status(502).json({ error: delivery.error });
       res.json({ incident: publicIncident(delivery.row), emailDelivery: { sent: true } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/:id/share", requireIncidentAccess as RequestHandler, async (req: any, res, next) => {
+    try {
+      const [incident] = await db.select().from(courtyardIncidentReports).where(eq(courtyardIncidentReports.id, req.params.id)).limit(1);
+      if (!incident) return res.status(404).json({ error: "Incident report not found." });
+      await db.update(courtyardIncidentShareLinks)
+        .set({ revokedAt: new Date() })
+        .where(and(
+          eq(courtyardIncidentShareLinks.incidentId, incident.id),
+          isNull(courtyardIncidentShareLinks.revokedAt),
+        ));
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await db.insert(courtyardIncidentShareLinks).values({
+        incidentId: incident.id,
+        tokenHash: shareTokenHash(token),
+        expiresAt,
+        createdBy: req.incidentUser?.id || null,
+      });
+      res.status(201).json({
+        shareUrl: `${publicBaseUrl(req)}/incidentreport/share/${token}`,
+        expiresAt,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete("/:id/share", requireIncidentAccess as RequestHandler, async (req, res, next) => {
+    try {
+      await db.update(courtyardIncidentShareLinks)
+        .set({ revokedAt: new Date() })
+        .where(and(
+          eq(courtyardIncidentShareLinks.incidentId, req.params.id),
+          isNull(courtyardIncidentShareLinks.revokedAt),
+        ));
+      res.json({ ok: true });
     } catch (error) {
       next(error);
     }

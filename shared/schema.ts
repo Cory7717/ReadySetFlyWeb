@@ -805,6 +805,19 @@ export const courtyardIncidentEvidence = pgTable("courtyard_incident_evidence", 
   index("idx_courtyard_incident_evidence_incident").on(table.incidentId),
 ]);
 
+export const courtyardIncidentShareLinks = pgTable("courtyard_incident_share_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  incidentId: varchar("incident_id").notNull().references(() => courtyardIncidentReports.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  createdBy: varchar("created_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_courtyard_incident_share_token").on(table.tokenHash),
+  index("idx_courtyard_incident_share_incident").on(table.incidentId),
+]);
+
 export const vehicleListings = pgTable("vehicle_listings", {
   id: varchar("id").primaryKey(),
   title: text("title").notNull(),

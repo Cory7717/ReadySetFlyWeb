@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Download, FileImage, FileVideo, FileWarning, LockKeyhole, Mail, Pencil, Plus, ShieldCheck, Upload, X } from "lucide-react";
+import { ArrowLeft, Download, FileImage, FileVideo, FileWarning, Link2, Link2Off, LockKeyhole, Mail, Pencil, Plus, ShieldCheck, Upload, X } from "lucide-react";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
@@ -254,6 +254,26 @@ export default function IncidentReportPage() {
     },
     onError: (error: Error) => toast({ title: "Unable to email incident report", description: error.message, variant: "destructive" }),
   });
+  const shareIncident = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("POST", `/api/incidentreport/${id}/share`);
+      return response.json() as Promise<{ shareUrl: string; expiresAt: string }>;
+    },
+    onSuccess: async (data) => {
+      try {
+        await navigator.clipboard.writeText(data.shareUrl);
+        toast({ title: "PIN-protected share link copied", description: `The recipient must enter the Courtyard PIN. The link expires ${new Date(data.expiresAt).toLocaleString()}.` });
+      } catch {
+        window.prompt("Copy this incident report share link:", data.shareUrl);
+      }
+    },
+    onError: (error: Error) => toast({ title: "Unable to create share link", description: error.message, variant: "destructive" }),
+  });
+  const revokeShare = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/incidentreport/${id}/share`),
+    onSuccess: () => toast({ title: "Share link revoked", description: "Existing shared access to this report has been disabled." }),
+    onError: (error: Error) => toast({ title: "Unable to revoke share link", description: error.message, variant: "destructive" }),
+  });
 
   useEffect(() => {
     if (!access.data?.user) return;
@@ -483,6 +503,8 @@ export default function IncidentReportPage() {
                             <Button size="sm" variant="outline" className={C.outline} onClick={() => startEditing(incident)}><Pencil className="mr-1 h-4 w-4" />Edit</Button>
                             <Button asChild size="sm" variant="outline" className={C.outline}><a href={apiUrl(`/api/incidentreport/${incident.id}/pdf`)}><Download className="mr-1 h-4 w-4" />PDF</a></Button>
                             <Button size="sm" variant="outline" className={C.outline} disabled={emailIncident.isPending} onClick={() => emailIncident.mutate(incident.id)}><Mail className="mr-1 h-4 w-4" />Email again</Button>
+                            <Button size="sm" variant="outline" className={C.outline} disabled={shareIncident.isPending} onClick={() => shareIncident.mutate(incident.id)}><Link2 className="mr-1 h-4 w-4" />Share link</Button>
+                            <Button size="sm" variant="outline" className={C.outline} disabled={revokeShare.isPending} onClick={() => revokeShare.mutate(incident.id)} title="Disable any active share link"><Link2Off className="h-4 w-4" /><span className="sr-only">Revoke share link</span></Button>
                           </div>
                         </td>
                       </tr>

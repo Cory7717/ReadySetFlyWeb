@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Download, FileImage, FileVideo, FileWarning, LockKeyhole, Mail, Plus, ShieldCheck, Upload } from "lucide-react";
+import { ArrowLeft, Download, FileImage, FileVideo, FileWarning, LockKeyhole, Mail, Pencil, Plus, ShieldCheck, Upload, X } from "lucide-react";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
@@ -89,6 +89,31 @@ const emptyForm = () => ({
   managerNotes: "",
 });
 
+function incidentForm(incident: Incident) {
+  return {
+    incidentDate: incident.incidentDate,
+    incidentTime: incident.incidentTime,
+    location: incident.location,
+    category: incident.category,
+    severity: incident.severity,
+    reportedByName: incident.reportedByName,
+    reportedByPosition: incident.reportedByPosition,
+    peopleInvolved: incident.peopleInvolved,
+    guestRooms: incident.guestRooms,
+    witnesses: incident.witnesses,
+    description: incident.description,
+    immediateActions: incident.immediateActions,
+    injuries: incident.injuries,
+    propertyDamage: incident.propertyDamage,
+    vehicleDetails: incident.vehicleDetails,
+    emergencyServices: incident.emergencyServices,
+    policeReportNumber: incident.policeReportNumber,
+    notifications: incident.notifications,
+    followUpRequired: incident.followUpRequired,
+    managerNotes: incident.managerNotes,
+  };
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(apiUrl(url), { credentials: "include" });
   if (!response.ok) throw new Error(await response.text());
@@ -127,6 +152,7 @@ export default function IncidentReportPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
 
   const access = useQuery<AccessResponse>({
     queryKey: ["/api/incidentreport/access"],
@@ -145,10 +171,10 @@ export default function IncidentReportPage() {
     },
     onError: (error: Error) => toast({ title: "Unable to unlock incident reports", description: error.message, variant: "destructive" }),
   });
-  const createIncident = useMutation({
+  const saveIncident = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/incidentreport", form);
-      const result = await response.json() as { incident: Incident; emailDelivery: { sent: boolean; error?: string } };
+      const response = await apiRequest(editingIncident ? "PATCH" : "POST", editingIncident ? `/api/incidentreport/${editingIncident.id}` : "/api/incidentreport", form);
+      const result = await response.json() as { incident: Incident; emailDelivery?: { sent: boolean; error?: string } };
       let evidenceError = "";
       if (evidenceFiles.length) {
         const body = new FormData();
@@ -170,18 +196,48 @@ export default function IncidentReportPage() {
       setForm({ ...emptyForm(), reportedByName: form.reportedByName, reportedByPosition: form.reportedByPosition });
       setEvidenceFiles([]);
       setShowForm(false);
+      const wasEditing = Boolean(editingIncident);
+      setEditingIncident(null);
       toast({
-        title: "Incident report saved",
+        title: wasEditing ? "Incident report updated" : "Incident report saved",
         description: data.evidenceError
           ? `${data.incident.incidentNumber} was saved, but evidence was not uploaded: ${data.evidenceError}`
-          : data.emailDelivery.sent
+          : wasEditing
+          ? `${data.incident.incidentNumber} was updated. Use Email again to send the revised PDF.`
+          : data.emailDelivery?.sent
           ? `${data.incident.incidentNumber} was saved and emailed with its PDF.`
           : `${data.incident.incidentNumber} was saved, but the email could not be sent. Use Email again from the archive.`,
-        variant: data.emailDelivery.sent && !data.evidenceError ? "default" : "destructive",
+        variant: (wasEditing || data.emailDelivery?.sent) && !data.evidenceError ? "default" : "destructive",
       });
     },
     onError: (error: Error) => toast({ title: "Unable to save incident report", description: error.message, variant: "destructive" }),
   });
+
+  const startNewIncident = () => {
+    setEditingIncident(null);
+    setEvidenceFiles([]);
+    setForm({
+      ...emptyForm(),
+      reportedByName: access.data?.user?.employeeDisplayName || "",
+      reportedByPosition: access.data?.user?.position || "",
+    });
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const startEditing = (incident: Incident) => {
+    setEditingIncident(incident);
+    setForm(incidentForm(incident));
+    setEvidenceFiles([]);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingIncident(null);
+    setEvidenceFiles([]);
+  };
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: Incident["status"] }) => apiRequest("PATCH", `/api/incidentreport/${id}/status`, { status }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/incidentreport"] }),
@@ -234,8 +290,12 @@ export default function IncidentReportPage() {
     const selected = Array.from(files || []);
     const images = selected.filter((file) => file.type.startsWith("image/"));
     const videos = selected.filter((file) => file.type.startsWith("video/"));
-    if (images.length > 10) {
-      toast({ title: "Evidence limit exceeded", description: "Choose up to 10 images.", variant: "destructive" });
+    const existingImages = editingIncident?.evidence.filter((item) => item.evidenceType === "image").length || 0;
+    const existingVideoDuration = editingIncident?.evidence
+      .filter((item) => item.evidenceType === "video")
+      .reduce((total, item) => total + Number(item.durationSeconds || 0), 0) || 0;
+    if (existingImages + images.length > 10) {
+      toast({ title: "Evidence limit exceeded", description: `This report can accept ${Math.max(0, 10 - existingImages)} more image(s).`, variant: "destructive" });
       return;
     }
     let totalVideoDuration = 0;
@@ -260,8 +320,8 @@ export default function IncidentReportPage() {
       }
       totalVideoDuration += duration;
     }
-    if (totalVideoDuration > 240) {
-      toast({ title: "Video is too long", description: "Combined video evidence must be four minutes or less.", variant: "destructive" });
+    if (existingVideoDuration + totalVideoDuration > 240) {
+      toast({ title: "Video is too long", description: `This report has ${Math.max(0, 240 - existingVideoDuration)} seconds of video capacity remaining.`, variant: "destructive" });
       return;
     }
     setEvidenceFiles(selected);
@@ -277,7 +337,9 @@ export default function IncidentReportPage() {
           </div>
           <div className="flex gap-2">
             <Button asChild variant="outline" className={C.outline}><Link href="/courtyard"><ArrowLeft className="mr-2 h-4 w-4" />Portal</Link></Button>
-            <Button className={C.green} onClick={() => setShowForm(!showForm)}><Plus className="mr-2 h-4 w-4" />{showForm ? "Hide form" : "New incident"}</Button>
+            {showForm
+              ? <Button className={C.outline} variant="outline" onClick={closeForm}><X className="mr-2 h-4 w-4" />Close form</Button>
+              : <Button className={C.green} onClick={startNewIncident}><Plus className="mr-2 h-4 w-4" />New incident</Button>}
           </div>
         </div>
       </header>
@@ -290,8 +352,8 @@ export default function IncidentReportPage() {
         {showForm && (
           <Card className={C.shell}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><FileWarning className="h-5 w-5 text-[#8a6b3f]" />New Hospitality Incident Report</CardTitle>
-              <CardDescription className={C.muted}>Fields marked with an asterisk are required. Include objective facts, actions taken, and available case numbers.</CardDescription>
+              <CardTitle className="flex items-center gap-2"><FileWarning className="h-5 w-5 text-[#8a6b3f]" />{editingIncident ? `Edit ${editingIncident.incidentNumber}` : "New Hospitality Incident Report"}</CardTitle>
+              <CardDescription className={C.muted}>{editingIncident ? "Update the report details or attach evidence received after the original submission. The incident number will not change." : "Fields marked with an asterisk are required. Include objective facts, actions taken, and available case numbers."}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -345,6 +407,7 @@ export default function IncidentReportPage() {
               <section className="rounded-lg border border-[#d7c8b5] bg-white p-4">
                 <div className="flex items-center gap-2 font-semibold"><Upload className="h-4 w-4 text-[#2f5f46]" />Photo and Video Evidence</div>
                 <p className={`mt-1 text-sm ${C.muted}`}>Optional. Attach up to 10 JPEG, PNG, or WebP images and MP4 or QuickTime video clips totaling up to four minutes.</p>
+                {editingIncident?.evidence.length ? <p className="mt-1 text-xs font-medium text-[#2f5f46]">{editingIncident.evidence.length} existing evidence file(s) will be retained. New files are added to them.</p> : null}
                 <Input className={`mt-3 ${C.field}`} type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" onChange={(event) => void chooseEvidence(event.target.files)} />
                 {!!evidenceFiles.length && (
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -359,8 +422,8 @@ export default function IncidentReportPage() {
               </section>
 
               <div className="flex justify-end">
-                <Button className={C.green} disabled={!requiredReady || createIncident.isPending} onClick={() => createIncident.mutate()}>
-                  <ShieldCheck className="mr-2 h-4 w-4" />{createIncident.isPending ? "Saving..." : "Submit Incident Report"}
+                <Button className={C.green} disabled={!requiredReady || saveIncident.isPending} onClick={() => saveIncident.mutate()}>
+                  <ShieldCheck className="mr-2 h-4 w-4" />{saveIncident.isPending ? "Saving..." : editingIncident ? "Save Changes" : "Submit Incident Report"}
                 </Button>
               </div>
             </CardContent>
@@ -417,6 +480,7 @@ export default function IncidentReportPage() {
                         </td>
                         <td className="p-2">
                           <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className={C.outline} onClick={() => startEditing(incident)}><Pencil className="mr-1 h-4 w-4" />Edit</Button>
                             <Button asChild size="sm" variant="outline" className={C.outline}><a href={apiUrl(`/api/incidentreport/${incident.id}/pdf`)}><Download className="mr-1 h-4 w-4" />PDF</a></Button>
                             <Button size="sm" variant="outline" className={C.outline} disabled={emailIncident.isPending} onClick={() => emailIncident.mutate(incident.id)}><Mail className="mr-1 h-4 w-4" />Email again</Button>
                           </div>

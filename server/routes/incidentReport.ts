@@ -506,6 +506,51 @@ export function registerIncidentReportRoutes(app: Express) {
     }
   });
 
+  router.patch("/:id", requireIncidentAccess as RequestHandler, async (req: any, res, next) => {
+    try {
+      const parsed = incidentSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+      const [existing] = await db.select().from(courtyardIncidentReports)
+        .where(eq(courtyardIncidentReports.id, req.params.id))
+        .limit(1);
+      if (!existing) return res.status(404).json({ error: "Incident report not found." });
+
+      const data = parsed.data;
+      const previousPayload = existing.payloadJson && typeof existing.payloadJson === "object" ? existing.payloadJson : {};
+      const [row] = await db.update(courtyardIncidentReports).set({
+        incidentDate: data.incidentDate,
+        incidentTime: data.incidentTime,
+        location: data.location,
+        category: data.category,
+        severity: data.severity,
+        reportedByName: data.reportedByName,
+        reportedByPosition: data.reportedByPosition,
+        peopleInvolved: data.peopleInvolved,
+        guestRooms: data.guestRooms,
+        witnesses: data.witnesses,
+        description: data.description,
+        immediateActions: data.immediateActions,
+        injuries: data.injuries,
+        propertyDamage: data.propertyDamage,
+        vehicleDetails: data.vehicleDetails,
+        emergencyServices: data.emergencyServices,
+        policeReportNumber: data.policeReportNumber,
+        notifications: data.notifications,
+        followUpRequired: data.followUpRequired,
+        managerNotes: data.managerNotes,
+        payloadJson: {
+          ...previousPayload,
+          lastEditedAt: new Date().toISOString(),
+          lastEditedByUserId: req.incidentUser?.id || null,
+        },
+        updatedAt: new Date(),
+      }).where(eq(courtyardIncidentReports.id, req.params.id)).returning();
+      res.json({ incident: publicIncident(await incidentWithEvidence(row)) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/:id/email", requireIncidentAccess as RequestHandler, async (req, res, next) => {
     try {
       const [row] = await db.select().from(courtyardIncidentReports).where(eq(courtyardIncidentReports.id, req.params.id)).limit(1);

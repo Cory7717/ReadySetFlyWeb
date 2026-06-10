@@ -21,6 +21,7 @@ const C = {
   accent: "!bg-[#b98435] !bg-none !text-white hover:!bg-[#9f6f2b]",
   field: "!border-[#cdbda8] !bg-white !text-[#201814] placeholder:!text-[#76695d]",
   outline: "!border-[#cdbda8] !bg-white !bg-none !text-[#201814] hover:!bg-[#f8efe2]",
+  menu: "!border-[#cdbda8] !bg-white !text-[#201814]",
 };
 
 type CourtyardUser = {
@@ -128,7 +129,7 @@ function CourtyardLogin({ onDone }: { onDone: (user?: CourtyardUser) => void }) 
                     <div><Label>Last name</Label><Input className={C.field} value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} /></div>
                     <div className="sm:col-span-2"><Label>Display name</Label><Input className={C.field} value={form.employeeDisplayName} onChange={(event) => setForm({ ...form, employeeDisplayName: event.target.value })} placeholder="Optional" /></div>
                     <div><Label>Phone</Label><Input className={C.field} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></div>
-                    <div><Label>Department</Label><Select value={form.department} onValueChange={(department) => setForm({ ...form, department })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent></Select></div>
+                    <div><Label>Department</Label><Select value={form.department} onValueChange={(department) => setForm({ ...form, department })}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent className={C.menu}>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent></Select></div>
                   </div>
                   <div>
                     <Label>Roles</Label>

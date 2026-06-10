@@ -20,6 +20,7 @@ const C = {
   outline: "!border-[#cdbda8] !bg-white !bg-none !text-[#201814] hover:!bg-[#f8efe2]",
   green: "!bg-[#2f5f46] !bg-none !text-white hover:!bg-[#274d39]",
   muted: "!text-[#5f5247]",
+  menu: "!border-[#cdbda8] !bg-white !text-[#201814]",
 };
 
 type Incident = {
@@ -440,7 +441,7 @@ export default function IncidentReportPage() {
                   <Label className="text-xs font-semibold uppercase tracking-[0.12em] text-[#5b4b3b]">Category *</Label>
                   <Select value={form.category} onValueChange={(category) => setForm({ ...form, category })}>
                     <SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className={C.menu}>
                       {["Vehicle / Parking Lot", "Guest Injury / Medical", "Employee Injury", "Theft / Missing Property", "Security / Disturbance", "Property Damage", "Fire / Life Safety", "Food Safety", "Privacy / Guest Information", "Other"].map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -449,7 +450,7 @@ export default function IncidentReportPage() {
                   <Label className="text-xs font-semibold uppercase tracking-[0.12em] text-[#5b4b3b]">Severity *</Label>
                   <Select value={form.severity} onValueChange={(severity) => setForm({ ...form, severity })}>
                     <SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className={C.menu}>
                       <SelectItem value="low">Low</SelectItem>
                       <SelectItem value="moderate">Moderate</SelectItem>
                       <SelectItem value="high">High</SelectItem>
@@ -532,7 +533,7 @@ export default function IncidentReportPage() {
                         <td className="p-2">
                           <Select value={incident.status} onValueChange={(status: Incident["status"]) => updateStatus.mutate({ id: incident.id, status })}>
                             <SelectTrigger className={`w-36 ${C.field}`}><SelectValue /></SelectTrigger>
-                            <SelectContent><SelectItem value="open">Open</SelectItem><SelectItem value="under_review">Under Review</SelectItem><SelectItem value="closed">Closed</SelectItem></SelectContent>
+                            <SelectContent className={C.menu}><SelectItem value="open">Open</SelectItem><SelectItem value="under_review">Under Review</SelectItem><SelectItem value="closed">Closed</SelectItem></SelectContent>
                           </Select>
                         </td>
                         <td className="p-2">

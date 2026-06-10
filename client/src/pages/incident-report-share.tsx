@@ -78,14 +78,14 @@ export default function IncidentReportSharePage() {
   if (!access.data?.unlocked) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f3efe7] p-4 text-[#201814]">
-        <Card className="w-full max-w-md border-[#d7c8b5] bg-[#fffaf2] shadow-lg">
+        <Card className="w-full max-w-md !border-[#d7c8b5] !bg-[#fffaf2] !bg-none !text-[#201814] shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><LockKeyhole className="h-5 w-5 text-[#2f5f46]" />Shared Incident Report</CardTitle>
             <p className="text-sm text-[#5f5247]">Enter the established five-digit Courtyard PIN to view this internal report.</p>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Input className="border-[#cdbda8] bg-white text-center text-2xl tracking-[0.4em]" type="password" inputMode="numeric" maxLength={5} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 5))} onKeyDown={(event) => event.key === "Enter" && pin.length === 5 && unlock.mutate()} />
-            <Button className="w-full bg-[#2f5f46] text-white hover:bg-[#274d39]" disabled={pin.length !== 5 || unlock.isPending} onClick={() => unlock.mutate()}>{unlock.isPending ? "Checking..." : "Open Shared Report"}</Button>
+            <Input className="!border-[#cdbda8] !bg-white !text-[#201814] placeholder:!text-[#7c6e61] text-center text-2xl tracking-[0.4em]" type="password" inputMode="numeric" maxLength={5} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 5))} onKeyDown={(event) => event.key === "Enter" && pin.length === 5 && unlock.mutate()} />
+            <Button className="w-full !bg-[#2f5f46] !bg-none !text-white hover:!bg-[#274d39]" disabled={pin.length !== 5 || unlock.isPending} onClick={() => unlock.mutate()}>{unlock.isPending ? "Checking..." : "Open Shared Report"}</Button>
             {!access.data?.hasPin && <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">No shared Courtyard PIN is configured.</div>}
           </CardContent>
         </Card>
@@ -94,7 +94,7 @@ export default function IncidentReportSharePage() {
   }
   if (share.isLoading) return <div className="min-h-screen bg-[#f3efe7] p-8 text-[#201814]">Loading shared incident report...</div>;
   if (share.error || !share.data) {
-    return <div className="flex min-h-screen items-center justify-center bg-[#f3efe7] p-4"><Card className="max-w-lg border-[#d7c8b5] bg-[#fffaf2]"><CardContent className="p-8 text-center"><ShieldAlert className="mx-auto mb-3 h-10 w-10 text-rose-700" /><h1 className="text-xl font-semibold">Report unavailable</h1><p className="mt-2 text-sm text-[#5f5247]">{(share.error as Error)?.message}</p></CardContent></Card></div>;
+    return <div className="flex min-h-screen items-center justify-center bg-[#f3efe7] p-4 text-[#201814]"><Card className="max-w-lg !border-[#d7c8b5] !bg-[#fffaf2] !bg-none !text-[#201814]"><CardContent className="p-8 text-center"><ShieldAlert className="mx-auto mb-3 h-10 w-10 text-rose-700" /><h1 className="text-xl font-semibold">Report unavailable</h1><p className="mt-2 text-sm text-[#5f5247]">{(share.error as Error)?.message}</p></CardContent></Card></div>;
   }
 
   const { incident } = share.data;
@@ -121,16 +121,16 @@ export default function IncidentReportSharePage() {
   return (
     <div className="min-h-screen bg-[#f3efe7] px-4 py-6 text-[#201814]">
       <main className="mx-auto max-w-5xl space-y-4">
-        <Card className="border-[#d7c8b5] bg-[#fffaf2] shadow-lg">
+        <Card className="!border-[#d7c8b5] !bg-[#fffaf2] !bg-none !text-[#201814] shadow-lg">
           <CardHeader className="flex-row items-start justify-between gap-4">
             <div><div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a6b3f]">Courtyard Austin Lakeline</div><CardTitle className="mt-1 text-2xl">Incident {incident.incidentNumber}</CardTitle><p className="mt-1 text-sm text-[#5f5247]">PIN-protected, read-only shared report. Link expires {new Date(share.data.expiresAt).toLocaleString()}.</p></div>
-            <div className="flex gap-2"><Badge>{incident.status.replace("_", " ")}</Badge><Button asChild variant="outline"><a href={apiUrl(`/api/incidentreport/share/${token}/pdf`)}><Download className="mr-2 h-4 w-4" />PDF</a></Button></div>
+            <div className="flex gap-2"><Badge className="!bg-[#243746] !text-white">{incident.status.replace("_", " ")}</Badge><Button asChild variant="outline" className="!border-[#cdbda8] !bg-white !bg-none !text-[#201814] hover:!bg-[#f8efe2]"><a href={apiUrl(`/api/incidentreport/share/${token}/pdf`)}><Download className="mr-2 h-4 w-4" />PDF</a></Button></div>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
             {fields.map(([label, value]) => <div key={label} className={`rounded border border-[#e0d3c1] bg-white p-3 ${label === "Incident narrative" || label === "Immediate actions" ? "md:col-span-2" : ""}`}><div className="text-xs font-semibold uppercase tracking-wider text-[#765f48]">{label}</div><div className="mt-1 whitespace-pre-wrap text-sm">{value || "None reported"}</div></div>)}
           </CardContent>
         </Card>
-        {!!incident.evidence.length && <Card className="border-[#d7c8b5] bg-[#fffaf2]"><CardHeader><CardTitle>Evidence</CardTitle></CardHeader><CardContent className="flex flex-wrap gap-2">{incident.evidence.map((item, index) => <Button key={item.id} asChild variant="outline"><a href={apiUrl(`/api/incidentreport/share/${token}/evidence/${item.id}`)} target="_blank" rel="noreferrer">{item.evidenceType === "video" ? <FileVideo className="mr-2 h-4 w-4" /> : <FileImage className="mr-2 h-4 w-4" />}{item.evidenceType === "video" ? `Video${item.durationSeconds ? ` (${item.durationSeconds}s)` : ""}` : `Image ${index + 1}`}</a></Button>)}</CardContent></Card>}
+        {!!incident.evidence.length && <Card className="!border-[#d7c8b5] !bg-[#fffaf2] !bg-none !text-[#201814]"><CardHeader><CardTitle>Evidence</CardTitle></CardHeader><CardContent className="flex flex-wrap gap-2">{incident.evidence.map((item, index) => <Button key={item.id} asChild variant="outline" className="!border-[#cdbda8] !bg-white !bg-none !text-[#201814] hover:!bg-[#f8efe2]"><a href={apiUrl(`/api/incidentreport/share/${token}/evidence/${item.id}`)} target="_blank" rel="noreferrer">{item.evidenceType === "video" ? <FileVideo className="mr-2 h-4 w-4" /> : <FileImage className="mr-2 h-4 w-4" />}{item.evidenceType === "video" ? `Video${item.durationSeconds ? ` (${item.durationSeconds}s)` : ""}` : `Image ${index + 1}`}</a></Button>)}</CardContent></Card>}
       </main>
     </div>
   );

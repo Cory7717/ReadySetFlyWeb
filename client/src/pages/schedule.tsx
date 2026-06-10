@@ -46,6 +46,7 @@ const C = {
   field: "!border-[#cdbda8] !bg-white !text-[#201814] placeholder:!text-[#76695d]",
   outline: "!border-[#cdbda8] !bg-white !bg-none !text-[#201814] hover:!bg-[#f8efe2]",
   darkButton: "!border-[#111827] !bg-[#1f2937] !bg-none !text-white hover:!bg-[#111827]",
+  menu: "!border-[#cdbda8] !bg-white !text-[#201814]",
 };
 
 const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
@@ -1045,7 +1046,7 @@ function ForecastPanel({
             <div className="grid gap-2 md:grid-cols-[160px_140px_1fr_auto]">
               <Select value={groupForm.forecastDate} onValueChange={(forecastDate) => setGroupForm({ ...groupForm, forecastDate })}>
                 <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
-                <SelectContent>{payload.days.map((day, index) => <SelectItem key={day} value={day}>{(spanish ? DAY_LABELS_ES : DAY_LABELS)[index]} {formatDate(day)}</SelectItem>)}</SelectContent>
+                <SelectContent className={C.menu}>{payload.days.map((day, index) => <SelectItem key={day} value={day}>{(spanish ? DAY_LABELS_ES : DAY_LABELS)[index]} {formatDate(day)}</SelectItem>)}</SelectContent>
               </Select>
               <Input className={C.field} type="number" value={groupForm.popupGroupRooms} onChange={(event) => setGroupForm({ ...groupForm, popupGroupRooms: event.target.value })} placeholder={t("Group rooms")} />
               <Input className={C.field} value={groupForm.popupGroupNotes} onChange={(event) => setGroupForm({ ...groupForm, popupGroupNotes: event.target.value })} placeholder={t("Group notes")} />
@@ -1258,7 +1259,7 @@ function ShiftEditDialog({
             <Label>Shift type</Label>
             <Select value={form.shiftTypeId || "none"} onValueChange={selectShiftType}>
               <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectContent className={C.menu}>
                 <SelectItem value="none">Clear / no shift</SelectItem>
                 {payload.shiftTypes.filter((shift) => shift.active).map((shift) => <SelectItem key={shift.id} value={shift.id}>{shift.label}</SelectItem>)}
               </SelectContent>
@@ -1268,7 +1269,7 @@ function ShiftEditDialog({
             <Label>Role worked</Label>
             <Select value={form.roleWorked || "none"} onValueChange={selectRoleWorked}>
               <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectContent className={C.menu}>
                 <SelectItem value="none">No role label</SelectItem>
                 {roleOptions.map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
               </SelectContent>
@@ -2097,7 +2098,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
           <Input className={C.field} placeholder={t("Display name")} value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} />
           <Select value={form.department} onValueChange={(department) => setForm({ ...form, department })}>
             <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
-            <SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent>
+            <SelectContent className={C.menu}>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent>
           </Select>
           <Input className={C.field} placeholder={t("Position")} value={form.position} onChange={(event) => setForm({ ...form, position: event.target.value })} />
           <div className="sm:col-span-2">
@@ -2171,7 +2172,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
               <Label>{t("Department")}</Label>
               <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
                 <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectContent className={C.menu}>
                   <SelectItem value="All">{t("All departments")}</SelectItem>
                   {DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}
                 </SelectContent>
@@ -2264,7 +2265,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
               </div>
               <Select value={normalizeDepartment(draft.department)} onValueChange={(department) => setEditing({ ...editing, [employee.id]: { ...draft, department } })}>
                 <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
-                <SelectContent>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent>
+                <SelectContent className={C.menu}>{DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}</SelectContent>
               </Select>
               <div className="flex flex-col gap-2">
                 <Button className={C.green} onClick={() => saveEmployee(employee)}>Save</Button>
@@ -2328,7 +2329,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
             <Label>{t("Type")}</Label>
             <Select value={form.requestType} onValueChange={(requestType) => setForm({ ...form, requestType })}>
               <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectContent className={C.menu}>
                 <SelectItem value="time_off">{t("Time off")}</SelectItem>
                 <SelectItem value="preferred_shift">{t("Preferred shift")}</SelectItem>
                 <SelectItem value="availability">{t("Availability")}</SelectItem>
@@ -2810,7 +2811,7 @@ export default function SchedulePage() {
                 <Label>{t("Week")}</Label>
                 <Select value={weekId || "none"} onValueChange={setSelectedWeekId}>
                   <SelectTrigger className={`${C.field} w-[240px]`}><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={C.menu}>
                     <SelectItem value="none">{t("Select schedule")}</SelectItem>
                     {(weeks.data?.weeks || []).map((week) => <SelectItem key={week.id} value={week.id}>{formatWeek(week.weekStartDate, week.weekEndDate)} - {week.status}</SelectItem>)}
                   </SelectContent>

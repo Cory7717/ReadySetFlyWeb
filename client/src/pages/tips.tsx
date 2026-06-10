@@ -44,6 +44,7 @@ const C = {
   field: "!border-[#cdbda8] !bg-white !text-[#201814] placeholder:!text-[#76695d]",
   outline: "!border-[#cdbda8] !bg-white !bg-none !text-[#201814] hover:!bg-[#f8efe2]",
   darkButton: "!border-[#111827] !bg-[#1f2937] !bg-none !text-white hover:!bg-[#111827]",
+  menu: "!border-[#cdbda8] !bg-white !text-[#201814]",
 };
 
 type TipsUser = {
@@ -521,7 +522,7 @@ function DayEditor({
               <Label>Shift type</Label>
               <Select value={shiftType || "other"} disabled={locked} onValueChange={(value) => setShiftType(value as TipEntry["shiftType"])}>
                 <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectContent className={C.menu}>
                   <SelectItem value="breakfast">Breakfast</SelectItem>
                   <SelectItem value="lunch">Lunch</SelectItem>
                   <SelectItem value="dinner">Dinner</SelectItem>
@@ -1371,7 +1372,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                   <Label>Report type</Label>
                   <Select value={banquetForm.reportType} disabled={grid.locked} onValueChange={(reportType: "banquet_service" | "group_breakfast") => setBanquetForm({ ...banquetForm, reportType, banquetTips: "" })}>
                     <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className={C.menu}>
                       <SelectItem value="banquet_service">Meeting service fee</SelectItem>
                       <SelectItem value="group_breakfast">Group breakfast</SelectItem>
                     </SelectContent>
@@ -1725,7 +1726,7 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
                 <PasswordField placeholder="Temporary password" value={newUserForm.password} onChange={(password) => setNewUserForm({ ...newUserForm, password })} />
                 <Select value={newUserForm.role} disabled={!canManageRoles} onValueChange={(role: TipsUser["role"]) => setNewUserForm({ ...newUserForm, role })}>
                   <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={C.menu}>
                     <SelectItem value="employee">Employee</SelectItem>
                     <SelectItem value="manager">Manager</SelectItem>
                     <SelectItem value="super_admin">Super Admin</SelectItem>
@@ -1773,7 +1774,7 @@ function TipsAdmin({ currentUser }: { currentUser: TipsUser }) {
                     }} />
                     <Select value={user.role} disabled={!canManageRoles || user.isSuperAdmin} onValueChange={(role: TipsUser["role"]) => roleMutation.mutate({ userId: user.id, role })}>
                       <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className={C.menu}>
                         <SelectItem value="employee">Employee</SelectItem>
                         <SelectItem value="manager">Manager</SelectItem>
                         <SelectItem value="super_admin">Super Admin</SelectItem>

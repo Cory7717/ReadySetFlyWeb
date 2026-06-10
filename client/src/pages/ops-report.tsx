@@ -31,6 +31,7 @@ const C = {
   darkMuted: "!text-[#e7dccd]",
   label: "!text-[#5b4b3b]",
   darkLabel: "!text-[#f0d9b0]",
+  menu: "!border-[#cdbda8] !bg-white !text-[#201814]",
 };
 
 type OpsAccess = { unlocked: boolean; user: { employeeDisplayName: string; email: string; isAdmin: boolean } | null; hasPin?: boolean; passwordChangeRequired?: boolean };
@@ -1369,7 +1370,7 @@ export default function OpsReportPage() {
           <div className="flex flex-wrap gap-2">
             <Select value={week} onValueChange={handleWeekLabelChange}>
               <SelectTrigger className={`w-32 ${C.field}`}><SelectValue /></SelectTrigger>
-              <SelectContent>{Array.from({ length: 52 }, (_, index) => <SelectItem key={index + 1} value={`Week ${index + 1}`}>Week {index + 1}</SelectItem>)}</SelectContent>
+              <SelectContent className={C.menu}>{Array.from({ length: 52 }, (_, index) => <SelectItem key={index + 1} value={`Week ${index + 1}`}>Week {index + 1}</SelectItem>)}</SelectContent>
             </Select>
             <Button
               variant="outline"
@@ -1525,7 +1526,7 @@ export default function OpsReportPage() {
               right={
                 <Select value={summaryMonthKey || currentMonthKey} onValueChange={setSummaryMonthKey}>
                   <SelectTrigger className={`w-44 ${C.field}`}><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={C.menu}>
                     {Array.from({ length: 12 }, (_, index) => {
                       const year = new Date(`${topMetrics.weekStart || new Date().toISOString().slice(0, 10)}T00:00:00`).getUTCFullYear() || new Date().getFullYear();
                       const value = `${year}-${String(index + 1).padStart(2, "0")}`;
@@ -1705,7 +1706,7 @@ export default function OpsReportPage() {
           <TabsContent value="weekly" className="space-y-5">
             <Card className={C.darkShell}>
               <CardHeader>
-                <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-[#2f5f46]" /><CardTitle>{week} Report</CardTitle></div>
+                <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-[#b9d8c2]" /><CardTitle>{week} Report</CardTitle></div>
                 <CardDescription className={C.darkMuted}>{setup.propertyName} | {topMetrics.weekStart} to {weekEnd || "week end date"}</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 md:grid-cols-4">
@@ -1889,7 +1890,7 @@ export default function OpsReportPage() {
                 setBudgetForm(budgetFormFromRow(month, existing));
               }}>
                 <SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectContent className={C.menu}>
                   {Array.from({ length: 12 }, (_, index) => {
                     const year = new Date().getFullYear();
                     const value = `${year}-${String(index + 1).padStart(2, "0")}`;
@@ -1947,7 +1948,7 @@ export default function OpsReportPage() {
                   setBistroForm(bistroFormFromRow(month, existing));
                 }}>
                   <SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={C.menu}>
                     {Array.from({ length: 12 }, (_, index) => {
                       const year = new Date().getFullYear();
                       const value = `${year}-${String(index + 1).padStart(2, "0")}`;
@@ -1993,7 +1994,7 @@ export default function OpsReportPage() {
                   setMeetingForm(meetingFormFromRow(month, existing));
                 }}>
                   <SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={C.menu}>
                     {Array.from({ length: 12 }, (_, index) => {
                       const year = new Date().getFullYear();
                       const value = `${year}-${String(index + 1).padStart(2, "0")}`;

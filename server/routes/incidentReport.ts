@@ -13,6 +13,7 @@ import { courtyardIncidentEvidence, courtyardIncidentReports, courtyardIncidentS
 import { getUncachableResendClient } from "../resendClient";
 
 const PROPERTY_ID = "courtyard-austin-lakeline";
+const PROPERTY_NAME = "Courtyard Austin Lakeline";
 const DEFAULT_INCIDENT_RECIPIENTS = "coryarmer@gmail.com,cory.armer@marriott.com";
 const INCIDENT_EVIDENCE_PREFIX = "uploads/courtyard-incidents";
 const incidentEvidenceDir = path.resolve(process.cwd(), "uploads", "courtyard-incidents");
@@ -60,6 +61,14 @@ const incidentSchema = z.object({
   notifications: z.string().max(3000).optional().default(""),
   followUpRequired: z.string().max(5000).optional().default(""),
   managerNotes: z.string().max(5000).optional().default(""),
+});
+
+const directEvidenceSchema = z.object({
+  storagePath: z.string().startsWith(`${INCIDENT_EVIDENCE_PREFIX}/`).max(500),
+  originalFileName: z.string().min(1).max(255),
+  mimeType: z.string().refine((value) => /^image\/(jpeg|png|webp)$/i.test(value) || /^(video\/mp4|video\/quicktime)$/i.test(value)),
+  size: z.number().int().positive().max(1024 * 1024 * 1024),
+  durationSeconds: z.number().int().positive().max(240).nullable().optional(),
 });
 
 async function getSessionUser(req: any) {
@@ -205,7 +214,7 @@ async function buildIncidentPdf(incident: any) {
   const newPage = () => {
     page = pdf.addPage(pageSize);
     y = pageSize[1] - margin;
-    page.drawText("COURTYARD AUSTIN NORTHWEST / LAKELINE", { x: margin, y, size: 9, font: bold, color: rgb(0.18, 0.37, 0.27) });
+    page.drawText(PROPERTY_NAME.toUpperCase(), { x: margin, y, size: 9, font: bold, color: rgb(0.18, 0.37, 0.27) });
     page.drawText("CONFIDENTIAL INCIDENT REPORT", { x: pageSize[0] - margin - 174, y, size: 9, font: bold, color: rgb(0.18, 0.22, 0.27) });
     y -= 18;
     page.drawLine({ start: { x: margin, y }, end: { x: pageSize[0] - margin, y }, thickness: 1, color: rgb(0.73, 0.64, 0.51) });
@@ -354,6 +363,14 @@ function incidentEmailRecipients() {
     .filter(Boolean);
 }
 
+function incidentFromEmail(configuredFrom: string) {
+  const override = process.env.INCIDENT_REPORT_FROM?.trim();
+  if (override) return override;
+  const addressMatch = configuredFrom.match(/<([^>]+)>/);
+  const address = addressMatch?.[1]?.trim() || configuredFrom.trim();
+  return `${PROPERTY_NAME} <${address}>`;
+}
+
 function escapeHtml(value: unknown) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -369,9 +386,9 @@ async function emailIncidentReport(row: any) {
 
   const pdf = await buildIncidentPdf(incident);
   const { client, fromEmail } = await getUncachableResendClient();
-  const subject = `Incident Report ${incident.incidentNumber}: ${incident.category}`;
+  const subject = `${PROPERTY_NAME} Incident Report ${incident.incidentNumber}: ${incident.category}`;
   const text = [
-    `A Courtyard incident report was submitted by ${incident.reportedByName}.`,
+    `A ${PROPERTY_NAME} incident report was submitted by ${incident.reportedByName}.`,
     "",
     `Incident: ${incident.incidentNumber}`,
     `Date and time: ${incident.incidentDate} at ${incident.incidentTime}`,
@@ -383,7 +400,8 @@ async function emailIncidentReport(row: any) {
   ].join("\n");
   const html = `
     <div style="font-family:Arial,sans-serif;color:#201814;line-height:1.5">
-      <h2 style="color:#243746">Courtyard Incident Report</h2>
+      <h2 style="color:#243746">${PROPERTY_NAME}</h2>
+      <p style="font-weight:bold;color:#765f48">Incident Report</p>
       <p>A new incident report was submitted by <strong>${escapeHtml(incident.reportedByName)}</strong>.</p>
       <table style="border-collapse:collapse;width:100%;max-width:650px">
         <tr><td style="padding:6px;border:1px solid #d7c8b5"><strong>Incident</strong></td><td style="padding:6px;border:1px solid #d7c8b5">${escapeHtml(incident.incidentNumber)}</td></tr>
@@ -397,7 +415,7 @@ async function emailIncidentReport(row: any) {
   `;
 
   await client.emails.send({
-    from: fromEmail,
+    from: incidentFromEmail(fromEmail),
     to: recipients,
     subject,
     text,
@@ -685,6 +703,79 @@ export function registerIncidentReportRoutes(app: Express) {
           isNull(courtyardIncidentShareLinks.revokedAt),
         ));
       res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/:id/evidence/upload-url", requireIncidentAccess as RequestHandler, async (req, res, next) => {
+    try {
+      if (!process.env.AWS_S3_BUCKET) return res.status(501).json({ error: "Direct evidence upload is not configured." });
+      const parsed = z.object({
+        mimeType: z.string().refine((value) => /^image\/(jpeg|png|webp)$/i.test(value) || /^(video\/mp4|video\/quicktime)$/i.test(value)),
+        size: z.number().int().positive().max(1024 * 1024 * 1024),
+      }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Unsupported evidence file or file size." });
+      const [incident] = await db.select().from(courtyardIncidentReports).where(eq(courtyardIncidentReports.id, req.params.id)).limit(1);
+      if (!incident) return res.status(404).json({ error: "Incident report not found." });
+      const { S3StorageService } = await import("../s3Storage.js");
+      const { uploadURL, key } = await new S3StorageService().getPresignedUploadUrlForKey({
+        prefix: `${INCIDENT_EVIDENCE_PREFIX}/${incident.id}`,
+        contentType: parsed.data.mimeType,
+        expiresInSeconds: 3600,
+      });
+      res.json({ uploadURL, storagePath: key });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/:id/evidence/complete", requireIncidentAccess as RequestHandler, async (req: any, res, next) => {
+    try {
+      if (!process.env.AWS_S3_BUCKET) return res.status(501).json({ error: "Direct evidence upload is not configured." });
+      const parsed = directEvidenceSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid evidence upload details." });
+      const [incident] = await db.select().from(courtyardIncidentReports).where(eq(courtyardIncidentReports.id, req.params.id)).limit(1);
+      if (!incident) return res.status(404).json({ error: "Incident report not found." });
+      const data = parsed.data;
+      const evidenceType = data.mimeType.startsWith("video/") ? "video" : "image";
+      if (!data.storagePath.startsWith(`${INCIDENT_EVIDENCE_PREFIX}/${incident.id}/`)) {
+        return res.status(400).json({ error: "The evidence upload does not belong to this incident." });
+      }
+      if (evidenceType === "video" && !data.durationSeconds) {
+        return res.status(400).json({ error: "Video duration is required." });
+      }
+
+      const existing = await db.select().from(courtyardIncidentEvidence).where(eq(courtyardIncidentEvidence.incidentId, incident.id));
+      const existingImages = existing.filter((item) => item.evidenceType === "image").length;
+      const existingVideoSeconds = existing
+        .filter((item) => item.evidenceType === "video")
+        .reduce((total, item) => total + Number(item.durationSeconds || 0), 0);
+      if (evidenceType === "image" && existingImages >= 10) return res.status(400).json({ error: "This incident already has 10 images." });
+      if (evidenceType === "video" && existingVideoSeconds + Number(data.durationSeconds) > 240) {
+        return res.status(400).json({ error: "Combined video evidence must be four minutes or less." });
+      }
+
+      const { S3StorageService } = await import("../s3Storage.js");
+      const object = await new S3StorageService().headObject(data.storagePath);
+      if (!object.contentLength || object.contentLength !== data.size) {
+        return res.status(400).json({ error: "The uploaded evidence file could not be verified." });
+      }
+      if (object.contentType && object.contentType !== data.mimeType) {
+        return res.status(400).json({ error: "The uploaded evidence file type could not be verified." });
+      }
+
+      const [evidence] = await db.insert(courtyardIncidentEvidence).values({
+        incidentId: incident.id,
+        evidenceType,
+        storagePath: data.storagePath,
+        originalFileName: data.originalFileName,
+        mimeType: data.mimeType,
+        size: data.size,
+        durationSeconds: evidenceType === "video" ? data.durationSeconds : null,
+        uploadedBy: req.incidentUser?.id || null,
+      }).returning();
+      res.status(201).json({ evidence: publicEvidence(evidence) });
     } catch (error) {
       next(error);
     }

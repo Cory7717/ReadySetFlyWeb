@@ -153,6 +153,7 @@ export default function IncidentReportPage() {
   const [form, setForm] = useState(emptyForm);
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
   const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
+  const [saveProgress, setSaveProgress] = useState("");
 
   const access = useQuery<AccessResponse>({
     queryKey: ["/api/incidentreport/access"],
@@ -173,20 +174,69 @@ export default function IncidentReportPage() {
   });
   const saveIncident = useMutation({
     mutationFn: async () => {
+      setSaveProgress(editingIncident ? "Saving changes..." : "Saving report...");
       const response = await apiRequest(editingIncident ? "PATCH" : "POST", editingIncident ? `/api/incidentreport/${editingIncident.id}` : "/api/incidentreport", form);
       const result = await response.json() as { incident: Incident; emailDelivery?: { sent: boolean; error?: string } };
       let evidenceError = "";
       if (evidenceFiles.length) {
-        const body = new FormData();
-        evidenceFiles.forEach((file) => body.append("evidence", file));
-        const uploadResponse = await fetch(apiUrl(`/api/incidentreport/${result.incident.id}/evidence`), {
-          method: "POST",
-          credentials: "include",
-          body,
-        });
-        if (!uploadResponse.ok) {
-          const errorBody = await uploadResponse.json().catch(() => ({ error: "Evidence upload failed." }));
-          evidenceError = errorBody.error || "Evidence upload failed.";
+        for (let index = 0; index < evidenceFiles.length; index += 1) {
+          const file = evidenceFiles[index];
+          setSaveProgress(`Uploading evidence ${index + 1} of ${evidenceFiles.length}...`);
+          let durationSeconds: number | null = null;
+          if (file.type.startsWith("video/")) durationSeconds = Math.ceil(await readVideoDuration(file));
+
+          const prepareResponse = await fetch(apiUrl(`/api/incidentreport/${result.incident.id}/evidence/upload-url`), {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mimeType: file.type, size: file.size }),
+          });
+          if (prepareResponse.status === 501) {
+            const body = new FormData();
+            evidenceFiles.forEach((fallbackFile) => body.append("evidence", fallbackFile));
+            const fallbackResponse = await fetch(apiUrl(`/api/incidentreport/${result.incident.id}/evidence`), {
+              method: "POST",
+              credentials: "include",
+              body,
+            });
+            if (!fallbackResponse.ok) {
+              const errorBody = await fallbackResponse.json().catch(() => ({ error: "Evidence upload failed." }));
+              evidenceError = errorBody.error || "Evidence upload failed.";
+            }
+            break;
+          }
+          if (!prepareResponse.ok) {
+            const errorBody = await prepareResponse.json().catch(() => ({ error: "Unable to prepare evidence upload." }));
+            evidenceError = errorBody.error || "Unable to prepare evidence upload.";
+            break;
+          }
+          const prepared = await prepareResponse.json() as { uploadURL: string; storagePath: string };
+          const directResponse = await fetch(prepared.uploadURL, {
+            method: "PUT",
+            headers: { "Content-Type": file.type },
+            body: file,
+          });
+          if (!directResponse.ok) {
+            evidenceError = `Upload failed for ${file.name}. Check the phone connection and try again.`;
+            break;
+          }
+          const completeResponse = await fetch(apiUrl(`/api/incidentreport/${result.incident.id}/evidence/complete`), {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              storagePath: prepared.storagePath,
+              originalFileName: file.name,
+              mimeType: file.type,
+              size: file.size,
+              durationSeconds,
+            }),
+          });
+          if (!completeResponse.ok) {
+            const errorBody = await completeResponse.json().catch(() => ({ error: "Unable to register uploaded evidence." }));
+            evidenceError = errorBody.error || "Unable to register uploaded evidence.";
+            break;
+          }
         }
       }
       return { ...result, evidenceError };
@@ -198,6 +248,7 @@ export default function IncidentReportPage() {
       setShowForm(false);
       const wasEditing = Boolean(editingIncident);
       setEditingIncident(null);
+      setSaveProgress("");
       toast({
         title: wasEditing ? "Incident report updated" : "Incident report saved",
         description: data.evidenceError
@@ -210,7 +261,10 @@ export default function IncidentReportPage() {
         variant: (wasEditing || data.emailDelivery?.sent) && !data.evidenceError ? "default" : "destructive",
       });
     },
-    onError: (error: Error) => toast({ title: "Unable to save incident report", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => {
+      setSaveProgress("");
+      toast({ title: "Unable to save incident report", description: error.message, variant: "destructive" });
+    },
   });
 
   const startNewIncident = () => {
@@ -306,6 +360,21 @@ export default function IncidentReportPage() {
 
   const requiredReady = form.incidentDate && form.incidentTime && form.location.trim() && form.reportedByName.trim() && form.description.trim().length >= 10 && form.immediateActions.trim().length >= 2;
 
+  const readVideoDuration = (file: File) => new Promise<number>((resolve, reject) => {
+    const video = document.createElement("video");
+    const url = URL.createObjectURL(file);
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(video.duration);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Video metadata could not be read."));
+    };
+    video.src = url;
+  });
+
   const chooseEvidence = async (files: FileList | null) => {
     const selected = Array.from(files || []);
     const images = selected.filter((file) => file.type.startsWith("image/"));
@@ -320,20 +389,7 @@ export default function IncidentReportPage() {
     }
     let totalVideoDuration = 0;
     for (const selectedVideo of videos) {
-      const duration = await new Promise<number>((resolve, reject) => {
-        const video = document.createElement("video");
-        const url = URL.createObjectURL(selectedVideo);
-        video.preload = "metadata";
-        video.onloadedmetadata = () => {
-          URL.revokeObjectURL(url);
-          resolve(video.duration);
-        };
-        video.onerror = () => {
-          URL.revokeObjectURL(url);
-          reject(new Error("Video metadata could not be read."));
-        };
-        video.src = url;
-      }).catch(() => 0);
+      const duration = await readVideoDuration(selectedVideo).catch(() => 0);
       if (!duration) {
         toast({ title: "Video could not be read", description: "Choose an MP4 or QuickTime video.", variant: "destructive" });
         return;
@@ -443,7 +499,7 @@ export default function IncidentReportPage() {
 
               <div className="flex justify-end">
                 <Button className={C.green} disabled={!requiredReady || saveIncident.isPending} onClick={() => saveIncident.mutate()}>
-                  <ShieldCheck className="mr-2 h-4 w-4" />{saveIncident.isPending ? "Saving..." : editingIncident ? "Save Changes" : "Submit Incident Report"}
+                  <ShieldCheck className="mr-2 h-4 w-4" />{saveIncident.isPending ? saveProgress || "Saving..." : editingIncident ? "Save Changes" : "Submit Incident Report"}
                 </Button>
               </div>
             </CardContent>

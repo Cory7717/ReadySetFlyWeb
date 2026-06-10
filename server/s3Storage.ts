@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createReadStream } from "fs";
 import { Readable } from "stream";
@@ -49,6 +49,7 @@ export class S3StorageService {
   async getPresignedUploadUrlForKey(params: {
     prefix?: string;
     contentType?: string;
+    expiresInSeconds?: number;
   }): Promise<{ uploadURL: string; key: string }> {
     const prefix = params.prefix || "uploads";
     const key = `${prefix}/${randomUUID()}`;
@@ -58,7 +59,7 @@ export class S3StorageService {
       ContentType: params.contentType || "application/octet-stream",
     });
     const uploadURL = await getSignedUrl(this.client, command, {
-      expiresIn: 900,
+      expiresIn: params.expiresInSeconds || 900,
     });
     return { uploadURL, key };
   }
@@ -96,6 +97,17 @@ export class S3StorageService {
       Key: key,
     });
     await this.client.send(command);
+  }
+
+  async headObject(key: string): Promise<{ contentType?: string; contentLength?: number }> {
+    const response = await this.client.send(new HeadObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    }));
+    return {
+      contentType: response.ContentType,
+      contentLength: response.ContentLength,
+    };
   }
 
   /**

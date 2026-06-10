@@ -858,19 +858,27 @@ export default function OpsReportPage() {
   }, [scheduledLabor.data]);
 
   const adr = useMemo(() => num(topMetrics.roomsSold) ? num(topMetrics.roomRevenue) / num(topMetrics.roomsSold) : 0, [topMetrics]);
-  const effectiveLabor = useMemo(() => labor.map((row) => {
+  const effectiveLabor = useMemo<Row[]>(() => labor.map((row): Row => {
     const department = String(row.department || "").trim().toUpperCase();
-    if (department !== "HOUSEKEEPING HOURS") return row;
+    if (department !== "HOUSEKEEPING HOURS") {
+      return {
+        ...row,
+        calculatedMpor: "",
+        targetMpor: "",
+        mporVariance: "",
+      };
+    }
     const roomsSold = num(topMetrics.roomsSold);
     const budgetHours = roomsSold * 30 / 60;
-    const actualMpor = roomsSold > 0 && num(row.actualHours) > 0 ? num(row.actualHours) * 60 / roomsSold : 0;
+    const hasActualHours = String(row.actualHours || "").trim() !== "";
+    const actualMpor = roomsSold > 0 && hasActualHours ? num(row.actualHours) * 60 / roomsSold : null;
+    const mporVariance = actualMpor == null ? null : actualMpor - 30;
     return {
       ...row,
       budget: fmtHours(budgetHours),
-      calculatedMpor: actualMpor ? actualMpor.toFixed(1) : "",
-      comments: actualMpor
-        ? `Actual MPOR ${actualMpor.toFixed(1)} min | Target 30 min`
-        : "Target MPOR 30 min",
+      calculatedMpor: actualMpor == null ? "" : actualMpor.toFixed(1),
+      targetMpor: "30.0",
+      mporVariance: mporVariance == null ? "" : `${mporVariance > 0 ? "+" : ""}${mporVariance.toFixed(1)}`,
     };
   }), [labor, topMetrics.roomsSold]);
   const scheduledLaborTotal = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.scheduledHours), 0), [effectiveLabor]);
@@ -880,7 +888,9 @@ export default function OpsReportPage() {
   const laborVariance = actualLaborTotal ? actualLaborTotal - laborBudget : 0;
   const laborRows = useMemo(() => effectiveLabor.map((row) => ({
     ...row,
-    variance: num(row.actualHours) ? fmtHours(num(row.actualHours) - num(row.budget)) : "",
+    variance: String(row.actualHours || "").trim() !== "" && String(row.budget || "").trim() !== ""
+      ? fmtHours(num(row.actualHours) - num(row.budget))
+      : "",
   })), [effectiveLabor]);
   const adjustmentTotal = useMemo(() => adjustments.reduce((sum, row) => sum + num(row.amount), 0), [adjustments]);
   const arTotal = num(ar.current) + num(ar.d30) + num(ar.d60) + num(ar.d90);
@@ -1767,7 +1777,7 @@ export default function OpsReportPage() {
                 <div>
                   <div className="text-sm font-semibold text-[#201814]">Scheduled, Actual, and Budgeted Hours</div>
                   <p className="mt-1 max-w-2xl text-sm text-[#5f5247]">
-                    Housekeeping budget uses a 30-minute MPOR target based on weekly rooms sold. Variance is Actual Hours minus Budgeted Hours.
+                    Every department's hours variance is Actual Hours minus Budgeted Hours. Only Housekeeping calculates MPOR using all HK department hours divided by rooms sold, with a 30-minute target.
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2 text-sm">
                     <Badge variant="outline">Scheduled {fmtHours(scheduledLaborTotal)}</Badge>
@@ -1795,13 +1805,15 @@ export default function OpsReportPage() {
                   { key: "department", label: "Department", wide: true },
                   { key: "scheduledHours", label: "Scheduled Hours" },
                   { key: "actualHours", label: "Actual Hours" },
-                  { key: "calculatedMpor", label: "Actual MPOR", readOnly: true },
-                  { key: "variance", label: "Variance", readOnly: true },
                   { key: "budget", label: "Budgeted Hours" },
+                  { key: "variance", label: "Hours Variance", readOnly: true },
+                  { key: "calculatedMpor", label: "Actual MPOR", readOnly: true },
+                  { key: "targetMpor", label: "Target MPOR", readOnly: true },
+                  { key: "mporVariance", label: "MPOR Variance", readOnly: true },
                   { key: "comments", label: "Comments", wide: true },
                 ]}
                 rows={laborRows}
-                onChange={(rows) => setLabor(rows.map(({ variance, calculatedMpor, ...row }) => row))}
+                onChange={(rows) => setLabor(rows.map(({ variance, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
               />
             </Section>
             <Section title="Staffing">

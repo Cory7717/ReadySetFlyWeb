@@ -34,8 +34,8 @@ app.use(securityHeaders);
 // CORS configuration - allow same-origin production traffic and explicit web origins.
 app.use(cors(buildCorsOptions()));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ extended: false, limit: "5mb" }));
 
 app.get("/healthz", (_req, res) => {
   const memory = process.memoryUsage();

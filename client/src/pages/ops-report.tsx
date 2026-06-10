@@ -231,6 +231,31 @@ function captureReportPatch(payload: Record<string, any>, reportType: OpsImportR
   return Object.fromEntries(REPORT_PAYLOAD_KEYS[reportType].map((key) => [key, cloneValue(payload[key])]));
 }
 
+function compactReportMapping(reportType: OpsImportResponse["reportType"], mapping: Record<string, any>) {
+  if (["previous_week_otb", "current_month_otb", "remaining_month_otb", "next_month_otb"].includes(reportType)) {
+    return {
+      dateStart: mapping.dateStart,
+      dateEnd: mapping.dateEnd,
+      total: mapping.total,
+    };
+  }
+  if (reportType === "detailed_flash") return { mtd: mapping.mtd, ytd: mapping.ytd };
+  if (reportType === "ooo_rooms") return { rooms: mapping.rooms, reportRange: mapping.reportRange };
+  if (reportType === "gss_scores") return { gssRows: mapping.gssRows, gssWaveRows: mapping.gssWaveRows };
+  if (reportType === "marriott_responses") return { positiveReviews: mapping.positiveReviews, negativeReviews: mapping.negativeReviews };
+  if (reportType === "ar_aging") return { summary: mapping.summary };
+  if (reportType === "credit_limit") return { entries: mapping.entries, summary: mapping.summary };
+  return {};
+}
+
+function compactUploadedReport(report: OpsImportResponse & { beforePatch?: Record<string, any> }) {
+  return {
+    ...report,
+    preview: [],
+    mapping: compactReportMapping(report.reportType, report.mapping || {}),
+  };
+}
+
 function fillRows(rows: Row[], count = 5) {
   return [...rows, ...emptyRows(Math.max(0, count - rows.length), ["source", "score", "comment"])].slice(0, count);
 }
@@ -373,18 +398,6 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
       uncovered: accounting(entry.uncovered),
       action: String(entry.action || ""),
     }));
-  }
-  return next;
-}
-
-function reconcileMonthlyOtbUploads(payload: Record<string, any>, reports: Array<Record<string, any>>, reportMonth: string) {
-  let next = cloneValue(payload);
-  const monthlyReports = reports.filter((report) => {
-    const mappingMonth = monthKeyFromDate(String(report.mapping?.dateStart || ""));
-    return report.mapping?.total && (mappingMonth === reportMonth || mappingMonth === nextMonthKey(reportMonth));
-  });
-  for (const report of monthlyReports) {
-    next = applyOpsReportToPayload(next, { ...report, reportMonth } as OpsImportResponse);
   }
   return next;
 }
@@ -787,7 +800,7 @@ export default function OpsReportPage() {
       files.forEach((file) => form.append("opsReport", file));
       form.append("weekStart", topMetrics.weekStart);
       form.append("weekEnd", weekEnd);
-      form.append("reportMonth", monthKeyFromDate(topMetrics.weekStart));
+      form.append("reportMonth", monthKeyFromDate(weekEnd || topMetrics.weekStart));
       const response = await fetch(apiUrl("/api/opsreport/import"), { method: "POST", credentials: "include", body: form });
       if (!response.ok) throw new Error(await response.text());
       return response.json() as Promise<OpsImportBatchResponse>;
@@ -797,7 +810,7 @@ export default function OpsReportPage() {
       const reports = data.reports.map((report) => {
         const beforePatch = captureReportPatch(nextPayload, report.reportType);
         if (report.status !== "failed") nextPayload = applyOpsReportToPayload(nextPayload, report);
-        return { ...report, beforePatch };
+        return compactUploadedReport({ ...report, beforePatch });
       });
       applyPayloadState(nextPayload);
       setUploadedReports((current) => [...current, ...reports]);
@@ -1197,10 +1210,10 @@ export default function OpsReportPage() {
       const sourceWeekStart = String(report.weekStartDate || "").trim();
       return !sourceWeekStart || sourceWeekStart === loaded.weekStart;
     });
-    const reconciledPayload = reconcileMonthlyOtbUploads(loaded.payload, currentReports, monthKeyFromDate(loaded.weekStart));
     setWeek(loaded.weekLabel || "Week 1");
-    applyPayloadState(reconciledPayload);
-    setUploadedReports(currentReports);
+    // The saved payload is authoritative. Replaying imports here overwrites manual corrections.
+    applyPayloadState(loaded.payload);
+    setUploadedReports(currentReports.map((report) => compactUploadedReport(report as OpsImportResponse)));
     return true;
   };
   const loadOpsWeek = async (weekStart: string, weekLabel: string) => {

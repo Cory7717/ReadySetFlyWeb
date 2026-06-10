@@ -1,12 +1,39 @@
 import express, { type Express, type RequestHandler } from "express";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import multer from "multer";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
+import { pipeline } from "stream/promises";
 import { z } from "zod";
 import { db } from "../db";
-import { courtyardIncidentReports, tipsKioskSettings, tipsUsers } from "@shared/schema";
+import { courtyardIncidentEvidence, courtyardIncidentReports, tipsKioskSettings, tipsUsers } from "@shared/schema";
+import { getUncachableResendClient } from "../resendClient";
 
 const PROPERTY_ID = "courtyard-austin-lakeline";
+const DEFAULT_INCIDENT_RECIPIENTS = "coryarmer@gmail.com,cory.armer@marriott.com";
+const INCIDENT_EVIDENCE_PREFIX = "uploads/courtyard-incidents";
+const incidentEvidenceDir = path.resolve(process.cwd(), "uploads", "courtyard-incidents");
+fs.mkdirSync(incidentEvidenceDir, { recursive: true });
+
+const evidenceUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, incidentEvidenceDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname || "").toLowerCase();
+      cb(null, `${Date.now()}-${crypto.randomBytes(10).toString("hex")}${ext}`);
+    },
+  }),
+  limits: { files: 20, fileSize: 300 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(jpeg|png|webp)$/i.test(file.mimetype) || /^(video\/mp4|video\/quicktime)$/i.test(file.mimetype)) {
+      return cb(null, true);
+    }
+    cb(new Error("Evidence must be a JPEG, PNG, WebP, MP4, or QuickTime file."));
+  },
+});
 
 const pinSchema = z.object({
   pin: z.string().regex(/^\d{5}$/, "PIN must be exactly 5 digits"),
@@ -99,8 +126,23 @@ function publicIncident(row: any) {
     notifications: row.notifications || "",
     followUpRequired: row.followUpRequired || "",
     managerNotes: row.managerNotes || "",
+    emailSentAt: row.emailSentAt,
+    emailError: row.emailError || "",
+    evidence: Array.isArray(row.evidence) ? row.evidence.map(publicEvidence) : [],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+function publicEvidence(row: any) {
+  return {
+    id: row.id,
+    evidenceType: row.evidenceType,
+    originalFileName: row.originalFileName,
+    mimeType: row.mimeType,
+    size: row.size,
+    durationSeconds: row.durationSeconds,
+    uploadedAt: row.uploadedAt,
   };
 }
 
@@ -189,6 +231,12 @@ async function buildIncidentPdf(incident: any) {
   field("Notifications made", incident.notifications);
   field("Required follow-up", incident.followUpRequired);
   field("Manager notes", incident.managerNotes);
+  if (incident.evidence?.length) {
+    field("Digital evidence retained", incident.evidence.map((item: any) => {
+      const duration = item.durationSeconds ? ` (${item.durationSeconds} seconds)` : "";
+      return `${item.evidenceType}: ${item.originalFileName}${duration}`;
+    }).join("\n"));
+  }
 
   ensureSpace(80);
   y -= 12;
@@ -206,6 +254,153 @@ async function buildIncidentPdf(incident: any) {
     lineHeight: 9,
   });
   return Buffer.from(await pdf.save());
+}
+
+async function readBoxHeader(handle: fs.promises.FileHandle, position: number, boundary: number) {
+  if (position + 8 > boundary) return null;
+  const header = Buffer.alloc(16);
+  const { bytesRead } = await handle.read(header, 0, 16, position);
+  if (bytesRead < 8) return null;
+  let size = header.readUInt32BE(0);
+  const type = header.toString("ascii", 4, 8);
+  let headerSize = 8;
+  if (size === 1) {
+    if (bytesRead < 16) return null;
+    const largeSize = header.readBigUInt64BE(8);
+    if (largeSize > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+    size = Number(largeSize);
+    headerSize = 16;
+  } else if (size === 0) {
+    size = boundary - position;
+  }
+  if (size < headerSize || position + size > boundary) return null;
+  return { position, size, type, headerSize };
+}
+
+async function mp4DurationSeconds(filePath: string) {
+  const handle = await fs.promises.open(filePath, "r");
+  try {
+    const stats = await handle.stat();
+    let topPosition = 0;
+    while (topPosition < stats.size) {
+      const box = await readBoxHeader(handle, topPosition, stats.size);
+      if (!box) break;
+      if (box.type === "moov") {
+        let childPosition = box.position + box.headerSize;
+        const boundary = box.position + box.size;
+        while (childPosition < boundary) {
+          const child = await readBoxHeader(handle, childPosition, boundary);
+          if (!child) break;
+          if (child.type === "mvhd") {
+            const data = Buffer.alloc(32);
+            const { bytesRead } = await handle.read(data, 0, data.length, child.position + child.headerSize);
+            if (bytesRead < 20) throw new Error("The video duration could not be read.");
+            const version = data.readUInt8(0);
+            if (version === 1 && bytesRead < 32) throw new Error("The video duration could not be read.");
+            const timescale = version === 1 ? data.readUInt32BE(20) : data.readUInt32BE(12);
+            const duration = version === 1 ? Number(data.readBigUInt64BE(24)) : data.readUInt32BE(16);
+            if (!timescale || !Number.isFinite(duration)) throw new Error("The video duration could not be read.");
+            return Math.ceil(duration / timescale);
+          }
+          childPosition += child.size;
+        }
+      }
+      topPosition += box.size;
+    }
+    throw new Error("The uploaded video is not a supported MP4 or QuickTime file.");
+  } finally {
+    await handle.close();
+  }
+}
+
+async function removeUploadedFiles(files: Express.Multer.File[]) {
+  await Promise.allSettled(files.map((file) => fs.promises.unlink(file.path)));
+}
+
+async function incidentWithEvidence(row: any) {
+  const evidence = await db.select().from(courtyardIncidentEvidence)
+    .where(eq(courtyardIncidentEvidence.incidentId, row.id))
+    .orderBy(courtyardIncidentEvidence.uploadedAt);
+  return { ...row, evidence };
+}
+
+function incidentEmailRecipients() {
+  return (process.env.INCIDENT_REPORT_RECIPIENTS || DEFAULT_INCIDENT_RECIPIENTS)
+    .split(",")
+    .map((email) => email.trim())
+    .filter(Boolean);
+}
+
+function escapeHtml(value: unknown) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+async function emailIncidentReport(row: any) {
+  const incident = publicIncident(await incidentWithEvidence(row));
+  const recipients = incidentEmailRecipients();
+  if (!recipients.length) throw new Error("No incident report email recipients are configured.");
+
+  const pdf = await buildIncidentPdf(incident);
+  const { client, fromEmail } = await getUncachableResendClient();
+  const subject = `Incident Report ${incident.incidentNumber}: ${incident.category}`;
+  const text = [
+    `A Courtyard incident report was submitted by ${incident.reportedByName}.`,
+    "",
+    `Incident: ${incident.incidentNumber}`,
+    `Date and time: ${incident.incidentDate} at ${incident.incidentTime}`,
+    `Location: ${incident.location}`,
+    `Category: ${incident.category}`,
+    `Severity: ${incident.severity}`,
+    "",
+    "The complete, printable incident report is attached as a PDF.",
+  ].join("\n");
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#201814;line-height:1.5">
+      <h2 style="color:#243746">Courtyard Incident Report</h2>
+      <p>A new incident report was submitted by <strong>${escapeHtml(incident.reportedByName)}</strong>.</p>
+      <table style="border-collapse:collapse;width:100%;max-width:650px">
+        <tr><td style="padding:6px;border:1px solid #d7c8b5"><strong>Incident</strong></td><td style="padding:6px;border:1px solid #d7c8b5">${escapeHtml(incident.incidentNumber)}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #d7c8b5"><strong>Date / time</strong></td><td style="padding:6px;border:1px solid #d7c8b5">${escapeHtml(incident.incidentDate)} at ${escapeHtml(incident.incidentTime)}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #d7c8b5"><strong>Location</strong></td><td style="padding:6px;border:1px solid #d7c8b5">${escapeHtml(incident.location)}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #d7c8b5"><strong>Category</strong></td><td style="padding:6px;border:1px solid #d7c8b5">${escapeHtml(incident.category)}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #d7c8b5"><strong>Severity</strong></td><td style="padding:6px;border:1px solid #d7c8b5">${escapeHtml(incident.severity)}</td></tr>
+      </table>
+      <p>The complete, printable incident report is attached as a PDF and can be forwarded directly.</p>
+    </div>
+  `;
+
+  await client.emails.send({
+    from: fromEmail,
+    to: recipients,
+    subject,
+    text,
+    html,
+    attachments: [{ filename: `${incident.incidentNumber}.pdf`, content: pdf }],
+  });
+}
+
+async function sendAndTrackIncidentEmail(row: any) {
+  try {
+    await emailIncidentReport(row);
+    const sentAt = new Date();
+    const [updated] = await db.update(courtyardIncidentReports)
+      .set({ emailSentAt: sentAt, emailError: null, updatedAt: sentAt })
+      .where(eq(courtyardIncidentReports.id, row.id))
+      .returning();
+    return { row: updated || row, sent: true, error: "" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Incident report email could not be sent.";
+    console.error(`[incident-report] Email failed for ${row.incidentNumber}:`, error);
+    const [updated] = await db.update(courtyardIncidentReports)
+      .set({ emailError: message, updatedAt: new Date() })
+      .where(eq(courtyardIncidentReports.id, row.id))
+      .returning();
+    return { row: updated || row, sent: false, error: message };
+  }
 }
 
 export function registerIncidentReportRoutes(app: Express) {
@@ -247,7 +442,12 @@ export function registerIncidentReportRoutes(app: Express) {
         .where(eq(courtyardIncidentReports.propertyId, PROPERTY_ID))
         .orderBy(desc(courtyardIncidentReports.incidentDate), desc(courtyardIncidentReports.createdAt))
         .limit(100);
-      res.json({ incidents: rows.map(publicIncident) });
+      const evidence = rows.length
+        ? await db.select().from(courtyardIncidentEvidence).where(inArray(courtyardIncidentEvidence.incidentId, rows.map((row) => row.id)))
+        : [];
+      const byIncident = new Map<string, any[]>();
+      for (const item of evidence) byIncident.set(item.incidentId, [...(byIncident.get(item.incidentId) || []), item]);
+      res.json({ incidents: rows.map((row) => publicIncident({ ...row, evidence: byIncident.get(row.id) || [] })) });
     } catch (error) {
       next(error);
     }
@@ -257,7 +457,7 @@ export function registerIncidentReportRoutes(app: Express) {
     try {
       const [row] = await db.select().from(courtyardIncidentReports).where(eq(courtyardIncidentReports.id, req.params.id)).limit(1);
       if (!row) return res.status(404).json({ error: "Incident report not found." });
-      res.json({ incident: publicIncident(row) });
+      res.json({ incident: publicIncident(await incidentWithEvidence(row)) });
     } catch (error) {
       next(error);
     }
@@ -296,8 +496,125 @@ export function registerIncidentReportRoutes(app: Express) {
         payloadJson: {},
         updatedAt: new Date(),
       }).returning();
-      res.status(201).json({ incident: publicIncident(row) });
+      const delivery = await sendAndTrackIncidentEmail(row);
+      res.status(201).json({
+        incident: publicIncident(delivery.row),
+        emailDelivery: { sent: delivery.sent, error: delivery.error },
+      });
     } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/:id/email", requireIncidentAccess as RequestHandler, async (req, res, next) => {
+    try {
+      const [row] = await db.select().from(courtyardIncidentReports).where(eq(courtyardIncidentReports.id, req.params.id)).limit(1);
+      if (!row) return res.status(404).json({ error: "Incident report not found." });
+      const delivery = await sendAndTrackIncidentEmail(row);
+      if (!delivery.sent) return res.status(502).json({ error: delivery.error });
+      res.json({ incident: publicIncident(delivery.row), emailDelivery: { sent: true } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/:id/evidence", requireIncidentAccess as RequestHandler, (req: any, res, next) => {
+    evidenceUpload.array("evidence", 20)(req, res, async (uploadError: any) => {
+      const files = ((req.files || []) as Express.Multer.File[]);
+      try {
+        if (uploadError) {
+          await removeUploadedFiles(files);
+          const message = uploadError instanceof multer.MulterError && uploadError.code === "LIMIT_FILE_SIZE"
+            ? "An evidence file exceeds the 300 MB limit."
+            : uploadError.message || "Evidence upload failed.";
+          return res.status(400).json({ error: message });
+        }
+        const [incident] = await db.select().from(courtyardIncidentReports).where(eq(courtyardIncidentReports.id, req.params.id)).limit(1);
+        if (!incident) {
+          await removeUploadedFiles(files);
+          return res.status(404).json({ error: "Incident report not found." });
+        }
+        if (!files.length) return res.status(400).json({ error: "Choose at least one image or video." });
+
+        const existing = await db.select().from(courtyardIncidentEvidence).where(eq(courtyardIncidentEvidence.incidentId, incident.id));
+        const imageFiles = files.filter((file) => file.mimetype.startsWith("image/"));
+        const videoFiles = files.filter((file) => file.mimetype.startsWith("video/"));
+        const existingImages = existing.filter((item) => item.evidenceType === "image").length;
+        const existingVideoSeconds = existing
+          .filter((item) => item.evidenceType === "video")
+          .reduce((total, item) => total + Number(item.durationSeconds || 0), 0);
+        if (existingImages + imageFiles.length > 10) {
+          await removeUploadedFiles(files);
+          return res.status(400).json({ error: "Each incident supports up to 10 images." });
+        }
+
+        const videoDurations = new Map<string, number>();
+        let uploadedVideoSeconds = 0;
+        for (const file of videoFiles) {
+          const duration = await mp4DurationSeconds(file.path);
+          uploadedVideoSeconds += duration;
+          videoDurations.set(file.filename, duration);
+        }
+        if (existingVideoSeconds + uploadedVideoSeconds > 240) {
+          await removeUploadedFiles(files);
+          return res.status(400).json({ error: "Combined video evidence must be four minutes or less." });
+        }
+
+        const inserted = [];
+        for (const file of files) {
+          const storagePath = `${INCIDENT_EVIDENCE_PREFIX}/${file.filename}`;
+          if (process.env.AWS_S3_BUCKET) {
+            const { S3StorageService } = await import("../s3Storage.js");
+            const s3Service = new S3StorageService();
+            await s3Service.uploadFile({ key: storagePath, filePath: file.path, contentType: file.mimetype });
+            await fs.promises.unlink(file.path);
+          }
+          const [evidence] = await db.insert(courtyardIncidentEvidence).values({
+            incidentId: incident.id,
+            evidenceType: file.mimetype.startsWith("video/") ? "video" : "image",
+            storagePath,
+            originalFileName: file.originalname,
+            mimeType: file.mimetype,
+            size: file.size,
+            durationSeconds: videoDurations.get(file.filename) || null,
+            uploadedBy: req.incidentUser?.id || null,
+          }).returning();
+          inserted.push(publicEvidence(evidence));
+        }
+        res.status(201).json({ evidence: inserted });
+      } catch (error) {
+        await removeUploadedFiles(files);
+        next(error);
+      }
+    });
+  });
+
+  router.get("/:id/evidence/:evidenceId", requireIncidentAccess as RequestHandler, async (req, res, next) => {
+    try {
+      const [row] = await db.select().from(courtyardIncidentEvidence)
+        .where(eq(courtyardIncidentEvidence.id, req.params.evidenceId))
+        .limit(1);
+      if (!row || row.incidentId !== req.params.id) return res.status(404).json({ error: "Evidence file not found." });
+      res.setHeader("Content-Type", row.mimeType);
+      res.setHeader("Content-Disposition", `inline; filename="${path.basename(row.originalFileName).replace(/"/g, "")}"`);
+      res.setHeader("Cache-Control", "private, max-age=3600");
+      if (process.env.AWS_S3_BUCKET) {
+        const { S3StorageService } = await import("../s3Storage.js");
+        const s3Service = new S3StorageService();
+        const { stream, contentLength } = await s3Service.getObjectStream({ key: row.storagePath });
+        if (contentLength) res.setHeader("Content-Length", String(contentLength));
+        await pipeline(stream, res);
+        return;
+      }
+      const filePath = path.resolve(process.cwd(), row.storagePath);
+      if (!filePath.startsWith(`${incidentEvidenceDir}${path.sep}`) || !fs.existsSync(filePath)) {
+        return res.status(404).json({ error: "Evidence file not found." });
+      }
+      res.sendFile(filePath);
+    } catch (error: any) {
+      if (error?.name === "NoSuchKey" || error?.$metadata?.httpStatusCode === 404) {
+        return res.status(404).json({ error: "Evidence file not found." });
+      }
       next(error);
     }
   });
@@ -321,7 +638,7 @@ export function registerIncidentReportRoutes(app: Express) {
     try {
       const [row] = await db.select().from(courtyardIncidentReports).where(eq(courtyardIncidentReports.id, req.params.id)).limit(1);
       if (!row) return res.status(404).json({ error: "Incident report not found." });
-      const pdf = await buildIncidentPdf(publicIncident(row));
+      const pdf = await buildIncidentPdf(publicIncident(await incidentWithEvidence(row)));
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${row.incidentNumber}.pdf"`);
       res.send(pdf);

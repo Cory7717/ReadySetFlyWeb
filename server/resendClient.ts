@@ -6,6 +6,10 @@ type BrevoEmailPayload = {
   html?: string;
   text?: string;
   replyTo?: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer | string;
+  }>;
 };
 
 type BrevoClient = {
@@ -58,6 +62,12 @@ async function sendBrevoEmail(apiKey: string, payload: BrevoEmailPayload) {
       htmlContent: payload.html,
       textContent: payload.text,
       replyTo: replyTo || undefined,
+      attachment: payload.attachments?.map((attachment) => ({
+        name: attachment.filename,
+        content: Buffer.isBuffer(attachment.content)
+          ? attachment.content.toString("base64")
+          : attachment.content,
+      })),
     }),
   });
 

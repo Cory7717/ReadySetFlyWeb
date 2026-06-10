@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Download, FileWarning, LockKeyhole, Plus, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Download, FileImage, FileVideo, FileWarning, LockKeyhole, Mail, Plus, ShieldCheck, Upload } from "lucide-react";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
@@ -46,6 +46,17 @@ type Incident = {
   notifications: string;
   followUpRequired: string;
   managerNotes: string;
+  emailSentAt: string | null;
+  emailError: string;
+  evidence: Array<{
+    id: string;
+    evidenceType: "image" | "video";
+    originalFileName: string;
+    mimeType: string;
+    size: number;
+    durationSeconds: number | null;
+    uploadedAt: string;
+  }>;
   createdAt: string;
 };
 
@@ -113,8 +124,9 @@ export default function IncidentReportPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [pin, setPin] = useState("");
-  const [showForm, setShowForm] = useState(true);
+  const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
 
   const access = useQuery<AccessResponse>({
     queryKey: ["/api/incidentreport/access"],
@@ -136,13 +148,37 @@ export default function IncidentReportPage() {
   const createIncident = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/incidentreport", form);
-      return response.json() as Promise<{ incident: Incident }>;
+      const result = await response.json() as { incident: Incident; emailDelivery: { sent: boolean; error?: string } };
+      let evidenceError = "";
+      if (evidenceFiles.length) {
+        const body = new FormData();
+        evidenceFiles.forEach((file) => body.append("evidence", file));
+        const uploadResponse = await fetch(apiUrl(`/api/incidentreport/${result.incident.id}/evidence`), {
+          method: "POST",
+          credentials: "include",
+          body,
+        });
+        if (!uploadResponse.ok) {
+          const errorBody = await uploadResponse.json().catch(() => ({ error: "Evidence upload failed." }));
+          evidenceError = errorBody.error || "Evidence upload failed.";
+        }
+      }
+      return { ...result, evidenceError };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/incidentreport"] });
       setForm({ ...emptyForm(), reportedByName: form.reportedByName, reportedByPosition: form.reportedByPosition });
+      setEvidenceFiles([]);
       setShowForm(false);
-      toast({ title: "Incident report saved", description: `${data.incident.incidentNumber} is ready for PDF download.` });
+      toast({
+        title: "Incident report saved",
+        description: data.evidenceError
+          ? `${data.incident.incidentNumber} was saved, but evidence was not uploaded: ${data.evidenceError}`
+          : data.emailDelivery.sent
+          ? `${data.incident.incidentNumber} was saved and emailed with its PDF.`
+          : `${data.incident.incidentNumber} was saved, but the email could not be sent. Use Email again from the archive.`,
+        variant: data.emailDelivery.sent && !data.evidenceError ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => toast({ title: "Unable to save incident report", description: error.message, variant: "destructive" }),
   });
@@ -150,6 +186,17 @@ export default function IncidentReportPage() {
     mutationFn: ({ id, status }: { id: string; status: Incident["status"] }) => apiRequest("PATCH", `/api/incidentreport/${id}/status`, { status }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/incidentreport"] }),
     onError: (error: Error) => toast({ title: "Unable to update status", description: error.message, variant: "destructive" }),
+  });
+  const emailIncident = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("POST", `/api/incidentreport/${id}/email`);
+      return response.json() as Promise<{ incident: Incident }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/incidentreport"] });
+      toast({ title: "Incident report emailed", description: `${data.incident.incidentNumber} was sent with the PDF attached.` });
+    },
+    onError: (error: Error) => toast({ title: "Unable to email incident report", description: error.message, variant: "destructive" }),
   });
 
   useEffect(() => {
@@ -182,6 +229,43 @@ export default function IncidentReportPage() {
   }
 
   const requiredReady = form.incidentDate && form.incidentTime && form.location.trim() && form.reportedByName.trim() && form.description.trim().length >= 10 && form.immediateActions.trim().length >= 2;
+
+  const chooseEvidence = async (files: FileList | null) => {
+    const selected = Array.from(files || []);
+    const images = selected.filter((file) => file.type.startsWith("image/"));
+    const videos = selected.filter((file) => file.type.startsWith("video/"));
+    if (images.length > 10) {
+      toast({ title: "Evidence limit exceeded", description: "Choose up to 10 images.", variant: "destructive" });
+      return;
+    }
+    let totalVideoDuration = 0;
+    for (const selectedVideo of videos) {
+      const duration = await new Promise<number>((resolve, reject) => {
+        const video = document.createElement("video");
+        const url = URL.createObjectURL(selectedVideo);
+        video.preload = "metadata";
+        video.onloadedmetadata = () => {
+          URL.revokeObjectURL(url);
+          resolve(video.duration);
+        };
+        video.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error("Video metadata could not be read."));
+        };
+        video.src = url;
+      }).catch(() => 0);
+      if (!duration) {
+        toast({ title: "Video could not be read", description: "Choose an MP4 or QuickTime video.", variant: "destructive" });
+        return;
+      }
+      totalVideoDuration += duration;
+    }
+    if (totalVideoDuration > 240) {
+      toast({ title: "Video is too long", description: "Combined video evidence must be four minutes or less.", variant: "destructive" });
+      return;
+    }
+    setEvidenceFiles(selected);
+  };
 
   return (
     <div className={C.page}>
@@ -258,6 +342,22 @@ export default function IncidentReportPage() {
                 <TextField label="Manager notes" value={form.managerNotes} onChange={(managerNotes) => setForm({ ...form, managerNotes })} />
               </section>
 
+              <section className="rounded-lg border border-[#d7c8b5] bg-white p-4">
+                <div className="flex items-center gap-2 font-semibold"><Upload className="h-4 w-4 text-[#2f5f46]" />Photo and Video Evidence</div>
+                <p className={`mt-1 text-sm ${C.muted}`}>Optional. Attach up to 10 JPEG, PNG, or WebP images and MP4 or QuickTime video clips totaling up to four minutes.</p>
+                <Input className={`mt-3 ${C.field}`} type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" onChange={(event) => void chooseEvidence(event.target.files)} />
+                {!!evidenceFiles.length && (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {evidenceFiles.map((file) => (
+                      <div key={`${file.name}-${file.size}`} className="flex items-center gap-2 rounded border border-[#e0d3c1] bg-[#fbf6ee] px-3 py-2 text-sm">
+                        {file.type.startsWith("video/") ? <FileVideo className="h-4 w-4" /> : <FileImage className="h-4 w-4" />}
+                        <span className="truncate" title={file.name}>{file.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
               <div className="flex justify-end">
                 <Button className={C.green} disabled={!requiredReady || createIncident.isPending} onClick={() => createIncident.mutate()}>
                   <ShieldCheck className="mr-2 h-4 w-4" />{createIncident.isPending ? "Saving..." : "Submit Incident Report"}
@@ -270,7 +370,7 @@ export default function IncidentReportPage() {
         <Card className={C.shell}>
           <CardHeader>
             <CardTitle>Saved Incident Reports</CardTitle>
-            <CardDescription className={C.muted}>The most recent 100 reports are retained here for review and PDF download.</CardDescription>
+            <CardDescription className={C.muted}>The most recent 100 reports are retained here. Download the PDF or send another email copy at any time.</CardDescription>
           </CardHeader>
           <CardContent>
             {incidents.isLoading ? <div className="text-sm text-[#5f5247]">Loading reports...</div> : !incidents.data?.incidents.length ? (
@@ -279,7 +379,7 @@ export default function IncidentReportPage() {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[900px] border-collapse text-sm">
                   <thead><tr className="bg-[#243746] text-left text-white">
-                    <th className="p-2">Incident</th><th className="p-2">Date / Time</th><th className="p-2">Category</th><th className="p-2">Location</th><th className="p-2">Reported By</th><th className="p-2">Severity</th><th className="p-2">Status</th><th className="p-2">PDF</th>
+                    <th className="p-2">Incident</th><th className="p-2">Date / Time</th><th className="p-2">Category</th><th className="p-2">Location</th><th className="p-2">Reported By</th><th className="p-2">Severity</th><th className="p-2">Status</th><th className="p-2">Evidence</th><th className="p-2">Email</th><th className="p-2">Actions</th>
                   </tr></thead>
                   <tbody>
                     {incidents.data.incidents.map((incident) => (
@@ -296,7 +396,31 @@ export default function IncidentReportPage() {
                             <SelectContent><SelectItem value="open">Open</SelectItem><SelectItem value="under_review">Under Review</SelectItem><SelectItem value="closed">Closed</SelectItem></SelectContent>
                           </Select>
                         </td>
-                        <td className="p-2"><Button asChild size="sm" variant="outline" className={C.outline}><a href={apiUrl(`/api/incidentreport/${incident.id}/pdf`)}><Download className="mr-1 h-4 w-4" />PDF</a></Button></td>
+                        <td className="p-2">
+                          {incident.evidence.length ? (
+                            <div className="flex max-w-52 flex-wrap gap-1">
+                              {incident.evidence.map((item, index) => (
+                                <Button key={item.id} asChild size="sm" variant="outline" className={`${C.outline} h-8 px-2`}>
+                                  <a href={apiUrl(`/api/incidentreport/${incident.id}/evidence/${item.id}`)} target="_blank" rel="noreferrer" title={item.originalFileName}>
+                                    {item.evidenceType === "video" ? <FileVideo className="mr-1 h-3.5 w-3.5" /> : <FileImage className="mr-1 h-3.5 w-3.5" />}
+                                    {item.evidenceType === "video" ? "Video" : `Image ${index + 1}`}
+                                  </a>
+                                </Button>
+                              ))}
+                            </div>
+                          ) : <span className="text-xs text-[#7c6e61]">None</span>}
+                        </td>
+                        <td className="p-2 text-xs">
+                          {incident.emailSentAt
+                            ? <span className="font-semibold text-[#2f5f46]">Sent</span>
+                            : <span className="font-semibold text-rose-700">Not sent</span>}
+                        </td>
+                        <td className="p-2">
+                          <div className="flex gap-2">
+                            <Button asChild size="sm" variant="outline" className={C.outline}><a href={apiUrl(`/api/incidentreport/${incident.id}/pdf`)}><Download className="mr-1 h-4 w-4" />PDF</a></Button>
+                            <Button size="sm" variant="outline" className={C.outline} disabled={emailIncident.isPending} onClick={() => emailIncident.mutate(incident.id)}><Mail className="mr-1 h-4 w-4" />Email again</Button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

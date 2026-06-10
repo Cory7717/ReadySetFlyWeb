@@ -780,12 +780,29 @@ export const courtyardIncidentReports = pgTable("courtyard_incident_reports", {
   followUpRequired: text("follow_up_required"),
   managerNotes: text("manager_notes"),
   payloadJson: jsonb("payload_json").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  emailSentAt: timestamp("email_sent_at"),
+  emailError: text("email_error"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   uniqueIndex("idx_courtyard_incident_number").on(table.incidentNumber),
   index("idx_courtyard_incident_date").on(table.incidentDate),
   index("idx_courtyard_incident_status").on(table.status),
+]);
+
+export const courtyardIncidentEvidence = pgTable("courtyard_incident_evidence", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  incidentId: varchar("incident_id").notNull().references(() => courtyardIncidentReports.id, { onDelete: "cascade" }),
+  evidenceType: text("evidence_type").notNull(),
+  storagePath: text("storage_path").notNull(),
+  originalFileName: text("original_file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  size: integer("size").notNull(),
+  durationSeconds: integer("duration_seconds"),
+  uploadedBy: varchar("uploaded_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+}, (table) => [
+  index("idx_courtyard_incident_evidence_incident").on(table.incidentId),
 ]);
 
 export const vehicleListings = pgTable("vehicle_listings", {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileSpreadsheet, LockKeyhole, LogOut, Trash2, Upload } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, LockKeyhole, LogOut, Trash2, Upload } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -64,6 +64,48 @@ type OpsDraftResponse = {
     uploadedReports: Array<Record<string, any>>;
     updatedAt: string;
   };
+};
+type MonthlySummaryAccount = { name: string; roomNights: string };
+type MonthlySummaryForm = {
+  reportMonth: string;
+  presentedTo: string;
+  hotelName: string;
+  generalManager: string;
+  issuedBy: string;
+  issueDate: string;
+  occupancyRate: string;
+  occupancyComparison: string;
+  adr: string;
+  adrComparison: string;
+  revpar: string;
+  revparComparison: string;
+  totalRevenue: string;
+  totalRevenueComparison: string;
+  guestSatisfaction: string;
+  increasedOccupancy: string;
+  enhancedGuestExperience: string;
+  staffPerformance: string;
+  seasonalVariability: string;
+  operationalCosts: string;
+  marketingStrategies: string;
+  costManagement: string;
+  guestEngagement: string;
+  forecastComment: string;
+  forecastKeyDrivers: string;
+  risksAndChallenges: string;
+  opportunitiesForGrowth: string;
+  currentRoomNights: string;
+  currentAccountRevenue: string;
+  previousRoomNights: string;
+  roomNightVariance: string;
+  previousAccountRevenue: string;
+  accountRevenueVariance: string;
+  corporateAccounts: MonthlySummaryAccount[];
+  groups: MonthlySummaryAccount[];
+  salesNotes: string[];
+};
+type MonthlySummaryResponse = {
+  summary: null | { id: string; reportMonth: string; payload: MonthlySummaryForm; updatedAt: string };
 };
 
 const REPORT_TYPE_LABELS: Record<OpsImportResponse["reportType"], string> = {
@@ -434,6 +476,52 @@ function monthLabelFromKey(value: string) {
   return new Date(Date.UTC(year, month - 1, 1)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
+function priorMonthKey() {
+  const now = new Date();
+  return `${new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7)}`;
+}
+
+function blankMonthlySummary(reportMonth: string, propertyName: string, generalManager: string): MonthlySummaryForm {
+  return {
+    reportMonth,
+    presentedTo: "Globiwest Hospitality - Corporate Office",
+    hotelName: propertyName || "Courtyard Austin Lakeline",
+    generalManager,
+    issuedBy: `${propertyName || "Courtyard Austin Lakeline"}${generalManager ? ` & ${generalManager}` : ""}`,
+    issueDate: new Date().toISOString().slice(0, 10),
+    occupancyRate: "",
+    occupancyComparison: "",
+    adr: "",
+    adrComparison: "",
+    revpar: "",
+    revparComparison: "",
+    totalRevenue: "",
+    totalRevenueComparison: "",
+    guestSatisfaction: "",
+    increasedOccupancy: "",
+    enhancedGuestExperience: "",
+    staffPerformance: "",
+    seasonalVariability: "",
+    operationalCosts: "",
+    marketingStrategies: "",
+    costManagement: "",
+    guestEngagement: "",
+    forecastComment: "",
+    forecastKeyDrivers: "",
+    risksAndChallenges: "",
+    opportunitiesForGrowth: "",
+    currentRoomNights: "",
+    currentAccountRevenue: "",
+    previousRoomNights: "",
+    roomNightVariance: "",
+    previousAccountRevenue: "",
+    accountRevenueVariance: "",
+    corporateAccounts: Array.from({ length: 10 }, () => ({ name: "", roomNights: "" })),
+    groups: Array.from({ length: 10 }, () => ({ name: "", roomNights: "" })),
+    salesNotes: Array.from({ length: 4 }, () => ""),
+  };
+}
+
 function LabeledInput({ label, value, onChange, type = "text", moneyFormat = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; moneyFormat?: boolean }) {
   return (
     <div>
@@ -668,6 +756,15 @@ export default function OpsReportPage() {
   const [bistroModalOpen, setBistroModalOpen] = useState(false);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
   const [summaryMonthKey, setSummaryMonthKey] = useState(monthKeyFromDate(new Date().toISOString().slice(0, 10)));
+  const [monthlyReviewOpen, setMonthlyReviewOpen] = useState(false);
+  const [monthlyReviewMonth, setMonthlyReviewMonth] = useState(priorMonthKey());
+  const [monthlyReviewHydrated, setMonthlyReviewHydrated] = useState(false);
+  const [monthlyReviewSavedAt, setMonthlyReviewSavedAt] = useState("");
+  const [monthlyReviewForm, setMonthlyReviewForm] = useState<MonthlySummaryForm>(() => blankMonthlySummary(
+    priorMonthKey(),
+    "Courtyard Austin Lakeline",
+    "",
+  ));
   const [monthlyBudgets, setMonthlyBudgets] = useState<Row[]>([]);
   const [bistroProductions, setBistroProductions] = useState<Row[]>([]);
   const [meetingProductions, setMeetingProductions] = useState<Row[]>([]);
@@ -735,6 +832,15 @@ export default function OpsReportPage() {
     enabled: Boolean(access.data?.unlocked),
     queryFn: async () => {
       const response = await fetch(apiUrl("/api/opsreport/draft"), { credentials: "include" });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+  });
+  const monthlyReview = useQuery<MonthlySummaryResponse>({
+    queryKey: ["/api/opsreport/monthly-summary", monthlyReviewMonth],
+    enabled: Boolean(access.data?.unlocked && monthlyReviewMonth),
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/opsreport/monthly-summary/${monthlyReviewMonth}`), { credentials: "include" });
       if (!response.ok) throw new Error(await response.text());
       return response.json();
     },
@@ -829,6 +935,20 @@ export default function OpsReportPage() {
     mutationFn: async (payload: Record<string, any>) => apiRequest("POST", "/api/opsreport/draft", payload),
     onSuccess: () => setLastSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })),
     onError: (error: Error) => toast({ title: "Unable to save ops report draft", description: error.message, variant: "destructive" }),
+  });
+  const saveMonthlyReview = useMutation({
+    mutationFn: async (payload: MonthlySummaryForm) => {
+      const response = await apiRequest("POST", "/api/opsreport/monthly-summary", {
+        reportMonth: payload.reportMonth,
+        payload,
+      });
+      return response.json() as Promise<MonthlySummaryResponse>;
+    },
+    onSuccess: (data) => {
+      setMonthlyReviewSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+      queryClient.setQueryData(["/api/opsreport/monthly-summary", monthlyReviewMonth], data);
+    },
+    onError: (error: Error) => toast({ title: "Unable to save monthly performance review", description: error.message, variant: "destructive" }),
   });
   const removeOpsReportUpload = useMutation({
     mutationFn: async (uploadId: string) => {
@@ -925,6 +1045,56 @@ export default function OpsReportPage() {
     return { ...row, priorWeek: priorScore, weekVariance };
   }), [gssWaveRows, previousGssWaveRows]);
   const currentMonthKey = useMemo(() => monthKeyFromDate(topMetrics.weekStart), [topMetrics.weekStart]);
+  useEffect(() => {
+    setMonthlyReviewHydrated(false);
+  }, [monthlyReviewMonth]);
+
+  useEffect(() => {
+    if (!access.data?.unlocked || monthlyReview.isLoading || monthlyReviewHydrated) return;
+    const saved = monthlyReview.data?.summary?.payload;
+    if (saved) {
+      setMonthlyReviewForm({
+        ...blankMonthlySummary(monthlyReviewMonth, setup.propertyName, setup.generalManager),
+        ...saved,
+        reportMonth: monthlyReviewMonth,
+        corporateAccounts: Array.from({ length: 10 }, (_, index) => saved.corporateAccounts?.[index] || { name: "", roomNights: "" }),
+        groups: Array.from({ length: 10 }, (_, index) => saved.groups?.[index] || { name: "", roomNights: "" }),
+        salesNotes: Array.from({ length: 4 }, (_, index) => saved.salesNotes?.[index] || ""),
+      });
+      setMonthlyReviewSavedAt(new Date(monthlyReview.data!.summary!.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+    } else {
+      const next = blankMonthlySummary(monthlyReviewMonth, setup.propertyName, setup.generalManager);
+      const budget = monthlyBudgets.find((row) => row.month === monthlyReviewMonth);
+      const occupancy = budget?.actualOccupancy || "";
+      const adrValue = budget?.actualAdr || "";
+      const revenue = budget?.actualRevenue || "";
+      next.occupancyRate = occupancy ? percentDisplay(num(occupancy)) : "";
+      next.adr = adrValue ? money(num(adrValue)) : "";
+      next.revpar = occupancy && adrValue ? money(num(adrValue) * (num(occupancy) > 1 ? num(occupancy) / 100 : num(occupancy))) : "";
+      next.totalRevenue = revenue ? money(num(revenue)) : "";
+      next.guestSatisfaction = gssRows.find((row) => row.label === "ITR")?.hotel || "";
+      setMonthlyReviewForm(next);
+      setMonthlyReviewSavedAt("");
+    }
+    setMonthlyReviewHydrated(true);
+  }, [
+    access.data?.unlocked,
+    monthlyReview.data,
+    monthlyReview.isLoading,
+    monthlyReviewHydrated,
+    monthlyReviewMonth,
+    monthlyBudgets,
+    setup.propertyName,
+    setup.generalManager,
+    gssRows,
+  ]);
+
+  useEffect(() => {
+    if (!monthlyReviewOpen || !monthlyReviewHydrated || monthlyReviewForm.reportMonth !== monthlyReviewMonth) return;
+    const timeout = window.setTimeout(() => saveMonthlyReview.mutate(monthlyReviewForm), 700);
+    return () => window.clearTimeout(timeout);
+  }, [monthlyReviewOpen, monthlyReviewHydrated, monthlyReviewMonth, monthlyReviewForm]);
+
   const previousWeekReports = useMemo(
     () => (previousDraft.data?.draft?.uploadedReports || []).filter((report) => report.status !== "removed"),
     [previousDraft.data?.draft?.uploadedReports],
@@ -1518,7 +1688,55 @@ export default function OpsReportPage() {
           <TabsList className="bg-[#fffaf2]">
             <TabsTrigger value="weekly">Weekly worksheet</TabsTrigger>
             <TabsTrigger value="summary">Summary dashboard</TabsTrigger>
+            <TabsTrigger value="monthly-review">Monthly performance review</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="monthly-review" className="space-y-5">
+            <Card className={C.shell}>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-[#2f5f46]" />
+                  <CardTitle className="text-xl text-[#201814]">Monthly Performance Review</CardTitle>
+                </div>
+                <CardDescription className={C.muted}>
+                  Complete the prior month's production narrative, top accounts, top groups, and three-month outlook. Each month is stored separately and autosaves while the editor is open.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div className="w-full max-w-xs">
+                  <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>Report month</Label>
+                  <Select value={monthlyReviewMonth} onValueChange={(value) => {
+                    setMonthlyReviewMonth(value);
+                    setMonthlyReviewOpen(false);
+                  }}>
+                    <SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger>
+                    <SelectContent className={C.menu}>
+                      {Array.from({ length: 36 }, (_, index) => {
+                        const current = new Date();
+                        const date = new Date(Date.UTC(current.getUTCFullYear() - 1, index, 1));
+                        const value = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+                        return <SelectItem key={value} value={value}>{monthLabelFromKey(value)}</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <div className="mt-2 text-xs text-[#5f5247]">
+                    {monthlyReview.isLoading ? "Loading month..." : monthlyReview.data?.summary ? `Saved ${monthlyReviewSavedAt || "previously"}` : "No saved review for this month yet."}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button className={C.green} onClick={() => setMonthlyReviewOpen(true)} disabled={monthlyReview.isLoading}>
+                    <FileText className="mr-2 h-4 w-4" />Open monthly review
+                  </Button>
+                  <Button asChild variant="outline" className={`${C.outline} ${!monthlyReview.data?.summary ? "pointer-events-none opacity-50" : ""}`}>
+                    <a aria-disabled={!monthlyReview.data?.summary} href={apiUrl(`/api/opsreport/monthly-summary/${monthlyReviewMonth}/docx`)}><Download className="mr-2 h-4 w-4" />Word</a>
+                  </Button>
+                  <Button asChild variant="outline" className={`${C.outline} ${!monthlyReview.data?.summary ? "pointer-events-none opacity-50" : ""}`}>
+                    <a aria-disabled={!monthlyReview.data?.summary} href={apiUrl(`/api/opsreport/monthly-summary/${monthlyReviewMonth}/pdf`)}><Download className="mr-2 h-4 w-4" />PDF</a>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="summary" className="space-y-5">
             <Section
@@ -1871,6 +2089,188 @@ export default function OpsReportPage() {
           </TabsContent>
         </Tabs>
       </main>
+      <Dialog open={monthlyReviewOpen} onOpenChange={setMonthlyReviewOpen}>
+        <DialogContent className="max-h-[94vh] max-w-6xl overflow-hidden border-[#d7c8b5] bg-[#f3efe7] p-0 text-[#201814]">
+          <div className="flex max-h-[94vh] flex-col">
+            <DialogHeader className="border-b border-[#d7c8b5] bg-[#fffaf2] px-6 py-4">
+              <div className="flex flex-col gap-3 pr-8 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <DialogTitle>Monthly Performance Review - {monthLabelFromKey(monthlyReviewMonth)}</DialogTitle>
+                  <DialogDescription className={C.muted}>This editor follows the uploaded two-page Word template. Changes autosave for the selected month.</DialogDescription>
+                </div>
+                <Badge className={`${saveMonthlyReview.isPending ? "bg-[#b98435]" : "bg-[#2f5f46]"} w-fit text-white`}>
+                  {saveMonthlyReview.isPending ? "Autosaving..." : monthlyReviewSavedAt ? `Saved ${monthlyReviewSavedAt}` : "Autosave on"}
+                </Badge>
+              </div>
+            </DialogHeader>
+            <div className="overflow-y-auto p-4 sm:p-6">
+              <div className="mx-auto max-w-4xl space-y-6 border border-[#cdbda8] bg-white p-5 shadow-sm sm:p-8">
+                <div>
+                  <h2 className="text-2xl font-bold">Monthly Performance Review</h2>
+                  <div className="mt-4 overflow-hidden border border-[#8c8c8c] text-sm">
+                    {([
+                      ["Presented to:", "presentedTo"],
+                      ["Issued by:", "issuedBy"],
+                      ["Date:", "issueDate"],
+                    ] as const).map(([label, key]) => (
+                      <div key={key} className="grid border-b border-[#8c8c8c] last:border-b-0 sm:grid-cols-[150px_1fr]">
+                        <div className="border-b border-[#8c8c8c] bg-[#f7f7f7] px-3 py-2 font-semibold sm:border-b-0 sm:border-r">{label}</div>
+                        <Input
+                          className="h-10 rounded-none border-0 bg-white text-[#201814] shadow-none focus-visible:ring-1"
+                          type={key === "issueDate" ? "date" : "text"}
+                          value={monthlyReviewForm[key]}
+                          onChange={(event) => setMonthlyReviewForm({ ...monthlyReviewForm, [key]: event.target.value })}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-bold">Key Performance Indicators (KPIs)</h3>
+                  <div className="mt-2 space-y-3">
+                    {([
+                      ["Occupancy Rate", "occupancyRate", "occupancyComparison"],
+                      ["Average Daily Rate (ADR)", "adr", "adrComparison"],
+                      ["Revenue per Available Room (RevPAR)", "revpar", "revparComparison"],
+                      ["Total Revenue", "totalRevenue", "totalRevenueComparison"],
+                    ] as const).map(([label, valueKey, comparisonKey]) => (
+                      <div key={valueKey} className="grid gap-2 sm:grid-cols-[220px_180px_1fr] sm:items-center">
+                        <Label className="font-semibold">{label}:</Label>
+                        <Input className={C.field} value={monthlyReviewForm[valueKey]} onChange={(event) => setMonthlyReviewForm({ ...monthlyReviewForm, [valueKey]: event.target.value })} placeholder="Value" />
+                        <Input className={C.field} value={monthlyReviewForm[comparisonKey]} onChange={(event) => setMonthlyReviewForm({ ...monthlyReviewForm, [comparisonKey]: event.target.value })} placeholder="Compared to previous month / last year" />
+                      </div>
+                    ))}
+                    <div className="grid gap-2 sm:grid-cols-[220px_1fr] sm:items-center">
+                      <Label className="font-semibold">Guest Satisfaction Score:</Label>
+                      <Input className={C.field} value={monthlyReviewForm.guestSatisfaction} onChange={(event) => setMonthlyReviewForm({ ...monthlyReviewForm, guestSatisfaction: event.target.value })} />
+                    </div>
+                  </div>
+                </div>
+
+                {([
+                  ["Highlights", [
+                    ["Increased Occupancy", "increasedOccupancy"],
+                    ["Enhanced Guest Experience", "enhancedGuestExperience"],
+                    ["Staff Performance", "staffPerformance"],
+                  ]],
+                  ["Challenges", [
+                    ["Seasonal Variability", "seasonalVariability"],
+                    ["Operational Costs", "operationalCosts"],
+                  ]],
+                  ["Recommendations", [
+                    ["Marketing Strategies", "marketingStrategies"],
+                    ["Cost Management", "costManagement"],
+                    ["Guest Engagement", "guestEngagement"],
+                  ]],
+                ] as Array<[string, Array<[string, keyof MonthlySummaryForm]>]>).map(([heading, fields]) => (
+                  <div key={heading}>
+                    <h3 className="text-lg font-bold">{heading}</h3>
+                    <div className="mt-2 space-y-3">
+                      {fields.map(([label, key]) => (
+                        <div key={String(key)}>
+                          <Label className="font-semibold">{label}:</Label>
+                          <Textarea className={`mt-1 min-h-[72px] ${C.field}`} value={String(monthlyReviewForm[key])} onChange={(event) => setMonthlyReviewForm({ ...monthlyReviewForm, [key]: event.target.value })} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                <div>
+                  <h3 className="text-lg font-bold">Three-month Forecast</h3>
+                  <div className="mt-2 space-y-3">
+                    <div><Label className="font-semibold">Forecast comment: Occ%, ADR</Label><Textarea className={`mt-1 ${C.field}`} value={monthlyReviewForm.forecastComment} onChange={(event) => setMonthlyReviewForm({ ...monthlyReviewForm, forecastComment: event.target.value })} /></div>
+                    <div><Label className="font-semibold">Forecast: Key Drivers</Label><Textarea className={`mt-1 min-h-[90px] ${C.field}`} value={monthlyReviewForm.forecastKeyDrivers} onChange={(event) => setMonthlyReviewForm({ ...monthlyReviewForm, forecastKeyDrivers: event.target.value })} /></div>
+                    <div><Label className="font-semibold">Risks and Challenges</Label><Textarea className={`mt-1 min-h-[90px] ${C.field}`} value={monthlyReviewForm.risksAndChallenges} onChange={(event) => setMonthlyReviewForm({ ...monthlyReviewForm, risksAndChallenges: event.target.value })} /></div>
+                    <div><Label className="font-semibold">Opportunities for Growth</Label><Textarea className={`mt-1 min-h-[90px] ${C.field}`} value={monthlyReviewForm.opportunitiesForGrowth} onChange={(event) => setMonthlyReviewForm({ ...monthlyReviewForm, opportunitiesForGrowth: event.target.value })} /></div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-bold">Top Corporate Accounts and Groups</h3>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {([
+                      ["Current room nights", "currentRoomNights"],
+                      ["Current total revenue", "currentAccountRevenue"],
+                      ["Previous month room nights", "previousRoomNights"],
+                      ["Room night variance", "roomNightVariance"],
+                      ["Previous month revenue", "previousAccountRevenue"],
+                      ["Revenue variance", "accountRevenueVariance"],
+                    ] as Array<[string, keyof MonthlySummaryForm]>).map(([label, key]) => (
+                      <div key={String(key)}><Label>{label}</Label><Input className={`mt-1 ${C.field}`} value={String(monthlyReviewForm[key])} onChange={(event) => setMonthlyReviewForm({ ...monthlyReviewForm, [key]: event.target.value })} /></div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-center text-lg font-bold">TOP ACCOUNTS FOR {monthLabelFromKey(monthlyReviewMonth).toUpperCase()}</h3>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[700px] border-collapse text-sm">
+                      <thead>
+                        <tr className={C.header}>
+                          <th className="border border-[#c9d2d8] p-2">#</th><th className="border border-[#c9d2d8] p-2 text-left">Top Corporate Accounts</th><th className="border border-[#c9d2d8] p-2">RMNTS</th>
+                          <th className="border border-[#c9d2d8] p-2">#</th><th className="border border-[#c9d2d8] p-2 text-left">Top Groups</th><th className="border border-[#c9d2d8] p-2">RMNTS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: 10 }, (_, index) => (
+                          <tr key={index} className="odd:bg-white even:bg-[#fffaf2]">
+                            <td className="border border-[#d7c8b5] p-2 text-center">{index + 1}</td>
+                            <td className="border border-[#d7c8b5] p-1"><Input className={C.field} value={monthlyReviewForm.corporateAccounts[index]?.name || ""} onChange={(event) => {
+                              const corporateAccounts = monthlyReviewForm.corporateAccounts.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item);
+                              setMonthlyReviewForm({ ...monthlyReviewForm, corporateAccounts });
+                            }} /></td>
+                            <td className="border border-[#d7c8b5] p-1"><Input className={`${C.field} text-center`} value={monthlyReviewForm.corporateAccounts[index]?.roomNights || ""} onChange={(event) => {
+                              const corporateAccounts = monthlyReviewForm.corporateAccounts.map((item, itemIndex) => itemIndex === index ? { ...item, roomNights: event.target.value } : item);
+                              setMonthlyReviewForm({ ...monthlyReviewForm, corporateAccounts });
+                            }} /></td>
+                            <td className="border border-[#d7c8b5] p-2 text-center">{index + 1}</td>
+                            <td className="border border-[#d7c8b5] p-1"><Input className={C.field} value={monthlyReviewForm.groups[index]?.name || ""} onChange={(event) => {
+                              const groups = monthlyReviewForm.groups.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item);
+                              setMonthlyReviewForm({ ...monthlyReviewForm, groups });
+                            }} /></td>
+                            <td className="border border-[#d7c8b5] p-1"><Input className={`${C.field} text-center`} value={monthlyReviewForm.groups[index]?.roomNights || ""} onChange={(event) => {
+                              const groups = monthlyReviewForm.groups.map((item, itemIndex) => itemIndex === index ? { ...item, roomNights: event.target.value } : item);
+                              setMonthlyReviewForm({ ...monthlyReviewForm, groups });
+                            }} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-bold">Sales Pipeline Notes</h3>
+                  <div className="mt-2 space-y-2">
+                    {monthlyReviewForm.salesNotes.map((note, index) => (
+                      <div key={index} className="grid grid-cols-[24px_1fr] items-start gap-2">
+                        <div className="pt-2 text-center font-semibold">•</div>
+                        <Textarea className={`min-h-[58px] ${C.field}`} value={note} onChange={(event) => {
+                          const salesNotes = monthlyReviewForm.salesNotes.map((item, itemIndex) => itemIndex === index ? event.target.value : item);
+                          setMonthlyReviewForm({ ...monthlyReviewForm, salesNotes });
+                        }} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#d7c8b5] bg-[#fffaf2] px-6 py-4">
+              <div className="flex gap-2">
+                <Button asChild variant="outline" className={`${C.outline} ${!monthlyReview.data?.summary ? "pointer-events-none opacity-50" : ""}`}><a aria-disabled={!monthlyReview.data?.summary} href={apiUrl(`/api/opsreport/monthly-summary/${monthlyReviewMonth}/docx`)}><Download className="mr-2 h-4 w-4" />Download Word</a></Button>
+                <Button asChild variant="outline" className={`${C.outline} ${!monthlyReview.data?.summary ? "pointer-events-none opacity-50" : ""}`}><a aria-disabled={!monthlyReview.data?.summary} href={apiUrl(`/api/opsreport/monthly-summary/${monthlyReviewMonth}/pdf`)}><Download className="mr-2 h-4 w-4" />Download PDF</a></Button>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" className={C.outline} onClick={() => setMonthlyReviewOpen(false)}>Close</Button>
+                <Button className={C.green} onClick={() => saveMonthlyReview.mutate(monthlyReviewForm)} disabled={saveMonthlyReview.isPending}>Save now</Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={budgetModalOpen} onOpenChange={setBudgetModalOpen}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-hidden border-[#d7c8b5] bg-[#fffaf2] p-0 text-[#201814]">
           <div className="flex max-h-[90vh] flex-col">

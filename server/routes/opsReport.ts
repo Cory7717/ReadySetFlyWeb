@@ -11,12 +11,18 @@ import {
   scheduleShiftAssignments,
   scheduleShiftTypes,
   courtyardOpsReportDrafts,
+  courtyardOpsMonthlySummaries,
   courtyardOpsReportUserSettings,
   tipsKioskSettings,
   tipsUsers,
   weeklySchedules,
 } from "@shared/schema";
 import { parseOpsReportFile } from "../opsReportParsers";
+import {
+  buildMonthlySummaryDocx,
+  buildMonthlySummaryPdf,
+  type OpsMonthlySummaryPayload,
+} from "../opsMonthlySummaryDocuments";
 
 const require = createRequire(import.meta.url);
 const laborUpload = multer({
@@ -50,6 +56,52 @@ const draftSchema = z.object({
   weekLabel: z.string().min(1).default("Week 1"),
   payload: z.record(z.unknown()),
   uploadedReports: z.array(z.record(z.unknown())).default([]),
+});
+const monthlyAccountSchema = z.object({
+  name: z.string().default(""),
+  roomNights: z.string().default(""),
+});
+const monthlySummaryPayloadSchema = z.object({
+  reportMonth: z.string().regex(/^\d{4}-\d{2}$/),
+  presentedTo: z.string().default("Globiwest Hospitality - Corporate Office"),
+  hotelName: z.string().default("Courtyard Austin Lakeline"),
+  generalManager: z.string().default(""),
+  issuedBy: z.string().default(""),
+  issueDate: z.string().default(""),
+  occupancyRate: z.string().default(""),
+  occupancyComparison: z.string().default(""),
+  adr: z.string().default(""),
+  adrComparison: z.string().default(""),
+  revpar: z.string().default(""),
+  revparComparison: z.string().default(""),
+  totalRevenue: z.string().default(""),
+  totalRevenueComparison: z.string().default(""),
+  guestSatisfaction: z.string().default(""),
+  increasedOccupancy: z.string().default(""),
+  enhancedGuestExperience: z.string().default(""),
+  staffPerformance: z.string().default(""),
+  seasonalVariability: z.string().default(""),
+  operationalCosts: z.string().default(""),
+  marketingStrategies: z.string().default(""),
+  costManagement: z.string().default(""),
+  guestEngagement: z.string().default(""),
+  forecastComment: z.string().default(""),
+  forecastKeyDrivers: z.string().default(""),
+  risksAndChallenges: z.string().default(""),
+  opportunitiesForGrowth: z.string().default(""),
+  currentRoomNights: z.string().default(""),
+  currentAccountRevenue: z.string().default(""),
+  previousRoomNights: z.string().default(""),
+  roomNightVariance: z.string().default(""),
+  previousAccountRevenue: z.string().default(""),
+  accountRevenueVariance: z.string().default(""),
+  corporateAccounts: z.array(monthlyAccountSchema).max(10).default([]),
+  groups: z.array(monthlyAccountSchema).max(10).default([]),
+  salesNotes: z.array(z.string()).max(4).default([]),
+});
+const monthlySummarySchema = z.object({
+  reportMonth: z.string().regex(/^\d{4}-\d{2}$/),
+  payload: monthlySummaryPayloadSchema,
 });
 
 const OPS_REPORT_ADMIN_EMAILS = new Set(
@@ -315,6 +367,16 @@ function publicDraft(row: any) {
   };
 }
 
+function publicMonthlySummary(row: any) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    reportMonth: row.reportMonth,
+    payload: row.payloadJson || {},
+    updatedAt: row.updatedAt,
+  };
+}
+
 async function parsePdfText(buffer: Buffer) {
   const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (buffer: Buffer) => Promise<{ text?: string }>;
   const parsed = await pdfParse(buffer);
@@ -441,6 +503,86 @@ export function registerOpsReportRoutes(app: Express) {
         req.session.save(() => undefined);
       }
       res.json({ draft: publicDraft(draft) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/monthly-summary/:reportMonth", requireOpsManager as RequestHandler, async (req, res, next) => {
+    try {
+      if (!/^\d{4}-\d{2}$/.test(req.params.reportMonth)) return res.status(400).json({ error: "Valid report month is required." });
+      const [summary] = await db
+        .select()
+        .from(courtyardOpsMonthlySummaries)
+        .where(and(
+          eq(courtyardOpsMonthlySummaries.propertyId, "courtyard-austin-lakeline"),
+          eq(courtyardOpsMonthlySummaries.reportMonth, req.params.reportMonth),
+        ))
+        .limit(1);
+      res.json({ summary: publicMonthlySummary(summary) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/monthly-summary", requireOpsManager as RequestHandler, async (req: any, res, next) => {
+    try {
+      const parsed = monthlySummarySchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Monthly summary data is invalid.", validation: parsed.error.format() });
+      const data = parsed.data;
+      const [summary] = await db
+        .insert(courtyardOpsMonthlySummaries)
+        .values({
+          propertyId: "courtyard-austin-lakeline",
+          reportMonth: data.reportMonth,
+          payloadJson: data.payload,
+          updatedBy: req.opsUser?.id || null,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [courtyardOpsMonthlySummaries.propertyId, courtyardOpsMonthlySummaries.reportMonth],
+          set: {
+            payloadJson: data.payload,
+            updatedBy: req.opsUser?.id || null,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+      res.json({ summary: publicMonthlySummary(summary) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/monthly-summary/:reportMonth/:format", requireOpsManager as RequestHandler, async (req, res, next) => {
+    try {
+      const parsedParams = z.object({
+        reportMonth: z.string().regex(/^\d{4}-\d{2}$/),
+        format: z.enum(["docx", "pdf"]),
+      }).safeParse(req.params);
+      if (!parsedParams.success) return res.status(400).json({ error: "Valid report month and export format are required." });
+      const [summary] = await db
+        .select()
+        .from(courtyardOpsMonthlySummaries)
+        .where(and(
+          eq(courtyardOpsMonthlySummaries.propertyId, "courtyard-austin-lakeline"),
+          eq(courtyardOpsMonthlySummaries.reportMonth, parsedParams.data.reportMonth),
+        ))
+        .limit(1);
+      if (!summary) return res.status(404).json({ error: "Save this monthly summary before downloading it." });
+      const payloadResult = monthlySummaryPayloadSchema.safeParse(summary.payloadJson);
+      if (!payloadResult.success) return res.status(422).json({ error: "The saved monthly summary is incomplete." });
+      const payload = payloadResult.data as OpsMonthlySummaryPayload;
+      const hotelSlug = String(payload.hotelName || "Hotel").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
+      const baseName = `Monthly-Performance-Summary-${hotelSlug}-${parsedParams.data.reportMonth}`;
+      if (parsedParams.data.format === "docx") {
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        res.setHeader("Content-Disposition", `attachment; filename="${baseName}.docx"`);
+        return res.send(buildMonthlySummaryDocx(payload));
+      }
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${baseName}.pdf"`);
+      return res.send(await buildMonthlySummaryPdf(payload));
     } catch (error) {
       next(error);
     }

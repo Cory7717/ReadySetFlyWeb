@@ -753,6 +753,19 @@ export const courtyardOpsReportUserSettings = pgTable("courtyard_ops_report_user
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const courtyardOpsMonthlySummaries = pgTable("courtyard_ops_monthly_summaries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: text("property_id").notNull().default("courtyard-austin-lakeline"),
+  reportMonth: text("report_month").notNull(),
+  payloadJson: jsonb("payload_json").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  updatedBy: varchar("updated_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_courtyard_ops_monthly_summary_period").on(table.propertyId, table.reportMonth),
+  index("idx_courtyard_ops_monthly_summary_updated").on(table.updatedAt),
+]);
+
 export const courtyardIncidentReports = pgTable("courtyard_incident_reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   propertyId: text("property_id").notNull().default("courtyard-austin-lakeline"),

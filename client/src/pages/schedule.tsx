@@ -859,15 +859,21 @@ function ForecastPanel({
     setForecastDirty(true);
     setDays((current) => current.map((item, i) => {
       if (i !== index) return item;
+      if (key === "arrivals") {
+        const arrivals = Math.max(0, Math.round(numberValue(value)));
+        return {
+          ...item,
+          arrivals,
+          stayovers: Math.max(0, numberValue(item.roomsSold) - arrivals),
+        };
+      }
       if (key !== "roomsSold") return { ...item, [key]: value };
 
       const nextRoomsSold = Math.max(0, Math.round(numberValue(value)));
       const previousRoomsSold = numberValue(item.roomsSold);
-      const roomDelta = nextRoomsSold - previousRoomsSold;
       const capacity = inferRoomCapacity(item);
       const occupancyPercent = Number(((nextRoomsSold / capacity) * 100).toFixed(2));
-      const previousArrivals = numberValue(item.arrivals);
-      const arrivals = Math.max(0, Math.round(previousArrivals + roomDelta));
+      const arrivals = Math.max(0, Math.round(numberValue(item.arrivals)));
       const stayovers = Math.max(0, nextRoomsSold - arrivals);
       const currentAdr = previousRoomsSold > 0 ? numberValue(item.roomRevenue) / previousRoomsSold : 0;
       const nextAdr = currentAdr > 0 ? currentAdr + 2 : 0;
@@ -890,7 +896,9 @@ function ForecastPanel({
           <div>
             <CardTitle className={C.ink}>{t("Forecast")}</CardTitle>
             <CardDescription className={C.muted}>
-              {spanish ? "Cuartos, ocupacion, llegadas, salidas y notas controlan alertas de personal." : "Rooms, occupancy, arrivals, departures, and notes drive staffing warnings."}
+              {spanish
+                ? "Cuartos, ocupacion, llegadas, salidas y notas controlan alertas de personal. Cuartos y llegadas recalculan estadias."
+                : "Rooms, occupancy, arrivals, departures, and notes drive staffing warnings. Rooms sold and arrivals recalculate stayovers."}
             </CardDescription>
           </div>
           {(editable || canActualize) && (

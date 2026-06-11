@@ -393,6 +393,7 @@ const gridEntrySchema = z.object({
   userId: z.string().min(1),
   entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   tipAmount: z.coerce.number().min(0).max(100000),
+  grossSales: z.coerce.number().min(0).max(1000000).default(0),
   notes: z.string().max(1000).optional().nullable(),
 });
 
@@ -769,6 +770,8 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
         date,
         entryId: entry?.id || null,
         tipAmount: moneyString(amount),
+        grossSales: moneyString(entry?.grossSales),
+        personalTipPercent: moneyNumber(entry?.grossSales) > 0 ? (amount / moneyNumber(entry?.grossSales)) * 100 : 0,
         notes: entry?.notes || "",
         status: entry?.status || "draft",
         confirmed: entry?.status === "confirmed" || entry?.status === "submitted",
@@ -778,10 +781,11 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
   });
   const dayTotals = period.days.map((date) => {
     const totalTips = rows.reduce((sum, row) => sum + moneyNumber(row.cells.find((cell) => cell.date === date)?.tipAmount), 0);
+    const shiftGrossSales = rows.reduce((sum, row) => sum + moneyNumber(row.cells.find((cell) => cell.date === date)?.grossSales), 0);
     const activeCells = rows
       .map((row) => row.cells.find((cell) => cell.date === date))
       .filter((cell) => moneyNumber(cell?.tipAmount) > 0);
-    const grossSales = moneyNumber(summariesByDate.get(date)?.grossSales);
+    const grossSales = shiftGrossSales > 0 ? shiftGrossSales : moneyNumber(summariesByDate.get(date)?.grossSales);
     const summary = summariesByDate.get(date);
     const taxAmount = moneyNumber(summary?.taxAmount);
     const netSales = Math.max(0, grossSales - taxAmount);
@@ -1837,6 +1841,7 @@ export function registerTipsRoutes(app: Express) {
         return res.status(423).json({ error: "This associate/day is confirmed. A manager must unlock it before changes can be made." });
       }
       const amount = parsed.data.tipAmount.toFixed(2);
+      const grossSales = parsed.data.grossSales.toFixed(2);
       const [entry] = await db
         .insert(tipEntries)
         .values({
@@ -1847,7 +1852,7 @@ export function registerTipsRoutes(app: Express) {
           tipAmount: amount,
           cashTips: "0.00",
           creditTips: amount,
-          grossSales: "0.00",
+          grossSales,
           coversServed: null,
           shiftType: "other",
           notes: parsed.data.notes || null,
@@ -1859,13 +1864,33 @@ export function registerTipsRoutes(app: Express) {
             tipAmount: amount,
             cashTips: "0.00",
             creditTips: amount,
+            grossSales,
             notes: parsed.data.notes || null,
             status: "saved",
             updatedAt: new Date(),
           },
         })
         .returning();
-      res.json({ entry: { ...entry, tipAmount: moneyString(entry.tipAmount), creditTips: moneyString(entry.creditTips) } });
+      const dateEntries = await db.select({ grossSales: tipEntries.grossSales }).from(tipEntries).where(eq(tipEntries.entryDate, parsed.data.entryDate));
+      const dailyGrossSales = dateEntries.reduce((sum, row) => sum + moneyNumber(row.grossSales), 0);
+      await db
+        .insert(tipGridDaySummaries)
+        .values({
+          summaryDate: parsed.data.entryDate,
+          payPeriodStart: period.start,
+          payPeriodEnd: period.end,
+          grossSales: dailyGrossSales.toFixed(2),
+          updatedBy: req.tipsUser?.id || null,
+        })
+        .onConflictDoUpdate({
+          target: tipGridDaySummaries.summaryDate,
+          set: {
+            grossSales: dailyGrossSales.toFixed(2),
+            updatedBy: req.tipsUser?.id || null,
+            updatedAt: new Date(),
+          },
+        });
+      res.json({ entry: { ...entry, tipAmount: moneyString(entry.tipAmount), creditTips: moneyString(entry.creditTips), grossSales: moneyString(entry.grossSales) } });
     } catch (error) {
       next(error);
     }
@@ -2040,6 +2065,9 @@ export function registerTipsRoutes(app: Express) {
     try {
       const [entry] = await db.select().from(tipEntries).where(eq(tipEntries.id, req.params.id)).limit(1);
       if (!entry) return res.status(404).json({ error: "Tip entry not found" });
+      if (moneyNumber(entry.tipAmount) > 0 && moneyNumber(entry.grossSales) <= 0) {
+        return res.status(409).json({ error: "Enter this associate's gross shift sales before confirming the tip entry." });
+      }
       const submission = await getGridSubmission(entry.payPeriodStart, entry.payPeriodEnd);
       if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
       const [updated] = await db.update(tipEntries).set({ status: "confirmed", updatedAt: new Date() }).where(eq(tipEntries.id, entry.id)).returning();
@@ -2120,6 +2148,8 @@ export function registerTipsRoutes(app: Express) {
       const daysWithTips = grid.dayTotals.filter((day: any) => moneyNumber(day.totalTips) > 0);
       const missingReports = daysWithTips.filter((day: any) => !day.report);
       if (missingReports.length > 0) return res.status(400).json({ error: "Every day with entered tips needs a sales report image before final submission." });
+      const missingShiftSales = grid.rows.flatMap((row: any) => row.cells.filter((cell: any) => moneyNumber(cell.tipAmount) > 0 && moneyNumber(cell.grossSales) <= 0));
+      if (missingShiftSales.length > 0) return res.status(400).json({ error: "Every associate tip entry needs gross shift sales before final submission." });
       const unconfirmedEntries = grid.rows.flatMap((row: any) => row.cells.filter((cell: any) => moneyNumber(cell.tipAmount) > 0 && !cell.confirmed));
       if (unconfirmedEntries.length > 0) return res.status(400).json({ error: "Every associate tip amount must be confirmed before final submission." });
       let [submission] = await db

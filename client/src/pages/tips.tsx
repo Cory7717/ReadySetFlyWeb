@@ -108,6 +108,8 @@ type TipsGridCell = {
   date: string;
   entryId: string | null;
   tipAmount: string;
+  grossSales: string;
+  personalTipPercent: number;
   notes: string;
   status: string;
   confirmed: boolean;
@@ -532,6 +534,12 @@ function DayEditor({
               </Select>
             </div>
           </div>
+          <div className="rounded-lg border border-[#bdd5c3] bg-[#e8f1ea] p-3 text-center text-[#173c25]">
+            <div className="text-xs font-semibold uppercase tracking-wide">Personal tip percentage</div>
+            <div className="text-2xl font-semibold">
+              {formatPercent(Number(grossSales || 0) > 0 ? (Number(creditTips || 0) / Number(grossSales)) * 100 : 0)}
+            </div>
+          </div>
           <div>
             <Label>Notes</Label>
             <Textarea className={C.field} value={notes} disabled={locked} onChange={(event) => setNotes(event.target.value)} placeholder="Optional notes" rows={2} />
@@ -716,10 +724,12 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [entrySalesDrafts, setEntrySalesDrafts] = useState<Record<string, string>>({});
   const [salesDrafts, setSalesDrafts] = useState<Record<string, Record<string, string>>>({});
   const [addAssociateOpen, setAddAssociateOpen] = useState(false);
   const [activeEntry, setActiveEntry] = useState<{ userId: string; date: string } | null>(null);
   const [entryModalAmount, setEntryModalAmount] = useState("");
+  const [entryModalSales, setEntryModalSales] = useState("");
   const [associateForm, setAssociateForm] = useState({ firstName: "", lastName: "", employeeDisplayName: "", position: "Bistro attendant", email: "" });
   const [selectedPeriodStart, setSelectedPeriodStart] = useState("");
   const [banquetForm, setBanquetForm] = useState({ eventDate: todayKey(), reportType: "banquet_service" as "banquet_service" | "group_breakfast", eventName: "", grossSales: "", banquetTips: "", notes: "" });
@@ -746,8 +756,8 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
     onError: (error: Error) => toast({ title: "Unable to add associate", description: error.message, variant: "destructive" }),
   });
   const saveEntry = useMutation({
-    mutationFn: async ({ userId, entryDate, tipAmount }: { userId: string; entryDate: string; tipAmount: string }) => {
-      const response = await apiRequest("POST", "/api/tips/grid/entries", { userId, entryDate, tipAmount });
+    mutationFn: async ({ userId, entryDate, tipAmount, grossSales }: { userId: string; entryDate: string; tipAmount: string; grossSales: string }) => {
+      const response = await apiRequest("POST", "/api/tips/grid/entries", { userId, entryDate, tipAmount, grossSales });
       return response.json();
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] }),
@@ -852,12 +862,18 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
 
   const canUnlock = Boolean(currentUser?.isAdmin);
   const missingReportDays = grid.dayTotals.filter((day) => Number(day.totalTips) > 0 && !day.report);
+  const missingShiftSalesCount = grid.rows.reduce((count, row) => count + row.cells.filter((cell) => Number(cell.tipAmount) > 0 && Number(cell.grossSales) <= 0).length, 0);
   const unconfirmedCount = grid.rows.reduce((count, row) => count + row.cells.filter((cell) => Number(cell.tipAmount) > 0 && !cell.confirmed).length, 0);
   const enteredDays = grid.dayTotals.filter((day) => Number(day.totalTips) > 0).length;
   const week1Days = grid.period.days.slice(0, 7);
   const week2Days = grid.period.days.slice(7, 14);
   const dayTotal = (date: string) => grid.dayTotals.find((day) => day.date === date);
   const cellValue = (row: TipsGridRow, cell: TipsGridCell) => drafts[`${row.associate.id}:${cell.date}`] ?? cell.tipAmount;
+  const cellSalesValue = (row: TipsGridRow, cell: TipsGridCell) => entrySalesDrafts[`${row.associate.id}:${cell.date}`] ?? cell.grossSales;
+  const personalTipPercent = (row: TipsGridRow, cell: TipsGridCell) => {
+    const sales = Number(cellSalesValue(row, cell) || 0);
+    return sales > 0 ? (Number(cellValue(row, cell) || 0) / sales) * 100 : 0;
+  };
   const salesFieldValue = (date: string, field: keyof TipsGrid["dayTotals"][number]) => salesDrafts[date]?.[field as string] ?? String(dayTotal(date)?.[field] ?? "0.00");
   const canManageSales = Boolean(grid.canManageSales);
   const banquetRate = banquetForm.reportType === "group_breakfast" ? 0.18 : 0.21;
@@ -887,9 +903,10 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
     setBanquetFile(null);
   };
   const commitCell = (row: TipsGridRow, cell: TipsGridCell) => {
-    const value = cellValue(row, cell);
-    if (value === cell.tipAmount || grid.locked || cell.confirmed) return;
-    saveEntry.mutate({ userId: row.associate.id, entryDate: cell.date, tipAmount: value || "0" });
+    const tipAmount = cellValue(row, cell);
+    const grossSales = cellSalesValue(row, cell);
+    if ((tipAmount === cell.tipAmount && grossSales === cell.grossSales) || grid.locked || cell.confirmed) return;
+    saveEntry.mutate({ userId: row.associate.id, entryDate: cell.date, tipAmount: tipAmount || "0", grossSales: grossSales || "0" });
   };
   const commitSales = (date: string) => {
     if (grid.locked || !canManageSales) return;
@@ -908,11 +925,18 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const openEntryModal = (row: TipsGridRow, cell: TipsGridCell) => {
     setActiveEntry({ userId: row.associate.id, date: cell.date });
     setEntryModalAmount(cellValue(row, cell));
+    setEntryModalSales(cellSalesValue(row, cell));
   };
   const saveEntryModal = () => {
     if (!activeRow || !activeCell || grid.locked || activeCell.confirmed) return;
-    saveEntry.mutate({ userId: activeRow.associate.id, entryDate: activeCell.date, tipAmount: entryModalAmount || "0" });
+    saveEntry.mutate({
+      userId: activeRow.associate.id,
+      entryDate: activeCell.date,
+      tipAmount: entryModalAmount || "0",
+      grossSales: entryModalSales || "0",
+    });
     setDrafts((current) => ({ ...current, [`${activeRow.associate.id}:${activeCell.date}`]: entryModalAmount || "0" }));
+    setEntrySalesDrafts((current) => ({ ...current, [`${activeRow.associate.id}:${activeCell.date}`]: entryModalSales || "0" }));
     setActiveEntry(null);
   };
   const renderSalesInput = (date: string, field: "grossSales" | "taxAmount" | "beerSales" | "liquorSales" | "foodSales" | "wineSales", label: string) => (
@@ -1033,6 +1057,8 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                       </div>
                       <div className="text-right">
                         <div className="text-lg font-semibold text-[#201814]">{formatMoney(cellValue(row, cell))}</div>
+                        <div className="text-xs text-[#5f5247]">Sales {formatMoney(cellSalesValue(row, cell))}</div>
+                        <div className="text-xs font-semibold text-[#2f5f46]">Personal {formatPercent(personalTipPercent(row, cell))}</div>
                         <div className={`text-xs ${cell.confirmed ? "text-emerald-700" : Number(cellValue(row, cell)) > 0 ? "text-amber-800" : "text-[#5f5247]"}`}>
                           {cell.confirmed ? "Confirmed" : Number(cellValue(row, cell)) > 0 ? "Needs confirm" : "Tap to enter"}
                         </div>
@@ -1127,7 +1153,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                 </th>
                 {days.map((date) => (
                   <th key={`entry-${date}`} className="border-b border-r border-[#e0d3c1] p-2 text-center text-xs font-semibold uppercase tracking-wide text-[#5f5247]">
-                    Associate CC tips
+                    Associate tips / shift sales
                   </th>
                 ))}
                 <th className="border-b border-[#e0d3c1] p-3 text-right">Associate total</th>
@@ -1145,19 +1171,44 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                     const lockedCell = grid.locked || cell.confirmed;
                     return (
                       <td key={`${row.associate.id}-${date}`} className="border-r border-t border-[#e0d3c1] p-2 align-top">
-                        <div className="relative">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#5f5247]">$</span>
-                          <Input
-                            className={`${C.field} h-9 pl-6 text-right`}
-                            inputMode="decimal"
-                            disabled={lockedCell}
-                            value={cellValue(row, cell)}
-                            onChange={(event) => setDrafts((current) => ({ ...current, [`${row.associate.id}:${cell.date}`]: event.target.value.replace(/[^0-9.]/g, "") }))}
-                            onBlur={() => commitCell(row, cell)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") event.currentTarget.blur();
-                            }}
-                          />
+                        <div className="space-y-2">
+                          <div>
+                            <div className="mb-1 text-[10px] font-semibold uppercase text-[#5f5247]">CC tips</div>
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#5f5247]">$</span>
+                              <Input
+                                className={`${C.field} h-9 pl-6 text-right`}
+                                inputMode="decimal"
+                                disabled={lockedCell}
+                                value={cellValue(row, cell)}
+                                onChange={(event) => setDrafts((current) => ({ ...current, [`${row.associate.id}:${cell.date}`]: event.target.value.replace(/[^0-9.]/g, "") }))}
+                                onBlur={() => commitCell(row, cell)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") event.currentTarget.blur();
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="mb-1 text-[10px] font-semibold uppercase text-[#5f5247]">Shift sales</div>
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#5f5247]">$</span>
+                              <Input
+                                className={`${C.field} h-9 pl-6 text-right`}
+                                inputMode="decimal"
+                                disabled={lockedCell}
+                                value={cellSalesValue(row, cell)}
+                                onChange={(event) => setEntrySalesDrafts((current) => ({ ...current, [`${row.associate.id}:${cell.date}`]: event.target.value.replace(/[^0-9.]/g, "") }))}
+                                onBlur={() => commitCell(row, cell)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") event.currentTarget.blur();
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div className="rounded-md bg-[#e8f1ea] px-2 py-1 text-center text-xs font-semibold text-[#173c25]">
+                            Personal tip % {formatPercent(personalTipPercent(row, cell))}
+                          </div>
                         </div>
                         <div className="mt-2 min-h-8">
                           {cell.confirmed ? (
@@ -1168,10 +1219,12 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                             ) : (
                               <Badge variant="outline" className="w-full justify-center border-emerald-300 bg-emerald-50 text-emerald-800">Confirmed</Badge>
                             )
-                          ) : Number(cellValue(row, cell)) > 0 && cell.entryId ? (
+                          ) : Number(cellValue(row, cell)) > 0 && Number(cellSalesValue(row, cell)) > 0 && cell.entryId ? (
                             <Button type="button" size="sm" className={`h-7 w-full text-xs ${C.green}`} onClick={() => confirmEntry.mutate(cell.entryId!)}>
                               Confirm
                             </Button>
+                          ) : Number(cellValue(row, cell)) > 0 ? (
+                            <div className="text-center text-[10px] text-amber-800">Enter shift sales to confirm</div>
                           ) : null}
                         </div>
                       </td>
@@ -1223,6 +1276,9 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
               <Badge variant="outline" className={unconfirmedCount ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-800"}>
                 {unconfirmedCount} unconfirmed entries
               </Badge>
+              <Badge variant="outline" className={missingShiftSalesCount ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-800"}>
+                {missingShiftSalesCount} missing shift sales
+              </Badge>
               {grid.locked && <Badge className="bg-[#1f2937] text-white">Submitted and locked</Badge>}
             </div>
           </CardContent>
@@ -1238,7 +1294,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
               <UserPlus className="mr-2 h-4 w-4" />
               Add associate to grid
             </Button>
-            <Button className={`w-full ${C.green}`} disabled={grid.locked || submitGrid.isPending || missingReportDays.length > 0 || unconfirmedCount > 0} onClick={() => submitGrid.mutate()}>
+            <Button className={`w-full ${C.green}`} disabled={grid.locked || submitGrid.isPending || missingReportDays.length > 0 || missingShiftSalesCount > 0 || unconfirmedCount > 0} onClick={() => submitGrid.mutate()}>
               <ShieldCheck className="mr-2 h-4 w-4" />
               {submitGrid.isPending ? "Submitting..." : "Submit final tips"}
             </Button>
@@ -1255,6 +1311,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
               </Button>
             )}
             {missingReportDays.length > 0 && <div className="text-sm text-amber-900">Upload a sales report image for every day with entered tips before submitting.</div>}
+            {missingShiftSalesCount > 0 && <div className="text-sm text-amber-900">Enter gross sales for every associate shift with tips before submitting.</div>}
             {unconfirmedCount > 0 && <div className="text-sm text-amber-900">Each associate must confirm their entered tip amount before final submission.</div>}
           </CardContent>
         </Card>
@@ -1266,7 +1323,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
             <div>
               <CardTitle className={C.ink}>Bistro sales</CardTitle>
               <CardDescription className={C.muted}>
-                GM/admin, Bistro Manager, or Bistro Supervisor can enter daily sales. Tip percentage uses net sales after tax.
+                Daily gross sales are summed automatically from all associate shift entries. Managers can enter tax and sales-category totals. Full-day tip percentage uses net sales after tax.
               </CardDescription>
             </div>
             <Button type="button" variant="outline" className={`${C.outline} shrink-0`} onClick={() => setSalesOpen((open) => !open)} aria-expanded={salesOpen}>
@@ -1301,8 +1358,8 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
             </div>
           </div>
           {!canManageSales && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              Sales entry is limited to admin/GM, Bistro Manager, or Bistro Supervisor accounts.
+            <div className="rounded-lg border border-[#bdd5c3] bg-[#e8f1ea] p-3 text-sm text-[#173c25]">
+              Associates enter their own shift sales with their tips. Tax and sales-category reconciliation is limited to management.
             </div>
           )}
           {salesOpen && (
@@ -1325,7 +1382,10 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                             </Button>
                           </div>
                           <div className="grid gap-2 sm:grid-cols-3">
-                            {renderSalesInput(date, "grossSales", "Gross")}
+                            <div className="rounded-md border border-[#e0d3c1] bg-[#fbf6ee] p-2">
+                              <div className="text-xs text-[#5f5247]">Gross from associate shifts</div>
+                              <div className="text-lg font-semibold text-[#201814]">{formatMoney(totalForDay?.grossSales)}</div>
+                            </div>
                             {renderSalesInput(date, "taxAmount", "Tax")}
                             {renderSalesInput(date, "foodSales", "Food")}
                             {renderSalesInput(date, "beerSales", "Beer")}
@@ -1504,6 +1564,28 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                   />
                 </div>
               </div>
+              <div>
+                <Label>Gross sales for this associate's shift</Label>
+                <div className="relative mt-1">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl text-[#5f5247]">$</span>
+                  <Input
+                    className={`${C.field} h-14 pl-9 text-right text-2xl`}
+                    inputMode="decimal"
+                    disabled={grid.locked || activeCell.confirmed}
+                    value={entryModalSales}
+                    onChange={(event) => setEntryModalSales(event.target.value.replace(/[^0-9.]/g, ""))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") saveEntryModal();
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="rounded-lg border border-[#bdd5c3] bg-[#e8f1ea] p-3 text-center text-[#173c25]">
+                <div className="text-xs font-semibold uppercase tracking-wide">Personal tip percentage</div>
+                <div className="text-2xl font-semibold">
+                  {formatPercent(Number(entryModalSales || 0) > 0 ? (Number(entryModalAmount || 0) / Number(entryModalSales)) * 100 : 0)}
+                </div>
+              </div>
               {activeCell.confirmed ? (
                 canUnlock && activeCell.entryId ? (
                   <Button type="button" variant="outline" className={`w-full ${C.outline}`} onClick={() => {
@@ -1518,15 +1600,18 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
               ) : (
                 <div className="grid gap-2">
                   <Button type="button" className={`w-full ${C.green}`} disabled={saveEntry.isPending} onClick={saveEntryModal}>
-                    Save amount
+                    Save tips and sales
                   </Button>
-                  {Number(entryModalAmount || 0) > 0 && activeCell.entryId && (
+                  {Number(entryModalAmount || 0) > 0 && Number(entryModalSales || 0) > 0 && activeCell.entryId && (
                     <Button type="button" variant="outline" className={`w-full ${C.outline}`} onClick={() => {
                       confirmEntry.mutate(activeCell.entryId!);
                       setActiveEntry(null);
                     }}>
                       Confirm and lock
                     </Button>
+                  )}
+                  {Number(entryModalAmount || 0) > 0 && Number(entryModalSales || 0) <= 0 && (
+                    <div className="text-center text-sm text-amber-900">Enter gross shift sales before confirming.</div>
                   )}
                 </div>
               )}

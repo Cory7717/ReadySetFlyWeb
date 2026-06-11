@@ -374,6 +374,7 @@ type LaborMetrics = {
     laborDollars: number;
     hpor: number;
     housekeepingHours: number;
+    roomAttendantHours?: number;
     roomCredits: number;
     hkMpor: number;
     targetHousekeepingHoursMin: number;
@@ -396,6 +397,7 @@ type LaborMetrics = {
     actualRoomRevenue: number;
     hpor: number;
     housekeepingHours: number;
+    roomAttendantHours?: number;
     roomCredits: number;
     hkMpor: number;
     targetHousekeepingHoursMin: number;
@@ -679,15 +681,17 @@ function housekeepingBoardTone(board?: HousekeepingBoard) {
   return "border-red-300 bg-red-50 text-red-800";
 }
 
-function isRoomAttendantAssignment(assignment?: ShiftAssignment, shiftType?: ShiftType) {
+function isRoomAttendantAssignment(assignment?: ShiftAssignment, shiftType?: ShiftType, employee?: ScheduleEmployee) {
   if (!assignment && !shiftType) return false;
+  const employeeText = [employee?.position, ...(employee?.rolesJson || [])].filter(Boolean).join(" ").toLowerCase();
+  if (employeeText.includes("executive housekeeper") || employeeText.includes("exec hk") || employeeText.includes("housekeeping manager")) return false;
   const text = [
     assignment?.roleWorked,
     assignment?.roleNote,
     shiftType?.label,
     shiftType?.departmentHint,
   ].filter(Boolean).join(" ").toLowerCase();
-  if (/(laundry|houseperson|houseman|inspector)/.test(text)) return false;
+  if (/(laundry|houseperson|houseman|inspector|executive housekeeper|exec hk|housekeeping manager)/.test(text)) return false;
   return text.includes("room attendant") || text.includes("housekeeping");
 }
 
@@ -1536,16 +1540,18 @@ function PersonalScheduleCard({ payload, user, spanish }: { payload: SchedulePay
 
 function HousekeepingForecastMini({ payload, labels }: { payload: SchedulePayload; labels: string[] }) {
   const forecastByDay = new Map(payload.forecast.map((day) => [day.forecastDate, day]));
-  const recommendationForDay = (index: number) => {
-    const workloadDay = payload.days[index - 1] || payload.days[index];
-    const workloadForecast = forecastByDay.get(workloadDay);
-    const roomsToClean = Number(workloadForecast?.roomsSold || 0);
-    const roomAttendants = Math.ceil(roomsToClean / 16);
+  const recommendationForDay = (day: string) => {
+    const metrics = payload.totals.laborMetrics?.daily[day];
+    const roomCredits = Number(metrics?.roomCredits || 0);
+    const roomAttendantHours = Number(metrics?.targetRoomAttendantHours || 0);
+    const roomAttendants = roomAttendantHours > 0 ? Math.ceil(roomAttendantHours / 8) : 0;
     return {
-      workloadDay,
-      roomsToClean,
+      roomCredits,
+      roomAttendantHours,
       roomAttendants,
-      housekeepingHours: roomAttendants * 8 + 7 + 7,
+      housekeepingHours: Number(metrics?.targetTotalHousekeepingOperatingHours || 0),
+      scheduledRoomAttendantHours: Number(metrics?.roomAttendantHours || 0),
+      scheduledHousekeepingHours: Number(metrics?.housekeepingHours || 0),
     };
   };
   const metrics = [
@@ -1564,7 +1570,7 @@ function HousekeepingForecastMini({ payload, labels }: { payload: SchedulePayloa
         <div className="mt-2 grid grid-cols-7 gap-2">
           {payload.days.map((day, index) => {
             const forecast = forecastByDay.get(day);
-            const recommendation = recommendationForDay(index);
+            const recommendation = recommendationForDay(day);
             return (
               <div key={day} className="rounded-lg border border-[#d6c8b5] bg-white p-2 text-xs">
                 <div className="font-semibold text-[#201814]">{labels[index]} {formatDate(day)}</div>
@@ -1578,8 +1584,9 @@ function HousekeepingForecastMini({ payload, labels }: { payload: SchedulePayloa
                 </div>
                 <div className="mt-2 border-t border-[#eadfce] pt-1 text-[#5f5247]">
                   <div className="flex justify-between gap-2"><span>RA needed</span><strong className="text-[#201814]">{recommendation.roomAttendants}</strong></div>
-                  <div className="flex justify-between gap-2"><span>HK hrs</span><strong className="text-[#201814]">{recommendation.housekeepingHours}</strong></div>
-                  <div className="text-[10px]">Workload: {recommendation.roomsToClean} rooms from {formatDate(recommendation.workloadDay)}</div>
+                  <div className="flex justify-between gap-2"><span>RA hrs</span><strong className="text-[#201814]">{recommendation.scheduledRoomAttendantHours} / {recommendation.roomAttendantHours}</strong></div>
+                  <div className="flex justify-between gap-2"><span>Total HK hrs</span><strong className="text-[#201814]">{recommendation.scheduledHousekeepingHours} / {recommendation.housekeepingHours}</strong></div>
+                  <div className="text-[10px]">30 MPOR workload: {recommendation.roomCredits} weighted room credits</div>
                 </div>
               </div>
             );
@@ -1592,16 +1599,18 @@ function HousekeepingForecastMini({ payload, labels }: { payload: SchedulePayloa
 
 function HousekeepingForecastMiniCards({ payload, labels }: { payload: SchedulePayload; labels: string[] }) {
   const forecastByDay = new Map(payload.forecast.map((day) => [day.forecastDate, day]));
-  const recommendationForDay = (index: number) => {
-    const workloadDay = payload.days[index - 1] || payload.days[index];
-    const workloadForecast = forecastByDay.get(workloadDay);
-    const roomsToClean = Number(workloadForecast?.roomsSold || 0);
-    const roomAttendants = Math.ceil(roomsToClean / 16);
+  const recommendationForDay = (day: string) => {
+    const metrics = payload.totals.laborMetrics?.daily[day];
+    const roomCredits = Number(metrics?.roomCredits || 0);
+    const roomAttendantHours = Number(metrics?.targetRoomAttendantHours || 0);
+    const roomAttendants = roomAttendantHours > 0 ? Math.ceil(roomAttendantHours / 8) : 0;
     return {
-      workloadDay,
-      roomsToClean,
+      roomCredits,
+      roomAttendantHours,
       roomAttendants,
-      housekeepingHours: roomAttendants * 8 + 7 + 7,
+      housekeepingHours: Number(metrics?.targetTotalHousekeepingOperatingHours || 0),
+      scheduledRoomAttendantHours: Number(metrics?.roomAttendantHours || 0),
+      scheduledHousekeepingHours: Number(metrics?.housekeepingHours || 0),
     };
   };
   return (
@@ -1611,7 +1620,7 @@ function HousekeepingForecastMiniCards({ payload, labels }: { payload: ScheduleP
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         {payload.days.map((day, index) => {
           const forecast = forecastByDay.get(day);
-          const recommendation = recommendationForDay(index);
+          const recommendation = recommendationForDay(day);
           return (
             <div key={day} className="rounded-lg border border-[#d6c8b5] bg-white p-2 text-sm">
               <div className="font-semibold">{labels[index]} {formatDate(day)}</div>
@@ -1625,8 +1634,9 @@ function HousekeepingForecastMiniCards({ payload, labels }: { payload: ScheduleP
               </div>
               <div className="mt-2 rounded-md bg-[#f4eadb] p-2 text-xs text-[#5f5247]">
                 <div><strong className="text-[#201814]">{recommendation.roomAttendants}</strong> room attendants recommended</div>
-                <div><strong className="text-[#201814]">{recommendation.housekeepingHours}</strong> estimated HK hours incl. 7 HP + 7 laundry</div>
-                <div>Workload: {recommendation.roomsToClean} rooms from {formatDate(recommendation.workloadDay)}</div>
+                <div>RA scheduled / target: <strong className="text-[#201814]">{recommendation.scheduledRoomAttendantHours} / {recommendation.roomAttendantHours}</strong></div>
+                <div>Total HK scheduled / target: <strong className="text-[#201814]">{recommendation.scheduledHousekeepingHours} / {recommendation.housekeepingHours}</strong></div>
+                <div>Workload: {recommendation.roomCredits} weighted room credits</div>
               </div>
             </div>
           );
@@ -1886,7 +1896,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                         const canEditActual = Boolean(currentUser?.isSuperAdmin || currentUser?.isAdmin || editableDepartments.includes(department));
                         const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
                         const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;
-                        const trackMpor = isRoomAttendantAssignment(assignment, shift);
+                        const trackMpor = isRoomAttendantAssignment(assignment, shift, employee);
                         const handleShiftDragStart = (event: DragEvent) => {
                           if (!assignment || !canEditCell) return;
                           const payload = JSON.stringify(assignment);
@@ -1946,6 +1956,17 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                       <td className="border border-[#e0d3c1] p-2 text-center font-semibold">{payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0}</td>
                     </tr>
                   )),
+                  <tr key={`${department}-daily-totals`}>
+                    <td className="sticky left-0 z-10 border border-[#cdbda8] bg-[#eadfce] p-2 font-semibold text-[#201814]">{department} daily hours</td>
+                    {payload.days.map((day) => (
+                      <td key={day} className="border border-[#cdbda8] bg-[#eadfce] p-2 text-center font-semibold text-[#201814]">
+                        {fmtHours(payload.totals.departmentDailyHours[department]?.[day] || 0)}
+                      </td>
+                    ))}
+                    <td className="border border-[#cdbda8] bg-[#eadfce] p-2 text-center font-semibold text-[#201814]">
+                      {fmtHours(payload.totals.departmentWeeklyHours[department] || 0)}
+                    </td>
+                  </tr>,
                 ];
               })}
               <tr>
@@ -2000,7 +2021,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                           const canEditCell = editable && (editableDepartments.includes(department) || currentEmployee?.id === employee.id);
                           const canEditBoard = isHousekeeping && canEditHousekeepingBoards;
                           const canEditActual = Boolean(currentUser?.isSuperAdmin || currentUser?.isAdmin || editableDepartments.includes(department));
-                          const trackMpor = isRoomAttendantAssignment(assignment, shift);
+                          const trackMpor = isRoomAttendantAssignment(assignment, shift, employee);
                           return (
                             <div key={day} className="rounded-md border border-[#e0d3c1] bg-white p-2">
                               <button disabled={!canEditCell || Boolean(approvedRequest)} className="w-full text-left text-sm disabled:cursor-default" style={{ color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }} onClick={() => onEdit(employee, day, department, assignment)}>
@@ -2034,10 +2055,42 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                       </div>
                     </div>
                   ))}
+                  <div className="rounded-xl border border-[#cdbda8] bg-[#eadfce] p-3 text-[#201814]">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-semibold">{department} daily hours</div>
+                      <Badge variant="outline" className="border-[#9f8b72] bg-white text-[#201814]">
+                        {fmtHours(payload.totals.departmentWeeklyHours[department] || 0)} weekly
+                      </Badge>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {payload.days.map((day, index) => (
+                        <div key={day} className="rounded-md border border-[#d6c8b5] bg-white p-2 text-center">
+                          <div className="text-xs font-semibold text-[#5f5247]">{labels[index]} {formatDate(day)}</div>
+                          <div className="text-lg font-semibold">{fmtHours(payload.totals.departmentDailyHours[department]?.[day] || 0)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             );
           })}
+          <div className="rounded-xl border border-[#9f8b72] bg-[#f4eadb] p-3 text-[#201814]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="font-semibold">{t("Daily labor hours")} - all departments</div>
+              <Badge variant="outline" className="border-[#9f8b72] bg-white text-[#201814]">
+                {fmtHours(payload.totals.totalWeeklyLaborHours)} weekly
+              </Badge>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {payload.days.map((day, index) => (
+                <div key={day} className="rounded-md border border-[#d6c8b5] bg-white p-2 text-center">
+                  <div className="text-xs font-semibold text-[#5f5247]">{labels[index]} {formatDate(day)}</div>
+                  <div className="text-lg font-semibold">{fmtHours(payload.totals.dailyLaborHours[day] || 0)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -2947,15 +3000,9 @@ export default function SchedulePage() {
                   <div className={`text-3xl font-semibold ${metricTone(payload.totals.laborMetrics?.weekly.hpor || 0, payload.totals.laborMetrics?.targets.hpor || 1.3)}`}>{payload.totals.laborMetrics?.weekly.hpor ?? "0.00"}</div>
                 </div>
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
-                  <div className="text-sm text-[#5f5247]">HK MPOR target {payload.totals.laborMetrics?.targets.hkMporMin ?? 25}-{payload.totals.laborMetrics?.targets.hkMporMax ?? 30}</div>
-                  {hasHousekeepingBoardData ? (
-                    <div className={`text-3xl font-semibold ${metricTone(payload.totals.laborMetrics?.weekly.hkMpor || 0, payload.totals.laborMetrics?.targets.hkMporMax || 30)}`}>{payload.totals.laborMetrics?.weekly.hkMpor ?? "0.0"}</div>
-                  ) : (
-                    <>
-                      <div className="text-2xl font-semibold text-[#5f5247]">Pending</div>
-                      <div className="text-xs text-[#5f5247]">Enter HK board data to calculate actual MPOR.</div>
-                    </>
-                  )}
+                  <div className="text-sm text-[#5f5247]">Scheduled RA MPOR</div>
+                  <div className={`text-3xl font-semibold ${metricTone(payload.totals.laborMetrics?.weekly.hkMpor || 0, payload.totals.laborMetrics?.targets.hkMporMax || 30)}`}>{payload.totals.laborMetrics?.weekly.hkMpor ?? "0.0"}</div>
+                  <div className="text-xs text-[#5f5247]">Target {payload.totals.laborMetrics?.targets.hkMporMin ?? 25}-{payload.totals.laborMetrics?.targets.hkMporMax ?? 30}; room-attendant hours only</div>
                 </div>
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">{spanish ? ES["Open shifts"] : "Open shifts"}</div><div className="text-3xl font-semibold">{payload.totals.openShiftCount}</div></div>
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">{spanish ? ES.Employees : "Employees"}</div><div className="text-3xl font-semibold">{payload.employees.filter((e) => e.active).length}</div></div>
@@ -3018,9 +3065,12 @@ export default function SchedulePage() {
                     <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.roomCredits}</div>
                   </div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
-                    <div className="text-sm text-[#5f5247]">Room Attendant target</div>
-                    <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.targetRoomAttendantHours ?? payload.totals.laborMetrics.weekly.targetHousekeepingHoursMax}</div>
-                    <div className="text-xs text-[#5f5247]">30-min checkout / 15-min stayover model</div>
+                    <div className="text-sm text-[#5f5247]">Room Attendant hours</div>
+                    <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.roomAttendantHours ?? 0} scheduled</div>
+                    <div className="text-xs text-[#5f5247]">Target {payload.totals.laborMetrics.weekly.targetRoomAttendantHours ?? payload.totals.laborMetrics.weekly.targetHousekeepingHoursMax} at 30 MPOR</div>
+                    <div className="text-xs font-semibold text-[#5f5247]">
+                      Variance {Number(((payload.totals.laborMetrics.weekly.roomAttendantHours ?? 0) - (payload.totals.laborMetrics.weekly.targetRoomAttendantHours ?? payload.totals.laborMetrics.weekly.targetHousekeepingHoursMax)).toFixed(2))}
+                    </div>
                   </div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
                     <div className="text-sm text-[#5f5247]">Laundry coverage</div>
@@ -3033,9 +3083,12 @@ export default function SchedulePage() {
                     <div className="text-xs text-[#5f5247]">7 hrs daily x 7 days</div>
                   </div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
-                    <div className="text-sm text-[#5f5247]">Total HK target</div>
-                    <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.targetTotalHousekeepingOperatingHours ?? payload.totals.laborMetrics.weekly.targetHousekeepingHoursMax}</div>
-                    <div className="text-xs text-[#5f5247]">Room Attendant + Laundry + Houseperson</div>
+                    <div className="text-sm text-[#5f5247]">Total Housekeeping hours</div>
+                    <div className="text-2xl font-semibold">{payload.totals.laborMetrics.weekly.housekeepingHours} scheduled</div>
+                    <div className="text-xs text-[#5f5247]">Target {payload.totals.laborMetrics.weekly.targetTotalHousekeepingOperatingHours ?? payload.totals.laborMetrics.weekly.targetHousekeepingHoursMax}: RA + Laundry + Houseperson</div>
+                    <div className="text-xs font-semibold text-[#5f5247]">
+                      Variance {Number((payload.totals.laborMetrics.weekly.housekeepingHours - (payload.totals.laborMetrics.weekly.targetTotalHousekeepingOperatingHours ?? payload.totals.laborMetrics.weekly.targetHousekeepingHoursMax)).toFixed(2))}
+                    </div>
                   </div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
                     <div className="text-sm text-[#5f5247]">Room revenue</div>

@@ -306,14 +306,15 @@ function isNonWorkingShiftLabel(value?: string | null) {
   return ["OFF", "PTO", "CALL OFF"].includes(String(value || "").trim().toUpperCase());
 }
 
-function isRoomAttendantWork(assignment: any, shiftType: any) {
+function isRoomAttendantWork(assignment: any, shiftType: any, employee?: any) {
+  if (isExecutiveHousekeeperEmployee(employee)) return false;
   const text = [
     assignment?.roleWorked,
     assignment?.roleNote,
     shiftType?.label,
     shiftType?.departmentHint,
   ].filter(Boolean).join(" ").toLowerCase();
-  if (/(laundry|houseperson|houseman|inspector)/.test(text)) return false;
+  if (/(laundry|houseperson|houseman|inspector|executive housekeeper|exec hk|housekeeping manager)/.test(text)) return false;
   return text.includes("room attendant") || text.includes("housekeeping");
 }
 
@@ -1235,6 +1236,7 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   const dailySalariedLaborDollars: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
   const departmentWeeklyLaborDollars: Record<string, number> = {};
   const departmentWeeklyLaborDollarsIncludingSalary: Record<string, number> = {};
+  const roomAttendantDailyHours: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
   const coverage: Record<string, Record<string, number>> = Object.fromEntries(days.map((day) => [day, { AM: 0, PM: 0, AUDIT: 0, MOD: 0 }]));
   let openShiftCount = 0;
   const warnings: string[] = [];
@@ -1265,6 +1267,9 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     departmentWeeklyHours[department] = (departmentWeeklyHours[department] || 0) + hourlyHours;
     departmentWeeklyLaborDollars[department] = (departmentWeeklyLaborDollars[department] || 0) + laborDollars;
     departmentWeeklyLaborDollarsIncludingSalary[department] = (departmentWeeklyLaborDollarsIncludingSalary[department] || 0) + laborDollarsIncludingSalary;
+    if (department === "Housekeeping" && isRoomAttendantWork(assignment, shiftType, employee)) {
+      roomAttendantDailyHours[assignment.shiftDate] = (roomAttendantDailyHours[assignment.shiftDate] || 0) + hourlyHours;
+    }
     dailyLaborHours[assignment.shiftDate] = (dailyLaborHours[assignment.shiftDate] || 0) + hourlyHours;
     dailyLaborHoursIncludingSalary[assignment.shiftDate] = (dailyLaborHoursIncludingSalary[assignment.shiftDate] || 0) + hours;
     dailySalariedLaborHours[assignment.shiftDate] = (dailySalariedLaborHours[assignment.shiftDate] || 0) + salariedHours;
@@ -1291,10 +1296,10 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     if (Number(day.departures || 0) >= 45 && hkHours < 24) warnings.push(`High departures on ${day.forecastDate} with low Housekeeping coverage.`);
   }
   if (openShiftCount > 0) warnings.push(`${openShiftCount} open shift(s) remaining.`);
-  const laborMetrics = calculateLaborMetrics(days, forecast, dailyLaborHours, departmentDailyHours, dailyLaborDollars);
+  const laborMetrics = calculateLaborMetrics(days, forecast, dailyLaborHours, departmentDailyHours, roomAttendantDailyHours, dailyLaborDollars);
   const bistroLabor = calculateBistroLaborTarget(forecast, departmentWeeklyHours["Bistro"] || 0);
   if (laborMetrics.weekly.hpor > TARGET_HPOR) warnings.push(`Weekly HPOR ${laborMetrics.weekly.hpor.toFixed(2)} is above target ${TARGET_HPOR}.`);
-  if (laborMetrics.weekly.hkMpor > TARGET_HK_MPOR_MAX) warnings.push(`Housekeeping MPOR ${laborMetrics.weekly.hkMpor.toFixed(1)} is above target ${TARGET_HK_MPOR_MIN}-${TARGET_HK_MPOR_MAX}.`);
+  if (laborMetrics.weekly.hkMpor > TARGET_HK_MPOR_MAX) warnings.push(`Scheduled Room Attendant MPOR ${laborMetrics.weekly.hkMpor.toFixed(1)} is above target ${TARGET_HK_MPOR_MIN}-${TARGET_HK_MPOR_MAX}.`);
   const totalWeeklyLaborDollars = Object.values(dailyLaborDollars).reduce((sum, value) => sum + value, 0);
   const totalWeeklyLaborDollarsIncludingSalary = Object.values(dailyLaborDollarsIncludingSalary).reduce((sum, value) => sum + value, 0);
   const totalWeeklySalariedLaborDollars = Object.values(dailySalariedLaborDollars).reduce((sum, value) => sum + value, 0);
@@ -1338,7 +1343,14 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   };
 }
 
-function calculateLaborMetrics(days: string[], forecast: any[], dailyLaborHours: Record<string, number>, departmentDailyHours: Record<string, Record<string, number>>, dailyLaborDollars: Record<string, number>) {
+function calculateLaborMetrics(
+  days: string[],
+  forecast: any[],
+  dailyLaborHours: Record<string, number>,
+  departmentDailyHours: Record<string, Record<string, number>>,
+  roomAttendantDailyHours: Record<string, number>,
+  dailyLaborDollars: Record<string, number>,
+) {
   const forecastByDay = new Map(forecast.map((day) => [day.forecastDate, day]));
   const daily: Record<string, any> = {};
   let weeklyLaborHours = 0;
@@ -1346,6 +1358,7 @@ function calculateLaborMetrics(days: string[], forecast: any[], dailyLaborHours:
   let weeklyRoomCredits = 0;
   let weeklyStandardHousekeepingMinutes = 0;
   let weeklyHkHours = 0;
+  let weeklyRoomAttendantHours = 0;
   let weeklyRoomRevenue = 0;
   let weeklyActualRoomRevenue = 0;
   let weeklyLaborDollars = 0;
@@ -1360,6 +1373,7 @@ function calculateLaborMetrics(days: string[], forecast: any[], dailyLaborHours:
     const laborHours = Number(dailyLaborHours[day] || 0);
     const laborDollars = Number(dailyLaborDollars[day] || 0);
     const hkHours = Number(departmentDailyHours["Housekeeping"]?.[day] || 0);
+    const roomAttendantHours = Number(roomAttendantDailyHours[day] || 0);
     const serviceStayovers = Math.max(0, stayovers - dndRooms);
     const roomCredits = Math.max(0, departures + serviceStayovers * 0.5);
     const standardMinutes = Math.max(0, departures * 30 + serviceStayovers * 15);
@@ -1367,7 +1381,7 @@ function calculateLaborMetrics(days: string[], forecast: any[], dailyLaborHours:
     const targetLaundryHours = 7;
     const targetHousepersonHours = 7;
     const hpor = roomsSold > 0 ? laborHours / roomsSold : 0;
-    const hkMpor = roomCredits > 0 ? (hkHours * 60) / roomCredits : 0;
+    const hkMpor = roomCredits > 0 ? (roomAttendantHours * 60) / roomCredits : 0;
     const roomRevenue = Number(forecastDay.roomRevenue || 0);
     const actualRoomRevenue = Number(forecastDay.actualRoomRevenue || 0);
     daily[day] = {
@@ -1378,6 +1392,7 @@ function calculateLaborMetrics(days: string[], forecast: any[], dailyLaborHours:
       laborDollars: Number(laborDollars.toFixed(2)),
       hpor: Number(hpor.toFixed(2)),
       housekeepingHours: Number(hkHours.toFixed(2)),
+      roomAttendantHours: Number(roomAttendantHours.toFixed(2)),
       roomCredits: Number(roomCredits.toFixed(1)),
       serviceStayovers,
       dndRooms,
@@ -1396,6 +1411,7 @@ function calculateLaborMetrics(days: string[], forecast: any[], dailyLaborHours:
     weeklyRoomCredits += roomCredits;
     weeklyStandardHousekeepingMinutes += standardMinutes;
     weeklyHkHours += hkHours;
+    weeklyRoomAttendantHours += roomAttendantHours;
     weeklyRoomRevenue += roomRevenue;
     weeklyActualRoomRevenue += actualRoomRevenue;
   }
@@ -1411,8 +1427,9 @@ function calculateLaborMetrics(days: string[], forecast: any[], dailyLaborHours:
       actualRoomRevenue: Number(weeklyActualRoomRevenue.toFixed(2)),
       hpor: Number((weeklyRooms > 0 ? weeklyLaborHours / weeklyRooms : 0).toFixed(2)),
       housekeepingHours: Number(weeklyHkHours.toFixed(2)),
+      roomAttendantHours: Number(weeklyRoomAttendantHours.toFixed(2)),
       roomCredits: Number(weeklyRoomCredits.toFixed(1)),
-      hkMpor: Number((weeklyRoomCredits > 0 ? (weeklyHkHours * 60) / weeklyRoomCredits : 0).toFixed(1)),
+      hkMpor: Number((weeklyRoomCredits > 0 ? (weeklyRoomAttendantHours * 60) / weeklyRoomCredits : 0).toFixed(1)),
       targetHousekeepingHoursMin: Number(((weeklyRoomCredits * TARGET_HK_MPOR_MIN) / 60).toFixed(2)),
       targetHousekeepingHoursMax: Number(((weeklyRoomCredits * TARGET_HK_MPOR_MAX) / 60).toFixed(2)),
       standardHousekeepingMinutes: Number(weeklyStandardHousekeepingMinutes.toFixed(0)),
@@ -3246,7 +3263,7 @@ export function registerScheduleRoutes(app: Express) {
       const [shiftType] = assignment?.shiftTypeId
         ? await db.select().from(scheduleShiftTypes).where(eq(scheduleShiftTypes.id, assignment.shiftTypeId)).limit(1)
         : [];
-      const trackMpor = isRoomAttendantWork(assignment, shiftType);
+      const trackMpor = isRoomAttendantWork(assignment, shiftType, employee);
       const boardValues = {
         actualHours: parsed.data.actualHours.toFixed(2),
         checkoutRooms: trackMpor ? parsed.data.checkoutRooms : 0,

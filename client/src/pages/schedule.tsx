@@ -3200,7 +3200,7 @@ export default function SchedulePage() {
               <Card className={C.shell}>
                 <CardHeader>
                   <CardTitle className={C.ink}>{spanish ? ES["Bistro labor"] : "Bistro labor"}</CardTitle>
-                  <CardDescription className={C.muted}>Sliding scale from the Bistro labor guide based on weekly occupancy.</CardDescription>
+                  <CardDescription className={C.muted}>Sliding scale from the Bistro labor guide based on weekly occupancy. Scheduled hours include Bistro Manager coverage.</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Forecast rooms</div><div className="text-2xl font-semibold">{payload.totals.laborMetrics?.weekly.roomsSold || 0}</div></div>
@@ -3208,7 +3208,7 @@ export default function SchedulePage() {
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Weekly Occ</div><div className="text-2xl font-semibold">{payload.totals.bistroLabor.weeklyOccupancyPercent}%</div></div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Model</div><div className="text-xl font-semibold">{payload.totals.bistroLabor.model}</div></div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Target hours</div><div className="text-2xl font-semibold">{payload.totals.bistroLabor.targetMinHours}-{payload.totals.bistroLabor.targetMaxHours}</div></div>
-                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Scheduled</div><div className="text-2xl font-semibold">{payload.totals.bistroLabor.scheduledHours}</div></div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Scheduled incl. Bistro Manager</div><div className="text-2xl font-semibold">{payload.totals.bistroLabor.scheduledHours}</div></div>
                 </CardContent>
               </Card>
             )}

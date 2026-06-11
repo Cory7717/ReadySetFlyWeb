@@ -189,6 +189,18 @@ function hasBistroScheduleRole(value: unknown) {
   return normalized.includes("bistro") || normalized.includes("breakfast");
 }
 
+function isBistroManagerEmployee(employee: any) {
+  const values = [
+    employee?.department,
+    employee?.position,
+    ...rolesArray(employee?.rolesJson),
+  ].map((value) => String(value || "").trim().toLowerCase());
+  const hasBistroRole = values.some((value) => value.includes("bistro") || value.includes("breakfast"));
+  const hasManagerRole = Boolean(employee?.isDepartmentManager)
+    || values.some((value) => value.includes("manager") || value.includes("supervisor") || value.includes("lead"));
+  return hasBistroRole && hasManagerRole;
+}
+
 function rolesArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
   if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -1270,6 +1282,7 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   const roomAttendantDailyHours: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
   const coverage: Record<string, Record<string, number>> = Object.fromEntries(days.map((day) => [day, { AM: 0, PM: 0, AUDIT: 0, MOD: 0 }]));
   let openShiftCount = 0;
+  let bistroLaborHours = 0;
   const warnings: string[] = [];
   const assignmentKeys = new Set<string>();
 
@@ -1284,6 +1297,7 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     const salariedLaborDollars = isSalaried ? laborDollarsIncludingSalary : 0;
     const hourlyHours = isSalaried ? 0 : hours;
     const salariedHours = isSalaried ? hours : 0;
+    if (department === "Bistro" || isBistroManagerEmployee(employee)) bistroLaborHours += hours;
     if (assignment.isOpenShift || shiftType?.label === "OPEN SHIFT") openShiftCount += 1;
     if (employee?.id) {
       const key = `${employee.id}:${assignment.shiftDate}`;
@@ -1327,7 +1341,7 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   }
   if (openShiftCount > 0) warnings.push(`${openShiftCount} open shift(s) remaining.`);
   const laborMetrics = calculateLaborMetrics(days, forecast, dailyLaborHours, departmentDailyHours, roomAttendantDailyHours, dailyLaborDollars);
-  const bistroLabor = calculateBistroLaborTarget(forecast, departmentWeeklyHours["Bistro"] || 0);
+  const bistroLabor = calculateBistroLaborTarget(forecast, bistroLaborHours);
   if (laborMetrics.weekly.hpor > TARGET_HPOR) warnings.push(`Weekly HPOR ${laborMetrics.weekly.hpor.toFixed(2)} is above target ${TARGET_HPOR}.`);
   if (laborMetrics.weekly.hkMpor > TARGET_HK_MPOR_MAX) warnings.push(`Scheduled Room Attendant MPOR ${laborMetrics.weekly.hkMpor.toFixed(1)} is above target ${TARGET_HK_MPOR_MIN}-${TARGET_HK_MPOR_MAX}.`);
   const totalWeeklyLaborDollars = Object.values(dailyLaborDollars).reduce((sum, value) => sum + value, 0);

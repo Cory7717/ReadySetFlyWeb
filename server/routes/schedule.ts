@@ -959,6 +959,7 @@ function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
     const arrivals = parseReportNumber(row.Arr);
     const departures = parseReportNumber(row.Dept);
     const stayovers = Math.max(0, roomsSoldOtb - arrivals);
+    const roomRevenueOtb = parseReportNumber(row["Rm Rev ($)"]);
 
     forecastByDate.set(forecastDate, {
       forecastDate,
@@ -971,7 +972,8 @@ function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
       otbOccupancyPercent: occOtb,
       otbArrivals: parseReportNumber(row.Arr),
       otbDepartures: parseReportNumber(row.Dept),
-      roomRevenue: parseReportNumber(row["Rm Rev ($)"]),
+      otbRoomRevenue: roomRevenueOtb,
+      roomRevenue: roomRevenueOtb,
       notes: `Imported OTB: ${roomsSoldOtb} rooms / ${occupancyPercent}%. Suggested pickup is +${suggestedPickup} rooms toward ${targetOccupancyPercent}% ${targetOccupancyPercent === TARGET_OCCUPANCY_PERCENT ? "weekly" : "day"} target using the ${leadDays}-day pickup window.`,
     });
   }

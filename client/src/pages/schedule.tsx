@@ -239,6 +239,7 @@ type ForecastDay = {
   otbOccupancyPercent?: string | number | null;
   otbArrivals?: number | null;
   otbDepartures?: number | null;
+  otbRoomRevenue?: string | number | null;
   actualRoomsSold?: number | null;
   actualOccupancyPercent?: string | number | null;
   actualArrivals?: number | null;
@@ -812,19 +813,35 @@ function ForecastPanel({
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const actualizedInputRef = useRef<HTMLInputElement | null>(null);
+  const autoSaveTimerRef = useRef<number | null>(null);
   const t = (value: string) => spanish ? ES[value] || value : value;
+  const [forecastDirty, setForecastDirty] = useState(false);
   const [days, setDays] = useState<ForecastDay[]>(payload.days.map((date) => payload.forecast.find((day) => day.forecastDate === date) || { forecastDate: date, roomsSold: 0, occupancyPercent: 0, arrivals: 0, departures: 0, stayovers: 0 }));
   const [groupForm, setGroupForm] = useState({ forecastDate: payload.days[0] || "", popupGroupRooms: "0", popupGroupNotes: "" });
   useEffect(() => {
     setDays(payload.days.map((date) => payload.forecast.find((day) => day.forecastDate === date) || { forecastDate: date, roomsSold: 0, occupancyPercent: 0, arrivals: 0, departures: 0, stayovers: 0 }));
+    setForecastDirty(false);
   }, [payload.schedule.id, payload.forecast, payload.days]);
+  useEffect(() => {
+    if (!editable || !forecastDirty) return;
+    if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      onSave(days);
+      setForecastDirty(false);
+    }, 700);
+    return () => {
+      if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [days, editable, forecastDirty, onSave]);
   const hasOriginalUpload = days.some((day) =>
     day.otbRoomsSold != null ||
     day.otbOccupancyPercent != null ||
     day.otbArrivals != null ||
-    day.otbDepartures != null
+    day.otbDepartures != null ||
+    day.otbRoomRevenue != null
   );
   const updateDayField = (index: number, key: string, value: string) => {
+    setForecastDirty(true);
     setDays((current) => current.map((item, i) => {
       if (i !== index) return item;
       if (key !== "roomsSold") return { ...item, [key]: value };
@@ -933,6 +950,7 @@ function ForecastPanel({
                   ["otbOccupancyPercent", "Occ %"],
                   ["otbArrivals", t("Arrivals")],
                   ["otbDepartures", t("Departures")],
+                  ["otbRoomRevenue", spanish ? "Ingresos cuartos" : "Room revenue"],
                 ].map(([key, label]) => (
                   <tr key={key}>
                     <td className="border border-[#e0d3c1] bg-white p-2 font-medium">{label}</td>
@@ -1016,7 +1034,11 @@ function ForecastPanel({
         </table>
         {editable && (
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button className={C.green} onClick={() => onSave(days)}><Save className="mr-2 h-4 w-4" />{t("Save forecast")}</Button>
+            <Button className={C.green} onClick={() => {
+              if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
+              onSave(days);
+              setForecastDirty(false);
+            }}><Save className="mr-2 h-4 w-4" />{forecastDirty ? (spanish ? "Guardar ahora" : "Save now") : t("Save forecast")}</Button>
             <input
               ref={fileInputRef}
               aria-label={spanish ? "Importar archivo CSV OTB" : "Import OTB CSV"}
@@ -2517,8 +2539,14 @@ export default function SchedulePage() {
     onError: (error: Error) => toast({ title: "Employee update failed", description: error.message, variant: "destructive" }),
   });
   const saveForecast = useMutation({
-    mutationFn: (days: ForecastDay[]) => apiRequest("PUT", `/api/schedule/weeks/${payload?.schedule.id}/forecast`, { days }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] }),
+    mutationFn: async (days: ForecastDay[]) => {
+      const response = await apiRequest("PUT", `/api/schedule/weeks/${payload?.schedule.id}/forecast`, { days });
+      return response.json() as Promise<SchedulePayload>;
+    },
+    onSuccess: (updatedPayload) => {
+      queryClient.setQueryData(["/api/schedule/weeks", weekId], updatedPayload);
+    },
+    onError: (error: Error) => toast({ title: "Forecast save failed", description: error.message, variant: "destructive" }),
   });
   const importForecast = useMutation({
     mutationFn: async (file: File) => {
@@ -3023,7 +3051,9 @@ export default function SchedulePage() {
                   <CardTitle className={C.ink}>{spanish ? ES["Bistro labor"] : "Bistro labor"}</CardTitle>
                   <CardDescription className={C.muted}>Sliding scale from the Bistro labor guide based on weekly occupancy.</CardDescription>
                 </CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-4">
+                <CardContent className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Forecast rooms</div><div className="text-2xl font-semibold">{payload.totals.laborMetrics?.weekly.roomsSold || 0}</div></div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Forecast room revenue</div><div className="text-2xl font-semibold">${payload.totals.laborMetrics?.weekly.roomRevenue || 0}</div></div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Weekly Occ</div><div className="text-2xl font-semibold">{payload.totals.bistroLabor.weeklyOccupancyPercent}%</div></div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Model</div><div className="text-xl font-semibold">{payload.totals.bistroLabor.model}</div></div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">Target hours</div><div className="text-2xl font-semibold">{payload.totals.bistroLabor.targetMinHours}-{payload.totals.bistroLabor.targetMaxHours}</div></div>

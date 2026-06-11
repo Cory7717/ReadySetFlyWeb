@@ -407,6 +407,16 @@ type LaborMetrics = {
     targetLaundryHours?: number;
     targetHousepersonHours?: number;
     targetTotalHousekeepingOperatingHours?: number;
+    fullDepartmentHousekeepingMpor?: {
+      target: number;
+      forecastHours: number;
+      forecastRooms: number;
+      forecastMpor: number;
+      actualHours: number;
+      actualRooms: number;
+      actualMpor: number | null;
+      actualReady: boolean;
+    };
   };
 };
 
@@ -2547,16 +2557,17 @@ export default function SchedulePage() {
   useEffect(() => {
     if (!payload || !canManageSchedule || shareToken) return;
     const daily = payload.totals.laborMetrics?.daily || {};
+    const hporTarget = Number(payload.totals.laborMetrics?.targets.hpor || 1.4);
     const overTarget = payload.days
       .map((day) => ({ day, hpor: Number(daily[day]?.hpor || 0) }))
-      .filter((item) => item.hpor > 1.25);
+      .filter((item) => item.hpor > hporTarget);
     if (!overTarget.length) return;
     const key = `${payload.schedule.id}:${overTarget.map((item) => `${item.day}:${item.hpor.toFixed(2)}`).join("|")}`;
     if (dailyHporToastKey.current === key) return;
     dailyHporToastKey.current = key;
     toast({
       title: "Daily labor HPOR alert",
-      description: overTarget.map((item) => `${formatDate(item.day)} ${item.hpor.toFixed(2)} HPOR`).join(", "),
+      description: `${overTarget.map((item) => `${formatDate(item.day)} ${item.hpor.toFixed(2)} HPOR`).join(", ")}. Target ${hporTarget.toFixed(2)}.`,
       variant: "destructive",
     });
   }, [canManageSchedule, payload, shareToken, toast]);
@@ -2860,6 +2871,7 @@ export default function SchedulePage() {
   const editableDepartmentsForAi = payload?.currentUserPermissions?.editableDepartments || [];
   const canGenerateFrontDeskAi = editable && editableDepartmentsForAi.includes("Front Desk");
   const canGenerateHousekeepingAi = editable && editableDepartmentsForAi.includes("Housekeeping");
+  const fullDepartmentHkMpor = payload?.totals.laborMetrics?.weekly.fullDepartmentHousekeepingMpor;
 
   return (
     <div className={`min-h-screen ${C.page}`}>
@@ -2996,8 +3008,8 @@ export default function SchedulePage() {
                   </div>
                 )}
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
-                  <div className="text-sm text-[#5f5247]">HPOR target {payload.totals.laborMetrics?.targets.hpor ?? 1.3}</div>
-                  <div className={`text-3xl font-semibold ${metricTone(payload.totals.laborMetrics?.weekly.hpor || 0, payload.totals.laborMetrics?.targets.hpor || 1.3)}`}>{payload.totals.laborMetrics?.weekly.hpor ?? "0.00"}</div>
+                  <div className="text-sm text-[#5f5247]">HPOR target {payload.totals.laborMetrics?.targets.hpor ?? 1.4}</div>
+                  <div className={`text-3xl font-semibold ${metricTone(payload.totals.laborMetrics?.weekly.hpor || 0, payload.totals.laborMetrics?.targets.hpor || 1.4)}`}>{payload.totals.laborMetrics?.weekly.hpor ?? "0.00"}</div>
                 </div>
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
                   <div className="text-sm text-[#5f5247]">Scheduled RA MPOR</div>
@@ -3009,6 +3021,60 @@ export default function SchedulePage() {
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">{spanish ? ES.Warnings : "Warnings"}</div><div className="text-3xl font-semibold">{payload.totals.warnings.length}</div></div>
               </CardContent>
             </Card>
+
+            {fullDepartmentHkMpor && (
+              <Card className={`${C.shell} ${fullDepartmentHkMpor.forecastMpor > fullDepartmentHkMpor.target || (fullDepartmentHkMpor.actualReady && Number(fullDepartmentHkMpor.actualMpor || 0) > fullDepartmentHkMpor.target) ? "!border-amber-400" : "!border-emerald-300"}`}>
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <CardTitle className={`${C.ink} flex items-center gap-2`}>
+                        <AlertTriangle className={`h-5 w-5 ${fullDepartmentHkMpor.forecastMpor > fullDepartmentHkMpor.target ? "text-amber-700" : "text-emerald-700"}`} />
+                        Overall HK Department MPOR
+                      </CardTitle>
+                      <CardDescription className={C.muted}>
+                        Ops report reference: all Housekeeping hours, including Exec HK, divided by occupied rooms. RVP target: {fullDepartmentHkMpor.target} minutes.
+                      </CardDescription>
+                    </div>
+                    <Badge variant="outline" className="border-[#9f8b72] bg-white text-[#201814]">OPS REPORT METRIC</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-2">
+                  <div className={`rounded-xl border p-4 ${fullDepartmentHkMpor.forecastMpor > fullDepartmentHkMpor.target ? "border-amber-300 bg-amber-50" : "border-emerald-300 bg-emerald-50"}`}>
+                    <div className="text-sm font-semibold text-[#5f5247]">Forecast full-department MPOR</div>
+                    <div className={`text-4xl font-semibold ${fullDepartmentHkMpor.forecastMpor > fullDepartmentHkMpor.target ? "text-amber-900" : "text-emerald-900"}`}>
+                      {fullDepartmentHkMpor.forecastMpor.toFixed(1)}
+                    </div>
+                    <div className="text-sm text-[#5f5247]">
+                      {fmtHours(fullDepartmentHkMpor.forecastHours)} scheduled HK hours / {fullDepartmentHkMpor.forecastRooms} forecast rooms
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-[#201814]">
+                      Variance to target: {(fullDepartmentHkMpor.forecastMpor - fullDepartmentHkMpor.target) > 0 ? "+" : ""}{(fullDepartmentHkMpor.forecastMpor - fullDepartmentHkMpor.target).toFixed(1)} minutes
+                    </div>
+                  </div>
+                  <div className={`rounded-xl border p-4 ${fullDepartmentHkMpor.actualReady && Number(fullDepartmentHkMpor.actualMpor || 0) > fullDepartmentHkMpor.target ? "border-amber-300 bg-amber-50" : fullDepartmentHkMpor.actualReady ? "border-emerald-300 bg-emerald-50" : "border-[#e0d3c1] bg-white"}`}>
+                    <div className="text-sm font-semibold text-[#5f5247]">Actual full-department MPOR</div>
+                    {fullDepartmentHkMpor.actualReady ? (
+                      <>
+                        <div className={`text-4xl font-semibold ${Number(fullDepartmentHkMpor.actualMpor || 0) > fullDepartmentHkMpor.target ? "text-amber-900" : "text-emerald-900"}`}>
+                          {Number(fullDepartmentHkMpor.actualMpor).toFixed(1)}
+                        </div>
+                        <div className="text-sm text-[#5f5247]">
+                          {fmtHours(fullDepartmentHkMpor.actualHours)} actual HK hours / {fullDepartmentHkMpor.actualRooms} actual rooms
+                        </div>
+                        <div className="mt-1 text-sm font-semibold text-[#201814]">
+                          Variance to target: {Number(fullDepartmentHkMpor.actualMpor) - fullDepartmentHkMpor.target > 0 ? "+" : ""}{(Number(fullDepartmentHkMpor.actualMpor) - fullDepartmentHkMpor.target).toFixed(1)} minutes
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-semibold text-[#5f5247]">Waiting for closed-week reports</div>
+                        <div className="mt-1 text-sm text-[#5f5247]">Upload both Hours Detail and final actualized OTB production to calculate actual MPOR.</div>
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {(canGenerateFrontDeskAi || canGenerateHousekeepingAi) && (
               <Card className={`${C.shell} print:hidden`}>

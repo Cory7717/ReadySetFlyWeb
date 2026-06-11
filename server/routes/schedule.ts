@@ -40,7 +40,7 @@ const SCHEDULE_ROLES = ["GM", "DOS", "DOS / Sales", "Sales", "MOD", "Executive H
 const SCHEDULE_DAY_LABELS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 const DAY_MS = 86_400_000;
 const TARGET_OCCUPANCY_PERCENT = Number(process.env.SCHEDULE_TARGET_OCCUPANCY_PERCENT || 65);
-const TARGET_HPOR = Number(process.env.SCHEDULE_TARGET_HPOR || 1.3);
+const TARGET_HPOR = Number(process.env.SCHEDULE_TARGET_HPOR || 1.4);
 const TARGET_HK_MPOR_MIN = Number(process.env.SCHEDULE_TARGET_HK_MPOR_MIN || 25);
 const TARGET_HK_MPOR_MAX = Number(process.env.SCHEDULE_TARGET_HK_MPOR_MAX || 30);
 const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
@@ -104,19 +104,7 @@ function normalizeEmail(email: string) {
 }
 
 function isSalariedScheduleManager(employee: any) {
-  const values = [
-    employee?.department,
-    employee?.position,
-    employee?.displayName,
-    ...(Array.isArray(employee?.rolesJson) ? employee.rolesJson : []),
-  ].map((value) => String(value || "").toLowerCase());
-  return Boolean(employee?.isSalaried)
-    || values.some((value) =>
-      /\bgm\b/.test(value)
-      || /\bdos\b/.test(value)
-      || value.includes("general manager")
-      || value.includes("director of sales"),
-    );
+  return Boolean(employee?.isSalaried);
 }
 
 function parseDateKey(value: string) {
@@ -1121,6 +1109,49 @@ async function buildSchedulePayload(scheduleId: string) {
     })
     .filter(Boolean);
   const totals = calculateTotals(days, employees, shiftTypes, forecast, assignments);
+  const employeeById = new Map<string, any>(employees.map((employee) => [employee.id, employee]));
+  const shiftTypeById = new Map<string, any>(shiftTypes.map((shift) => [shift.id, shift]));
+  const assignmentByEmployeeDay = new Map<string, any>(
+    assignments
+      .filter((assignment) => assignment.employeeId)
+      .map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment]),
+  );
+  const actualHousekeepingHours = actualHours.reduce((sum, row) => {
+    const employee = employeeById.get(row.employeeId);
+    if (!employee) return sum;
+    const assignment = assignmentByEmployeeDay.get(`${row.employeeId}:${row.workDate}`);
+    const shiftType = assignment?.shiftTypeId ? shiftTypeById.get(assignment.shiftTypeId) : null;
+    const department = assignment
+      ? assignmentRenderDepartment(assignment, employee, shiftType)
+      : normalizeDepartment(employee.department);
+    return department === "Housekeeping" ? sum + Number(row.actualHours || 0) : sum;
+  }, 0);
+  const scheduledHousekeepingHours = assignments.reduce((sum, assignment) => {
+    if (assignment.isOpenShift) return sum;
+    const employee = assignment.employeeId ? employeeById.get(assignment.employeeId) : null;
+    const shiftType = assignment.shiftTypeId ? shiftTypeById.get(assignment.shiftTypeId) : null;
+    const department = assignmentRenderDepartment(assignment, employee, shiftType);
+    return department === "Housekeeping" ? sum + hoursForShift(assignment, shiftType) : sum;
+  }, 0);
+  const forecastRooms = Number(totals.laborMetrics?.weekly.roomsSold || 0);
+  const actualRoomsComplete = days.every((day) => forecast.some((row) => row.forecastDate === day && row.actualRoomsSold != null));
+  const actualRooms = actualRoomsComplete
+    ? forecast.reduce((sum, row) => sum + Number(row.actualRoomsSold || 0), 0)
+    : 0;
+  if (totals.laborMetrics?.weekly) {
+    (totals.laborMetrics.weekly as any).fullDepartmentHousekeepingMpor = {
+      target: 30,
+      forecastHours: Number(scheduledHousekeepingHours.toFixed(2)),
+      forecastRooms,
+      forecastMpor: Number((forecastRooms > 0 ? (scheduledHousekeepingHours * 60) / forecastRooms : 0).toFixed(1)),
+      actualHours: Number(actualHousekeepingHours.toFixed(2)),
+      actualRooms,
+      actualMpor: actualHousekeepingHours > 0 && actualRooms > 0
+        ? Number(((actualHousekeepingHours * 60) / actualRooms).toFixed(1))
+        : null,
+      actualReady: actualHousekeepingHours > 0 && actualRoomsComplete && actualRooms > 0,
+    };
+  }
   return { schedule, days, departments: DEPARTMENTS, requiredDepartments: REQUIRED_DEPARTMENTS, employees, shiftTypes, forecast, assignments, actualHours, housekeepingBoards: housekeepingBoards.map(summarizeHousekeepingBoard), approvedRequests, totals, departmentStatus: schedule.departmentStatusJson || {} };
 }
 
@@ -1287,7 +1318,6 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   }
   for (const day of days) {
     if ((coverage[day]?.AUDIT || 0) < 1) warnings.push(`No audit scheduled on ${day}.`);
-    if ((coverage[day]?.MOD || 0) < 1) warnings.push(`No MOD scheduled on ${day}.`);
   }
   for (const day of forecast) {
     const fdHours = departmentDailyHours["Front Desk"]?.[day.forecastDate] || 0;
@@ -1991,7 +2021,7 @@ async function summarizeAiSchedule(payload: any, draft: any) {
         {
           role: "user",
           content: JSON.stringify({
-            goal: "Review this weekly hotel schedule draft for HPOR target 1.3 and Housekeeping MPOR target 25-30.",
+            goal: `Review this weekly hotel schedule draft for HPOR target ${TARGET_HPOR} and Housekeeping MPOR target 25-30.`,
             baseline,
           }),
         },

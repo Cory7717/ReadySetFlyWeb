@@ -190,6 +190,7 @@ type ScheduleEmployee = {
   department: string;
   position?: string | null;
   rolesJson?: string[] | null;
+  roleRatesJson?: Record<string, number | string> | null;
   isSalaried?: boolean;
   isDepartmentManager?: boolean;
   sortOrder?: number;
@@ -2109,7 +2110,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
 
 function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollImport, importingPayroll, spanish }: { employees: ScheduleEmployee[]; canViewRates: boolean; spanish: boolean; onAdd: (employee: any) => void; onUpdate: (id: string, patch: any) => void; onPayrollImport: (file: File) => void; importingPayroll: boolean }) {
   const payrollInputRef = useRef<HTMLInputElement | null>(null);
-  const emptyForm = { firstName: "", lastName: "", displayName: "", department: "Front Desk", position: "", rolesJson: [] as string[], hourlyRate: "", email: "", phone: "", isSalaried: false, isDepartmentManager: false };
+  const emptyForm = { firstName: "", lastName: "", displayName: "", department: "Front Desk", position: "", rolesJson: [] as string[], roleRatesJson: {} as Record<string, string>, hourlyRate: "", email: "", phone: "", isSalaried: false, isDepartmentManager: false };
   const [form, setForm] = useState(emptyForm);
   const [expanded, setExpanded] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
@@ -2120,9 +2121,15 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
   const employeePatch = (employee: ScheduleEmployee) => editing[employee.id] || employee;
   const saveEmployee = (employee: ScheduleEmployee) => {
     const patch = employeePatch(employee);
+    const roleRatesJson = Object.fromEntries(
+      Object.entries(patch.roleRatesJson || {})
+        .filter(([, rate]) => rate !== "" && rate != null)
+        .map(([role, rate]) => [role, Number(rate)]),
+    );
     onUpdate(employee.id, {
       ...patch,
       hourlyRate: patch.hourlyRate === "" || patch.hourlyRate == null ? null : Number(patch.hourlyRate),
+      roleRatesJson,
     });
   };
   const toggleEmployeeRole = (employee: ScheduleEmployee, role: string) => {
@@ -2195,10 +2202,10 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
           </div>
           {canViewRates && (
             <div>
-              <Label>{form.isSalaried ? "Salary labor rate" : "Hourly rate"}</Label>
+              <Label>{form.isSalaried ? "Salary labor rate" : "Base hourly rate"}</Label>
               <Input
                 className={C.field}
-                placeholder={form.isSalaried ? "Salary hourly equivalent" : t("Hourly rate")}
+                placeholder={form.isSalaried ? "Salary hourly equivalent" : "Base hourly rate"}
                 type="number"
                 step="0.01"
                 min="0"
@@ -2208,11 +2215,39 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
               <div className="mt-1 text-xs text-[#5f5247]">Used for labor dollar calculations. Manual edits override missing payroll import data.</div>
             </div>
           )}
+          {canViewRates && form.rolesJson.length > 0 && (
+            <div className="sm:col-span-2 rounded-lg border border-[#e0d3c1] bg-white p-3">
+              <Label>Role-specific hourly rates</Label>
+              <p className="mb-2 text-xs text-[#5f5247]">Optional. Leave a role blank to use the base hourly rate.</p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {form.rolesJson.map((role) => (
+                  <div key={role}>
+                    <Label className="text-xs">{role}</Label>
+                    <Input
+                      className={C.field}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder={form.hourlyRate ? `Base $${form.hourlyRate}` : "Use base rate"}
+                      value={form.roleRatesJson[role] || ""}
+                      onChange={(event) => setForm({ ...form, roleRatesJson: { ...form.roleRatesJson, [role]: event.target.value } })}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <Input className={C.field} placeholder={t("Email")} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
           <Input className={C.field} placeholder={t("Phone")} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isSalaried} onChange={(event) => setForm({ ...form, isSalaried: event.target.checked })} /> Salaried</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isDepartmentManager} onChange={(event) => setForm({ ...form, isDepartmentManager: event.target.checked })} /> Department manager</label>
-          <Button className={C.green} onClick={() => { onAdd({ ...form, hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate) }); setForm(emptyForm); }}><Plus className="mr-2 h-4 w-4" />{t("Add employee")}</Button>
+          <Button className={C.green} onClick={() => {
+            const roleRatesJson = Object.fromEntries(
+              Object.entries(form.roleRatesJson).filter(([, rate]) => rate !== "").map(([role, rate]) => [role, Number(rate)]),
+            );
+            onAdd({ ...form, hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate), roleRatesJson });
+            setForm(emptyForm);
+          }}><Plus className="mr-2 h-4 w-4" />{t("Add employee")}</Button>
           {canViewRates && (
             <>
               <input
@@ -2307,28 +2342,57 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
                   <Input className={C.field} placeholder="Email" value={draft.email || ""} onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, email: event.target.value } })} />
                 </div>
                 {canViewRates && (
-                  <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
-                    <div>
-                      <Label>{draft.isSalaried ? "Salary labor rate" : "Hourly rate"}</Label>
-                      <Input
-                        className={C.field}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={draft.hourlyRate ?? ""}
-                        placeholder={draft.isSalaried ? "Salary hourly equivalent" : "Hourly rate"}
-                        onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, hourlyRate: event.target.value } })}
-                      />
+                  <>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+                      <div>
+                        <Label>{draft.isSalaried ? "Salary labor rate" : "Base hourly rate"}</Label>
+                        <Input
+                          className={C.field}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={draft.hourlyRate ?? ""}
+                          placeholder={draft.isSalaried ? "Salary hourly equivalent" : "Base hourly rate"}
+                          onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, hourlyRate: event.target.value } })}
+                        />
+                      </div>
+                      <label className="mt-6 flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(draft.isSalaried)}
+                          onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, isSalaried: event.target.checked } })}
+                        />
+                        Salaried
+                      </label>
                     </div>
-                    <label className="mt-6 flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(draft.isSalaried)}
-                        onChange={(event) => setEditing({ ...editing, [employee.id]: { ...draft, isSalaried: event.target.checked } })}
-                      />
-                      Salaried
-                    </label>
-                  </div>
+                    {roles.length > 0 && (
+                      <div className="mt-2 rounded-lg border border-[#e0d3c1] bg-[#fbf6ee] p-3">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Role-specific hourly rates</div>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {roles.map((role) => (
+                            <div key={role}>
+                              <Label className="text-xs">{role}</Label>
+                              <Input
+                                className={C.field}
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder={draft.hourlyRate ? `Base $${draft.hourlyRate}` : "Use base rate"}
+                                value={draft.roleRatesJson?.[role] ?? ""}
+                                onChange={(event) => setEditing({
+                                  ...editing,
+                                  [employee.id]: {
+                                    ...draft,
+                                    roleRatesJson: { ...(draft.roleRatesJson || {}), [role]: event.target.value },
+                                  },
+                                })}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
                 {(!draft.phone || !draft.email) && <Badge variant="outline" className="mt-2 border-amber-300 bg-amber-50 text-amber-900">Missing phone/email</Badge>}
                 <div className="mt-3">

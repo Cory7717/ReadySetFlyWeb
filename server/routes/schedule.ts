@@ -201,6 +201,22 @@ function isBistroManagerEmployee(employee: any) {
   return hasBistroRole && hasManagerRole;
 }
 
+function hourlyRateForAssignment(employee: any, assignment: any, shiftType: any) {
+  const roleRates = employee?.roleRatesJson && typeof employee.roleRatesJson === "object"
+    ? employee.roleRatesJson as Record<string, unknown>
+    : {};
+  const candidates = [assignment?.roleWorked, shiftType?.label]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+  for (const candidate of candidates) {
+    const match = Object.entries(roleRates).find(([role]) => role.trim().toLowerCase() === candidate);
+    if (!match) continue;
+    const rate = Number(match[1]);
+    if (Number.isFinite(rate) && rate >= 0) return rate;
+  }
+  return Number(employee?.hourlyRate || 0);
+}
+
 function rolesArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
   if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -783,6 +799,7 @@ const employeeSchema = z.object({
   department: z.string().trim().min(1).max(120).default("Front Desk"),
   position: z.string().trim().max(120).optional().nullable(),
   rolesJson: z.array(z.string().trim().min(1).max(80)).optional().nullable(),
+  roleRatesJson: z.record(z.string().trim().min(1).max(80), z.coerce.number().min(0).max(500)).optional().nullable(),
   isSalaried: z.boolean().optional().default(false),
   isDepartmentManager: z.boolean().optional().default(false),
   sortOrder: z.coerce.number().int().min(0).optional().default(0),
@@ -1207,7 +1224,7 @@ function stripPrivateScheduleRates(payload: any, user: any) {
   } = payload.totals || {};
   return {
     ...enriched,
-    employees: payload.employees.map(({ hourlyRate, ...employee }: any) => employee),
+    employees: payload.employees.map(({ hourlyRate, roleRatesJson, ...employee }: any) => employee),
     totals: {
       ...publicTotals,
       laborMetrics: laborMetrics
@@ -1229,7 +1246,7 @@ function stripPrivateScheduleRates(payload: any, user: any) {
 
 function stripPrivateEmployeeRates(employees: any[], user: any) {
   if (publicScheduleUser(user).isSuperAdmin) return employees;
-  return employees.map(({ hourlyRate, ...employee }: any) => employee);
+  return employees.map(({ hourlyRate, roleRatesJson, ...employee }: any) => employee);
 }
 
 async function addRequestConflictInfo(rows: Array<{ request: any; user: any }>) {
@@ -1292,7 +1309,7 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     const department = normalizeDepartment(assignment.roleWorked || employee?.department || shiftType?.departmentHint);
     const hours = hoursForShift(assignment, shiftType);
     const isSalaried = employee ? isSalariedScheduleManager(employee) : false;
-    const laborDollarsIncludingSalary = hours * Number(employee?.hourlyRate || 0);
+    const laborDollarsIncludingSalary = hours * hourlyRateForAssignment(employee, assignment, shiftType);
     const laborDollars = isSalaried ? 0 : laborDollarsIncludingSalary;
     const salariedLaborDollars = isSalaried ? laborDollarsIncludingSalary : 0;
     const hourlyHours = isSalaried ? 0 : hours;
@@ -2643,6 +2660,7 @@ export function registerScheduleRoutes(app: Express) {
       const [employee] = await db.insert(scheduleEmployees).values({
         ...parsed.data,
         hourlyRate: isSuperAdmin && parsed.data.hourlyRate != null ? parsed.data.hourlyRate.toFixed(2) : null,
+        roleRatesJson: isSuperAdmin ? parsed.data.roleRatesJson || null : null,
         department: normalizeDepartment(parsed.data.department),
         rolesJson: parsed.data.rolesJson || rolesArray(parsed.data.position || parsed.data.department),
         isSalaried: Boolean(parsed.data.isSalaried),
@@ -2653,7 +2671,7 @@ export function registerScheduleRoutes(app: Express) {
         maxWeeklyHours: parsed.data.maxWeeklyHours == null ? null : parsed.data.maxWeeklyHours.toFixed(2),
       } as any).returning();
       await audit(null, req.scheduleUser.id, "employee_created", { employeeId: employee.id });
-      res.status(201).json({ employee });
+      res.status(201).json({ employee: stripPrivateEmployeeRates([employee], req.scheduleUser)[0] });
     } catch (error) {
       next(error);
     }
@@ -2669,6 +2687,9 @@ export function registerScheduleRoutes(app: Express) {
         hourlyRate: isSuperAdmin && Object.prototype.hasOwnProperty.call(parsed.data, "hourlyRate")
           ? parsed.data.hourlyRate == null ? null : parsed.data.hourlyRate.toFixed(2)
           : undefined,
+        roleRatesJson: isSuperAdmin && Object.prototype.hasOwnProperty.call(parsed.data, "roleRatesJson")
+          ? parsed.data.roleRatesJson || null
+          : undefined,
         department: parsed.data.department ? normalizeDepartment(parsed.data.department) : undefined,
         rolesJson: parsed.data.rolesJson === null ? null : parsed.data.rolesJson,
         isSalaried: parsed.data.isSalaried,
@@ -2680,7 +2701,7 @@ export function registerScheduleRoutes(app: Express) {
       } as any).where(eq(scheduleEmployees.id, req.params.id)).returning();
       if (!employee) return res.status(404).json({ error: "Employee not found" });
       await audit(null, req.scheduleUser.id, "employee_updated", { employeeId: employee.id });
-      res.json({ employee });
+      res.json({ employee: stripPrivateEmployeeRates([employee], req.scheduleUser)[0] });
     } catch (error) {
       next(error);
     }

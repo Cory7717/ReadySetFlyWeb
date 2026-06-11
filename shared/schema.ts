@@ -463,6 +463,7 @@ export const scheduleEmployees = pgTable("schedule_employees", {
   department: text("department").notNull().default("Other"),
   position: text("position"),
   rolesJson: jsonb("roles_json"),
+  roleRatesJson: jsonb("role_rates_json"),
   isSalaried: boolean("is_salaried").notNull().default(false),
   isDepartmentManager: boolean("is_department_manager").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),

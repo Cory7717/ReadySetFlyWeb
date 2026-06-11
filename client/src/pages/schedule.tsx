@@ -2467,6 +2467,7 @@ export default function SchedulePage() {
   const [selectedActualHours, setSelectedActualHours] = useState<{ employee: ScheduleEmployee; date: string; actual?: ScheduleActualHours } | null>(null);
   const [aiDraft, setAiDraft] = useState<AiScheduleDraft | null>(null);
   const [aiGeneratingMode, setAiGeneratingMode] = useState<"frontDesk" | "housekeeping" | null>(null);
+  const [aiToolsOpen, setAiToolsOpen] = useState(false);
   const [hoursComparison, setHoursComparison] = useState<HoursComparison | null>(null);
   const [teamMessageOpen, setTeamMessageOpen] = useState(false);
   const [teamMessage, setTeamMessage] = useState({
@@ -2509,6 +2510,8 @@ export default function SchedulePage() {
 
   useEffect(() => {
     setHoursComparison(null);
+    setAiDraft(null);
+    setAiToolsOpen(false);
   }, [payload?.schedule.id]);
 
   const createWeek = useMutation({
@@ -2634,7 +2637,7 @@ export default function SchedulePage() {
   });
   const generateAiSchedule = useMutation({
     mutationFn: async ({ mode }: { mode: "frontDesk" | "housekeeping" }) => {
-      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/generate`, { mode });
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/generate`, { mode, userInitiated: true });
       return response.json() as Promise<AiScheduleDraft>;
     },
     onMutate: ({ mode }) => setAiGeneratingMode(mode),
@@ -2648,7 +2651,11 @@ export default function SchedulePage() {
   const applyAiSchedule = useMutation({
     mutationFn: async () => {
       if (!aiDraft) throw new Error("Generate an AI draft first.");
-      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/apply`, { mode: aiDraft.mode, assignments: aiDraft.assignments });
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/ai/apply`, {
+        mode: aiDraft.mode,
+        assignments: aiDraft.assignments,
+        userInitiated: true,
+      });
       return response.json();
     },
     onSuccess: () => {
@@ -2911,21 +2918,7 @@ export default function SchedulePage() {
                     <CardTitle className={C.ink}>{payload.schedule.propertyName}</CardTitle>
                     <CardDescription className={C.muted}>{formatWeek(payload.schedule.weekStartDate, payload.schedule.weekEndDate)}</CardDescription>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {canGenerateFrontDeskAi && (
-                      <Button className={C.accent} disabled={Boolean(aiGeneratingMode)} onClick={() => generateAiSchedule.mutate({ mode: "frontDesk" })}>
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        {aiGeneratingMode === "frontDesk" ? "Generating FD..." : "FD Rotation AI"}
-                      </Button>
-                    )}
-                    {canGenerateHousekeepingAi && (
-                      <Button variant="outline" className={C.outline} disabled={Boolean(aiGeneratingMode)} onClick={() => generateAiSchedule.mutate({ mode: "housekeeping" })}>
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        {aiGeneratingMode === "housekeeping" ? "Generating HK..." : "HK Coverage AI"}
-                      </Button>
-                    )}
-                    <Badge variant="outline" className={statusBadge(payload.schedule.status)}>{payload.schedule.status}</Badge>
-                  </div>
+                  <Badge variant="outline" className={statusBadge(payload.schedule.status)}>{payload.schedule.status}</Badge>
                 </div>
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
@@ -2969,6 +2962,45 @@ export default function SchedulePage() {
                 <div className="rounded-xl border border-[#e0d3c1] bg-white p-4"><div className="text-sm text-[#5f5247]">{spanish ? ES.Warnings : "Warnings"}</div><div className="text-3xl font-semibold">{payload.totals.warnings.length}</div></div>
               </CardContent>
             </Card>
+
+            {(canGenerateFrontDeskAi || canGenerateHousekeepingAi) && (
+              <Card className={`${C.shell} print:hidden`}>
+                <CardHeader className="pb-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={`${C.outline} h-auto w-full justify-between px-4 py-3 text-left`}
+                    aria-expanded={aiToolsOpen}
+                    onClick={() => setAiToolsOpen((open) => !open)}
+                  >
+                    <span>
+                      <span className="block font-semibold">Optional AI scheduling tools</span>
+                      <span className="mt-1 block text-xs font-normal text-[#5f5247]">
+                        Manual entry and drag-to-copy are the primary scheduling workflow. AI runs only when you open this section and choose a draft.
+                      </span>
+                    </span>
+                    {aiToolsOpen ? <ChevronUp className="ml-3 h-4 w-4 shrink-0" /> : <ChevronDown className="ml-3 h-4 w-4 shrink-0" />}
+                  </Button>
+                </CardHeader>
+                {aiToolsOpen && (
+                  <CardContent className="flex flex-wrap items-center gap-3 pt-0">
+                    {canGenerateFrontDeskAi && (
+                      <Button className={C.accent} disabled={Boolean(aiGeneratingMode)} onClick={() => generateAiSchedule.mutate({ mode: "frontDesk" })}>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        {aiGeneratingMode === "frontDesk" ? "Generating FD..." : "Create Front Desk AI draft"}
+                      </Button>
+                    )}
+                    {canGenerateHousekeepingAi && (
+                      <Button variant="outline" className={C.outline} disabled={Boolean(aiGeneratingMode)} onClick={() => generateAiSchedule.mutate({ mode: "housekeeping" })}>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        {aiGeneratingMode === "housekeeping" ? "Generating HK..." : "Create Housekeeping AI draft"}
+                      </Button>
+                    )}
+                    <p className="text-sm text-[#5f5247]">Generating a draft does not change or publish the schedule. You must review and explicitly apply it.</p>
+                  </CardContent>
+                )}
+              </Card>
+            )}
 
             {payload.totals.laborMetrics && (
               <Card className={C.shell}>
@@ -3212,7 +3244,7 @@ export default function SchedulePage() {
           <DialogHeader>
             <DialogTitle>AI schedule draft</DialogTitle>
             <DialogDescription className={C.muted}>
-              Review the draft before applying. Applying updates matching associate/date cells but does not publish the schedule.
+              Review the draft before applying. Only the associate/date cells shown in this proposal are updated. Existing shifts not shown here are preserved.
             </DialogDescription>
           </DialogHeader>
           {aiDraft && (
@@ -3248,8 +3280,10 @@ export default function SchedulePage() {
               )}
               <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" className={C.outline} onClick={() => setAiDraft(null)}>Keep manual schedule</Button>
-                <Button className={C.green} disabled={applyAiSchedule.isPending} onClick={() => applyAiSchedule.mutate()}>
-                  {applyAiSchedule.isPending ? "Applying..." : "Apply AI draft"}
+                <Button className={C.green} disabled={applyAiSchedule.isPending} onClick={() => {
+                  if (window.confirm("Apply only the proposed associate/date cells? Existing shifts outside this proposal will remain unchanged.")) applyAiSchedule.mutate();
+                }}>
+                  {applyAiSchedule.isPending ? "Applying..." : "Apply proposed cells"}
                 </Button>
               </div>
             </div>

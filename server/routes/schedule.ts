@@ -3135,7 +3135,13 @@ export function registerScheduleRoutes(app: Express) {
           } as any,
         });
       }
-      await audit(schedule.id, req.scheduleUser.id, "shift_updated", { employeeId, shiftDate: parsed.data.shiftDate });
+      await audit(schedule.id, req.scheduleUser.id, "shift_updated", {
+        employeeId,
+        shiftDate: parsed.data.shiftDate,
+        clear: parsed.data.clear,
+        shiftTypeId: parsed.data.shiftTypeId || null,
+        roleWorked: parsed.data.roleWorked || null,
+      });
       res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {
       next(error);
@@ -3319,6 +3325,9 @@ export function registerScheduleRoutes(app: Express) {
 
   router.post("/weeks/:id/ai/generate", requireScheduleManager, scheduleRateLimiter, async (req: any, res, next) => {
     try {
+      if (req.body?.userInitiated !== true) {
+        return res.status(400).json({ error: "AI schedule generation must be explicitly started by a schedule manager." });
+      }
       const payload = await buildSchedulePayload(req.params.id);
       if (!payload) return res.status(404).json({ error: "Schedule not found" });
       if (payload.schedule.status === "published") return res.status(423).json({ error: "Published schedules are locked. Reopen before generating a draft." });
@@ -3352,6 +3361,9 @@ export function registerScheduleRoutes(app: Express) {
 
   router.post("/weeks/:id/ai/apply", requireScheduleManager, async (req: any, res, next) => {
     try {
+      if (req.body?.userInitiated !== true) {
+        return res.status(400).json({ error: "AI schedule changes must be explicitly applied by a schedule manager." });
+      }
       const schedule = await getScheduleOr404(req.params.id);
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
       if (schedule.status === "published") return res.status(423).json({ error: "Published schedules are locked. Reopen before applying a draft." });
@@ -3373,15 +3385,6 @@ export function registerScheduleRoutes(app: Express) {
       if (allowedDepartment) {
         if (!(await canManageDepartment(req.scheduleUser, allowedDepartment))) {
           return res.status(403).json({ error: `You can only apply AI drafts for your assigned department.` });
-        }
-        const existingAssignments = await db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, schedule.id));
-        for (const existing of existingAssignments) {
-          const employee = employeeById.get(existing.employeeId || "");
-          const shiftType = shiftTypeById.get(existing.shiftTypeId || "");
-          const department = assignmentRenderDepartment(existing, employee, shiftType);
-          if (department === allowedDepartment) {
-            await db.delete(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.id, existing.id));
-          }
         }
       }
       for (const assignment of parsed.data.assignments) {
@@ -3418,7 +3421,16 @@ export function registerScheduleRoutes(app: Express) {
         });
         applied += 1;
       }
-      await audit(schedule.id, req.scheduleUser.id, "schedule_ai_draft_applied", { applied });
+      await audit(schedule.id, req.scheduleUser.id, "schedule_ai_draft_applied", {
+        applied,
+        mode: parsed.data.mode,
+        behavior: "upsert_only",
+        cells: parsed.data.assignments.map((assignment) => ({
+          employeeId: assignment.employeeId,
+          shiftDate: assignment.shiftDate,
+          shiftTypeId: assignment.shiftTypeId,
+        })),
+      });
       res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {
       next(error);
@@ -3487,7 +3499,18 @@ export function registerScheduleRoutes(app: Express) {
       if (missing.length) return res.status(409).json({ error: "All departments must be completed before final publish.", missingDepartments: missing });
       const [schedule] = await db.update(weeklySchedules).set({ status: "published", publishedAt: new Date(), updatedAt: new Date() }).where(eq(weeklySchedules.id, req.params.id)).returning();
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
-      await audit(schedule.id, req.scheduleUser.id, "schedule_published");
+      const publishedAssignments = await db
+        .select({ employeeId: scheduleShiftAssignments.employeeId, shiftDate: scheduleShiftAssignments.shiftDate, shiftTypeId: scheduleShiftAssignments.shiftTypeId })
+        .from(scheduleShiftAssignments)
+        .where(eq(scheduleShiftAssignments.scheduleId, schedule.id));
+      await audit(schedule.id, req.scheduleUser.id, "schedule_published", {
+        assignmentCount: publishedAssignments.length,
+        cells: publishedAssignments.map((assignment) => ({
+          employeeId: assignment.employeeId,
+          shiftDate: assignment.shiftDate,
+          shiftTypeId: assignment.shiftTypeId,
+        })),
+      });
       res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {
       next(error);

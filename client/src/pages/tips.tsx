@@ -738,6 +738,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const [editingBanquetId, setEditingBanquetId] = useState<string | null>(null);
   const [banquetOpen, setBanquetOpen] = useState(false);
   const [salesOpen, setSalesOpen] = useState(false);
+  const [expandedAssociateIds, setExpandedAssociateIds] = useState<string[]>([]);
   const { data: grid, isLoading } = useQuery<TipsGrid>({
     queryKey: ["/api/tips/grid", selectedPeriodStart],
     queryFn: () => fetchJson(`/api/tips/grid${selectedPeriodStart ? `?start=${selectedPeriodStart}` : ""}`),
@@ -881,6 +882,9 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const banquetSplitAmount = banquetAssociateIds.length ? computedBanquetTips / banquetAssociateIds.length : 0;
   const toggleBanquetAssociate = (userId: string) => {
     setBanquetAssociateIds((current) => current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]);
+  };
+  const toggleAssociateRow = (userId: string) => {
+    setExpandedAssociateIds((current) => current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]);
   };
   const startEditBanquetReport = (report: TipsGrid["banquetReports"][number]) => {
     setEditingBanquetId(report.id);
@@ -1085,11 +1089,16 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto rounded-xl border border-[#ddccb5] bg-white">
-          <table className="min-w-[920px] w-full border-collapse text-sm">
+        <div className="rounded-xl border border-[#ddccb5] bg-white">
+          <table className="w-full table-fixed border-collapse text-xs">
+            <colgroup>
+              <col className="w-[16%]" />
+              {days.map((date) => <col key={date} className="w-[11.2%]" />)}
+              <col className="w-[5.6%]" />
+            </colgroup>
             <thead>
               <tr className="bg-[#fbf6ee] text-left">
-                <th className="sticky left-0 z-10 min-w-[190px] border-b border-r border-[#e0d3c1] bg-[#fbf6ee] p-3 align-top">
+                <th className="border-b border-r border-[#e0d3c1] bg-[#fbf6ee] p-2 align-top">
                   <div className="font-semibold text-[#201814]">Daily sales report</div>
                   <div className="mt-1 text-xs font-normal text-[#5f5247]">
                     Gross sales, tip %, and report upload apply to the whole day.
@@ -1099,7 +1108,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                   const totalForDay = dayTotal(date);
                   const isToday = date === todayKey();
                   return (
-                    <th key={date} className={`min-w-[132px] border-b border-r border-[#e0d3c1] p-2 align-top ${isToday ? "bg-[#fff3d8]" : ""}`}>
+                    <th key={date} className={`border-b border-r border-[#e0d3c1] p-1.5 align-top ${isToday ? "bg-[#fff3d8]" : ""}`}>
                       <div className="font-semibold">{isToday ? "Today" : formatDisplayDate(date).split(",")[0]}</div>
                       <div className="text-xs text-[#5f5247]">{formatDisplayDate(date).replace(/^\w+,\s*/, "")}</div>
                       <div className="mt-2 space-y-1">
@@ -1138,44 +1147,69 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                     </th>
                   );
                 })}
-                <th className="min-w-[110px] border-b border-[#e0d3c1] p-3 text-right">Total</th>
+                <th className="border-b border-[#e0d3c1] p-2 text-right">Total</th>
               </tr>
-              <tr className="bg-[#f4eadb] text-left">
-                <th className="sticky left-0 z-10 border-b border-r border-[#e0d3c1] bg-[#f4eadb] p-3">
+              <tr className="sticky top-0 z-30 bg-[#f4eadb] text-left shadow-sm">
+                <th className="sticky left-0 z-40 border-b border-r border-[#e0d3c1] bg-[#f4eadb] p-2">
                   <div className="flex items-center justify-between gap-2">
                     <span>Bistro associate</span>
-                    <Button type="button" size="sm" variant="outline" className={`h-8 w-8 p-0 ${C.outline}`} onClick={() => setAddAssociateOpen(true)} aria-label="Add Bistro associate">
-                      <UserPlus className="h-4 w-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className={`h-7 px-2 text-[10px] ${C.outline}`}
+                        onClick={() => setExpandedAssociateIds(
+                          grid.rows.every((row) => expandedAssociateIds.includes(row.associate.id))
+                            ? []
+                            : grid.rows.map((row) => row.associate.id),
+                        )}
+                      >
+                        {grid.rows.every((row) => expandedAssociateIds.includes(row.associate.id)) ? "Collapse all" : "Expand all"}
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" className={`h-7 w-7 p-0 ${C.outline}`} onClick={() => setAddAssociateOpen(true)} aria-label="Add Bistro associate">
+                        <UserPlus className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 </th>
-                {days.map((date) => (
-                  <th key={`entry-${date}`} className="border-b border-r border-[#e0d3c1] p-2 text-center text-xs font-semibold uppercase tracking-wide text-[#5f5247]">
-                    Associate tips / shift sales
+                {days.map((date) => {
+                  const isToday = date === todayKey();
+                  return (
+                  <th key={`entry-${date}`} className={`border-b border-r border-[#e0d3c1] p-2 text-center font-semibold ${isToday ? "bg-[#fff3d8] text-[#7a4b00]" : "text-[#5f5247]"}`}>
+                    <div>{isToday ? "Today" : formatDisplayDate(date).split(",")[0]}</div>
+                    <div className="text-[10px] font-normal">{formatDisplayDate(date).replace(/^\w+,\s*/, "")}</div>
                   </th>
-                ))}
-                <th className="border-b border-[#e0d3c1] p-3 text-right">Associate total</th>
+                );})}
+                <th className="border-b border-[#e0d3c1] p-2 text-right">Total</th>
               </tr>
             </thead>
             <tbody>
-              {grid.rows.map((row) => (
+              {grid.rows.map((row) => {
+                const expanded = expandedAssociateIds.includes(row.associate.id);
+                return (
                 <tr key={`${title}-${row.associate.id}`} className="odd:bg-white even:bg-[#fffaf2]">
-                  <td className="sticky left-0 z-10 border-r border-t border-[#e0d3c1] bg-inherit p-3">
-                    <div className="font-semibold text-[#201814]">{row.associate.employeeDisplayName}</div>
-                    <div className="text-xs text-[#5f5247]">{row.associate.position || "Associate"}</div>
+                  <td className="sticky left-0 z-10 border-r border-t border-[#e0d3c1] bg-inherit p-2">
+                    <button type="button" className="flex w-full items-start justify-between gap-1 text-left" onClick={() => toggleAssociateRow(row.associate.id)}>
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-[#201814]">{row.associate.employeeDisplayName}</span>
+                        <span className="block truncate text-[10px] text-[#5f5247]">{row.associate.position || "Associate"}</span>
+                      </span>
+                      <ChevronDown className={`mt-0.5 h-4 w-4 shrink-0 text-[#5f5247] transition-transform ${expanded ? "rotate-180" : ""}`} />
+                    </button>
                   </td>
                   {days.map((date) => {
                     const cell = row.cells.find((item) => item.date === date)!;
                     const lockedCell = grid.locked || cell.confirmed;
                     return (
-                      <td key={`${row.associate.id}-${date}`} className="border-r border-t border-[#e0d3c1] p-2 align-top">
-                        <div className="space-y-2">
+                      <td key={`${row.associate.id}-${date}`} className="border-r border-t border-[#e0d3c1] p-1.5 align-top">
+                        {expanded ? <div className="space-y-1.5">
                           <div>
                             <div className="mb-1 text-[10px] font-semibold uppercase text-[#5f5247]">CC tips</div>
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#5f5247]">$</span>
                               <Input
-                                className={`${C.field} h-9 pl-6 text-right`}
+                                className={`${C.field} h-8 px-1 pl-4 text-right text-xs`}
                                 inputMode="decimal"
                                 disabled={lockedCell}
                                 value={cellValue(row, cell)}
@@ -1192,7 +1226,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#5f5247]">$</span>
                               <Input
-                                className={`${C.field} h-9 pl-6 text-right`}
+                                className={`${C.field} h-8 px-1 pl-4 text-right text-xs`}
                                 inputMode="decimal"
                                 disabled={lockedCell}
                                 value={cellSalesValue(row, cell)}
@@ -1204,11 +1238,17 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                               />
                             </div>
                           </div>
-                          <div className="rounded-md bg-[#e8f1ea] px-2 py-1 text-center text-xs font-semibold text-[#173c25]">
+                          <div className="rounded-md bg-[#e8f1ea] px-1 py-1 text-center text-[10px] font-semibold text-[#173c25]">
                             Personal tip % {formatPercent(personalTipPercent(row, cell))}
                           </div>
-                        </div>
-                        <div className="mt-2 min-h-8">
+                        </div> : (
+                          <button type="button" className="w-full rounded-md p-1 text-center hover:bg-[#f4eadb]" onClick={() => toggleAssociateRow(row.associate.id)}>
+                            <div className="font-semibold text-[#201814]">{formatMoney(cellValue(row, cell))}</div>
+                            <div className="text-[10px] text-[#5f5247]">Sales {formatMoney(cellSalesValue(row, cell))}</div>
+                            {Number(cellValue(row, cell)) > 0 && <div className="text-[10px] font-semibold text-[#2f5f46]">{formatPercent(personalTipPercent(row, cell))}</div>}
+                          </button>
+                        )}
+                        {expanded && <div className="mt-1.5 min-h-7">
                           {cell.confirmed ? (
                             canUnlock && cell.entryId ? (
                               <Button type="button" size="sm" variant="outline" className={`h-7 w-full text-xs ${C.outline}`} onClick={() => unlockEntry.mutate(cell.entryId!)}>
@@ -1224,13 +1264,13 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                           ) : Number(cellValue(row, cell)) > 0 ? (
                             <div className="text-center text-[10px] text-amber-800">Enter shift sales to confirm</div>
                           ) : null}
-                        </div>
+                        </div>}
                       </td>
                     );
                   })}
-                  <td className="border-t border-[#e0d3c1] p-3 text-right font-semibold">{formatMoney(row.totalTips)}</td>
+                  <td className="border-t border-[#e0d3c1] p-1.5 text-right font-semibold">{formatMoney(row.totalTips)}</td>
                 </tr>
-              ))}
+              );})}
               <tr className="bg-[#e8f1ea] font-semibold text-[#173c25]">
                 <td className="sticky left-0 z-10 border-r border-t border-[#bdd5c3] bg-[#e8f1ea] p-3">Daily total</td>
                 {days.map((date) => (

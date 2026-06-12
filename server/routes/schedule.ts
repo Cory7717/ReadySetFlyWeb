@@ -2420,7 +2420,7 @@ async function renderSchedulePdf(payload: any) {
       ? [[`${department} total hours`, "departmentDailyHours", "departmentWeeklyHours", tan, true] as const]
       : [
           ["Associate hours", "departmentAssociateDailyHours", "departmentAssociateWeeklyHours", tan, false] as const,
-          ["Supervisor hours", "departmentSupervisorDailyHours", "departmentSupervisorWeeklyHours", paleGreen, true] as const,
+          ["Manager hours", "departmentSupervisorDailyHours", "departmentSupervisorWeeklyHours", paleGreen, true] as const,
           [`${department} total hours`, "departmentDailyHours", "departmentWeeklyHours", tan, true] as const,
         ];
     for (const [label, dailyKey, weeklyKey, fill, isBold] of subtotalRows) {

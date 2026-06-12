@@ -2107,8 +2107,19 @@ export function registerTipsRoutes(app: Express) {
     try {
       const [entry] = await db.select().from(tipEntries).where(eq(tipEntries.id, req.params.id)).limit(1);
       if (!entry) return res.status(404).json({ error: "Tip entry not found" });
-      if (moneyNumber(entry.tipAmount) > 0 && moneyNumber(entry.grossSales) <= 0) {
-        return res.status(409).json({ error: "Enter this associate's gross shift sales before confirming the tip entry." });
+      if (moneyNumber(entry.tipAmount) > 0) {
+        const bistroUsers = await getBistroTipsUsers();
+        const bistroUserIds = bistroUsers.map((user) => user.id);
+        const dayEntries = bistroUserIds.length
+          ? await db
+              .select({ grossSales: tipEntries.grossSales })
+              .from(tipEntries)
+              .where(and(eq(tipEntries.entryDate, entry.entryDate), inArray(tipEntries.userId, bistroUserIds)))
+          : [];
+        const sharedDaySales = dayEntries.reduce((sum, row) => sum + moneyNumber(row.grossSales), 0);
+        if (sharedDaySales <= 0) {
+          return res.status(409).json({ error: "Enter gross sales under one associate sharing this card before confirming the day's tip entries." });
+        }
       }
       const submission = await getGridSubmission(entry.payPeriodStart, entry.payPeriodEnd);
       if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
@@ -2194,8 +2205,8 @@ export function registerTipsRoutes(app: Express) {
       const daysWithTips = grid.dayTotals.filter((day: any) => moneyNumber(day.totalTips) > 0);
       const missingReports = daysWithTips.filter((day: any) => !day.report);
       if (missingReports.length > 0) return res.status(400).json({ error: "Every day with entered tips needs a sales report image before final submission." });
-      const missingShiftSales = grid.rows.flatMap((row: any) => row.cells.filter((cell: any) => moneyNumber(cell.tipAmount) > 0 && moneyNumber(cell.grossSales) <= 0));
-      if (missingShiftSales.length > 0) return res.status(400).json({ error: "Every associate tip entry needs gross shift sales before final submission." });
+      const missingSalesDays = grid.dayTotals.filter((day: any) => moneyNumber(day.totalTips) > 0 && moneyNumber(day.grossSales) <= 0);
+      if (missingSalesDays.length > 0) return res.status(400).json({ error: "Every day with tips needs gross sales entered under at least one associate sharing the card." });
       const unconfirmedEntries = grid.rows.flatMap((row: any) => row.cells.filter((cell: any) => moneyNumber(cell.tipAmount) > 0 && !cell.confirmed));
       if (unconfirmedEntries.length > 0) return res.status(400).json({ error: "Every associate tip amount must be confirmed before final submission." });
       let [submission] = await db

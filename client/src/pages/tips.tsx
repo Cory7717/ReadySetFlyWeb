@@ -863,7 +863,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
 
   const canReopenEntry = !grid.locked;
   const missingReportDays = grid.dayTotals.filter((day) => Number(day.totalTips) > 0 && !day.report);
-  const missingShiftSalesCount = grid.rows.reduce((count, row) => count + row.cells.filter((cell) => Number(cell.tipAmount) > 0 && Number(cell.grossSales) <= 0).length, 0);
+  const missingSalesDays = grid.dayTotals.filter((day) => Number(day.totalTips) > 0 && Number(day.grossSales) <= 0);
   const unconfirmedCount = grid.rows.reduce((count, row) => count + row.cells.filter((cell) => Number(cell.tipAmount) > 0 && !cell.confirmed).length, 0);
   const enteredDays = grid.dayTotals.filter((day) => Number(day.totalTips) > 0).length;
   const week1Days = grid.period.days.slice(0, 7);
@@ -1263,12 +1263,12 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                             ) : (
                               <Badge variant="outline" className="w-full justify-center border-emerald-300 bg-emerald-50 text-emerald-800">Confirmed</Badge>
                             )
-                          ) : Number(cellValue(row, cell)) > 0 && Number(cellSalesValue(row, cell)) > 0 && cell.entryId ? (
+                          ) : Number(cellValue(row, cell)) > 0 && Number(dayTotal(cell.date)?.grossSales) > 0 && cell.entryId ? (
                             <Button type="button" size="sm" className={`h-7 w-full text-xs ${C.green}`} onClick={() => confirmEntry.mutate(cell.entryId!)}>
                               Confirm
                             </Button>
                           ) : Number(cellValue(row, cell)) > 0 ? (
-                            <div className="text-center text-[10px] text-amber-800">Enter shift sales to confirm</div>
+                            <div className="text-center text-[10px] text-amber-800">Enter shared card sales to confirm</div>
                           ) : null}
                         </div>}
                       </td>
@@ -1322,8 +1322,8 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
               <Badge variant="outline" className={unconfirmedCount ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-800"}>
                 {unconfirmedCount} unconfirmed entries
               </Badge>
-              <Badge variant="outline" className={missingShiftSalesCount ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-800"}>
-                {missingShiftSalesCount} missing shift sales
+              <Badge variant="outline" className={missingSalesDays.length ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-800"}>
+                {missingSalesDays.length} days missing sales
               </Badge>
               {grid.locked && <Badge className="bg-[#1f2937] text-white">Submitted and locked</Badge>}
             </div>
@@ -1340,7 +1340,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
               <UserPlus className="mr-2 h-4 w-4" />
               Add associate to grid
             </Button>
-            <Button className={`w-full ${C.green}`} disabled={grid.locked || submitGrid.isPending || missingReportDays.length > 0 || missingShiftSalesCount > 0 || unconfirmedCount > 0} onClick={() => submitGrid.mutate()}>
+            <Button className={`w-full ${C.green}`} disabled={grid.locked || submitGrid.isPending || missingReportDays.length > 0 || missingSalesDays.length > 0 || unconfirmedCount > 0} onClick={() => submitGrid.mutate()}>
               <ShieldCheck className="mr-2 h-4 w-4" />
               {submitGrid.isPending ? "Submitting..." : "Submit final tips"}
             </Button>
@@ -1357,7 +1357,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
               </Button>
             )}
             {missingReportDays.length > 0 && <div className="text-sm text-amber-900">Upload a sales report image for every day with entered tips before submitting.</div>}
-            {missingShiftSalesCount > 0 && <div className="text-sm text-amber-900">Enter gross sales for every associate shift with tips before submitting.</div>}
+            {missingSalesDays.length > 0 && <div className="text-sm text-amber-900">For each day with tips, enter the shared card sales under one associate before submitting.</div>}
             {unconfirmedCount > 0 && <div className="text-sm text-amber-900">Each associate must confirm their entered tip amount before final submission.</div>}
           </CardContent>
         </Card>
@@ -1693,7 +1693,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                   <Button type="button" className={`w-full ${C.green}`} disabled={saveEntry.isPending} onClick={saveEntryModal}>
                     Save tips and sales
                   </Button>
-                  {Number(entryModalAmount || 0) > 0 && Number(entryModalSales || 0) > 0 && activeCell.entryId && (
+                  {Number(entryModalAmount || 0) > 0 && (Number(entryModalSales || 0) > 0 || Number(dayTotal(activeCell.date)?.grossSales) > 0) && activeCell.entryId && (
                     <Button type="button" variant="outline" className={`w-full ${C.outline}`} onClick={() => {
                       confirmEntry.mutate(activeCell.entryId!);
                       setActiveEntry(null);
@@ -1701,8 +1701,8 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                       Confirm and lock
                     </Button>
                   )}
-                  {Number(entryModalAmount || 0) > 0 && Number(entryModalSales || 0) <= 0 && (
-                    <div className="text-center text-sm text-amber-900">Enter gross shift sales before confirming.</div>
+                  {Number(entryModalAmount || 0) > 0 && Number(entryModalSales || 0) <= 0 && Number(dayTotal(activeCell.date)?.grossSales) <= 0 && (
+                    <div className="text-center text-sm text-amber-900">Enter the shared card sales under one associate before confirming.</div>
                   )}
                 </div>
               )}

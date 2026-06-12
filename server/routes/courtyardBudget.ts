@@ -3,11 +3,12 @@ import multer from "multer";
 import AdmZip from "adm-zip";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
-import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, lte } from "drizzle-orm";
 import { db } from "../db";
 import {
   courtyardBudgetAuditLog,
   courtyardBudgetCheckbookEntries,
+  courtyardBudgetDepartmentForecasts,
   courtyardBudgetLineItems,
   courtyardBudgetUploads,
   scheduleEmployees,
@@ -16,6 +17,7 @@ import {
 
 const PROPERTY_ID = "courtyard-austin-lakeline";
 const PROPERTY_NAME = "Courtyard Austin Lakeline";
+const BUDGET_DEPARTMENTS = ["Bistro", "Housekeeping", "Maintenance"] as const;
 const BUDGET_ADMIN_EMAILS = new Set(
   (
     process.env.COURTYARD_BUDGET_ADMIN_EMAILS ||
@@ -80,19 +82,9 @@ function normalizeDepartment(value: unknown) {
 function departmentScopeForEmployee(employee: any) {
   const text = `${employee?.department || ""} ${employee?.position || ""} ${Array.isArray(employee?.rolesJson) ? employee.rolesJson.join(" ") : ""}`.toLowerCase();
   const departments = new Set<string>();
-  if (text.includes("bistro") || text.includes("breakfast")) {
-    departments.add("Bistro / Restaurant");
-    departments.add("Meeting Room");
-  }
-  if (text.includes("front desk") || text.includes("night audit") || text.includes("rooms")) departments.add("Rooms");
-  if (text.includes("housekeeping") || text.includes("room attendant") || text.includes("laundry") || text.includes("houseperson")) departments.add("Rooms");
-  if (text.includes("maintenance") || text.includes("engineering")) {
-    departments.add("Repairs & Maintenance");
-    departments.add("Utilities");
-  }
-  if (text.includes("dos") || text.includes("sales")) departments.add("Sales & Marketing");
-  if (text.includes("gm") || text.includes("general manager")) departments.add("Administrative & General");
-  if (!departments.size && employee?.department) departments.add(normalizeDepartment(employee.department));
+  if (text.includes("bistro") || text.includes("breakfast")) departments.add("Bistro");
+  if (text.includes("housekeeping") || text.includes("room attendant") || text.includes("laundry") || text.includes("houseperson")) departments.add("Housekeeping");
+  if (text.includes("maintenance") || text.includes("engineering")) departments.add("Maintenance");
   return Array.from(departments);
 }
 
@@ -122,8 +114,7 @@ async function getUserBySession(req: any) {
 async function getBudgetAccess(user: any) {
   const base = publicUser(user);
   if (base.isSuperAdmin) {
-    const departments = await db.selectDistinct({ department: courtyardBudgetLineItems.department }).from(courtyardBudgetLineItems).orderBy(asc(courtyardBudgetLineItems.department));
-    return { ...base, canAccessBudget: true, canUpload: true, canEditForecast: true, departments: departments.map((row) => row.department).filter(Boolean), allDepartments: true };
+    return { ...base, canAccessBudget: true, canUpload: true, canEditForecast: true, departments: [...BUDGET_DEPARTMENTS], allDepartments: true };
   }
   const [employee] = await db
     .select()
@@ -152,11 +143,54 @@ const requireBudgetAccess: RequestHandler = async (req: any, res, next) => {
 };
 
 function requestedDepartment(req: any) {
-  const requested = normalizeDepartment(req.query.department || req.body?.department || "");
+  const requested = String(req.query.department || req.body?.department || "").trim();
   const access = req.budgetAccess;
-  if (access.allDepartments) return requested || access.departments[0] || "Bistro / Restaurant";
+  if (access.allDepartments) return BUDGET_DEPARTMENTS.includes(requested as any) ? requested : access.departments[0] || "Bistro";
   if (!requested) return access.departments[0];
   return access.departments.includes(requested) ? requested : null;
+}
+
+function sourceDepartmentForBudgetView(department: string) {
+  if (department === "Bistro") return "Bistro / Restaurant";
+  if (department === "Housekeeping") return "Rooms";
+  if (department === "Maintenance") return "Repairs & Maintenance";
+  return department;
+}
+
+function isDepartmentExpenseLine(department: string, line: any) {
+  if (line.isTotal || line.categoryType === "revenue" || line.categoryType === "labor") return false;
+  const item = String(line.lineItem || "").toLowerCase();
+  if (/(administrative|information|telecom|minor operated|miscellaneous|\bmisc\b)/.test(item)) return false;
+  if (department === "Housekeeping") {
+    return /(cleaning supplies|guest supplies|laundry supplies|linen|uniform|housekeeping supplies|operating supplies|amenities|room supplies|paper supplies)/.test(item);
+  }
+  if (department === "Bistro") {
+    return /(^food$|^beverage$|cost of food|food cost|cost of sales|beverage cost|non.?consumable|inventory|restaurant supplies|supplies.*restaurant|paper supplies|cleaning supplies|smallwares|china|glass|silver|linen)/.test(item);
+  }
+  if (department === "Maintenance") {
+    return /(building|hvac|electrical|painting|grounds|plumbing|pool|engineering supplies|kitchen equipment|waste removal|fire life|exterminating|repair|maintenance supplies|parts)/.test(item);
+  }
+  return false;
+}
+
+function revenueTotal(lines: any[], preferredPattern: RegExp) {
+  const preferred = lines.find((line) => preferredPattern.test(String(line.lineItem || "")) && line.isTotal)
+    || lines.find((line) => preferredPattern.test(String(line.lineItem || "")));
+  if (preferred) {
+    return {
+      budget: Math.abs(moneyNumber(preferred.originalBudgetAmount)),
+      actual: Math.abs(moneyNumber(preferred.actualAmount)),
+    };
+  }
+  const revenue = lines.filter((line) => line.categoryType === "revenue" && !line.isTotal);
+  return {
+    budget: Math.abs(revenue.reduce((sum, line) => sum + moneyNumber(line.originalBudgetAmount), 0)),
+    actual: Math.abs(revenue.reduce((sum, line) => sum + moneyNumber(line.actualAmount), 0)),
+  };
+}
+
+function categoryKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function isSensitiveLine(lineItem: string, department: string) {
@@ -481,9 +515,7 @@ const forecastSchema = z.object({
   department: z.string().trim().min(1),
   month: z.coerce.number().int().min(1).max(12),
   year: z.coerce.number().int().min(2020).max(2100),
-  mode: z.enum(["dollar", "percent", "reset"]),
-  scope: z.enum(["revenue", "expenses", "department"]),
-  amount: z.coerce.number().default(0),
+  forecastRevenue: z.coerce.number().min(0).max(100000000),
 });
 
 export function registerCourtyardBudgetRoutes(app: Express) {
@@ -558,33 +590,86 @@ export function registerCourtyardBudgetRoutes(app: Express) {
       const year = Number(req.query.year || new Date().getFullYear());
       const department = requestedDepartment(req);
       if (!department) return res.status(403).json({ error: "You do not have access to that budget department." });
-      const departments = req.budgetAccess.allDepartments ? undefined : req.budgetAccess.departments;
-      let lines = await db.select().from(courtyardBudgetLineItems).where(and(eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID), eq(courtyardBudgetLineItems.month, month), eq(courtyardBudgetLineItems.year, year), departments ? inArray(courtyardBudgetLineItems.department, departments) : sql`true`)).orderBy(asc(courtyardBudgetLineItems.department), asc(courtyardBudgetLineItems.lineItem));
-      if (department) lines = lines.filter((line) => line.department === department);
-      if (!req.budgetAccess.allDepartments) lines = lines.filter((line) => !line.isHiddenFromDepartmentHead && !line.isSensitive);
-      const detail = req.query.detail === "1" && req.budgetAccess.allDepartments;
-      const displayLines = detail ? lines : lines.filter(isOperationalBudgetLine);
-      const checkbook = await db.select().from(courtyardBudgetCheckbookEntries).where(and(eq(courtyardBudgetCheckbookEntries.propertyId, PROPERTY_ID), eq(courtyardBudgetCheckbookEntries.month, month), eq(courtyardBudgetCheckbookEntries.year, year), eq(courtyardBudgetCheckbookEntries.department, department))).orderBy(asc(courtyardBudgetCheckbookEntries.entryDate));
-      const allDepartmentRows = await db.selectDistinct({ department: courtyardBudgetLineItems.department }).from(courtyardBudgetLineItems).where(and(eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID), eq(courtyardBudgetLineItems.month, month), eq(courtyardBudgetLineItems.year, year))).orderBy(asc(courtyardBudgetLineItems.department));
-      const visibleDepartments = req.budgetAccess.allDepartments ? allDepartmentRows.map((row) => row.department) : req.budgetAccess.departments;
+      const sourceDepartment = sourceDepartmentForBudgetView(department);
+      const [sourceLines, roomsLines, checkbook, forecastRows] = await Promise.all([
+        db.select().from(courtyardBudgetLineItems).where(and(
+          eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID),
+          eq(courtyardBudgetLineItems.month, month),
+          eq(courtyardBudgetLineItems.year, year),
+          eq(courtyardBudgetLineItems.department, sourceDepartment),
+        )).orderBy(asc(courtyardBudgetLineItems.lineItem)),
+        department === "Maintenance"
+          ? db.select().from(courtyardBudgetLineItems).where(and(
+              eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID),
+              eq(courtyardBudgetLineItems.month, month),
+              eq(courtyardBudgetLineItems.year, year),
+              eq(courtyardBudgetLineItems.department, "Rooms"),
+            ))
+          : Promise.resolve([]),
+        db.select().from(courtyardBudgetCheckbookEntries).where(and(
+          eq(courtyardBudgetCheckbookEntries.propertyId, PROPERTY_ID),
+          eq(courtyardBudgetCheckbookEntries.month, month),
+          eq(courtyardBudgetCheckbookEntries.year, year),
+          eq(courtyardBudgetCheckbookEntries.department, department),
+        )).orderBy(asc(courtyardBudgetCheckbookEntries.entryDate)),
+        db.select().from(courtyardBudgetDepartmentForecasts).where(and(
+          eq(courtyardBudgetDepartmentForecasts.propertyId, PROPERTY_ID),
+          eq(courtyardBudgetDepartmentForecasts.month, month),
+          eq(courtyardBudgetDepartmentForecasts.year, year),
+          eq(courtyardBudgetDepartmentForecasts.department, department),
+        )).limit(1),
+      ]);
+      const revenueLines = department === "Maintenance" ? roomsLines : sourceLines;
+      const revenue = revenueTotal(revenueLines, department === "Bistro" ? /total restaurant revenue/i : /total rooms revenue/i);
+      const forecastRevenue = forecastRows.length ? moneyNumber(forecastRows[0].forecastRevenue) : revenue.budget;
+      const scale = revenue.budget > 0 ? forecastRevenue / revenue.budget : 1;
+      const expenseLines = sourceLines.filter((line) => isDepartmentExpenseLine(department, line));
+      const spentByCategory = new Map<string, number>();
+      checkbook.forEach((entry) => {
+        const key = categoryKey(entry.category);
+        spentByCategory.set(key, (spentByCategory.get(key) || 0) + moneyNumber(entry.amount));
+      });
+      const expenses = expenseLines.map((line) => {
+        const budgetAmount = Math.abs(moneyNumber(line.originalBudgetAmount));
+        const forecastAmount = budgetAmount * scale;
+        const key = categoryKey(line.lineItem);
+        let spent = spentByCategory.get(key) || 0;
+        if (!spent) {
+          const matched = Array.from(spentByCategory.entries()).find(([entryKey]) => entryKey.includes(key) || key.includes(entryKey));
+          spent = matched?.[1] || 0;
+        }
+        return {
+          id: line.id,
+          category: line.lineItem,
+          budgetAmount: moneyString(budgetAmount),
+          forecastAmount: moneyString(forecastAmount),
+          spentAmount: moneyString(spent),
+          remainingAmount: moneyString(forecastAmount - spent),
+        };
+      });
+      const totalExpenseBudget = expenses.reduce((sum, line) => sum + moneyNumber(line.budgetAmount), 0);
+      const totalExpenseForecast = expenses.reduce((sum, line) => sum + moneyNumber(line.forecastAmount), 0);
+      const totalSpent = checkbook.reduce((sum, entry) => sum + moneyNumber(entry.amount), 0);
       res.json({
         propertyName: PROPERTY_NAME,
         month,
         year,
         department,
-        departments: visibleDepartments,
+        departments: req.budgetAccess.departments,
         user: req.budgetAccess,
-        totals: departmentTotals(lines, checkbook),
-        operationalSections: buildOperationalSections(req.budgetAccess.allDepartments ? await db.select().from(courtyardBudgetLineItems).where(and(eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID), eq(courtyardBudgetLineItems.month, month), eq(courtyardBudgetLineItems.year, year))) : lines),
-        lines: displayLines.map((line) => ({
-          ...line,
-          actualAmount: moneyString(line.actualAmount),
-          originalBudgetAmount: moneyString(line.originalBudgetAmount),
-          updatedForecastAmount: moneyString(line.updatedForecastAmount),
-          priorYearAmount: moneyString(line.priorYearAmount),
-          ytdActualAmount: moneyString(line.ytdActualAmount),
-          ytdBudgetAmount: moneyString(line.ytdBudgetAmount),
-        })),
+        revenue: {
+          label: department === "Bistro" ? "Bistro revenue" : "Rooms revenue",
+          budgetAmount: moneyString(revenue.budget),
+          actualAmount: moneyString(revenue.actual),
+          forecastAmount: moneyString(forecastRevenue),
+        },
+        totals: {
+          expenseBudget: moneyString(totalExpenseBudget),
+          expenseForecast: moneyString(totalExpenseForecast),
+          checkbookSpend: moneyString(totalSpent),
+          remainingBudget: moneyString(totalExpenseForecast - totalSpent),
+        },
+        expenses,
         checkbook: checkbook.map((entry) => ({ ...entry, amount: moneyString(entry.amount) })),
       });
     } catch (error) {
@@ -596,7 +681,7 @@ export function registerCourtyardBudgetRoutes(app: Express) {
     try {
       const parsed = checkbookSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid checkbook entry", validation: parsed.error.format() });
-      const department = normalizeDepartment(parsed.data.department);
+      const department = parsed.data.department.trim();
       if (!req.budgetAccess.allDepartments && !req.budgetAccess.departments.includes(department)) return res.status(403).json({ error: "You cannot add checkbook entries for that department." });
       const [entry] = await db.insert(courtyardBudgetCheckbookEntries).values({
         propertyId: PROPERTY_ID,
@@ -622,27 +707,28 @@ export function registerCourtyardBudgetRoutes(app: Express) {
       if (!req.budgetAccess.canEditForecast) return res.status(403).json({ error: "Only GM/admin can edit forecasts." });
       const parsed = forecastSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid forecast adjustment", validation: parsed.error.format() });
-      const department = normalizeDepartment(parsed.data.department);
-      const lines = await db.select().from(courtyardBudgetLineItems).where(and(eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID), eq(courtyardBudgetLineItems.month, parsed.data.month), eq(courtyardBudgetLineItems.year, parsed.data.year), eq(courtyardBudgetLineItems.department, department)));
-      const revenueBudget = Math.abs(lines.filter((line) => line.categoryType === "revenue").reduce((sum, line) => sum + moneyNumber(line.originalBudgetAmount), 0)) || 1;
-      for (const line of lines) {
-        const original = moneyNumber(line.originalBudgetAmount);
-        let next = moneyNumber(line.updatedForecastAmount);
-        const isRevenue = line.categoryType === "revenue";
-        const included = parsed.data.scope === "department" || (parsed.data.scope === "revenue" && isRevenue) || (parsed.data.scope === "expenses" && !isRevenue);
-        if (!included) continue;
-        if (parsed.data.mode === "reset") next = original;
-        else if (parsed.data.mode === "dollar") next = original + parsed.data.amount;
-        else if (parsed.data.mode === "percent") {
-          const pct = parsed.data.amount / 100;
-          if (isRevenue) next = original * (1 + pct);
-          else if (line.categoryType === "variable") next = original * ((revenueBudget * (1 + pct)) / revenueBudget);
-          else if (line.categoryType === "semi-variable") next = original * (1 + pct * 0.5);
-          else if (line.categoryType === "labor") next = original * (1 + pct);
-          else next = original;
-        }
-        await db.update(courtyardBudgetLineItems).set({ updatedForecastAmount: next.toFixed(2), updatedAt: new Date() }).where(eq(courtyardBudgetLineItems.id, line.id));
-      }
+      const department = parsed.data.department.trim();
+      if (!BUDGET_DEPARTMENTS.includes(department as any)) return res.status(400).json({ error: "Unsupported department." });
+      await db.insert(courtyardBudgetDepartmentForecasts).values({
+        propertyId: PROPERTY_ID,
+        department,
+        month: parsed.data.month,
+        year: parsed.data.year,
+        forecastRevenue: parsed.data.forecastRevenue.toFixed(2),
+        updatedBy: req.budgetUser.id,
+      }).onConflictDoUpdate({
+        target: [
+          courtyardBudgetDepartmentForecasts.propertyId,
+          courtyardBudgetDepartmentForecasts.year,
+          courtyardBudgetDepartmentForecasts.month,
+          courtyardBudgetDepartmentForecasts.department,
+        ],
+        set: {
+          forecastRevenue: parsed.data.forecastRevenue.toFixed(2),
+          updatedBy: req.budgetUser.id,
+          updatedAt: new Date(),
+        },
+      });
       await db.insert(courtyardBudgetAuditLog).values({ actorUserId: req.budgetUser.id, action: "forecast_adjusted", department, month: parsed.data.month, year: parsed.data.year, metadataJson: parsed.data });
       res.json({ ok: true });
     } catch (error) {
@@ -656,11 +742,16 @@ export function registerCourtyardBudgetRoutes(app: Express) {
       if (!department) return res.status(403).json({ error: "You do not have access to that budget department." });
       const month = Number(req.query.month || new Date().getMonth() + 1);
       const year = Number(req.query.year || new Date().getFullYear());
-      const lines = await db.select().from(courtyardBudgetLineItems).where(and(eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID), eq(courtyardBudgetLineItems.month, month), eq(courtyardBudgetLineItems.year, year), eq(courtyardBudgetLineItems.department, department))).orderBy(asc(courtyardBudgetLineItems.lineItem));
-      const visible = req.budgetAccess.allDepartments ? lines : lines.filter((line) => !line.isHiddenFromDepartmentHead && !line.isSensitive);
+      const lines = await db.select().from(courtyardBudgetLineItems).where(and(
+        eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID),
+        eq(courtyardBudgetLineItems.month, month),
+        eq(courtyardBudgetLineItems.year, year),
+        eq(courtyardBudgetLineItems.department, sourceDepartmentForBudgetView(department)),
+      )).orderBy(asc(courtyardBudgetLineItems.lineItem));
+      const visible = lines.filter((line) => isDepartmentExpenseLine(department, line));
       const csv = [
-        ["Department", "Line Item", "COA", "Type", "Original Budget", "Actual", "Updated Forecast", "Variance"].join(","),
-        ...visible.map((line) => [department, line.lineItem, line.coa || "", line.categoryType, moneyString(line.originalBudgetAmount), moneyString(line.actualAmount), moneyString(line.updatedForecastAmount), moneyString(moneyNumber(line.updatedForecastAmount) - moneyNumber(line.actualAmount))].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")),
+        ["Department", "Expense Category", "Budget"].join(","),
+        ...visible.map((line) => [department, line.lineItem, moneyString(Math.abs(moneyNumber(line.originalBudgetAmount)))].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")),
       ].join("\n");
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="courtyard-budget-${year}-${String(month).padStart(2, "0")}-${department.replace(/[^a-z0-9]+/gi, "-")}.csv"`);

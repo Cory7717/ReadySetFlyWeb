@@ -756,6 +756,20 @@ export const courtyardBudgetCheckbookEntries = pgTable("courtyard_budget_checkbo
   index("idx_courtyard_budget_checkbook_department").on(table.department),
 ]);
 
+export const courtyardBudgetDepartmentForecasts = pgTable("courtyard_budget_department_forecasts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: text("property_id").notNull().default("courtyard-austin-lakeline"),
+  department: text("department").notNull(),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  forecastRevenue: numeric("forecast_revenue", { precision: 12, scale: 2 }).notNull().default("0"),
+  updatedBy: varchar("updated_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_courtyard_budget_forecast_period_department").on(table.propertyId, table.year, table.month, table.department),
+]);
+
 export const courtyardBudgetAuditLog = pgTable("courtyard_budget_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   actorUserId: varchar("actor_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),

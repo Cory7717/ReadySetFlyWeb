@@ -1328,11 +1328,13 @@ function ShiftEditDialog({
   const defaultRole = employee
     ? rolesArray(employee.rolesJson).find((role) => roleDepartment(role) === rowDepartment) || rowDepartment || employee.rolesJson?.[0] || ""
     : rowDepartment || "";
+  const assignedShiftType = payload.shiftTypes.find((shift) => shift.id === assignment?.shiftTypeId);
+  const initialBreakMinutes = assignment?.unpaidBreakMinutes ?? assignedShiftType?.unpaidBreakMinutes ?? 0;
   const [form, setForm] = useState({
     shiftTypeId: assignment?.shiftTypeId || "",
     customStartTime: assignment?.customStartTime?.slice(0, 5) || "",
     customEndTime: assignment?.customEndTime?.slice(0, 5) || "",
-    unpaidBreakMinutes: assignment?.unpaidBreakMinutes?.toString() || "",
+    unpaidBreakMinutes: initialBreakMinutes.toString(),
     roleWorked: assignment?.roleWorked || defaultRole,
     roleNote: assignment?.roleNote || "",
     managerNote: assignment?.managerNote || "",
@@ -1349,7 +1351,7 @@ function ShiftEditDialog({
       shiftTypeId: shiftTypeId === "none" ? "" : shiftTypeId,
       customStartTime: nonWorking ? "" : shift?.startTime?.slice(0, 5) || "",
       customEndTime: nonWorking ? "" : shift?.endTime?.slice(0, 5) || "",
-      unpaidBreakMinutes: nonWorking ? "" : form.unpaidBreakMinutes,
+      unpaidBreakMinutes: nonWorking ? "" : String(shift?.unpaidBreakMinutes ?? 0),
       roleWorked: shouldUseShiftRole ? shift?.label || "" : form.roleWorked || shift?.label || "",
     });
   };

@@ -799,7 +799,7 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
       liquorSales: moneyString(summary?.liquorSales),
       foodSales: moneyString(summary?.foodSales),
       wineSales: moneyString(summary?.wineSales),
-      tipPercent: netSales > 0 ? (totalTips / netSales) * 100 : 0,
+      tipPercent: grossSales > 0 ? (totalTips / grossSales) * 100 : 0,
       splitCount: activeCells.length,
       splitAmount: activeCells.length === 2 ? moneyString(totalTips / 2) : null,
       report: reportsByDate.get(date) || null,
@@ -811,10 +811,30 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
   const monthProbe = addUtcDays(parseDateKey(monthStart)!, 32);
   const nextMonthStart = `${monthProbe.toISOString().slice(0, 7)}-01`;
   const monthEnd = toDateKey(addUtcDays(parseDateKey(nextMonthStart)!, -1));
-  const monthSummaries = await db
-    .select()
-    .from(tipGridDaySummaries)
-    .where(and(gte(tipGridDaySummaries.summaryDate, monthStart), lte(tipGridDaySummaries.summaryDate, monthEnd)));
+  const bistroUserIds = users.map((user) => user.id);
+  const [monthEntries, monthSummaries] = await Promise.all([
+    bistroUserIds.length
+      ? db
+          .select({ entryDate: tipEntries.entryDate, grossSales: tipEntries.grossSales })
+          .from(tipEntries)
+          .where(and(gte(tipEntries.entryDate, monthStart), lte(tipEntries.entryDate, monthEnd), inArray(tipEntries.userId, bistroUserIds)))
+      : Promise.resolve([]),
+    db
+      .select()
+      .from(tipGridDaySummaries)
+      .where(and(gte(tipGridDaySummaries.summaryDate, monthStart), lte(tipGridDaySummaries.summaryDate, monthEnd))),
+  ]);
+  const monthEntrySalesByDate = new Map<string, number>();
+  monthEntries.forEach((entry) => {
+    const date = String(entry.entryDate);
+    monthEntrySalesByDate.set(date, (monthEntrySalesByDate.get(date) || 0) + moneyNumber(entry.grossSales));
+  });
+  const monthGrossSales = monthSummaries.reduce((sum, summary) => {
+    const entrySales = monthEntrySalesByDate.get(String(summary.summaryDate)) || 0;
+    return sum + (entrySales > 0 ? entrySales : moneyNumber(summary.grossSales));
+  }, 0) + Array.from(monthEntrySalesByDate.entries()).reduce((sum, [date, grossSales]) => (
+    monthSummaries.some((summary) => String(summary.summaryDate) === date) ? sum : sum + grossSales
+  ), 0);
   const salesTotal = (rows: any[]) => {
     const grossSales = rows.reduce((sum, row) => sum + moneyNumber(row.grossSales), 0);
     const taxAmount = rows.reduce((sum, row) => sum + moneyNumber(row.taxAmount), 0);
@@ -854,7 +874,15 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
       week1: salesTotal(dayTotals.slice(0, 7)),
       week2: salesTotal(dayTotals.slice(7)),
       period: salesTotal(dayTotals),
-      month: salesTotal(monthSummaries),
+      month: {
+        grossSales: moneyString(monthGrossSales),
+        taxAmount: "0.00",
+        netSales: moneyString(monthGrossSales),
+        beerSales: "0.00",
+        liquorSales: "0.00",
+        foodSales: "0.00",
+        wineSales: "0.00",
+      },
     },
     canManageSales: await canManageTipsSales(viewerUser),
     submission: submission ? { ...submission, week1Total: moneyString(submission.week1Total), week2Total: moneyString(submission.week2Total), totalTips: moneyString(submission.totalTips) } : null,

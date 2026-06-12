@@ -725,7 +725,6 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [entrySalesDrafts, setEntrySalesDrafts] = useState<Record<string, string>>({});
-  const [salesDrafts, setSalesDrafts] = useState<Record<string, Record<string, string>>>({});
   const [addAssociateOpen, setAddAssociateOpen] = useState(false);
   const [activeEntry, setActiveEntry] = useState<{ userId: string; date: string } | null>(null);
   const [entryModalAmount, setEntryModalAmount] = useState("");
@@ -739,6 +738,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const [banquetOpen, setBanquetOpen] = useState(false);
   const [salesOpen, setSalesOpen] = useState(false);
   const [expandedAssociateIds, setExpandedAssociateIds] = useState<string[]>([]);
+  const [attentionDate, setAttentionDate] = useState<string | null>(null);
   const { data: grid, isLoading } = useQuery<TipsGrid>({
     queryKey: ["/api/tips/grid", selectedPeriodStart],
     queryFn: () => fetchJson(`/api/tips/grid${selectedPeriodStart ? `?start=${selectedPeriodStart}` : ""}`),
@@ -763,14 +763,6 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] }),
     onError: (error: Error) => toast({ title: "Tip save failed", description: error.message, variant: "destructive" }),
-  });
-  const saveSalesDay = useMutation({
-    mutationFn: async ({ date, sales }: { date: string; sales: Record<string, string> }) => {
-      const response = await apiRequest("POST", "/api/tips/grid/days", { date, ...sales });
-      return response.json();
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] }),
-    onError: (error: Error) => toast({ title: "Sales save failed", description: error.message, variant: "destructive" }),
   });
   const confirmEntry = useMutation({
     mutationFn: async (entryId: string) => apiRequest("POST", `/api/tips/grid/entries/${entryId}/confirm`),
@@ -870,7 +862,6 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
     return Boolean(cell && Number(cell.tipAmount) > 0 && !cell.confirmed);
   }));
   const hasDaysNeedingAttention = missingReportDays.length > 0 || missingSalesDays.length > 0 || unconfirmedDays.length > 0;
-  const formatAttentionDays = (dates: string[]) => dates.map((date) => formatDisplayDate(date, "long")).join(", ");
   const enteredDays = grid.dayTotals.filter((day) => Number(day.totalTips) > 0).length;
   const week1Days = grid.period.days.slice(0, 7);
   const week2Days = grid.period.days.slice(7, 14);
@@ -887,8 +878,6 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
       return sum + Number(cell ? cellValue(row, cell) : 0);
     }, 0)
   );
-  const salesFieldValue = (date: string, field: keyof TipsGrid["dayTotals"][number]) => salesDrafts[date]?.[field as string] ?? String(dayTotal(date)?.[field] ?? "0.00");
-  const canManageSales = Boolean(grid.canManageSales);
   const banquetRate = banquetForm.reportType === "group_breakfast" ? 0.18 : 0.21;
   const computedBanquetTips = Number(banquetForm.banquetTips || 0) > 0 ? Number(banquetForm.banquetTips || 0) : Number(banquetForm.grossSales || 0) * banquetRate;
   const banquetSplitAmount = banquetAssociateIds.length ? computedBanquetTips / banquetAssociateIds.length : 0;
@@ -898,6 +887,37 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const toggleAssociateRow = (userId: string) => {
     setExpandedAssociateIds((current) => current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]);
   };
+  const goToAttentionDate = (date: string, issue: "report" | "sales" | "confirmation") => {
+    if (issue !== "report") {
+      const relevantIds = grid.rows
+        .filter((row) => {
+          const cell = row.cells.find((item) => item.date === date);
+          return Boolean(cell && Number(cell.tipAmount) > 0 && (issue === "sales" || !cell.confirmed));
+        })
+        .map((row) => row.associate.id);
+      setExpandedAssociateIds((current) => Array.from(new Set([...current, ...relevantIds])));
+    }
+    setAttentionDate(date);
+    window.setTimeout(() => {
+      const targetPrefix = window.matchMedia("(min-width: 768px)").matches ? "tips-day-desktop" : "tips-day-mobile";
+      document.getElementById(`${targetPrefix}-${date}`)?.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    }, 50);
+    window.setTimeout(() => setAttentionDate((current) => current === date ? null : current), 2500);
+  };
+  const renderAttentionDates = (dates: string[], issue: "report" | "sales" | "confirmation") => (
+    <div className="flex flex-wrap gap-1.5">
+      {dates.map((date) => (
+        <button
+          key={`${issue}-${date}`}
+          type="button"
+          className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-950 transition-colors hover:border-amber-500 hover:bg-amber-100"
+          onClick={() => goToAttentionDate(date, issue)}
+        >
+          {parseLocalDate(date).toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" })}
+        </button>
+      ))}
+    </div>
+  );
   const startEditBanquetReport = (report: TipsGrid["banquetReports"][number]) => {
     setEditingBanquetId(report.id);
     setBanquetOpen(true);
@@ -924,18 +944,6 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
     if ((tipAmount === cell.tipAmount && grossSales === cell.grossSales) || grid.locked || cell.confirmed) return;
     saveEntry.mutate({ userId: row.associate.id, entryDate: cell.date, tipAmount: tipAmount || "0", grossSales: grossSales || "0" });
   };
-  const commitSales = (date: string) => {
-    if (grid.locked || !canManageSales) return;
-    const sales = {
-      grossSales: salesFieldValue(date, "grossSales") || "0",
-      taxAmount: salesFieldValue(date, "taxAmount") || "0",
-      beerSales: salesFieldValue(date, "beerSales") || "0",
-      liquorSales: salesFieldValue(date, "liquorSales") || "0",
-      foodSales: salesFieldValue(date, "foodSales") || "0",
-      wineSales: salesFieldValue(date, "wineSales") || "0",
-    };
-    saveSalesDay.mutate({ date, sales });
-  };
   const activeRow = activeEntry ? grid.rows.find((row) => row.associate.id === activeEntry.userId) : null;
   const activeCell = activeRow && activeEntry ? activeRow.cells.find((cell) => cell.date === activeEntry.date) : null;
   const openEntryModal = (row: TipsGridRow, cell: TipsGridCell) => {
@@ -955,25 +963,6 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
     setEntrySalesDrafts((current) => ({ ...current, [`${activeRow.associate.id}:${activeCell.date}`]: entryModalSales || "0" }));
     setActiveEntry(null);
   };
-  const renderSalesInput = (date: string, field: "grossSales" | "taxAmount" | "beerSales" | "liquorSales" | "foodSales" | "wineSales", label: string) => (
-    <div>
-      <Label className="text-xs text-[#5f5247]">{label}</Label>
-      <Input
-        className={`${C.field} h-9 text-right`}
-        inputMode="decimal"
-        disabled={grid.locked || !canManageSales}
-        value={salesFieldValue(date, field)}
-        onChange={(event) => setSalesDrafts((current) => ({
-          ...current,
-          [date]: {
-            ...(current[date] || {}),
-            [field]: event.target.value.replace(/[^0-9.]/g, ""),
-          },
-        }))}
-        onBlur={() => commitSales(date)}
-      />
-    </div>
-  );
 
   const renderDayControls = (date: string) => {
     const totalForDay = dayTotal(date);
@@ -1037,7 +1026,17 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
         {days.map((date) => {
           const totalForDay = dayTotal(date);
           return (
-            <div key={date} className={`rounded-xl border p-4 ${date === todayKey() ? "border-[#b98435] bg-[#fff3d8]" : "border-[#e0d3c1] bg-white"}`}>
+            <div
+              id={`tips-day-mobile-${date}`}
+              key={date}
+              className={`scroll-mt-6 rounded-xl border p-4 transition-shadow ${
+                attentionDate === date
+                  ? "border-amber-500 bg-amber-50 shadow-[0_0_0_3px_rgba(217,119,6,0.2)]"
+                  : date === todayKey()
+                    ? "border-[#b98435] bg-[#fff3d8]"
+                    : "border-[#e0d3c1] bg-white"
+              }`}
+            >
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <div className="text-lg font-semibold text-[#201814]">{date === todayKey() ? "Today" : formatDisplayDate(date).split(",")[0]}</div>
@@ -1120,7 +1119,15 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                   const totalForDay = dayTotal(date);
                   const isToday = date === todayKey();
                   return (
-                    <th key={date} className={`border-b border-r border-[#e0d3c1] p-1.5 align-top ${isToday ? "bg-[#fff3d8]" : ""}`}>
+                    <th
+                      id={`tips-day-desktop-${date}`}
+                      key={date}
+                      className={`scroll-mt-6 border-b border-r p-1.5 align-top transition-shadow ${
+                        attentionDate === date
+                          ? "border-amber-500 bg-amber-50 shadow-[inset_0_0_0_3px_rgba(217,119,6,0.25)]"
+                          : `border-[#e0d3c1] ${isToday ? "bg-[#fff3d8]" : ""}`
+                      }`}
+                    >
                       <div className="font-semibold">{isToday ? "Today" : formatDisplayDate(date).split(",")[0]}</div>
                       <div className="text-xs text-[#5f5247]">{formatDisplayDate(date).replace(/^\w+,\s*/, "")}</div>
                       <div className="mt-2 space-y-1">
@@ -1335,16 +1342,25 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
             </div>
             {hasDaysNeedingAttention && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-                <div className="font-semibold">Days needing attention before closing</div>
-                <div className="mt-2 space-y-1">
+                <div className="font-semibold">Days needing attention</div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
                   {missingReportDays.length > 0 && (
-                    <div><span className="font-medium">Sales report:</span> {formatAttentionDays(missingReportDays.map((day) => day.date))}</div>
+                    <div>
+                      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-amber-900">Sales report</div>
+                      {renderAttentionDates(missingReportDays.map((day) => day.date), "report")}
+                    </div>
                   )}
                   {missingSalesDays.length > 0 && (
-                    <div><span className="font-medium">Shared-card sales:</span> {formatAttentionDays(missingSalesDays.map((day) => day.date))}</div>
+                    <div>
+                      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-amber-900">Shared-card sales</div>
+                      {renderAttentionDates(missingSalesDays.map((day) => day.date), "sales")}
+                    </div>
                   )}
                   {unconfirmedDays.length > 0 && (
-                    <div><span className="font-medium">Tip confirmation:</span> {formatAttentionDays(unconfirmedDays)}</div>
+                    <div>
+                      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-amber-900">Tip confirmation</div>
+                      {renderAttentionDates(unconfirmedDays, "confirmation")}
+                    </div>
                   )}
                 </div>
               </div>
@@ -1391,7 +1407,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
             <div>
               <CardTitle className={C.ink}>Bistro sales</CardTitle>
               <CardDescription className={C.muted}>
-                Daily gross sales are summed automatically from all associate shift entries. Managers can enter tax and sales-category totals. Full-day tip percentage uses net sales after tax.
+                High-level gross sales and tip reporting. The monthly running total includes sales entered in previous and following pay periods within the same calendar month.
               </CardDescription>
             </div>
             <Button type="button" variant="outline" className={`${C.outline} shrink-0`} onClick={() => setSalesOpen((open) => !open)} aria-expanded={salesOpen}>
@@ -1401,35 +1417,10 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-4">
-            <StatCard label="Period gross" value={formatMoney(grid.salesTotals.period.grossSales)} />
-            <StatCard label="Tax deducted" value={formatMoney(grid.salesTotals.period.taxAmount)} />
-            <StatCard label="Period net" value={formatMoney(grid.salesTotals.period.netSales)} tone="green" />
-            <StatCard label="Month net" value={formatMoney(grid.salesTotals.month.netSales)} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <StatCard label="Current pay-period gross sales" value={formatMoney(grid.salesTotals.period.grossSales)} />
+            <StatCard label={`${parseLocalDate(grid.period.start).toLocaleDateString("en-US", { month: "long" })} running gross sales`} value={formatMoney(grid.salesTotals.month.grossSales)} tone="green" />
           </div>
-          <div className="grid gap-3 md:grid-cols-4">
-            <div className="rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm">
-              <div className="text-[#5f5247]">Food</div>
-              <div className="text-xl font-semibold text-[#201814]">{formatMoney(grid.salesTotals.period.foodSales)}</div>
-            </div>
-            <div className="rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm">
-              <div className="text-[#5f5247]">Beer</div>
-              <div className="text-xl font-semibold text-[#201814]">{formatMoney(grid.salesTotals.period.beerSales)}</div>
-            </div>
-            <div className="rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm">
-              <div className="text-[#5f5247]">Liquor</div>
-              <div className="text-xl font-semibold text-[#201814]">{formatMoney(grid.salesTotals.period.liquorSales)}</div>
-            </div>
-            <div className="rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm">
-              <div className="text-[#5f5247]">Wine</div>
-              <div className="text-xl font-semibold text-[#201814]">{formatMoney(grid.salesTotals.period.wineSales)}</div>
-            </div>
-          </div>
-          {!canManageSales && (
-            <div className="rounded-lg border border-[#bdd5c3] bg-[#e8f1ea] p-3 text-sm text-[#173c25]">
-              Associates enter their own shift sales with their tips. Tax and sales-category reconciliation is limited to management.
-            </div>
-          )}
           {salesOpen && (
             <div className="grid gap-3 lg:grid-cols-2">
               {[week1Days, week2Days].map((days, index) => (
@@ -1443,22 +1434,12 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <div className="font-semibold text-[#201814]">{date === todayKey() ? formatTodayLabel(date) : formatDisplayDate(date, "long")}</div>
-                              <div className="text-xs text-[#5f5247]">Net {formatMoney(totalForDay?.netSales)} | Tip % {formatPercent(totalForDay?.tipPercent)}</div>
+                              <div className="text-xs text-[#5f5247]">Tip percentage {formatPercent(totalForDay?.tipPercent)}</div>
                             </div>
-                            <Button type="button" size="sm" variant="outline" className={C.outline} disabled={grid.locked || !canManageSales || saveSalesDay.isPending} onClick={() => commitSales(date)}>
-                              Save
-                            </Button>
-                          </div>
-                          <div className="grid gap-2 sm:grid-cols-3">
-                            <div className="rounded-md border border-[#e0d3c1] bg-[#fbf6ee] p-2">
-                              <div className="text-xs text-[#5f5247]">Gross from associate shifts</div>
+                            <div className="text-right">
+                              <div className="text-xs text-[#5f5247]">Gross sales</div>
                               <div className="text-lg font-semibold text-[#201814]">{formatMoney(totalForDay?.grossSales)}</div>
                             </div>
-                            {renderSalesInput(date, "taxAmount", "Tax")}
-                            {renderSalesInput(date, "foodSales", "Food")}
-                            {renderSalesInput(date, "beerSales", "Beer")}
-                            {renderSalesInput(date, "liquorSales", "Liquor")}
-                            {renderSalesInput(date, "wineSales", "Wine")}
                           </div>
                         </div>
                       );

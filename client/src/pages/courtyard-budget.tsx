@@ -56,6 +56,12 @@ type BudgetSummary = {
   user: BudgetUser;
   revenue: { label: string; budgetAmount: string; actualAmount: string; forecastAmount: string };
   totals: { expenseBudget: string; expenseForecast: string; checkbookSpend: string; remainingBudget: string };
+  profitability: {
+    projectedLabor: string;
+    projectedProfit: string;
+    projectedMarginPercent: number;
+    laborRoles: Array<{ role: string; hourlyRate: number; employeeCount: number; hours: number; projectedCost: number }>;
+  } | null;
   expenses: BudgetExpense[];
   checkbook: CheckbookEntry[];
 };
@@ -115,6 +121,7 @@ export default function CourtyardBudgetPage() {
   const [budgetFile, setBudgetFile] = useState<File | null>(null);
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
   const [forecastRevenue, setForecastRevenue] = useState("");
+  const [laborHoursByRole, setLaborHoursByRole] = useState<Record<string, string>>({});
   const [checkbookForm, setCheckbookForm] = useState({
     entryDate: dateKey(year, month),
     vendor: "",
@@ -142,8 +149,11 @@ export default function CourtyardBudgetPage() {
   }, [month, year]);
 
   useEffect(() => {
-    if (data) setForecastRevenue(data.revenue.forecastAmount);
-  }, [data?.revenue.forecastAmount]);
+    if (data) {
+      setForecastRevenue(data.revenue.forecastAmount);
+      setLaborHoursByRole(Object.fromEntries((data.profitability?.laborRoles || []).map((role) => [role.role, String(role.hours || "")])));
+    }
+  }, [data?.revenue.forecastAmount, data?.profitability?.laborRoles]);
 
   const uploadBudget = useMutation({
     mutationFn: async () => {
@@ -175,6 +185,7 @@ export default function CourtyardBudgetPage() {
       month,
       year,
       forecastRevenue: forecastRevenue || "0",
+      laborHoursByRole: activeDepartment === "Bistro" ? laborHoursByRole : {},
     }),
     onSuccess: () => {
       toast({ title: "Monthly forecast saved", description: "Expense limits were scaled to the revised revenue forecast." });
@@ -281,12 +292,67 @@ export default function CourtyardBudgetPage() {
             {me.data.user.canEditForecast && (
               <Card className={C.shell}>
                 <CardHeader>
-                  <CardTitle>Monthly Revenue Forecast</CardTitle>
-                  <CardDescription className={C.muted}>Enter the current full-month revenue forecast. Expense allowances scale by the same percentage versus budget.</CardDescription>
+                  <CardTitle>{activeDepartment === "Bistro" ? "Monthly Revenue and Labor Forecast" : "Monthly Revenue Forecast"}</CardTitle>
+                  <CardDescription className={C.muted}>
+                    Enter the current full-month revenue forecast. Expense allowances scale by the same percentage versus budget.
+                    {activeDepartment === "Bistro" ? " Projected Bistro labor is included in department profit and margin." : ""}
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
                   <div><Label>Forecasted {data.revenue.label}</Label><Input className={C.field} inputMode="decimal" value={forecastRevenue} onChange={(event) => setForecastRevenue(event.target.value.replace(/[^0-9.]/g, ""))} /></div>
-                  <Button className={C.accent} disabled={!forecastRevenue || saveForecast.isPending} onClick={() => saveForecast.mutate()}>Save forecast</Button>
+                    <Button className={C.accent} disabled={!forecastRevenue || saveForecast.isPending} onClick={() => saveForecast.mutate()}>Save forecast</Button>
+                  </div>
+                  {activeDepartment === "Bistro" && data.profitability && (
+                    <div className="overflow-hidden rounded-lg border border-[#e0d3c1] bg-white">
+                      <div className="border-b border-[#e0d3c1] bg-[#fbf6ee] px-3 py-2">
+                        <div className="font-semibold text-[#201814]">Projected hours by position</div>
+                        <div className="text-xs text-[#5f5247]">Hourly rates come from active associates assigned to each role. Multiple rates are averaged.</div>
+                      </div>
+                      <div className="divide-y divide-[#e0d3c1]">
+                        {data.profitability.laborRoles.map((role) => {
+                          const hours = Number(laborHoursByRole[role.role] || 0);
+                          return (
+                            <div key={role.role} className="grid gap-2 p-3 sm:grid-cols-[1fr_150px_150px_150px] sm:items-center">
+                              <div>
+                                <div className="font-medium text-[#201814]">{role.role}</div>
+                                <div className="text-xs text-[#5f5247]">{role.employeeCount} associate{role.employeeCount === 1 ? "" : "s"} assigned</div>
+                              </div>
+                              <div className="text-sm sm:text-right"><span className="text-[#5f5247]">Rate </span>{money(role.hourlyRate)}/hr</div>
+                              <div>
+                                <Label className="sr-only">Monthly hours for {role.role}</Label>
+                                <Input
+                                  className={`${C.field} text-right`}
+                                  inputMode="decimal"
+                                  placeholder="Monthly hours"
+                                  value={laborHoursByRole[role.role] || ""}
+                                  onChange={(event) => setLaborHoursByRole((current) => ({ ...current, [role.role]: event.target.value.replace(/[^0-9.]/g, "") }))}
+                                />
+                              </div>
+                              <div className="text-right font-semibold text-[#201814]">{money(hours * role.hourlyRate)}</div>
+                            </div>
+                          );
+                        })}
+                        {!data.profitability.laborRoles.length && <div className="p-3 text-sm text-[#5f5247]">No active Bistro roles with hourly rates were found in the Schedule employee list.</div>}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {data.profitability && (
+              <Card className={C.shell}>
+                <CardHeader>
+                  <CardTitle>Bistro Projected Profitability</CardTitle>
+                  <CardDescription className={C.muted}>Forecast revenue less scaled operating expenses and projected Bistro labor.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <StatCard label="Forecast revenue" value={money(data.revenue.forecastAmount)} />
+                  <StatCard label="Operating expenses" value={money(data.totals.expenseForecast)} />
+                  <StatCard label="Projected labor" value={money(data.profitability.projectedLabor)} />
+                  <StatCard label="Projected profit" value={money(data.profitability.projectedProfit)} tone={Number(data.profitability.projectedProfit) >= 0 ? "green" : "amber"} />
+                  <StatCard label="Projected profit margin" value={`${data.profitability.projectedMarginPercent.toFixed(1)}%`} tone={data.profitability.projectedMarginPercent >= 0 ? "green" : "amber"} />
                 </CardContent>
               </Card>
             )}

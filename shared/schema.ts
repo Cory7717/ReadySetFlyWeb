@@ -763,6 +763,8 @@ export const courtyardBudgetDepartmentForecasts = pgTable("courtyard_budget_depa
   month: integer("month").notNull(),
   year: integer("year").notNull(),
   forecastRevenue: numeric("forecast_revenue", { precision: 12, scale: 2 }).notNull().default("0"),
+  projectedLabor: numeric("projected_labor", { precision: 12, scale: 2 }).notNull().default("0"),
+  laborProjectionJson: jsonb("labor_projection_json").$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
   updatedBy: varchar("updated_by").references(() => tipsUsers.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

@@ -222,6 +222,53 @@ function categoryKey(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function rolesArray(value: unknown) {
+  if (Array.isArray(value)) return value.map((role) => String(role || "").trim()).filter(Boolean);
+  return String(value || "").split(",").map((role) => role.trim()).filter(Boolean);
+}
+
+function isBistroLaborRole(role: string) {
+  return /(bistro|breakfast|bartender|server|cook|food|beverage)/i.test(role);
+}
+
+function roleRateForEmployee(employee: any, role: string) {
+  const rates = employee?.roleRatesJson && typeof employee.roleRatesJson === "object"
+    ? employee.roleRatesJson as Record<string, unknown>
+    : {};
+  const match = Object.entries(rates).find(([rateRole]) => rateRole.trim().toLowerCase() === role.trim().toLowerCase());
+  return moneyNumber(match?.[1] ?? employee?.hourlyRate);
+}
+
+function buildBistroLaborRoles(employees: any[], hoursByRole: Record<string, number>) {
+  const roles = new Map<string, { rates: number[]; employeeIds: Set<string> }>();
+  for (const employee of employees) {
+    const assignedRoles = Array.from(new Set([
+      ...rolesArray(employee.rolesJson),
+      String(employee.position || "").trim(),
+    ].filter((role) => role && isBistroLaborRole(role))));
+    for (const role of assignedRoles) {
+      const existing = roles.get(role) || { rates: [], employeeIds: new Set<string>() };
+      const rate = roleRateForEmployee(employee, role);
+      if (rate > 0) existing.rates.push(rate);
+      existing.employeeIds.add(employee.id);
+      roles.set(role, existing);
+    }
+  }
+  return Array.from(roles.entries())
+    .map(([role, details]) => {
+      const hourlyRate = details.rates.length ? details.rates.reduce((sum, rate) => sum + rate, 0) / details.rates.length : 0;
+      const hours = Math.max(0, moneyNumber(hoursByRole[role]));
+      return {
+        role,
+        hourlyRate: Number(hourlyRate.toFixed(2)),
+        employeeCount: details.employeeIds.size,
+        hours: Number(hours.toFixed(2)),
+        projectedCost: Number((hours * hourlyRate).toFixed(2)),
+      };
+    })
+    .sort((a, b) => a.role.localeCompare(b.role));
+}
+
 function isSensitiveLine(lineItem: string, department: string) {
   const text = `${lineItem} ${department}`.toLowerCase();
   return /(general manager|\bgm\b|director of sales|\bdos\b|supervisor|management wages|manager salary|salary|owner|franchise|non-operating|payroll related)/i.test(text);
@@ -545,6 +592,7 @@ const forecastSchema = z.object({
   month: z.coerce.number().int().min(1).max(12),
   year: z.coerce.number().int().min(2020).max(2100),
   forecastRevenue: z.coerce.number().min(0).max(100000000),
+  laborHoursByRole: z.record(z.string().trim().min(1).max(120), z.coerce.number().min(0).max(10000)).default({}),
 });
 
 export function registerCourtyardBudgetRoutes(app: Express) {
@@ -621,7 +669,7 @@ export function registerCourtyardBudgetRoutes(app: Express) {
       if (!department) return res.status(403).json({ error: "You do not have access to that budget department." });
       const sourceDepartment = sourceDepartmentForBudgetView(department);
       const revenueDepartment = revenueDepartmentForBudgetView(department);
-      const [sourceLines, revenueLines, checkbook, forecastRows] = await Promise.all([
+      const [sourceLines, revenueLines, checkbook, forecastRows, bistroEmployees] = await Promise.all([
         db.select().from(courtyardBudgetLineItems).where(and(
           eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID),
           eq(courtyardBudgetLineItems.month, month),
@@ -648,9 +696,17 @@ export function registerCourtyardBudgetRoutes(app: Express) {
           eq(courtyardBudgetDepartmentForecasts.year, year),
           eq(courtyardBudgetDepartmentForecasts.department, department),
         )).limit(1),
+        department === "Bistro"
+          ? db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true)).orderBy(asc(scheduleEmployees.displayName))
+          : Promise.resolve([]),
       ]);
       const revenue = revenueTotal(revenueLines || sourceLines, revenuePatternForBudgetView(department));
       const forecastRevenue = forecastRows.length ? moneyNumber(forecastRows[0].forecastRevenue) : revenue.budget;
+      const savedLaborHours = department === "Bistro" && forecastRows.length && forecastRows[0].laborProjectionJson && typeof forecastRows[0].laborProjectionJson === "object"
+        ? forecastRows[0].laborProjectionJson as Record<string, number>
+        : {};
+      const laborRoles = department === "Bistro" ? buildBistroLaborRoles(bistroEmployees, savedLaborHours) : [];
+      const projectedLabor = laborRoles.reduce((sum, role) => sum + role.projectedCost, 0);
       const scale = revenue.budget > 0 ? forecastRevenue / revenue.budget : 1;
       const expenseLines = sourceLines.filter((line) => isDepartmentExpenseLine(department, line));
       const spentByCategory = new Map<string, number>();
@@ -679,6 +735,7 @@ export function registerCourtyardBudgetRoutes(app: Express) {
       const totalExpenseBudget = expenses.reduce((sum, line) => sum + moneyNumber(line.budgetAmount), 0);
       const totalExpenseForecast = expenses.reduce((sum, line) => sum + moneyNumber(line.forecastAmount), 0);
       const totalSpent = checkbook.reduce((sum, entry) => sum + moneyNumber(entry.amount), 0);
+      const projectedProfit = forecastRevenue - totalExpenseForecast - projectedLabor;
       res.json({
         propertyName: PROPERTY_NAME,
         month,
@@ -698,6 +755,12 @@ export function registerCourtyardBudgetRoutes(app: Express) {
           checkbookSpend: moneyString(totalSpent),
           remainingBudget: moneyString(totalExpenseForecast - totalSpent),
         },
+        profitability: department === "Bistro" ? {
+          projectedLabor: moneyString(projectedLabor),
+          projectedProfit: moneyString(projectedProfit),
+          projectedMarginPercent: forecastRevenue > 0 ? Number(((projectedProfit / forecastRevenue) * 100).toFixed(2)) : 0,
+          laborRoles,
+        } : null,
         expenses,
         checkbook: checkbook.map((entry) => ({ ...entry, amount: moneyString(entry.amount) })),
       });
@@ -738,12 +801,19 @@ export function registerCourtyardBudgetRoutes(app: Express) {
       if (!parsed.success) return res.status(400).json({ error: "Invalid forecast adjustment", validation: parsed.error.format() });
       const department = parsed.data.department.trim();
       if (!BUDGET_DEPARTMENTS.includes(department as any)) return res.status(400).json({ error: "Unsupported department." });
+      const bistroEmployees = department === "Bistro"
+        ? await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true))
+        : [];
+      const laborRoles = department === "Bistro" ? buildBistroLaborRoles(bistroEmployees, parsed.data.laborHoursByRole) : [];
+      const projectedLabor = laborRoles.reduce((sum, role) => sum + role.projectedCost, 0);
       await db.insert(courtyardBudgetDepartmentForecasts).values({
         propertyId: PROPERTY_ID,
         department,
         month: parsed.data.month,
         year: parsed.data.year,
         forecastRevenue: parsed.data.forecastRevenue.toFixed(2),
+        projectedLabor: projectedLabor.toFixed(2),
+        laborProjectionJson: parsed.data.laborHoursByRole,
         updatedBy: req.budgetUser.id,
       }).onConflictDoUpdate({
         target: [
@@ -754,6 +824,8 @@ export function registerCourtyardBudgetRoutes(app: Express) {
         ],
         set: {
           forecastRevenue: parsed.data.forecastRevenue.toFixed(2),
+          projectedLabor: projectedLabor.toFixed(2),
+          laborProjectionJson: parsed.data.laborHoursByRole,
           updatedBy: req.budgetUser.id,
           updatedAt: new Date(),
         },

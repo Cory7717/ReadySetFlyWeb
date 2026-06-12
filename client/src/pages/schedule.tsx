@@ -54,6 +54,8 @@ const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Mainten
 const SCHEDULE_ROLES = ["GM", "DOS", "DOS / Sales", "Sales", "MOD", "Executive Housekeeper", "Exec HK", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
 const DAY_LABELS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 const DAY_LABELS_ES = ["Sab", "Dom", "Lun", "Mar", "Mie", "Jue", "Vie"];
+const HOUSEKEEPING_OUT_TIME_NOTICE = "Housekeeping scheduled end times are planning estimates used to calculate labor hours. Associates may leave once their assigned work is complete and they have been released by their supervisor. If additional time is needed to complete assigned duties, associates should remain until the work is finished.";
+const HOUSEKEEPING_OUT_TIME_NOTICE_ES = "Las horas de salida de Housekeeping son estimados de planificacion utilizados para calcular las horas laborales. Los asociados pueden retirarse cuando hayan terminado el trabajo asignado y su supervisor los haya autorizado. Si necesitan tiempo adicional para completar sus responsabilidades, deben permanecer hasta finalizar el trabajo.";
 
 const ES: Record<string, string> = {
   "Courtyard Schedule Builder": "Constructor de Horarios Courtyard",
@@ -655,6 +657,7 @@ function shiftTone(assignment: ShiftAssignment | undefined, shiftType: ShiftType
         const label = shift.label.toLowerCase();
         return label === role
           || (role.includes("room attendant") && (label === "room attendant" || label === "housekeeping"))
+          || ((role.includes("executive housekeeper") || role.includes("exec hk")) && label === "housekeeping")
           || (role.includes("laundry") && label === "laundry")
           || ((role.includes("houseperson") || role.includes("houseman")) && label === "houseperson")
           || (role.includes("inspector") && label === "room inspector")
@@ -678,6 +681,7 @@ function matchingShiftForRole(roleWorked: string, shiftTypes: ShiftType[]) {
       || (role.includes("audit") && (label === "night audit" || label === "audit"))
       || ((role.includes("dos") || role.includes("sales")) && label === "dos / sales")
       || (role.includes("room attendant") && (label === "room attendant" || label === "housekeeping"))
+      || ((role.includes("executive housekeeper") || role.includes("exec hk")) && label === "housekeeping")
       || (role.includes("laundry") && label === "laundry")
       || ((role.includes("houseperson") || role.includes("houseman")) && label === "houseperson")
       || (role.includes("inspector") && label === "room inspector")
@@ -1361,8 +1365,8 @@ function ShiftEditDialog({
       ...form,
       roleWorked: nextRole,
       shiftTypeId: shouldReplaceShift ? matchingShift?.id || "" : form.shiftTypeId || matchingShift?.id || "",
-      customStartTime: nonWorking ? "" : shouldReplaceShift ? matchingShift?.startTime?.slice(0, 5) || "" : form.customStartTime || matchingShift?.startTime?.slice(0, 5) || "",
-      customEndTime: nonWorking ? "" : shouldReplaceShift ? matchingShift?.endTime?.slice(0, 5) || "" : form.customEndTime || matchingShift?.endTime?.slice(0, 5) || "",
+      customStartTime: nonWorking ? "" : form.customStartTime || matchingShift?.startTime?.slice(0, 5) || "",
+      customEndTime: nonWorking ? "" : form.customEndTime || matchingShift?.endTime?.slice(0, 5) || "",
       unpaidBreakMinutes: nonWorking ? "" : form.unpaidBreakMinutes,
     });
   };
@@ -1965,6 +1969,13 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                 const showHousekeepingReference = department === "Housekeeping" && editable && editableDepartments.includes("Housekeeping");
                 return [
                   <tr key={`${department}-header`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#2a211c] p-2 font-semibold text-white">{department} - {payload.totals.departmentWeeklyHours[department] || 0} hrs</td></tr>,
+                  department === "Housekeeping" ? (
+                    <tr key={`${department}-out-time-notice`}>
+                      <td colSpan={9} className="border border-[#c8d9cd] bg-[#edf5ef] px-4 py-3 text-sm leading-relaxed text-[#173c25]">
+                        <strong>Housekeeping schedule note:</strong> {spanish ? HOUSEKEEPING_OUT_TIME_NOTICE_ES : HOUSEKEEPING_OUT_TIME_NOTICE}
+                      </td>
+                    </tr>
+                  ) : null,
                   showHousekeepingReference ? <tr key={`${department}-guide`}><td colSpan={9} className="border border-[#e0d3c1] bg-[#fbf6ee] p-3"><HousekeepingSchedulingGuide spanish={spanish} /></td></tr> : null,
                   showHousekeepingReference ? <HousekeepingForecastMini key={`${department}-forecast`} payload={payload} labels={labels} /> : null,
                   <tr key={`${department}-days`}>
@@ -2063,7 +2074,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                     </tr>
                   )),
                   !["Managers", "Night Audit"].includes(department) ? <tr key={`${department}-associate-totals`}>
-                    <td className="sticky left-0 z-10 border border-[#d6c8b5] bg-[#f8f1e7] p-2 font-medium text-[#201814]">Regular associate hours</td>
+                    <td className="sticky left-0 z-10 border border-[#d6c8b5] bg-[#f8f1e7] p-2 font-medium text-[#201814]">Associate hours</td>
                     {payload.days.map((day) => (
                       <td key={day} className="border border-[#d6c8b5] bg-[#f8f1e7] p-2 text-center font-medium text-[#201814]">
                         {fmtHours(payload.totals.departmentAssociateDailyHours?.[department]?.[day] || 0)}
@@ -2113,6 +2124,11 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
             return (
               <div key={department}>
                 <h3 className="mb-2 font-semibold">{department}</h3>
+                {department === "Housekeeping" && (
+                  <div className="mb-3 rounded-xl border border-[#c8d9cd] bg-[#edf5ef] p-3 text-sm leading-relaxed text-[#173c25]">
+                    <strong>Housekeeping schedule note:</strong> {spanish ? HOUSEKEEPING_OUT_TIME_NOTICE_ES : HOUSEKEEPING_OUT_TIME_NOTICE}
+                  </div>
+                )}
                 {showHousekeepingReference && (
                   <>
                     <HousekeepingSchedulingGuide spanish={spanish} />
@@ -2193,7 +2209,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                     {!["Managers", "Night Audit"].includes(department) && (
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
                         <div className="rounded-md border border-[#d6c8b5] bg-[#f8f1e7] p-2">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Regular associate hours</div>
+                          <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Associate hours</div>
                           <div className="mt-1 text-lg font-semibold">{fmtHours(payload.totals.departmentAssociateWeeklyHours?.[department] || 0)} weekly</div>
                         </div>
                         <div className="rounded-md border border-[#c8d9cd] bg-[#edf5ef] p-2 text-[#173c25]">

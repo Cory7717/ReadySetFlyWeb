@@ -43,6 +43,7 @@ const TARGET_OCCUPANCY_PERCENT = Number(process.env.SCHEDULE_TARGET_OCCUPANCY_PE
 const TARGET_HPOR = Number(process.env.SCHEDULE_TARGET_HPOR || 1.4);
 const TARGET_HK_MPOR_MIN = Number(process.env.SCHEDULE_TARGET_HK_MPOR_MIN || 25);
 const TARGET_HK_MPOR_MAX = Number(process.env.SCHEDULE_TARGET_HK_MPOR_MAX || 30);
+const HOUSEKEEPING_OUT_TIME_NOTICE = "Housekeeping scheduled end times are planning estimates used to calculate labor hours. Associates may leave once their assigned work is complete and they have been released by their supervisor. If additional time is needed to complete assigned duties, associates should remain until the work is finished.";
 const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 const openaiBaseUrl = (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || "").trim();
 const openai = openaiApiKey
@@ -92,6 +93,8 @@ const DEFAULT_SHIFT_TYPES = [
 const HOUSEKEEPING_ROLE_SHIFT_FALLBACKS: Record<string, any> = {
   "ROOM ATTENDANT": { label: "Room Attendant", startTime: "09:00", endTime: "17:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
   HOUSEKEEPING: { label: "HOUSEKEEPING", startTime: "09:00", endTime: "17:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
+  "EXECUTIVE HOUSEKEEPER": { label: "HOUSEKEEPING", startTime: "09:00", endTime: "17:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
+  "EXEC HK": { label: "HOUSEKEEPING", startTime: "09:00", endTime: "17:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
   LAUNDRY: { label: "Laundry", startTime: "08:00", endTime: "15:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
   HOUSEPERSON: { label: "Houseperson", startTime: "09:00", endTime: "16:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
   HOUSEMAN: { label: "Houseperson", startTime: "09:00", endTime: "16:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
@@ -422,6 +425,7 @@ function resolveShiftTypeFromRole(role: string, shiftTypeByLabel: Map<string, an
     || (normalized.includes("AUDIT") || normalized.includes("NIGHT") ? shiftTypeByLabel.get("NIGHT AUDIT") || shiftTypeByLabel.get("AUDIT") : null)
     || (normalized.includes("DOS") || normalized.includes("SALES") ? shiftTypeByLabel.get("DOS / SALES") : null)
     || (normalized.includes("ROOM ATTENDANT") ? shiftTypeByLabel.get("ROOM ATTENDANT") || shiftTypeByLabel.get("HOUSEKEEPING") : null)
+    || (normalized.includes("EXECUTIVE HOUSEKEEPER") || normalized.includes("EXEC HK") ? shiftTypeByLabel.get("HOUSEKEEPING") || HOUSEKEEPING_ROLE_SHIFT_FALLBACKS["EXECUTIVE HOUSEKEEPER"] : null)
     || (normalized.includes("LAUNDRY") ? shiftTypeByLabel.get("LAUNDRY") : null)
     || (normalized.includes("HOUSEPERSON") || normalized.includes("HOUSEMAN") ? shiftTypeByLabel.get("HOUSEPERSON") : null)
     || (normalized.includes("INSPECTOR") ? shiftTypeByLabel.get("ROOM INSPECTOR") : null)
@@ -688,6 +692,9 @@ async function sendPublishedScheduleEmails(schedule: any, url: string, recipient
         </div>
         <div style="background:#fffaf2;border:1px solid #dbc9b4;border-top:0;border-radius:0 0 14px 14px;padding:24px 26px;">
           <p style="margin:0 0 18px;font-size:15px;line-height:1.5;">The published schedule for <strong>${schedule.propertyName || PROPERTY_NAME}</strong> is ready to view.</p>
+          <div style="margin:0 0 18px;padding:14px 16px;border:1px solid #b9d2c1;border-radius:10px;background:#edf5ef;color:#173c25;font-size:13px;line-height:1.5;">
+            <strong>Housekeeping associates:</strong> ${HOUSEKEEPING_OUT_TIME_NOTICE}
+          </div>
           <a href="${url}" style="display:inline-block;background:#28624f;color:#fff;text-decoration:none;border-radius:10px;padding:12px 18px;font-weight:700;">View Published Schedule</a>
           <p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#6b5b4d;">This is a read-only schedule link. Contact your supervisor if you have a schedule question or need a correction.</p>
         </div>
@@ -698,6 +705,8 @@ async function sendPublishedScheduleEmails(schedule: any, url: string, recipient
     `${schedule.propertyName || PROPERTY_NAME} schedule is ready.`,
     "",
     `Week: ${schedule.weekStartDate} to ${schedule.weekEndDate}`,
+    "",
+    `Housekeeping associates: ${HOUSEKEEPING_OUT_TIME_NOTICE}`,
     "",
     "View the published schedule here:",
     url,
@@ -2364,10 +2373,17 @@ async function renderSchedulePdf(payload: any) {
       .sort((a: any, b: any) => scheduleEmployeeDepartmentSort(department, a, b));
     if (!employees.length) continue;
     const rowH = 34;
-    ensureSpace(102 + employees.length * rowH);
+    ensureSpace(102 + employees.length * rowH + (department === "Housekeeping" ? 40 : 0));
     drawBox(margin, y, tableWidth, 22, dark, dark);
     drawText(`${department} - ${payload.totals.departmentWeeklyHours[department] || 0} hrs`, margin + 8, y - 14, 9, true, white);
     y -= 22;
+    if (department === "Housekeeping") {
+      const noticeLines = wrapPdfText(`Schedule note: ${HOUSEKEEPING_OUT_TIME_NOTICE}`, 128, 3);
+      const noticeHeight = 10 + noticeLines.length * 9;
+      drawBox(margin, y, tableWidth, noticeHeight, paleGreen);
+      noticeLines.forEach((line: string, index: number) => drawText(line, margin + 8, y - 12 - index * 9, 6.5, index === 0));
+      y -= noticeHeight;
+    }
     drawBox(margin, y, employeeW, 20, tan);
     drawText("Associate", margin + 6, y - 13, 7, true);
     payload.days.forEach((day: string, index: number) => {
@@ -2403,7 +2419,7 @@ async function renderSchedulePdf(payload: any) {
     const subtotalRows = ["Managers", "Night Audit"].includes(department)
       ? [[`${department} total hours`, "departmentDailyHours", "departmentWeeklyHours", tan, true] as const]
       : [
-          ["Regular associate hours", "departmentAssociateDailyHours", "departmentAssociateWeeklyHours", tan, false] as const,
+          ["Associate hours", "departmentAssociateDailyHours", "departmentAssociateWeeklyHours", tan, false] as const,
           ["Supervisor hours", "departmentSupervisorDailyHours", "departmentSupervisorWeeklyHours", paleGreen, true] as const,
           [`${department} total hours`, "departmentDailyHours", "departmentWeeklyHours", tan, true] as const,
         ];
@@ -2460,8 +2476,11 @@ function renderScheduleExcelHtml(payload: any) {
         return `<td${style}>${scheduleCellText(sectionAssignment, sectionShiftType)}</td>`;
       }).join("")}<td>${payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0}</td></tr>`);
     }
+    if (department === "Housekeeping") {
+      rows.push(`<tr><td>${department}</td><td colspan="${payload.days.length + 2}"><strong>Schedule note:</strong> ${HOUSEKEEPING_OUT_TIME_NOTICE}</td></tr>`);
+    }
     if (!["Managers", "Night Audit"].includes(department)) {
-      rows.push(`<tr><td>${department}</td><td><strong>Regular associate hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentAssociateDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentAssociateWeeklyHours?.[department] || 0}</td></tr>`);
+      rows.push(`<tr><td>${department}</td><td><strong>Associate hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentAssociateDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentAssociateWeeklyHours?.[department] || 0}</td></tr>`);
       rows.push(`<tr><td>${department}</td><td><strong>Supervisor hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentSupervisorDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentSupervisorWeeklyHours?.[department] || 0}</td></tr>`);
     }
     rows.push(`<tr><td>${department}</td><td><strong>Department total hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentWeeklyHours?.[department] || 0}</td></tr>`);

@@ -2073,7 +2073,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                       <td className="border border-[#e0d3c1] p-2 text-center font-semibold">{payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0}</td>
                     </tr>
                   )),
-                  !["Managers", "Night Audit"].includes(department) ? <tr key={`${department}-associate-totals`}>
+                  !["Managers", "Night Audit", "Maintenance"].includes(department) ? <tr key={`${department}-associate-totals`}>
                     <td className="sticky left-0 z-10 border border-[#d6c8b5] bg-[#f8f1e7] p-2 font-medium text-[#201814]">Associate hours</td>
                     {payload.days.map((day) => (
                       <td key={day} className="border border-[#d6c8b5] bg-[#f8f1e7] p-2 text-center font-medium text-[#201814]">
@@ -2084,7 +2084,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                       {fmtHours(payload.totals.departmentAssociateWeeklyHours?.[department] || 0)}
                     </td>
                   </tr> : null,
-                  !["Managers", "Night Audit"].includes(department) ? <tr key={`${department}-supervisor-totals`}>
+                  !["Managers", "Night Audit", "Maintenance"].includes(department) ? <tr key={`${department}-supervisor-totals`}>
                     <td className="sticky left-0 z-10 border border-[#c8d9cd] bg-[#edf5ef] p-2 font-semibold text-[#173c25]">Supervisor hours</td>
                     {payload.days.map((day) => (
                       <td key={day} className="border border-[#c8d9cd] bg-[#edf5ef] p-2 text-center font-semibold text-[#173c25]">
@@ -2206,7 +2206,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                         {fmtHours(payload.totals.departmentWeeklyHours[department] || 0)} weekly
                       </Badge>
                     </div>
-                    {!["Managers", "Night Audit"].includes(department) && (
+                    {!["Managers", "Night Audit", "Maintenance"].includes(department) && (
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
                         <div className="rounded-md border border-[#d6c8b5] bg-[#f8f1e7] p-2">
                           <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Associate hours</div>
@@ -2223,7 +2223,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                         <div key={day} className="rounded-md border border-[#d6c8b5] bg-white p-2 text-center">
                           <div className="text-xs font-semibold text-[#5f5247]">{labels[index]} {formatDate(day)}</div>
                           <div className="text-lg font-semibold">{fmtHours(payload.totals.departmentDailyHours[department]?.[day] || 0)}</div>
-                          {!["Managers", "Night Audit"].includes(department) && (
+                          {!["Managers", "Night Audit", "Maintenance"].includes(department) && (
                             <div className="mt-1 text-[11px] text-[#5f5247]">
                               Associates {fmtHours(payload.totals.departmentAssociateDailyHours?.[department]?.[day] || 0)} / Sup {fmtHours(payload.totals.departmentSupervisorDailyHours?.[department]?.[day] || 0)}
                             </div>

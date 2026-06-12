@@ -2416,7 +2416,7 @@ async function renderSchedulePdf(payload: any) {
       drawText(String(payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0), margin + employeeW + 7 * dayW + 10, y - 19, 8, true);
       y -= rowH;
     }
-    const subtotalRows = ["Managers", "Night Audit"].includes(department)
+    const subtotalRows = ["Managers", "Night Audit", "Maintenance"].includes(department)
       ? [[`${department} total hours`, "departmentDailyHours", "departmentWeeklyHours", tan, true] as const]
       : [
           ["Associate hours", "departmentAssociateDailyHours", "departmentAssociateWeeklyHours", tan, false] as const,
@@ -2479,7 +2479,7 @@ function renderScheduleExcelHtml(payload: any) {
     if (department === "Housekeeping") {
       rows.push(`<tr><td>${department}</td><td colspan="${payload.days.length + 2}"><strong>Schedule note:</strong> ${HOUSEKEEPING_OUT_TIME_NOTICE}</td></tr>`);
     }
-    if (!["Managers", "Night Audit"].includes(department)) {
+    if (!["Managers", "Night Audit", "Maintenance"].includes(department)) {
       rows.push(`<tr><td>${department}</td><td><strong>Associate hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentAssociateDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentAssociateWeeklyHours?.[department] || 0}</td></tr>`);
       rows.push(`<tr><td>${department}</td><td><strong>Supervisor hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentSupervisorDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentSupervisorWeeklyHours?.[department] || 0}</td></tr>`);
     }

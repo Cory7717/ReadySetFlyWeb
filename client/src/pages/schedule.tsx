@@ -164,6 +164,7 @@ type ScheduleUser = {
   isAdmin: boolean;
   isSuperAdmin: boolean;
   isDepartmentManager?: boolean;
+  canManageTemplates?: boolean;
   department?: string | null;
   canAccessTips?: boolean;
 };
@@ -297,6 +298,30 @@ type ScheduleActualHours = {
   actualHours: number | string;
   notes?: string | null;
   source?: string | null;
+};
+
+type ScheduleTemplate = {
+  id: string;
+  name: string;
+  occupancyTier: "minimal" | "low" | "moderate" | "high" | "peak" | "custom";
+  description?: string | null;
+  shiftCount: number;
+  updatedAt?: string | null;
+};
+
+type ScheduleTemplatePreview = {
+  template: ScheduleTemplate;
+  schedule: WeeklySchedule;
+  shiftCount: number;
+  applicableCount: number;
+  conflicts: {
+    missingAssociates: string[];
+    inactiveAssociates: string[];
+    missingShiftTypes: string[];
+    approvedRequests: string[];
+    existingCells: string[];
+    weeklyHours: string[];
+  };
 };
 
 type SchedulePayload = {
@@ -2752,6 +2777,14 @@ export default function SchedulePage() {
   const [hoursComparison, setHoursComparison] = useState<HoursComparison | null>(null);
   const [teamMessageOpen, setTeamMessageOpen] = useState(false);
   const [housekeepingBreakNoticeOpen, setHousekeepingBreakNoticeOpen] = useState(false);
+  const [templatePanelOpen, setTemplatePanelOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templatePreview, setTemplatePreview] = useState<ScheduleTemplatePreview | null>(null);
+  const [templateForm, setTemplateForm] = useState({
+    name: "",
+    occupancyTier: "minimal",
+    description: "",
+  });
   const [teamMessage, setTeamMessage] = useState({
     subject: "Current Week Schedule Catch-Up",
     message: "Team,\n\nI am publishing the current week's schedule in the system to catch it up. No schedule changes were made. Please continue following the current schedule as already communicated.\n\nThank you.",
@@ -2769,6 +2802,12 @@ export default function SchedulePage() {
   const payload = shareToken ? share.data : detail.data;
   const user = auth.data?.user;
   const canManageSchedule = Boolean(user?.isAdmin || user?.isDepartmentManager || user?.role === "manager");
+  const canManageTemplates = Boolean(user?.canManageTemplates);
+  const templates = useQuery<{ templates: ScheduleTemplate[] }>({
+    queryKey: ["/api/schedule/templates"],
+    queryFn: () => fetchJson("/api/schedule/templates"),
+    enabled: canManageTemplates && !shareToken,
+  });
   const editable = Boolean(canManageSchedule && payload?.schedule.status === "draft" && !shareToken);
   const canActualizeForecast = Boolean(user?.isAdmin && payload && !shareToken);
   const t = (value: string) => tr(spanish, value);
@@ -2992,6 +3031,41 @@ export default function SchedulePage() {
     },
     onError: (error: Error) => toast({ title: "Shift save failed", description: error.message, variant: "destructive" }),
   });
+  const saveTemplate = useMutation({
+    mutationFn: async () => {
+      if (!payload?.schedule.id) throw new Error("Choose a schedule week first.");
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload.schedule.id}/templates`, templateForm);
+      return response.json() as Promise<{ template: ScheduleTemplate }>;
+    },
+    onSuccess: (data) => {
+      setSelectedTemplateId(data.template.id);
+      setTemplateForm({ name: "", occupancyTier: "minimal", description: "" });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/templates"] });
+      toast({ title: "Staffing template saved", description: `${data.template.name} now contains ${data.template.shiftCount} shifts.` });
+    },
+    onError: (error: Error) => toast({ title: "Template save failed", description: error.message, variant: "destructive" }),
+  });
+  const previewTemplate = useMutation({
+    mutationFn: async () => {
+      if (!payload?.schedule.id || !selectedTemplateId) throw new Error("Choose a template and schedule week first.");
+      return fetchJson(`/api/schedule/templates/${selectedTemplateId}/preview?scheduleId=${payload.schedule.id}`) as Promise<ScheduleTemplatePreview>;
+    },
+    onSuccess: setTemplatePreview,
+    onError: (error: Error) => toast({ title: "Template preview failed", description: error.message, variant: "destructive" }),
+  });
+  const applyTemplate = useMutation({
+    mutationFn: async (mode: "replace" | "fillOpen") => {
+      if (!payload?.schedule.id || !selectedTemplateId) throw new Error("Choose a template and schedule week first.");
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload.schedule.id}/templates/${selectedTemplateId}/apply`, { mode });
+      return response.json() as Promise<{ payload: SchedulePayload; applied: number; skipped: number }>;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/schedule/weeks", weekId], data.payload);
+      setTemplatePreview(null);
+      toast({ title: "Staffing template applied", description: `${data.applied} shifts applied${data.skipped ? `; ${data.skipped} skipped` : ""}.` });
+    },
+    onError: (error: Error) => toast({ title: "Template apply failed", description: error.message, variant: "destructive" }),
+  });
   const copyPreviousShifts = useMutation({
     mutationFn: async (body: { scope: "all" | "employee"; employeeId?: string; department?: string }) => {
       if (!payload?.schedule.id) throw new Error("Select a schedule before copying previous shifts.");
@@ -3202,6 +3276,89 @@ export default function SchedulePage() {
                 </div>
               )}
             </CardContent>
+          </Card>
+        )}
+
+        {!shareToken && canManageTemplates && (
+          <Card className={`${C.shell} print:hidden`}>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle className={C.ink}>Staffing Templates</CardTitle>
+                  <CardDescription className={C.muted}>Save a complete schedule by occupancy tier, then preview and apply it to another week.</CardDescription>
+                </div>
+                <Button variant="outline" className={C.outline} onClick={() => setTemplatePanelOpen((open) => !open)}>
+                  {templatePanelOpen ? <ChevronUp className="mr-2 h-4 w-4" /> : <ChevronDown className="mr-2 h-4 w-4" />}
+                  {templatePanelOpen ? "Collapse" : "Manage"}
+                </Button>
+              </div>
+            </CardHeader>
+            {templatePanelOpen && (
+              <CardContent className="grid gap-4 lg:grid-cols-2">
+                <div className="space-y-3 rounded-xl border border-[#e0d3c1] bg-white p-4">
+                  <div className="font-semibold">Save current schedule</div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label>Template name</Label>
+                      <Input className={C.field} value={templateForm.name} onChange={(event) => setTemplateForm({ ...templateForm, name: event.target.value })} placeholder="Minimal Coverage" />
+                    </div>
+                    <div>
+                      <Label>Occupancy tier</Label>
+                      <Select value={templateForm.occupancyTier} onValueChange={(occupancyTier) => setTemplateForm({ ...templateForm, occupancyTier })}>
+                        <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
+                        <SelectContent className={C.menu}>
+                          <SelectItem value="minimal">Minimal Coverage</SelectItem>
+                          <SelectItem value="low">Low Occupancy</SelectItem>
+                          <SelectItem value="moderate">Moderate Occupancy</SelectItem>
+                          <SelectItem value="high">High Occupancy</SelectItem>
+                          <SelectItem value="peak">Sellout / Peak</SelectItem>
+                          <SelectItem value="custom">Custom</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Description</Label>
+                    <Input className={C.field} value={templateForm.description} onChange={(event) => setTemplateForm({ ...templateForm, description: event.target.value })} placeholder="Optional notes about when this model should be used" />
+                  </div>
+                  <Button className={C.green} disabled={!payload || templateForm.name.trim().length < 2 || saveTemplate.isPending} onClick={() => saveTemplate.mutate()}>
+                    <Save className="mr-2 h-4 w-4" />
+                    {saveTemplate.isPending ? "Saving..." : "Save current week as template"}
+                  </Button>
+                  <div className="text-xs text-[#5f5247]">Saving an existing template name updates it with the currently selected week.</div>
+                </div>
+                <div className="space-y-3 rounded-xl border border-[#e0d3c1] bg-white p-4">
+                  <div className="font-semibold">Apply a saved template</div>
+                  <div>
+                    <Label>Template</Label>
+                    <Select value={selectedTemplateId || "none"} onValueChange={(value) => setSelectedTemplateId(value === "none" ? "" : value)}>
+                      <SelectTrigger className={C.field}><SelectValue placeholder="Choose a template" /></SelectTrigger>
+                      <SelectContent className={C.menu}>
+                        <SelectItem value="none">Choose a template</SelectItem>
+                        {(templates.data?.templates || []).map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name} - {template.occupancyTier.replace("_", " ")} ({template.shiftCount} shifts)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {selectedTemplateId && (() => {
+                    const selected = templates.data?.templates.find((template) => template.id === selectedTemplateId);
+                    return selected ? (
+                      <div className="rounded-lg border border-[#e0d3c1] bg-[#fbf6ee] p-3 text-sm">
+                        <div className="font-semibold">{selected.name}</div>
+                        <div className="text-[#5f5247]">{selected.description || "No template notes."}</div>
+                      </div>
+                    ) : null;
+                  })()}
+                  <Button className={C.green} disabled={!payload || !selectedTemplateId || previewTemplate.isPending} onClick={() => previewTemplate.mutate()}>
+                    <Search className="mr-2 h-4 w-4" />
+                    {previewTemplate.isPending ? "Checking..." : "Preview against selected week"}
+                  </Button>
+                </div>
+              </CardContent>
+            )}
           </Card>
         )}
 
@@ -3575,6 +3732,62 @@ export default function SchedulePage() {
           onSave={(body) => saveActualHours.mutate(body)}
         />
       )}
+      <Dialog open={!!templatePreview} onOpenChange={(open) => !open && setTemplatePreview(null)}>
+        <DialogContent className="max-w-2xl bg-[#fffaf2] text-[#201814]">
+          <DialogHeader>
+            <DialogTitle>Template Preview: {templatePreview?.template.name}</DialogTitle>
+            <DialogDescription className={C.muted}>
+              {templatePreview?.applicableCount || 0} of {templatePreview?.shiftCount || 0} shifts can be applied to {templatePreview ? formatWeek(templatePreview.schedule.weekStartDate, templatePreview.schedule.weekEndDate) : "this week"}.
+            </DialogDescription>
+          </DialogHeader>
+          {templatePreview && (
+            <div className="space-y-4">
+              {[
+                ["Approved requests - skipped", templatePreview.conflicts.approvedRequests],
+                ["Inactive associates - skipped", templatePreview.conflicts.inactiveAssociates],
+                ["Missing associates - skipped", templatePreview.conflicts.missingAssociates],
+                ["Missing shift types", templatePreview.conflicts.missingShiftTypes],
+                ["Existing scheduled cells", templatePreview.conflicts.existingCells],
+                ["Weekly hour warnings", templatePreview.conflicts.weeklyHours],
+              ].map(([label, items]) => {
+                const values = items as string[];
+                if (!values.length) return null;
+                return (
+                  <div key={label as string} className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                    <div className="font-semibold">{label as string} ({values.length})</div>
+                    <div className="mt-1 max-h-24 overflow-y-auto">{values.join(", ")}</div>
+                  </div>
+                );
+              })}
+              {!Object.values(templatePreview.conflicts).some((items) => items.length > 0) && (
+                <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm font-medium text-emerald-900">
+                  No conflicts found. All template shifts are ready to apply.
+                </div>
+              )}
+              <div className="rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm text-[#5f5247]">
+                Approved-request, inactive-associate, and missing-associate shifts are always skipped. Weekly-hour warnings do not prevent application.
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" className={C.outline} onClick={() => setTemplatePreview(null)}>Cancel</Button>
+                <Button className={C.green} disabled={applyTemplate.isPending} onClick={() => applyTemplate.mutate("fillOpen")}>
+                  Fill open cells
+                </Button>
+                <Button
+                  className={C.accent}
+                  disabled={applyTemplate.isPending}
+                  onClick={() => {
+                    if (window.confirm("Replace all shifts in the selected week with this template? This removes the current schedule assignments first.")) {
+                      applyTemplate.mutate("replace");
+                    }
+                  }}
+                >
+                  Replace schedule
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={teamMessageOpen} onOpenChange={setTeamMessageOpen}>
         <DialogContent className="max-w-2xl bg-[#fffaf2] text-[#201814]">
           <DialogHeader>

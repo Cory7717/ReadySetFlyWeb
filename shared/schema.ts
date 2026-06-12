@@ -570,6 +570,43 @@ export const scheduleShiftAssignments = pgTable("schedule_shift_assignments", {
   index("idx_schedule_shift_schedule_date").on(table.scheduleId, table.shiftDate),
 ]);
 
+export const scheduleTemplates = pgTable("schedule_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  occupancyTier: text("occupancy_tier").notNull().default("custom"),
+  description: text("description"),
+  sourceScheduleId: varchar("source_schedule_id").references(() => weeklySchedules.id, { onDelete: "set null" }),
+  createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_schedule_templates_name").on(table.name),
+  index("idx_schedule_templates_tier").on(table.occupancyTier),
+  index("idx_schedule_templates_active").on(table.active),
+]);
+
+export const scheduleTemplateShifts = pgTable("schedule_template_shifts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: varchar("template_id").notNull().references(() => scheduleTemplates.id, { onDelete: "cascade" }),
+  dayOffset: integer("day_offset").notNull(),
+  employeeId: varchar("employee_id").references(() => scheduleEmployees.id, { onDelete: "set null" }),
+  employeeName: text("employee_name"),
+  shiftTypeId: varchar("shift_type_id").references(() => scheduleShiftTypes.id, { onDelete: "set null" }),
+  shiftTypeLabel: text("shift_type_label"),
+  customStartTime: time("custom_start_time"),
+  customEndTime: time("custom_end_time"),
+  unpaidBreakMinutes: integer("unpaid_break_minutes"),
+  roleWorked: text("role_worked"),
+  roleNote: text("role_note"),
+  managerNote: text("manager_note"),
+  isOpenShift: boolean("is_open_shift").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_schedule_template_shifts_template").on(table.templateId),
+  index("idx_schedule_template_shifts_employee").on(table.employeeId),
+]);
+
 export const scheduleShareLinks = pgTable("schedule_share_links", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   scheduleId: varchar("schedule_id").notNull().references(() => weeklySchedules.id, { onDelete: "cascade" }),
@@ -2080,6 +2117,17 @@ export const insertScheduleShiftAssignmentSchema = createInsertSchema(scheduleSh
   id: true,
   createdAt: true,
   updatedAt: true,
+});
+
+export const insertScheduleTemplateSchema = createInsertSchema(scheduleTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertScheduleTemplateShiftSchema = createInsertSchema(scheduleTemplateShifts).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const insertScheduleShareLinkSchema = createInsertSchema(scheduleShareLinks).omit({
@@ -3811,6 +3859,10 @@ export type ScheduleForecastDay = typeof scheduleForecastDays.$inferSelect;
 export type InsertScheduleForecastDay = z.infer<typeof insertScheduleForecastDaySchema>;
 export type ScheduleShiftAssignment = typeof scheduleShiftAssignments.$inferSelect;
 export type InsertScheduleShiftAssignment = z.infer<typeof insertScheduleShiftAssignmentSchema>;
+export type ScheduleTemplate = typeof scheduleTemplates.$inferSelect;
+export type InsertScheduleTemplate = z.infer<typeof insertScheduleTemplateSchema>;
+export type ScheduleTemplateShift = typeof scheduleTemplateShifts.$inferSelect;
+export type InsertScheduleTemplateShift = z.infer<typeof insertScheduleTemplateShiftSchema>;
 export type ScheduleShareLink = typeof scheduleShareLinks.$inferSelect;
 export type InsertScheduleShareLink = z.infer<typeof insertScheduleShareLinkSchema>;
 export type ScheduleRequest = typeof scheduleRequests.$inferSelect;

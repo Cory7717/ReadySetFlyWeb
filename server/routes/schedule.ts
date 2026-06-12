@@ -21,6 +21,8 @@ import {
   scheduleRequests,
   scheduleShareLinks,
   scheduleShiftAssignments,
+  scheduleTemplateShifts,
+  scheduleTemplates,
   scheduleShiftTypes,
   tipsUsers,
   weeklySchedules,
@@ -541,6 +543,7 @@ async function publicScheduleUserWithProfile(user: any) {
     ...baseUser,
     role: isAdmin && baseUser.role === "employee" ? "manager" : baseUser.role,
     isAdmin,
+    canManageTemplates: baseUser.isAdmin,
     scheduleRoles,
     canAccessSchedule: getExplicitToolAccess(user, "schedule") !== false,
     canAccessTips,
@@ -904,6 +907,16 @@ const createWeekSchema = z.object({
   weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   propertyName: z.string().trim().min(1).max(160).default(PROPERTY_NAME),
   mode: z.enum(["blank", "copyPrevious"]).default("blank"),
+});
+
+const scheduleTemplateSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  occupancyTier: z.enum(["minimal", "low", "moderate", "high", "peak", "custom"]).default("custom"),
+  description: z.string().trim().max(1000).optional().nullable(),
+});
+
+const applyScheduleTemplateSchema = z.object({
+  mode: z.enum(["replace", "fillOpen"]).default("fillOpen"),
 });
 
 const forecastSchema = z.object({
@@ -1340,6 +1353,108 @@ async function buildSchedulePayload(scheduleId: string) {
     };
   }
   return { schedule, days, departments: DEPARTMENTS, requiredDepartments: REQUIRED_DEPARTMENTS, employees, shiftTypes, forecast, assignments, actualHours, housekeepingBoards: housekeepingBoards.map(summarizeHousekeepingBoard), approvedRequests, totals, departmentStatus: schedule.departmentStatusJson || {} };
+}
+
+async function buildScheduleTemplatePreview(templateId: string, scheduleId: string) {
+  const [template] = await db.select().from(scheduleTemplates).where(and(eq(scheduleTemplates.id, templateId), eq(scheduleTemplates.active, true))).limit(1);
+  const schedule = await getScheduleOr404(scheduleId);
+  if (!template || !schedule) return null;
+
+  const [templateShifts, employees, shiftTypes, existingAssignments, approvedRequestRows] = await Promise.all([
+    db.select().from(scheduleTemplateShifts).where(eq(scheduleTemplateShifts.templateId, templateId)).orderBy(asc(scheduleTemplateShifts.dayOffset)),
+    db.select().from(scheduleEmployees),
+    db.select().from(scheduleShiftTypes),
+    db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, scheduleId)),
+    db
+      .select({ request: scheduleRequests, user: tipsUsers })
+      .from(scheduleRequests)
+      .innerJoin(tipsUsers, eq(scheduleRequests.requesterUserId, tipsUsers.id))
+      .where(eq(scheduleRequests.status, "approved")),
+  ]);
+  const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+  const employeeByEmail = new Map(employees.map((employee) => [normalizeEmail(String(employee.email || "")), employee]));
+  const shiftTypeById = new Map(shiftTypes.map((shift) => [shift.id, shift]));
+  const shiftTypeByLabel = new Map(shiftTypes.map((shift) => [String(shift.label || "").trim().toUpperCase(), shift]));
+  const assignmentCellKey = (assignment: any) => assignment.employeeId
+    ? `${assignment.employeeId}:${assignment.shiftDate}`
+    : `open:${assignment.shiftDate}:${assignment.shiftTypeId || ""}:${assignment.customStartTime || ""}:${assignment.customEndTime || ""}:${assignment.roleWorked || ""}`;
+  const existingKeys = new Set(existingAssignments.map(assignmentCellKey));
+  const approvedKeys = new Set<string>();
+  for (const row of approvedRequestRows) {
+    const employee = employeeByEmail.get(normalizeEmail(String(row.user.email || "")));
+    if (!employee) continue;
+    for (const requestDate of dateRange(row.request.requestDate, requestEndDate(row.request))) {
+      approvedKeys.add(`${employee.id}:${requestDate}`);
+    }
+  }
+
+  const missingAssociates: string[] = [];
+  const inactiveAssociates: string[] = [];
+  const missingShiftTypes: string[] = [];
+  const approvedRequestConflicts: string[] = [];
+  const existingCellConflicts: string[] = [];
+  const applicableAssignments: any[] = [];
+  const weeklyHours = new Map<string, number>();
+
+  for (const templateShift of templateShifts) {
+    const shiftDate = addDays(schedule.weekStartDate, templateShift.dayOffset);
+    const employee = templateShift.employeeId ? employeeById.get(templateShift.employeeId) : null;
+    if (templateShift.employeeId && !employee) {
+      missingAssociates.push(templateShift.employeeName || "Unknown associate");
+      continue;
+    }
+    if (employee && !employee.active) {
+      inactiveAssociates.push(employee.displayName);
+      continue;
+    }
+    const shiftType = (templateShift.shiftTypeId ? shiftTypeById.get(templateShift.shiftTypeId) : null)
+      || shiftTypeByLabel.get(String(templateShift.shiftTypeLabel || "").trim().toUpperCase())
+      || null;
+    if (templateShift.shiftTypeLabel && !shiftType) missingShiftTypes.push(templateShift.shiftTypeLabel);
+    const assignment = {
+      employeeId: employee?.id || null,
+      shiftDate,
+      shiftTypeId: shiftType?.id || null,
+      customStartTime: templateShift.customStartTime,
+      customEndTime: templateShift.customEndTime,
+      unpaidBreakMinutes: templateShift.unpaidBreakMinutes,
+      roleWorked: templateShift.roleWorked,
+      roleNote: templateShift.roleNote,
+      managerNote: templateShift.managerNote,
+      isOpenShift: templateShift.isOpenShift,
+    };
+    if (employee && approvedKeys.has(`${employee.id}:${shiftDate}`)) {
+      approvedRequestConflicts.push(`${employee.displayName} - ${shiftDate}`);
+      continue;
+    }
+    if (existingKeys.has(assignmentCellKey(assignment))) {
+      existingCellConflicts.push(`${employee?.displayName || "Open shift"} - ${shiftDate}`);
+    }
+    if (employee) {
+      weeklyHours.set(employee.id, (weeklyHours.get(employee.id) || 0) + hoursForShift(assignment, shiftType));
+    }
+    applicableAssignments.push(assignment);
+  }
+
+  const weeklyHourConflicts = employees
+    .filter((employee) => Number(employee.maxWeeklyHours || 0) > 0 && (weeklyHours.get(employee.id) || 0) > Number(employee.maxWeeklyHours))
+    .map((employee) => `${employee.displayName}: ${(weeklyHours.get(employee.id) || 0).toFixed(1)} hours exceeds max ${Number(employee.maxWeeklyHours).toFixed(1)}`);
+
+  return {
+    template,
+    schedule,
+    shiftCount: templateShifts.length,
+    applicableCount: applicableAssignments.length,
+    applicableAssignments,
+    conflicts: {
+      missingAssociates: Array.from(new Set(missingAssociates)),
+      inactiveAssociates: Array.from(new Set(inactiveAssociates)),
+      missingShiftTypes: Array.from(new Set(missingShiftTypes)),
+      approvedRequests: Array.from(new Set(approvedRequestConflicts)),
+      existingCells: Array.from(new Set(existingCellConflicts)),
+      weeklyHours: weeklyHourConflicts,
+    },
+  };
 }
 
 function summarizeHousekeepingBoard(board: any) {
@@ -3096,6 +3211,175 @@ export function registerScheduleRoutes(app: Express) {
       const [shiftType] = await db.update(scheduleShiftTypes).set({ ...parsed.data, updatedAt: new Date() } as any).where(eq(scheduleShiftTypes.id, req.params.id)).returning();
       if (!shiftType) return res.status(404).json({ error: "Shift type not found" });
       res.json({ shiftType });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/templates", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      if (!publicScheduleUser(req.scheduleUser).isAdmin) return res.status(403).json({ error: "Schedule administrator access required" });
+      const [templates, shifts] = await Promise.all([
+        db.select().from(scheduleTemplates).where(eq(scheduleTemplates.active, true)).orderBy(asc(scheduleTemplates.occupancyTier), asc(scheduleTemplates.name)),
+        db.select().from(scheduleTemplateShifts),
+      ]);
+      const shiftCounts = shifts.reduce((counts: Record<string, number>, shift) => {
+        counts[shift.templateId] = (counts[shift.templateId] || 0) + 1;
+        return counts;
+      }, {});
+      res.json({ templates: templates.map((template) => ({ ...template, shiftCount: shiftCounts[template.id] || 0 })) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/templates", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      if (!publicScheduleUser(req.scheduleUser).isAdmin) return res.status(403).json({ error: "Schedule administrator access required" });
+      const parsed = scheduleTemplateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid schedule template", validation: parsed.error.format() });
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      const [assignments, employees, shiftTypes] = await Promise.all([
+        db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, schedule.id)),
+        db.select().from(scheduleEmployees),
+        db.select().from(scheduleShiftTypes),
+      ]);
+      if (!assignments.length) return res.status(400).json({ error: "Add at least one shift before saving this schedule as a template." });
+      const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+      const shiftTypeById = new Map(shiftTypes.map((shift) => [shift.id, shift]));
+      const scheduleStart = parseDateKey(schedule.weekStartDate)!;
+
+      const template = await db.transaction(async (tx) => {
+        const [savedTemplate] = await tx.insert(scheduleTemplates).values({
+          ...parsed.data,
+          sourceScheduleId: schedule.id,
+          createdByUserId: req.scheduleUser.id,
+          active: true,
+          updatedAt: new Date(),
+        } as any).onConflictDoUpdate({
+          target: scheduleTemplates.name,
+          set: {
+            occupancyTier: parsed.data.occupancyTier,
+            description: parsed.data.description || null,
+            sourceScheduleId: schedule.id,
+            createdByUserId: req.scheduleUser.id,
+            active: true,
+            updatedAt: new Date(),
+          } as any,
+        }).returning();
+        await tx.delete(scheduleTemplateShifts).where(eq(scheduleTemplateShifts.templateId, savedTemplate.id));
+        await tx.insert(scheduleTemplateShifts).values(assignments.map((assignment) => {
+          const employee = assignment.employeeId ? employeeById.get(assignment.employeeId) : null;
+          const shiftType = assignment.shiftTypeId ? shiftTypeById.get(assignment.shiftTypeId) : null;
+          const assignmentDate = parseDateKey(assignment.shiftDate)!;
+          return {
+            templateId: savedTemplate.id,
+            dayOffset: Math.round((assignmentDate.getTime() - scheduleStart.getTime()) / DAY_MS),
+            employeeId: assignment.employeeId,
+            employeeName: employee?.displayName || null,
+            shiftTypeId: assignment.shiftTypeId,
+            shiftTypeLabel: shiftType?.label || null,
+            customStartTime: assignment.customStartTime,
+            customEndTime: assignment.customEndTime,
+            unpaidBreakMinutes: assignment.unpaidBreakMinutes,
+            roleWorked: assignment.roleWorked,
+            roleNote: assignment.roleNote,
+            managerNote: assignment.managerNote,
+            isOpenShift: assignment.isOpenShift,
+          };
+        }) as any);
+        return savedTemplate;
+      });
+      await audit(schedule.id, req.scheduleUser.id, "schedule_template_saved", { templateId: template.id, name: template.name, shiftCount: assignments.length });
+      res.status(201).json({ template: { ...template, shiftCount: assignments.length } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/templates/:templateId/preview", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      if (!publicScheduleUser(req.scheduleUser).isAdmin) return res.status(403).json({ error: "Schedule administrator access required" });
+      const scheduleId = String(req.query.scheduleId || "");
+      if (!scheduleId) return res.status(400).json({ error: "Choose a schedule week first." });
+      const preview = await buildScheduleTemplatePreview(req.params.templateId, scheduleId);
+      if (!preview) return res.status(404).json({ error: "Schedule template or week not found" });
+      const { applicableAssignments, ...publicPreview } = preview;
+      res.json(publicPreview);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/templates/:templateId/apply", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      if (!publicScheduleUser(req.scheduleUser).isAdmin) return res.status(403).json({ error: "Schedule administrator access required" });
+      const parsed = applyScheduleTemplateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid template application mode", validation: parsed.error.format() });
+      const preview = await buildScheduleTemplatePreview(req.params.templateId, req.params.id);
+      if (!preview) return res.status(404).json({ error: "Schedule template or week not found" });
+      if (preview.schedule.status !== "draft") return res.status(423).json({ error: "Reopen the schedule before applying a template." });
+      let applied = 0;
+      await db.transaction(async (tx) => {
+        const existingAssignments = parsed.data.mode === "fillOpen"
+          ? await tx.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, preview.schedule.id))
+          : [];
+        const assignmentCellKey = (assignment: any) => assignment.employeeId
+          ? `${assignment.employeeId}:${assignment.shiftDate}`
+          : `open:${assignment.shiftDate}:${assignment.shiftTypeId || ""}:${assignment.customStartTime || ""}:${assignment.customEndTime || ""}:${assignment.roleWorked || ""}`;
+        const occupiedCells = new Set(existingAssignments.map(assignmentCellKey));
+        if (parsed.data.mode === "replace") {
+          await tx.delete(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, preview.schedule.id));
+        }
+        for (const assignment of preview.applicableAssignments) {
+          const cellKey = assignmentCellKey(assignment);
+          if (parsed.data.mode === "fillOpen" && occupiedCells.has(cellKey)) continue;
+          await tx.insert(scheduleShiftAssignments).values({
+            scheduleId: preview.schedule.id,
+            ...assignment,
+          } as any).onConflictDoUpdate({
+            target: [scheduleShiftAssignments.scheduleId, scheduleShiftAssignments.employeeId, scheduleShiftAssignments.shiftDate],
+            set: {
+              shiftTypeId: assignment.shiftTypeId,
+              customStartTime: assignment.customStartTime,
+              customEndTime: assignment.customEndTime,
+              unpaidBreakMinutes: assignment.unpaidBreakMinutes,
+              roleWorked: assignment.roleWorked,
+              roleNote: assignment.roleNote,
+              managerNote: assignment.managerNote,
+              isOpenShift: assignment.isOpenShift,
+              updatedAt: new Date(),
+            } as any,
+          });
+          occupiedCells.add(cellKey);
+          applied += 1;
+        }
+        await tx.update(weeklySchedules).set({ departmentStatusJson: {}, updatedAt: new Date() } as any).where(eq(weeklySchedules.id, preview.schedule.id));
+      });
+      await audit(preview.schedule.id, req.scheduleUser.id, "schedule_template_applied", {
+        templateId: preview.template.id,
+        mode: parsed.data.mode,
+        applied,
+        conflicts: preview.conflicts,
+      });
+      res.json({
+        payload: stripPrivateScheduleRates(await buildSchedulePayload(preview.schedule.id), req.scheduleUser),
+        applied,
+        skipped: preview.shiftCount - applied,
+        conflicts: preview.conflicts,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete("/templates/:templateId", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      if (!publicScheduleUser(req.scheduleUser).isAdmin) return res.status(403).json({ error: "Schedule administrator access required" });
+      const [template] = await db.update(scheduleTemplates).set({ active: false, updatedAt: new Date() }).where(eq(scheduleTemplates.id, req.params.templateId)).returning();
+      if (!template) return res.status(404).json({ error: "Schedule template not found" });
+      res.json({ ok: true });
     } catch (error) {
       next(error);
     }

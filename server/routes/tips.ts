@@ -679,11 +679,11 @@ async function sendTipsPasswordResetEmail(params: {
   await client.emails.send({
     from: fromEmail,
     to: params.email,
-    subject: "Courtyard Tips Tracker password change required",
+    subject: "Courtyard Associate Portal password change required",
     text: [
       `Hi ${params.firstName},`,
       "",
-      `${params.requestedByName} requested a password change for your Courtyard Tips Tracker account.`,
+      `${params.requestedByName} requested a password change for your Courtyard Associate Portal account.`,
       "",
       `Sign in here: ${tipsUrl}`,
       `Temporary password: ${params.temporaryPassword}`,
@@ -1440,6 +1440,48 @@ export function registerTipsRoutes(app: Express) {
         console.error("Failed to send tips password reset email:", error);
       }
       res.status(emailSent ? 200 : 202).json({ user: publicTipsUser(updated), emailSent, warning: emailWarning });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/admin/users/:id/password-reset-email", requireTipsSuperAdmin, async (req: any, res, next) => {
+    try {
+      const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
+      if (!target) return res.status(404).json({ error: "Associate account not found" });
+      if (target.disabledAt) return res.status(400).json({ error: "Enable this associate before sending a password reset." });
+      const email = normalizeEmail(String(target.email || ""));
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "This associate does not have a valid email address on file." });
+
+      const temporaryPassword = `Temp${crypto.randomInt(100000, 999999)}!`;
+      const [updated] = await db
+        .update(tipsUsers)
+        .set({
+          hashedPassword: await bcrypt.hash(temporaryPassword, 12),
+          mustChangePassword: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(tipsUsers.id, target.id))
+        .returning();
+      await db.insert(tipAdminActions).values({
+        actorUserId: req.tipsUser.id,
+        targetUserId: updated.id,
+        action: "user_password_reset_email_sent",
+        metadataJson: { email: updated.email },
+      });
+
+      try {
+        await sendTipsPasswordResetEmail({
+          email: updated.email,
+          firstName: updated.firstName,
+          temporaryPassword,
+          requestedByName: req.tipsUser.employeeDisplayName || req.tipsUser.email,
+        });
+      } catch (error) {
+        console.error("Failed to send Courtyard password reset email:", error);
+        return res.status(502).json({ error: "The password was reset, but the email could not be delivered. Send another reset after checking the email address." });
+      }
+      res.json({ user: publicTipsUser(updated), emailSent: true });
     } catch (error) {
       next(error);
     }

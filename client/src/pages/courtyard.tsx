@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ClipboardPlus, Coffee, DollarSign, DoorOpen, FileSpreadsheet, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
+import { CalendarDays, ClipboardPlus, Coffee, DollarSign, DoorOpen, FileSpreadsheet, KeyRound, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -220,6 +220,21 @@ function CourtyardToolAccessAdmin() {
     },
     onError: (error: Error) => toast({ title: "Unable to update access", description: error.message, variant: "destructive" }),
   });
+  const sendPasswordReset = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest("POST", `/api/tips/admin/users/${userId}/password-reset-email`, {});
+      return response.json();
+    },
+    onSuccess: (_data, userId) => {
+      const associate = accessUsers.data?.users.find((item) => item.id === userId);
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/tool-access-users"] });
+      toast({
+        title: "Password reset sent",
+        description: `${associate?.employeeDisplayName || "The associate"} was emailed a temporary password.`,
+      });
+    },
+    onError: (error: Error) => toast({ title: "Unable to send password reset", description: error.message, variant: "destructive" }),
+  });
   const users = (accessUsers.data?.users || []).filter((item) => {
     const query = search.trim().toLowerCase();
     if (!query) return true;
@@ -252,7 +267,7 @@ function CourtyardToolAccessAdmin() {
           <div className="text-sm text-[#5f5247]">Loading associates...</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-sm">
+            <table className="w-full min-w-[900px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-[#d7c8b5] text-left text-xs uppercase tracking-[0.12em] text-[#6b5f54]">
                   <th className="py-2 pr-3">Associate</th>
@@ -260,6 +275,7 @@ function CourtyardToolAccessAdmin() {
                   <th className="px-3 py-2 text-center">Schedule</th>
                   <th className="px-3 py-2 text-center">Tips</th>
                   <th className="px-3 py-2 text-center">Ops Report</th>
+                  <th className="px-3 py-2 text-center">Password</th>
                 </tr>
               </thead>
               <tbody>
@@ -285,6 +301,23 @@ function CourtyardToolAccessAdmin() {
                         </div>
                       </td>
                     ))}
+                    <td className="px-3 py-3 text-center">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className={C.outline}
+                        disabled={sendPasswordReset.isPending || !item.email}
+                        onClick={() => {
+                          if (window.confirm(`Send a temporary password to ${item.employeeDisplayName} at ${item.email}? Their current password will stop working immediately.`)) {
+                            sendPasswordReset.mutate(item.id);
+                          }
+                        }}
+                      >
+                        <KeyRound className="mr-2 h-4 w-4" />
+                        Send reset
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

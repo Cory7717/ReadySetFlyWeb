@@ -915,6 +915,10 @@ const scheduleTemplateSchema = z.object({
   description: z.string().trim().max(1000).optional().nullable(),
 });
 
+const selectedScheduleEmailSchema = z.object({
+  employeeIds: z.array(z.string().trim().min(1)).min(1).max(200),
+});
+
 const applyScheduleTemplateSchema = z.object({
   mode: z.enum(["replace", "fillOpen"]).default("fillOpen"),
 });
@@ -2476,14 +2480,16 @@ async function renderSchedulePdf(payload: any) {
   const shiftTypeById = new Map<any, any>(payload.shiftTypes.map((shift: any) => [shift.id, shift]));
   const shiftTypeByLabel = new Map<string, any>(payload.shiftTypes.map((shift: any) => [String(shift.label || "").toUpperCase(), shift]));
   for (const department of payload.departments) {
+    const hasDepartmentAssignment = (employee: any) => payload.assignments.some((assignment: any) => {
+      if (assignment.employeeId !== employee.id) return false;
+      const shiftType = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
+      return assignmentBelongsToDepartment(assignment, employee, shiftType, department);
+    });
     const employees = payload.employees
       .filter((employee: any) => employee.active && (
-        employeeScheduleDepartments(employee).includes(department)
-        || payload.assignments.some((assignment: any) => {
-          if (assignment.employeeId !== employee.id) return false;
-          const shiftType = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
-          return assignmentBelongsToDepartment(assignment, employee, shiftType, department);
-        })
+        department === "Night Audit"
+          ? hasDepartmentAssignment(employee)
+          : employeeScheduleDepartments(employee).includes(department) || hasDepartmentAssignment(employee)
       ))
       .sort((a: any, b: any) => scheduleEmployeeDepartmentSort(department, a, b));
     if (!employees.length) continue;
@@ -4246,6 +4252,50 @@ export function registerScheduleRoutes(app: Express) {
         failedCount: result.failed,
       });
       res.json({ url, recipientCount: recipients.length, sentCount: result.sent, failedCount: result.failed });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/email-selected", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      if (!publicScheduleUser(req.scheduleUser).isSuperAdmin) return res.status(403).json({ error: "Only GM/admin can email the final schedule." });
+      const parsed = selectedScheduleEmailSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Select at least one associate.", validation: parsed.error.format() });
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      if (schedule.status !== "published") return res.status(400).json({ error: "Publish the schedule before emailing it." });
+
+      const selectedIds = new Set(parsed.data.employeeIds);
+      const employees = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
+      const selectedEmployees = employees.filter((employee) => selectedIds.has(employee.id));
+      const missingEmail = selectedEmployees
+        .filter((employee) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(String(employee.email || ""))))
+        .map((employee) => employee.displayName);
+      const recipients = Array.from(new Set(
+        selectedEmployees
+          .map((employee) => normalizeEmail(String(employee.email || "")))
+          .filter((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)),
+      ));
+      if (!recipients.length) return res.status(400).json({ error: "None of the selected associates have a valid email address." });
+
+      const { url } = await getOrCreateScheduleShareLink(schedule, req.scheduleUser.id);
+      const result = await sendPublishedScheduleEmails(schedule, url, recipients);
+      await audit(schedule.id, req.scheduleUser.id, "schedule_selected_email_sent", {
+        employeeIds: selectedEmployees.map((employee) => employee.id),
+        recipientCount: recipients.length,
+        sentCount: result.sent,
+        failedCount: result.failed,
+        missingEmail,
+      });
+      res.json({
+        url,
+        selectedCount: selectedEmployees.length,
+        recipientCount: recipients.length,
+        sentCount: result.sent,
+        failedCount: result.failed,
+        missingEmail,
+      });
     } catch (error) {
       next(error);
     }

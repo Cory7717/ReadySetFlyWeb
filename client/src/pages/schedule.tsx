@@ -15,7 +15,6 @@ import {
   Lock,
   Mail,
   Plus,
-  Printer,
   RefreshCw,
   Save,
   Search,
@@ -2877,6 +2876,8 @@ export default function SchedulePage() {
   const [aiToolsOpen, setAiToolsOpen] = useState(false);
   const [hoursComparison, setHoursComparison] = useState<HoursComparison | null>(null);
   const [teamMessageOpen, setTeamMessageOpen] = useState(false);
+  const [scheduleEmailOpen, setScheduleEmailOpen] = useState(false);
+  const [selectedScheduleEmailEmployeeIds, setSelectedScheduleEmailEmployeeIds] = useState<string[]>([]);
   const [housekeepingBreakNoticeOpen, setHousekeepingBreakNoticeOpen] = useState(false);
   const [templatePanelOpen, setTemplatePanelOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -3235,14 +3236,16 @@ export default function SchedulePage() {
     onError: (error: Error) => toast({ title: "Share failed", description: error.message, variant: "destructive" }),
   });
   const emailSchedule = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/email`, {});
+    mutationFn: async (employeeIds: string[]) => {
+      const response = await apiRequest("POST", `/api/schedule/weeks/${payload?.schedule.id}/email-selected`, { employeeIds });
       return response.json();
     },
     onSuccess: (data) => {
+      setScheduleEmailOpen(false);
+      setSelectedScheduleEmailEmployeeIds([]);
       toast({
         title: "Schedule emailed",
-        description: `${data.sentCount || 0} of ${data.recipientCount || 0} employee email(s) sent.`,
+        description: `${data.sentCount || 0} of ${data.recipientCount || 0} selected employee email(s) sent.${data.missingEmail?.length ? ` Missing email: ${data.missingEmail.join(", ")}.` : ""}`,
       });
     },
     onError: (error: Error) => toast({ title: "Email failed", description: error.message, variant: "destructive" }),
@@ -3328,7 +3331,6 @@ export default function SchedulePage() {
             {!shareToken && canManageSchedule && <Input className={`${C.field} w-[160px]`} type="date" value={weekStartDate} onChange={(event) => setWeekStartDate(event.target.value)} />}
             {!shareToken && canManageSchedule && <Button className={C.green} onClick={() => createWeek.mutate("blank")}><CalendarDays className="mr-2 h-4 w-4" />{t("Blank week")}</Button>}
             {!shareToken && canManageSchedule && <Button variant="outline" className={C.outline} onClick={() => createWeek.mutate("copyPrevious")}><Copy className="mr-2 h-4 w-4" />{t("Copy previous")}</Button>}
-            <Button variant="outline" className={C.outline} onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" />{t("Print")}</Button>
           </div>
         </div>
       </header>
@@ -3354,7 +3356,7 @@ export default function SchedulePage() {
                   {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "reopen", body: { reason: "Manager edit" } })}><RefreshCw className="mr-2 h-4 w-4" />{t("Reopen")}</Button>}
                   {payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "archive" })}><Archive className="mr-2 h-4 w-4" />{t("Archive")}</Button>}
                   {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => shareLink.mutate()}><Share2 className="mr-2 h-4 w-4" />{t("Copy share link")}</Button>}
-                  {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} disabled={emailSchedule.isPending} onClick={() => emailSchedule.mutate()}><Mail className="mr-2 h-4 w-4" />{emailSchedule.isPending ? t("Emailing...") : t("Email schedule")}</Button>}
+                  {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} disabled={emailSchedule.isPending} onClick={() => setScheduleEmailOpen(true)}><Mail className="mr-2 h-4 w-4" />Email selected</Button>}
                   {payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => setTeamMessageOpen(true)}><Users className="mr-2 h-4 w-4" />Team message</Button>}
                   {editable && canManageSchedule && (
                     <Button
@@ -3888,6 +3890,86 @@ export default function SchedulePage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={scheduleEmailOpen}
+        onOpenChange={(open) => {
+          setScheduleEmailOpen(open);
+          if (!open) setSelectedScheduleEmailEmployeeIds([]);
+        }}
+      >
+        <DialogContent className="max-w-2xl bg-[#fffaf2] text-[#201814]">
+          <DialogHeader>
+            <DialogTitle>Email Schedule to Selected Associates</DialogTitle>
+            <DialogDescription className={C.muted}>
+              Select only the associates who need the current published schedule. They will receive the read-only schedule link.
+            </DialogDescription>
+          </DialogHeader>
+          {payload && (() => {
+            const activeEmployees = payload.employees
+              .filter((employee) => employee.active)
+              .sort((a, b) => normalizeDepartment(a.department).localeCompare(normalizeDepartment(b.department)) || a.displayName.localeCompare(b.displayName));
+            const emailableEmployees = activeEmployees.filter((employee) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(employee.email || "").trim()));
+            const allSelected = emailableEmployees.length > 0 && emailableEmployees.every((employee) => selectedScheduleEmailEmployeeIds.includes(employee.id));
+            return (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#e0d3c1] bg-white p-3">
+                  <div className="text-sm">
+                    <strong>{selectedScheduleEmailEmployeeIds.length}</strong> selected
+                    <span className="ml-2 text-[#5f5247]">{emailableEmployees.length} with valid email</span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className={C.outline}
+                    onClick={() => setSelectedScheduleEmailEmployeeIds(allSelected ? [] : emailableEmployees.map((employee) => employee.id))}
+                  >
+                    {allSelected ? "Clear all" : "Select all"}
+                  </Button>
+                </div>
+                <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+                  {activeEmployees.map((employee) => {
+                    const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(employee.email || "").trim());
+                    const scheduledDays = new Set(payload.assignments.filter((assignment) => assignment.employeeId === employee.id).map((assignment) => assignment.shiftDate)).size;
+                    return (
+                      <label
+                        key={employee.id}
+                        className={`flex items-center gap-3 rounded-lg border p-3 ${hasEmail ? "cursor-pointer border-[#e0d3c1] bg-white" : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-500"}`}
+                      >
+                        <input
+                          type="checkbox"
+                          disabled={!hasEmail}
+                          checked={selectedScheduleEmailEmployeeIds.includes(employee.id)}
+                          onChange={(event) => setSelectedScheduleEmailEmployeeIds((current) => event.target.checked
+                            ? [...current, employee.id]
+                            : current.filter((id) => id !== employee.id))}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold">{employee.displayName}</div>
+                          <div className="text-xs text-[#5f5247]">
+                            {normalizeDepartment(employee.department)} - {scheduledDays} scheduled day{scheduledDays === 1 ? "" : "s"} - {hasEmail ? employee.email : "Missing email address"}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" className={C.outline} onClick={() => setScheduleEmailOpen(false)}>Cancel</Button>
+                  <Button
+                    className={C.green}
+                    disabled={!selectedScheduleEmailEmployeeIds.length || emailSchedule.isPending}
+                    onClick={() => emailSchedule.mutate(selectedScheduleEmailEmployeeIds)}
+                  >
+                    <Mail className="mr-2 h-4 w-4" />
+                    {emailSchedule.isPending ? "Sending..." : `Email ${selectedScheduleEmailEmployeeIds.length} selected`}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
       <Dialog open={teamMessageOpen} onOpenChange={setTeamMessageOpen}>

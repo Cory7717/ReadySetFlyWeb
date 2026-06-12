@@ -865,6 +865,12 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const missingReportDays = grid.dayTotals.filter((day) => Number(day.totalTips) > 0 && !day.report);
   const missingSalesDays = grid.dayTotals.filter((day) => Number(day.totalTips) > 0 && Number(day.grossSales) <= 0);
   const unconfirmedCount = grid.rows.reduce((count, row) => count + row.cells.filter((cell) => Number(cell.tipAmount) > 0 && !cell.confirmed).length, 0);
+  const unconfirmedDays = grid.period.days.filter((date) => grid.rows.some((row) => {
+    const cell = row.cells.find((item) => item.date === date);
+    return Boolean(cell && Number(cell.tipAmount) > 0 && !cell.confirmed);
+  }));
+  const hasDaysNeedingAttention = missingReportDays.length > 0 || missingSalesDays.length > 0 || unconfirmedDays.length > 0;
+  const formatAttentionDays = (dates: string[]) => dates.map((date) => formatDisplayDate(date, "long")).join(", ");
   const enteredDays = grid.dayTotals.filter((day) => Number(day.totalTips) > 0).length;
   const week1Days = grid.period.days.slice(0, 7);
   const week2Days = grid.period.days.slice(7, 14);
@@ -1327,6 +1333,22 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
               </Badge>
               {grid.locked && <Badge className="bg-[#1f2937] text-white">Submitted and locked</Badge>}
             </div>
+            {hasDaysNeedingAttention && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                <div className="font-semibold">Days needing attention before closing</div>
+                <div className="mt-2 space-y-1">
+                  {missingReportDays.length > 0 && (
+                    <div><span className="font-medium">Sales report:</span> {formatAttentionDays(missingReportDays.map((day) => day.date))}</div>
+                  )}
+                  {missingSalesDays.length > 0 && (
+                    <div><span className="font-medium">Shared-card sales:</span> {formatAttentionDays(missingSalesDays.map((day) => day.date))}</div>
+                  )}
+                  {unconfirmedDays.length > 0 && (
+                    <div><span className="font-medium">Tip confirmation:</span> {formatAttentionDays(unconfirmedDays)}</div>
+                  )}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

@@ -554,7 +554,7 @@ function DayEditor({
                 View current report: {attachment.originalFileName}
               </a>
             )}
-            <Input className={`mt-3 ${C.field}`} type="file" accept="image/*,application/pdf" capture="environment" disabled={locked} onChange={(event) => setFile(event.target.files?.[0] || null)} />
+            <Input className={`mt-3 ${C.field}`} type="file" accept="image/*,application/pdf" disabled={locked} onChange={(event) => setFile(event.target.files?.[0] || null)} />
             {file && <div className="mt-2 text-xs text-[#5f5247]">Ready to upload: {file.name}</div>}
             {!attachment && !file && <div className="mt-2 text-xs font-medium text-[#8a4d12]">Required before this tip entry can be saved.</div>}
           </div>
@@ -989,7 +989,6 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
             type="file"
             className="hidden"
             accept="image/*,application/pdf"
-            capture="environment"
             disabled={grid.locked}
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -1122,7 +1121,6 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                             type="file"
                             className="hidden"
                             accept="image/*,application/pdf"
-                            capture="environment"
                             disabled={grid.locked}
                             onChange={(event) => {
                               const file = event.target.files?.[0];

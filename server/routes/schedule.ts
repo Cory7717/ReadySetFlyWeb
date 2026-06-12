@@ -232,10 +232,36 @@ function primaryOperationalDepartment(employee: any, fallback?: string | null) {
   return candidates.find((department) => department !== "Managers") || candidates[0] || "Front Desk";
 }
 
+function operationalManagerDepartment(employee: any) {
+  const text = [
+    employee?.department,
+    employee?.position,
+    ...rolesArray(employee?.rolesJson),
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (text.includes("general manager") || /\bgm\b/.test(text) || text.includes("director of sales") || /\bdos\b/.test(text)) return "";
+  if (text.includes("executive housekeeper") || text.includes("exec hk") || text.includes("housekeeping manager")) return "Housekeeping";
+  if (
+    (text.includes("bistro") || text.includes("breakfast"))
+    && (text.includes("manager") || text.includes("supervisor") || text.includes("lead"))
+  ) return "Bistro";
+  if (
+    (text.includes("front desk") || text.includes("front office") || /\bfd\b/.test(text))
+    && (text.includes("manager") || text.includes("supervisor") || text.includes("lead"))
+  ) return "Front Desk";
+  return "";
+}
+
 function employeeScheduleDepartments(employee: any) {
-  return Array.from(new Set([
+  const managerDepartment = operationalManagerDepartment(employee);
+  const departments = Array.from(new Set([
     normalizeDepartment(employee?.department),
+    employee?.position ? normalizeDepartment(employee.position) : "",
     ...rolesArray(employee?.rolesJson).map((role) => normalizeDepartment(role)).filter(Boolean),
+  ].filter(Boolean)));
+  if (!managerDepartment) return departments;
+  return Array.from(new Set([
+    managerDepartment,
+    ...departments.filter((department) => department !== "Managers"),
   ]));
 }
 
@@ -769,6 +795,19 @@ const forecastUpload = multer({
   },
 });
 
+const forecastScreenshotUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    const name = file.originalname.toLowerCase();
+    if (
+      ["image/png", "image/jpeg", "image/webp"].includes(file.mimetype)
+      || /\.(png|jpe?g|webp)$/.test(name)
+    ) return cb(null, true);
+    cb(new Error("Only PNG, JPG, or WEBP forecast screenshots are supported."));
+  },
+});
+
 const payrollUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024, files: 1 },
@@ -997,6 +1036,90 @@ function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
   }
 
   return scheduleDays.map((day) => forecastByDate.get(day)).filter(Boolean);
+}
+
+const agilysysScreenshotSchema = z.object({
+  days: z.array(z.object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    arriving: z.coerce.number().int().min(0).max(10000),
+    departing: z.coerce.number().int().min(0).max(10000),
+    stayover: z.coerce.number().int().min(0).max(10000),
+    roomsSold: z.coerce.number().int().min(0).max(10000),
+    outOfOrderRooms: z.coerce.number().int().min(0).max(10000).default(0),
+  })).min(1).max(31),
+});
+
+function inferForecastCapacity(day: any, outOfOrderRooms = 0) {
+  const candidates = [
+    [Number(day?.otbRoomsSold || 0), Number(day?.otbOccupancyPercent || 0)],
+    [Number(day?.roomsSold || 0), Number(day?.occupancyPercent || 0)],
+  ];
+  for (const [rooms, occupancy] of candidates) {
+    if (rooms > 0 && occupancy > 0) return Math.max(rooms, Math.round(rooms / (occupancy / 100)));
+  }
+  const totalRooms = Math.max(1, Number(process.env.SCHEDULE_TOTAL_ROOMS || 118));
+  return Math.max(1, totalRooms - outOfOrderRooms);
+}
+
+async function forecastFromAgilysysScreenshot(
+  file: Express.Multer.File,
+  scheduleDays: string[],
+  existingForecast: any[],
+) {
+  if (!openai) throw new Error("Screenshot parsing is unavailable because the AI service is not configured.");
+  const prompt = `Extract the Agilysys housekeeping forecasting grid from this screenshot.
+Return JSON only in this exact shape:
+{"days":[{"date":"YYYY-MM-DD","arriving":0,"departing":0,"stayover":0,"roomsSold":0,"outOfOrderRooms":0}]}
+
+The schedule dates that must be present exactly once are: ${scheduleDays.join(", ")}.
+Read only the rows labeled Arriving, Departing, Stayover, Rooms Sold, and Out of Order Rooms.
+Use the month and year displayed in the screenshot when constructing each date.
+Do not estimate, forecast, alter, or infer unreadable numbers. If a required value is unreadable, omit that date.`;
+  const completion = await openai.chat.completions.create({
+    model: process.env.SCHEDULE_AI_VISION_MODEL || process.env.SCHEDULE_AI_MODEL || "gpt-4o-mini",
+    response_format: { type: "json_object" },
+    messages: [{
+      role: "user",
+      content: [
+        { type: "text", text: prompt },
+        {
+          type: "image_url",
+          image_url: { url: `data:${file.mimetype};base64,${file.buffer.toString("base64")}` },
+        },
+      ] as any,
+    }],
+    max_tokens: 1200,
+    temperature: 0,
+  });
+  const parsedJson = JSON.parse(completion.choices[0]?.message?.content || "{}");
+  const parsed = agilysysScreenshotSchema.safeParse(parsedJson);
+  if (!parsed.success) throw new Error("The screenshot could not be read as an Agilysys forecast grid.");
+
+  const extractedByDate = new Map(parsed.data.days.map((day) => [day.date, day]));
+  const missingDates = scheduleDays.filter((day) => !extractedByDate.has(day));
+  if (missingDates.length) {
+    throw new Error(`The screenshot is missing readable forecast data for: ${missingDates.join(", ")}.`);
+  }
+
+  const existingByDate = new Map(existingForecast.map((day) => [String(day.forecastDate), day]));
+  return scheduleDays.map((forecastDate) => {
+    const extracted = extractedByDate.get(forecastDate)!;
+    if (extracted.arriving + extracted.stayover !== extracted.roomsSold) {
+      throw new Error(
+        `${forecastDate} is inconsistent: arriving (${extracted.arriving}) plus stayover (${extracted.stayover}) does not equal rooms sold (${extracted.roomsSold}).`,
+      );
+    }
+    const existing = existingByDate.get(forecastDate) || {};
+    const saleableCapacity = inferForecastCapacity(existing, extracted.outOfOrderRooms);
+    return {
+      forecastDate,
+      roomsSold: extracted.roomsSold,
+      occupancyPercent: Number(((extracted.roomsSold / saleableCapacity) * 100).toFixed(2)),
+      arrivals: extracted.arriving,
+      departures: extracted.departing,
+      stayovers: extracted.stayover,
+    };
+  });
 }
 
 function actualizedFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
@@ -2999,6 +3122,34 @@ export function registerScheduleRoutes(app: Express) {
         fileName: req.file.originalname,
         importedDays: importedDays.length,
         targetOccupancyPercent: TARGET_OCCUPANCY_PERCENT,
+      });
+      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/weeks/:id/forecast/import-screenshot", requireScheduleManager, forecastScreenshotUpload.single("forecastScreenshot"), async (req: any, res, next) => {
+    try {
+      const schedule = await getScheduleOr404(req.params.id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      if (!req.file) return res.status(400).json({ error: "Agilysys forecast screenshot is required." });
+      const days = weekDays(schedule.weekStartDate);
+      const existingForecast = await db
+        .select()
+        .from(scheduleForecastDays)
+        .where(eq(scheduleForecastDays.scheduleId, schedule.id));
+      const importedDays = await forecastFromAgilysysScreenshot(req.file, days, existingForecast);
+
+      for (const day of importedDays) {
+        await db.insert(scheduleForecastDays).values({ scheduleId: schedule.id, ...day } as any).onConflictDoUpdate({
+          target: [scheduleForecastDays.scheduleId, scheduleForecastDays.forecastDate],
+          set: { ...day, updatedAt: new Date() } as any,
+        });
+      }
+      await audit(schedule.id, req.scheduleUser.id, "forecast_screenshot_imported", {
+        fileName: req.file.originalname,
+        importedDays: importedDays.length,
       });
       res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {

@@ -11,6 +11,7 @@ import {
   Download,
   FileSpreadsheet,
   GripVertical,
+  Image,
   Lock,
   Mail,
   Plus,
@@ -551,10 +552,36 @@ function roleDepartment(value?: string | null) {
   return "";
 }
 
+function operationalManagerDepartment(employee: ScheduleEmployee) {
+  const text = [
+    employee.department,
+    employee.position,
+    ...rolesArray(employee.rolesJson),
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (text.includes("general manager") || /\bgm\b/.test(text) || text.includes("director of sales") || /\bdos\b/.test(text)) return "";
+  if (text.includes("executive housekeeper") || text.includes("exec hk") || text.includes("housekeeping manager")) return "Housekeeping";
+  if (
+    (text.includes("bistro") || text.includes("breakfast"))
+    && (text.includes("manager") || text.includes("supervisor") || text.includes("lead"))
+  ) return "Bistro";
+  if (
+    (text.includes("front desk") || text.includes("front office") || /\bfd\b/.test(text))
+    && (text.includes("manager") || text.includes("supervisor") || text.includes("lead"))
+  ) return "Front Desk";
+  return "";
+}
+
 function employeeDepartments(employee: ScheduleEmployee) {
-  return Array.from(new Set([
+  const managerDepartment = operationalManagerDepartment(employee);
+  const departments = Array.from(new Set([
     normalizeDepartment(employee.department),
+    roleDepartment(employee.position),
     ...rolesArray(employee.rolesJson).map(roleDepartment).filter(Boolean),
+  ]));
+  if (!managerDepartment) return departments;
+  return Array.from(new Set([
+    managerDepartment,
+    ...departments.filter((department) => department !== "Managers"),
   ]));
 }
 
@@ -586,8 +613,12 @@ function assignmentBelongsToDepartment(assignment: ShiftAssignment | undefined, 
   return assignmentDepartment(assignment, employee, shiftType) === department;
 }
 
-function scheduleEmployeeSort(a: ScheduleEmployee, b: ScheduleEmployee) {
-  const managerRank = Number(Boolean(b.isDepartmentManager)) - Number(Boolean(a.isDepartmentManager));
+function scheduleEmployeeSort(department: string, a: ScheduleEmployee, b: ScheduleEmployee) {
+  const aIsDepartmentManager = operationalManagerDepartment(a) === department
+    || (Boolean(a.isDepartmentManager) && normalizeDepartment(a.department) === department);
+  const bIsDepartmentManager = operationalManagerDepartment(b) === department
+    || (Boolean(b.isDepartmentManager) && normalizeDepartment(b.department) === department);
+  const managerRank = Number(bIsDepartmentManager) - Number(aIsDepartmentManager);
   return managerRank || Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName);
 }
 
@@ -808,9 +839,11 @@ function ForecastPanel({
   editable,
   onSave,
   onImport,
+  onScreenshotImport,
   onActualizedImport,
   onPopupGroupSave,
   importing,
+  importingScreenshot,
   actualizing,
   canActualize,
   spanish,
@@ -819,14 +852,17 @@ function ForecastPanel({
   editable: boolean;
   onSave: (days: ForecastDay[]) => void;
   onImport: (file: File) => void;
+  onScreenshotImport: (file: File) => void;
   onActualizedImport: (file: File) => void;
   onPopupGroupSave: (body: { forecastDate: string; popupGroupRooms: number; popupGroupNotes: string }) => void;
   importing: boolean;
+  importingScreenshot: boolean;
   actualizing: boolean;
   canActualize: boolean;
   spanish: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const screenshotInputRef = useRef<HTMLInputElement | null>(null);
   const actualizedInputRef = useRef<HTMLInputElement | null>(null);
   const autoSaveTimerRef = useRef<number | null>(null);
   const t = (value: string) => spanish ? ES[value] || value : value;
@@ -904,10 +940,16 @@ function ForecastPanel({
           {(editable || canActualize) && (
             <div className="flex flex-wrap gap-2">
               {editable && (
-                <Button variant="outline" className={C.outline} disabled={importing} onClick={() => fileInputRef.current?.click()}>
-                  <FileSpreadsheet className="mr-2 h-4 w-4" />
-                  {importing ? (spanish ? "Importando..." : "Importing...") : t("Import OTB CSV")}
-                </Button>
+                <>
+                  <Button variant="outline" className={C.outline} disabled={importing} onClick={() => fileInputRef.current?.click()}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    {importing ? (spanish ? "Importando..." : "Importing...") : t("Import OTB CSV")}
+                  </Button>
+                  <Button variant="outline" className={C.outline} disabled={importingScreenshot} onClick={() => screenshotInputRef.current?.click()}>
+                    <Image className="mr-2 h-4 w-4" />
+                    {importingScreenshot ? (spanish ? "Leyendo imagen..." : "Reading screenshot...") : (spanish ? "Importar imagen Agilysys" : "Import Agilysys screenshot")}
+                  </Button>
+                </>
               )}
               {canActualize && <Button variant="outline" className={C.outline} disabled={actualizing} onClick={() => actualizedInputRef.current?.click()}>
                 <FileSpreadsheet className="mr-2 h-4 w-4" />
@@ -1075,9 +1117,26 @@ function ForecastPanel({
                 event.target.value = "";
               }}
             />
+            <input
+              ref={screenshotInputRef}
+              aria-label={spanish ? "Importar imagen de pronostico Agilysys" : "Import Agilysys forecast screenshot"}
+              title={spanish ? "Importar imagen de pronostico Agilysys" : "Import Agilysys forecast screenshot"}
+              type="file"
+              accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) onScreenshotImport(file);
+                event.target.value = "";
+              }}
+            />
             <Button variant="outline" className={C.outline} disabled={importing} onClick={() => fileInputRef.current?.click()}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               {importing ? (spanish ? "Importando..." : "Importing...") : t("Import OTB CSV")}
+            </Button>
+            <Button variant="outline" className={C.outline} disabled={importingScreenshot} onClick={() => screenshotInputRef.current?.click()}>
+              <Image className="mr-2 h-4 w-4" />
+              {importingScreenshot ? (spanish ? "Leyendo imagen..." : "Reading screenshot...") : (spanish ? "Importar imagen Agilysys" : "Import Agilysys screenshot")}
             </Button>
             {canActualize && <Button variant="outline" className={C.outline} disabled={actualizing} onClick={() => actualizedInputRef.current?.click()}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
@@ -1873,7 +1932,9 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
             </thead>
             <tbody>
               {payload.departments.map((department) => {
-                const employees = payload.employees.filter((employee) => employee.active && employeeDepartments(employee).includes(department)).sort(scheduleEmployeeSort);
+                const employees = payload.employees
+                  .filter((employee) => employee.active && employeeDepartments(employee).includes(department))
+                  .sort((a, b) => scheduleEmployeeSort(department, a, b));
                 if (!employees.length) return null;
                 const showHousekeepingReference = department === "Housekeeping" && editable && editableDepartments.includes("Housekeeping");
                 return [
@@ -1998,7 +2059,9 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
         </div>
         <div className="space-y-4 lg:hidden">
           {payload.departments.map((department) => {
-            const employees = payload.employees.filter((employee) => employee.active && employeeDepartments(employee).includes(department)).sort(scheduleEmployeeSort);
+            const employees = payload.employees
+              .filter((employee) => employee.active && employeeDepartments(employee).includes(department))
+              .sort((a, b) => scheduleEmployeeSort(department, a, b));
             if (!employees.length) return null;
             const showHousekeepingReference = department === "Housekeeping" && editable && editableDepartments.includes("Housekeeping");
             return (
@@ -2558,7 +2621,7 @@ function AiDraftPreview({ payload, draft }: { payload: SchedulePayload; draft: A
           <tbody>
             {departments.flatMap((department) => payload.employees
               .filter((employee) => employee.active && employeeDepartments(employee).includes(department))
-              .sort(scheduleEmployeeSort)
+              .sort((a, b) => scheduleEmployeeSort(department, a, b))
               .map((employee) => (
                 <tr key={`${department}-${employee.id}`}>
                   <td className="border border-[#e0d3c1] p-2 font-semibold">
@@ -2705,6 +2768,31 @@ export default function SchedulePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
     },
     onError: (error: Error) => toast({ title: "Forecast import failed", description: error.message, variant: "destructive" }),
+  });
+  const importForecastScreenshot = useMutation({
+    mutationFn: async (file: File) => {
+      if (!payload?.schedule.id) throw new Error("Select a schedule before importing forecast data.");
+      const formData = new FormData();
+      formData.append("forecastScreenshot", file);
+      const response = await fetch(apiUrl(`/api/schedule/weeks/${payload.schedule.id}/forecast/import-screenshot`), {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || "The Agilysys screenshot could not be imported.");
+      }
+      return response.json() as Promise<SchedulePayload>;
+    },
+    onSuccess: (updatedPayload) => {
+      toast({
+        title: "Agilysys forecast imported",
+        description: "Arrivals, departures, stayovers, rooms sold, and housekeeping staffing targets were updated.",
+      });
+      queryClient.setQueryData(["/api/schedule/weeks", weekId], updatedPayload);
+    },
+    onError: (error: Error) => toast({ title: "Screenshot import failed", description: error.message, variant: "destructive" }),
   });
   const importActualized = useMutation({
     mutationFn: async (file: File) => {
@@ -3299,9 +3387,11 @@ export default function SchedulePage() {
               editable={editable}
               onSave={(days) => saveForecast.mutate(days)}
               onImport={(file) => importForecast.mutate(file)}
+              onScreenshotImport={(file) => importForecastScreenshot.mutate(file)}
               onActualizedImport={(file) => importActualized.mutate(file)}
               onPopupGroupSave={(body) => savePopupGroup.mutate(body)}
               importing={importForecast.isPending}
+              importingScreenshot={importForecastScreenshot.isPending}
               actualizing={importActualized.isPending}
               canActualize={canActualizeForecast}
               spanish={spanish}

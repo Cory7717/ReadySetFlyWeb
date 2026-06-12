@@ -875,6 +875,12 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
     const sales = Number(cellSalesValue(row, cell) || 0);
     return sales > 0 ? (Number(cellValue(row, cell) || 0) / sales) * 100 : 0;
   };
+  const associateTipTotal = (row: TipsGridRow, days: string[]) => (
+    days.reduce((sum, date) => {
+      const cell = row.cells.find((item) => item.date === date);
+      return sum + Number(cell ? cellValue(row, cell) : 0);
+    }, 0)
+  );
   const salesFieldValue = (date: string, field: keyof TipsGrid["dayTotals"][number]) => salesDrafts[date]?.[field as string] ?? String(dayTotal(date)?.[field] ?? "0.00");
   const canManageSales = Boolean(grid.canManageSales);
   const banquetRate = banquetForm.reportType === "group_breakfast" ? 0.18 : 0.21;
@@ -1147,7 +1153,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                     </th>
                   );
                 })}
-                <th className="border-b border-[#e0d3c1] p-2 text-right">Total</th>
+                <th className="border-b border-[#e0d3c1] p-2 text-right">{title} total</th>
               </tr>
               <tr className="sticky top-0 z-30 bg-[#f4eadb] text-left shadow-sm">
                 <th className="sticky left-0 z-40 border-b border-r border-[#e0d3c1] bg-[#f4eadb] p-2">
@@ -1181,7 +1187,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                     <div className="text-[10px] font-normal">{formatDisplayDate(date).replace(/^\w+,\s*/, "")}</div>
                   </th>
                 );})}
-                <th className="border-b border-[#e0d3c1] p-2 text-right">Total</th>
+                <th className="border-b border-[#e0d3c1] p-2 text-right">{title} total</th>
               </tr>
             </thead>
             <tbody>
@@ -1268,7 +1274,9 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                       </td>
                     );
                   })}
-                  <td className="border-t border-[#e0d3c1] p-1.5 text-right font-semibold">{formatMoney(row.totalTips)}</td>
+                  <td className="border-t border-[#e0d3c1] bg-[#f8f1e7] p-1.5 text-right font-semibold text-[#201814]">
+                    {formatMoney(associateTipTotal(row, days))}
+                  </td>
                 </tr>
               );})}
               <tr className="bg-[#e8f1ea] font-semibold text-[#173c25]">
@@ -1576,6 +1584,51 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
       {renderMobileWeek(week2Days, "Week 2", grid.week2Total)}
       {renderWeekTable(week1Days, "Week 1", grid.week1Total)}
       {renderWeekTable(week2Days, "Week 2", grid.week2Total)}
+      <Card className={C.shell}>
+        <CardHeader>
+          <CardTitle className={C.ink}>Associate tip totals</CardTitle>
+          <CardDescription className={C.muted}>Week 1, Week 2, and full pay-period totals by associate.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-hidden rounded-xl border border-[#ddccb5] bg-white">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="bg-[#f4eadb] text-[#201814]">
+                  <th className="border-b border-r border-[#ddccb5] p-3 text-left">Bistro associate</th>
+                  <th className="border-b border-r border-[#ddccb5] p-3 text-right">Week 1</th>
+                  <th className="border-b border-r border-[#ddccb5] p-3 text-right">Week 2</th>
+                  <th className="border-b border-[#ddccb5] p-3 text-right">Grand total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grid.rows.map((row) => (
+                  <tr key={`summary-${row.associate.id}`} className="odd:bg-white even:bg-[#fffaf2]">
+                    <td className="border-b border-r border-[#e0d3c1] p-3">
+                      <div className="font-semibold text-[#201814]">{row.associate.employeeDisplayName}</div>
+                      <div className="text-xs text-[#5f5247]">{row.associate.position || "Associate"}</div>
+                    </td>
+                    <td className="border-b border-r border-[#e0d3c1] p-3 text-right font-medium">
+                      {formatMoney(associateTipTotal(row, week1Days))}
+                    </td>
+                    <td className="border-b border-r border-[#e0d3c1] p-3 text-right font-medium">
+                      {formatMoney(associateTipTotal(row, week2Days))}
+                    </td>
+                    <td className="border-b border-[#e0d3c1] bg-[#f8f1e7] p-3 text-right font-semibold text-[#201814]">
+                      {formatMoney(associateTipTotal(row, grid.period.days))}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-[#e8f1ea] font-semibold text-[#173c25]">
+                  <td className="border-r border-t border-[#bdd5c3] p-3">All associates</td>
+                  <td className="border-r border-t border-[#bdd5c3] p-3 text-right">{formatMoney(grid.week1Total)}</td>
+                  <td className="border-r border-t border-[#bdd5c3] p-3 text-right">{formatMoney(grid.week2Total)}</td>
+                  <td className="border-t border-[#bdd5c3] p-3 text-right text-base">{formatMoney(grid.totalTips)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
       {grid.rows.length === 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">No active associates are available. Add the first associate from the grid.</div>}
       <Dialog open={Boolean(activeEntry)} onOpenChange={(open) => !open && setActiveEntry(null)}>
         <DialogContent className="border-[#ddccb5] bg-[#fffaf2] text-[#201814] sm:max-w-md">

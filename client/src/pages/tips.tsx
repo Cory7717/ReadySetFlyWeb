@@ -975,12 +975,12 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
           </div>
           <div className="mt-1 flex items-center justify-between text-xs text-[#5f5247]">
             <span>Gross {formatMoney(totalForDay?.grossSales)}</span>
-            <span>Tax {formatMoney(totalForDay?.taxAmount)}</span>
+          <span>Tips {formatMoney(totalForDay?.totalTips)}</span>
           </div>
         </div>
         <div className="flex items-center justify-between text-sm text-[#5f5247]">
           <span>Tip % {formatPercent(totalForDay?.tipPercent)}</span>
-          <span>{formatMoney(totalForDay?.totalTips)} tips</span>
+          <span>Tip % {formatPercent(totalForDay?.tipPercent)}</span>
         </div>
         {totalForDay?.splitCount === 2 && (
           <div className="rounded-md border border-[#bdd5c3] bg-[#e8f1ea] px-3 py-2 text-sm text-[#173c25]">
@@ -1112,7 +1112,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                 <th className="border-b border-r border-[#e0d3c1] bg-[#fbf6ee] p-2 align-top">
                   <div className="font-semibold text-[#201814]">Daily sales report</div>
                   <div className="mt-1 text-xs font-normal text-[#5f5247]">
-                    Gross sales, tip %, and report upload apply to the whole day.
+                    Gross sales, tips, tip %, and report upload apply to the whole day.
                   </div>
                 </th>
                 {days.map((date) => {
@@ -1133,8 +1133,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                       <div className="mt-2 space-y-1">
                         <div className="rounded-md border border-[#e0d3c1] bg-white px-2 py-1 text-xs text-[#5f5247]">
                           <div className="flex justify-between gap-2"><span>Gross</span><span>{formatMoney(totalForDay?.grossSales)}</span></div>
-                          <div className="flex justify-between gap-2"><span>Tax</span><span>{formatMoney(totalForDay?.taxAmount)}</span></div>
-                          <div className="flex justify-between gap-2 font-semibold text-[#201814]"><span>Net</span><span>{formatMoney(totalForDay?.netSales)}</span></div>
+                          <div className="flex justify-between gap-2 font-semibold text-[#201814]"><span>Tips</span><span>{formatMoney(totalForDay?.totalTips)}</span></div>
                         </div>
                         <div className="text-center text-xs text-[#5f5247]">Tip % {formatPercent(totalForDay?.tipPercent)}</div>
                         {totalForDay?.splitCount === 2 && (

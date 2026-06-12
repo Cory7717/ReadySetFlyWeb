@@ -17,7 +17,7 @@ import {
 
 const PROPERTY_ID = "courtyard-austin-lakeline";
 const PROPERTY_NAME = "Courtyard Austin Lakeline";
-const BUDGET_DEPARTMENTS = ["Bistro", "Housekeeping", "Maintenance"] as const;
+const BUDGET_DEPARTMENTS = ["Bistro", "Market", "Front Desk", "Housekeeping", "Maintenance"] as const;
 const BUDGET_ADMIN_EMAILS = new Set(
   (
     process.env.COURTYARD_BUDGET_ADMIN_EMAILS ||
@@ -83,6 +83,11 @@ function departmentScopeForEmployee(employee: any) {
   const text = `${employee?.department || ""} ${employee?.position || ""} ${Array.isArray(employee?.rolesJson) ? employee.rolesJson.join(" ") : ""}`.toLowerCase();
   const departments = new Set<string>();
   if (text.includes("bistro") || text.includes("breakfast")) departments.add("Bistro");
+  if (text.includes("market") || text.includes("pantry") || text.includes("shop")) departments.add("Market");
+  if (text.includes("front desk") || text.includes("night audit") || text.includes("guest services")) {
+    departments.add("Front Desk");
+    departments.add("Market");
+  }
   if (text.includes("housekeeping") || text.includes("room attendant") || text.includes("laundry") || text.includes("houseperson")) departments.add("Housekeeping");
   if (text.includes("maintenance") || text.includes("engineering")) departments.add("Maintenance");
   return Array.from(departments);
@@ -152,9 +157,27 @@ function requestedDepartment(req: any) {
 
 function sourceDepartmentForBudgetView(department: string) {
   if (department === "Bistro") return "Bistro / Restaurant";
-  if (department === "Housekeeping") return "Rooms";
+  if (department === "Market") return "Shop";
+  if (department === "Housekeeping" || department === "Front Desk") return "Rooms";
   if (department === "Maintenance") return "Repairs & Maintenance";
   return department;
+}
+
+function revenueDepartmentForBudgetView(department: string) {
+  if (department === "Maintenance") return "Rooms";
+  return sourceDepartmentForBudgetView(department);
+}
+
+function revenuePatternForBudgetView(department: string) {
+  if (department === "Bistro") return /total restaurant revenue/i;
+  if (department === "Market") return /total shop revenue/i;
+  return /total rooms revenue/i;
+}
+
+function revenueLabelForBudgetView(department: string) {
+  if (department === "Bistro") return "Bistro revenue";
+  if (department === "Market") return "Market revenue";
+  return "Rooms revenue";
 }
 
 function isDepartmentExpenseLine(department: string, line: any) {
@@ -166,6 +189,12 @@ function isDepartmentExpenseLine(department: string, line: any) {
   }
   if (department === "Bistro") {
     return /(^food$|^beverage$|cost of food|food cost|cost of sales|beverage cost|non.?consumable|inventory|restaurant supplies|supplies.*restaurant|paper supplies|cleaning supplies|smallwares|china|glass|silver|linen)/.test(item);
+  }
+  if (department === "Market") {
+    return /(food & sundries|cost of sales|food cost|beverage cost|shop supplies|market supplies|pantry supplies|non.?consumable|inventory|paper supplies|smallwares)/.test(item);
+  }
+  if (department === "Front Desk") {
+    return /(key card|front desk supplies|front office supplies|guest recovery|guest transportation|guest relocation|printing|paper supplies|office supplies)/.test(item);
   }
   if (department === "Maintenance") {
     return /(building|hvac|electrical|painting|grounds|plumbing|pool|engineering supplies|kitchen equipment|waste removal|fire life|exterminating|repair|maintenance supplies|parts)/.test(item);
@@ -591,21 +620,22 @@ export function registerCourtyardBudgetRoutes(app: Express) {
       const department = requestedDepartment(req);
       if (!department) return res.status(403).json({ error: "You do not have access to that budget department." });
       const sourceDepartment = sourceDepartmentForBudgetView(department);
-      const [sourceLines, roomsLines, checkbook, forecastRows] = await Promise.all([
+      const revenueDepartment = revenueDepartmentForBudgetView(department);
+      const [sourceLines, revenueLines, checkbook, forecastRows] = await Promise.all([
         db.select().from(courtyardBudgetLineItems).where(and(
           eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID),
           eq(courtyardBudgetLineItems.month, month),
           eq(courtyardBudgetLineItems.year, year),
           eq(courtyardBudgetLineItems.department, sourceDepartment),
         )).orderBy(asc(courtyardBudgetLineItems.lineItem)),
-        department === "Maintenance"
+        revenueDepartment !== sourceDepartment
           ? db.select().from(courtyardBudgetLineItems).where(and(
               eq(courtyardBudgetLineItems.propertyId, PROPERTY_ID),
               eq(courtyardBudgetLineItems.month, month),
               eq(courtyardBudgetLineItems.year, year),
-              eq(courtyardBudgetLineItems.department, "Rooms"),
+              eq(courtyardBudgetLineItems.department, revenueDepartment),
             ))
-          : Promise.resolve([]),
+          : Promise.resolve(null),
         db.select().from(courtyardBudgetCheckbookEntries).where(and(
           eq(courtyardBudgetCheckbookEntries.propertyId, PROPERTY_ID),
           eq(courtyardBudgetCheckbookEntries.month, month),
@@ -619,8 +649,7 @@ export function registerCourtyardBudgetRoutes(app: Express) {
           eq(courtyardBudgetDepartmentForecasts.department, department),
         )).limit(1),
       ]);
-      const revenueLines = department === "Maintenance" ? roomsLines : sourceLines;
-      const revenue = revenueTotal(revenueLines, department === "Bistro" ? /total restaurant revenue/i : /total rooms revenue/i);
+      const revenue = revenueTotal(revenueLines || sourceLines, revenuePatternForBudgetView(department));
       const forecastRevenue = forecastRows.length ? moneyNumber(forecastRows[0].forecastRevenue) : revenue.budget;
       const scale = revenue.budget > 0 ? forecastRevenue / revenue.budget : 1;
       const expenseLines = sourceLines.filter((line) => isDepartmentExpenseLine(department, line));
@@ -658,7 +687,7 @@ export function registerCourtyardBudgetRoutes(app: Express) {
         departments: req.budgetAccess.departments,
         user: req.budgetAccess,
         revenue: {
-          label: department === "Bistro" ? "Bistro revenue" : "Rooms revenue",
+          label: revenueLabelForBudgetView(department),
           budgetAmount: moneyString(revenue.budget),
           actualAmount: moneyString(revenue.actual),
           forecastAmount: moneyString(forecastRevenue),

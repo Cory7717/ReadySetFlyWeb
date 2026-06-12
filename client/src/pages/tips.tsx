@@ -783,10 +783,10 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const unlockEntry = useMutation({
     mutationFn: async (entryId: string) => apiRequest("POST", `/api/tips/grid/entries/${entryId}/unlock`),
     onSuccess: () => {
-      toast({ title: "Tip entry unlocked" });
+      toast({ title: "Entry reopened", description: "Correct the tips or shift sales, save, and confirm the entry again." });
       queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
     },
-    onError: (error: Error) => toast({ title: "Unable to unlock", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Unable to reopen entry", description: error.message, variant: "destructive" }),
   });
   const uploadReport = useMutation({
     mutationFn: async ({ date, file }: { date: string; file: File }) => {
@@ -861,7 +861,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
 
   if (isLoading || !grid) return <div className="text-sm text-[#5f5247]">Loading tips grid...</div>;
 
-  const canUnlock = Boolean(currentUser?.isAdmin);
+  const canReopenEntry = !grid.locked;
   const missingReportDays = grid.dayTotals.filter((day) => Number(day.totalTips) > 0 && !day.report);
   const missingShiftSalesCount = grid.rows.reduce((count, row) => count + row.cells.filter((cell) => Number(cell.tipAmount) > 0 && Number(cell.grossSales) <= 0).length, 0);
   const unconfirmedCount = grid.rows.reduce((count, row) => count + row.cells.filter((cell) => Number(cell.tipAmount) > 0 && !cell.confirmed).length, 0);
@@ -1250,9 +1250,9 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                         )}
                         {expanded && <div className="mt-1.5 min-h-7">
                           {cell.confirmed ? (
-                            canUnlock && cell.entryId ? (
+                            canReopenEntry && cell.entryId ? (
                               <Button type="button" size="sm" variant="outline" className={`h-7 w-full text-xs ${C.outline}`} onClick={() => unlockEntry.mutate(cell.entryId!)}>
-                                Unlock
+                                Reopen to correct
                               </Button>
                             ) : (
                               <Badge variant="outline" className="w-full justify-center border-emerald-300 bg-emerald-50 text-emerald-800">Confirmed</Badge>
@@ -1625,12 +1625,12 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                 </div>
               </div>
               {activeCell.confirmed ? (
-                canUnlock && activeCell.entryId ? (
+                canReopenEntry && activeCell.entryId ? (
                   <Button type="button" variant="outline" className={`w-full ${C.outline}`} onClick={() => {
                     unlockEntry.mutate(activeCell.entryId!);
                     setActiveEntry(null);
                   }}>
-                    Unlock entry
+                    Reopen to correct
                   </Button>
                 ) : (
                   <Badge variant="outline" className="w-full justify-center border-emerald-300 bg-emerald-50 py-2 text-emerald-800">Confirmed and locked</Badge>

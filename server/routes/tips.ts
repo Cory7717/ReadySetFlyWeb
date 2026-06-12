@@ -1880,7 +1880,7 @@ export function registerTipsRoutes(app: Express) {
         .where(and(eq(tipEntries.userId, parsed.data.userId), eq(tipEntries.entryDate, parsed.data.entryDate)))
         .limit(1);
       if (existingEntry?.status === "confirmed" || existingEntry?.status === "submitted") {
-        return res.status(423).json({ error: "This associate/day is confirmed. A manager must unlock it before changes can be made." });
+        return res.status(423).json({ error: "This associate/day is confirmed. Reopen it before making changes." });
       }
       const amount = parsed.data.tipAmount.toFixed(2);
       const grossSales = parsed.data.grossSales.toFixed(2);
@@ -2119,7 +2119,7 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
-  router.post("/grid/entries/:id/unlock", requireTipsAdmin, async (req: any, res, next) => {
+  router.post("/grid/entries/:id/unlock", requireTipsGridAccess, async (req: any, res, next) => {
     try {
       const [entry] = await db.select().from(tipEntries).where(eq(tipEntries.id, req.params.id)).limit(1);
       if (!entry) return res.status(404).json({ error: "Tip entry not found" });
@@ -2127,10 +2127,14 @@ export function registerTipsRoutes(app: Express) {
       if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
       const [updated] = await db.update(tipEntries).set({ status: "saved", updatedAt: new Date() }).where(eq(tipEntries.id, entry.id)).returning();
       await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser.id,
+        actorUserId: req.tipsUser?.id || null,
         targetUserId: updated.userId,
         action: "tip_grid_entry_unlocked",
-        metadataJson: { entryId: updated.id, entryDate: updated.entryDate },
+        metadataJson: {
+          entryId: updated.id,
+          entryDate: updated.entryDate,
+          accessType: isTipsManager(req.tipsUser) ? "admin" : req.tipsUser ? "user" : "kiosk",
+        },
       });
       res.json({ entry: { ...updated, tipAmount: moneyString(updated.tipAmount), creditTips: moneyString(updated.creditTips) } });
     } catch (error) {

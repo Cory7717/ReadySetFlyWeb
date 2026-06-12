@@ -251,6 +251,30 @@ function operationalManagerDepartment(employee: any) {
   return "";
 }
 
+function propertyLeadershipRank(employee: any) {
+  const text = [employee?.position, employee?.department, ...rolesArray(employee?.rolesJson)].filter(Boolean).join(" ").toLowerCase();
+  if (text.includes("general manager") || /\bgm\b/.test(text)) return 0;
+  if (text.includes("director of sales") || /\bdos\b/.test(text)) return 1;
+  return 2;
+}
+
+function isDepartmentSupervisor(employee: any, department: string) {
+  if (!employee) return false;
+  if (department === "Managers" && propertyLeadershipRank(employee) < 2) return true;
+  return operationalManagerDepartment(employee) === department
+    || (Boolean(employee.isDepartmentManager) && normalizeDepartment(employee.department) === department);
+}
+
+function scheduleEmployeeDepartmentSort(department: string, a: any, b: any) {
+  if (department === "Managers") {
+    const rank = propertyLeadershipRank(a) - propertyLeadershipRank(b);
+    if (rank) return rank;
+  }
+  return Number(isDepartmentSupervisor(b, department)) - Number(isDepartmentSupervisor(a, department))
+    || Number(a?.sortOrder || 0) - Number(b?.sortOrder || 0)
+    || String(a?.displayName || "").localeCompare(String(b?.displayName || ""));
+}
+
 function employeeScheduleDepartments(employee: any) {
   const managerDepartment = operationalManagerDepartment(employee);
   const departments = Array.from(new Set([
@@ -427,7 +451,9 @@ function resolveShiftTypeForAssignment(assignment: any, shiftTypeById: Map<any, 
 
 function assignmentRenderDepartment(assignment: any, employee: any, shiftType: any) {
   if (!assignment) return "";
-  return normalizeDepartment(assignment.roleWorked || shiftType?.departmentHint || shiftType?.label || employee?.department);
+  const resolved = normalizeDepartment(assignment.roleWorked || shiftType?.departmentHint || shiftType?.label || employee?.department);
+  const managerDepartment = operationalManagerDepartment(employee);
+  return resolved === "Managers" && managerDepartment ? managerDepartment : resolved;
 }
 
 function assignmentBelongsToDepartment(assignment: any, employee: any, shiftType: any, department: string) {
@@ -1411,6 +1437,11 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   const employeeDepartmentWeeklyHours: Record<string, Record<string, number>> = {};
   const departmentDailyHours: Record<string, Record<string, number>> = {};
   const departmentWeeklyHours: Record<string, number> = {};
+  const departmentSupervisorDailyHours: Record<string, Record<string, number>> = {};
+  const departmentSupervisorWeeklyHours: Record<string, number> = {};
+  const departmentAssociateDailyHours: Record<string, Record<string, number>> = {};
+  const departmentAssociateWeeklyHours: Record<string, number> = {};
+  const dailyScheduledHours: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
   const dailyLaborHours: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
   const dailyLaborHoursIncludingSalary: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
   const dailySalariedLaborHours: Record<string, number> = Object.fromEntries(days.map((day) => [day, 0]));
@@ -1429,7 +1460,7 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   for (const assignment of assignments) {
     const shiftType = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
     const employee = assignment.employeeId ? employeeById.get(assignment.employeeId) : null;
-    const department = normalizeDepartment(assignment.roleWorked || employee?.department || shiftType?.departmentHint);
+    const department = assignmentRenderDepartment(assignment, employee, shiftType);
     const hours = hoursForShift(assignment, shiftType);
     const isSalaried = employee ? isSalariedScheduleManager(employee) : false;
     const laborDollarsIncludingSalary = hours * hourlyRateForAssignment(employee, assignment, shiftType);
@@ -1443,19 +1474,28 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
       const key = `${employee.id}:${assignment.shiftDate}`;
       if (assignmentKeys.has(key)) warnings.push(`${employee.displayName} has duplicate shifts on ${assignment.shiftDate}.`);
       assignmentKeys.add(key);
-      employeeWeeklyHours[employee.id] = (employeeWeeklyHours[employee.id] || 0) + hourlyHours;
+      employeeWeeklyHours[employee.id] = (employeeWeeklyHours[employee.id] || 0) + hours;
       employeeDepartmentWeeklyHours[employee.id] ||= {};
-      employeeDepartmentWeeklyHours[employee.id][department] = (employeeDepartmentWeeklyHours[employee.id][department] || 0) + hourlyHours;
+      employeeDepartmentWeeklyHours[employee.id][department] = (employeeDepartmentWeeklyHours[employee.id][department] || 0) + hours;
     }
     departmentDailyHours[department] ||= {};
-    departmentDailyHours[department][assignment.shiftDate] = (departmentDailyHours[department][assignment.shiftDate] || 0) + hourlyHours;
-    departmentWeeklyHours[department] = (departmentWeeklyHours[department] || 0) + hourlyHours;
+    departmentDailyHours[department][assignment.shiftDate] = (departmentDailyHours[department][assignment.shiftDate] || 0) + hours;
+    departmentWeeklyHours[department] = (departmentWeeklyHours[department] || 0) + hours;
+    const supervisorHours = isDepartmentSupervisor(employee, department) ? hours : 0;
+    const associateHours = hours - supervisorHours;
+    departmentSupervisorDailyHours[department] ||= {};
+    departmentSupervisorDailyHours[department][assignment.shiftDate] = (departmentSupervisorDailyHours[department][assignment.shiftDate] || 0) + supervisorHours;
+    departmentSupervisorWeeklyHours[department] = (departmentSupervisorWeeklyHours[department] || 0) + supervisorHours;
+    departmentAssociateDailyHours[department] ||= {};
+    departmentAssociateDailyHours[department][assignment.shiftDate] = (departmentAssociateDailyHours[department][assignment.shiftDate] || 0) + associateHours;
+    departmentAssociateWeeklyHours[department] = (departmentAssociateWeeklyHours[department] || 0) + associateHours;
     departmentWeeklyLaborDollars[department] = (departmentWeeklyLaborDollars[department] || 0) + laborDollars;
     departmentWeeklyLaborDollarsIncludingSalary[department] = (departmentWeeklyLaborDollarsIncludingSalary[department] || 0) + laborDollarsIncludingSalary;
     if (department === "Housekeeping" && isRoomAttendantWork(assignment, shiftType, employee)) {
       roomAttendantDailyHours[assignment.shiftDate] = (roomAttendantDailyHours[assignment.shiftDate] || 0) + hourlyHours;
     }
     dailyLaborHours[assignment.shiftDate] = (dailyLaborHours[assignment.shiftDate] || 0) + hourlyHours;
+    dailyScheduledHours[assignment.shiftDate] = (dailyScheduledHours[assignment.shiftDate] || 0) + hours;
     dailyLaborHoursIncludingSalary[assignment.shiftDate] = (dailyLaborHoursIncludingSalary[assignment.shiftDate] || 0) + hours;
     dailySalariedLaborHours[assignment.shiftDate] = (dailySalariedLaborHours[assignment.shiftDate] || 0) + salariedHours;
     dailyLaborDollars[assignment.shiftDate] = (dailyLaborDollars[assignment.shiftDate] || 0) + laborDollars;
@@ -1503,15 +1543,21 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
     employeeDepartmentWeeklyHours: roundNestedRecord(employeeDepartmentWeeklyHours),
     departmentDailyHours: roundNestedRecord(departmentDailyHours),
     departmentWeeklyHours: roundRecord(departmentWeeklyHours),
+    departmentSupervisorDailyHours: roundNestedRecord(departmentSupervisorDailyHours),
+    departmentSupervisorWeeklyHours: roundRecord(departmentSupervisorWeeklyHours),
+    departmentAssociateDailyHours: roundNestedRecord(departmentAssociateDailyHours),
+    departmentAssociateWeeklyHours: roundRecord(departmentAssociateWeeklyHours),
     departmentWeeklyLaborDollars: roundRecord(departmentWeeklyLaborDollars),
     departmentWeeklyLaborDollarsIncludingSalary: roundRecord(departmentWeeklyLaborDollarsIncludingSalary),
     dailyLaborHours: roundRecord(dailyLaborHours),
+    dailyScheduledHours: roundRecord(dailyScheduledHours),
     dailyLaborHoursIncludingSalary: roundRecord(dailyLaborHoursIncludingSalary),
     dailySalariedLaborHours: roundRecord(dailySalariedLaborHours),
     dailyLaborDollars: roundRecord(dailyLaborDollars),
     dailyLaborDollarsIncludingSalary: roundRecord(dailyLaborDollarsIncludingSalary),
     dailySalariedLaborDollars: roundRecord(dailySalariedLaborDollars),
     totalWeeklyLaborHours: Object.values(dailyLaborHours).reduce((sum, value) => sum + value, 0).toFixed(2),
+    totalWeeklyScheduledHours: Object.values(dailyScheduledHours).reduce((sum, value) => sum + value, 0).toFixed(2),
     totalWeeklyLaborHoursIncludingSalary: Object.values(dailyLaborHoursIncludingSalary).reduce((sum, value) => sum + value, 0).toFixed(2),
     totalWeeklySalariedLaborHours: Object.values(dailySalariedLaborHours).reduce((sum, value) => sum + value, 0).toFixed(2),
     totalWeeklyLaborDollars: totalWeeklyLaborDollars.toFixed(2),
@@ -2244,6 +2290,7 @@ async function renderSchedulePdf(payload: any) {
   const muted = rgb(0.38, 0.32, 0.27);
   const border = rgb(0.84, 0.78, 0.69);
   const tan = rgb(0.96, 0.92, 0.86);
+  const paleGreen = rgb(0.93, 0.96, 0.94);
   const dark = rgb(0.16, 0.12, 0.10);
   const white = rgb(1, 1, 1);
   let page = pdf.addPage(pageSize);
@@ -2305,10 +2352,19 @@ async function renderSchedulePdf(payload: any) {
   const shiftTypeById = new Map<any, any>(payload.shiftTypes.map((shift: any) => [shift.id, shift]));
   const shiftTypeByLabel = new Map<string, any>(payload.shiftTypes.map((shift: any) => [String(shift.label || "").toUpperCase(), shift]));
   for (const department of payload.departments) {
-    const employees = payload.employees.filter((employee: any) => employee.active && employeeScheduleDepartments(employee).includes(department));
+    const employees = payload.employees
+      .filter((employee: any) => employee.active && (
+        employeeScheduleDepartments(employee).includes(department)
+        || payload.assignments.some((assignment: any) => {
+          if (assignment.employeeId !== employee.id) return false;
+          const shiftType = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
+          return assignmentBelongsToDepartment(assignment, employee, shiftType, department);
+        })
+      ))
+      .sort((a: any, b: any) => scheduleEmployeeDepartmentSort(department, a, b));
     if (!employees.length) continue;
     const rowH = 34;
-    ensureSpace(48 + employees.length * rowH);
+    ensureSpace(102 + employees.length * rowH);
     drawBox(margin, y, tableWidth, 22, dark, dark);
     drawText(`${department} - ${payload.totals.departmentWeeklyHours[department] || 0} hrs`, margin + 8, y - 14, 9, true, white);
     y -= 22;
@@ -2344,13 +2400,28 @@ async function renderSchedulePdf(payload: any) {
       drawText(String(payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0), margin + employeeW + 7 * dayW + 10, y - 19, 8, true);
       y -= rowH;
     }
+    for (const [label, dailyKey, weeklyKey, fill, isBold] of [
+      ["Regular associate hours", "departmentAssociateDailyHours", "departmentAssociateWeeklyHours", tan, false],
+      ["Supervisor hours", "departmentSupervisorDailyHours", "departmentSupervisorWeeklyHours", paleGreen, true],
+      [`${department} total hours`, "departmentDailyHours", "departmentWeeklyHours", tan, true],
+    ] as const) {
+      drawBox(margin, y, employeeW, 18, fill);
+      drawText(label, margin + 6, y - 12, 7, isBold);
+      payload.days.forEach((day: string, index: number) => {
+        drawBox(margin + employeeW + index * dayW, y, dayW, 18, fill);
+        drawText(String(payload.totals[dailyKey]?.[department]?.[day] || 0), margin + employeeW + index * dayW + 6, y - 12, 7, isBold);
+      });
+      drawBox(margin + employeeW + 7 * dayW, y, hoursW, 18, fill);
+      drawText(String(payload.totals[weeklyKey]?.[department] || 0), margin + employeeW + 7 * dayW + 8, y - 12, 7, isBold);
+      y -= 18;
+    }
     y -= 12;
   }
 
   ensureSpace(44);
   drawBox(margin, y, tableWidth, 30, tan);
-  drawText(`Hourly scheduled hours: ${payload.totals.totalWeeklyLaborHours || "0.00"}`, margin + 8, y - 12, 8, true);
-  drawText(`Salaried manager hours shown: ${payload.totals.totalWeeklySalariedLaborHours || "0.00"} | All displayed hours: ${payload.totals.totalWeeklyLaborHoursIncludingSalary || "0.00"}`, margin + 8, y - 24, 7, false, muted);
+  drawText(`All scheduled hours: ${payload.totals.totalWeeklyScheduledHours || payload.totals.totalWeeklyLaborHoursIncludingSalary || "0.00"}`, margin + 8, y - 12, 8, true);
+  drawText(`Hourly payroll hours: ${payload.totals.totalWeeklyLaborHours || "0.00"} | Salaried hours shown: ${payload.totals.totalWeeklySalariedLaborHours || "0.00"}`, margin + 8, y - 24, 7, false, muted);
   return Buffer.from(await pdf.save());
 }
 
@@ -2366,7 +2437,17 @@ function renderScheduleExcelHtml(payload: any) {
   }
   rows.push("</table><br/><table border='1'><tr><th>Department</th><th>Employee</th>" + payload.days.map((day: string) => `<th>${day}</th>`).join("") + "<th>Total</th></tr>");
   for (const department of payload.departments) {
-    for (const employee of payload.employees.filter((item: any) => item.active && employeeScheduleDepartments(item).includes(department))) {
+    const employees = payload.employees
+      .filter((employee: any) => employee.active && (
+        employeeScheduleDepartments(employee).includes(department)
+        || payload.assignments.some((assignment: any) => {
+          if (assignment.employeeId !== employee.id) return false;
+          const shiftType = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
+          return assignmentBelongsToDepartment(assignment, employee, shiftType, department);
+        })
+      ))
+      .sort((a: any, b: any) => scheduleEmployeeDepartmentSort(department, a, b));
+    for (const employee of employees) {
       rows.push(`<tr><td>${department}</td><td>${employee.displayName}</td>${payload.days.map((day: string) => {
         const assignment: any = assignmentsByEmployeeDay.get(`${employee.id}:${day}`);
         const shiftType: any = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
@@ -2376,9 +2457,13 @@ function renderScheduleExcelHtml(payload: any) {
         return `<td${style}>${scheduleCellText(sectionAssignment, sectionShiftType)}</td>`;
       }).join("")}<td>${payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0}</td></tr>`);
     }
+    rows.push(`<tr><td>${department}</td><td><strong>Regular associate hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentAssociateDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentAssociateWeeklyHours?.[department] || 0}</td></tr>`);
+    rows.push(`<tr><td>${department}</td><td><strong>Supervisor hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentSupervisorDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentSupervisorWeeklyHours?.[department] || 0}</td></tr>`);
+    rows.push(`<tr><td>${department}</td><td><strong>Department total hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentWeeklyHours?.[department] || 0}</td></tr>`);
   }
   rows.push("</table>");
   rows.push("<br/><table border='1'>");
+  rows.push(`<tr><th>All scheduled hours</th><td>${payload.totals.totalWeeklyScheduledHours || payload.totals.totalWeeklyLaborHoursIncludingSalary || "0.00"}</td></tr>`);
   rows.push(`<tr><th>Hourly scheduled hours</th><td>${payload.totals.totalWeeklyLaborHours}</td></tr>`);
   rows.push(`<tr><th>Salaried manager hours shown</th><td>${payload.totals.totalWeeklySalariedLaborHours || "0.00"}</td></tr>`);
   rows.push(`<tr><th>All displayed hours</th><td>${payload.totals.totalWeeklyLaborHoursIncludingSalary || "0.00"}</td></tr>`);
@@ -3623,7 +3708,7 @@ export function registerScheduleRoutes(app: Express) {
       for (const assignment of parsed.data.assignments) {
         const employee = employeeById.get(assignment.employeeId);
         const shiftType = shiftTypeById.get(assignment.shiftTypeId);
-        const department = normalizeDepartment(assignment.roleWorked || shiftType?.departmentHint || shiftType?.label || employee?.department);
+        const department = assignmentRenderDepartment(assignment, employee, shiftType);
         if (allowedDepartment && department !== allowedDepartment) continue;
         if (!(await canManageDepartment(req.scheduleUser, department))) continue;
         if (employee && !employeeApprovedForDepartment(employee, department, assignment.roleWorked)) continue;

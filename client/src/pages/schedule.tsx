@@ -312,15 +312,21 @@ type SchedulePayload = {
     employeeDepartmentWeeklyHours?: Record<string, Record<string, number>>;
     departmentDailyHours: Record<string, Record<string, number>>;
     departmentWeeklyHours: Record<string, number>;
+    departmentSupervisorDailyHours?: Record<string, Record<string, number>>;
+    departmentSupervisorWeeklyHours?: Record<string, number>;
+    departmentAssociateDailyHours?: Record<string, Record<string, number>>;
+    departmentAssociateWeeklyHours?: Record<string, number>;
     departmentWeeklyLaborDollars?: Record<string, number>;
     departmentWeeklyLaborDollarsIncludingSalary?: Record<string, number>;
     dailyLaborHours: Record<string, number>;
+    dailyScheduledHours?: Record<string, number>;
     dailyLaborHoursIncludingSalary?: Record<string, number>;
     dailySalariedLaborHours?: Record<string, number>;
     dailyLaborDollars?: Record<string, number>;
     dailyLaborDollarsIncludingSalary?: Record<string, number>;
     dailySalariedLaborDollars?: Record<string, number>;
     totalWeeklyLaborHours: string;
+    totalWeeklyScheduledHours?: string;
     totalWeeklyLaborHoursIncludingSalary?: string;
     totalWeeklySalariedLaborHours?: string;
     totalWeeklyLaborDollars?: string;
@@ -605,7 +611,9 @@ function findEmployeeForUser(payload: SchedulePayload, user?: ScheduleUser | nul
 }
 
 function assignmentDepartment(assignment: ShiftAssignment | undefined, employee: ScheduleEmployee, shiftType?: ShiftType) {
-  return roleDepartment(assignment?.roleWorked || shiftType?.departmentHint || employee.department);
+  const resolved = roleDepartment(assignment?.roleWorked || shiftType?.departmentHint || employee.department);
+  const managerDepartment = operationalManagerDepartment(employee);
+  return resolved === "Managers" && managerDepartment ? managerDepartment : resolved;
 }
 
 function assignmentBelongsToDepartment(assignment: ShiftAssignment | undefined, employee: ScheduleEmployee, shiftType: ShiftType | undefined, department: string) {
@@ -614,6 +622,16 @@ function assignmentBelongsToDepartment(assignment: ShiftAssignment | undefined, 
 }
 
 function scheduleEmployeeSort(department: string, a: ScheduleEmployee, b: ScheduleEmployee) {
+  if (department === "Managers") {
+    const propertyLeadershipRank = (employee: ScheduleEmployee) => {
+      const text = [employee.position, employee.department, ...rolesArray(employee.rolesJson)].filter(Boolean).join(" ").toLowerCase();
+      if (text.includes("general manager") || /\bgm\b/.test(text)) return 0;
+      if (text.includes("director of sales") || /\bdos\b/.test(text)) return 1;
+      return 2;
+    };
+    const rank = propertyLeadershipRank(a) - propertyLeadershipRank(b);
+    if (rank) return rank;
+  }
   const aIsDepartmentManager = operationalManagerDepartment(a) === department
     || (Boolean(a.isDepartmentManager) && normalizeDepartment(a.department) === department);
   const bIsDepartmentManager = operationalManagerDepartment(b) === department
@@ -1909,6 +1927,16 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
   const currentEmployee = findEmployeeForUser(payload, currentUser);
   const canEditHousekeepingBoards = Boolean(currentUser?.isSuperAdmin || currentUser?.isAdmin || editableDepartments.includes("Housekeeping"));
   const weeklyMporByEmployee = useMemo(() => new Map(payload.employees.map((employee) => [employee.id, weeklyRoomAttendantMpor(employee.id, payload.housekeepingBoards || [])])), [payload.employees, payload.housekeepingBoards]);
+  const employeesForDepartment = (department: string) => payload.employees
+    .filter((employee) => employee.active && (
+      employeeDepartments(employee).includes(department)
+      || payload.assignments.some((assignment) => {
+        if (assignment.employeeId !== employee.id) return false;
+        const shiftType = shiftTypes.get(assignment.shiftTypeId || "");
+        return assignmentBelongsToDepartment(assignment, employee, shiftType, department);
+      })
+    ))
+    .sort((a, b) => scheduleEmployeeSort(department, a, b));
   return (
     <Card className={C.shell} data-tour="schedule-grid">
       <CardHeader>
@@ -1932,9 +1960,7 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
             </thead>
             <tbody>
               {payload.departments.map((department) => {
-                const employees = payload.employees
-                  .filter((employee) => employee.active && employeeDepartments(employee).includes(department))
-                  .sort((a, b) => scheduleEmployeeSort(department, a, b));
+                const employees = employeesForDepartment(department);
                 if (!employees.length) return null;
                 const showHousekeepingReference = department === "Housekeeping" && editable && editableDepartments.includes("Housekeeping");
                 return [
@@ -2036,6 +2062,28 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                       <td className="border border-[#e0d3c1] p-2 text-center font-semibold">{payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0}</td>
                     </tr>
                   )),
+                  <tr key={`${department}-associate-totals`}>
+                    <td className="sticky left-0 z-10 border border-[#d6c8b5] bg-[#f8f1e7] p-2 font-medium text-[#201814]">Regular associate hours</td>
+                    {payload.days.map((day) => (
+                      <td key={day} className="border border-[#d6c8b5] bg-[#f8f1e7] p-2 text-center font-medium text-[#201814]">
+                        {fmtHours(payload.totals.departmentAssociateDailyHours?.[department]?.[day] || 0)}
+                      </td>
+                    ))}
+                    <td className="border border-[#d6c8b5] bg-[#f8f1e7] p-2 text-center font-medium text-[#201814]">
+                      {fmtHours(payload.totals.departmentAssociateWeeklyHours?.[department] || 0)}
+                    </td>
+                  </tr>,
+                  <tr key={`${department}-supervisor-totals`}>
+                    <td className="sticky left-0 z-10 border border-[#c8d9cd] bg-[#edf5ef] p-2 font-semibold text-[#173c25]">Supervisor hours</td>
+                    {payload.days.map((day) => (
+                      <td key={day} className="border border-[#c8d9cd] bg-[#edf5ef] p-2 text-center font-semibold text-[#173c25]">
+                        {fmtHours(payload.totals.departmentSupervisorDailyHours?.[department]?.[day] || 0)}
+                      </td>
+                    ))}
+                    <td className="border border-[#c8d9cd] bg-[#edf5ef] p-2 text-center font-semibold text-[#173c25]">
+                      {fmtHours(payload.totals.departmentSupervisorWeeklyHours?.[department] || 0)}
+                    </td>
+                  </tr>,
                   <tr key={`${department}-daily-totals`}>
                     <td className="sticky left-0 z-10 border border-[#cdbda8] bg-[#eadfce] p-2 font-semibold text-[#201814]">{department} daily hours</td>
                     {payload.days.map((day) => (
@@ -2051,17 +2099,15 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
               })}
               <tr>
                 <td className="border border-[#e0d3c1] bg-[#f4eadb] p-2 font-semibold">{t("Daily labor hours")}</td>
-                {payload.days.map((day) => <td key={day} className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center font-semibold">{payload.totals.dailyLaborHours[day] || 0}</td>)}
-                <td className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center font-semibold">{payload.totals.totalWeeklyLaborHours}</td>
+                {payload.days.map((day) => <td key={day} className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center font-semibold">{payload.totals.dailyScheduledHours?.[day] ?? payload.totals.dailyLaborHours[day] ?? 0}</td>)}
+                <td className="border border-[#e0d3c1] bg-[#f4eadb] p-2 text-center font-semibold">{payload.totals.totalWeeklyScheduledHours ?? payload.totals.totalWeeklyLaborHours}</td>
               </tr>
             </tbody>
           </table>
         </div>
         <div className="space-y-4 lg:hidden">
           {payload.departments.map((department) => {
-            const employees = payload.employees
-              .filter((employee) => employee.active && employeeDepartments(employee).includes(department))
-              .sort((a, b) => scheduleEmployeeSort(department, a, b));
+            const employees = employeesForDepartment(department);
             if (!employees.length) return null;
             const showHousekeepingReference = department === "Housekeeping" && editable && editableDepartments.includes("Housekeeping");
             return (
@@ -2144,11 +2190,24 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
                         {fmtHours(payload.totals.departmentWeeklyHours[department] || 0)} weekly
                       </Badge>
                     </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <div className="rounded-md border border-[#d6c8b5] bg-[#f8f1e7] p-2">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Regular associate hours</div>
+                        <div className="mt-1 text-lg font-semibold">{fmtHours(payload.totals.departmentAssociateWeeklyHours?.[department] || 0)} weekly</div>
+                      </div>
+                      <div className="rounded-md border border-[#c8d9cd] bg-[#edf5ef] p-2 text-[#173c25]">
+                        <div className="text-xs font-semibold uppercase tracking-wide">Supervisor hours</div>
+                        <div className="mt-1 text-lg font-semibold">{fmtHours(payload.totals.departmentSupervisorWeeklyHours?.[department] || 0)} weekly</div>
+                      </div>
+                    </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {payload.days.map((day, index) => (
                         <div key={day} className="rounded-md border border-[#d6c8b5] bg-white p-2 text-center">
                           <div className="text-xs font-semibold text-[#5f5247]">{labels[index]} {formatDate(day)}</div>
                           <div className="text-lg font-semibold">{fmtHours(payload.totals.departmentDailyHours[department]?.[day] || 0)}</div>
+                          <div className="mt-1 text-[11px] text-[#5f5247]">
+                            Associates {fmtHours(payload.totals.departmentAssociateDailyHours?.[department]?.[day] || 0)} / Sup {fmtHours(payload.totals.departmentSupervisorDailyHours?.[department]?.[day] || 0)}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -2161,14 +2220,14 @@ function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onC
             <div className="flex items-center justify-between gap-3">
               <div className="font-semibold">{t("Daily labor hours")} - all departments</div>
               <Badge variant="outline" className="border-[#9f8b72] bg-white text-[#201814]">
-                {fmtHours(payload.totals.totalWeeklyLaborHours)} weekly
+                {fmtHours(payload.totals.totalWeeklyScheduledHours ?? payload.totals.totalWeeklyLaborHours)} weekly
               </Badge>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {payload.days.map((day, index) => (
                 <div key={day} className="rounded-md border border-[#d6c8b5] bg-white p-2 text-center">
                   <div className="text-xs font-semibold text-[#5f5247]">{labels[index]} {formatDate(day)}</div>
-                  <div className="text-lg font-semibold">{fmtHours(payload.totals.dailyLaborHours[day] || 0)}</div>
+                  <div className="text-lg font-semibold">{fmtHours(payload.totals.dailyScheduledHours?.[day] ?? payload.totals.dailyLaborHours[day] ?? 0)}</div>
                 </div>
               ))}
             </div>
@@ -3163,7 +3222,7 @@ export default function SchedulePage() {
                 ) : (
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
                     <div className="text-sm text-[#5f5247]">Displayed hours</div>
-                    <div className="text-3xl font-semibold">{payload.totals.totalWeeklyLaborHoursIncludingSalary || payload.totals.totalWeeklyLaborHours}</div>
+                    <div className="text-3xl font-semibold">{payload.totals.totalWeeklyScheduledHours || payload.totals.totalWeeklyLaborHoursIncludingSalary || payload.totals.totalWeeklyLaborHours}</div>
                     <div className="text-xs text-[#5f5247]">Labor dollars hidden</div>
                   </div>
                 )}

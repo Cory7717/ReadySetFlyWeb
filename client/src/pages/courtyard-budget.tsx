@@ -23,6 +23,7 @@ const C = {
 
 type BudgetUser = {
   id: string;
+  isSuperAdmin: boolean;
   canAccessBudget: boolean;
   canUpload: boolean;
   canEditForecast: boolean;
@@ -60,7 +61,7 @@ type BudgetSummary = {
     projectedLabor: string;
     projectedProfit: string;
     projectedMarginPercent: number;
-    laborRoles: Array<{ role: string; hourlyRate: number; employeeCount: number; hours: number; projectedCost: number }>;
+    laborRoles: Array<{ role: string; hourlyRate?: number; employeeCount: number; hours: number; projectedCost?: number }>;
   } | null;
   expenses: BudgetExpense[];
   checkbook: CheckbookEntry[];
@@ -307,18 +308,23 @@ export default function CourtyardBudgetPage() {
                     <div className="overflow-hidden rounded-lg border border-[#e0d3c1] bg-white">
                       <div className="border-b border-[#e0d3c1] bg-[#fbf6ee] px-3 py-2">
                         <div className="font-semibold text-[#201814]">Projected hours by position</div>
-                        <div className="text-xs text-[#5f5247]">Hourly rates come from active associates assigned to each role. Multiple rates are averaged.</div>
+                        <div className="text-xs text-[#5f5247]">
+                          {data.user.isSuperAdmin
+                            ? "Hourly rates come from active associates assigned to each role. Multiple rates are averaged."
+                            : "Enter the projected monthly hours for each Bistro position."}
+                        </div>
                       </div>
                       <div className="divide-y divide-[#e0d3c1]">
                         {data.profitability.laborRoles.map((role) => {
-                          const hours = Number(laborHoursByRole[role.role] || 0);
                           return (
-                            <div key={role.role} className="grid gap-2 p-3 sm:grid-cols-[1fr_150px_150px_150px] sm:items-center">
+                            <div key={role.role} className={`grid gap-2 p-3 sm:items-center ${data.user.isSuperAdmin ? "sm:grid-cols-[1fr_150px_150px_150px]" : "sm:grid-cols-[1fr_150px_150px]"}`}>
                               <div>
                                 <div className="font-medium text-[#201814]">{role.role}</div>
                                 <div className="text-xs text-[#5f5247]">{role.employeeCount} associate{role.employeeCount === 1 ? "" : "s"} assigned</div>
                               </div>
-                              <div className="text-sm sm:text-right"><span className="text-[#5f5247]">Rate </span>{money(role.hourlyRate)}/hr</div>
+                              {data.user.isSuperAdmin && (
+                                <div className="text-sm sm:text-right"><span className="text-[#5f5247]">Rate </span>{money(role.hourlyRate)}/hr</div>
+                              )}
                               <div>
                                 <Label className="sr-only">Monthly hours for {role.role}</Label>
                                 <Input
@@ -329,7 +335,7 @@ export default function CourtyardBudgetPage() {
                                   onChange={(event) => setLaborHoursByRole((current) => ({ ...current, [role.role]: event.target.value.replace(/[^0-9.]/g, "") }))}
                                 />
                               </div>
-                              <div className="text-right font-semibold text-[#201814]">{money(hours * role.hourlyRate)}</div>
+                              <div className="text-right font-semibold text-[#201814]">{money(role.projectedCost)}</div>
                             </div>
                           );
                         })}

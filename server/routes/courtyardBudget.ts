@@ -759,7 +759,12 @@ export function registerCourtyardBudgetRoutes(app: Express) {
           projectedLabor: moneyString(projectedLabor),
           projectedProfit: moneyString(projectedProfit),
           projectedMarginPercent: forecastRevenue > 0 ? Number(((projectedProfit / forecastRevenue) * 100).toFixed(2)) : 0,
-          laborRoles,
+          laborRoles: laborRoles.map((role) => ({
+            role: role.role,
+            employeeCount: role.employeeCount,
+            hours: role.hours,
+            ...(req.budgetAccess.isSuperAdmin ? { hourlyRate: role.hourlyRate, projectedCost: role.projectedCost } : {}),
+          })),
         } : null,
         expenses,
         checkbook: checkbook.map((entry) => ({ ...entry, amount: moneyString(entry.amount) })),

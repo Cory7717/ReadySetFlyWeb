@@ -2400,11 +2400,14 @@ async function renderSchedulePdf(payload: any) {
       drawText(String(payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0), margin + employeeW + 7 * dayW + 10, y - 19, 8, true);
       y -= rowH;
     }
-    for (const [label, dailyKey, weeklyKey, fill, isBold] of [
-      ["Regular associate hours", "departmentAssociateDailyHours", "departmentAssociateWeeklyHours", tan, false],
-      ["Supervisor hours", "departmentSupervisorDailyHours", "departmentSupervisorWeeklyHours", paleGreen, true],
-      [`${department} total hours`, "departmentDailyHours", "departmentWeeklyHours", tan, true],
-    ] as const) {
+    const subtotalRows = ["Managers", "Night Audit"].includes(department)
+      ? [[`${department} total hours`, "departmentDailyHours", "departmentWeeklyHours", tan, true] as const]
+      : [
+          ["Regular associate hours", "departmentAssociateDailyHours", "departmentAssociateWeeklyHours", tan, false] as const,
+          ["Supervisor hours", "departmentSupervisorDailyHours", "departmentSupervisorWeeklyHours", paleGreen, true] as const,
+          [`${department} total hours`, "departmentDailyHours", "departmentWeeklyHours", tan, true] as const,
+        ];
+    for (const [label, dailyKey, weeklyKey, fill, isBold] of subtotalRows) {
       drawBox(margin, y, employeeW, 18, fill);
       drawText(label, margin + 6, y - 12, 7, isBold);
       payload.days.forEach((day: string, index: number) => {
@@ -2457,8 +2460,10 @@ function renderScheduleExcelHtml(payload: any) {
         return `<td${style}>${scheduleCellText(sectionAssignment, sectionShiftType)}</td>`;
       }).join("")}<td>${payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0}</td></tr>`);
     }
-    rows.push(`<tr><td>${department}</td><td><strong>Regular associate hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentAssociateDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentAssociateWeeklyHours?.[department] || 0}</td></tr>`);
-    rows.push(`<tr><td>${department}</td><td><strong>Supervisor hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentSupervisorDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentSupervisorWeeklyHours?.[department] || 0}</td></tr>`);
+    if (!["Managers", "Night Audit"].includes(department)) {
+      rows.push(`<tr><td>${department}</td><td><strong>Regular associate hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentAssociateDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentAssociateWeeklyHours?.[department] || 0}</td></tr>`);
+      rows.push(`<tr><td>${department}</td><td><strong>Supervisor hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentSupervisorDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentSupervisorWeeklyHours?.[department] || 0}</td></tr>`);
+    }
     rows.push(`<tr><td>${department}</td><td><strong>Department total hours</strong></td>${payload.days.map((day: string) => `<td>${payload.totals.departmentDailyHours?.[department]?.[day] || 0}</td>`).join("")}<td>${payload.totals.departmentWeeklyHours?.[department] || 0}</td></tr>`);
   }
   rows.push("</table>");
@@ -3364,8 +3369,15 @@ export function registerScheduleRoutes(app: Express) {
       const parsed = shiftAssignmentSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid shift", validation: parsed.error.format() });
       const employeeId = parsed.data.employeeId || null;
-      const [targetEmployee] = employeeId ? await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.id, employeeId)).limit(1) : [];
-      const targetDepartment = normalizeDepartment(parsed.data.roleWorked || targetEmployee?.department);
+      const [[targetEmployee], [selectedShiftType]] = await Promise.all([
+        employeeId ? db.select().from(scheduleEmployees).where(eq(scheduleEmployees.id, employeeId)).limit(1) : Promise.resolve([]),
+        parsed.data.shiftTypeId ? db.select().from(scheduleShiftTypes).where(eq(scheduleShiftTypes.id, parsed.data.shiftTypeId)).limit(1) : Promise.resolve([]),
+      ]);
+      const proposedAssignment = {
+        roleWorked: parsed.data.roleWorked || selectedShiftType?.label || null,
+        roleNote: parsed.data.roleNote || null,
+      };
+      const targetDepartment = assignmentRenderDepartment(proposedAssignment, targetEmployee, selectedShiftType);
       const requesterEmployee = await getScheduleEmployeeForUser(req.scheduleUser);
       const isOwnScheduleCell = Boolean(targetEmployee && requesterEmployee && targetEmployee.id === requesterEmployee.id);
       if (!(await canManageDepartment(req.scheduleUser, targetDepartment)) && !isOwnScheduleCell) return res.status(403).json({ error: "You can only edit your assigned department schedule." });
@@ -3376,11 +3388,6 @@ export function registerScheduleRoutes(app: Express) {
       if (parsed.data.clear) {
         await db.delete(scheduleShiftAssignments).where(and(eq(scheduleShiftAssignments.scheduleId, schedule.id), eq(scheduleShiftAssignments.shiftDate, parsed.data.shiftDate), employeeId ? eq(scheduleShiftAssignments.employeeId, employeeId) : eq(scheduleShiftAssignments.isOpenShift, true)));
       } else {
-        const [selectedShiftType] = parsed.data.shiftTypeId ? await db.select().from(scheduleShiftTypes).where(eq(scheduleShiftTypes.id, parsed.data.shiftTypeId)).limit(1) : [];
-        const proposedAssignment = {
-          roleWorked: parsed.data.roleWorked || selectedShiftType?.label || null,
-          roleNote: parsed.data.roleNote || null,
-        };
         const proposedIsInspector = isRoomInspectorWork(proposedAssignment, selectedShiftType);
         const proposedIsLaundry = isLaundryWork(proposedAssignment, selectedShiftType);
         const proposedIsHouseperson = isHousepersonWork(proposedAssignment, selectedShiftType);

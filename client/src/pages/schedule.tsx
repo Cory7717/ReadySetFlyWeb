@@ -56,6 +56,8 @@ const DAY_LABELS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 const DAY_LABELS_ES = ["Sab", "Dom", "Lun", "Mar", "Mie", "Jue", "Vie"];
 const HOUSEKEEPING_OUT_TIME_NOTICE = "Housekeeping scheduled end times are planning estimates used to calculate labor hours. Associates may leave once their assigned work is complete and they have been released by their supervisor. If additional time is needed to complete assigned duties, associates should remain until the work is finished.";
 const HOUSEKEEPING_OUT_TIME_NOTICE_ES = "Las horas de salida de Housekeeping son estimados de planificacion utilizados para calcular las horas laborales. Los asociados pueden retirarse cuando hayan terminado el trabajo asignado y su supervisor los haya autorizado. Si necesitan tiempo adicional para completar sus responsabilidades, deben permanecer hasta finalizar el trabajo.";
+const HOUSEKEEPING_BREAK_NOTICE = "Any time you take a break, you are required to clock out when the break begins and clock back in before returning to work.";
+const HOUSEKEEPING_BREAK_NOTICE_ES = "Cada vez que tome un descanso, debe marcar la salida al comenzar el descanso y volver a marcar la entrada antes de regresar al trabajo.";
 
 const ES: Record<string, string> = {
   "Courtyard Schedule Builder": "Constructor de Horarios Courtyard",
@@ -2749,12 +2751,14 @@ export default function SchedulePage() {
   const [aiToolsOpen, setAiToolsOpen] = useState(false);
   const [hoursComparison, setHoursComparison] = useState<HoursComparison | null>(null);
   const [teamMessageOpen, setTeamMessageOpen] = useState(false);
+  const [housekeepingBreakNoticeOpen, setHousekeepingBreakNoticeOpen] = useState(false);
   const [teamMessage, setTeamMessage] = useState({
     subject: "Current Week Schedule Catch-Up",
     message: "Team,\n\nI am publishing the current week's schedule in the system to catch it up. No schedule changes were made. Please continue following the current schedule as already communicated.\n\nThank you.",
   });
   const [spanish, setSpanish] = useState(false);
   const dailyHporToastKey = useRef("");
+  const housekeepingBreakNoticeUserKey = useRef("");
 
   const auth = useQuery<{ user: ScheduleUser | null }>({ queryKey: ["/api/schedule/auth/me"], queryFn: () => fetchJson("/api/schedule/auth/me"), enabled: !shareToken });
   const weeks = useQuery<{ weeks: WeeklySchedule[] }>({ queryKey: ["/api/schedule/weeks"], queryFn: () => fetchJson("/api/schedule/weeks"), enabled: !!auth.data?.user && !shareToken });
@@ -2769,6 +2773,16 @@ export default function SchedulePage() {
   const canActualizeForecast = Boolean(user?.isAdmin && payload && !shareToken);
   const t = (value: string) => tr(spanish, value);
   const hasHousekeepingBoardData = Boolean(payload?.housekeepingBoards?.some((board) => Number(board.actualHours || 0) > 0));
+
+  useEffect(() => {
+    if (!payload || !user || shareToken || canManageSchedule) return;
+    const employee = findEmployeeForUser(payload, user);
+    if (!employee || normalizeDepartment(employee.department) !== "Housekeeping") return;
+    const noticeKey = `${user.id}:${employee.id}`;
+    if (housekeepingBreakNoticeUserKey.current === noticeKey) return;
+    housekeepingBreakNoticeUserKey.current = noticeKey;
+    setHousekeepingBreakNoticeOpen(true);
+  }, [canManageSchedule, payload, shareToken, user]);
 
   useEffect(() => {
     if (!payload || !canManageSchedule || shareToken) return;
@@ -3599,6 +3613,23 @@ export default function SchedulePage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={housekeepingBreakNoticeOpen}>
+        <DialogContent
+          className="max-w-md bg-[#fffaf2] text-[#201814]"
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>{spanish ? "Recordatorio de descansos" : "Break Clocking Reminder"}</DialogTitle>
+            <DialogDescription className="text-base leading-6 !text-[#40362e]">
+              {spanish ? HOUSEKEEPING_BREAK_NOTICE_ES : HOUSEKEEPING_BREAK_NOTICE}
+            </DialogDescription>
+          </DialogHeader>
+          <Button className={`${C.green} w-full`} onClick={() => setHousekeepingBreakNoticeOpen(false)}>
+            {spanish ? "Entiendo" : "I understand"}
+          </Button>
         </DialogContent>
       </Dialog>
       <Dialog open={!!aiDraft} onOpenChange={(open) => !open && setAiDraft(null)}>

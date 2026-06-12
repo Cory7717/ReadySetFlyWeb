@@ -1948,6 +1948,107 @@ function HousekeepingSchedulingGuide({ spanish }: { spanish: boolean }) {
   );
 }
 
+function PrintableSchedule({ payload, spanish }: { payload: SchedulePayload; spanish: boolean }) {
+  const assignments = new Map(payload.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment]));
+  const shiftTypes = new Map(payload.shiftTypes.map((shift) => [shift.id, shift]));
+  const approvedRequests = new Map((payload.approvedRequests || []).map((request) => [`${request.employeeId}:${request.requestDate}`, request]));
+  const labels = spanish ? DAY_LABELS_ES : DAY_LABELS;
+  const pageGroups = [
+    ["Managers"],
+    ["Front Desk", "Night Audit"],
+    ["Bistro"],
+    ["Maintenance"],
+    ["Housekeeping"],
+  ];
+  const employeesForDepartment = (department: string) => payload.employees
+    .filter((employee) => employee.active && (
+      employeeDepartments(employee).includes(department)
+      || payload.assignments.some((assignment) => {
+        if (assignment.employeeId !== employee.id) return false;
+        const shiftType = shiftTypes.get(assignment.shiftTypeId || "");
+        return assignmentBelongsToDepartment(assignment, employee, shiftType, department);
+      })
+    ))
+    .sort((a, b) => scheduleEmployeeSort(department, a, b));
+
+  return (
+    <div className="schedule-print-root hidden print:block">
+      {pageGroups.map((departments, pageIndex) => (
+        <section className="schedule-print-page" key={departments.join("-")}>
+          <header className="schedule-print-header">
+            <div>
+              <h1>{payload.schedule.propertyName}</h1>
+              <div>{formatWeek(payload.schedule.weekStartDate, payload.schedule.weekEndDate)}</div>
+            </div>
+            <div className="schedule-print-page-title">{departments.join(" / ")}</div>
+          </header>
+          {departments.map((department) => {
+            const employees = employeesForDepartment(department);
+            if (!employees.length) return null;
+            return (
+              <div className="schedule-print-department" key={department}>
+                <h2>{department} - {fmtHours(payload.totals.departmentWeeklyHours[department] || 0)} hours</h2>
+                {department === "Housekeeping" && (
+                  <div className="schedule-print-notice">
+                    <strong>Housekeeping schedule note:</strong> {spanish ? HOUSEKEEPING_OUT_TIME_NOTICE_ES : HOUSEKEEPING_OUT_TIME_NOTICE}
+                  </div>
+                )}
+                <table>
+                  <colgroup>
+                    <col className="schedule-print-associate-col" />
+                    {payload.days.map((day) => <col key={day} />)}
+                    <col className="schedule-print-hours-col" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th className="schedule-print-associate">Associate</th>
+                      {payload.days.map((day, index) => <th key={day}>{labels[index]}<br />{formatDate(day)}</th>)}
+                      <th>Hours</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employees.map((employee) => (
+                      <tr key={employee.id}>
+                        <td className="schedule-print-associate">
+                          <strong>{employee.displayName}</strong>
+                          <span>{employeeScheduleSubtitle(employee)}</span>
+                        </td>
+                        {payload.days.map((day) => {
+                          const rawAssignment = assignments.get(`${employee.id}:${day}`);
+                          const rawShift = rawAssignment ? shiftTypes.get(rawAssignment.shiftTypeId || "") : undefined;
+                          const assignment = assignmentBelongsToDepartment(rawAssignment, employee, rawShift, department) ? rawAssignment : undefined;
+                          const approvedRequest = approvedRequests.get(`${employee.id}:${day}`);
+                          const shift = assignment ? shiftTone(assignment, rawShift, shiftTypes) : undefined;
+                          return (
+                            <td
+                              key={day}
+                              className="schedule-print-shift"
+                              style={{ backgroundColor: approvedRequest ? "#e5e7eb" : shift?.color || "#ffffff", color: approvedRequest ? "#374151" : shift?.textColor || "#201814" }}
+                            >
+                              {approvedRequest ? (spanish ? "Solicitud aprobada" : "Approved request") : shiftText(assignment, shift) || "-"}
+                            </td>
+                          );
+                        })}
+                        <td className="schedule-print-total">{fmtHours(payload.totals.employeeDepartmentWeeklyHours?.[employee.id]?.[department] || 0)}</td>
+                      </tr>
+                    ))}
+                    <tr className="schedule-print-daily-total">
+                      <td className="schedule-print-associate">{department} daily total</td>
+                      {payload.days.map((day) => <td key={day}>{fmtHours(payload.totals.departmentDailyHours[department]?.[day] || 0)}</td>)}
+                      <td>{fmtHours(payload.totals.departmentWeeklyHours[department] || 0)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
+          <footer>{pageIndex + 1} of {pageGroups.length}</footer>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function ScheduleGrid({ payload, editable, currentUser, onEdit, onCopyShift, onCopyPreviousEmployee, onHousekeepingBoard, onActualHours, spanish }: { payload: SchedulePayload; editable: boolean; currentUser?: ScheduleUser | null; spanish: boolean; onEdit: (employee: ScheduleEmployee, date: string, department: string, assignment?: ShiftAssignment) => void; onCopyShift: (assignment: ShiftAssignment, employee: ScheduleEmployee, date: string, department: string) => void; onCopyPreviousEmployee: (employee: ScheduleEmployee, department: string) => void; onHousekeepingBoard: (employee: ScheduleEmployee, date: string, board: HousekeepingBoard | undefined, trackMpor: boolean) => void; onActualHours: (employee: ScheduleEmployee, date: string, actual?: ScheduleActualHours) => void }) {
   const assignments = useMemo(() => new Map(payload.assignments.map((assignment) => [`${assignment.employeeId}:${assignment.shiftDate}`, assignment])), [payload.assignments]);
   const housekeepingBoards = useMemo(() => new Map((payload.housekeepingBoards || []).map((board) => [`${board.employeeId}:${board.boardDate}`, board])), [payload.housekeepingBoards]);
@@ -3232,7 +3333,7 @@ export default function SchedulePage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 print:hidden">
         {!shareToken && (
           <Card className={`${C.shell} print:hidden`}>
             <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -3698,6 +3799,7 @@ export default function SchedulePage() {
           </>
         )}
       </main>
+      {payload && <PrintableSchedule payload={payload} spanish={spanish} />}
       {payload && selectedShift && (
         <ShiftEditDialog
           open={!!selectedShift}

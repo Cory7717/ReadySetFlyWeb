@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ClipboardPlus, Coffee, DollarSign, DoorOpen, FileSpreadsheet, KeyRound, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
+import { CalendarClock, CalendarDays, ClipboardPlus, Coffee, DollarSign, DoorOpen, FileSpreadsheet, KeyRound, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -368,6 +368,15 @@ export default function CourtyardPortalPage() {
 
   const user = auth.data.user;
   const tools = [
+    {
+      href: "/schedule?requests=1",
+      icon: CalendarClock,
+      title: "Request Time Off",
+      description: "Submit and track time-off, availability, or preferred-shift requests. Available to every associate.",
+      action: "Open schedule requests",
+      tone: C.accent,
+      disabled: false,
+    },
     {
       href: "/schedule",
       icon: CalendarDays,

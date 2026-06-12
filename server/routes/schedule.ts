@@ -802,6 +802,19 @@ const requireScheduleAuth: RequestHandler = async (req: any, res, next) => {
   }
 };
 
+const requireCourtyardAssociate: RequestHandler = async (req: any, res, next) => {
+  try {
+    const user = await getUserBySession(req);
+    if (!user) return res.status(401).json({ error: "Courtyard login required" });
+    if (user.disabledAt) return res.status(403).json({ error: "This account is disabled." });
+    if (user.mustChangePassword) return res.status(403).json({ error: "Password change required before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
+    req.scheduleUser = user;
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 const requireScheduleManager: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getUserBySession(req);
@@ -3070,7 +3083,7 @@ export function registerScheduleRoutes(app: Express) {
     }
   });
 
-  router.get("/requests", requireScheduleAuth, async (req: any, res, next) => {
+  router.get("/requests", requireCourtyardAssociate, async (req: any, res, next) => {
     try {
       const user = await publicScheduleUserWithProfile(req.scheduleUser);
       const query = db
@@ -3093,7 +3106,7 @@ export function registerScheduleRoutes(app: Express) {
     }
   });
 
-  router.post("/requests", requireScheduleAuth, scheduleRateLimiter, async (req: any, res, next) => {
+  router.post("/requests", requireCourtyardAssociate, scheduleRateLimiter, async (req: any, res, next) => {
     try {
       const parsed = scheduleRequestSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid schedule request", validation: parsed.error.format() });
@@ -3171,7 +3184,7 @@ export function registerScheduleRoutes(app: Express) {
     }
   });
 
-  router.patch("/requests/:id/cancel", requireScheduleAuth, async (req: any, res, next) => {
+  router.patch("/requests/:id/cancel", requireCourtyardAssociate, async (req: any, res, next) => {
     try {
       const [existing] = await db.select().from(scheduleRequests).where(eq(scheduleRequests.id, req.params.id)).limit(1);
       if (!existing) return res.status(404).json({ error: "Schedule request not found" });

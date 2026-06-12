@@ -2711,14 +2711,13 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
 
 function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus, onCancel }: { requests: ScheduleRequest[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => void; onStatus: (request: ScheduleRequest, status: string) => void; onCancel: (request: ScheduleRequest) => void }) {
   const [form, setForm] = useState({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
-  const [expanded, setExpanded] = useState(!isAdmin);
+  const [expanded, setExpanded] = useState(true);
   const t = (value: string) => tr(spanish, value);
   const submit = () => {
     if (daysBetweenLocal(localDateKey(), form.requestDate) < 14) {
-      const confirmed = window.confirm(spanish
-        ? "Esta solicitud esta dentro de 14 dias. Esta fuera de la politica del hotel y esta sujeta a aprobacion del gerente. Desea enviarla de todos modos?"
-        : "This request is within 14 days. It is outside of the hotel's policy and subject to manager approval. Submit it anyway?");
-      if (!confirmed) return;
+      window.alert(spanish
+        ? "Esta solicitud es para una fecha dentro de los proximos 14 dias. Puede enviarla, pero es posible que no sea aprobada."
+        : "This request is for a date within the next 14 days. You may submit it, but approval is not guaranteed.");
     }
     onSubmit({ ...form, requestEndDate: form.requestEndDate || form.requestDate, startTime: form.startTime || null, endTime: form.endTime || null });
     setForm({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
@@ -2866,8 +2865,9 @@ export default function SchedulePage() {
   const { toast } = useToast();
   const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
   const shareToken = params.get("share");
+  const requestOnly = params.get("requests") === "1";
   const [selectedWeekId, setSelectedWeekId] = useState<string>("");
-  const [weekStartDate, setWeekStartDate] = useState(saturdayFor());
+  const [weekStartDate, setWeekStartDate] = useState(localDateKey());
   const [selectedShift, setSelectedShift] = useState<{ employee: ScheduleEmployee; date: string; department: string; assignment?: ShiftAssignment } | null>(null);
   const [selectedHousekeepingBoard, setSelectedHousekeepingBoard] = useState<{ employee: ScheduleEmployee; date: string; board?: HousekeepingBoard; trackMpor: boolean } | null>(null);
   const [selectedActualHours, setSelectedActualHours] = useState<{ employee: ScheduleEmployee; date: string; actual?: ScheduleActualHours } | null>(null);
@@ -2896,11 +2896,11 @@ export default function SchedulePage() {
   const housekeepingBreakNoticeUserKey = useRef("");
 
   const auth = useQuery<{ user: ScheduleUser | null }>({ queryKey: ["/api/schedule/auth/me"], queryFn: () => fetchJson("/api/schedule/auth/me"), enabled: !shareToken });
-  const weeks = useQuery<{ weeks: WeeklySchedule[] }>({ queryKey: ["/api/schedule/weeks"], queryFn: () => fetchJson("/api/schedule/weeks"), enabled: !!auth.data?.user && !shareToken });
+  const weeks = useQuery<{ weeks: WeeklySchedule[] }>({ queryKey: ["/api/schedule/weeks"], queryFn: () => fetchJson("/api/schedule/weeks"), enabled: !!auth.data?.user && !shareToken && !requestOnly });
   const requests = useQuery<{ requests: ScheduleRequest[] }>({ queryKey: ["/api/schedule/requests"], queryFn: () => fetchJson("/api/schedule/requests"), enabled: !!auth.data?.user && !shareToken });
   const share = useQuery<SchedulePayload>({ queryKey: ["/api/schedule/share", shareToken], queryFn: () => fetchJson(`/api/schedule/share/${shareToken}`), enabled: !!shareToken });
   const weekId = selectedWeekId || weeks.data?.weeks?.[0]?.id || "";
-  const detail = useQuery<SchedulePayload>({ queryKey: ["/api/schedule/weeks", weekId], queryFn: () => fetchJson(`/api/schedule/weeks/${weekId}`), enabled: !!weekId && !shareToken });
+  const detail = useQuery<SchedulePayload>({ queryKey: ["/api/schedule/weeks", weekId], queryFn: () => fetchJson(`/api/schedule/weeks/${weekId}`), enabled: !!weekId && !shareToken && !requestOnly });
   const payload = shareToken ? share.data : detail.data;
   const user = auth.data?.user;
   const canManageSchedule = Boolean(user?.isAdmin || user?.isDepartmentManager || user?.role === "manager");
@@ -2908,7 +2908,7 @@ export default function SchedulePage() {
   const templates = useQuery<{ templates: ScheduleTemplate[] }>({
     queryKey: ["/api/schedule/templates"],
     queryFn: () => fetchJson("/api/schedule/templates"),
-    enabled: canManageTemplates && !shareToken,
+    enabled: canManageTemplates && !shareToken && !requestOnly,
   });
   const editable = Boolean(canManageSchedule && payload?.schedule.status === "draft" && !shareToken);
   const canActualizeForecast = Boolean(user?.isAdmin && payload && !shareToken);
@@ -2951,7 +2951,9 @@ export default function SchedulePage() {
 
   const createWeek = useMutation({
     mutationFn: async (mode: "blank" | "copyPrevious") => {
-      const response = await apiRequest("POST", "/api/schedule/weeks", { weekStartDate, propertyName: "Courtyard Austin Lakeline", mode });
+      const selectedDate = new Date(`${weekStartDate}T00:00:00`);
+      const normalizedWeekStartDate = saturdayFor(selectedDate);
+      const response = await apiRequest("POST", "/api/schedule/weeks", { weekStartDate: normalizedWeekStartDate, propertyName: "Courtyard Austin Lakeline", mode });
       return response.json();
     },
     onSuccess: (data: SchedulePayload) => {
@@ -3312,7 +3314,7 @@ export default function SchedulePage() {
         <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">{t("Courtyard Austin Lakeline")}</div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("Courtyard Schedule Builder")}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{requestOnly ? t("Schedule requests") : t("Courtyard Schedule Builder")}</h1>
           </div>
           <div className="flex flex-wrap gap-2" data-tour="week-controls">
             {!shareToken && (
@@ -3328,15 +3330,15 @@ export default function SchedulePage() {
             <Button variant="outline" className={C.outline} onClick={() => setSpanish((value) => !value)}>
               {spanish ? "English" : "Espanol"}
             </Button>
-            {!shareToken && canManageSchedule && <Input className={`${C.field} w-[160px]`} type="date" value={weekStartDate} onChange={(event) => setWeekStartDate(event.target.value)} />}
-            {!shareToken && canManageSchedule && <Button className={C.green} onClick={() => createWeek.mutate("blank")}><CalendarDays className="mr-2 h-4 w-4" />{t("Blank week")}</Button>}
-            {!shareToken && canManageSchedule && <Button variant="outline" className={C.outline} onClick={() => createWeek.mutate("copyPrevious")}><Copy className="mr-2 h-4 w-4" />{t("Copy previous")}</Button>}
+            {!shareToken && !requestOnly && canManageSchedule && <Input className={`${C.field} w-[160px]`} type="date" value={weekStartDate} onChange={(event) => setWeekStartDate(event.target.value)} />}
+            {!shareToken && !requestOnly && canManageSchedule && <Button className={C.green} onClick={() => createWeek.mutate("blank")}><CalendarDays className="mr-2 h-4 w-4" />{t("Blank week")}</Button>}
+            {!shareToken && !requestOnly && canManageSchedule && <Button variant="outline" className={C.outline} onClick={() => createWeek.mutate("copyPrevious")}><Copy className="mr-2 h-4 w-4" />{t("Copy previous")}</Button>}
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 print:hidden">
-        {!shareToken && (
+        {!shareToken && !requestOnly && (
           <Card className={`${C.shell} print:hidden`}>
             <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-2">
@@ -3382,7 +3384,7 @@ export default function SchedulePage() {
           </Card>
         )}
 
-        {!shareToken && canManageTemplates && (
+        {!shareToken && !requestOnly && canManageTemplates && (
           <Card className={`${C.shell} print:hidden`}>
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-3">
@@ -3487,7 +3489,7 @@ export default function SchedulePage() {
           />
         )}
 
-        {!payload ? (
+        {!requestOnly && (!payload ? (
           <Card className={C.shell}><CardContent className="p-6">{shareToken ? (spanish ? "Cargando horario compartido..." : "Loading shared schedule...") : (spanish ? "Cree o seleccione una semana para comenzar." : "Create or select a week to begin.")}</CardContent></Card>
         ) : (
           <>
@@ -3799,7 +3801,7 @@ export default function SchedulePage() {
             )}
             {!editable && !shareToken && payload.schedule.status === "published" && <div className="flex items-center gap-2 text-sm text-[#5f5247]"><Lock className="h-4 w-4" />{t("Published schedules are read-only until reopened.")}</div>}
           </>
-        )}
+        ))}
       </main>
       {payload && <PrintableSchedule payload={payload} spanish={spanish} />}
       {payload && selectedShift && (

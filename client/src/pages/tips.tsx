@@ -134,6 +134,8 @@ type TipsGrid = {
   week2Total: string;
   totalTips: string;
   submission: any | null;
+  isCurrentPeriod: boolean;
+  lockReason: "submitted" | null;
   locked: boolean;
 };
 

@@ -736,6 +736,20 @@ async function getGridSubmission(start: string, end: string) {
   return submission || null;
 }
 
+function gridSubmissionLocksPeriod(
+  submission: { status?: string | null; submittedAt?: Date | string | null } | null,
+  start: string,
+  end: string,
+) {
+  if (!submission || submission.status === "reopened") return false;
+  const currentPeriod = getPayPeriodForDate();
+  if (start !== currentPeriod.start) return true;
+
+  const submittedAt = submission.submittedAt ? new Date(submission.submittedAt) : null;
+  if (!submittedAt || Number.isNaN(submittedAt.getTime())) return false;
+  return toDateKey(submittedAt) >= end;
+}
+
 async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
   const startDate = requestedStart ? parseDateKey(requestedStart) : null;
   const period = startDate
@@ -760,6 +774,7 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
   const entryByUserDate = new Map(entries.map((entry) => [`${entry.userId}:${entry.entryDate}`, entry]));
   const reportsByDate = new Map(reports.map((report) => [String(report.reportDate), report]));
   const summariesByDate = new Map(daySummaries.map((summary) => [String(summary.summaryDate), summary]));
+  const locked = gridSubmissionLocksPeriod(submission, period.start, period.end);
   const rows = associates.map((associate) => {
     let total = 0;
     const cells = period.days.map((date) => {
@@ -774,7 +789,7 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
         personalTipPercent: moneyNumber(entry?.grossSales) > 0 ? (amount / moneyNumber(entry?.grossSales)) * 100 : 0,
         notes: entry?.notes || "",
         status: entry?.status || "draft",
-        confirmed: entry?.status === "confirmed" || entry?.status === "submitted",
+        confirmed: entry?.status === "confirmed" || (entry?.status === "submitted" && locked),
       };
     });
     return { associate, cells, totalTips: moneyString(total) };
@@ -886,7 +901,9 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
     },
     canManageSales: await canManageTipsSales(viewerUser),
     submission: submission ? { ...submission, week1Total: moneyString(submission.week1Total), week2Total: moneyString(submission.week2Total), totalTips: moneyString(submission.totalTips) } : null,
-    locked: Boolean(submission && submission.status !== "reopened"),
+    isCurrentPeriod: period.start === getPayPeriodForDate().start,
+    lockReason: locked ? "submitted" : null,
+    locked,
   };
 }
 
@@ -1883,10 +1900,11 @@ export function registerTipsRoutes(app: Express) {
       submissions.forEach((submission) => {
         const start = toDateKey(parseDateKey(String(submission.start)) || new Date(String(submission.start)));
         const end = toDateKey(parseDateKey(String(submission.end)) || new Date(String(submission.end)));
+        const locked = gridSubmissionLocksPeriod(submission, start, end);
         periods.set(start, {
           start,
           end,
-          status: submission.status,
+          status: locked ? submission.status : "open",
           submittedAt: submission.submittedAt || null,
           current: start === current.start,
         });
@@ -1940,7 +1958,7 @@ export function registerTipsRoutes(app: Express) {
       const period = getPayPeriodForEntryDate(parsed.data.entryDate);
       if (!period) return res.status(400).json({ error: "Invalid entry date" });
       const submission = await getGridSubmission(period.start, period.end);
-      if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
+      if (gridSubmissionLocksPeriod(submission, period.start, period.end)) return res.status(423).json({ error: "This pay period is locked." });
       const allowedUsers = await getBistroTipsUsers();
       if (!allowedUsers.some((user) => user.id === parsed.data.userId)) {
         return res.status(403).json({ error: "Only Bistro or Breakfast associates can be entered on the tips grid." });
@@ -1950,7 +1968,7 @@ export function registerTipsRoutes(app: Express) {
         .from(tipEntries)
         .where(and(eq(tipEntries.userId, parsed.data.userId), eq(tipEntries.entryDate, parsed.data.entryDate)))
         .limit(1);
-      if (existingEntry?.status === "confirmed" || existingEntry?.status === "submitted") {
+      if (existingEntry?.status === "confirmed" || (existingEntry?.status === "submitted" && gridSubmissionLocksPeriod(submission, period.start, period.end))) {
         return res.status(423).json({ error: "This associate/day is confirmed. Reopen it before making changes." });
       }
       const amount = parsed.data.tipAmount.toFixed(2);
@@ -2017,7 +2035,7 @@ export function registerTipsRoutes(app: Express) {
       const period = getPayPeriodForEntryDate(parsed.data.date);
       if (!period) return res.status(400).json({ error: "Invalid day date" });
       const submission = await getGridSubmission(period.start, period.end);
-      if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
+      if (gridSubmissionLocksPeriod(submission, period.start, period.end)) return res.status(423).json({ error: "This pay period is locked." });
       const [summary] = await db
         .insert(tipGridDaySummaries)
         .values({
@@ -2067,7 +2085,7 @@ export function registerTipsRoutes(app: Express) {
       const period = getPayPeriodForEntryDate(parsed.data.eventDate);
       if (!period) return res.status(400).json({ error: "Invalid event date" });
       const submission = await getGridSubmission(period.start, period.end);
-      if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
+      if (gridSubmissionLocksPeriod(submission, period.start, period.end)) return res.status(423).json({ error: "This pay period is locked." });
       const banquetAssociates = await getBanquetTipAssociates();
       const selectedAssociates = banquetAssociates.filter((user) => parsed.data.assignedUserIds.includes(user.id));
       if (parsed.data.assignedUserIds.length !== selectedAssociates.length) {
@@ -2120,7 +2138,7 @@ export function registerTipsRoutes(app: Express) {
       const period = getPayPeriodForEntryDate(parsed.data.eventDate);
       if (!period) return res.status(400).json({ error: "Invalid event date" });
       const submission = await getGridSubmission(existing.payPeriodStart, existing.payPeriodEnd);
-      if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
+      if (gridSubmissionLocksPeriod(submission, existing.payPeriodStart, existing.payPeriodEnd)) return res.status(423).json({ error: "This pay period is locked." });
       const banquetAssociates = await getBanquetTipAssociates();
       const selectedAssociates = banquetAssociates.filter((user) => parsed.data.assignedUserIds.includes(user.id));
       if (parsed.data.assignedUserIds.length !== selectedAssociates.length) {
@@ -2193,7 +2211,7 @@ export function registerTipsRoutes(app: Express) {
         }
       }
       const submission = await getGridSubmission(entry.payPeriodStart, entry.payPeriodEnd);
-      if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
+      if (gridSubmissionLocksPeriod(submission, entry.payPeriodStart, entry.payPeriodEnd)) return res.status(423).json({ error: "This pay period is locked." });
       const [updated] = await db.update(tipEntries).set({ status: "confirmed", updatedAt: new Date() }).where(eq(tipEntries.id, entry.id)).returning();
       res.json({ entry: { ...updated, tipAmount: moneyString(updated.tipAmount), creditTips: moneyString(updated.creditTips) } });
     } catch (error) {
@@ -2206,7 +2224,7 @@ export function registerTipsRoutes(app: Express) {
       const [entry] = await db.select().from(tipEntries).where(eq(tipEntries.id, req.params.id)).limit(1);
       if (!entry) return res.status(404).json({ error: "Tip entry not found" });
       const submission = await getGridSubmission(entry.payPeriodStart, entry.payPeriodEnd);
-      if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
+      if (gridSubmissionLocksPeriod(submission, entry.payPeriodStart, entry.payPeriodEnd)) return res.status(423).json({ error: "This pay period is locked." });
       const [updated] = await db.update(tipEntries).set({ status: "saved", updatedAt: new Date() }).where(eq(tipEntries.id, entry.id)).returning();
       await db.insert(tipAdminActions).values({
         actorUserId: req.tipsUser?.id || null,
@@ -2230,7 +2248,7 @@ export function registerTipsRoutes(app: Express) {
       const period = getPayPeriodForEntryDate(reportDate);
       if (!period) return res.status(400).json({ error: "Invalid report date" });
       const submission = await getGridSubmission(period.start, period.end);
-      if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
+      if (gridSubmissionLocksPeriod(submission, period.start, period.end)) return res.status(423).json({ error: "This pay period is locked." });
       if (!req.file) return res.status(400).json({ error: "Sales report file is required" });
       const [existing] = await db.select().from(tipDailyReportAttachments).where(eq(tipDailyReportAttachments.reportDate, reportDate)).limit(1);
       if (existing) await db.delete(tipDailyReportAttachments).where(eq(tipDailyReportAttachments.id, existing.id));
@@ -2272,7 +2290,7 @@ export function registerTipsRoutes(app: Express) {
       if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
       const grid = await buildTipsGrid(parsed.data.start, req.tipsUser);
       const existing = await getGridSubmission(grid.period.start, grid.period.end);
-      if (existing && existing.status !== "reopened") return res.status(409).json({ error: "This pay period has already been submitted." });
+      if (gridSubmissionLocksPeriod(existing, grid.period.start, grid.period.end)) return res.status(409).json({ error: "This pay period has already been submitted." });
       const daysWithTips = grid.dayTotals.filter((day: any) => moneyNumber(day.totalTips) > 0);
       const missingReports = daysWithTips.filter((day: any) => !day.report);
       if (missingReports.length > 0) return res.status(400).json({ error: "Every day with entered tips needs a sales report image before final submission." });

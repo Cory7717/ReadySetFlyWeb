@@ -1867,20 +1867,26 @@ export function registerTipsRoutes(app: Express) {
         .from(tipGridSubmissions)
         .orderBy(desc(tipGridSubmissions.payPeriodStart));
       const periods = new Map<string, { start: string; end: string; status: string; submittedAt: Date | null; current: boolean }>();
-      periods.set(current.start, {
-        start: current.start,
-        end: current.end,
-        status: "open",
-        submittedAt: null,
-        current: true,
-      });
+      for (let offset = 0; offset < 12; offset += 1) {
+        const startDate = addUtcDays(parseDateKey(current.start)!, offset * -14);
+        const start = toDateKey(startDate);
+        periods.set(start, {
+          start,
+          end: toDateKey(addUtcDays(startDate, 13)),
+          status: offset === 0 ? "open" : "historical",
+          submittedAt: null,
+          current: offset === 0,
+        });
+      }
       submissions.forEach((submission) => {
-        periods.set(String(submission.start), {
-          start: String(submission.start),
-          end: String(submission.end),
+        const start = toDateKey(parseDateKey(String(submission.start)) || new Date(String(submission.start)));
+        const end = toDateKey(parseDateKey(String(submission.end)) || new Date(String(submission.end)));
+        periods.set(start, {
+          start,
+          end,
           status: submission.status,
           submittedAt: submission.submittedAt || null,
-          current: String(submission.start) === current.start,
+          current: start === current.start,
         });
       });
       res.json({ periods: Array.from(periods.values()).sort((a, b) => b.start.localeCompare(a.start)) });

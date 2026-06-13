@@ -843,6 +843,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
         variant: data?.emailSent === false ? "destructive" : "default",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/grid/periods"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tips/admin/submissions"] });
     },
     onError: (error: Error) => toast({ title: "Submission failed", description: error.message, variant: "destructive" }),
@@ -1324,17 +1325,17 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
             <div className="max-w-lg">
               <Label>View pay period</Label>
               <Select
-                value={selectedPeriodStart || "current"}
+                value={grid.period.start}
                 onValueChange={(value) => {
-                  setSelectedPeriodStart(value === "current" ? "" : value);
+                  setSelectedPeriodStart(value);
                   setExpandedAssociateIds([]);
                 }}
               >
                 <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
                 <SelectContent className={C.menu}>
                   {(periodOptions?.periods || []).map((period) => (
-                    <SelectItem key={period.start} value={period.current ? "current" : period.start}>
-                      {formatPeriod(period.start, period.end)} {period.current ? "(Current)" : period.status === "reopened" ? "(Reopened)" : "(Closed)"}
+                    <SelectItem key={period.start} value={period.start}>
+                      {formatPeriod(period.start, period.end)} {period.current ? "(Current)" : period.status === "reopened" ? "(Reopened)" : period.status === "historical" ? "(Previous)" : "(Closed)"}
                     </SelectItem>
                   ))}
                 </SelectContent>

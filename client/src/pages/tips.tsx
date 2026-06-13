@@ -742,10 +742,14 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const { data: grid, isLoading } = useQuery<TipsGrid>({
     queryKey: ["/api/tips/grid", selectedPeriodStart],
     queryFn: () => fetchJson(`/api/tips/grid${selectedPeriodStart ? `?start=${selectedPeriodStart}` : ""}`),
+    refetchInterval: selectedPeriodStart ? false : 60_000,
+    refetchOnWindowFocus: true,
   });
   const { data: periodOptions } = useQuery<{ periods: TipsGridPeriod[] }>({
     queryKey: ["/api/tips/grid/periods"],
     queryFn: () => fetchJson("/api/tips/grid/periods"),
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
   const addAssociate = useMutation({
     mutationFn: async () => {
@@ -1327,7 +1331,8 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
               <Select
                 value={grid.period.start}
                 onValueChange={(value) => {
-                  setSelectedPeriodStart(value);
+                  const selected = periodOptions?.periods.find((period) => period.start === value);
+                  setSelectedPeriodStart(selected?.current ? "" : value);
                   setExpandedAssociateIds([]);
                 }}
               >
@@ -1340,7 +1345,14 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                   ))}
                 </SelectContent>
               </Select>
-              {grid.locked && <div className="mt-1 text-xs text-[#5f5247]">This submitted period is available for review and download only.</div>}
+              {grid.locked && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <div className="text-xs text-[#5f5247]">This submitted period is available for review and download only.</div>
+                  <Button type="button" size="sm" variant="outline" className={`h-8 ${C.outline}`} onClick={() => setSelectedPeriodStart("")}>
+                    Go to current period
+                  </Button>
+                </div>
+              )}
             </div>
             <div className="grid gap-3 sm:grid-cols-4">
               <StatCard label="Day" value={`${grid.period.dayNumber}/14`} />

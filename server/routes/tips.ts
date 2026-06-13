@@ -1848,6 +1848,7 @@ export function registerTipsRoutes(app: Express) {
     try {
       const parsed = periodSchema.safeParse(req.query);
       if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
+      res.setHeader("Cache-Control", "no-store");
       res.json(await buildTipsGrid(parsed.data.start, req.tipsUser));
     } catch (error) {
       next(error);
@@ -1856,6 +1857,7 @@ export function registerTipsRoutes(app: Express) {
 
   router.get("/grid/periods", requireTipsGridAccess, async (_req: any, res, next) => {
     try {
+      res.setHeader("Cache-Control", "no-store");
       const current = getPayPeriodForDate();
       const submissions = await db
         .select({

@@ -137,6 +137,14 @@ type TipsGrid = {
   locked: boolean;
 };
 
+type TipsGridPeriod = {
+  start: string;
+  end: string;
+  status: string;
+  submittedAt: string | null;
+  current: boolean;
+};
+
 type AuthMode = "login" | "register";
 
 function formatMoney(value: string | number | undefined | null) {
@@ -182,14 +190,6 @@ function todayKey() {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${now.getFullYear()}-${month}-${day}`;
-}
-
-function addDaysKey(value: string, days: number) {
-  const date = parseLocalDate(value);
-  date.setDate(date.getDate() + days);
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 async function compressSalesReportFile(file: File) {
@@ -742,6 +742,10 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
   const { data: grid, isLoading } = useQuery<TipsGrid>({
     queryKey: ["/api/tips/grid", selectedPeriodStart],
     queryFn: () => fetchJson(`/api/tips/grid${selectedPeriodStart ? `?start=${selectedPeriodStart}` : ""}`),
+  });
+  const { data: periodOptions } = useQuery<{ periods: TipsGridPeriod[] }>({
+    queryKey: ["/api/tips/grid/periods"],
+    queryFn: () => fetchJson("/api/tips/grid/periods"),
   });
   const addAssociate = useMutation({
     mutationFn: async () => {
@@ -1313,10 +1317,30 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
       <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
         <Card className={C.shell}>
           <CardHeader>
-            <CardTitle className={C.ink}>Current pay period</CardTitle>
+            <CardTitle className={C.ink}>{grid.locked ? "Closed pay period" : "Current pay period"}</CardTitle>
             <CardDescription className={C.muted}>{formatPeriod(grid.period.start, grid.period.end)}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="max-w-lg">
+              <Label>View pay period</Label>
+              <Select
+                value={selectedPeriodStart || "current"}
+                onValueChange={(value) => {
+                  setSelectedPeriodStart(value === "current" ? "" : value);
+                  setExpandedAssociateIds([]);
+                }}
+              >
+                <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
+                <SelectContent className={C.menu}>
+                  {(periodOptions?.periods || []).map((period) => (
+                    <SelectItem key={period.start} value={period.current ? "current" : period.start}>
+                      {formatPeriod(period.start, period.end)} {period.current ? "(Current)" : period.status === "reopened" ? "(Reopened)" : "(Closed)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {grid.locked && <div className="mt-1 text-xs text-[#5f5247]">This submitted period is available for review and download only.</div>}
+            </div>
             <div className="grid gap-3 sm:grid-cols-4">
               <StatCard label="Day" value={`${grid.period.dayNumber}/14`} />
               <StatCard label="Week 1" value={formatMoney(grid.week1Total)} />
@@ -1465,14 +1489,6 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
-            <div>
-              <Label>Pay period lookup</Label>
-              <Input className={C.field} type="date" value={grid.period.start} onChange={(event) => setSelectedPeriodStart(event.target.value)} />
-            </div>
-            <Button type="button" variant="outline" className={C.outline} onClick={() => setSelectedPeriodStart(addDaysKey(grid.period.start, -14))}>Previous period</Button>
-            <Button type="button" variant="outline" className={C.outline} onClick={() => setSelectedPeriodStart(addDaysKey(grid.period.start, 14))}>Next period</Button>
-          </div>
           {banquetOpen && (
             <>
               <div className="grid gap-3 lg:grid-cols-[170px_150px_1fr_150px_150px]">

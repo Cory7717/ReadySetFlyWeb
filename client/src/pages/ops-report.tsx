@@ -1728,10 +1728,10 @@ export default function OpsReportPage() {
                     <FileText className="mr-2 h-4 w-4" />Open monthly review
                   </Button>
                   <Button variant="outline" className={C.outline} disabled={!monthlyReview.data?.summary} onClick={() => window.location.assign(apiUrl(`/api/opsreport/monthly-summary/${monthlyReviewMonth}/docx`))}>
-                    <Download className="mr-2 h-4 w-4" />Word
+                    Word
                   </Button>
                   <Button variant="outline" className={C.outline} disabled={!monthlyReview.data?.summary} onClick={() => window.location.assign(apiUrl(`/api/opsreport/monthly-summary/${monthlyReviewMonth}/pdf`))}>
-                    <Download className="mr-2 h-4 w-4" />PDF
+                    PDF
                   </Button>
                 </div>
               </CardContent>
@@ -2259,8 +2259,8 @@ export default function OpsReportPage() {
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#d7c8b5] bg-[#fffaf2] px-6 py-4">
               <div className="flex gap-2">
-                <Button variant="outline" className={C.outline} disabled={!monthlyReview.data?.summary} onClick={() => window.location.assign(apiUrl(`/api/opsreport/monthly-summary/${monthlyReviewMonth}/docx`))}><Download className="mr-2 h-4 w-4" />Download Word</Button>
-                <Button variant="outline" className={C.outline} disabled={!monthlyReview.data?.summary} onClick={() => window.location.assign(apiUrl(`/api/opsreport/monthly-summary/${monthlyReviewMonth}/pdf`))}><Download className="mr-2 h-4 w-4" />Download PDF</Button>
+                <Button variant="outline" className={C.outline} disabled={!monthlyReview.data?.summary} onClick={() => window.location.assign(apiUrl(`/api/opsreport/monthly-summary/${monthlyReviewMonth}/docx`))}>Download Word</Button>
+                <Button variant="outline" className={C.outline} disabled={!monthlyReview.data?.summary} onClick={() => window.location.assign(apiUrl(`/api/opsreport/monthly-summary/${monthlyReviewMonth}/pdf`))}>Download PDF</Button>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" className={C.outline} onClick={() => setMonthlyReviewOpen(false)}>Close</Button>

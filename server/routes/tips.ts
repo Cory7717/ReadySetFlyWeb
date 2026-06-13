@@ -1854,6 +1854,41 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
+  router.get("/grid/periods", requireTipsGridAccess, async (_req: any, res, next) => {
+    try {
+      const current = getPayPeriodForDate();
+      const submissions = await db
+        .select({
+          start: tipGridSubmissions.payPeriodStart,
+          end: tipGridSubmissions.payPeriodEnd,
+          status: tipGridSubmissions.status,
+          submittedAt: tipGridSubmissions.submittedAt,
+        })
+        .from(tipGridSubmissions)
+        .orderBy(desc(tipGridSubmissions.payPeriodStart));
+      const periods = new Map<string, { start: string; end: string; status: string; submittedAt: Date | null; current: boolean }>();
+      periods.set(current.start, {
+        start: current.start,
+        end: current.end,
+        status: "open",
+        submittedAt: null,
+        current: true,
+      });
+      submissions.forEach((submission) => {
+        periods.set(String(submission.start), {
+          start: String(submission.start),
+          end: String(submission.end),
+          status: submission.status,
+          submittedAt: submission.submittedAt || null,
+          current: String(submission.start) === current.start,
+        });
+      });
+      res.json({ periods: Array.from(periods.values()).sort((a, b) => b.start.localeCompare(a.start)) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/grid/associates", requireTipsGridAccess, tipsAuthRateLimiter, async (req: any, res, next) => {
     try {
       const parsed = gridAssociateSchema.safeParse(req.body);

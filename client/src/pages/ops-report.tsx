@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileSpreadsheet, FileText, LockKeyhole, LogOut, Trash2, Upload } from "lucide-react";
 import { apiUrl } from "@/lib/api";
@@ -106,6 +106,12 @@ type MonthlySummaryForm = {
 };
 type MonthlySummaryResponse = {
   summary: null | { id: string; reportMonth: string; payload: MonthlySummaryForm; updatedAt: string };
+};
+type ReportGuideItem = {
+  name: string;
+  scope: string;
+  parameters: string;
+  fileName: string;
 };
 
 const REPORT_TYPE_LABELS: Record<OpsImportResponse["reportType"], string> = {
@@ -476,6 +482,12 @@ function monthLabelFromKey(value: string) {
   return new Date(Date.UTC(year, month - 1, 1)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
+function displayOpsDate(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value || "selected date";
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 function priorMonthKey() {
   const now = new Date();
   return `${new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7)}`;
@@ -551,6 +563,67 @@ function Section({ title, children, right }: { title: string; children: ReactNod
       </CardHeader>
       <CardContent className="p-0">{children}</CardContent>
     </Card>
+  );
+}
+
+function SectionReportUpload({
+  reports,
+  onUpload,
+  uploading,
+  multiple = false,
+}: {
+  reports: ReportGuideItem[];
+  onUpload: (files: File[]) => void;
+  uploading: boolean;
+  multiple?: boolean;
+}) {
+  const [files, setFiles] = useState<File[]>([]);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  return (
+    <div className="border-b border-[#e0d3c1] bg-[#fbf6ee] p-3">
+      <Accordion type="single" collapsible>
+        <AccordionItem value="requirements" className="border-0">
+          <AccordionTrigger className="py-1.5 text-sm font-semibold text-[#201814] hover:no-underline [&>svg]:text-[#5b4b3b]">
+            <span className="flex items-center gap-2"><Upload className="h-4 w-4 text-[#2f5f46]" />Upload source report</span>
+          </AccordionTrigger>
+          <AccordionContent className="pb-2 pt-2">
+            <div className="grid gap-2 lg:grid-cols-2">
+              {reports.map((report) => (
+                <div key={report.name} className="rounded-lg border border-[#d7c8b5] bg-white p-3 text-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="font-semibold text-[#201814]">{report.name}</div>
+                    <Badge variant="outline" className="border-[#cdbda8] bg-[#fffaf2] text-[#4f3d2e]">{report.scope}</Badge>
+                  </div>
+                  <p className="mt-2 leading-5 text-[#5f5247]">{report.parameters}</p>
+                  <div className="mt-2 break-all rounded bg-[#fbf6ee] px-2 py-1 font-mono text-xs text-[#4f3d2e]">{report.fileName}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Input
+                ref={inputRef}
+                className={C.field}
+                type="file"
+                accept=".xlsx,.xls,.csv,.pdf"
+                multiple={multiple}
+                onChange={(event) => setFiles(Array.from(event.target.files || []))}
+              />
+              <Button
+                className={`${C.green} shrink-0`}
+                disabled={!files.length || uploading}
+                onClick={() => {
+                  onUpload(files);
+                  setFiles([]);
+                  if (inputRef.current) inputRef.current.value = "";
+                }}
+              >
+                {uploading ? "Importing..." : `Import ${files.length > 1 ? `${files.length} files` : "report"}`}
+              </Button>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    </div>
   );
 }
 
@@ -749,7 +822,6 @@ export default function OpsReportPage() {
     { department: "OTHER", scheduledHours: "", actualHours: "", budget: "5", comments: "" },
   ]);
   const [laborFile, setLaborFile] = useState<File | null>(null);
-  const [opsReportFiles, setOpsReportFiles] = useState<File[]>([]);
   const [uploadedReports, setUploadedReports] = useState<Array<Record<string, any>>>([]);
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [budgetModalOpen, setBudgetModalOpen] = useState(false);
@@ -902,7 +974,7 @@ export default function OpsReportPage() {
     onError: (error: Error) => toast({ title: "Unable to parse labor summary", description: error.message, variant: "destructive" }),
   });
   const opsReportUpload = useMutation({
-    mutationFn: async (files: File[]) => {
+    mutationFn: async ({ files }: { files: File[]; sourceLabel: string }) => {
       const form = new FormData();
       files.forEach((file) => form.append("opsReport", file));
       form.append("weekStart", topMetrics.weekStart);
@@ -912,7 +984,7 @@ export default function OpsReportPage() {
       if (!response.ok) throw new Error(await response.text());
       return response.json() as Promise<OpsImportBatchResponse>;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       let nextPayload: Record<string, any> = cloneValue(currentDraftPayload);
       const reports = data.reports.map((report) => {
         const beforePatch = captureReportPatch(nextPayload, report.reportType);
@@ -921,11 +993,10 @@ export default function OpsReportPage() {
       });
       applyPayloadState(nextPayload);
       setUploadedReports((current) => [...current, ...reports]);
-      setOpsReportFiles([]);
       const warnings = reports.reduce((total, report) => total + report.warnings.length, 0);
       const failed = reports.filter((report) => report.status === "failed").length;
       toast({
-        title: "Ops reports imported",
+        title: `${variables.sourceLabel} source imported`,
         description: `${reports.length - failed} mapped, ${failed} failed.${warnings ? ` ${warnings} parser message${warnings === 1 ? "" : "s"} need review.` : ""}`,
       });
     },
@@ -1206,6 +1277,82 @@ export default function OpsReportPage() {
     start.setDate(start.getDate() + 6);
     return start.toISOString().slice(0, 10);
   }, [topMetrics.weekStart]);
+  const reportMonthKey = monthKeyFromDate(weekEnd || topMetrics.weekStart);
+  const followingMonthKey = nextMonthKey(reportMonthKey);
+  const reportMonthStart = reportMonthKey ? `${reportMonthKey}-01` : "";
+  const followingMonthStart = followingMonthKey ? `${followingMonthKey}-01` : "";
+  const reportMonthEnd = reportMonthStart ? addDaysIso(followingMonthStart, -1) : "";
+  const followingMonthEnd = followingMonthStart ? addDaysIso(`${nextMonthKey(followingMonthKey)}-01`, -1) : "";
+  const reportGuide = [
+    {
+      name: "Previous Week OTB",
+      scope: `${displayOpsDate(topMetrics.weekStart)} through ${displayOpsDate(weekEnd)}`,
+      parameters: "Run after the selected week closes. Include daily rows plus the TOTAL row for the exact selected report week.",
+      fileName: "MMDDYYYY_Previous Week OTB.csv",
+    },
+    {
+      name: "Current Month OTB",
+      scope: `${displayOpsDate(reportMonthStart)} through ${displayOpsDate(reportMonthEnd)}`,
+      parameters: `Run the full ${monthLabelFromKey(reportMonthKey)} calendar month. Include all daily rows and the TOTAL row.`,
+      fileName: `MMDDYYYY_${monthLabelFromKey(reportMonthKey).split(" ")[0]} Month OTB.csv`,
+    },
+    {
+      name: "Remaining Month OTB",
+      scope: `Current business date through ${displayOpsDate(reportMonthEnd)}`,
+      parameters: "Use only future on-the-books dates remaining in the selected report month. This populates Current Month Future Booked.",
+      fileName: "MMDDYYYY_Remaining Month OTB.csv",
+    },
+    {
+      name: "Next Month OTB",
+      scope: `${displayOpsDate(followingMonthStart)} through ${displayOpsDate(followingMonthEnd)}`,
+      parameters: `Run the full ${monthLabelFromKey(followingMonthKey)} calendar month, including the TOTAL row.`,
+      fileName: `MMDDYYYY_${monthLabelFromKey(followingMonthKey).split(" ")[0]} Month OTB.csv`,
+    },
+    {
+      name: "Detailed Flash",
+      scope: `Business date within ${monthLabelFromKey(reportMonthKey)}`,
+      parameters: "Include Month-to-Date and Year-to-Date columns. Used for rooms sold, occupancy, ADR, room revenue, MTD, and YTD results.",
+      fileName: "Detailed Flash_AUSNL_YYYY-MM-DD_HH-MM-SS.csv",
+    },
+    {
+      name: "OOO Rooms",
+      scope: `${displayOpsDate(topMetrics.weekStart)} through ${displayOpsDate(weekEnd)}`,
+      parameters: "Set the report start and end dates to the exact selected week. Include room number, reason/status, OOO start, and expected return date.",
+      fileName: "MMDDYYYY_OOO Rooms.pdf",
+    },
+    {
+      name: "GSS Scores",
+      scope: monthLabelFromKey(reportMonthKey),
+      parameters: "Use the Satisfaction sheet. The selected month column supplies MTD; the Total column supplies Wave-to-Date.",
+      fileName: "MMDDYYYY_GSS Scores.xlsx",
+    },
+    {
+      name: "Marriott Responses",
+      scope: `${displayOpsDate(topMetrics.weekStart)} through ${displayOpsDate(weekEnd)}`,
+      parameters: "Export responses covering the selected week. The importer filters strictly by Response Date inside this range.",
+      fileName: "Marriott_Responses_Export_MM_DD_YYYY.xlsx",
+    },
+    {
+      name: "AR Aging",
+      scope: "As of the current business date",
+      parameters: "Include Current, 30, 60, 90, and 120+ aging buckets plus total balance and account/customer names where available.",
+      fileName: "MMDDYYYY_AR Aging.xlsx",
+    },
+    {
+      name: "Credit Limit / Guest Ledger",
+      scope: "As of the current business date",
+      parameters: "Include all in-house guest balances and credit-card authorization amounts. Only balances over $1,000 or balances without sufficient authorization are listed.",
+      fileName: "MMDDYYYY_CreditLimit.pdf",
+    },
+    {
+      name: "Actual Labor Hours",
+      scope: `${displayOpsDate(topMetrics.weekStart)} through ${displayOpsDate(weekEnd)}`,
+      parameters: "Run the closed-week payroll labor summary/Hours Detail for the exact selected week. Upload it inside Department Labor Review.",
+      fileName: "Closed week labor summary.pdf",
+    },
+  ];
+  const reportGuideFor = (...names: string[]) => reportGuide.filter((report) => names.includes(report.name));
+  const uploadSectionReports = (sourceLabel: string, files: File[]) => opsReportUpload.mutate({ files, sourceLabel });
   const saveMonthlyBudget = () => {
     const normalized = {
       month: budgetForm.month,
@@ -1601,7 +1748,7 @@ export default function OpsReportPage() {
                 <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
                   <div className="rounded-lg bg-[#e8f0e9] p-2 text-[#2f5f46]"><Upload className="h-4 w-4" /></div>
                   <div className="min-w-0">
-                    <div className="font-semibold text-[#201814]">Import ops source reports</div>
+                    <div className="font-semibold text-[#201814]">Imported source report files</div>
                     <div className="truncate text-xs font-normal text-[#6b5d50]">
                       {uploadedReports.length} current-week file{uploadedReports.length === 1 ? "" : "s"} · {previousWeekReports.length} previous-week variance reference{previousWeekReports.length === 1 ? "" : "s"}
                     </div>
@@ -1609,38 +1756,10 @@ export default function OpsReportPage() {
                 </div>
               </AccordionTrigger>
               <AccordionContent className="border-t border-[#d7c8b5] bg-white px-4 pb-4 pt-3 text-[#201814]">
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                  <div>
-                    <p className="text-sm font-medium text-[#5f5247]">
-                      Select OTB, Detailed Flash, OOO Rooms, GSS, Marriott responses, AR Aging, or Credit Limit files.
-                    </p>
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                      <Input className={C.field} type="file" accept=".xlsx,.xls,.csv,.pdf" multiple onChange={(event) => setOpsReportFiles(Array.from(event.target.files || []))} />
-                      <Button className={`${C.green} shrink-0 disabled:!bg-[#9aab9f] disabled:!text-white disabled:opacity-100`} onClick={() => opsReportFiles.length && opsReportUpload.mutate(opsReportFiles)} disabled={!opsReportFiles.length || opsReportUpload.isPending}>
-                        {opsReportUpload.isPending ? "Importing..." : "Import files"}
-                      </Button>
-                    </div>
-                    <Accordion type="single" collapsible className="mt-3">
-                      <AccordionItem value="file-guide" className="rounded-lg border border-[#d7c8b5] bg-[#fffaf2] px-3 text-[#201814]">
-                        <AccordionTrigger className="py-2 text-sm font-semibold text-[#201814] hover:no-underline [&>svg]:text-[#5b4b3b]">Required files and suggested names</AccordionTrigger>
-                        <AccordionContent className="pb-3 text-xs leading-5 text-[#5f5247]">
-                          <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
-                            <div><b>Previous Week OTB:</b> <code>MMDDYYYY_Previous Week OTB.csv</code></div>
-                            <div><b>Current Month OTB:</b> <code>MMDDYYYY_June Month OTB.csv</code></div>
-                            <div><b>Remaining Month OTB:</b> <code>MMDDYYYY_Remaining Month OTB.csv</code></div>
-                            <div><b>Next Month OTB:</b> <code>MMDDYYYY_July Month OTB.csv</code></div>
-                            <div><b>Detailed Flash:</b> <code>Detailed Flash_AUSNL_YYYY-MM-DD.csv</code></div>
-                            <div><b>OOO Rooms:</b> <code>MMDDYYYY_OOO Rooms.pdf</code></div>
-                            <div><b>GSS Scores:</b> <code>MMDDYYYY_GSS Scores.xlsx</code></div>
-                            <div><b>Marriott Responses:</b> <code>Marriott_Responses_Export_MM_DD_YYYY.xlsx</code></div>
-                            <div><b>AR Aging:</b> <code>MMDDYYYY_AR Aging.xlsx</code></div>
-                            <div><b>Credit Limit:</b> <code>MMDDYYYY_CreditLimit.pdf</code></div>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-                  </div>
-                  <Accordion type="multiple" className="space-y-2">
+                <div className="mb-3 rounded-lg border border-[#bdd5c3] bg-[#edf5ef] p-3 text-sm text-[#173c25]">
+                  Upload each report inside the worksheet section it populates. Use this panel to review or remove imported source files.
+                </div>
+                <Accordion type="multiple" className="space-y-2">
                     <AccordionItem value="current-files" className="rounded-lg border border-[#cdbda8] bg-[#fffaf2] px-3 text-[#201814]">
                       <AccordionTrigger className="py-2 text-sm font-semibold text-[#201814] hover:no-underline [&>svg]:text-[#5b4b3b]">Current week files ({uploadedReports.length})</AccordionTrigger>
                       <AccordionContent className="max-h-72 space-y-2 overflow-y-auto pb-3 text-[#201814]">
@@ -1677,8 +1796,7 @@ export default function OpsReportPage() {
                         ))}
                       </AccordionContent>
                     </AccordionItem>
-                  </Accordion>
-                </div>
+                </Accordion>
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -1927,6 +2045,12 @@ export default function OpsReportPage() {
                 <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-[#b9d8c2]" /><CardTitle>{week} Report</CardTitle></div>
                 <CardDescription className={C.darkMuted}>{setup.propertyName} | {topMetrics.weekStart} to {weekEnd || "week end date"}</CardDescription>
               </CardHeader>
+              <SectionReportUpload
+                reports={reportGuideFor("Previous Week OTB", "Detailed Flash")}
+                multiple
+                uploading={opsReportUpload.isPending}
+                onUpload={(files) => uploadSectionReports("Weekly performance", files)}
+              />
               <CardContent className="grid gap-3 md:grid-cols-4">
                 <DarkLabeledInput
                   label="Week start date"
@@ -1956,9 +2080,20 @@ export default function OpsReportPage() {
             </Card>
 
             <Section title="Current Month">
+              <SectionReportUpload
+                reports={reportGuideFor("Current Month OTB", "Remaining Month OTB")}
+                multiple
+                uploading={opsReportUpload.isPending}
+                onUpload={(files) => uploadSectionReports("Current Month", files)}
+              />
               <EditableTable columns={[{ key: "label", label: "Current Month", wide: true }, { key: "occupancy", label: "Occupancy" }, { key: "rooms", label: "Rooms" }, { key: "adr", label: "ADR" }, { key: "revenue", label: "Room Revenue" }, { key: "comments", label: "Comments", wide: true }]} rows={monthRows} onChange={setMonthRows} />
             </Section>
             <Section title="Next Month Data">
+              <SectionReportUpload
+                reports={reportGuideFor("Next Month OTB")}
+                uploading={opsReportUpload.isPending}
+                onUpload={(files) => uploadSectionReports("Next Month", files)}
+              />
               <EditableTable columns={[{ key: "label", label: "Next Month", wide: true }, { key: "occupancy", label: "Occupancy" }, { key: "rooms", label: "Rooms" }, { key: "adr", label: "ADR" }, { key: "revenue", label: "Room Revenue" }, { key: "comments", label: "Comments", wide: true }]} rows={nextMonthRows} onChange={setNextMonthRows} />
             </Section>
             <Section title="Weekly Chargebacks">
@@ -1968,12 +2103,22 @@ export default function OpsReportPage() {
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "rooms", label: "P.M. Rooms" }, { key: "area", label: "Area" }, { key: "hours", label: "Time Consumed Hrs" }, { key: "comment", label: "Comment", wide: true }]} rows={maintenance} onChange={setMaintenance} />
             </Section>
             <Section title="Weekly Out of Order Rooms">
+              <SectionReportUpload
+                reports={reportGuideFor("OOO Rooms")}
+                uploading={opsReportUpload.isPending}
+                onUpload={(files) => uploadSectionReports("Weekly OOO Rooms", files)}
+              />
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "room", label: "Room No" }, { key: "startDate", label: "OOO Start Date" }, { key: "returnDate", label: "Expected Return" }, { key: "comment", label: "Comment", wide: true }]} rows={oooRooms} onChange={setOooRooms} />
             </Section>
             <Section title="Week's Total Revenue Adjustments" right={<Badge variant="outline">{money(adjustmentTotal)}</Badge>}>
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "room", label: "Room No" }, { key: "guest", label: "Guest Name" }, { key: "amount", label: "Adjustment Amount" }, { key: "comment", label: "Reason/Comment", wide: true }]} rows={adjustments} onChange={setAdjustments} />
             </Section>
             <Section title="Accounts Receivable / Aging" right={<Badge variant="outline">Total {money(arTotal)}</Badge>}>
+              <SectionReportUpload
+                reports={reportGuideFor("AR Aging")}
+                uploading={opsReportUpload.isPending}
+                onUpload={(files) => uploadSectionReports("Accounts Receivable", files)}
+              />
               <div className="grid gap-3 p-4 sm:grid-cols-5">
                 <LabeledInput label="Current" value={ar.current} onChange={(current) => setAr({ ...ar, current })} moneyFormat />
                 <LabeledInput label="30" value={ar.d30} onChange={(d30) => setAr({ ...ar, d30 })} moneyFormat />
@@ -1983,6 +2128,11 @@ export default function OpsReportPage() {
               </div>
             </Section>
             <Section title="Guest Ledger Balance">
+              <SectionReportUpload
+                reports={reportGuideFor("Credit Limit / Guest Ledger")}
+                uploading={opsReportUpload.isPending}
+                onUpload={(files) => uploadSectionReports("Guest Ledger", files)}
+              />
               <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
                 <LabeledInput label="Total balance" value={ledger.balance} onChange={(balance) => setLedger({ ...ledger, balance })} moneyFormat />
                 <LabeledInput label="Uncovered authorization" value={ledger.uncovered || ""} onChange={(uncovered) => setLedger({ ...ledger, uncovered })} moneyFormat />
@@ -2011,6 +2161,11 @@ export default function OpsReportPage() {
                   <p className="mt-1 max-w-2xl text-sm text-[#5f5247]">
                     Every department's hours variance is Actual Hours minus Budgeted Hours. Only Housekeeping calculates MPOR using all HK department hours divided by rooms sold, with a 30-minute target.
                   </p>
+                  <div className="mt-2 rounded-lg border border-[#d7c8b5] bg-[#fbf6ee] p-2 text-xs text-[#5f5247]">
+                    <span className="font-semibold text-[#201814]">Required actual-hours report:</span>{" "}
+                    {reportGuideFor("Actual Labor Hours")[0]?.parameters} Suggested file:{" "}
+                    <code>{reportGuideFor("Actual Labor Hours")[0]?.fileName}</code>
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-sm">
                     <Badge variant="outline">Scheduled {fmtHours(scheduledLaborTotal)}</Badge>
                     <Badge variant="outline">Actual {fmtHours(actualLaborTotal)}</Badge>
@@ -2064,6 +2219,11 @@ export default function OpsReportPage() {
               <BulletRowsEditor rows={gmOverviewRows} onChange={setGmOverviewRows} />
             </Section>
             <Section title="Guest Satisfaction Scores">
+              <SectionReportUpload
+                reports={reportGuideFor("GSS Scores")}
+                uploading={opsReportUpload.isPending}
+                onUpload={(files) => uploadSectionReports("Guest Satisfaction", files)}
+              />
               <EditableTable columns={[{ key: "label", label: "GSS MTD", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior" }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance" }, { key: "sply", label: "SPLY Variance" }, { key: "comments", label: "Comments", wide: true }]} rows={gssRowsWithPrevious} onChange={(rows) => setGssRows(stripDerivedComparisonColumns(rows))} />
             </Section>
             <Section title="GSS Wave To Date">
@@ -2074,6 +2234,11 @@ export default function OpsReportPage() {
             </Section>
             <div className="grid gap-5 lg:grid-cols-2">
               <Section title="Weekly Reviews: Positive">
+                <SectionReportUpload
+                  reports={reportGuideFor("Marriott Responses")}
+                  uploading={opsReportUpload.isPending}
+                  onUpload={(files) => uploadSectionReports("Weekly Reviews", files)}
+                />
                 <EditableTable columns={[{ key: "source", label: "Source" }, { key: "score", label: "Overall Score" }, { key: "comment", label: "Guest Comments", wide: true }]} rows={positiveReviews} onChange={setPositiveReviews} />
               </Section>
               <Section title="Weekly Reviews: Negative">

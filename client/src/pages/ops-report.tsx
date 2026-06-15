@@ -1237,6 +1237,15 @@ export default function OpsReportPage() {
     const weekVariance = priorScore && currentScore ? rowValue(num(currentScore) - num(priorScore), 1) : "";
     return { ...row, priorWeek: priorScore, weekVariance };
   }), [gssWaveRows, previousGssWaveRows]);
+  const reputationRowsWithVariance = useMemo(() => reputationRows.map((row) => {
+    const hasScore = String(row.score || "").trim() !== "";
+    const hasGoal = String(row.goal || "").trim() !== "";
+    const variance = hasScore && hasGoal ? num(row.score) - num(row.goal) : null;
+    return {
+      ...row,
+      variance: variance == null ? "" : `${variance > 0 ? "+" : ""}${rowValue(variance, 2)}`,
+    };
+  }), [reputationRows]);
   const currentMonthKey = useMemo(() => monthKeyFromDate(topMetrics.weekStart), [topMetrics.weekStart]);
   useEffect(() => {
     setMonthlyReviewHydrated(false);
@@ -2527,7 +2536,11 @@ export default function OpsReportPage() {
               <EditableTable columns={[{ key: "label", label: "GSS Wave To Date", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior" }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance" }, { key: "sply", label: "SPLY Variance" }, { key: "comments", label: "Comments", wide: true }]} rows={gssWaveRowsWithPrevious} onChange={(rows) => setGssWaveRows(stripDerivedComparisonColumns(rows))} />
             </Section>
             <Section title="Online Reputation">
-              <EditableTable columns={[{ key: "label", label: "Name", wide: true }, { key: "reviews", label: "Total Reviews" }, { key: "score", label: "Rank / Score" }, { key: "outOf", label: "Out Of" }, { key: "goal", label: "Goal Rank" }, { key: "variance", label: "Variance" }, { key: "strategy", label: "Strategy / Action Plan", wide: true }]} rows={reputationRows} onChange={setReputationRows} />
+              <EditableTable
+                columns={[{ key: "label", label: "Name", wide: true }, { key: "reviews", label: "Total Reviews" }, { key: "score", label: "Current Score" }, { key: "outOf", label: "Out Of" }, { key: "goal", label: "Goal Score" }, { key: "variance", label: "Variance to Goal", readOnly: true }, { key: "strategy", label: "Strategy / Action Plan", wide: true }]}
+                rows={reputationRowsWithVariance}
+                onChange={(rows) => setReputationRows(rows.map(({ variance, ...row }) => row))}
+              />
             </Section>
             <div className="overflow-hidden rounded-xl border border-[#cdbda8] bg-[#fffaf2] shadow-[0_12px_30px_rgba(72,52,31,0.08)]">
               <SectionReportUpload

@@ -61,6 +61,77 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+function isCourtyardPlaceholderEmail(email: unknown) {
+  return /^tips-[^@]+@courtyard-tips\.local$/i.test(normalizeEmail(String(email || "")));
+}
+
+function isDeliverableEmail(email: unknown) {
+  const normalized = normalizeEmail(String(email || ""));
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) && !isCourtyardPlaceholderEmail(normalized);
+}
+
+function normalizePersonName(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findScheduleEmployeeForTipsUser(user: any, employees: any[]) {
+  const email = normalizeEmail(String(user?.email || ""));
+  if (email && !isCourtyardPlaceholderEmail(email)) {
+    const byEmail = employees.find((employee) => normalizeEmail(String(employee.email || "")) === email);
+    if (byEmail) return byEmail;
+  }
+
+  const first = normalizePersonName(user?.firstName);
+  const last = normalizePersonName(user?.lastName);
+  const display = normalizePersonName(user?.employeeDisplayName || [user?.firstName, user?.lastName].filter(Boolean).join(" "));
+  const matches = employees.filter((employee) => {
+    const employeeFirst = normalizePersonName(employee.firstName);
+    const employeeLast = normalizePersonName(employee.lastName);
+    const employeeDisplay = normalizePersonName(employee.displayName);
+    return Boolean(
+      (first && last && employeeFirst === first && employeeLast === last)
+      || (display && employeeDisplay === display)
+    );
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
+async function reconcileTipsUserScheduleEmail(user: any, employees?: any[], users?: any[]) {
+  if (!user || !isCourtyardPlaceholderEmail(user.email)) return user;
+  const scheduleRows = employees || await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
+  const employee = findScheduleEmployeeForTipsUser(user, scheduleRows);
+  const scheduleEmail = normalizeEmail(String(employee?.email || ""));
+  if (!isDeliverableEmail(scheduleEmail)) return user;
+
+  const allUsers = users || await db.select().from(tipsUsers);
+  const emailOwner = allUsers.find((item) => item.id !== user.id && normalizeEmail(String(item.email || "")) === scheduleEmail);
+  if (emailOwner) return user;
+
+  const [updated] = await db
+    .update(tipsUsers)
+    .set({ email: scheduleEmail, updatedAt: new Date() })
+    .where(eq(tipsUsers.id, user.id))
+    .returning();
+  return updated || user;
+}
+
+async function reconcileTipsUsersWithSchedule(users: any[]) {
+  const employees = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
+  const reconciled: any[] = [];
+  for (const user of users) {
+    const updated = await reconcileTipsUserScheduleEmail(user, employees, users);
+    reconciled.push(updated);
+    const index = users.findIndex((item) => item.id === updated.id);
+    if (index >= 0) users[index] = updated;
+  }
+  return reconciled;
+}
+
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -1384,8 +1455,9 @@ export function registerTipsRoutes(app: Express) {
         db.select().from(tipsUsers).orderBy(asc(tipsUsers.employeeDisplayName)),
         getBistroTipsUsers(),
       ]);
+      const reconciledUsers = await reconcileTipsUsersWithSchedule(allUsers);
       const bistroIds = new Set(bistroUsers.map((user) => user.id));
-      const users = allUsers.filter((user) => bistroIds.has(user.id) || isTipsManager(user));
+      const users = reconciledUsers.filter((user) => bistroIds.has(user.id) || isTipsManager(user));
       res.json({ users: users.map(publicTipsUser) });
     } catch (error) {
       next(error);
@@ -1395,7 +1467,8 @@ export function registerTipsRoutes(app: Express) {
   router.get("/admin/tool-access-users", requireTipsSuperAdmin, async (_req: any, res, next) => {
     try {
       const users = await db.select().from(tipsUsers).orderBy(asc(tipsUsers.employeeDisplayName));
-      res.json({ users: users.map(publicTipsUser), tools: COURTYARD_TOOL_KEYS });
+      const reconciledUsers = await reconcileTipsUsersWithSchedule(users);
+      res.json({ users: reconciledUsers.map(publicTipsUser), tools: COURTYARD_TOOL_KEYS });
     } catch (error) {
       next(error);
     }
@@ -1492,11 +1565,14 @@ export function registerTipsRoutes(app: Express) {
 
   router.post("/admin/users/:id/password-reset-email", requireTipsSuperAdmin, async (req: any, res, next) => {
     try {
-      const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
-      if (!target) return res.status(404).json({ error: "Associate account not found" });
+      const [storedTarget] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
+      if (!storedTarget) return res.status(404).json({ error: "Associate account not found" });
+      const target = await reconcileTipsUserScheduleEmail(storedTarget);
       if (target.disabledAt) return res.status(400).json({ error: "Enable this associate before sending a password reset." });
       const email = normalizeEmail(String(target.email || ""));
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "This associate does not have a valid email address on file." });
+      if (!isDeliverableEmail(email)) {
+        return res.status(400).json({ error: "This associate does not have a deliverable email address on file. Update the email in the Schedule employee profile and try again." });
+      }
 
       const temporaryPassword = `Temp${crypto.randomInt(100000, 999999)}!`;
       const [updated] = await db

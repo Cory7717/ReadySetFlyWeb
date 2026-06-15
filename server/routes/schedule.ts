@@ -340,6 +340,34 @@ function findEmployeeForUserInList(user: any, employees: any[] = []) {
   return nameMatches.length === 1 ? nameMatches[0] : null;
 }
 
+async function syncPlaceholderCourtyardUserEmail(employee: any) {
+  const email = normalizeEmail(String(employee?.email || ""));
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.endsWith("@courtyard-tips.local")) return;
+
+  const users = await db.select().from(tipsUsers);
+  if (users.some((user) => normalizeEmail(String(user.email || "")) === email)) return;
+
+  const employeeFirst = String(employee.firstName || "").trim().toLowerCase();
+  const employeeLast = String(employee.lastName || "").trim().toLowerCase();
+  const employeeDisplay = String(employee.displayName || "").trim().toLowerCase();
+  const matches = users.filter((user) => {
+    if (!/^tips-[^@]+@courtyard-tips\.local$/i.test(normalizeEmail(String(user.email || "")))) return false;
+    const userFirst = String(user.firstName || "").trim().toLowerCase();
+    const userLast = String(user.lastName || "").trim().toLowerCase();
+    const userDisplay = String(user.employeeDisplayName || "").trim().toLowerCase();
+    return Boolean(
+      (employeeFirst && employeeLast && userFirst === employeeFirst && userLast === employeeLast)
+      || (employeeDisplay && userDisplay === employeeDisplay)
+    );
+  });
+  if (matches.length !== 1) return;
+
+  await db
+    .update(tipsUsers)
+    .set({ email, updatedAt: new Date() })
+    .where(eq(tipsUsers.id, matches[0].id));
+}
+
 function managerDepartmentsForUser(user: any, employees: any[] = []) {
   const publicUser = publicScheduleUser(user);
   if (publicUser.isSuperAdmin) return DEPARTMENTS;
@@ -3190,6 +3218,7 @@ export function registerScheduleRoutes(app: Express) {
         email: parsed.data.email || null,
         maxWeeklyHours: parsed.data.maxWeeklyHours == null ? null : parsed.data.maxWeeklyHours.toFixed(2),
       } as any).returning();
+      await syncPlaceholderCourtyardUserEmail(employee);
       await audit(null, req.scheduleUser.id, "employee_created", { employeeId: employee.id });
       res.status(201).json({ employee: stripPrivateEmployeeRates([employee], req.scheduleUser)[0] });
     } catch (error) {
@@ -3220,6 +3249,7 @@ export function registerScheduleRoutes(app: Express) {
         updatedAt: new Date(),
       } as any).where(eq(scheduleEmployees.id, req.params.id)).returning();
       if (!employee) return res.status(404).json({ error: "Employee not found" });
+      await syncPlaceholderCourtyardUserEmail(employee);
       await audit(null, req.scheduleUser.id, "employee_updated", { employeeId: employee.id });
       res.json({ employee: stripPrivateEmployeeRates([employee], req.scheduleUser)[0] });
     } catch (error) {

@@ -12,6 +12,7 @@ export type OpsReportType =
   | "remaining_month_otb"
   | "next_month_otb"
   | "next_month_sdly_otb"
+  | "analytical_account_tracking"
   | "detailed_flash"
   | "ooo_rooms"
   | "gss_scores"
@@ -218,6 +219,11 @@ function baseReport(file: Express.Multer.File, reportType: OpsReportType, contex
 export function detectOpsReportType(fileName: string, rows: string[][], context: OpsParserContext): OpsReportType | null {
   const name = fileName.toLowerCase();
   const flattenedHeaders = rows.slice(0, 12).flat().map(normalizedHeader);
+  if (/analytical\s*account\s*tracking/.test(name) || (
+    flattenedHeaders.includes("global ultimate account name")
+    && flattenedHeaders.includes("current room revenue")
+    && flattenedHeaders.includes("current room nights")
+  )) return "analytical_account_tracking";
   if (/detailed\s*flash|detailed_flash/.test(name) || (flattenedHeaders.includes("group") && flattenedHeaders.includes("category") && flattenedHeaders.some((value) => value.includes("month to date")))) return "detailed_flash";
   if (/ooo\s*rooms|out\s*of\s*order/.test(name)) return "ooo_rooms";
   if (/marriott[_\s-]*responses|responses[_\s-]*export/.test(name) || (flattenedHeaders.includes("response date") && flattenedHeaders.includes("overall comment"))) return "marriott_responses";
@@ -365,6 +371,77 @@ function parseDetailedFlash(file: Express.Multer.File, rows: string[][], context
     },
   };
   return { ...baseReport(file, "detailed_flash", context, warnings), preview: [mapping.mtd, mapping.ytd], mapping };
+}
+
+function parseAnalyticalAccountTracking(
+  file: Express.Multer.File,
+  sheets: Array<{ name: string; rows: string[][] }>,
+  context: OpsParserContext,
+): ParsedReport {
+  const warnings: string[] = [];
+  const dataSheet = sheets.find((sheet) => normalizedHeader(sheet.name).startsWith("analytical account tracking"))
+    || sheets.find((sheet) => findHeader(sheet.rows, ["Global Ultimate Account Name", "Current Room Revenue"]) >= 0);
+  const filtersSheet = sheets.find((sheet) => normalizedHeader(sheet.name) === "filters");
+  if (!dataSheet) throw new Error("Analytical Account Tracking data sheet was not found.");
+  if (!filtersSheet) throw new Error("Analytical Account Tracking Filters sheet was not found.");
+
+  const headerIndex = findHeader(dataSheet.rows, ["Global Ultimate Account Name", "Current Room Nights", "Current Room Revenue"]);
+  if (headerIndex < 0) throw new Error("Analytical Account Tracking revenue headers were not found.");
+  const indexes = headerIndexes(dataSheet.rows[headerIndex]);
+  const roomNightsIndex = indexes.find("Current Room Nights");
+  const roomRevenueIndex = indexes.find("Current Room Revenue");
+  if (roomNightsIndex < 0 || roomRevenueIndex < 0) throw new Error("Current Room Nights or Current Room Revenue column was not found.");
+
+  const timeframeText = filtersSheet.rows
+    .flat()
+    .map((value) => String(value || "").trim())
+    .find((value) => /^timeframe:/i.test(value)) || "";
+  const timeframeMatch = timeframeText.match(
+    /timeframe:\s*([A-Za-z]{3,9})\s+(\d{1,2})\s+(\d{4})\s*-\s*([A-Za-z]{3,9})\s+(\d{1,2})\s+(\d{4})/i,
+  );
+  if (!timeframeMatch) throw new Error("The Filters sheet timeframe could not be read.");
+  const parseFilterDate = (monthName: string, day: string, year: string) => {
+    const date = new Date(`${monthName} ${day}, ${year} 00:00:00 UTC`);
+    return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+  };
+  const dateStart = parseFilterDate(timeframeMatch[1], timeframeMatch[2], timeframeMatch[3]);
+  const dateEnd = parseFilterDate(timeframeMatch[4], timeframeMatch[5], timeframeMatch[6]);
+  if (!dateStart || !dateEnd) throw new Error("The Filters sheet timeframe contains an invalid date.");
+
+  const dataRows = dataSheet.rows.slice(headerIndex + 1).filter((row) =>
+    String(row[roomNightsIndex] || "").trim() || String(row[roomRevenueIndex] || "").trim());
+  const roomNights = round(dataRows.reduce((total, row) => total + numeric(row[roomNightsIndex]), 0), 2);
+  const roomRevenue = round(dataRows.reduce((total, row) => total + numeric(row[roomRevenueIndex]), 0), 2);
+  const adr = roomNights ? round(roomRevenue / roomNights, 2) : 0;
+  const start = new Date(`${dateStart}T00:00:00Z`);
+  const end = new Date(`${dateEnd}T00:00:00Z`);
+  const period = start.getUTCMonth() === end.getUTCMonth() && start.getUTCDate() === 1 ? "mtd"
+    : start.getUTCMonth() === 0 && start.getUTCDate() === 1 ? "ytd"
+      : "custom";
+  const reportYear = Number(String(context.reportMonth || context.weekEnd || context.weekStart || "").slice(0, 4));
+  const dataYear = end.getUTCFullYear();
+  const comparison = reportYear && dataYear === reportYear - 1 ? "last_year"
+    : reportYear && dataYear === reportYear ? "current_year"
+      : "other";
+  if (period === "custom") warnings.push("The report timeframe is neither month-to-date nor year-to-date.");
+  if (comparison === "current_year") warnings.push("Current-year Analytical Account Tracking data was retained for reference; Detailed Flash remains the source for current-year MTD/YTD.");
+  if (comparison === "other") warnings.push("The report year does not match the selected report year or its prior year.");
+
+  const mapping = {
+    period,
+    comparison,
+    dateStart,
+    dateEnd,
+    roomNights,
+    roomRevenue,
+    adr,
+    rowCount: dataRows.length,
+  };
+  return {
+    ...baseReport(file, "analytical_account_tracking", context, warnings),
+    preview: [mapping],
+    mapping,
+  };
 }
 
 function parseGss(file: Express.Multer.File, sheets: Array<{ name: string; rows: string[][] }>, context: OpsParserContext): ParsedReport {
@@ -649,6 +726,7 @@ export async function parseOpsReportFile(file: Express.Multer.File, context: Ops
   const reportType = detectOpsReportType(file.originalname, rows, context);
   if (!reportType) throw new Error("This report format was not recognized.");
   if (["previous_week_otb", "current_month_otb", "remaining_month_otb", "next_month_otb", "next_month_sdly_otb"].includes(reportType)) return parseOtb(file, rows, reportType, context);
+  if (reportType === "analytical_account_tracking") return parseAnalyticalAccountTracking(file, sheets, context);
   if (reportType === "detailed_flash") return parseDetailedFlash(file, rows, context);
   if (reportType === "gss_scores") return parseGss(file, sheets, context);
   if (reportType === "marriott_responses") return parseResponses(file, rows, context);

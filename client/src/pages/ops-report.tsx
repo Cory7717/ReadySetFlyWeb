@@ -41,7 +41,7 @@ type OpsImportResponse = {
   uploadId: string;
   originalFileName: string;
   sourceFileName: string;
-  reportType: "previous_week_otb" | "current_month_otb" | "remaining_month_otb" | "next_month_otb" | "next_month_sdly_otb" | "detailed_flash" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "ar_aging" | "credit_limit" | "unknown";
+  reportType: "previous_week_otb" | "current_month_otb" | "remaining_month_otb" | "next_month_otb" | "next_month_sdly_otb" | "analytical_account_tracking" | "detailed_flash" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "ar_aging" | "credit_limit" | "unknown";
   status: "parsed" | "warning" | "failed";
   warnings: string[];
   selectedWeek: string;
@@ -120,6 +120,7 @@ const REPORT_TYPE_LABELS: Record<OpsImportResponse["reportType"], string> = {
   remaining_month_otb: "Remaining Month OTB",
   next_month_otb: "Next Month OTB",
   next_month_sdly_otb: "Next Month SDLY OTB",
+  analytical_account_tracking: "MTD / YTD Account Tracking",
   detailed_flash: "Detailed Flash",
   ooo_rooms: "OOO Rooms",
   gss_scores: "GSS Scores",
@@ -265,6 +266,7 @@ const REPORT_PAYLOAD_KEYS: Record<OpsImportResponse["reportType"], string[]> = {
   remaining_month_otb: ["monthRows"],
   next_month_otb: ["nextMonthRows"],
   next_month_sdly_otb: ["nextMonthRows"],
+  analytical_account_tracking: ["topMetrics"],
   detailed_flash: ["topMetrics", "monthRows", "monthlyBudgets"],
   ooo_rooms: ["oooRooms"],
   gss_scores: ["gssRows", "gssWaveRows"],
@@ -291,6 +293,15 @@ function compactReportMapping(reportType: OpsImportResponse["reportType"], mappi
     };
   }
   if (reportType === "detailed_flash") return { mtd: mapping.mtd, ytd: mapping.ytd };
+  if (reportType === "analytical_account_tracking") return {
+    period: mapping.period,
+    comparison: mapping.comparison,
+    dateStart: mapping.dateStart,
+    dateEnd: mapping.dateEnd,
+    roomRevenue: mapping.roomRevenue,
+    roomNights: mapping.roomNights,
+    adr: mapping.adr,
+  };
   if (reportType === "ooo_rooms") return { rooms: mapping.rooms, reportRange: mapping.reportRange };
   if (reportType === "gss_scores") return { gssRows: mapping.gssRows, gssWaveRows: mapping.gssWaveRows };
   if (reportType === "marriott_responses") return { positiveReviews: mapping.positiveReviews, negativeReviews: mapping.negativeReviews };
@@ -393,6 +404,13 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
         comments: `Same-day-last-year OTB snapshot for ${mapping.dateStart} to ${mapping.dateEnd}`,
       };
     });
+  }
+  if (report.reportType === "analytical_account_tracking" && mapping.comparison === "last_year") {
+    next.topMetrics = {
+      ...next.topMetrics,
+      ...(mapping.period === "mtd" ? { mtdLastYear: accounting(mapping.roomRevenue) } : {}),
+      ...(mapping.period === "ytd" ? { ytdLastYear: accounting(mapping.roomRevenue) } : {}),
+    };
   }
   if (report.reportType === "detailed_flash") {
     const mtd = mapping.mtd || {};
@@ -1373,6 +1391,12 @@ export default function OpsReportPage() {
       fileName: "Detailed Flash_AUSNL_YYYY-MM-DD_HH-MM-SS.csv",
     },
     {
+      name: "MTD / YTD Account Tracking",
+      scope: `Prior-year MTD and YTD ending on the same calendar date as the current reporting snapshot`,
+      parameters: "Export Analytical Account Tracking twice for last year: month start through the matching date, and January 1 through the matching date. Current-year comparison exports may also be uploaded, but they will not replace Detailed Flash current-year totals.",
+      fileName: "Analytical Account Tracking - Export.xlsx",
+    },
+    {
       name: "OOO Rooms",
       scope: `${displayOpsDate(topMetrics.weekStart)} through ${displayOpsDate(weekEnd)}`,
       parameters: "Set the report start and end dates to the exact selected week. Include room number, reason/status, OOO start, and expected return date.",
@@ -2176,7 +2200,7 @@ export default function OpsReportPage() {
                 <CardDescription className={C.darkMuted}>{setup.propertyName} | {topMetrics.weekStart} to {weekEnd || "week end date"}</CardDescription>
               </CardHeader>
               <SectionReportUpload
-                reports={reportGuideFor("Previous Week OTB", "Detailed Flash")}
+                reports={reportGuideFor("Previous Week OTB", "Detailed Flash", "MTD / YTD Account Tracking")}
                 multiple
                 uploading={opsReportUpload.isPending}
                 onUpload={(files) => uploadSectionReports("Weekly performance", files)}

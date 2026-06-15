@@ -13,6 +13,7 @@ export type OpsReportType =
   | "current_month_otb"
   | "remaining_month_otb"
   | "next_month_otb"
+  | "current_month_sdly_otb"
   | "next_month_sdly_otb"
   | "analytical_account_tracking"
   | "detailed_flash"
@@ -739,11 +740,9 @@ async function parseCreditLimit(file: Express.Multer.File, context: OpsParserCon
 
 async function parseMintPacingScreenshot(file: Express.Multer.File, context: OpsParserContext): Promise<ParsedReport> {
   if (!openai) throw new Error("MINT screenshot parsing is unavailable because the AI service is not configured.");
-  const expectedMonth = nextMonthKey(context.reportMonth || (context.weekEnd ? monthKey(context.weekEnd) : ""));
-  if (!expectedMonth) throw new Error("Select a valid Ops Report week before uploading the MINT pacing screenshot.");
-  const expectedStart = `${expectedMonth}-01`;
-  const expectedEndDate = new Date(Date.UTC(Number(expectedMonth.slice(0, 4)), Number(expectedMonth.slice(5, 7)), 0));
-  const expectedEnd = expectedEndDate.toISOString().slice(0, 10);
+  const reportMonth = context.reportMonth || (context.weekEnd ? monthKey(context.weekEnd) : "");
+  const nextReportMonth = nextMonthKey(reportMonth);
+  if (!reportMonth || !nextReportMonth) throw new Error("Select a valid Ops Report week before uploading the MINT pacing screenshot.");
   const prompt = `Read this Marriott MINT pacing screenshot.
 Return JSON only in this exact shape:
 {"stayDateStart":"YYYY-MM-DD","stayDateEnd":"YYYY-MM-DD","reportRunDate":"YYYY-MM-DD","roomNightsTy":0,"roomNightsStly":0,"roomRevenueTy":0,"roomRevenueStly":0,"adrTy":0,"adrStly":0}
@@ -770,9 +769,23 @@ Do not use percentages, detail rows, or infer unreadable values.`;
   const parsed = mintPacingScreenshotSchema.safeParse(parsedJson);
   if (!parsed.success) throw new Error("The MINT screenshot dates or Grand Total values could not be read.");
   const data = parsed.data;
+  const screenshotMonth = monthKey(data.stayDateStart);
+  const expectedMonth = screenshotMonth === reportMonth
+    ? reportMonth
+    : screenshotMonth === nextReportMonth
+      ? nextReportMonth
+      : "";
+  if (!expectedMonth) {
+    throw new Error(
+      `This screenshot covers ${data.stayDateStart} through ${data.stayDateEnd}. It must cover either ${reportMonth} or ${nextReportMonth}.`,
+    );
+  }
+  const expectedStart = `${expectedMonth}-01`;
+  const expectedEndDate = new Date(Date.UTC(Number(expectedMonth.slice(0, 4)), Number(expectedMonth.slice(5, 7)), 0));
+  const expectedEnd = expectedEndDate.toISOString().slice(0, 10);
   if (data.stayDateStart !== expectedStart || data.stayDateEnd !== expectedEnd) {
     throw new Error(
-      `This screenshot covers ${data.stayDateStart} through ${data.stayDateEnd}. The selected Ops Report requires the full next month: ${expectedStart} through ${expectedEnd}.`,
+      `This screenshot covers ${data.stayDateStart} through ${data.stayDateEnd}. Pacing requires the full calendar month: ${expectedStart} through ${expectedEnd}.`,
     );
   }
   const totalRooms = Number(context.totalRooms || 0);
@@ -804,7 +817,7 @@ Do not use percentages, detail rows, or infer unreadable values.`;
     },
   };
   return {
-    ...baseReport(file, "next_month_sdly_otb", context, warnings),
+    ...baseReport(file, expectedMonth === reportMonth ? "current_month_sdly_otb" : "next_month_sdly_otb", context, warnings),
     preview: [{
       stayDateRange: `${data.stayDateStart} to ${data.stayDateEnd}`,
       reportRunDate: data.reportRunDate,

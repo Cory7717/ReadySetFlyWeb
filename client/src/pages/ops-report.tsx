@@ -41,7 +41,7 @@ type OpsImportResponse = {
   uploadId: string;
   originalFileName: string;
   sourceFileName: string;
-  reportType: "previous_week_otb" | "current_month_otb" | "remaining_month_otb" | "next_month_otb" | "next_month_sdly_otb" | "analytical_account_tracking" | "detailed_flash" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "ar_aging" | "credit_limit" | "unknown";
+  reportType: "previous_week_otb" | "current_month_otb" | "remaining_month_otb" | "next_month_otb" | "current_month_sdly_otb" | "next_month_sdly_otb" | "analytical_account_tracking" | "detailed_flash" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "ar_aging" | "credit_limit" | "unknown";
   status: "parsed" | "warning" | "failed";
   warnings: string[];
   selectedWeek: string;
@@ -119,6 +119,7 @@ const REPORT_TYPE_LABELS: Record<OpsImportResponse["reportType"], string> = {
   current_month_otb: "Current Month OTB",
   remaining_month_otb: "Remaining Month OTB",
   next_month_otb: "Next Month OTB",
+  current_month_sdly_otb: "Current Month SDLY OTB",
   next_month_sdly_otb: "Next Month SDLY OTB",
   analytical_account_tracking: "MTD / YTD Account Tracking",
   detailed_flash: "Detailed Flash",
@@ -265,6 +266,7 @@ const REPORT_PAYLOAD_KEYS: Record<OpsImportResponse["reportType"], string[]> = {
   current_month_otb: ["monthRows", "monthlyBudgets"],
   remaining_month_otb: ["monthRows"],
   next_month_otb: ["nextMonthRows"],
+  current_month_sdly_otb: ["monthRows"],
   next_month_sdly_otb: ["nextMonthRows"],
   analytical_account_tracking: ["topMetrics"],
   detailed_flash: ["topMetrics", "monthRows", "monthlyBudgets"],
@@ -285,7 +287,7 @@ function captureReportPatch(payload: Record<string, any>, reportType: OpsImportR
 }
 
 function compactReportMapping(reportType: OpsImportResponse["reportType"], mapping: Record<string, any>) {
-  if (["previous_week_otb", "current_month_otb", "remaining_month_otb", "next_month_otb", "next_month_sdly_otb"].includes(reportType)) {
+  if (["previous_week_otb", "current_month_otb", "remaining_month_otb", "next_month_otb", "current_month_sdly_otb", "next_month_sdly_otb"].includes(reportType)) {
     return {
       dateStart: mapping.dateStart,
       dateEnd: mapping.dateEnd,
@@ -329,7 +331,9 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
   const reportMonth = String(report.reportMonth || monthKeyFromDate(report.weekStartDate || ""));
   const mappingMonth = monthKeyFromDate(String(mapping.dateStart || ""));
   const isRemainingMonthFile = /remaining[\s_-]*month[\s_-]*otb/i.test(String(report.originalFileName || report.sourceFileName || ""));
-  const resolvedReportType = report.reportType === "next_month_sdly_otb"
+  const resolvedReportType = report.reportType === "current_month_sdly_otb"
+    ? "current_month_sdly_otb"
+    : report.reportType === "next_month_sdly_otb"
     ? "next_month_sdly_otb"
     : report.reportType === "remaining_month_otb" || isRemainingMonthFile
     ? "remaining_month_otb"
@@ -396,6 +400,20 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
     const total = mapping.total || {};
     next.nextMonthRows = normalizeNextMonthRows(next.nextMonthRows || []).map((row: Row) => {
       if (String(row.label || "").toUpperCase() !== "SDLY OTB FOR NEXT MONTH") return row;
+      return {
+        ...row,
+        occupancy: percentDisplay(total.occupancy),
+        rooms: rowValue(total.roomsSold, 0),
+        adr: accounting(total.adr),
+        revenue: accounting(total.roomRevenue),
+        comments: `SDLY pacing as of ${mapping.reportRunDate || "uploaded snapshot"} for ${mapping.dateStart} to ${mapping.dateEnd}`,
+      };
+    });
+  }
+  if (resolvedReportType === "current_month_sdly_otb") {
+    const total = mapping.total || {};
+    next.monthRows = normalizeCurrentMonthRows(next.monthRows || []).map((row: Row) => {
+      if (String(row.label || "").toUpperCase() !== "SDLY OTB FOR CURRENT MONTH") return row;
       return {
         ...row,
         occupancy: percentDisplay(total.occupancy),
@@ -533,6 +551,8 @@ const CURRENT_MONTH_ROW_LABELS = [
   "MONTHLY TOTAL",
   "CURRENT MONTH BUDGET",
   "VARIANCE TO BUDGET",
+  "SDLY OTB FOR CURRENT MONTH",
+  "PACING VARIANCE TO LY",
   "LY SAME MONTH",
   "VARIANCE TO LY",
 ] as const;
@@ -887,6 +907,8 @@ export default function OpsReportPage() {
     { label: "MONTHLY TOTAL", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     { label: "CURRENT MONTH BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     { label: "VARIANCE TO BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+    { label: "SDLY OTB FOR CURRENT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+    { label: "PACING VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     { label: "LY SAME MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     { label: "VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
   ]);
@@ -1155,6 +1177,14 @@ export default function OpsReportPage() {
   }, [scheduledLabor.data]);
 
   const adr = useMemo(() => num(topMetrics.roomsSold) ? num(topMetrics.roomRevenue) / num(topMetrics.roomsSold) : 0, [topMetrics]);
+  const mtdVariance = num(topMetrics.mtdThisYear) - num(topMetrics.mtdLastYear);
+  const ytdVariance = num(topMetrics.ytdThisYear) - num(topMetrics.ytdLastYear);
+  const mtdVariancePercent = num(topMetrics.mtdLastYear)
+    ? mtdVariance / Math.abs(num(topMetrics.mtdLastYear)) * 100
+    : null;
+  const ytdVariancePercent = num(topMetrics.ytdLastYear)
+    ? ytdVariance / Math.abs(num(topMetrics.ytdLastYear)) * 100
+    : null;
   const effectiveLabor = useMemo<Row[]>(() => labor.map((row): Row => {
     const department = String(row.department || "").trim().toUpperCase();
     if (department !== "HOUSEKEEPING HOURS") {
@@ -1395,6 +1425,12 @@ export default function OpsReportPage() {
       fileName: "MMDDYYYY_Remaining Month OTB.csv",
     },
     {
+      name: "Current Month SDLY OTB",
+      scope: `${monthLabelFromKey(reportMonthKey)} OTB as of the same reporting date last year`,
+      parameters: `Upload a MINT pacing screenshot showing the full ${monthLabelFromKey(reportMonthKey)} Stay Date Range, Grand Total row, and report run timestamp. The importer maps Grand Total STLY rooms, ADR, and room revenue; occupancy is calculated from STLY rooms and the property's available room nights.`,
+      fileName: `MMDDYYYY_MINT_${monthLabelFromKey(reportMonthKey).split(" ")[0]}_Pacing.png`,
+    },
+    {
       name: "Next Month OTB",
       scope: `${displayOpsDate(followingMonthStart)} through ${displayOpsDate(followingMonthEnd)}`,
       parameters: `Run the full ${monthLabelFromKey(followingMonthKey)} calendar month, including the TOTAL row.`,
@@ -1561,6 +1597,8 @@ export default function OpsReportPage() {
       { label: "MONTHLY TOTAL", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
       { label: "CURRENT MONTH BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
       { label: "VARIANCE TO BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "SDLY OTB FOR CURRENT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "PACING VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
       { label: "LY SAME MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
       { label: "VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     ]);
@@ -1793,6 +1831,7 @@ export default function OpsReportPage() {
         adr: totalRooms ? accounting(totalRevenue / totalRooms) : "",
         revenue: accounting(totalRevenue),
       };
+      const sdly: Row = rows.find((row) => row.label === "SDLY OTB FOR CURRENT MONTH") || {};
       const ly = budget
         ? {
             occupancy: budget.lyOccupancy || "",
@@ -1818,6 +1857,15 @@ export default function OpsReportPage() {
                   adr: accounting(num(monthlyTotal.adr) - num(budget.adr || "")),
                   revenue: accounting(num(monthlyTotal.revenue) - num(budget.revenue || "")),
                   comments: `Variance to Budget = Monthly Total minus Current Month Budget`,
+                }
+            : label === "PACING VARIANCE TO LY"
+              ? {
+                  ...row,
+                  occupancy: monthlyTotal.occupancy && sdly.occupancy ? rowValue(num(monthlyTotal.occupancy) - num(sdly.occupancy), 2) : "",
+                  rooms: monthlyTotal.rooms && sdly.rooms ? rowValue(num(monthlyTotal.rooms) - num(sdly.rooms), 0) : "",
+                  adr: monthlyTotal.adr && sdly.adr ? accounting(num(monthlyTotal.adr) - num(sdly.adr)) : "",
+                  revenue: monthlyTotal.revenue && sdly.revenue ? accounting(num(monthlyTotal.revenue) - num(sdly.revenue)) : "",
+                  comments: `Pacing Variance to LY = Monthly Total minus SDLY OTB for Current Month`,
                 }
             : label === "VARIANCE TO LY" && ly
               ? {
@@ -2246,37 +2294,82 @@ export default function OpsReportPage() {
                 uploading={opsReportUpload.isPending}
                 onUpload={(files) => uploadSectionReports("Weekly performance", files)}
               />
-              <CardContent className="grid gap-3 md:grid-cols-4">
-                <DarkLabeledInput
-                  label="Week start date"
-                  value={topMetrics.weekStart}
-                  onChange={(weekStart) => {
-                    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
-                      setTopMetrics({ ...topMetrics, weekStart });
-                      return;
-                    }
-                    loadOpsWeek(weekStart, week).catch((error) => toast({ title: "Unable to load week", description: error.message, variant: "destructive" }));
-                  }}
-                  type="date"
-                />
-                <DarkLabeledInput label="Week end date" value={weekEnd} onChange={() => undefined} type="date" />
-                <DarkLabeledInput label="Rooms sold" value={topMetrics.roomsSold} onChange={(roomsSold) => setTopMetrics({ ...topMetrics, roomsSold })} type="number" />
-                <DarkLabeledInput label="Occupancy %" value={topMetrics.occupancy} onChange={(occupancy) => setTopMetrics({ ...topMetrics, occupancy })} />
-                <DarkLabeledInput label="Room revenue" value={topMetrics.roomRevenue} onChange={(roomRevenue) => setTopMetrics({ ...topMetrics, roomRevenue })} moneyFormat />
-                <div className="rounded-lg border border-[#d7c8b5] bg-white p-3">
-                  <div className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>Weekly ADR</div>
-                  <div className="mt-2 text-2xl font-semibold text-[#201814]">{money(adr)}</div>
+              <CardContent className="space-y-5">
+                <div>
+                  <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#f0d9b0]">Weekly Performance</div>
+                  <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+                    <DarkLabeledInput
+                      label="Week start date"
+                      value={topMetrics.weekStart}
+                      onChange={(weekStart) => {
+                        if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
+                          setTopMetrics({ ...topMetrics, weekStart });
+                          return;
+                        }
+                        loadOpsWeek(weekStart, week).catch((error) => toast({ title: "Unable to load week", description: error.message, variant: "destructive" }));
+                      }}
+                      type="date"
+                    />
+                    <DarkLabeledInput label="Week end date" value={weekEnd} onChange={() => undefined} type="date" />
+                    <DarkLabeledInput label="Rooms sold" value={topMetrics.roomsSold} onChange={(roomsSold) => setTopMetrics({ ...topMetrics, roomsSold })} type="number" />
+                    <DarkLabeledInput label="Occupancy %" value={topMetrics.occupancy} onChange={(occupancy) => setTopMetrics({ ...topMetrics, occupancy })} />
+                    <DarkLabeledInput label="Room revenue" value={topMetrics.roomRevenue} onChange={(roomRevenue) => setTopMetrics({ ...topMetrics, roomRevenue })} moneyFormat />
+                    <div className="rounded-lg border border-[#d7c8b5] bg-white p-3">
+                      <div className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>Weekly ADR</div>
+                      <div className="mt-2 text-2xl font-semibold text-[#201814]">{money(adr)}</div>
+                    </div>
+                  </div>
                 </div>
-                <DarkLabeledInput label="MTD this year" value={topMetrics.mtdThisYear} onChange={(mtdThisYear) => setTopMetrics({ ...topMetrics, mtdThisYear })} moneyFormat />
-                <DarkLabeledInput label="MTD last year" value={topMetrics.mtdLastYear} onChange={(mtdLastYear) => setTopMetrics({ ...topMetrics, mtdLastYear })} moneyFormat />
-                <DarkLabeledInput label="YTD this year" value={topMetrics.ytdThisYear} onChange={(ytdThisYear) => setTopMetrics({ ...topMetrics, ytdThisYear })} moneyFormat />
-                <DarkLabeledInput label="YTD last year" value={topMetrics.ytdLastYear} onChange={(ytdLastYear) => setTopMetrics({ ...topMetrics, ytdLastYear })} moneyFormat />
+
+                <div className="grid gap-4 border-t border-[#4a5360] pt-5 lg:grid-cols-2">
+                  {[
+                    {
+                      label: "Month to Date",
+                      thisYear: topMetrics.mtdThisYear,
+                      lastYear: topMetrics.mtdLastYear,
+                      variance: mtdVariance,
+                      variancePercent: mtdVariancePercent,
+                      setThisYear: (mtdThisYear: string) => setTopMetrics({ ...topMetrics, mtdThisYear }),
+                      setLastYear: (mtdLastYear: string) => setTopMetrics({ ...topMetrics, mtdLastYear }),
+                    },
+                    {
+                      label: "Year to Date",
+                      thisYear: topMetrics.ytdThisYear,
+                      lastYear: topMetrics.ytdLastYear,
+                      variance: ytdVariance,
+                      variancePercent: ytdVariancePercent,
+                      setThisYear: (ytdThisYear: string) => setTopMetrics({ ...topMetrics, ytdThisYear }),
+                      setLastYear: (ytdLastYear: string) => setTopMetrics({ ...topMetrics, ytdLastYear }),
+                    },
+                  ].map((comparison) => (
+                    <div key={comparison.label} className="rounded-xl border border-[#4a5360] bg-[#19212b] p-4">
+                      <div className="mb-3 text-sm font-semibold uppercase tracking-[0.12em] text-[#f0d9b0]">{comparison.label} Comparison</div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <DarkLabeledInput label="This Year" value={comparison.thisYear} onChange={comparison.setThisYear} moneyFormat />
+                        <DarkLabeledInput label="Last Year" value={comparison.lastYear} onChange={comparison.setLastYear} moneyFormat />
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div className={`rounded-lg border px-3 py-2 ${varianceTone(comparison.variance)}`}>
+                          <div className="text-xs font-semibold uppercase tracking-[0.1em]">Dollar Variance</div>
+                          <div className="mt-1 text-xl font-semibold">{signedValue(comparison.variance, accounting)}</div>
+                        </div>
+                        <div className={`rounded-lg border px-3 py-2 ${comparison.variancePercent == null ? varianceTone(0) : varianceTone(comparison.variancePercent)}`}>
+                          <div className="text-xs font-semibold uppercase tracking-[0.1em]">Variance %</div>
+                          <div className="mt-1 text-xl font-semibold">
+                            {comparison.variancePercent == null ? "—" : `${comparison.variancePercent > 0 ? "+" : ""}${comparison.variancePercent.toFixed(1)}%`}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-[#cfc4b5]">Variance = This Year minus Last Year.</div>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
 
             <Section title="Current Month">
               <SectionReportUpload
-                reports={reportGuideFor("Current Month OTB", "Remaining Month OTB")}
+                reports={reportGuideFor("Current Month OTB", "Remaining Month OTB", "Current Month SDLY OTB")}
                 multiple
                 uploading={opsReportUpload.isPending}
                 onUpload={(files) => uploadSectionReports("Current Month", files)}
@@ -2284,6 +2377,7 @@ export default function OpsReportPage() {
               <EditableTable columns={[{ key: "label", label: "Current Month", wide: true }, { key: "occupancy", label: "Occupancy" }, { key: "rooms", label: "Rooms" }, { key: "adr", label: "ADR" }, { key: "revenue", label: "Room Revenue" }, { key: "comments", label: "Comments", wide: true }]} rows={monthRows} onChange={setMonthRows} />
               <div className="rounded-lg border border-[#d7c8b5] bg-[#fffaf2] px-4 py-3 text-sm text-[#5f5247]">
                 <span className="font-semibold text-[#201814]">Variance to Budget</span> = Monthly Total minus Current Month Budget.{" "}
+                <span className="font-semibold text-[#201814]">Pacing Variance to LY</span> = Monthly Total minus the SDLY OTB snapshot.{" "}
                 <span className="font-semibold text-[#201814]">Variance to LY</span> = Monthly Total minus LY Same Month.
                 Positive values are ahead of the comparison; negative values are behind.
               </div>

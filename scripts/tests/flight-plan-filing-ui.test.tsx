@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FilingProviderUpdatesList, FilingProviderWorkspace } from "../../client/src/components/flight-planner/FilingProviderWorkspace";
 import type { FlightPlan } from "../../shared/schema";

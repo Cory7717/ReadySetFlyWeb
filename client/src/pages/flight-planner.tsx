@@ -132,7 +132,9 @@ const summarizePlannerError = (value: unknown) => {
   if (message.startsWith("{") && message.includes("\"error\"")) {
     try {
       const parsed = JSON.parse(message);
-      if (typeof parsed?.error === "string" && parsed.error.trim()) {
+      if (Array.isArray(parsed?.validation?.errors) && parsed.validation.errors.length > 0) {
+        message = parsed.validation.errors.map(String).join(" ");
+      } else if (typeof parsed?.error === "string" && parsed.error.trim()) {
         message = parsed.error.trim();
       }
     } catch {
@@ -1518,6 +1520,13 @@ export default function FlightPlanner() {
   const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<FlightPlan | null>(null);
   const [overdueClosePlan, setOverdueClosePlan] = useState<FlightPlan | null>(null);
   const [overdueCloseLocation, setOverdueCloseLocation] = useState("");
+  const [filingActionFeedback, setFilingActionFeedback] = useState<{
+    tone: "pending" | "success" | "warning" | "error";
+    title: string;
+    message: string;
+    providerPlanId?: string | null;
+    beaconCode?: string | null;
+  } | null>(null);
   const [expandedPlanIds, setExpandedPlanIds] = useState<Record<string, boolean>>({});
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [providerUpdatesPlan, setProviderUpdatesPlan] = useState<FlightPlan | null>(null);
@@ -1801,16 +1810,16 @@ export default function FlightPlanner() {
   const [filingDraft, setFilingDraft] = useState({
     flightRules: "VFR",
     aircraftId: "",
-    equipment: "S/C",
-    soulsOnBoard: "1",
+    equipment: "",
+    soulsOnBoard: "",
     aircraftColor: "",
     pilotName: "",
     pilotPhone: "",
     aircraftHomeBase: "",
     remarks: "",
-    wakeTurbulence: "MEDIUM",
-    typeOfFlight: "G",
-    surveillanceEquipment: "N",
+    wakeTurbulence: "",
+    typeOfFlight: "",
+    surveillanceEquipment: "",
     otherInfo: "",
     departureName: "",
     destinationName: "",
@@ -3139,7 +3148,7 @@ export default function FlightPlanner() {
     enduranceMinutes: Math.round(enduranceMinutes) || null,
     fuelRequiredGallons: totalFuel ? Number(totalFuel.toFixed(1)) : null,
     fuelOnBoardGallons: fuelAvailableGallons ? Number(fuelAvailableGallons.toFixed(1)) : null,
-    aircraftId: filingDraft.aircraftId.trim() || form.tailNumber.trim() || null,
+    aircraftId: filingDraft.aircraftId.trim().toUpperCase() || form.tailNumber.trim().toUpperCase() || null,
     aircraftType: getPlannerAircraftTypeValue({
       manualAircraftType: form.aircraftType,
       selectedProfile,
@@ -3156,7 +3165,10 @@ export default function FlightPlanner() {
     typeOfFlight: filingDraft.typeOfFlight.trim() || null,
     surveillanceEquipment: filingDraft.surveillanceEquipment.trim() || null,
     otherInfo: filingDraft.otherInfo.trim() || null,
-    remarks: [filingDraft.remarks.trim(), form.notes.trim()].filter(Boolean).join(" | ") || "Prepared in RSF",
+    departureName: filingDraft.departureName.trim() || null,
+    destinationName: filingDraft.destinationName.trim() || null,
+    alternateName: filingDraft.alternateName.trim() || null,
+    remarks: [filingDraft.remarks.trim(), form.notes.trim()].filter(Boolean).join(" | ") || null,
   }), [
     filingDraft,
     form.departure,
@@ -5036,6 +5048,7 @@ export default function FlightPlanner() {
     mutationFn: async () => {
         const payload = {
           ...form,
+          tailNumber: filingDraft.aircraftId.trim().toUpperCase() || form.tailNumber.trim().toUpperCase(),
           fuelOnBoard: form.fuelOnBoard?.trim() ? form.fuelOnBoard.trim() : "",
           route: activeFiledRoute || null,
           aircraftType: getPlannerAircraftTypeValue({
@@ -5119,6 +5132,7 @@ export default function FlightPlanner() {
     mutationFn: async (planId: string) => {
       const payload = {
         ...form,
+        tailNumber: filingDraft.aircraftId.trim().toUpperCase() || form.tailNumber.trim().toUpperCase(),
         fuelOnBoard: form.fuelOnBoard?.trim() ? form.fuelOnBoard.trim() : "",
         route: activeFiledRoute || null,
         aircraftType: getPlannerAircraftTypeValue({
@@ -5350,6 +5364,13 @@ export default function FlightPlanner() {
       const res = await apiRequest("POST", `/api/flight-plans/${planId}/filing-action`, body);
       return res.json();
     },
+    onMutate: (variables) => {
+      setFilingActionFeedback({
+        tone: "pending",
+        title: `${variables.action.charAt(0).toUpperCase()}${variables.action.slice(1)} request in progress`,
+        message: "RSF is sending the action to Leidos Flight Service.",
+      });
+    },
     onSuccess: (result: any, variables) => {
       if (result?.plan) {
         queryClient.setQueryData<FlightPlan[]>(["/api/flight-plans"], (current = []) =>
@@ -5368,6 +5389,14 @@ export default function FlightPlanner() {
         cancel: live ? "Flight plan cancelled" : "Cancellation staged",
         close: live ? "Flight plan closed" : "Closure staged",
       };
+      const updatedPlan = result?.plan as FlightPlan | undefined;
+      setFilingActionFeedback({
+        tone: live ? "success" : "warning",
+        title: actionTitles[variables.action] ?? (live ? "Request accepted" : "Request staged"),
+        message: result?.message || (live ? "Leidos accepted the request." : "The request is staged and has not been accepted live by Leidos."),
+        providerPlanId: result?.providerPlanId || updatedPlan?.filingProviderPlanId || null,
+        beaconCode: getPlanBeaconCode(updatedPlan) || null,
+      });
       toast({
         title: actionTitles[variables.action] ?? (live ? "Request submitted" : "Request staged"),
         description: result?.message || (live ? "The provider accepted your request." : "The request was staged and will be sent when provider is ready."),
@@ -5377,11 +5406,17 @@ export default function FlightPlanner() {
       setPendingFilingActionAfterSave(null);
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
+      const message = summarizePlannerError(error?.message);
+      setFilingActionFeedback({
+        tone: "error",
+        title: "Flight plan action failed",
+        message,
+      });
       toast({
         title: /provider state|Leidos says|PROPOSED/i.test(String(error?.message || ""))
           ? "Provider state changed"
-          : isLeidosTimeoutMessage(error?.message) ? "Leidos is taking longer than usual" : "Staging failed",
-        description: summarizePlannerError(error?.message),
+          : isLeidosTimeoutMessage(error?.message) ? "Leidos is taking longer than usual" : "Flight plan action failed",
+        description: message,
         variant: "destructive",
       });
     },
@@ -7874,11 +7909,14 @@ export default function FlightPlanner() {
                     These are the core ICAO-style details Leidos expects for the aircraft and pilot.
                   </div>
                 </div>
-                {selectedProfileHasFilingDefaults && (
-                  <Button type="button" size="sm" variant="outline" onClick={applyAircraftFilingDefaults}>
-                    Apply aircraft defaults
-                  </Button>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">ICAO Flight Plan</Badge>
+                  {selectedProfileHasFilingDefaults && (
+                    <Button type="button" size="sm" variant="outline" onClick={applyAircraftFilingDefaults}>
+                      Apply aircraft profile
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-2">
@@ -7978,19 +8016,36 @@ export default function FlightPlanner() {
                 </div>
                 <div className="space-y-2">
                   <Label>Wake Turbulence</Label>
-                  <Input
-                    value={filingDraft.wakeTurbulence}
-                    onChange={(e) => setFilingDraft((current) => ({ ...current, wakeTurbulence: e.target.value.toUpperCase() }))}
-                    placeholder="MEDIUM"
-                  />
+                  <Select
+                    value={filingDraft.wakeTurbulence || "none"}
+                    onValueChange={(value) => setFilingDraft((current) => ({ ...current, wakeTurbulence: value === "none" ? "" : value }))}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                    <SelectContent className={plannerSelectContentClass}>
+                      <SelectItem value="none">Select category</SelectItem>
+                      <SelectItem value="LIGHT">Light (L)</SelectItem>
+                      <SelectItem value="MEDIUM">Medium (M)</SelectItem>
+                      <SelectItem value="HEAVY">Heavy (H)</SelectItem>
+                      <SelectItem value="SUPER">Super (J)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Type Of Flight</Label>
-                  <Input
-                    value={filingDraft.typeOfFlight}
-                    onChange={(e) => setFilingDraft((current) => ({ ...current, typeOfFlight: e.target.value.toUpperCase() }))}
-                    placeholder="G"
-                  />
+                  <Select
+                    value={filingDraft.typeOfFlight || "none"}
+                    onValueChange={(value) => setFilingDraft((current) => ({ ...current, typeOfFlight: value === "none" ? "" : value }))}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select flight type" /></SelectTrigger>
+                    <SelectContent className={plannerSelectContentClass}>
+                      <SelectItem value="none">Select flight type</SelectItem>
+                      <SelectItem value="G">General aviation (G)</SelectItem>
+                      <SelectItem value="S">Scheduled air service (S)</SelectItem>
+                      <SelectItem value="N">Non-scheduled air transport (N)</SelectItem>
+                      <SelectItem value="M">Military (M)</SelectItem>
+                      <SelectItem value="X">Other (X)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Surveillance Equipment</Label>
@@ -8143,6 +8198,29 @@ export default function FlightPlanner() {
                 ? "Guest filing limit reached. Create a free account to save plans, keep filing, and receive real-time provider updates and route change notifications."
                 : `You have ${guestFlightPlanFilesRemaining} free ${guestFlightPlanFilesRemaining === 1 ? "filing" : "filings"} remaining as a guest. Create a free account to save plans, manage lifecycle actions, and get notified when the provider changes your route.`}
             </div>
+          )}
+          {filingActionFeedback && (
+            <Alert
+              role="status"
+              aria-live="polite"
+              className={cn(
+                filingActionFeedback.tone === "success" && "border-emerald-400/50 bg-emerald-500/10 text-emerald-100",
+                filingActionFeedback.tone === "warning" && "border-amber-400/50 bg-amber-500/10 text-amber-100",
+                filingActionFeedback.tone === "error" && "border-red-400/50 bg-red-500/10 text-red-100",
+                filingActionFeedback.tone === "pending" && "border-blue-400/50 bg-blue-500/10 text-blue-100",
+              )}
+            >
+              <AlertDescription>
+                <div className="font-semibold">{filingActionFeedback.title}</div>
+                <div className="mt-1">{filingActionFeedback.message}</div>
+                {(filingActionFeedback.providerPlanId || filingActionFeedback.beaconCode) && (
+                  <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                    {filingActionFeedback.providerPlanId && <span>Provider reference: <span className="font-mono font-semibold">{filingActionFeedback.providerPlanId}</span></span>}
+                    {filingActionFeedback.beaconCode && <span>Assigned beacon code: <span className="font-mono font-semibold">{filingActionFeedback.beaconCode}</span></span>}
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert>
           )}
           {hasCurrentSavedPlan ? (
             <div className={cn("space-y-3 p-4", plannerSubpanelClass)}>

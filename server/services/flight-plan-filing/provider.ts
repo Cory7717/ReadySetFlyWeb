@@ -705,35 +705,14 @@ const getLeidosAircraftTypeCode = (plan: FlightPlan) => {
   return aircraftType || null;
 };
 
-const getLeidosWakeTurbulence = (plan: FlightPlan, config: LeidosFlightServiceConfig) => {
+const getLeidosWakeTurbulence = (plan: FlightPlan) => {
   const plannerState = getPlannerStateRecord(plan);
   const selectedProfileMaxGrossWeightLb =
     plannerState && typeof plannerState.selectedProfileMaxGrossWeightLb === "number"
       ? plannerState.selectedProfileMaxGrossWeightLb
       : null;
-  const selectedTypeMaxGrossWeightLb =
-    plannerState && typeof plannerState.selectedTypeMaxGrossWeightLb === "number"
-      ? plannerState.selectedTypeMaxGrossWeightLb
-      : null;
-  const customProfile =
-    plannerState && plannerState.customProfile && typeof plannerState.customProfile === "object" && !Array.isArray(plannerState.customProfile)
-      ? plannerState.customProfile as Record<string, unknown>
-      : null;
-  const customMaxGrossWeightCandidate = customProfile
-    ? Number(customProfile.maxGrossWeightOverrideLb)
-    : null;
-  const customMaxGrossWeightLb =
-    customMaxGrossWeightCandidate !== null && Number.isFinite(customMaxGrossWeightCandidate) && customMaxGrossWeightCandidate > 0
-      ? customMaxGrossWeightCandidate
-      : null;
-  const inferredWakeTurbulence = inferWakeTurbulenceCategoryFromWeightLb(
-    selectedProfileMaxGrossWeightLb ??
-    customMaxGrossWeightLb ??
-    selectedTypeMaxGrossWeightLb,
-  );
-  return inferredWakeTurbulence ||
-    normalizeWakeTurbulenceCategory(plan.filingWakeTurbulence) ||
-    normalizeWakeTurbulenceCategory(config.wakeTurbulence);
+  const inferredWakeTurbulence = inferWakeTurbulenceCategoryFromWeightLb(selectedProfileMaxGrossWeightLb);
+  return inferredWakeTurbulence || normalizeWakeTurbulenceCategory(plan.filingWakeTurbulence);
 };
 
 const buildProviderMessages = ({
@@ -998,7 +977,7 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("flightDuration", minutesToIsoDuration(plan.filingEstimatedEnrouteMinutes));
     append("speedKnots", plan.filingTrueAirspeedKtas);
     append("aircraftType", getLeidosAircraftTypeCode(plan));
-    append("wakeTurbulence", getLeidosWakeTurbulence(plan, config));
+    append("wakeTurbulence", getLeidosWakeTurbulence(plan));
     append("aircraftEquipment", normalizeLeidosEquipmentCode(plan.filingEquipment));
     append("route", routeNormalization.normalizedRoute || "DCT");
     append("remarks", plan.filingRemarks || plan.notes);
@@ -1006,8 +985,8 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("pilotData", plan.filingPilotName);
     append("peopleOnBoardExtended", plan.filingSoulsOnBoard);
     append("aircraftColorExtended", normalizeLeidosAircraftColorExtended(plan.filingAircraftColor));
-    append("typeOfFlight", plan.filingTypeOfFlight || config.typeOfFlight);
-    append("surveillanceEquipment", plan.filingSurveillanceEquipment || config.surveillanceEquipment);
+    append("typeOfFlight", plan.filingTypeOfFlight);
+    append("surveillanceEquipment", plan.filingSurveillanceEquipment);
     append("pilotInCommandExtended", plan.filingPilotName);
     append("pilotPhone", plan.filingPilotPhone);
     append("aircraftHomeBase", plan.filingAircraftHomeBase);
@@ -1558,6 +1537,21 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   }
   if ((action === "file" || action === "amend") && !plan.filingPilotPhone) {
     errors.push("Pilot phone number is required before sending this filing action to Leidos.");
+  }
+  if ((action === "file" || action === "amend") && !plan.filingPilotName) {
+    errors.push("Pilot in command name is required before sending this filing action to Leidos.");
+  }
+  if ((action === "file" || action === "amend") && !plan.filingSoulsOnBoard) {
+    errors.push("Souls on board is required before sending this filing action to Leidos.");
+  }
+  if ((action === "file" || action === "amend") && !getLeidosWakeTurbulence(plan)) {
+    errors.push("Wake turbulence category is required. Enter it or select an aircraft profile with a known maximum gross weight.");
+  }
+  if ((action === "file" || action === "amend") && !plan.filingTypeOfFlight) {
+    errors.push("Type of flight is required before sending this filing action to Leidos.");
+  }
+  if ((action === "file" || action === "amend") && !plan.filingSurveillanceEquipment) {
+    errors.push("Surveillance equipment is required before sending this filing action to Leidos.");
   }
   if ((action === "file" || action === "amend") && !plan.filingAircraftHomeBase) {
     errors.push("Aircraft home base is required before sending this filing action to Leidos.");

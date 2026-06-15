@@ -526,6 +526,25 @@ const NEXT_MONTH_ROW_LABELS = [
   "PACING VARIANCE TO LY",
 ] as const;
 
+const CURRENT_MONTH_ROW_LABELS = [
+  "MONTH TO DATE",
+  "FUTURE BOOKED",
+  "MONTHLY TOTAL",
+  "CURRENT MONTH BUDGET",
+  "VARIANCE TO BUDGET",
+  "LY SAME MONTH",
+  "VARIANCE TO LY",
+] as const;
+
+function normalizeCurrentMonthRows(rows: Row[]) {
+  const byLabel = new Map(rows.map((row) => [String(row.label || "").trim().toUpperCase(), row]));
+  const legacyVariance = byLabel.get("VARIANCE");
+  return CURRENT_MONTH_ROW_LABELS.map((label) => {
+    const existing = byLabel.get(label) || (label === "VARIANCE TO BUDGET" ? legacyVariance : undefined);
+    return { occupancy: "", rooms: "", adr: "", revenue: "", comments: "", ...existing, label };
+  });
+}
+
 function normalizeNextMonthRows(rows: Row[]) {
   const byLabel = new Map(rows.map((row) => [String(row.label || "").trim().toUpperCase(), row]));
   const legacyVariance = byLabel.get("VARIANCE");
@@ -866,8 +885,9 @@ export default function OpsReportPage() {
     { label: "FUTURE BOOKED", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     { label: "MONTHLY TOTAL", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     { label: "CURRENT MONTH BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
-    { label: "VARIANCE", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+    { label: "VARIANCE TO BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     { label: "LY SAME MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+    { label: "VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
   ]);
   const [nextMonthRows, setNextMonthRows] = useState<Row[]>([
     { label: "FUTURE BOOKED FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
@@ -1538,8 +1558,9 @@ export default function OpsReportPage() {
       { label: "FUTURE BOOKED", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
       { label: "MONTHLY TOTAL", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
       { label: "CURRENT MONTH BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
-      { label: "VARIANCE", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "VARIANCE TO BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
       { label: "LY SAME MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     ]);
     setNextMonthRows([
       { label: "FUTURE BOOKED FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
@@ -1581,7 +1602,7 @@ export default function OpsReportPage() {
   function applyPayloadState(payload: Record<string, any>) {
     if (payload.setup) setSetup(payload.setup);
     if (payload.topMetrics) setTopMetrics(payload.topMetrics);
-    if (payload.monthRows) setMonthRows(payload.monthRows);
+    if (payload.monthRows) setMonthRows(normalizeCurrentMonthRows(payload.monthRows));
     if (payload.nextMonthRows) setNextMonthRows(normalizeNextMonthRows(payload.nextMonthRows));
     if (payload.chargebacks) setChargebacks(payload.chargebacks);
     if (payload.maintenance) setMaintenance(payload.maintenance);
@@ -1751,9 +1772,10 @@ export default function OpsReportPage() {
 
   useEffect(() => {
     const budget = monthlyBudgets.find((row) => row.month === currentMonthKey);
-    setMonthRows((rows) => {
-      const mtd = rows.find((item) => String(item.label || "").trim().toUpperCase() === "MONTH TO DATE") || {};
-      const future = rows.find((item) => String(item.label || "").trim().toUpperCase() === "FUTURE BOOKED") || {};
+    setMonthRows((currentRows) => {
+      const rows = normalizeCurrentMonthRows(currentRows);
+      const mtd: Row = rows.find((item) => String(item.label || "").trim().toUpperCase() === "MONTH TO DATE") || {};
+      const future: Row = rows.find((item) => String(item.label || "").trim().toUpperCase() === "FUTURE BOOKED") || {};
       const totalRooms = num(mtd.rooms || "") + num(future.rooms || "");
       const totalRevenue = num(mtd.revenue || "") + num(future.revenue || "");
       const inferredAvailable = (row: Row) => {
@@ -1769,6 +1791,14 @@ export default function OpsReportPage() {
         adr: totalRooms ? accounting(totalRevenue / totalRooms) : "",
         revenue: accounting(totalRevenue),
       };
+      const ly = budget
+        ? {
+            occupancy: budget.lyOccupancy || "",
+            rooms: monthlyRoomsValue(budget.lyRooms || "", budget.lyAdr || "", budget.lyRevenue || ""),
+            adr: budget.lyAdr || "",
+            revenue: budget.lyRevenue || "",
+          }
+        : null;
       let changed = false;
       const nextRows = rows.map((row) => {
       const label = String(row.label || "").trim().toUpperCase();
@@ -1776,22 +1806,31 @@ export default function OpsReportPage() {
         ? { ...row, occupancy: budget.occupancy || "", rooms: monthlyRoomsValue(budget.rooms || "", budget.adr || "", budget.revenue || ""), adr: budget.adr || "", revenue: budget.revenue || "", comments: `Budget for ${monthLabelFromKey(currentMonthKey)}` }
         : label === "MONTHLY TOTAL"
           ? { ...row, ...monthlyTotal, comments: "Month to date plus future booked" }
-          : label === "LY SAME MONTH" && budget
-            ? { ...row, occupancy: budget.lyOccupancy || "", rooms: monthlyRoomsValue(budget.lyRooms || "", budget.lyAdr || "", budget.lyRevenue || ""), adr: budget.lyAdr || "", revenue: budget.lyRevenue || "", comments: `Last year actual for ${monthLabelFromKey(currentMonthKey)}` }
-            : label === "VARIANCE" && budget
+          : label === "LY SAME MONTH" && ly
+            ? { ...row, ...ly, comments: `Last year actual for ${monthLabelFromKey(currentMonthKey)}` }
+            : label === "VARIANCE TO BUDGET" && budget
               ? {
                   ...row,
                   occupancy: rowValue(num(monthlyTotal.occupancy) - num(budget.occupancy || ""), 2),
                   rooms: rowValue(num(monthlyTotal.rooms) - num(budget.rooms || ""), 0),
                   adr: accounting(num(monthlyTotal.adr) - num(budget.adr || "")),
                   revenue: accounting(num(monthlyTotal.revenue) - num(budget.revenue || "")),
-                  comments: `Monthly total minus budget for ${monthLabelFromKey(currentMonthKey)}`,
+                  comments: `Variance to Budget = Monthly Total minus Current Month Budget`,
+                }
+            : label === "VARIANCE TO LY" && ly
+              ? {
+                  ...row,
+                  occupancy: rowValue(num(monthlyTotal.occupancy) - num(ly.occupancy), 2),
+                  rooms: rowValue(num(monthlyTotal.rooms) - num(ly.rooms), 0),
+                  adr: accounting(num(monthlyTotal.adr) - num(ly.adr)),
+                  revenue: accounting(num(monthlyTotal.revenue) - num(ly.revenue)),
+                  comments: `Variance to LY = Monthly Total minus LY Same Month`,
                 }
             : row;
       if (JSON.stringify(row) !== JSON.stringify(next)) changed = true;
       return next;
       });
-      return changed ? nextRows : rows;
+      return changed || JSON.stringify(rows) !== JSON.stringify(currentRows) ? nextRows : currentRows;
     });
   }, [monthlyBudgets, currentMonthKey, monthRows]);
 
@@ -2241,6 +2280,11 @@ export default function OpsReportPage() {
                 onUpload={(files) => uploadSectionReports("Current Month", files)}
               />
               <EditableTable columns={[{ key: "label", label: "Current Month", wide: true }, { key: "occupancy", label: "Occupancy" }, { key: "rooms", label: "Rooms" }, { key: "adr", label: "ADR" }, { key: "revenue", label: "Room Revenue" }, { key: "comments", label: "Comments", wide: true }]} rows={monthRows} onChange={setMonthRows} />
+              <div className="rounded-lg border border-[#d7c8b5] bg-[#fffaf2] px-4 py-3 text-sm text-[#5f5247]">
+                <span className="font-semibold text-[#201814]">Variance to Budget</span> = Monthly Total minus Current Month Budget.{" "}
+                <span className="font-semibold text-[#201814]">Variance to LY</span> = Monthly Total minus LY Same Month.
+                Positive values are ahead of the comparison; negative values are behind.
+              </div>
             </Section>
             <Section title="Next Month Data">
               <SectionReportUpload

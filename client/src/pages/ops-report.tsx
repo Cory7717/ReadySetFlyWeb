@@ -650,11 +650,11 @@ function LabeledInput({ label, value, onChange, type = "text", moneyFormat = fal
   );
 }
 
-function DarkLabeledInput({ label, value, onChange, type = "text", moneyFormat = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; moneyFormat?: boolean }) {
+function DarkLabeledInput({ label, value, onChange, type = "text", moneyFormat = false, readOnly = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; moneyFormat?: boolean; readOnly?: boolean }) {
   return (
     <div>
       <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.darkLabel}`}>{label}</Label>
-      <Input className={`mt-1 ${C.darkField}`} type={type} inputMode={type === "number" ? "numeric" : undefined} value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => moneyFormat && onChange(accounting(value))} />
+      <Input className={`mt-1 ${C.darkField}`} type={type} inputMode={type === "number" ? "numeric" : undefined} value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} onBlur={() => moneyFormat && onChange(accounting(value))} />
     </div>
   );
 }
@@ -899,7 +899,7 @@ export default function OpsReportPage() {
   const queryClient = useQueryClient();
   const [pin, setPin] = useState("");
   const [week, setWeek] = useState("Week 1");
-  const [setup, setSetup] = useState({ propertyName: "Courtyard Austin Lakeline", generalManager: "", totalRooms: "", monthlyRoomNights: "" });
+  const [setup, setSetup] = useState({ propertyName: "Courtyard Austin Lakeline", generalManager: "", totalRooms: "" });
   const [topMetrics, setTopMetrics] = useState({ weekStart: "2026-01-03", occupancy: "", roomsSold: "", roomRevenue: "", mtdThisYear: "", mtdLastYear: "", ytdThisYear: "", ytdLastYear: "" });
   const [monthRows, setMonthRows] = useState<Row[]>([
     { label: "MONTH TO DATE", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
@@ -1405,6 +1405,8 @@ export default function OpsReportPage() {
   const followingMonthStart = followingMonthKey ? `${followingMonthKey}-01` : "";
   const reportMonthEnd = reportMonthStart ? addDaysIso(followingMonthStart, -1) : "";
   const followingMonthEnd = followingMonthStart ? addDaysIso(`${nextMonthKey(followingMonthKey)}-01`, -1) : "";
+  const reportMonthDays = reportMonthEnd ? Number(reportMonthEnd.slice(-2)) : 0;
+  const totalAvailableRooms = num(setup.totalRooms) * reportMonthDays;
   const reportGuide = [
     {
       name: "Previous Week OTB",
@@ -1980,7 +1982,7 @@ export default function OpsReportPage() {
             <DarkLabeledInput label="Property name" value={setup.propertyName} onChange={(propertyName) => setSetup({ ...setup, propertyName })} />
             <DarkLabeledInput label="General manager" value={setup.generalManager} onChange={(generalManager) => setSetup({ ...setup, generalManager })} />
             <DarkLabeledInput label="Total rooms" value={setup.totalRooms} onChange={(totalRooms) => setSetup({ ...setup, totalRooms })} type="number" />
-            <DarkLabeledInput label="Monthly room nights" value={setup.monthlyRoomNights} onChange={(monthlyRoomNights) => setSetup({ ...setup, monthlyRoomNights })} type="number" />
+            <DarkLabeledInput label="Total available rooms" value={totalAvailableRooms ? String(totalAvailableRooms) : ""} onChange={() => undefined} type="number" readOnly />
           </CardContent>
         </Card>
 

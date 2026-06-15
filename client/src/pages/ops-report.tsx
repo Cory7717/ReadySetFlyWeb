@@ -522,8 +522,8 @@ function priorYearMonthKey(value: string) {
 const NEXT_MONTH_ROW_LABELS = [
   "FUTURE BOOKED FOR NEXT MONTH",
   "NEXT MONTH BUDGET",
-  "SDLY OTB FOR NEXT MONTH",
   "VARIANCE TO BUDGET",
+  "SDLY OTB FOR NEXT MONTH",
   "PACING VARIANCE TO LY",
 ] as const;
 
@@ -893,8 +893,8 @@ export default function OpsReportPage() {
   const [nextMonthRows, setNextMonthRows] = useState<Row[]>([
     { label: "FUTURE BOOKED FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     { label: "NEXT MONTH BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
-    { label: "SDLY OTB FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     { label: "VARIANCE TO BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+    { label: "SDLY OTB FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     { label: "PACING VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
   ]);
   const [chargebacks, setChargebacks] = useState<Row[]>(emptyRows(5, ["no", "reason", "respondDate", "amount", "comment"]));
@@ -1567,8 +1567,8 @@ export default function OpsReportPage() {
     setNextMonthRows([
       { label: "FUTURE BOOKED FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
       { label: "NEXT MONTH BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
-      { label: "SDLY OTB FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
       { label: "VARIANCE TO BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "SDLY OTB FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
       { label: "PACING VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     ]);
     setChargebacks(emptyRows(5, ["no", "reason", "respondDate", "amount", "comment"]));

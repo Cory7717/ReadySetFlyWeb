@@ -485,6 +485,9 @@ function resolveShiftTypeForAssignment(assignment: any, shiftTypeById: Map<any, 
 
 function assignmentRenderDepartment(assignment: any, employee: any, shiftType: any) {
   if (!assignment) return "";
+  if (isNonWorkingShiftLabel(assignment.roleWorked) || isNonWorkingShiftLabel(shiftType?.label)) {
+    return primaryOperationalDepartment(employee);
+  }
   const resolved = normalizeDepartment(assignment.roleWorked || shiftType?.departmentHint || shiftType?.label || employee?.department);
   const managerDepartment = operationalManagerDepartment(employee);
   return resolved === "Managers" && managerDepartment ? managerDepartment : resolved;

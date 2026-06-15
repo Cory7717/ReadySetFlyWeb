@@ -674,6 +674,14 @@ function findEmployeeForUser(payload: SchedulePayload, user?: ScheduleUser | nul
 }
 
 function assignmentDepartment(assignment: ShiftAssignment | undefined, employee: ScheduleEmployee, shiftType?: ShiftType) {
+  if (isNonWorkingShift(assignment?.roleWorked) || isNonWorkingShift(shiftType?.label)) {
+    const managerDepartment = operationalManagerDepartment(employee);
+    if (managerDepartment) return managerDepartment;
+    const departments = [employee.department, employee.position, ...rolesArray(employee.rolesJson)]
+      .filter(Boolean)
+      .map((value) => normalizeDepartment(value));
+    return departments.find((department) => department !== "Managers") || departments[0] || "Front Desk";
+  }
   const resolved = roleDepartment(assignment?.roleWorked || shiftType?.departmentHint || employee.department);
   const managerDepartment = operationalManagerDepartment(employee);
   return resolved === "Managers" && managerDepartment ? managerDepartment : resolved;
@@ -1444,7 +1452,7 @@ function ShiftEditDialog({
     const nonWorking = isNonWorkingShift(shift?.label);
     const shiftDept = normalizeDepartment(shift?.departmentHint || shift?.label);
     const currentRoleDept = roleDepartment(form.roleWorked);
-    const shouldUseShiftRole = Boolean(shift && (!form.roleWorked || (shiftDept && currentRoleDept && shiftDept !== currentRoleDept)));
+    const shouldUseShiftRole = Boolean(!nonWorking && shift && (!form.roleWorked || (shiftDept && currentRoleDept && shiftDept !== currentRoleDept)));
     setForm({
       ...form,
       shiftTypeId: shiftTypeId === "none" ? "" : shiftTypeId,

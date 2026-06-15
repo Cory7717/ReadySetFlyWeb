@@ -240,6 +240,7 @@ type ForecastDay = {
   departures: number;
   stayovers: number;
   dndRooms?: number | null;
+  forecastAdr?: string | number | null;
   roomRevenue?: string | number | null;
   otbRoomsSold?: number | null;
   otbOccupancyPercent?: string | number | null;
@@ -331,6 +332,40 @@ type SchedulePayload = {
   employees: ScheduleEmployee[];
   shiftTypes: ShiftType[];
   forecast: ForecastDay[];
+  forecastAccuracy?: {
+    current: {
+      ready: boolean;
+      completedDays: number;
+      daily: Array<{
+        date: string;
+        originalPickupRooms: number | null;
+        forecastVarianceRooms: number;
+        absoluteForecastErrorRooms: number;
+        forecastVariancePercent: number | null;
+        revenueVariance: number | null;
+      }>;
+      weekly: {
+        originalPickupRooms: number;
+        forecastVarianceRooms: number;
+        forecastAccuracyPercent: number | null;
+        meanAbsoluteErrorRooms: number;
+        revenueVariance: number;
+        forecastRooms: number;
+        actualRooms: number;
+        forecastRevenue: number;
+        actualRevenue: number;
+      };
+    };
+    historical: {
+      sampleDays: number;
+      byWeekday: Record<string, {
+        sampleDays: number;
+        averageRoomsVariance: number;
+        averageArrivalsVariance: number;
+        averageDeparturesVariance: number;
+      }>;
+    };
+  };
   assignments: ShiftAssignment[];
   actualHours?: ScheduleActualHours[];
   housekeepingBoards?: HousekeepingBoard[];
@@ -939,6 +974,7 @@ function ForecastPanel({
     day.otbDepartures != null ||
     day.otbRoomRevenue != null
   );
+  const forecastVarianceForDate = (date: string) => payload.forecastAccuracy?.current.daily.find((day) => day.date === date);
   const updateDayField = (index: number, key: string, value: string) => {
     setForecastDirty(true);
     setDays((current) => current.map((item, i) => {
@@ -951,17 +987,30 @@ function ForecastPanel({
           stayovers: Math.max(0, numberValue(item.roomsSold) - arrivals),
         };
       }
+      if (key === "forecastAdr") {
+        const forecastAdr = Math.max(0, numberValue(value));
+        const totalForecastRooms = Math.max(0, numberValue(item.roomsSold) + numberValue(item.popupGroupRooms));
+        return {
+          ...item,
+          forecastAdr,
+          roomRevenue: Number((totalForecastRooms * forecastAdr).toFixed(2)),
+        };
+      }
       if (key !== "roomsSold") return { ...item, [key]: value };
 
       const nextRoomsSold = Math.max(0, Math.round(numberValue(value)));
-      const previousRoomsSold = numberValue(item.roomsSold);
       const capacity = inferRoomCapacity(item);
       const occupancyPercent = Number(((nextRoomsSold / capacity) * 100).toFixed(2));
       const arrivals = Math.max(0, Math.round(numberValue(item.arrivals)));
       const stayovers = Math.max(0, nextRoomsSold - arrivals);
-      const currentAdr = previousRoomsSold > 0 ? numberValue(item.roomRevenue) / previousRoomsSold : 0;
-      const nextAdr = currentAdr > 0 ? currentAdr + 2 : 0;
-      const roomRevenue = nextAdr > 0 ? Number((nextRoomsSold * nextAdr).toFixed(2)) : numberValue(item.roomRevenue);
+      const forecastAdr = numberValue(item.forecastAdr) || (
+        numberValue(item.roomsSold) + numberValue(item.popupGroupRooms) > 0
+          ? numberValue(item.roomRevenue) / (numberValue(item.roomsSold) + numberValue(item.popupGroupRooms))
+          : 0
+      );
+      const roomRevenue = forecastAdr > 0
+        ? Number(((nextRoomsSold + numberValue(item.popupGroupRooms)) * forecastAdr).toFixed(2))
+        : numberValue(item.roomRevenue);
 
       return {
         ...item,
@@ -969,6 +1018,7 @@ function ForecastPanel({
         occupancyPercent,
         arrivals,
         stayovers,
+        forecastAdr: forecastAdr > 0 ? Number(forecastAdr.toFixed(2)) : null,
         roomRevenue,
       };
     }));
@@ -1045,9 +1095,20 @@ function ForecastPanel({
                 </p>
               </div>
               {days.some((day) => day.actualRoomsSold != null && day.otbRoomsSold != null) && (
-                <Badge variant="outline" className="w-fit border-[#bdd5c3] bg-[#e8f1ea] text-[#173c25]">
-                  {spanish ? "Pickup vs original" : "Pickup vs original"}: {days.reduce((sum, day) => sum + (Number(day.actualRoomsSold ?? day.otbRoomsSold ?? 0) - Number(day.otbRoomsSold ?? 0)), 0)} rooms
-                </Badge>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="w-fit border-[#bdd5c3] bg-[#e8f1ea] text-[#173c25]">
+                    {spanish ? "Pickup vs original" : "Pickup vs original"}: {payload.forecastAccuracy?.current.weekly.originalPickupRooms ?? 0} rooms
+                  </Badge>
+                  <Badge variant="outline" className="w-fit border-[#d9c9b4] bg-white text-[#4f3d2e]">
+                    {spanish ? "Varianza vs pronostico" : "Variance vs forecast"}: {(payload.forecastAccuracy?.current.weekly.forecastVarianceRooms ?? 0) > 0 ? "+" : ""}{payload.forecastAccuracy?.current.weekly.forecastVarianceRooms ?? 0} rooms
+                  </Badge>
+                  <Badge variant="outline" className="w-fit border-[#d9c9b4] bg-white text-[#4f3d2e]">
+                    {spanish ? "Precision" : "Forecast accuracy"}: {payload.forecastAccuracy?.current.weekly.forecastAccuracyPercent?.toFixed(1) ?? "-"}%
+                  </Badge>
+                  <Badge variant="outline" className="w-fit border-[#d9c9b4] bg-white text-[#4f3d2e]">
+                    {spanish ? "Varianza ingresos" : "Revenue variance"}: ${Number(payload.forecastAccuracy?.current.weekly.revenueVariance ?? 0).toFixed(2)}
+                  </Badge>
+                </div>
               )}
             </div>
             <table className="w-full min-w-[820px] border-collapse text-sm">
@@ -1103,6 +1164,17 @@ function ForecastPanel({
                         );
                       })}
                     </tr>
+                    <tr>
+                      <td className="border border-[#e0d3c1] bg-[#fff4df] p-2 font-medium">{spanish ? "Real vs pronostico" : "Actual vs forecast"}</td>
+                      {days.map((day) => {
+                        const variance = forecastVarianceForDate(day.forecastDate)?.forecastVarianceRooms;
+                        return (
+                          <td key={day.forecastDate} className="border border-[#e0d3c1] bg-[#fff4df] p-2 text-center font-semibold">
+                            {variance == null ? "-" : variance > 0 ? `+${variance}` : variance}
+                          </td>
+                        );
+                      })}
+                    </tr>
                   </>
                 )}
               </tbody>
@@ -1124,7 +1196,8 @@ function ForecastPanel({
               ["departures", t("Departures")],
               ["stayovers", t("Stayovers")],
               ["dndRooms", spanish ? "Cuartos DND" : "DND rooms"],
-              ["roomRevenue", spanish ? "Ingresos cuartos" : "Room rev"],
+              ["forecastAdr", "ADR"],
+              ["roomRevenue", spanish ? "Ingresos cuartos calculados" : "Calculated room rev"],
               ["popupGroupRooms", spanish ? "Cuartos grupo" : "Pop-up rooms"],
               ["notes", t("Notes")],
             ].map(([key, label]) => (
@@ -1134,7 +1207,7 @@ function ForecastPanel({
                   <td key={day.forecastDate} className="border border-[#e0d3c1] p-1">
                     <Input
                       className={C.field}
-                      disabled={!editable}
+                      disabled={!editable || key === "roomRevenue"}
                       value={(day as any)[key] ?? ""}
                       type={key === "notes" ? "text" : "number"}
                       onChange={(event) => updateDayField(index, key, event.target.value)}
@@ -2959,6 +3032,9 @@ export default function SchedulePage() {
     onSuccess: (data: SchedulePayload) => {
       setSelectedWeekId(data.schedule.id);
       queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks"] });
+      if ((data as SchedulePayload & { existingWeek?: boolean }).existingWeek) {
+        toast({ title: "Existing week opened", description: "That schedule already existed, so no shifts were copied or changed." });
+      }
     },
     onError: (error: Error) => toast({ title: "Unable to create week", description: error.message, variant: "destructive" }),
   });
@@ -3680,9 +3756,22 @@ export default function SchedulePage() {
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
                     <div className="text-sm text-[#5f5247]">Actual pickup</div>
                     <div className="text-2xl font-semibold">
-                      {payload.forecast.some((day) => day.actualRoomsSold != null && day.otbRoomsSold != null)
-                        ? payload.forecast.reduce((sum, day) => sum + (Number(day.actualRoomsSold ?? day.otbRoomsSold ?? 0) - Number(day.otbRoomsSold ?? 0)), 0)
+                      {payload.forecastAccuracy?.current.ready
+                        ? payload.forecastAccuracy.current.weekly.originalPickupRooms
                         : "-"}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
+                    <div className="text-sm text-[#5f5247]">Actual vs forecast</div>
+                    <div className="text-2xl font-semibold">
+                      {payload.forecastAccuracy?.current.ready
+                        ? `${payload.forecastAccuracy.current.weekly.forecastVarianceRooms > 0 ? "+" : ""}${payload.forecastAccuracy.current.weekly.forecastVarianceRooms}`
+                        : "-"}
+                    </div>
+                    <div className="text-xs text-[#5f5247]">
+                      {payload.forecastAccuracy?.current.ready
+                        ? `${payload.forecastAccuracy.current.weekly.forecastAccuracyPercent?.toFixed(1) ?? "-"}% accuracy`
+                        : "Upload final actual pickup"}
                     </div>
                   </div>
                 </CardContent>

@@ -945,6 +945,7 @@ const forecastSchema = z.object({
     departures: z.coerce.number().int().min(0).max(10000).default(0),
     stayovers: z.coerce.number().int().min(0).max(10000).default(0),
     dndRooms: z.coerce.number().int().min(0).max(10000).optional().default(0),
+    forecastAdr: z.coerce.number().min(0).max(100000).optional().nullable(),
     roomRevenue: z.coerce.number().min(0).max(10000000).optional().nullable(),
     popupGroupRooms: z.coerce.number().int().min(0).max(10000).optional().default(0),
     popupGroupNotes: z.string().max(2000).optional().nullable(),
@@ -1039,6 +1040,27 @@ function parseReportNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function forecastAdrForDay(day: any) {
+  const explicitAdr = Number(day?.forecastAdr || 0);
+  if (explicitAdr > 0) return explicitAdr;
+  const forecastRooms = Number(day?.roomsSold || 0) + Number(day?.popupGroupRooms || 0);
+  const forecastRevenue = Number(day?.roomRevenue || 0);
+  if (forecastRooms > 0 && forecastRevenue > 0) return forecastRevenue / forecastRooms;
+  const otbRooms = Number(day?.otbRoomsSold || 0);
+  const otbRevenue = Number(day?.otbRoomRevenue || 0);
+  return otbRooms > 0 && otbRevenue > 0 ? otbRevenue / otbRooms : 0;
+}
+
+function withCalculatedForecastRevenue(day: any) {
+  const forecastAdr = forecastAdrForDay(day);
+  const forecastRooms = Number(day?.roomsSold || 0) + Number(day?.popupGroupRooms || 0);
+  return {
+    ...day,
+    forecastAdr: forecastAdr > 0 ? Number(forecastAdr.toFixed(2)) : null,
+    roomRevenue: forecastAdr > 0 ? Number((forecastRooms * forecastAdr).toFixed(2)) : Number(day?.roomRevenue || 0),
+  };
+}
+
 function occupancyTargetForDate(dateKey: string) {
   const day = parseDateKey(dateKey)?.getUTCDay();
   if (day === 0) return 50; // Sunday is typically softer than the weekly target.
@@ -1082,6 +1104,7 @@ function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
     const departures = parseReportNumber(row.Dept);
     const stayovers = Math.max(0, roomsSoldOtb - arrivals);
     const roomRevenueOtb = parseReportNumber(row["Rm Rev ($)"]);
+    const forecastAdr = roomsSoldOtb > 0 ? roomRevenueOtb / roomsSoldOtb : 0;
 
     forecastByDate.set(forecastDate, {
       forecastDate,
@@ -1095,6 +1118,7 @@ function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
       otbArrivals: parseReportNumber(row.Arr),
       otbDepartures: parseReportNumber(row.Dept),
       otbRoomRevenue: roomRevenueOtb,
+      forecastAdr: forecastAdr > 0 ? Number(forecastAdr.toFixed(2)) : null,
       roomRevenue: roomRevenueOtb,
       notes: `Imported OTB: ${roomsSoldOtb} rooms / ${occupancyPercent}%. Suggested pickup is +${suggestedPickup} rooms toward ${targetOccupancyPercent}% ${targetOccupancyPercent === TARGET_OCCUPANCY_PERCENT ? "weekly" : "day"} target using the ${leadDays}-day pickup window.`,
     });
@@ -1277,6 +1301,48 @@ async function getScheduleOr404(id: string) {
   return schedule || null;
 }
 
+function publishedAssignmentKey(assignment: any) {
+  return [
+    assignment.employeeId || "open",
+    String(assignment.shiftDate || ""),
+    assignment.shiftTypeId || "",
+  ].join(":");
+}
+
+async function getPublishedAssignmentSnapshot(scheduleId: string) {
+  const [publishedAudit] = await db
+    .select({ metadataJson: scheduleAuditLog.metadataJson })
+    .from(scheduleAuditLog)
+    .where(and(eq(scheduleAuditLog.scheduleId, scheduleId), eq(scheduleAuditLog.action, "schedule_published")))
+    .orderBy(desc(scheduleAuditLog.createdAt))
+    .limit(1);
+  const cells = (publishedAudit?.metadataJson as any)?.cells;
+  return Array.isArray(cells) ? cells : null;
+}
+
+async function protectClosedScheduleAssignments(schedule: any, assignments: any[]) {
+  if (schedule.status === "draft") return assignments;
+  const publishedCells = await getPublishedAssignmentSnapshot(schedule.id);
+  if (!publishedCells) return assignments;
+  const publishedKeys = new Set(publishedCells.map(publishedAssignmentKey));
+  return assignments.filter((assignment) => publishedKeys.has(publishedAssignmentKey(assignment)));
+}
+
+async function removeAssignmentsAddedAfterPublish(schedule: any) {
+  const publishedCells = await getPublishedAssignmentSnapshot(schedule.id);
+  if (!publishedCells) return 0;
+  const publishedKeys = new Set(publishedCells.map(publishedAssignmentKey));
+  const assignments = await db
+    .select()
+    .from(scheduleShiftAssignments)
+    .where(eq(scheduleShiftAssignments.scheduleId, schedule.id));
+  const addedAssignments = assignments.filter((assignment) => !publishedKeys.has(publishedAssignmentKey(assignment)));
+  for (const assignment of addedAssignments) {
+    await db.delete(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.id, assignment.id));
+  }
+  return addedAssignments.length;
+}
+
 async function canManageDepartment(user: any, department: string) {
   const publicUser = publicScheduleUser(user);
   if (publicUser.isSuperAdmin) return true;
@@ -1289,12 +1355,86 @@ function sectionCompleted(schedule: any, department: string) {
   return Boolean(status?.completedAt);
 }
 
+function calculateForecastAccuracy(forecast: any[]) {
+  const completed = forecast.filter((day) => day.actualRoomsSold != null);
+  const daily = completed.map((day) => {
+    const forecastRooms = Number(day.roomsSold || 0) + Number(day.popupGroupRooms || 0);
+    const actualRooms = Number(day.actualRoomsSold || 0);
+    const otbRooms = Number(day.otbRoomsSold || 0);
+    const forecastRevenue = Number(day.roomRevenue || 0);
+    const actualRevenue = Number(day.actualRoomRevenue || 0);
+    return {
+      date: String(day.forecastDate),
+      originalPickupRooms: day.otbRoomsSold != null ? actualRooms - otbRooms : null,
+      forecastVarianceRooms: actualRooms - forecastRooms,
+      absoluteForecastErrorRooms: Math.abs(actualRooms - forecastRooms),
+      forecastVariancePercent: forecastRooms > 0 ? ((actualRooms - forecastRooms) / forecastRooms) * 100 : null,
+      revenueVariance: day.actualRoomRevenue != null ? actualRevenue - forecastRevenue : null,
+    };
+  });
+  const totalForecastRooms = completed.reduce((sum, day) => sum + Number(day.roomsSold || 0) + Number(day.popupGroupRooms || 0), 0);
+  const totalActualRooms = completed.reduce((sum, day) => sum + Number(day.actualRoomsSold || 0), 0);
+  const totalOtbRooms = completed.reduce((sum, day) => sum + Number(day.otbRoomsSold || 0), 0);
+  const totalForecastRevenue = completed.reduce((sum, day) => sum + Number(day.roomRevenue || 0), 0);
+  const totalActualRevenue = completed.reduce((sum, day) => sum + Number(day.actualRoomRevenue || 0), 0);
+  const meanAbsoluteErrorRooms = daily.length
+    ? daily.reduce((sum, day) => sum + day.absoluteForecastErrorRooms, 0) / daily.length
+    : 0;
+  const totalAbsoluteForecastErrorRooms = daily.reduce((sum, day) => sum + day.absoluteForecastErrorRooms, 0);
+  return {
+    ready: completed.length > 0,
+    completedDays: completed.length,
+    daily,
+    weekly: {
+      originalPickupRooms: totalActualRooms - totalOtbRooms,
+      forecastVarianceRooms: totalActualRooms - totalForecastRooms,
+      forecastAccuracyPercent: totalActualRooms > 0
+        ? Math.max(0, 100 - (totalAbsoluteForecastErrorRooms / totalActualRooms) * 100)
+        : null,
+      meanAbsoluteErrorRooms: Number(meanAbsoluteErrorRooms.toFixed(1)),
+      revenueVariance: totalActualRevenue - totalForecastRevenue,
+      forecastRooms: totalForecastRooms,
+      actualRooms: totalActualRooms,
+      forecastRevenue: Number(totalForecastRevenue.toFixed(2)),
+      actualRevenue: Number(totalActualRevenue.toFixed(2)),
+    },
+  };
+}
+
+async function buildHistoricalForecastAccuracy(scheduleId: string) {
+  const rows = await db
+    .select()
+    .from(scheduleForecastDays);
+  const completed = rows.filter((row) => row.scheduleId !== scheduleId && row.actualRoomsSold != null);
+  const buckets = new Map<number, { rooms: number[]; arrivals: number[]; departures: number[] }>();
+  for (const row of completed) {
+    const weekday = parseDateKey(String(row.forecastDate))?.getUTCDay();
+    if (weekday == null) continue;
+    const bucket = buckets.get(weekday) || { rooms: [], arrivals: [], departures: [] };
+    bucket.rooms.push(Number(row.actualRoomsSold || 0) - (Number(row.roomsSold || 0) + Number(row.popupGroupRooms || 0)));
+    if (row.actualArrivals != null) bucket.arrivals.push(Number(row.actualArrivals || 0) - Number(row.arrivals || 0));
+    if (row.actualDepartures != null) bucket.departures.push(Number(row.actualDepartures || 0) - Number(row.departures || 0));
+    buckets.set(weekday, bucket);
+  }
+  const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  const byWeekday = Object.fromEntries(Array.from(buckets.entries()).map(([weekday, bucket]) => [
+    weekday,
+    {
+      sampleDays: bucket.rooms.length,
+      averageRoomsVariance: Number(average(bucket.rooms).toFixed(1)),
+      averageArrivalsVariance: Number(average(bucket.arrivals).toFixed(1)),
+      averageDeparturesVariance: Number(average(bucket.departures).toFixed(1)),
+    },
+  ]));
+  return { sampleDays: completed.length, byWeekday };
+}
+
 async function buildSchedulePayload(scheduleId: string) {
   await seedShiftTypes();
   const schedule = await getScheduleOr404(scheduleId);
   if (!schedule) return null;
   const days = weekDays(schedule.weekStartDate);
-  const [employees, shiftTypes, forecast, assignments, housekeepingBoards, actualHours, approvedRequestRows] = await Promise.all([
+  const [employees, shiftTypes, forecast, rawAssignments, housekeepingBoards, actualHours, approvedRequestRows] = await Promise.all([
     db.select().from(scheduleEmployees).orderBy(asc(scheduleEmployees.department), asc(scheduleEmployees.sortOrder), asc(scheduleEmployees.displayName)),
     db.select().from(scheduleShiftTypes).orderBy(asc(scheduleShiftTypes.sortOrder), asc(scheduleShiftTypes.label)),
     db.select().from(scheduleForecastDays).where(eq(scheduleForecastDays.scheduleId, scheduleId)).orderBy(asc(scheduleForecastDays.forecastDate)),
@@ -1307,6 +1447,7 @@ async function buildSchedulePayload(scheduleId: string) {
       .innerJoin(tipsUsers, eq(scheduleRequests.requesterUserId, tipsUsers.id))
       .where(eq(scheduleRequests.status, "approved")),
   ]);
+  const assignments = await protectClosedScheduleAssignments(schedule, rawAssignments);
   const employeeByEmail = new Map(employees.map((employee) => [normalizeEmail(String(employee.email || "")), employee]));
   const approvedRequests = approvedRequestRows
     .flatMap((row) => {
@@ -1369,7 +1510,11 @@ async function buildSchedulePayload(scheduleId: string) {
       actualReady: actualHousekeepingHours > 0 && actualRoomsComplete && actualRooms > 0,
     };
   }
-  return { schedule, days, departments: DEPARTMENTS, requiredDepartments: REQUIRED_DEPARTMENTS, employees, shiftTypes, forecast, assignments, actualHours, housekeepingBoards: housekeepingBoards.map(summarizeHousekeepingBoard), approvedRequests, totals, departmentStatus: schedule.departmentStatusJson || {} };
+  const forecastAccuracy = {
+    current: calculateForecastAccuracy(forecast),
+    historical: await buildHistoricalForecastAccuracy(scheduleId),
+  };
+  return { schedule, days, departments: DEPARTMENTS, requiredDepartments: REQUIRED_DEPARTMENTS, employees, shiftTypes, forecast, forecastAccuracy, assignments, actualHours, housekeepingBoards: housekeepingBoards.map(summarizeHousekeepingBoard), approvedRequests, totals, departmentStatus: schedule.departmentStatusJson || {} };
 }
 
 async function buildScheduleTemplatePreview(templateId: string, scheduleId: string) {
@@ -2275,10 +2420,15 @@ function buildAiScheduleDraft(payload: any, scopeDepartment?: string | string[])
   if (allowed && allowed.has("Front Desk") && allowed.size === 1) return { assignments, warnings };
   for (const day of payload.days) {
     const forecast: any = forecastByDay.get(day) || {};
-    const rooms = Number(forecast.roomsSold || 0);
+    const weekday = parseDateKey(day)?.getUTCDay();
+    const learned = weekday == null ? null : payload.forecastAccuracy?.historical?.byWeekday?.[weekday];
+    const useLearnedBias = Number(learned?.sampleDays || 0) >= 2;
+    const roomsBias = useLearnedBias ? Math.max(-10, Math.min(10, Number(learned.averageRoomsVariance || 0))) : 0;
+    const departuresBias = useLearnedBias ? Math.max(-10, Math.min(10, Number(learned.averageDeparturesVariance || 0))) : 0;
+    const rooms = Math.max(0, Number(forecast.roomsSold || 0) + Number(forecast.popupGroupRooms || 0) + roomsBias);
     const occ = Number(forecast.occupancyPercent || 0);
     const arrivals = Number(forecast.arrivals || 0);
-    const departures = Number(forecast.departures || 0);
+    const departures = Math.max(0, Number(forecast.departures || 0) + departuresBias);
     const stayovers = Number(forecast.stayovers || Math.max(0, rooms - arrivals));
     const roomCredits = Math.max(0, departures + stayovers * 0.5);
     const hkAttendants = Math.max(1, Math.ceil(((roomCredits * 28) / 60) / 8));
@@ -2301,6 +2451,9 @@ function buildAiScheduleDraft(payload: any, scopeDepartment?: string | string[])
     if (!allowed) {
       if (![0, 6].includes(new Date(`${day}T00:00:00Z`).getUTCDay()) || occ >= 75) add("Maintenance", "MAINTENANCE", day, "Property coverage");
     }
+  }
+  if (Number(payload.forecastAccuracy?.historical?.sampleDays || 0) > 0) {
+    warnings.push(`AI staffing demand used bounded weekday forecast-error corrections from ${payload.forecastAccuracy.historical.sampleDays} actualized historical day(s).`);
   }
 
   const bistroTarget = !allowed ? payload.totals.bistroLabor : null;
@@ -2333,6 +2486,7 @@ async function summarizeAiSchedule(payload: any, draft: any) {
     })),
     laborTargets: payload.totals.laborMetrics?.targets,
     currentLabor: payload.totals.laborMetrics?.weekly,
+    forecastAccuracy: payload.forecastAccuracy,
     proposedShiftCount: draft.assignments.length,
     warnings: draft.warnings,
   };
@@ -3420,20 +3574,31 @@ export function registerScheduleRoutes(app: Express) {
       if (!parsed.success) return res.status(400).json({ error: "Invalid week", validation: parsed.error.format() });
       const weekStartDate = parsed.data.weekStartDate;
       const weekEndDate = addDays(weekStartDate, 6);
+      const [existingSchedule] = await db
+        .select()
+        .from(weeklySchedules)
+        .where(eq(weeklySchedules.weekStartDate, weekStartDate))
+        .limit(1);
+      if (existingSchedule) {
+        const payload = await buildSchedulePayload(existingSchedule.id);
+        return res.status(200).json({
+          ...stripPrivateScheduleRates(payload, req.scheduleUser),
+          existingWeek: true,
+          requestedModeIgnored: parsed.data.mode,
+        });
+      }
       const [schedule] = await db.insert(weeklySchedules).values({
         propertyName: parsed.data.propertyName,
         weekStartDate,
         weekEndDate,
         createdByUserId: req.scheduleUser.id,
-      }).onConflictDoUpdate({
-        target: weeklySchedules.weekStartDate,
-        set: { propertyName: parsed.data.propertyName, updatedAt: new Date() },
       }).returning();
       await ensureForecast(schedule.id, schedule.weekStartDate);
       if (parsed.data.mode === "copyPrevious") {
         const [previous] = await db.select().from(weeklySchedules).where(lt(weeklySchedules.weekStartDate, weekStartDate)).orderBy(desc(weeklySchedules.weekStartDate)).limit(1);
         if (previous) {
-          const previousAssignments = await db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, previous.id));
+          const rawPreviousAssignments = await db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, previous.id));
+          const previousAssignments = await protectClosedScheduleAssignments(previous, rawPreviousAssignments);
           const employees = await db.select().from(scheduleEmployees);
           const employeesById = new Map(employees.map((employee) => [employee.id, employee]));
           const shiftTypes = await db.select().from(scheduleShiftTypes);
@@ -3502,9 +3667,11 @@ export function registerScheduleRoutes(app: Express) {
       const parsed = forecastSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid forecast", validation: parsed.error.format() });
       for (const day of parsed.data.days) {
-        await db.insert(scheduleForecastDays).values({ scheduleId: schedule.id, ...day } as any).onConflictDoUpdate({
+        if (!weekDays(schedule.weekStartDate).includes(day.forecastDate)) continue;
+        const calculatedDay = withCalculatedForecastRevenue(day);
+        await db.insert(scheduleForecastDays).values({ scheduleId: schedule.id, ...calculatedDay } as any).onConflictDoUpdate({
           target: [scheduleForecastDays.scheduleId, scheduleForecastDays.forecastDate],
-          set: { ...day, updatedAt: new Date() } as any,
+          set: { ...calculatedDay, updatedAt: new Date() } as any,
         });
       }
       await audit(schedule.id, req.scheduleUser.id, "forecast_updated");
@@ -3525,9 +3692,10 @@ export function registerScheduleRoutes(app: Express) {
         return res.status(400).json({ error: "No matching forecast dates were found in the uploaded report for this schedule week." });
       }
       for (const day of importedDays) {
-        await db.insert(scheduleForecastDays).values({ scheduleId: schedule.id, ...day } as any).onConflictDoUpdate({
+        const calculatedDay = withCalculatedForecastRevenue(day);
+        await db.insert(scheduleForecastDays).values({ scheduleId: schedule.id, ...calculatedDay } as any).onConflictDoUpdate({
           target: [scheduleForecastDays.scheduleId, scheduleForecastDays.forecastDate],
-          set: { ...day, updatedAt: new Date() } as any,
+          set: { ...calculatedDay, updatedAt: new Date() } as any,
         });
       }
       await audit(schedule.id, req.scheduleUser.id, "forecast_imported", {
@@ -3585,11 +3753,13 @@ export function registerScheduleRoutes(app: Express) {
           set: { ...day, updatedAt: new Date() } as any,
         });
       }
+      const payload = await buildSchedulePayload(schedule.id);
       await audit(schedule.id, req.scheduleUser.id, "forecast_actualized_imported", {
         fileName: req.file.originalname,
         actualizedDays: actualizedDays.length,
+        forecastAccuracy: payload?.forecastAccuracy?.current?.weekly || null,
       });
-      res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
+      res.json(stripPrivateScheduleRates(payload, req.scheduleUser));
     } catch (error) {
       next(error);
     }
@@ -3672,9 +3842,24 @@ export function registerScheduleRoutes(app: Express) {
       if (!parsed.success) return res.status(400).json({ error: "Invalid pop-up group adjustment", validation: parsed.error.format() });
       const days = weekDays(schedule.weekStartDate);
       if (!days.includes(parsed.data.forecastDate)) return res.status(400).json({ error: "Group date is outside this schedule week." });
-      await db.insert(scheduleForecastDays).values({ scheduleId: schedule.id, ...parsed.data } as any).onConflictDoUpdate({
+      const [existingForecast] = await db
+        .select()
+        .from(scheduleForecastDays)
+        .where(and(eq(scheduleForecastDays.scheduleId, schedule.id), eq(scheduleForecastDays.forecastDate, parsed.data.forecastDate)))
+        .limit(1);
+      const calculatedDay = withCalculatedForecastRevenue({
+        ...(existingForecast || { roomsSold: 0 }),
+        ...parsed.data,
+      });
+      await db.insert(scheduleForecastDays).values({ scheduleId: schedule.id, ...calculatedDay } as any).onConflictDoUpdate({
         target: [scheduleForecastDays.scheduleId, scheduleForecastDays.forecastDate],
-        set: { ...parsed.data, updatedAt: new Date() } as any,
+        set: {
+          popupGroupRooms: calculatedDay.popupGroupRooms,
+          popupGroupNotes: calculatedDay.popupGroupNotes,
+          forecastAdr: calculatedDay.forecastAdr,
+          roomRevenue: calculatedDay.roomRevenue,
+          updatedAt: new Date(),
+        } as any,
       });
       await audit(schedule.id, req.scheduleUser.id, "forecast_popup_group_updated", parsed.data);
       res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
@@ -3687,9 +3872,12 @@ export function registerScheduleRoutes(app: Express) {
     try {
       const schedule = await getScheduleOr404(req.params.id);
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
-      if (schedule.status === "published") return res.status(423).json({ error: "Published schedules are locked. Reopen before editing." });
+      if (schedule.status !== "draft") return res.status(423).json({ error: "Closed schedules are locked. Reopen before editing." });
       const parsed = shiftAssignmentSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid shift", validation: parsed.error.format() });
+      if (!weekDays(schedule.weekStartDate).includes(parsed.data.shiftDate)) {
+        return res.status(400).json({ error: "Shift date is outside this schedule week." });
+      }
       const employeeId = parsed.data.employeeId || null;
       const [[targetEmployee], [selectedShiftType]] = await Promise.all([
         employeeId ? db.select().from(scheduleEmployees).where(eq(scheduleEmployees.id, employeeId)).limit(1) : Promise.resolve([]),
@@ -3799,7 +3987,7 @@ export function registerScheduleRoutes(app: Express) {
     try {
       const schedule = await getScheduleOr404(req.params.id);
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
-      if (schedule.status === "published") return res.status(423).json({ error: "Published schedules are locked. Reopen before copying previous shifts." });
+      if (schedule.status !== "draft") return res.status(423).json({ error: "Closed schedules are locked. Reopen before copying previous shifts." });
       const parsed = copyPreviousScheduleSchema.safeParse(req.body || {});
       if (!parsed.success) return res.status(400).json({ error: "Invalid copy request", validation: parsed.error.format() });
       if (parsed.data.scope === "employee" && !parsed.data.employeeId) return res.status(400).json({ error: "Choose an associate to copy." });
@@ -3807,11 +3995,12 @@ export function registerScheduleRoutes(app: Express) {
       const [previous] = await db.select().from(weeklySchedules).where(lt(weeklySchedules.weekStartDate, schedule.weekStartDate)).orderBy(desc(weeklySchedules.weekStartDate)).limit(1);
       if (!previous) return res.status(404).json({ error: "No previous schedule found to copy from." });
 
-      const [employees, shiftTypes, previousAssignments] = await Promise.all([
+      const [employees, shiftTypes, rawPreviousAssignments] = await Promise.all([
         db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true)),
         db.select().from(scheduleShiftTypes),
         db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, previous.id)),
       ]);
+      const previousAssignments = await protectClosedScheduleAssignments(previous, rawPreviousAssignments);
       const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
       const shiftTypeById = new Map(shiftTypes.map((shift) => [shift.id, shift]));
       const shiftTypeByLabel = new Map(shiftTypes.map((shift) => [String(shift.label || "").toUpperCase(), shift]));
@@ -4013,9 +4202,10 @@ export function registerScheduleRoutes(app: Express) {
       }
       const schedule = await getScheduleOr404(req.params.id);
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
-      if (schedule.status === "published") return res.status(423).json({ error: "Published schedules are locked. Reopen before applying a draft." });
+      if (schedule.status !== "draft") return res.status(423).json({ error: "Closed schedules are locked. Reopen before applying a draft." });
       const parsed = aiDraftApplySchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid AI draft", validation: parsed.error.format() });
+      const scheduleDays = new Set(weekDays(schedule.weekStartDate));
 
       let applied = 0;
       const [employees, shiftTypes] = await Promise.all([
@@ -4035,6 +4225,7 @@ export function registerScheduleRoutes(app: Express) {
         }
       }
       for (const assignment of parsed.data.assignments) {
+        if (!scheduleDays.has(assignment.shiftDate)) continue;
         const employee = employeeById.get(assignment.employeeId);
         const shiftType = shiftTypeById.get(assignment.shiftTypeId);
         const department = assignmentRenderDepartment(assignment, employee, shiftType);
@@ -4168,9 +4359,12 @@ export function registerScheduleRoutes(app: Express) {
     try {
       if (!publicScheduleUser(req.scheduleUser).isSuperAdmin) return res.status(403).json({ error: "Only GM/admin can reopen the final schedule." });
       const reason = z.string().max(500).optional().parse(req.body?.reason || "");
+      const current = await getScheduleOr404(req.params.id);
+      if (!current) return res.status(404).json({ error: "Schedule not found" });
+      const removedPostPublishAssignments = await removeAssignmentsAddedAfterPublish(current);
       const [schedule] = await db.update(weeklySchedules).set({ status: "draft", updatedAt: new Date() }).where(eq(weeklySchedules.id, req.params.id)).returning();
       if (!schedule) return res.status(404).json({ error: "Schedule not found" });
-      await audit(schedule.id, req.scheduleUser.id, "schedule_reopened", { reason });
+      await audit(schedule.id, req.scheduleUser.id, "schedule_reopened", { reason, removedPostPublishAssignments });
       res.json(stripPrivateScheduleRates(await buildSchedulePayload(schedule.id), req.scheduleUser));
     } catch (error) {
       next(error);

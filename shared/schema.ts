@@ -529,6 +529,7 @@ export const scheduleForecastDays = pgTable("schedule_forecast_days", {
   departures: integer("departures").notNull().default(0),
   stayovers: integer("stayovers").notNull().default(0),
   dndRooms: integer("dnd_rooms").notNull().default(0),
+  forecastAdr: numeric("forecast_adr", { precision: 10, scale: 2 }),
   roomRevenue: numeric("room_revenue", { precision: 12, scale: 2 }),
   otbRoomsSold: integer("otb_rooms_sold"),
   otbOccupancyPercent: numeric("otb_occupancy_percent", { precision: 5, scale: 2 }),

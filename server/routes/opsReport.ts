@@ -38,8 +38,8 @@ const reportUpload = multer({
   limits: { fileSize: 12 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const name = file.originalname.toLowerCase();
-    if (name.endsWith(".csv") || name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".pdf") || file.mimetype === "text/csv" || file.mimetype === "application/pdf" || file.mimetype.includes("spreadsheet")) return cb(null, true);
-    cb(new Error("Upload a CSV, XLSX, or PDF ops report."));
+    if (name.endsWith(".csv") || name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".pdf") || /\.(png|jpe?g|webp)$/.test(name) || file.mimetype === "text/csv" || file.mimetype === "application/pdf" || file.mimetype.includes("spreadsheet") || /^image\/(png|jpeg|webp)$/i.test(file.mimetype)) return cb(null, true);
+    cb(new Error("Upload a CSV, XLSX, PDF, PNG, JPG, or WebP ops report."));
   },
 });
 
@@ -598,6 +598,7 @@ export function registerOpsReportRoutes(app: Express) {
           weekStart: typeof req.body?.weekStart === "string" ? req.body.weekStart : undefined,
           weekEnd: typeof req.body?.weekEnd === "string" ? req.body.weekEnd : undefined,
           reportMonth: typeof req.body?.reportMonth === "string" ? req.body.reportMonth : undefined,
+          totalRooms: Number(req.body?.totalRooms || 0) || undefined,
         };
         const reports = await Promise.all(files.map(async (file) => {
           try {

@@ -3,6 +3,8 @@ import AdmZip from "adm-zip";
 import { XMLParser } from "fast-xml-parser";
 import { createRequire } from "module";
 import { randomUUID } from "crypto";
+import OpenAI from "openai";
+import { z } from "zod";
 
 const require = createRequire(import.meta.url);
 
@@ -24,6 +26,7 @@ export type OpsParserContext = {
   weekStart?: string;
   weekEnd?: string;
   reportMonth?: string;
+  totalRooms?: number;
 };
 
 type ParsedReport = {
@@ -41,6 +44,27 @@ type ParsedReport = {
   preview: Array<Record<string, unknown>>;
   mapping: Record<string, unknown>;
 };
+
+const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+const openaiBaseUrl = (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || "").trim();
+const openai = openaiApiKey
+  ? new OpenAI({
+      apiKey: openaiApiKey,
+      ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
+    })
+  : null;
+
+const mintPacingScreenshotSchema = z.object({
+  stayDateStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  stayDateEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  reportRunDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  roomNightsTy: z.coerce.number().min(0),
+  roomNightsStly: z.coerce.number().min(0),
+  roomRevenueTy: z.coerce.number().min(0),
+  roomRevenueStly: z.coerce.number().min(0),
+  adrTy: z.coerce.number().min(0),
+  adrStly: z.coerce.number().min(0),
+});
 
 function normalizedHeader(value: unknown) {
   return String(value ?? "")
@@ -713,7 +737,89 @@ async function parseCreditLimit(file: Express.Multer.File, context: OpsParserCon
   return { ...baseReport(file, "credit_limit", context, warnings), preview: exceptions.slice(0, 10), mapping: { entries: exceptions, summary } };
 }
 
+async function parseMintPacingScreenshot(file: Express.Multer.File, context: OpsParserContext): Promise<ParsedReport> {
+  if (!openai) throw new Error("MINT screenshot parsing is unavailable because the AI service is not configured.");
+  const expectedMonth = nextMonthKey(context.reportMonth || (context.weekEnd ? monthKey(context.weekEnd) : ""));
+  if (!expectedMonth) throw new Error("Select a valid Ops Report week before uploading the MINT pacing screenshot.");
+  const expectedStart = `${expectedMonth}-01`;
+  const expectedEndDate = new Date(Date.UTC(Number(expectedMonth.slice(0, 4)), Number(expectedMonth.slice(5, 7)), 0));
+  const expectedEnd = expectedEndDate.toISOString().slice(0, 10);
+  const prompt = `Read this Marriott MINT pacing screenshot.
+Return JSON only in this exact shape:
+{"stayDateStart":"YYYY-MM-DD","stayDateEnd":"YYYY-MM-DD","reportRunDate":"YYYY-MM-DD","roomNightsTy":0,"roomNightsStly":0,"roomRevenueTy":0,"roomRevenueStly":0,"adrTy":0,"adrStly":0}
+
+Read Stay Date Range from the two date fields near the top.
+Read reportRunDate from the "Report run date/timestamp" at the bottom.
+Read values only from the Grand Total row.
+Use these columns exactly: OTB Room Nights TY, OTB Room Nights STLY, OTB Room Revenue TY, OTB Room Revenue STLY, OTB Room ADR TY, OTB Room ADR STLY.
+Do not use percentages, detail rows, or infer unreadable values.`;
+  const completion = await openai.chat.completions.create({
+    model: process.env.OPS_REPORT_AI_VISION_MODEL || process.env.SCHEDULE_AI_VISION_MODEL || "gpt-4o-mini",
+    response_format: { type: "json_object" },
+    messages: [{
+      role: "user",
+      content: [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: `data:${file.mimetype};base64,${file.buffer.toString("base64")}` } },
+      ] as any,
+    }],
+    max_tokens: 700,
+    temperature: 0,
+  });
+  const parsedJson = JSON.parse(completion.choices[0]?.message?.content || "{}");
+  const parsed = mintPacingScreenshotSchema.safeParse(parsedJson);
+  if (!parsed.success) throw new Error("The MINT screenshot dates or Grand Total values could not be read.");
+  const data = parsed.data;
+  if (data.stayDateStart !== expectedStart || data.stayDateEnd !== expectedEnd) {
+    throw new Error(
+      `This screenshot covers ${data.stayDateStart} through ${data.stayDateEnd}. The selected Ops Report requires the full next month: ${expectedStart} through ${expectedEnd}.`,
+    );
+  }
+  const totalRooms = Number(context.totalRooms || 0);
+  if (!Number.isFinite(totalRooms) || totalRooms <= 0) {
+    throw new Error("Enter Total Rooms at the top of the Ops Report before importing a MINT pacing screenshot.");
+  }
+  const days = Math.round((expectedEndDate.getTime() - new Date(`${expectedStart}T00:00:00Z`).getTime()) / 86_400_000) + 1;
+  const availableRoomNights = totalRooms * days;
+  const occupancy = availableRoomNights ? data.roomNightsStly / availableRoomNights : 0;
+  const warnings: string[] = [];
+  if (Math.abs(data.roomNightsStly * data.adrStly - data.roomRevenueStly) > Math.max(5, data.roomRevenueStly * 0.01)) {
+    warnings.push("Grand Total STLY rooms multiplied by ADR does not closely match STLY room revenue; review the screenshot values.");
+  }
+  const mapping = {
+    dateStart: data.stayDateStart,
+    dateEnd: data.stayDateEnd,
+    reportRunDate: data.reportRunDate,
+    total: {
+      roomsSold: round(data.roomNightsStly, 0),
+      occupancy: round(occupancy, 6),
+      adr: round(data.adrStly, 2),
+      roomRevenue: round(data.roomRevenueStly, 2),
+      roomsActive: availableRoomNights,
+    },
+    currentYearTotal: {
+      roomsSold: round(data.roomNightsTy, 0),
+      adr: round(data.adrTy, 2),
+      roomRevenue: round(data.roomRevenueTy, 2),
+    },
+  };
+  return {
+    ...baseReport(file, "next_month_sdly_otb", context, warnings),
+    preview: [{
+      stayDateRange: `${data.stayDateStart} to ${data.stayDateEnd}`,
+      reportRunDate: data.reportRunDate,
+      stlyRooms: data.roomNightsStly,
+      stlyOccupancy: round(occupancy * 100, 2),
+      stlyAdr: data.adrStly,
+      stlyRoomRevenue: data.roomRevenueStly,
+    }],
+    mapping,
+  };
+}
+
 export async function parseOpsReportFile(file: Express.Multer.File, context: OpsParserContext = {}): Promise<ParsedReport> {
+  const isImage = /^image\/(png|jpeg|webp)$/i.test(file.mimetype) || /\.(png|jpe?g|webp)$/i.test(file.originalname);
+  if (isImage) return parseMintPacingScreenshot(file, context);
   const isPdf = /\.pdf$/i.test(file.originalname) || file.mimetype === "application/pdf";
   if (isPdf) {
     if (/credit\s*limit|creditlimit/i.test(file.originalname)) return parseCreditLimit(file, context);

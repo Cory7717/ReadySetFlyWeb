@@ -289,6 +289,7 @@ function compactReportMapping(reportType: OpsImportResponse["reportType"], mappi
     return {
       dateStart: mapping.dateStart,
       dateEnd: mapping.dateEnd,
+      reportRunDate: mapping.reportRunDate,
       total: mapping.total,
     };
   }
@@ -401,7 +402,7 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
         rooms: rowValue(total.roomsSold, 0),
         adr: accounting(total.adr),
         revenue: accounting(total.roomRevenue),
-        comments: `Same-day-last-year OTB snapshot for ${mapping.dateStart} to ${mapping.dateEnd}`,
+        comments: `SDLY pacing as of ${mapping.reportRunDate || "uploaded snapshot"} for ${mapping.dateStart} to ${mapping.dateEnd}`,
       };
     });
   }
@@ -690,7 +691,7 @@ function SectionReportUpload({
                 ref={inputRef}
                 className={C.field}
                 type="file"
-                accept=".xlsx,.xls,.csv,.pdf"
+                accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
                 multiple={multiple}
                 onChange={(event) => setFiles(Array.from(event.target.files || []))}
               />
@@ -1069,6 +1070,7 @@ export default function OpsReportPage() {
       form.append("weekStart", topMetrics.weekStart);
       form.append("weekEnd", weekEnd);
       form.append("reportMonth", monthKeyFromDate(weekEnd || topMetrics.weekStart));
+      form.append("totalRooms", setup.totalRooms);
       const response = await fetch(apiUrl("/api/opsreport/import"), { method: "POST", credentials: "include", body: form });
       if (!response.ok) throw new Error(await response.text());
       return response.json() as Promise<OpsImportBatchResponse>;
@@ -1401,8 +1403,8 @@ export default function OpsReportPage() {
     {
       name: "Next Month SDLY OTB",
       scope: `${monthLabelFromKey(priorYearMonthKey(followingMonthKey))} OTB as of the same reporting date last year`,
-      parameters: `Use the OTB snapshot produced on the same calendar date last year for the full ${monthLabelFromKey(priorYearMonthKey(followingMonthKey))} calendar month. Include the TOTAL row.`,
-      fileName: `MMDDYYYY_SDLY_${monthLabelFromKey(priorYearMonthKey(followingMonthKey)).split(" ")[0]} Month OTB.csv`,
+      parameters: `Upload a MINT pacing screenshot showing the full ${monthLabelFromKey(followingMonthKey)} Stay Date Range, Grand Total row, and report run timestamp. The importer maps Grand Total STLY rooms, ADR, and room revenue; occupancy is calculated from STLY rooms and the property's available room nights.`,
+      fileName: `MMDDYYYY_MINT_${monthLabelFromKey(followingMonthKey).split(" ")[0]}_Pacing.png`,
     },
     {
       name: "Detailed Flash",

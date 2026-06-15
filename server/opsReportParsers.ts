@@ -11,6 +11,7 @@ export type OpsReportType =
   | "current_month_otb"
   | "remaining_month_otb"
   | "next_month_otb"
+  | "next_month_sdly_otb"
   | "detailed_flash"
   | "ooo_rooms"
   | "gss_scores"
@@ -166,6 +167,12 @@ function nextMonthKey(value: string) {
   return new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7);
 }
 
+function priorYearMonthKey(value: string) {
+  const [year, month] = value.split("-").map(Number);
+  if (!year || !month) return "";
+  return `${year - 1}-${String(month).padStart(2, "0")}`;
+}
+
 function monthFromFileName(fileName: string, year: number) {
   const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
   const lower = fileName.toLowerCase();
@@ -223,11 +230,12 @@ export function detectOpsReportType(fileName: string, rows: string[][], context:
     const reportMonth = context.reportMonth || (context.weekStart ? monthKey(context.weekStart) : "");
     const reportYear = Number(reportMonth.slice(0, 4)) || new Date().getUTCFullYear();
     const namedMonth = monthFromFileName(fileName, reportYear);
-    if (namedMonth && namedMonth === reportMonth) return "current_month_otb";
-    if (namedMonth && namedMonth === nextMonthKey(reportMonth)) return "next_month_otb";
     const firstDate = rows.slice(otbHeader + 1).map((row) => excelDateToIso(row[0])).find(Boolean) || "";
     if (firstDate && monthKey(firstDate) === reportMonth) return "current_month_otb";
     if (firstDate && monthKey(firstDate) === nextMonthKey(reportMonth)) return "next_month_otb";
+    if (firstDate && monthKey(firstDate) === priorYearMonthKey(nextMonthKey(reportMonth))) return "next_month_sdly_otb";
+    if (namedMonth && namedMonth === reportMonth) return "current_month_otb";
+    if (namedMonth && namedMonth === nextMonthKey(reportMonth)) return "next_month_otb";
     return "previous_week_otb";
   }
   return null;
@@ -640,7 +648,7 @@ export async function parseOpsReportFile(file: Express.Multer.File, context: Ops
   const rows = sheets.flatMap((sheet) => sheet.rows);
   const reportType = detectOpsReportType(file.originalname, rows, context);
   if (!reportType) throw new Error("This report format was not recognized.");
-  if (["previous_week_otb", "current_month_otb", "remaining_month_otb", "next_month_otb"].includes(reportType)) return parseOtb(file, rows, reportType, context);
+  if (["previous_week_otb", "current_month_otb", "remaining_month_otb", "next_month_otb", "next_month_sdly_otb"].includes(reportType)) return parseOtb(file, rows, reportType, context);
   if (reportType === "detailed_flash") return parseDetailedFlash(file, rows, context);
   if (reportType === "gss_scores") return parseGss(file, sheets, context);
   if (reportType === "marriott_responses") return parseResponses(file, rows, context);

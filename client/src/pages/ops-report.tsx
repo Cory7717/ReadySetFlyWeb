@@ -41,7 +41,7 @@ type OpsImportResponse = {
   uploadId: string;
   originalFileName: string;
   sourceFileName: string;
-  reportType: "previous_week_otb" | "current_month_otb" | "remaining_month_otb" | "next_month_otb" | "detailed_flash" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "ar_aging" | "credit_limit" | "unknown";
+  reportType: "previous_week_otb" | "current_month_otb" | "remaining_month_otb" | "next_month_otb" | "next_month_sdly_otb" | "detailed_flash" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "ar_aging" | "credit_limit" | "unknown";
   status: "parsed" | "warning" | "failed";
   warnings: string[];
   selectedWeek: string;
@@ -119,6 +119,7 @@ const REPORT_TYPE_LABELS: Record<OpsImportResponse["reportType"], string> = {
   current_month_otb: "Current Month OTB",
   remaining_month_otb: "Remaining Month OTB",
   next_month_otb: "Next Month OTB",
+  next_month_sdly_otb: "Next Month SDLY OTB",
   detailed_flash: "Detailed Flash",
   ooo_rooms: "OOO Rooms",
   gss_scores: "GSS Scores",
@@ -263,6 +264,7 @@ const REPORT_PAYLOAD_KEYS: Record<OpsImportResponse["reportType"], string[]> = {
   current_month_otb: ["monthRows", "monthlyBudgets"],
   remaining_month_otb: ["monthRows"],
   next_month_otb: ["nextMonthRows"],
+  next_month_sdly_otb: ["nextMonthRows"],
   detailed_flash: ["topMetrics", "monthRows", "monthlyBudgets"],
   ooo_rooms: ["oooRooms"],
   gss_scores: ["gssRows", "gssWaveRows"],
@@ -281,7 +283,7 @@ function captureReportPatch(payload: Record<string, any>, reportType: OpsImportR
 }
 
 function compactReportMapping(reportType: OpsImportResponse["reportType"], mapping: Record<string, any>) {
-  if (["previous_week_otb", "current_month_otb", "remaining_month_otb", "next_month_otb"].includes(reportType)) {
+  if (["previous_week_otb", "current_month_otb", "remaining_month_otb", "next_month_otb", "next_month_sdly_otb"].includes(reportType)) {
     return {
       dateStart: mapping.dateStart,
       dateEnd: mapping.dateEnd,
@@ -315,7 +317,9 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
   const reportMonth = String(report.reportMonth || monthKeyFromDate(report.weekStartDate || ""));
   const mappingMonth = monthKeyFromDate(String(mapping.dateStart || ""));
   const isRemainingMonthFile = /remaining[\s_-]*month[\s_-]*otb/i.test(String(report.originalFileName || report.sourceFileName || ""));
-  const resolvedReportType = report.reportType === "remaining_month_otb" || isRemainingMonthFile
+  const resolvedReportType = report.reportType === "next_month_sdly_otb"
+    ? "next_month_sdly_otb"
+    : report.reportType === "remaining_month_otb" || isRemainingMonthFile
     ? "remaining_month_otb"
     : mapping.total && mappingMonth === nextMonthKey(reportMonth)
     ? "next_month_otb"
@@ -373,6 +377,20 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
         adr: accounting(total.adr),
         revenue: accounting(total.roomRevenue),
         comments: `Imported ${mapping.dateStart} to ${mapping.dateEnd}`,
+      };
+    });
+  }
+  if (resolvedReportType === "next_month_sdly_otb") {
+    const total = mapping.total || {};
+    next.nextMonthRows = normalizeNextMonthRows(next.nextMonthRows || []).map((row: Row) => {
+      if (String(row.label || "").toUpperCase() !== "SDLY OTB FOR NEXT MONTH") return row;
+      return {
+        ...row,
+        occupancy: percentDisplay(total.occupancy),
+        rooms: rowValue(total.roomsSold, 0),
+        adr: accounting(total.adr),
+        revenue: accounting(total.roomRevenue),
+        comments: `Same-day-last-year OTB snapshot for ${mapping.dateStart} to ${mapping.dateEnd}`,
       };
     });
   }
@@ -474,6 +492,37 @@ function nextMonthKey(value: string) {
   const [year, month] = value.split("-").map(Number);
   if (!year || !month) return "";
   return new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7);
+}
+
+function priorYearMonthKey(value: string) {
+  const [year, month] = value.split("-").map(Number);
+  if (!year || !month) return "";
+  return `${year - 1}-${String(month).padStart(2, "0")}`;
+}
+
+const NEXT_MONTH_ROW_LABELS = [
+  "FUTURE BOOKED FOR NEXT MONTH",
+  "NEXT MONTH BUDGET",
+  "SDLY OTB FOR NEXT MONTH",
+  "VARIANCE TO BUDGET",
+  "PACING VARIANCE TO LY",
+] as const;
+
+function normalizeNextMonthRows(rows: Row[]) {
+  const byLabel = new Map(rows.map((row) => [String(row.label || "").trim().toUpperCase(), row]));
+  const legacyVariance = byLabel.get("VARIANCE");
+  return NEXT_MONTH_ROW_LABELS.map((label) => {
+    const existing = byLabel.get(label) || (label === "VARIANCE TO BUDGET" ? legacyVariance : undefined);
+    return { occupancy: "", rooms: "", adr: "", revenue: "", comments: "", ...existing, label };
+  });
+}
+
+function normalizeOpsImportReport(report: OpsImportResponse) {
+  const mappingMonth = monthKeyFromDate(String(report.mapping?.dateStart || ""));
+  const comparisonMonth = priorYearMonthKey(nextMonthKey(String(report.reportMonth || "")));
+  return mappingMonth && comparisonMonth && mappingMonth === comparisonMonth
+    ? { ...report, reportType: "next_month_sdly_otb" as const }
+    : report;
 }
 
 function monthLabelFromKey(value: string) {
@@ -805,7 +854,9 @@ export default function OpsReportPage() {
   const [nextMonthRows, setNextMonthRows] = useState<Row[]>([
     { label: "FUTURE BOOKED FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     { label: "NEXT MONTH BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
-    { label: "VARIANCE", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+    { label: "SDLY OTB FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+    { label: "VARIANCE TO BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+    { label: "PACING VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
   ]);
   const [chargebacks, setChargebacks] = useState<Row[]>(emptyRows(5, ["no", "reason", "respondDate", "amount", "comment"]));
   const [maintenance, setMaintenance] = useState<Row[]>(emptyRows(5, ["no", "rooms", "area", "hours", "comment"]));
@@ -986,7 +1037,8 @@ export default function OpsReportPage() {
     },
     onSuccess: (data, variables) => {
       let nextPayload: Record<string, any> = cloneValue(currentDraftPayload);
-      const reports = data.reports.map((report) => {
+      const reports = data.reports.map((rawReport) => {
+        const report = normalizeOpsImportReport(rawReport);
         const beforePatch = captureReportPatch(nextPayload, report.reportType);
         if (report.status !== "failed") nextPayload = applyOpsReportToPayload(nextPayload, report);
         return compactUploadedReport({ ...report, beforePatch });
@@ -1309,6 +1361,12 @@ export default function OpsReportPage() {
       fileName: `MMDDYYYY_${monthLabelFromKey(followingMonthKey).split(" ")[0]} Month OTB.csv`,
     },
     {
+      name: "Next Month SDLY OTB",
+      scope: `${monthLabelFromKey(priorYearMonthKey(followingMonthKey))} OTB as of the same reporting date last year`,
+      parameters: `Use the OTB snapshot produced on the same calendar date last year for the full ${monthLabelFromKey(priorYearMonthKey(followingMonthKey))} calendar month. Include the TOTAL row.`,
+      fileName: `MMDDYYYY_SDLY_${monthLabelFromKey(priorYearMonthKey(followingMonthKey)).split(" ")[0]} Month OTB.csv`,
+    },
+    {
       name: "Detailed Flash",
       scope: `Business date within ${monthLabelFromKey(reportMonthKey)}`,
       parameters: "Include Month-to-Date and Year-to-Date columns. Used for rooms sold, occupancy, ADR, room revenue, MTD, and YTD results.",
@@ -1462,7 +1520,9 @@ export default function OpsReportPage() {
     setNextMonthRows([
       { label: "FUTURE BOOKED FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
       { label: "NEXT MONTH BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
-      { label: "VARIANCE", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "SDLY OTB FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "VARIANCE TO BUDGET", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
+      { label: "PACING VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     ]);
     setChargebacks(emptyRows(5, ["no", "reason", "respondDate", "amount", "comment"]));
     setMaintenance(emptyRows(5, ["no", "rooms", "area", "hours", "comment"]));
@@ -1498,7 +1558,7 @@ export default function OpsReportPage() {
     if (payload.setup) setSetup(payload.setup);
     if (payload.topMetrics) setTopMetrics(payload.topMetrics);
     if (payload.monthRows) setMonthRows(payload.monthRows);
-    if (payload.nextMonthRows) setNextMonthRows(payload.nextMonthRows);
+    if (payload.nextMonthRows) setNextMonthRows(normalizeNextMonthRows(payload.nextMonthRows));
     if (payload.chargebacks) setChargebacks(payload.chargebacks);
     if (payload.maintenance) setMaintenance(payload.maintenance);
     if (payload.oooRooms) setOooRooms(payload.oooRooms);
@@ -1594,6 +1654,76 @@ export default function OpsReportPage() {
     }, 500);
     return () => window.clearTimeout(timeout);
   }, [access.data?.unlocked, draftHydrated, weekEnd, week, topMetrics.weekStart, currentDraftPayload, uploadedReports]);
+
+  useEffect(() => {
+    const previous = previousDraft.data?.draft;
+    if (!previous?.payload || monthKeyFromDate(previous.weekEnd || previous.weekStart) !== reportMonthKey) return;
+    const priorBudgets = Array.isArray(previous.payload.monthlyBudgets) ? previous.payload.monthlyBudgets.map(normalizeMonthlyBudgetRow) : [];
+    const priorNextMonthBudget = priorBudgets.find((row: Row) => row.month === followingMonthKey);
+    if (!priorNextMonthBudget) return;
+    setMonthlyBudgets((rows) => {
+      const current = rows.find((row) => row.month === followingMonthKey);
+      const hasCurrentBudget = Boolean(current && [current.rooms, current.occupancy, current.adr, current.revenue].some((value) => String(value || "").trim()));
+      if (hasCurrentBudget) return rows;
+      const merged = current
+        ? {
+            ...current,
+            rooms: priorNextMonthBudget.rooms || "",
+            occupancy: priorNextMonthBudget.occupancy || "",
+            adr: priorNextMonthBudget.adr || "",
+            revenue: priorNextMonthBudget.revenue || "",
+          }
+        : priorNextMonthBudget;
+      return [...rows.filter((row) => row.month !== followingMonthKey), normalizeMonthlyBudgetRow(merged)];
+    });
+  }, [previousDraft.data?.draft, reportMonthKey, followingMonthKey]);
+
+  useEffect(() => {
+    const budget = monthlyBudgets.find((row) => row.month === followingMonthKey);
+    setNextMonthRows((currentRows) => {
+      const rows = normalizeNextMonthRows(currentRows);
+      const otb: Row = rows.find((row) => row.label === "FUTURE BOOKED FOR NEXT MONTH") || {};
+      const sdly: Row = rows.find((row) => row.label === "SDLY OTB FOR NEXT MONTH") || {};
+      const difference = (left: unknown, right: unknown, formatter: (value: number) => string) => {
+        if (!String(left || "").trim() || !String(right || "").trim()) return "";
+        return formatter(num(String(left)) - num(String(right)));
+      };
+      const nextRows = rows.map((row) => {
+        if (row.label === "NEXT MONTH BUDGET" && budget) {
+          return {
+            ...row,
+            occupancy: budget.occupancy || "",
+            rooms: monthlyRoomsValue(budget.rooms || "", budget.adr || "", budget.revenue || ""),
+            adr: budget.adr || "",
+            revenue: budget.revenue || "",
+            comments: `Budget for ${monthLabelFromKey(followingMonthKey)}`,
+          };
+        }
+        if (row.label === "VARIANCE TO BUDGET") {
+          return {
+            ...row,
+            occupancy: difference(otb.occupancy, budget?.occupancy, (value) => rowValue(value, 2)),
+            rooms: difference(otb.rooms, budget ? monthlyRoomsValue(budget.rooms || "", budget.adr || "", budget.revenue || "") : "", (value) => rowValue(value, 0)),
+            adr: difference(otb.adr, budget?.adr, accounting),
+            revenue: difference(otb.revenue, budget?.revenue, accounting),
+            comments: `Current OTB minus budget for ${monthLabelFromKey(followingMonthKey)}`,
+          };
+        }
+        if (row.label === "PACING VARIANCE TO LY") {
+          return {
+            ...row,
+            occupancy: difference(otb.occupancy, sdly.occupancy, (value) => rowValue(value, 2)),
+            rooms: difference(otb.rooms, sdly.rooms, (value) => rowValue(value, 0)),
+            adr: difference(otb.adr, sdly.adr, accounting),
+            revenue: difference(otb.revenue, sdly.revenue, accounting),
+            comments: `Current OTB minus same-day-last-year OTB for ${monthLabelFromKey(followingMonthKey)}`,
+          };
+        }
+        return row;
+      });
+      return JSON.stringify(nextRows) === JSON.stringify(currentRows) ? currentRows : nextRows;
+    });
+  }, [monthlyBudgets, followingMonthKey, nextMonthRows]);
 
   useEffect(() => {
     const budget = monthlyBudgets.find((row) => row.month === currentMonthKey);
@@ -2090,7 +2220,8 @@ export default function OpsReportPage() {
             </Section>
             <Section title="Next Month Data">
               <SectionReportUpload
-                reports={reportGuideFor("Next Month OTB")}
+                reports={reportGuideFor("Next Month OTB", "Next Month SDLY OTB")}
+                multiple
                 uploading={opsReportUpload.isPending}
                 onUpload={(files) => uploadSectionReports("Next Month", files)}
               />

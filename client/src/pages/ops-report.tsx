@@ -2529,13 +2529,15 @@ export default function OpsReportPage() {
             <Section title="Online Reputation">
               <EditableTable columns={[{ key: "label", label: "Name", wide: true }, { key: "reviews", label: "Total Reviews" }, { key: "score", label: "Rank / Score" }, { key: "outOf", label: "Out Of" }, { key: "goal", label: "Goal Rank" }, { key: "variance", label: "Variance" }, { key: "strategy", label: "Strategy / Action Plan", wide: true }]} rows={reputationRows} onChange={setReputationRows} />
             </Section>
-            <div className="grid gap-5 lg:grid-cols-2">
+            <div className="overflow-hidden rounded-xl border border-[#cdbda8] bg-[#fffaf2] shadow-[0_12px_30px_rgba(72,52,31,0.08)]">
+              <SectionReportUpload
+                reports={reportGuideFor("Marriott Responses")}
+                uploading={opsReportUpload.isPending}
+                onUpload={(files) => uploadSectionReports("Weekly Reviews", files)}
+              />
+            </div>
+            <div className="grid items-stretch gap-5 lg:grid-cols-2">
               <Section title="Weekly Reviews: Positive">
-                <SectionReportUpload
-                  reports={reportGuideFor("Marriott Responses")}
-                  uploading={opsReportUpload.isPending}
-                  onUpload={(files) => uploadSectionReports("Weekly Reviews", files)}
-                />
                 <EditableTable columns={[{ key: "source", label: "Source" }, { key: "score", label: "Overall Score" }, { key: "comment", label: "Guest Comments", wide: true }]} rows={positiveReviews} onChange={setPositiveReviews} />
               </Section>
               <Section title="Weekly Reviews: Negative">

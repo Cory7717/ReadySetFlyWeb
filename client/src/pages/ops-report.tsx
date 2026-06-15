@@ -678,14 +678,73 @@ function SectionReportUpload({
   onUpload,
   uploading,
   multiple = false,
+  compact = false,
 }: {
   reports: ReportGuideItem[];
   onUpload: (files: File[]) => void;
   uploading: boolean;
   multiple?: boolean;
+  compact?: boolean;
 }) {
   const [files, setFiles] = useState<File[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const uploadContent = (
+    <>
+      <div className="grid gap-2 lg:grid-cols-2">
+        {reports.map((report) => (
+          <div key={report.name} className="rounded-lg border border-[#d7c8b5] bg-white p-3 text-sm">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="font-semibold text-[#201814]">{report.name}</div>
+              <Badge variant="outline" className="border-[#cdbda8] bg-[#fffaf2] text-[#4f3d2e]">{report.scope}</Badge>
+            </div>
+            <p className="mt-2 leading-5 text-[#5f5247]">{report.parameters}</p>
+            <div className="mt-2 break-all rounded bg-[#fbf6ee] px-2 py-1 font-mono text-xs text-[#4f3d2e]">{report.fileName}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <Input
+          ref={inputRef}
+          className={C.field}
+          type="file"
+          accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+          multiple={multiple}
+          onChange={(event) => setFiles(Array.from(event.target.files || []))}
+        />
+        <Button
+          className={`${C.green} shrink-0`}
+          disabled={!files.length || uploading}
+          onClick={() => {
+            onUpload(files);
+            setFiles([]);
+            setDialogOpen(false);
+            if (inputRef.current) inputRef.current.value = "";
+          }}
+        >
+          {uploading ? "Importing..." : `Import ${files.length > 1 ? `${files.length} files` : "report"}`}
+        </Button>
+      </div>
+    </>
+  );
+  if (compact) {
+    return (
+      <>
+        <Button variant="outline" className="border-[#728090] bg-[#2b3542] text-white hover:bg-[#354252] hover:text-white" onClick={() => setDialogOpen(true)}>
+          <Upload className="mr-2 h-4 w-4" />Upload reports
+        </Button>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto border-[#d7c8b5] bg-[#fbf6ee] text-[#201814]">
+            <DialogHeader>
+              <DialogTitle>Upload Weekly Source Reports</DialogTitle>
+              <DialogDescription className={C.muted}>Select the reports used for weekly performance, MTD, and YTD figures.</DialogDescription>
+            </DialogHeader>
+            {uploadContent}
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
   return (
     <div className="border-b border-[#e0d3c1] bg-[#fbf6ee] p-3">
       <Accordion type="single" collapsible>
@@ -694,39 +753,7 @@ function SectionReportUpload({
             <span className="flex items-center gap-2"><Upload className="h-4 w-4 text-[#2f5f46]" />Upload source report</span>
           </AccordionTrigger>
           <AccordionContent className="pb-2 pt-2">
-            <div className="grid gap-2 lg:grid-cols-2">
-              {reports.map((report) => (
-                <div key={report.name} className="rounded-lg border border-[#d7c8b5] bg-white p-3 text-sm">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="font-semibold text-[#201814]">{report.name}</div>
-                    <Badge variant="outline" className="border-[#cdbda8] bg-[#fffaf2] text-[#4f3d2e]">{report.scope}</Badge>
-                  </div>
-                  <p className="mt-2 leading-5 text-[#5f5247]">{report.parameters}</p>
-                  <div className="mt-2 break-all rounded bg-[#fbf6ee] px-2 py-1 font-mono text-xs text-[#4f3d2e]">{report.fileName}</div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Input
-                ref={inputRef}
-                className={C.field}
-                type="file"
-                accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
-                multiple={multiple}
-                onChange={(event) => setFiles(Array.from(event.target.files || []))}
-              />
-              <Button
-                className={`${C.green} shrink-0`}
-                disabled={!files.length || uploading}
-                onClick={() => {
-                  onUpload(files);
-                  setFiles([]);
-                  if (inputRef.current) inputRef.current.value = "";
-                }}
-              >
-                {uploading ? "Importing..." : `Import ${files.length > 1 ? `${files.length} files` : "report"}`}
-              </Button>
-            </div>
+            {uploadContent}
           </AccordionContent>
         </AccordionItem>
       </Accordion>
@@ -2295,16 +2322,19 @@ export default function OpsReportPage() {
 
           <TabsContent value="weekly" className="space-y-5">
             <Card className={C.darkShell}>
-              <CardHeader>
-                <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-[#b9d8c2]" /><CardTitle>{week} Report</CardTitle></div>
-                <CardDescription className={C.darkMuted}>{setup.propertyName} | {topMetrics.weekStart} to {weekEnd || "week end date"}</CardDescription>
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-[#b9d8c2]" /><CardTitle>{week} Report</CardTitle></div>
+                  <CardDescription className={`mt-1 ${C.darkMuted}`}>{setup.propertyName} | {topMetrics.weekStart} to {weekEnd || "week end date"}</CardDescription>
+                </div>
+                <SectionReportUpload
+                  reports={reportGuideFor("Previous Week OTB", "Detailed Flash", "MTD / YTD Account Tracking")}
+                  multiple
+                  compact
+                  uploading={opsReportUpload.isPending}
+                  onUpload={(files) => uploadSectionReports("Weekly performance", files)}
+                />
               </CardHeader>
-              <SectionReportUpload
-                reports={reportGuideFor("Previous Week OTB", "Detailed Flash", "MTD / YTD Account Tracking")}
-                multiple
-                uploading={opsReportUpload.isPending}
-                onUpload={(files) => uploadSectionReports("Weekly performance", files)}
-              />
               <CardContent className="space-y-5">
                 <div>
                   <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#f0d9b0]">Weekly Performance</div>

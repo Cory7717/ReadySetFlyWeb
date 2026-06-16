@@ -387,6 +387,7 @@ function AppShell() {
   const isTipsPage = location.startsWith("/tips");
   const isSchedulePage = location.startsWith("/schedule");
   const isCourtyardPage = location.startsWith("/courtyard");
+  const isBankDepositPage = location.startsWith("/bankdeposit");
   const isOpsReportPage = location.startsWith("/opsreport");
   const isIncidentReportPage = location.startsWith("/incidentreport");
   const isVwBeetlePage = location.startsWith("/vw-beetle");
@@ -399,6 +400,7 @@ function AppShell() {
     isTipsPage ||
     isSchedulePage ||
     isCourtyardPage ||
+    isBankDepositPage ||
     isOpsReportPage ||
     isIncidentReportPage ||
     isVwBeetlePage;

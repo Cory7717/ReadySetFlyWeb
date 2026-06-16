@@ -1914,8 +1914,39 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
+  router.get("/shared-pin/status", async (req: any, res, next) => {
+    try {
+      const user = await getTipsUserBySession(req);
+      if (!user || user.disabledAt || user.mustChangePassword) {
+        return res.json({ unlocked: false, hasPin: Boolean(await getKioskPinHash() || process.env.TIPS_KIOSK_PIN), requiresLogin: true });
+      }
+      const adminUnlocked = Boolean(isTipsManager(user));
+      res.json({
+        unlocked: Boolean(req.session?.courtyardSharedPinUnlocked || adminUnlocked),
+        hasPin: Boolean(await getKioskPinHash() || process.env.TIPS_KIOSK_PIN),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/shared-pin/login", tipsAuthRateLimiter, async (req: any, res, next) => {
+    try {
+      const user = await getTipsUserBySession(req);
+      if (!user || user.disabledAt || user.mustChangePassword) return res.status(401).json({ error: "Courtyard login required before entering the PIN." });
+      const parsed = kioskPinSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Enter the 5 digit PIN." });
+      if (!(await verifyKioskPin(parsed.data.pin))) return res.status(401).json({ error: "Invalid PIN." });
+      req.session.courtyardSharedPinUnlocked = true;
+      req.session.save(() => res.json({ unlocked: true }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/kiosk/logout", (req: any, res) => {
     if (req.session) delete req.session.tipsKioskUnlocked;
+    if (req.session) delete req.session.courtyardSharedPinUnlocked;
     req.session?.save(() => res.json({ ok: true }));
   });
 

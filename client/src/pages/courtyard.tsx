@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, CalendarDays, ClipboardPlus, Coffee, DollarSign, DoorOpen, FileSpreadsheet, KeyRound, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
+import { Banknote, CalendarClock, CalendarDays, ClipboardPlus, Coffee, DollarSign, DoorOpen, FileSpreadsheet, KeyRound, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -411,6 +411,15 @@ export default function CourtyardPortalPage() {
       description: "Open saved incident reports, submit a new report, download PDFs, and resend manager email copies.",
       action: "Open incident reports",
       tone: C.green,
+      disabled: false,
+    },
+    {
+      href: "/bankdeposit",
+      icon: Banknote,
+      title: "Bank Deposit",
+      description: "Track daily system drop counts against actual deposits with monthly variance totals.",
+      action: "Open bank deposits",
+      tone: C.outline,
       disabled: false,
     },
     ...(user.isAdmin ? [{

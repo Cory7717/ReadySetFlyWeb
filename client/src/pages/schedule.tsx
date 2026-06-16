@@ -184,6 +184,25 @@ type ScheduleRequest = {
   status: string;
   createdAt?: string | null;
   conflictCount?: number;
+  isPast?: boolean;
+  overlapConflictCount?: number;
+  firstOverlapRequest?: {
+    id: string;
+    requesterName: string;
+    requestDate: string;
+    requestEndDate?: string | null;
+    status: string;
+    createdAt?: string | null;
+    isCurrentRequest?: boolean;
+  } | null;
+  overlapConflicts?: Array<{
+    id: string;
+    requesterName: string;
+    requestDate: string;
+    requestEndDate?: string | null;
+    status: string;
+    createdAt?: string | null;
+  }>;
   requester?: ScheduleUser;
 };
 
@@ -2793,7 +2812,12 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
 function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus, onCancel }: { requests: ScheduleRequest[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => void; onStatus: (request: ScheduleRequest, status: string) => void; onCancel: (request: ScheduleRequest) => void }) {
   const [form, setForm] = useState({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
   const [expanded, setExpanded] = useState(true);
+  const [pastExpanded, setPastExpanded] = useState(false);
   const t = (value: string) => tr(spanish, value);
+  const today = localDateKey();
+  const isPastRequest = (request: ScheduleRequest) => Boolean(request.isPast ?? ((request.requestEndDate || request.requestDate) < today));
+  const activeRequests = requests.filter((request) => !isPastRequest(request));
+  const pastRequests = requests.filter(isPastRequest);
   const submit = () => {
     if (daysBetweenLocal(localDateKey(), form.requestDate) < 14) {
       window.alert(spanish
@@ -2803,10 +2827,59 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
     onSubmit({ ...form, requestEndDate: form.requestEndDate || form.requestDate, startTime: form.startTime || null, endTime: form.endTime || null });
     setForm({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
   };
-  const pendingCount = requests.filter((request) => request.status === "submitted").length;
-  const approvedCount = requests.filter((request) => request.status === "approved").length;
-  const deniedCount = requests.filter((request) => request.status === "denied").length;
-  const cancelledCount = requests.filter((request) => request.status === "cancelled").length;
+  const pendingCount = activeRequests.filter((request) => request.status === "submitted").length;
+  const approvedCount = activeRequests.filter((request) => request.status === "approved").length;
+  const deniedCount = activeRequests.filter((request) => request.status === "denied").length;
+  const cancelledCount = activeRequests.filter((request) => request.status === "cancelled").length;
+  const renderRequestCard = (request: ScheduleRequest) => {
+    const overlapCount = Number(request.overlapConflictCount || 0);
+    const first = request.firstOverlapRequest;
+    const conflictNames = (request.overlapConflicts || [])
+      .slice(0, 4)
+      .map((conflict) => `${conflict.requesterName} (${conflict.status})`)
+      .join(", ");
+    return (
+      <div key={request.id} className="flex flex-col gap-2 rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold">{isAdmin ? `${request.requester?.employeeDisplayName || "Associate"} - ` : ""}{formatRequestDateRange(request)} - {request.requestType.replace("_", " ")}</div>
+          <div className="text-[#5f5247]">{isAdmin && request.department ? `${request.department} - ` : ""}{[request.startTime?.slice(0, 5), request.endTime?.slice(0, 5)].filter(Boolean).join(" - ")} {request.notes}</div>
+          {isAdmin && overlapCount > 0 && (
+            <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-amber-950">
+              <div className="flex items-start gap-2 font-semibold">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  {spanish ? "Alerta de cobertura" : "Coverage warning"}: {overlapCount} {overlapCount === 1 ? (spanish ? "otra solicitud coincide" : "other request overlaps") : (spanish ? "otras solicitudes coinciden" : "other requests overlap")} {request.department || (spanish ? "este departamento" : "this department")}.
+                </span>
+              </div>
+              {first && (
+                <div className="mt-1 text-xs">
+                  {spanish ? "Primera solicitud" : "First requested"}: {first.requesterName} ({first.status}) for {formatRequestDateRange({ ...request, requestDate: first.requestDate, requestEndDate: first.requestEndDate } as ScheduleRequest)}.
+                </div>
+              )}
+              {conflictNames && <div className="mt-1 text-xs">{spanish ? "Coincide con" : "Overlaps with"}: {conflictNames}</div>}
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 md:justify-end">
+          {isAdmin && request.status === "submitted" && overlapCount > 0 && (
+            <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-900">
+              {overlapCount} {spanish ? "coincidente(s)" : "overlap(s)"}
+            </Badge>
+          )}
+          <Badge variant="outline" className={request.status === "approved" ? "border-emerald-300 bg-emerald-50 text-emerald-800" : request.status === "denied" ? "border-red-300 bg-red-50 text-red-800" : request.status === "cancelled" ? "border-slate-300 bg-slate-50 text-slate-700" : "border-amber-300 bg-amber-50 text-amber-900"}>{request.status}</Badge>
+          {isAdmin && request.status === "submitted" && !isPastRequest(request) && (
+            <>
+              <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "approved")}>{t("Approve")}</Button>
+              <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "denied")}>{t("Deny")}</Button>
+            </>
+          )}
+          {(request.status === "submitted" || request.status === "approved") && !isPastRequest(request) && (
+            <Button size="sm" variant="outline" className={C.outline} onClick={() => onCancel(request)}>{t("Cancel")}</Button>
+          )}
+        </div>
+      </div>
+    );
+  };
   return (
     <Card className={`${C.shell} print:hidden`} data-tour="requests">
       <CardHeader>
@@ -2820,6 +2893,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
                 <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800">{approvedCount} {spanish ? "aprobada(s)" : "approved"}</Badge>
                 <Badge variant="outline" className="border-red-300 bg-red-50 text-red-800">{deniedCount} {spanish ? "negada(s)" : "denied"}</Badge>
                 <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">{cancelledCount} {spanish ? "cancelada(s)" : "cancelled"}</Badge>
+                <Badge variant="outline" className="border-[#d6c8b5] bg-white text-[#5f5247]">{pastRequests.length} {spanish ? "pasada(s)" : "past"}</Badge>
               </div>
             )}
           </div>
@@ -2851,32 +2925,21 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
           <div className="flex items-end"><Button className={C.green} disabled={!form.requestDate || !form.notes.trim()} onClick={submit}>{t("Submit")}</Button></div>
         </div>
         <div className="space-y-2">
-          {requests.map((request) => (
-            <div key={request.id} className="flex flex-col gap-2 rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm md:flex-row md:items-center md:justify-between">
-              <div>
-                <div className="font-semibold">{isAdmin ? `${request.requester?.employeeDisplayName || "Associate"} - ` : ""}{formatRequestDateRange(request)} - {request.requestType.replace("_", " ")}</div>
-                <div className="text-[#5f5247]">{isAdmin && request.department ? `${request.department} - ` : ""}{[request.startTime?.slice(0, 5), request.endTime?.slice(0, 5)].filter(Boolean).join(" - ")} {request.notes}</div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {isAdmin && request.status === "submitted" && Number(request.conflictCount || 0) > 0 && (
-                  <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-900">
-                    {request.conflictCount} {spanish ? "ya aprobado(s)" : "already approved"}
-                  </Badge>
-                )}
-                <Badge variant="outline" className={request.status === "approved" ? "border-emerald-300 bg-emerald-50 text-emerald-800" : request.status === "denied" ? "border-red-300 bg-red-50 text-red-800" : request.status === "cancelled" ? "border-slate-300 bg-slate-50 text-slate-700" : "border-amber-300 bg-amber-50 text-amber-900"}>{request.status}</Badge>
-                {isAdmin && request.status === "submitted" && (
-                  <>
-                    <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "approved")}>{t("Approve")}</Button>
-                    <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "denied")}>{t("Deny")}</Button>
-                  </>
-                )}
-                {(request.status === "submitted" || request.status === "approved") && (
-                  <Button size="sm" variant="outline" className={C.outline} onClick={() => onCancel(request)}>{t("Cancel")}</Button>
-                )}
-              </div>
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-[#201814]">{spanish ? "Solicitudes actuales" : "Current requests"}</div>
+            <Badge variant="outline" className="border-[#d6c8b5] bg-white text-[#5f5247]">{activeRequests.length}</Badge>
+          </div>
+          {activeRequests.map(renderRequestCard)}
+          {activeRequests.length === 0 && <div className="rounded-lg border border-dashed border-[#d6c8b5] bg-[#fbf6ee] p-3 text-sm text-[#5f5247]">{t("No schedule requests yet.")}</div>}
+          {pastRequests.length > 0 && (
+            <div className="pt-2">
+              <Button variant="outline" className={`${C.outline} w-full justify-between`} onClick={() => setPastExpanded((value) => !value)}>
+                <span className="flex items-center gap-2"><Archive className="h-4 w-4" /> {spanish ? "Solicitudes pasadas" : "Past requests"} ({pastRequests.length})</span>
+                {pastExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+              {pastExpanded && <div className="mt-2 space-y-2">{pastRequests.map(renderRequestCard)}</div>}
             </div>
-          ))}
-          {requests.length === 0 && <div className="text-sm text-[#5f5247]">{t("No schedule requests yet.")}</div>}
+          )}
         </div>
       </CardContent>}
     </Card>
@@ -3558,10 +3621,13 @@ export default function SchedulePage() {
             spanish={spanish}
             onSubmit={(request) => submitRequest.mutate(request)}
             onStatus={(request, status) => {
+              const overlapCount = Number(request.overlapConflictCount || request.conflictCount || 0);
+              const first = request.firstOverlapRequest;
+              const firstText = first ? ` First request: ${first.requesterName} (${first.status}) for ${formatRequestDateRange({ ...request, requestDate: first.requestDate, requestEndDate: first.requestEndDate } as ScheduleRequest)}.` : "";
               if (
                 status === "approved" &&
-                Number(request.conflictCount || 0) > 0 &&
-                !window.confirm(`${request.conflictCount} associate(s) in ${request.department || "this department"} are already approved off during ${formatRequestDateRange(request)}. Approve this additional request?`)
+                overlapCount > 0 &&
+                !window.confirm(`${overlapCount} other associate request(s) in ${request.department || "this department"} overlap ${formatRequestDateRange(request)}.${firstText} Approve this additional request?`)
               ) {
                 return;
               }

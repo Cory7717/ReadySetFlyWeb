@@ -1716,17 +1716,53 @@ function stripPrivateEmployeeRates(employees: any[], user: any) {
 }
 
 async function addRequestConflictInfo(rows: Array<{ request: any; user: any }>) {
-  const approved = await db.select().from(scheduleRequests).where(eq(scheduleRequests.status, "approved"));
+  const activeRows = await db
+    .select({ request: scheduleRequests, user: tipsUsers })
+    .from(scheduleRequests)
+    .innerJoin(tipsUsers, eq(scheduleRequests.requesterUserId, tipsUsers.id))
+    .where(inArray(scheduleRequests.status, ["submitted", "approved"] as any));
+  const today = todayDateKey();
   return rows.map((row) => {
-    const conflicts = approved.filter((request) =>
-      request.department === row.request.department &&
-      requestRangesOverlap(request, row.request) &&
-      request.id !== row.request.id,
+    const conflicts = activeRows.filter((candidate) =>
+      candidate.request.department === row.request.department &&
+      requestRangesOverlap(candidate.request, row.request) &&
+      candidate.request.id !== row.request.id &&
+      candidate.request.requesterUserId !== row.request.requesterUserId,
     );
+    const sortedOverlapGroup = [row, ...conflicts]
+      .sort((left, right) =>
+        String(left.request.createdAt || left.request.requestDate).localeCompare(String(right.request.createdAt || right.request.requestDate))
+      );
+    const first = conflicts.length ? sortedOverlapGroup[0] : null;
     return {
       ...row.request,
       requester: publicScheduleUser(row.user),
-      conflictCount: conflicts.length,
+      isPast: requestEndDate(row.request) < today,
+      conflictCount: conflicts.filter((candidate) => candidate.request.status === "approved").length,
+      overlapConflictCount: conflicts.length,
+      firstOverlapRequest: first
+        ? {
+            id: first.request.id,
+            requesterName: publicScheduleUser(first.user).employeeDisplayName || [first.user.firstName, first.user.lastName].filter(Boolean).join(" ") || first.user.email,
+            requestDate: first.request.requestDate,
+            requestEndDate: requestEndDate(first.request),
+            status: first.request.status,
+            createdAt: first.request.createdAt,
+            isCurrentRequest: first.request.id === row.request.id,
+          }
+        : null,
+      overlapConflicts: conflicts
+        .sort((left, right) =>
+          String(left.request.createdAt || left.request.requestDate).localeCompare(String(right.request.createdAt || right.request.requestDate))
+        )
+        .map((candidate) => ({
+          id: candidate.request.id,
+          requesterName: publicScheduleUser(candidate.user).employeeDisplayName || [candidate.user.firstName, candidate.user.lastName].filter(Boolean).join(" ") || candidate.user.email,
+          requestDate: candidate.request.requestDate,
+          requestEndDate: requestEndDate(candidate.request),
+          status: candidate.request.status,
+          createdAt: candidate.request.createdAt,
+        })),
     };
   });
 }

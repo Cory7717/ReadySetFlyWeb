@@ -17,6 +17,8 @@ import { trackEvent } from "@/lib/analytics";
 
 const CONCEPT_ART_PATH = "/downloads/the-grasp-concept-art.png";
 const CORY_BIO_IMAGE_PATH = "/downloads/cory-armer-creator-bio.png";
+const THE_GRASP_DESCRIPTION =
+  "Seeking freedom from a life dictated by time, Jonas and Lena relocate to the Norwegian island of Sommarøy, where clocks and schedules have been abandoned. What begins as liberation slowly reveals itself to be something far darker as they uncover the island’s true reason for drawing people there.";
 
 const storyMovements = [
   {
@@ -95,6 +97,24 @@ function trackAsset(label: string, target: string) {
   trackEvent("cta_click", { label, target });
 }
 
+const setMetaTag = (selector: string, attribute: "name" | "property", value: string, content: string) => {
+  let tag = document.head.querySelector<HTMLMetaElement>(selector);
+  if (!tag) {
+    tag = document.createElement("meta");
+    tag.setAttribute(attribute, value);
+    document.head.appendChild(tag);
+  }
+  const previous = tag.content;
+  tag.content = content;
+  return () => {
+    if (previous) {
+      tag.content = previous;
+    } else {
+      tag.remove();
+    }
+  };
+};
+
 function SpiralMark({ className = "" }: { className?: string }) {
   return (
     <div className={`relative aspect-square ${className}`} aria-hidden="true">
@@ -121,8 +141,20 @@ export default function TheGraspPage() {
   const [scriptOpen, setScriptOpen] = useState(false);
 
   useEffect(() => {
+    const previousTitle = document.title;
     document.title = "The Grasp | A Psychological Folk Horror Feature";
+    const metaCleanups = [
+      setMetaTag('meta[name="description"]', "name", "description", THE_GRASP_DESCRIPTION),
+      setMetaTag('meta[property="og:title"]', "property", "og:title", "The Grasp | A Psychological Folk Horror Feature"),
+      setMetaTag('meta[property="og:description"]', "property", "og:description", THE_GRASP_DESCRIPTION),
+      setMetaTag('meta[property="og:image"]', "property", "og:image", CONCEPT_ART_PATH),
+    ];
     trackEvent("the_grasp_page_view", { page: "/thegrasp" });
+
+    return () => {
+      document.title = previousTitle;
+      metaCleanups.forEach((cleanup) => cleanup());
+    };
   }, []);
 
   const movement = storyMovements[activeMovement];
@@ -168,8 +200,7 @@ export default function TheGraspPage() {
                 </p>
               </div>
               <p className="mt-7 max-w-2xl text-base leading-8 text-[#40575f] sm:text-lg">
-                A man travels to a remote Norwegian island to save his relationship, only to discover the community
-                does not believe in letting outsiders go.
+                {THE_GRASP_DESCRIPTION}
               </p>
               <div className="mt-7 flex w-fit items-center gap-4 border border-[#536d76]/35 bg-[#e6ecea]/70 px-5 py-4 shadow-[0_18px_50px_rgba(46,65,71,0.12)] backdrop-blur">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center border border-[#536d76]/30 bg-white/30 text-[#536d76]">

@@ -22,7 +22,7 @@ const projects = [
     cue: "Seattle music / legacy / addiction",
     description:
       "A character-driven anthology exploring the artists who defined a generation and the personal cost of fame, addiction, creativity, and legacy. Season One follows Layne Staley and Jerry Cantrell as Alice in Chains rises from Seattle clubs to international fame while the bond that built the band is tested by success and addiction.",
-    badges: ["Pilot Complete", "Series Bible Complete", "Pitch Deck Complete", "Producer Attached", "Early Development"],
+    badges: ["Pilot Complete", "7 of 8 Episodes Complete", "Series Bible Complete", "Pitch Deck Complete", "Producer Attached", "Early Development"],
     href: "/noiseandfury",
   },
   {
@@ -39,7 +39,7 @@ const projects = [
     genre: "Psychological Thriller / Horror Feature",
     cue: "Time / belonging / surrender",
     description:
-      "Seeking freedom from a life dictated by time, Jonas and Lena relocate to the Norwegian island of Sommaroy, where clocks and schedules have been abandoned. What begins as liberation slowly reveals itself to be something far darker as they uncover the island's true reason for drawing people there.",
+      "Seeking freedom from a life dictated by time, Jonas and Lena relocate to the Norwegian island of Sommarøy, where clocks and schedules have been abandoned. What begins as liberation slowly reveals itself to be something far darker as they uncover the island’s true reason for drawing people there.",
     badges: ["Feature Screenplay Complete", "Character Bible Complete", "Pitch Deck Complete"],
     href: "/thegrasp",
   },

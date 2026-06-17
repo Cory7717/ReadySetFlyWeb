@@ -123,6 +123,20 @@ type DosReport = {
   executiveSummary: string;
 };
 
+type DosHotel = {
+  id: string;
+  name: string;
+  hotelCode: string;
+  brand?: string | null;
+  market?: string | null;
+};
+
+type DosContext = {
+  canSelectHotel: boolean;
+  currentHotelId: string;
+  hotels: DosHotel[];
+};
+
 type AccountSummaryRow = {
   id: string;
   name: string;
@@ -223,23 +237,6 @@ async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(apiUrl(url), { credentials: "include" });
   if (!response.ok) throw new Error(await response.text());
   return response.json();
-}
-
-function useSavedReport() {
-  const [report, setReport] = useState<DosReport>(() => {
-    try {
-      const saved = window.localStorage.getItem("courtyard-dos-report-v1");
-      return saved ? { ...defaultReport(), ...JSON.parse(saved) } : defaultReport();
-    } catch {
-      return defaultReport();
-    }
-  });
-
-  useEffect(() => {
-    window.localStorage.setItem("courtyard-dos-report-v1", JSON.stringify(report));
-  }, [report]);
-
-  return [report, setReport] as const;
 }
 
 function PinGate() {
@@ -363,10 +360,26 @@ function RowDelete({ onClick }: { onClick: () => void }) {
 export default function DosReportingPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [report, setReport] = useSavedReport();
+  const [report, setReport] = useState<DosReport>(() => defaultReport());
+  const [selectedHotelId, setSelectedHotelId] = useState("");
   const access = useQuery<{ unlocked: boolean; hasPin: boolean; requiresLogin?: boolean }>({
     queryKey: ["/api/tips/shared-pin/status"],
     queryFn: () => fetchJson("/api/tips/shared-pin/status"),
+  });
+  const dosContext = useQuery<DosContext>({
+    queryKey: ["/api/dosreporting/context"],
+    enabled: Boolean(access.data?.unlocked),
+    queryFn: () => fetchJson("/api/dosreporting/context"),
+  });
+  const savedReport = useQuery<{ report: { id: string; reportMonth: string; payload: Partial<DosReport>; updatedAt: string } | null }>({
+    queryKey: ["/api/dosreporting/report", selectedHotelId, report.meta.reportMonth],
+    enabled: Boolean(access.data?.unlocked && selectedHotelId && report.meta.reportMonth),
+    queryFn: () => fetchJson(`/api/dosreporting/report/${encodeURIComponent(selectedHotelId)}/${encodeURIComponent(report.meta.reportMonth)}`),
+  });
+  const savedReports = useQuery<{ reports: Array<{ id: string; reportMonth: string; updatedAt: string }> }>({
+    queryKey: ["/api/dosreporting/reports", selectedHotelId],
+    enabled: Boolean(access.data?.unlocked && selectedHotelId),
+    queryFn: () => fetchJson(`/api/dosreporting/reports?hotelId=${encodeURIComponent(selectedHotelId)}`),
   });
   const counts = useMemo(() => stageCounts(report.monthlyActivities), [report.monthlyActivities]);
   const activeActivities = report.monthlyActivities.filter((row) => row.name.trim()).length;
@@ -375,6 +388,95 @@ export default function DosReportingPage() {
 
   const update = (patch: Partial<DosReport>) => setReport({ ...report, ...patch });
   const updateMeta = (key: keyof DosReport["meta"], value: string) => update({ meta: { ...report.meta, [key]: value } });
+  const saveReport = useMutation({
+    mutationFn: async (status: "draft" | "submitted" = "draft") => {
+      const response = await apiRequest("POST", "/api/dosreporting/report", {
+        hotelId: selectedHotelId,
+        reportMonth: report.meta.reportMonth,
+        payload: report,
+        status,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dosreporting/report", selectedHotelId, report.meta.reportMonth] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dosreporting/reports", selectedHotelId] });
+      toast({ title: "DOS report saved", description: "This report is now saved to the backend." });
+    },
+    onError: (error: Error) => toast({ title: "Unable to save DOS report", description: error.message, variant: "destructive" }),
+  });
+
+  useEffect(() => {
+    if (!selectedHotelId && dosContext.data?.currentHotelId) {
+      setSelectedHotelId(dosContext.data.currentHotelId);
+    }
+  }, [dosContext.data?.currentHotelId, selectedHotelId]);
+
+  useEffect(() => {
+    const hotel = dosContext.data?.hotels.find((item) => item.id === selectedHotelId);
+    if (hotel && !savedReport.data?.report) {
+      setReport((current) => ({
+        ...current,
+        meta: {
+          ...current.meta,
+          hotelCode: hotel.hotelCode,
+          hotelName: hotel.name,
+        },
+      }));
+    }
+  }, [dosContext.data?.hotels, selectedHotelId, savedReport.data?.report]);
+
+  useEffect(() => {
+    if (savedReport.data?.report?.payload) {
+      setReport({ ...defaultReport(), ...savedReport.data.report.payload });
+    }
+  }, [savedReport.data?.report?.id, savedReport.data?.report?.updatedAt]);
+
+  useEffect(() => {
+    if (!savedReport.isSuccess || savedReport.data?.report) return;
+    const hotel = dosContext.data?.hotels.find((item) => item.id === selectedHotelId);
+    setReport((current) => ({
+      ...defaultReport(),
+      meta: {
+        ...defaultReport().meta,
+        reportMonth: current.meta.reportMonth,
+        issuedDate: current.meta.issuedDate,
+        preparedBy: current.meta.preparedBy,
+        hotelCode: hotel?.hotelCode || current.meta.hotelCode,
+        hotelName: hotel?.name || current.meta.hotelName,
+      },
+    }));
+  }, [savedReport.isSuccess, savedReport.data?.report, selectedHotelId, report.meta.reportMonth]);
+
+  const selectHotel = (hotelId: string) => {
+    const hotel = dosContext.data?.hotels.find((item) => item.id === hotelId);
+    setSelectedHotelId(hotelId);
+    setReport((current) => ({
+      ...defaultReport(),
+      meta: {
+        ...defaultReport().meta,
+        reportMonth: current.meta.reportMonth,
+        issuedDate: current.meta.issuedDate,
+        preparedBy: current.meta.preparedBy,
+        hotelCode: hotel?.hotelCode || "",
+        hotelName: hotel?.name || "",
+      },
+    }));
+  };
+
+  const selectReportMonth = (reportMonth: string) => {
+    const hotel = dosContext.data?.hotels.find((item) => item.id === selectedHotelId);
+    setReport((current) => ({
+      ...defaultReport(),
+      meta: {
+        ...defaultReport().meta,
+        reportMonth,
+        preparedBy: current.meta.preparedBy,
+        hotelCode: hotel?.hotelCode || current.meta.hotelCode,
+        hotelName: hotel?.name || current.meta.hotelName,
+      },
+    }));
+  };
 
   const downloadJson = () => {
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
@@ -394,6 +496,7 @@ export default function DosReportingPage() {
   if (access.isLoading) return <div className={`${C.page} p-8`}>Loading DOS reporting...</div>;
   if (access.data?.requiresLogin) return <LoginRequired />;
   if (!access.data?.unlocked) return <PinGate />;
+  if (dosContext.isLoading || !selectedHotelId) return <div className={`${C.page} p-8`}>Loading hotel access...</div>;
 
   return (
     <div className={C.page}>
@@ -404,9 +507,12 @@ export default function DosReportingPage() {
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">DOS Sales Activities Report</h1>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className={C.outline} onClick={() => toast({ title: "Draft saved", description: "This browser has the latest report draft." })}>
+            <Button variant="outline" className={C.outline} disabled={saveReport.isPending || !selectedHotelId || !report.meta.reportMonth} onClick={() => saveReport.mutate("draft")}>
               <Save className="mr-2 h-4 w-4" />
-              Save draft
+              {saveReport.isPending ? "Saving..." : "Save draft"}
+            </Button>
+            <Button className={C.green} disabled={saveReport.isPending || !selectedHotelId || !report.meta.reportMonth} onClick={() => saveReport.mutate("submitted")}>
+              Submit
             </Button>
             <Button variant="outline" className={C.outline} onClick={downloadJson}>
               <Download className="mr-2 h-4 w-4" />
@@ -415,6 +521,10 @@ export default function DosReportingPage() {
             <Button variant="outline" className={C.outline} onClick={() => window.print()}>
               <Printer className="mr-2 h-4 w-4" />
               Print / PDF
+            </Button>
+            <Button variant="outline" className={C.outline} disabled={!selectedHotelId || !report.meta.reportMonth || !savedReport.data?.report} onClick={() => window.location.assign(apiUrl(`/api/dosreporting/report/${encodeURIComponent(selectedHotelId)}/${encodeURIComponent(report.meta.reportMonth)}/pdf`))}>
+              <Download className="mr-2 h-4 w-4" />
+              Download PDF
             </Button>
             <Button variant="outline" className={C.outline} onClick={() => logout.mutate()}>Lock</Button>
           </div>
@@ -428,11 +538,35 @@ export default function DosReportingPage() {
             <CardDescription className={C.muted}>Matches the hotel, month, and accountability information from the workbook cover/monthly tabs.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-5">
+            {dosContext.data?.canSelectHotel && (
+              <div className="md:col-span-2">
+                <Label>Hotel</Label>
+                <Select value={selectedHotelId} onValueChange={selectHotel}>
+                  <SelectTrigger className={C.field}><SelectValue /></SelectTrigger>
+                  <SelectContent className={C.menu}>
+                    {(dosContext.data?.hotels || []).map((hotel) => (
+                      <SelectItem key={hotel.id} value={hotel.id}>{hotel.name} ({hotel.hotelCode})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div><Label>Hotel code</Label><Input className={C.field} value={report.meta.hotelCode} onChange={(event) => updateMeta("hotelCode", event.target.value)} /></div>
             <div className="md:col-span-2"><Label>Hotel name</Label><Input className={C.field} value={report.meta.hotelName} onChange={(event) => updateMeta("hotelName", event.target.value)} /></div>
-            <div><Label>Report month</Label><Input className={C.field} type="month" value={report.meta.reportMonth} onChange={(event) => updateMeta("reportMonth", event.target.value)} /></div>
+            <div><Label>Report month</Label><Input className={C.field} type="month" value={report.meta.reportMonth} onChange={(event) => selectReportMonth(event.target.value)} /></div>
             <div><Label>Issued date</Label><Input className={C.field} type="date" value={report.meta.issuedDate} onChange={(event) => updateMeta("issuedDate", event.target.value)} /></div>
             <div className="md:col-span-2"><Label>Prepared by</Label><Input className={C.field} value={report.meta.preparedBy} onChange={(event) => updateMeta("preparedBy", event.target.value)} /></div>
+            <div>
+              <Label>Saved months</Label>
+              <Select value={report.meta.reportMonth} onValueChange={selectReportMonth}>
+                <SelectTrigger className={C.field}><SelectValue placeholder="Saved reports" /></SelectTrigger>
+                <SelectContent className={C.menu}>
+                  {(savedReports.data?.reports || []).map((item) => (
+                    <SelectItem key={item.id} value={item.reportMonth}>{item.reportMonth}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="md:col-span-3"><Label>Executive summary / corporate callout</Label><Textarea className={`min-h-[80px] ${C.field}`} value={report.executiveSummary} onChange={(event) => update({ executiveSummary: event.target.value })} /></div>
           </CardContent>
         </Card>

@@ -106,6 +106,9 @@ export default function CoryArmer() {
 
   return (
     <main className="cory-writer-page">
+      <div className="cw-background" aria-hidden="true">
+        <img src="/downloads/coryarmer-portfolio-background.png" alt="" />
+      </div>
       <div className="cw-texture" aria-hidden="true" />
 
       <section className="cw-hero">

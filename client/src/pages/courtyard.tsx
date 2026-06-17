@@ -405,6 +405,15 @@ export default function CourtyardPortalPage() {
       disabled: !toolEnabled(user, "opsreport"),
     },
     {
+      href: "/dosreporting",
+      icon: FileSpreadsheet,
+      title: "DOS Reporting",
+      description: "Complete weekly sales activity, monthly pipeline, top accounts, production, and future business reports.",
+      action: "Open DOS reporting",
+      tone: C.green,
+      disabled: !toolEnabled(user, "opsreport"),
+    },
+    {
       href: "/incidentreport",
       icon: ClipboardPlus,
       title: "Incident Report",

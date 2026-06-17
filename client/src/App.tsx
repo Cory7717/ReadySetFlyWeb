@@ -88,6 +88,7 @@ import CoryArmer from "@/pages/CoryArmer";
 import TipsPage from "@/pages/tips";
 import SchedulePage from "@/pages/schedule";
 import OpsReportPage from "@/pages/ops-report";
+import DosReportingPage from "@/pages/dos-reporting";
 import CourtyardPortalPage from "@/pages/courtyard";
 import CourtyardBudgetPage from "@/pages/courtyard-budget";
 import BankDepositPage from "@/pages/bank-deposit";
@@ -254,6 +255,7 @@ function Router() {
       <Route path="/bankdeposit" component={BankDepositPage} />
       <Route path="/schedule" component={SchedulePage} />
       <Route path="/opsreport" component={OpsReportPage} />
+      <Route path="/dosreporting" component={DosReportingPage} />
       <Route path="/incidentreport" component={IncidentReportPage} />
       <Route path="/incidentreport/share/:token" component={IncidentReportSharePage} />
       <Route path="/vw-beetle" component={VwBeetlePage} />
@@ -389,6 +391,7 @@ function AppShell() {
   const isCourtyardPage = location.startsWith("/courtyard");
   const isBankDepositPage = location.startsWith("/bankdeposit");
   const isOpsReportPage = location.startsWith("/opsreport");
+  const isDosReportingPage = location.startsWith("/dosreporting");
   const isIncidentReportPage = location.startsWith("/incidentreport");
   const isVwBeetlePage = location.startsWith("/vw-beetle");
   const isStandalonePage =
@@ -402,6 +405,7 @@ function AppShell() {
     isCourtyardPage ||
     isBankDepositPage ||
     isOpsReportPage ||
+    isDosReportingPage ||
     isIncidentReportPage ||
     isVwBeetlePage;
   useEffect(() => {

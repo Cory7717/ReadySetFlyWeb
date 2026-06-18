@@ -78,6 +78,17 @@ async function getSessionUser(req: any) {
   return user && !user.disabledAt ? user : null;
 }
 
+function getToolAccess(user: any): Record<string, boolean> {
+  const access = user?.toolAccessJson;
+  return access && typeof access === "object" && !Array.isArray(access) ? access as Record<string, boolean> : {};
+}
+
+function canUseIncidentReport(user: any) {
+  if (!user) return true;
+  const explicit = getToolAccess(user).incidentreport;
+  return explicit !== false;
+}
+
 async function getSharedPinHash() {
   const [tipsRow] = await db.select().from(tipsKioskSettings).where(eq(tipsKioskSettings.key, "pin_hash")).limit(1);
   if (tipsRow?.value) return tipsRow.value;
@@ -100,8 +111,10 @@ async function verifySharedPin(pin: string) {
 
 async function requireIncidentAccess(req: any, res: any, next: any) {
   try {
+    const user = await getSessionUser(req);
+    if (!canUseIncidentReport(user)) return res.status(403).json({ error: "Incident Report access is not enabled for this account." });
     if (req.session?.incidentReportUnlocked) {
-      req.incidentUser = await getSessionUser(req);
+      req.incidentUser = user;
       return next();
     }
     return res.status(401).json({ error: "Incident report PIN required." });
@@ -513,8 +526,10 @@ export function registerIncidentReportRoutes(app: Express) {
   router.get("/access", async (req: any, res, next) => {
     try {
       const user = await getSessionUser(req);
+      const accessEnabled = canUseIncidentReport(user);
       res.json({
-        unlocked: Boolean(req.session?.incidentReportUnlocked),
+        unlocked: Boolean(req.session?.incidentReportUnlocked && accessEnabled),
+        accessEnabled,
         user: user ? { id: user.id, employeeDisplayName: user.employeeDisplayName, position: user.position || "", email: user.email } : null,
         hasPin: await hasSharedPin(),
       });
@@ -525,6 +540,8 @@ export function registerIncidentReportRoutes(app: Express) {
 
   router.post("/pin-login", async (req: any, res, next) => {
     try {
+      const user = await getSessionUser(req);
+      if (!canUseIncidentReport(user)) return res.status(403).json({ error: "Incident Report access is not enabled for this account." });
       const parsed = pinSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Enter the established 5 digit team PIN." });
       if (!(await verifySharedPin(parsed.data.pin))) return res.status(401).json({ error: "Invalid PIN." });

@@ -31,11 +31,18 @@ function getToolAccess(user: any): Record<string, boolean> {
   return access && typeof access === "object" && !Array.isArray(access) ? access as Record<string, boolean> : {};
 }
 
-function hasOpsToolAccess(user: any) {
+function hasDosToolAccess(user: any) {
   if (!user || user.disabledAt || user.mustChangePassword) return false;
-  const explicit = getToolAccess(user).opsreport;
+  const access = getToolAccess(user);
+  const explicit = access.dosreporting;
   if (typeof explicit === "boolean") return explicit;
+  const opsExplicit = access.opsreport;
+  if (typeof opsExplicit === "boolean") return opsExplicit;
   return user.role === "super_admin" || user.role === "manager";
+}
+
+function dosAccessExplicitlyDenied(user: any) {
+  return getToolAccess(user).dosreporting === false;
 }
 
 function isAboveProperty(user: any) {
@@ -64,7 +71,7 @@ async function getHotelsForUser(user: any) {
     : [];
   const assignedHotels = assignments.map((row) => row.hotel);
   if (assignedHotels.length) return assignedHotels;
-  if (user && hasOpsToolAccess(user)) return allHotels.filter((hotel) => hotel.id === DEFAULT_HOTEL_ID);
+  if (user && hasDosToolAccess(user)) return allHotels.filter((hotel) => hotel.id === DEFAULT_HOTEL_ID);
   return [];
 }
 
@@ -74,7 +81,10 @@ async function requireDosReportAccess(req: any, res: any, next: any) {
     if (!user || user.disabledAt || user.mustChangePassword) {
       return res.status(401).json({ error: "Courtyard login is required." });
     }
-    if (!hasOpsToolAccess(user) && !req.session?.courtyardSharedPinUnlocked && !req.session?.opsReportUnlocked && !req.session?.tipsKioskUnlocked) {
+    if (dosAccessExplicitlyDenied(user)) {
+      return res.status(403).json({ error: "DOS Reporting access is not enabled for this account." });
+    }
+    if (!hasDosToolAccess(user) && !req.session?.courtyardSharedPinUnlocked && !req.session?.opsReportUnlocked && !req.session?.tipsKioskUnlocked) {
       return res.status(401).json({ error: "Shared PIN is required." });
     }
     const hotels = await getHotelsForUser(user);

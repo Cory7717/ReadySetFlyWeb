@@ -104,6 +104,11 @@ function publicUser(user: any) {
   };
 }
 
+function getToolAccess(user: any): Record<string, boolean> {
+  const access = user?.toolAccessJson;
+  return access && typeof access === "object" && !Array.isArray(access) ? access as Record<string, boolean> : {};
+}
+
 async function getUserBySession(req: any) {
   const userId = req.session?.tipsUserId;
   if (userId) {
@@ -121,6 +126,10 @@ async function getBudgetAccess(user: any) {
   if (base.isSuperAdmin) {
     return { ...base, canAccessBudget: true, canUpload: true, canEditForecast: true, departments: [...BUDGET_DEPARTMENTS], allDepartments: true };
   }
+  const explicitBudgetAccess = getToolAccess(user).budget;
+  if (explicitBudgetAccess === false) {
+    return { ...base, canAccessBudget: false, canUpload: false, canEditForecast: false, departments: [], allDepartments: false };
+  }
   const [employee] = await db
     .select()
     .from(scheduleEmployees)
@@ -129,6 +138,9 @@ async function getBudgetAccess(user: any) {
   const managerText = `${employee?.position || ""} ${Array.isArray(employee?.rolesJson) ? employee.rolesJson.join(" ") : ""}`.toLowerCase();
   const isDepartmentHead = Boolean(employee?.isDepartmentManager || managerText.includes("manager") || managerText.includes("supervisor") || managerText.includes("executive housekeeper") || managerText.includes("exec hk"));
   const departments = isDepartmentHead ? departmentScopeForEmployee(employee) : [];
+  if (explicitBudgetAccess === true) {
+    return { ...base, canAccessBudget: true, canUpload: false, canEditForecast: false, departments: departments.length ? departments : [...BUDGET_DEPARTMENTS], allDepartments: departments.length === 0 };
+  }
   return { ...base, canAccessBudget: departments.length > 0, canUpload: false, canEditForecast: false, departments, allDepartments: false };
 }
 

@@ -40,8 +40,9 @@ type CourtyardUser = {
   canAccessOpsReport?: boolean;
 };
 
-type ToolKey = "schedule" | "tips" | "opsreport";
+type ToolKey = "schedule" | "tips" | "opsreport" | "dosreporting" | "incidentreport" | "bankdeposit" | "budget";
 type ToolAccessResponse = { users: CourtyardUser[]; tools: ToolKey[] };
+const DEFAULT_TOOL_KEYS: ToolKey[] = ["schedule", "tips", "opsreport", "dosreporting", "incidentreport", "bankdeposit", "budget"];
 
 const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
 const SCHEDULE_ROLES = ["GM", "DOS", "MOD", "Executive Housekeeper", "Exec HK", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
@@ -61,7 +62,9 @@ function toolEnabled(user: CourtyardUser, tool: ToolKey) {
   if (typeof explicit === "boolean") return explicit;
   if (tool === "schedule") return user.canAccessSchedule !== false;
   if (tool === "tips") return user.canAccessTips ?? userHasTipsAccess(user);
-  return user.canAccessOpsReport ?? user.isAdmin;
+  if (tool === "opsreport" || tool === "dosreporting" || tool === "budget") return user.canAccessOpsReport ?? user.isAdmin;
+  if (tool === "incidentreport" || tool === "bankdeposit") return true;
+  return false;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -244,7 +247,12 @@ function CourtyardToolAccessAdmin() {
     schedule: "Schedule",
     tips: "Tips",
     opsreport: "Ops Report",
+    dosreporting: "DOS Reporting",
+    incidentreport: "Incident Report",
+    bankdeposit: "Bank Deposit",
+    budget: "Budget",
   };
+  const tools = accessUsers.data?.tools?.length ? accessUsers.data.tools : DEFAULT_TOOL_KEYS;
 
   return (
     <Card className={C.shell}>
@@ -267,14 +275,14 @@ function CourtyardToolAccessAdmin() {
           <div className="text-sm text-[#5f5247]">Loading associates...</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse text-sm">
+            <table className="w-full min-w-[1280px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-[#d7c8b5] text-left text-xs uppercase tracking-[0.12em] text-[#6b5f54]">
                   <th className="py-2 pr-3">Associate</th>
                   <th className="px-3 py-2">Role</th>
-                  <th className="px-3 py-2 text-center">Schedule</th>
-                  <th className="px-3 py-2 text-center">Tips</th>
-                  <th className="px-3 py-2 text-center">Ops Report</th>
+                  {tools.map((tool) => (
+                    <th key={tool} className="px-3 py-2 text-center">{toolLabels[tool]}</th>
+                  ))}
                   <th className="px-3 py-2 text-center">Password</th>
                 </tr>
               </thead>
@@ -288,7 +296,7 @@ function CourtyardToolAccessAdmin() {
                     <td className="px-3 py-3">
                       <Badge variant="outline" className="border-[#cdbda8] bg-white text-[#201814]">{item.role.replace("_", " ")}</Badge>
                     </td>
-                    {(["schedule", "tips", "opsreport"] as ToolKey[]).map((tool) => (
+                    {tools.map((tool) => (
                       <td key={tool} className="px-3 py-3 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <Switch
@@ -411,7 +419,7 @@ export default function CourtyardPortalPage() {
       description: "Complete weekly sales activity, monthly pipeline, top accounts, production, and future business reports.",
       action: "Open DOS reporting",
       tone: C.green,
-      disabled: !toolEnabled(user, "opsreport"),
+      disabled: !toolEnabled(user, "dosreporting"),
     },
     {
       href: "/incidentreport",
@@ -420,7 +428,7 @@ export default function CourtyardPortalPage() {
       description: "Open saved incident reports, submit a new report, download PDFs, and resend manager email copies.",
       action: "Open incident reports",
       tone: C.green,
-      disabled: false,
+      disabled: !toolEnabled(user, "incidentreport"),
     },
     {
       href: "/bankdeposit",
@@ -429,9 +437,9 @@ export default function CourtyardPortalPage() {
       description: "Track daily system drop counts against actual deposits with monthly variance totals.",
       action: "Open bank deposits",
       tone: C.outline,
-      disabled: false,
+      disabled: !toolEnabled(user, "bankdeposit"),
     },
-    ...(user.isAdmin ? [{
+    ...(toolEnabled(user, "budget") ? [{
       href: "/courtyard/budget",
       icon: DollarSign,
       title: "Budget",

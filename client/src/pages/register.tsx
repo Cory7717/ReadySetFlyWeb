@@ -127,7 +127,7 @@ export default function RegisterPage() {
             <h1 className="max-w-xl text-3xl font-bold leading-tight sm:text-4xl">
               Create a free account when you want RSF to keep working for you.
             </h1>
-            <p className="max-w-xl text-sm leading-6 text-sky-50/84 sm:text-base">
+            <p className="max-w-xl text-sm leading-6 text-sky-50 sm:text-base">
               Save your first plan, keep tools synced across devices, track logbook activity, and upgrade only when the extra workflow value is clear.
             </p>
           </div>
@@ -141,7 +141,7 @@ export default function RegisterPage() {
             ].map((item) => (
               <div
                 key={item}
-                className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3 text-sm text-sky-50/92"
+                className="rounded-2xl border border-white/16 bg-white/10 px-4 py-3 text-sm text-sky-50"
               >
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-sky-200" />
@@ -153,12 +153,12 @@ export default function RegisterPage() {
 
           <div className="mt-8 rounded-2xl border border-white/12 bg-white/8 p-4">
             <div className="text-sm font-semibold">Best path for most users</div>
-            <div className="mt-2 flex items-center gap-2 text-sm text-sky-50/82">
+            <div className="mt-2 flex items-center gap-2 text-sm text-sky-50">
               <span>Continue with Google</span>
               <ChevronRight className="h-4 w-4" />
               <span>Get back to what you were doing</span>
             </div>
-            <div className="mt-2 text-xs text-sky-100/72">
+            <div className="mt-2 text-xs text-sky-50/90">
               Faster signup usually wins. Email signup is still available below.
             </div>
           </div>

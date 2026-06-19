@@ -397,15 +397,10 @@ export default function CesiumGlobe({
     let active = true;
     const loadRadar = async () => {
       try {
-        const response = await fetch("https://api.rainviewer.com/public/weather-maps.json");
+        const response = await fetch(apiUrl("/api/weather/rainviewer/frames"), { credentials: "include" });
         if (!response.ok) return;
         const data = await response.json();
-        const frames = [
-          ...(data?.radar?.past || []),
-          ...(data?.radar?.nowcast || [])
-        ]
-          .map((item: { path?: string }) => item.path)
-          .filter(Boolean) as string[];
+        const frames = (Array.isArray(data?.frames) ? data.frames : []).filter(Boolean) as string[];
         if (!active) return;
         const last = frames.length ? frames[frames.length - 1] : null;
         setRadarFrame(last);

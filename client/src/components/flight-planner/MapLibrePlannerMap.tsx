@@ -194,6 +194,8 @@ export default function MapLibrePlannerMap({
   const airportMarkersRef = useRef<maplibregl.Marker[]>([]);
   const terrainMarkersRef = useRef<maplibregl.Marker[]>([]);
   const healthMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const initialCenterRef = useRef(center);
+  const initialZoomRef = useRef(initialZoom);
   const gibsDate = useMemo(
     () => new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString().slice(0, 10),
     [],
@@ -298,12 +300,10 @@ export default function MapLibrePlannerMap({
     let isActive = true;
     const loadRadarFrames = async () => {
       try {
-        const response = await fetch("https://api.rainviewer.com/public/weather-maps.json");
+        const response = await fetch(apiUrl("/api/weather/rainviewer/frames"), { credentials: "include" });
         if (!response.ok) throw new Error("Failed to load radar frames");
         const data = await response.json();
-        const frames = [...(data?.radar?.past || []), ...(data?.radar?.nowcast || [])]
-          .map((item: { path?: string }) => item.path)
-          .filter(Boolean) as string[];
+        const frames = (Array.isArray(data?.frames) ? data.frames : []).filter(Boolean) as string[];
         if (!isActive) return;
         setRadarFrames(frames);
         setRadarFrameIndex(frames.length > 0 ? frames.length - 1 : 0);
@@ -353,8 +353,8 @@ export default function MapLibrePlannerMap({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      center,
-      zoom: initialZoom,
+      center: initialCenterRef.current,
+      zoom: initialZoomRef.current,
       attributionControl: {},
       style: createRasterBaseStyle({
         sourceId: "osm",
@@ -441,7 +441,6 @@ export default function MapLibrePlannerMap({
       });
 
       setMapReady(true);
-      syncRasterLayers(map);
     });
 
     mapRef.current = map;
@@ -453,7 +452,7 @@ export default function MapLibrePlannerMap({
       map.remove();
       mapRef.current = null;
     };
-  }, [center, initialZoom, routeGeoJson, syncRasterLayers, terrainGeoJson, terrainSegments.length]);
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -470,24 +469,24 @@ export default function MapLibrePlannerMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map || !mapReady || !map.isStyleLoaded()) return;
     setGeoJsonSourceData(map, MAP_SOURCE_ID, routeGeoJson);
     const routeLayerVisible = terrainSegments.length > 0 ? "none" : "visible";
     if (map.getLayer(ROUTE_LAYER_ID)) map.setLayoutProperty(ROUTE_LAYER_ID, "visibility", routeLayerVisible);
-  }, [routeGeoJson, terrainSegments.length]);
+  }, [mapReady, routeGeoJson, terrainSegments.length]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map || !mapReady || !map.isStyleLoaded()) return;
     setGeoJsonSourceData(map, TERRAIN_SOURCE_ID, terrainGeoJson);
     const terrainVisible = terrainSegments.length > 0 ? "visible" : "none";
     if (map.getLayer(TERRAIN_SURFACE_LAYER_ID)) map.setLayoutProperty(TERRAIN_SURFACE_LAYER_ID, "visibility", terrainVisible);
     if (map.getLayer(TERRAIN_LINE_LAYER_ID)) map.setLayoutProperty(TERRAIN_LINE_LAYER_ID, "visibility", terrainVisible);
-  }, [terrainGeoJson, terrainSegments.length]);
+  }, [mapReady, terrainGeoJson, terrainSegments.length]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || points.length === 0) return;
+    if (!map || !mapReady || points.length === 0) return;
     const bounds = new maplibregl.LngLatBounds([points[0].lon, points[0].lat], [points[0].lon, points[0].lat]);
     points.forEach((point) => bounds.extend([point.lon, point.lat]));
     window.requestAnimationFrame(() => {
@@ -501,7 +500,7 @@ export default function MapLibrePlannerMap({
         maxZoom: mapStyle === "sectional" ? 12 : 15,
       });
     });
-  }, [mapStyle, points]);
+  }, [mapReady, mapStyle, points]);
 
   useEffect(() => {
     const map = mapRef.current;

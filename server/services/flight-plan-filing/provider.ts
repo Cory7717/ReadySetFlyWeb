@@ -688,21 +688,32 @@ const inferWakeTurbulenceCategoryFromWeightLb = (maxGrossWeightLb?: number | nul
   return "MEDIUM";
 };
 
+const LEIDOS_AIRCRAFT_TYPE_ALIASES: Record<string, string> = {
+  B300: "B350",
+  B300C: "B350",
+};
+
+const normalizeLeidosAircraftTypeCode = (value?: string | null) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!normalized) return null;
+  return LEIDOS_AIRCRAFT_TYPE_ALIASES[normalized] || normalized;
+};
+
 const getLeidosAircraftTypeCode = (plan: FlightPlan) => {
   const plannerState = getPlannerStateRecord(plan);
   const selectedTypeIcao =
     plannerState && typeof plannerState.selectedTypeIcao === "string"
       ? plannerState.selectedTypeIcao.trim().toUpperCase()
       : "";
-  if (selectedTypeIcao) return selectedTypeIcao;
+  if (selectedTypeIcao) return normalizeLeidosAircraftTypeCode(selectedTypeIcao);
 
   const aircraftType = String(plan.aircraftType || "").trim();
   const parentheticalMatch = aircraftType.match(/\(([A-Z0-9]{2,6})\)\s*$/i);
   if (parentheticalMatch?.[1]) {
-    return parentheticalMatch[1].trim().toUpperCase();
+    return normalizeLeidosAircraftTypeCode(parentheticalMatch[1]);
   }
 
-  return aircraftType || null;
+  return normalizeLeidosAircraftTypeCode(aircraftType);
 };
 
 const getLeidosWakeTurbulence = (plan: FlightPlan) => {

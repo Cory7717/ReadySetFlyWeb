@@ -122,9 +122,12 @@ export default function LoginPage() {
       setLocation(redirectTarget);
     },
     onError: (error: Error) => {
+      const isCredentialError = /invalid email or password/i.test(error.message);
       toast({
         title: 'Login failed',
-        description: error.message,
+        description: isCredentialError
+          ? 'Invalid email or password. If you created this RSF account with Google, use Continue with Google. Otherwise, confirm the email and password used on the RSF create-account page.'
+          : error.message,
         variant: 'destructive',
       });
     },
@@ -157,7 +160,7 @@ export default function LoginPage() {
             <h1 className="max-w-xl text-3xl font-bold leading-tight sm:text-4xl">
               Sign in and keep moving.
             </h1>
-            <p className="max-w-xl text-sm leading-6 text-sky-50/84 sm:text-base">
+            <p className="max-w-xl text-sm leading-6 text-sky-50 sm:text-base">
               Return to your planner, logbook, marketplace, and saved tools without rebuilding your workflow from scratch.
             </p>
           </div>
@@ -171,7 +174,7 @@ export default function LoginPage() {
             ].map((item) => (
               <div
                 key={item}
-                className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3 text-sm text-sky-50/92"
+                className="rounded-2xl border border-white/16 bg-white/10 px-4 py-3 text-sm text-sky-50"
               >
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-sky-200" />
@@ -183,7 +186,7 @@ export default function LoginPage() {
 
           <div className="mt-8 rounded-2xl border border-white/12 bg-white/8 p-4">
             <div className="text-sm font-semibold">Fastest path back in</div>
-            <div className="mt-2 flex items-center gap-2 text-sm text-sky-50/82">
+            <div className="mt-2 flex items-center gap-2 text-sm text-sky-50">
               <span>Continue with Google</span>
               <ChevronRight className="h-4 w-4" />
               <span>Resume where you left off</span>

@@ -80,11 +80,13 @@ const buildLegHealthIcon = (status: PlannerLegHealthMarker["status"]) => {
 
 function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: RsfLeafletMapStyle }) {
   const map = useMap();
+  const routeKey = points.map((point) => `${point.icao}:${point.lat.toFixed(5)},${point.lon.toFixed(5)}`).join("|");
+  const boundsPoints = useMemo(() => points.map((point) => [point.lat, point.lon] as [number, number]), [routeKey]);
 
   useEffect(() => {
-    if (points.length === 0) return;
+    if (boundsPoints.length === 0) return;
     if (!map.getPane("mapPane")) return;
-    const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lon]));
+    const bounds = L.latLngBounds(boundsPoints);
     const raf = requestAnimationFrame(() => {
       try {
         map.fitBounds(bounds.pad(0.2));
@@ -98,7 +100,7 @@ function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: Rsf
       }
     });
     return () => cancelAnimationFrame(raf);
-  }, [map, points, mapStyle]);
+  }, [map, routeKey, boundsPoints, mapStyle]);
 
   return null;
 }
@@ -392,17 +394,12 @@ export default function PlannerMap({
     let isActive = true;
     const loadRadarFrames = async () => {
       try {
-        const response = await fetch("https://api.rainviewer.com/public/weather-maps.json");
+        const response = await fetch(apiUrl("/api/weather/rainviewer/frames"), { credentials: "include" });
         if (!response.ok) {
           throw new Error("Failed to load radar frames");
         }
         const data = await response.json();
-        const frames = [
-          ...(data?.radar?.past || []),
-          ...(data?.radar?.nowcast || [])
-        ]
-          .map((item: { path?: string }) => item.path)
-          .filter(Boolean) as string[];
+        const frames = (Array.isArray(data?.frames) ? data.frames : []).filter(Boolean) as string[];
 
         if (!isActive) return;
         setRadarFrames(frames);

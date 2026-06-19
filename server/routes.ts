@@ -16123,6 +16123,33 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  app.get("/api/weather/rainviewer/frames", async (_req, res) => {
+    try {
+      const response = await fetchWithTimeout(
+        "https://api.rainviewer.com/public/weather-maps.json",
+        { headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" } },
+        8000
+      );
+      if (!response.ok) {
+        return res.status(response.status).json({ error: "RainViewer metadata unavailable" });
+      }
+      const data = await response.json() as any;
+      const frames = [...(data?.radar?.past || []), ...(data?.radar?.nowcast || [])]
+        .map((item: { path?: string }) => item.path)
+        .filter(Boolean);
+      res.setHeader("Cache-Control", "public, max-age=120");
+      return res.json({ frames });
+    } catch (error: any) {
+      const errorName = String(error?.name || "");
+      const errorMessage = String(error?.message || "");
+      if (errorName === "AbortError" || /aborted|timed out|timeout/i.test(errorMessage)) {
+        return res.status(504).json({ error: "RainViewer metadata timed out" });
+      }
+      console.error("RainViewer metadata proxy failed:", error);
+      return res.status(502).json({ error: "RainViewer metadata unavailable" });
+    }
+  });
+
   app.get("/api/tiles/faa/wms", async (req, res) => {
     const query = req.query as Record<string, string | string[] | undefined>;
     const readQuery = (...keys: string[]) => {

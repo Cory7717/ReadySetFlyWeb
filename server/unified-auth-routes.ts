@@ -133,6 +133,10 @@ function parseOptionalDate(value?: string | null): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function normalizeAuthEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 /**
  * Unified authentication routes for both web and mobile
  * POST /api/auth/web-register - Web registration (creates session)
@@ -159,7 +163,8 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         return;
       }
 
-      const { email, password, firstName, lastName, turnstileToken } = result.data;
+      const { password, firstName, lastName, turnstileToken } = result.data;
+      const email = normalizeAuthEmail(result.data.email);
 
       // Verify Turnstile CAPTCHA
       const clientIp = req.ip || req.connection?.remoteAddress || '';
@@ -269,7 +274,8 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         return;
       }
 
-      const { email, password } = result.data;
+      const { password } = result.data;
+      const email = normalizeAuthEmail(result.data.email);
 
       // Find user by email
       const user = await storage.getUserByEmail(email);
@@ -326,7 +332,8 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         return;
       }
 
-      const { email, password, firstName, lastName, turnstileToken } = result.data;
+      const { password, firstName, lastName, turnstileToken } = result.data;
+      const email = normalizeAuthEmail(result.data.email);
 
       // Verify Turnstile CAPTCHA
       const clientIp = req.ip || (req as any).connection?.remoteAddress || '';
@@ -413,7 +420,8 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         return;
       }
 
-      const { email, password } = result.data;
+      const { password } = result.data;
+      const email = normalizeAuthEmail(result.data.email);
 
       // Find user by email
       const user = await storage.getUserByEmail(email);

@@ -49,8 +49,8 @@ const C = {
   menu: "!border-[#cdbda8] !bg-white !text-[#201814]",
 };
 
-const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
-const SCHEDULE_ROLES = ["GM", "DOS", "DOS / Sales", "Sales", "MOD", "Executive Housekeeper", "Exec HK", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
+const DEPARTMENTS = ["Managers", "Above Property", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
+const SCHEDULE_ROLES = ["Above Property", "GM", "DOS", "DOS / Sales", "Sales", "MOD", "Executive Housekeeper", "Exec HK", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
 const DAY_LABELS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 const DAY_LABELS_ES = ["Sab", "Dom", "Lun", "Mar", "Mie", "Jue", "Vie"];
 const HOUSEKEEPING_OUT_TIME_NOTICE = "Housekeeping scheduled end times are planning estimates used to calculate labor hours. Associates may leave once their assigned work is complete and they have been released by their supervisor. If additional time is needed to complete assigned duties, associates should remain until the work is finished.";
@@ -2496,7 +2496,25 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
   const [departmentFilter, setDepartmentFilter] = useState("All");
   const [editing, setEditing] = useState<Record<string, any>>({});
   const t = (value: string) => tr(spanish, value);
-  const toggleRole = (role: string) => setForm((current) => ({ ...current, rolesJson: current.rolesJson.includes(role) ? current.rolesJson.filter((item) => item !== role) : [...current.rolesJson, role] }));
+  const toggleRole = (role: string) => setForm((current) => {
+    if (role === "Above Property") {
+      return {
+        ...current,
+        department: "Above Property",
+        position: "Above Property",
+        isDepartmentManager: false,
+        rolesJson: current.rolesJson.includes(role) ? [] : [role],
+      };
+    }
+    return {
+      ...current,
+      department: current.department === "Above Property" ? "Managers" : current.department,
+      position: current.position === "Above Property" ? "" : current.position,
+      rolesJson: current.rolesJson.includes(role)
+        ? current.rolesJson.filter((item) => item !== role)
+        : [...current.rolesJson.filter((item) => item !== "Above Property"), role],
+    };
+  });
   const employeePatch = (employee: ScheduleEmployee) => editing[employee.id] || employee;
   const saveEmployee = (employee: ScheduleEmployee) => {
     const patch = employeePatch(employee);
@@ -2514,8 +2532,30 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
   const toggleEmployeeRole = (employee: ScheduleEmployee, role: string) => {
     const draft = employeePatch(employee);
     const roles = rolesArray(draft.rolesJson);
-    const nextRoles = roles.includes(role) ? roles.filter((item) => item !== role) : [...roles, role];
-    setEditing({ ...editing, [employee.id]: { ...draft, rolesJson: nextRoles } });
+    if (role === "Above Property") {
+      setEditing({
+        ...editing,
+        [employee.id]: {
+          ...draft,
+          department: "Above Property",
+          position: "Above Property",
+          isDepartmentManager: false,
+          active: false,
+          rolesJson: roles.includes(role) ? [] : [role],
+        },
+      });
+      return;
+    }
+    const nextRoles = roles.includes(role) ? roles.filter((item) => item !== role) : [...roles.filter((item) => item !== "Above Property"), role];
+    setEditing({
+      ...editing,
+      [employee.id]: {
+        ...draft,
+        department: draft.department === "Above Property" ? "Managers" : draft.department,
+        position: draft.position === "Above Property" ? "" : draft.position,
+        rolesJson: nextRoles,
+      },
+    });
   };
   const reorderEmployee = (draggedId: string, targetId: string) => {
     if (draggedId === targetId) return;

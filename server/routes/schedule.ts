@@ -36,9 +36,9 @@ const SCHEDULE_ADMIN_EMAILS = new Set(
 );
 
 const PROPERTY_NAME = process.env.SCHEDULE_PROPERTY_NAME || "Courtyard Austin Lakeline";
-const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
+const DEPARTMENTS = ["Managers", "Above Property", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
 const REQUIRED_DEPARTMENTS = ["Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
-const SCHEDULE_ROLES = ["GM", "DOS", "DOS / Sales", "Sales", "MOD", "Executive Housekeeper", "Exec HK", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
+const SCHEDULE_ROLES = ["Above Property", "GM", "DOS", "DOS / Sales", "Sales", "MOD", "Executive Housekeeper", "Exec HK", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
 const SCHEDULE_DAY_LABELS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 const DAY_MS = 86_400_000;
 const TARGET_OCCUPANCY_PERCENT = Number(process.env.SCHEDULE_TARGET_OCCUPANCY_PERCENT || 65);
@@ -593,12 +593,53 @@ function employeeProfileMatches(employee: any, input: { email?: string; phone?: 
   return Boolean(emailMatch || phoneMatch || nameMatch);
 }
 
+function isAbovePropertyProfile(profile: any) {
+  const text = [
+    profile?.department,
+    profile?.position,
+    ...rolesArray(profile?.rolesJson),
+  ].filter(Boolean).join(" ").toLowerCase();
+  return text.includes("above property") || text.includes("corporate");
+}
+
+function scheduleEmployeeValuesWithAbovePropertyState(values: any) {
+  if (!isAbovePropertyProfile(values)) return values;
+  return {
+    ...values,
+    department: "Above Property",
+    position: values.position || "Above Property",
+    rolesJson: ["Above Property"],
+    isDepartmentManager: false,
+    active: false,
+  };
+}
+
 async function upsertScheduleEmployeeForUser(user: any, profile: any) {
   const employees = await db.select().from(scheduleEmployees);
   const existing = employees.find((employee) => employeeProfileMatches(employee, profile));
+  if (isAbovePropertyProfile(profile)) {
+    const values = {
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      displayName: profile.employeeDisplayName || `${profile.firstName} ${profile.lastName}`,
+      email: normalizeEmail(profile.email),
+      phone: profile.phone,
+      department: "Above Property",
+      position: "Above Property",
+      rolesJson: ["Above Property"],
+      isDepartmentManager: false,
+      active: false,
+      updatedAt: new Date(),
+    } as any;
+    if (existing) {
+      const [employee] = await db.update(scheduleEmployees).set(values).where(eq(scheduleEmployees.id, existing.id)).returning();
+      return employee;
+    }
+    return null;
+  }
   const isHousekeepingManager = hasHousekeepingManagerRole(profile.rolesJson);
   const department = isHousekeepingManager ? "Housekeeping" : normalizeDepartment(profile.department);
-  const values = {
+  const values = scheduleEmployeeValuesWithAbovePropertyState({
     firstName: profile.firstName,
     lastName: profile.lastName,
     displayName: profile.employeeDisplayName || `${profile.firstName} ${profile.lastName}`,
@@ -609,7 +650,7 @@ async function upsertScheduleEmployeeForUser(user: any, profile: any) {
     rolesJson: rolesArray(profile.rolesJson),
     isDepartmentManager: isHousekeepingManager || Boolean(existing?.isDepartmentManager),
     updatedAt: new Date(),
-  } as any;
+  } as any);
   if (existing) {
     const [employee] = await db.update(scheduleEmployees).set(values).where(eq(scheduleEmployees.id, existing.id)).returning();
     return employee;
@@ -1224,13 +1265,13 @@ Do not estimate, forecast, alter, or infer unreadable numbers. If a required val
   const existingByDate = new Map(existingForecast.map((day) => [String(day.forecastDate), day]));
   return scheduleDays.map((forecastDate) => {
     const extracted = extractedByDate.get(forecastDate)!;
-    if (extracted.arriving + extracted.stayover !== extracted.roomsSold) {
-      throw new Error(
-        `${forecastDate} is inconsistent: arriving (${extracted.arriving}) plus stayover (${extracted.stayover}) does not equal rooms sold (${extracted.roomsSold}).`,
-      );
-    }
     const existing = existingByDate.get(forecastDate) || {};
     const saleableCapacity = inferForecastCapacity(existing, extracted.outOfOrderRooms);
+    const warnings: string[] = [];
+    if (extracted.arriving + extracted.stayover !== extracted.roomsSold) {
+      warnings.push(`Agilysys import warning: arriving (${extracted.arriving}) plus stayover (${extracted.stayover}) does not equal rooms sold (${extracted.roomsSold}). Review this day manually.`);
+    }
+    const notes = [existing.notes, ...warnings].filter(Boolean).join("\n");
     return {
       forecastDate,
       roomsSold: extracted.roomsSold,
@@ -1238,6 +1279,7 @@ Do not estimate, forecast, alter, or infer unreadable numbers. If a required val
       arrivals: extracted.arriving,
       departures: extracted.departing,
       stayovers: extracted.stayover,
+      notes,
     };
   });
 }
@@ -3174,6 +3216,10 @@ export function registerScheduleRoutes(app: Express) {
         if (!(await bcrypt.compare(parsed.data.password.trim(), user.hashedPassword))) {
           return res.status(409).json({ error: "An account already exists for this email. Sign in or request a temporary password." });
         }
+        const nextPosition = parsed.data.position || parsed.data.rolesJson.join(", ");
+        if (nextPosition !== user.position) {
+          [user] = await db.update(tipsUsers).set({ position: nextPosition, updatedAt: new Date() } as any).where(eq(tipsUsers.id, user.id)).returning();
+        }
       } else {
         const hashedPassword = await bcrypt.hash(parsed.data.password, 12);
         [user] = await db.insert(tipsUsers).values({
@@ -3244,7 +3290,7 @@ export function registerScheduleRoutes(app: Express) {
       const parsed = employeeSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid employee", validation: parsed.error.format() });
       const isSuperAdmin = publicScheduleUser(req.scheduleUser).isSuperAdmin;
-      const [employee] = await db.insert(scheduleEmployees).values({
+      const employeeValues = scheduleEmployeeValuesWithAbovePropertyState({
         ...parsed.data,
         hourlyRate: isSuperAdmin && parsed.data.hourlyRate != null ? parsed.data.hourlyRate.toFixed(2) : null,
         roleRatesJson: isSuperAdmin ? parsed.data.roleRatesJson || null : null,
@@ -3256,7 +3302,8 @@ export function registerScheduleRoutes(app: Express) {
         displayName: parsed.data.displayName || `${parsed.data.firstName} ${parsed.data.lastName}`,
         email: parsed.data.email || null,
         maxWeeklyHours: parsed.data.maxWeeklyHours == null ? null : parsed.data.maxWeeklyHours.toFixed(2),
-      } as any).returning();
+      } as any);
+      const [employee] = await db.insert(scheduleEmployees).values(employeeValues).returning();
       await syncPlaceholderCourtyardUserEmail(employee);
       await audit(null, req.scheduleUser.id, "employee_created", { employeeId: employee.id });
       res.status(201).json({ employee: stripPrivateEmployeeRates([employee], req.scheduleUser)[0] });
@@ -3270,7 +3317,13 @@ export function registerScheduleRoutes(app: Express) {
       const parsed = employeeSchema.partial().safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid employee", validation: parsed.error.format() });
       const isSuperAdmin = publicScheduleUser(req.scheduleUser).isSuperAdmin;
-      const [employee] = await db.update(scheduleEmployees).set({
+      const [existingEmployee] = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.id, req.params.id)).limit(1);
+      if (!existingEmployee) return res.status(404).json({ error: "Employee not found" });
+      const nextEmployeePreview = { ...existingEmployee, ...parsed.data };
+      const effectiveDepartment = parsed.data.department ? normalizeDepartment(parsed.data.department) : existingEmployee.department;
+      const effectivePosition = Object.prototype.hasOwnProperty.call(parsed.data, "position") ? parsed.data.position : existingEmployee.position;
+      const effectiveRolesJson = parsed.data.rolesJson === null ? null : parsed.data.rolesJson || existingEmployee.rolesJson;
+      const updateValues = scheduleEmployeeValuesWithAbovePropertyState({
         ...parsed.data,
         hourlyRate: isSuperAdmin && Object.prototype.hasOwnProperty.call(parsed.data, "hourlyRate")
           ? parsed.data.hourlyRate == null ? null : parsed.data.hourlyRate.toFixed(2)
@@ -3278,15 +3331,26 @@ export function registerScheduleRoutes(app: Express) {
         roleRatesJson: isSuperAdmin && Object.prototype.hasOwnProperty.call(parsed.data, "roleRatesJson")
           ? parsed.data.roleRatesJson || null
           : undefined,
-        department: parsed.data.department ? normalizeDepartment(parsed.data.department) : undefined,
-        rolesJson: parsed.data.rolesJson === null ? null : parsed.data.rolesJson,
+        department: effectiveDepartment,
+        position: effectivePosition,
+        rolesJson: effectiveRolesJson,
         isSalaried: parsed.data.isSalaried,
         isDepartmentManager: parsed.data.isDepartmentManager,
         sortOrder: parsed.data.sortOrder,
         email: parsed.data.email === "" ? null : parsed.data.email,
         maxWeeklyHours: parsed.data.maxWeeklyHours == null ? undefined : parsed.data.maxWeeklyHours.toFixed(2),
         updatedAt: new Date(),
-      } as any).where(eq(scheduleEmployees.id, req.params.id)).returning();
+      } as any);
+      if (!isAbovePropertyProfile(nextEmployeePreview) && !Object.prototype.hasOwnProperty.call(parsed.data, "department")) {
+        updateValues.department = undefined;
+      }
+      if (!isAbovePropertyProfile(nextEmployeePreview) && !Object.prototype.hasOwnProperty.call(parsed.data, "position")) {
+        updateValues.position = undefined;
+      }
+      if (!isAbovePropertyProfile(nextEmployeePreview) && !Object.prototype.hasOwnProperty.call(parsed.data, "rolesJson")) {
+        updateValues.rolesJson = undefined;
+      }
+      const [employee] = await db.update(scheduleEmployees).set(updateValues).where(eq(scheduleEmployees.id, req.params.id)).returning();
       if (!employee) return res.status(404).json({ error: "Employee not found" });
       await syncPlaceholderCourtyardUserEmail(employee);
       await audit(null, req.scheduleUser.id, "employee_updated", { employeeId: employee.id });

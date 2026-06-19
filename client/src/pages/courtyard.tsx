@@ -44,8 +44,8 @@ type ToolKey = "schedule" | "tips" | "opsreport" | "dosreporting" | "incidentrep
 type ToolAccessResponse = { users: CourtyardUser[]; tools: ToolKey[] };
 const DEFAULT_TOOL_KEYS: ToolKey[] = ["schedule", "tips", "opsreport", "dosreporting", "incidentreport", "bankdeposit", "budget"];
 
-const DEPARTMENTS = ["Managers", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
-const SCHEDULE_ROLES = ["GM", "DOS", "MOD", "Executive Housekeeper", "Exec HK", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
+const DEPARTMENTS = ["Managers", "Above Property", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
+const SCHEDULE_ROLES = ["Above Property", "GM", "DOS", "MOD", "Executive Housekeeper", "Exec HK", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
 
 function isBistroRole(role: string) {
   const normalized = role.toLowerCase();
@@ -101,7 +101,22 @@ function CourtyardLogin({ onDone }: { onDone: (user?: CourtyardUser) => void }) 
     onSuccess: () => toast({ title: "Check your email", description: "If that account exists, a temporary password was sent." }),
     onError: (error: Error) => toast({ title: "Unable to request reset", description: error.message, variant: "destructive" }),
   });
-  const toggleRole = (role: string) => setForm((current) => ({ ...current, rolesJson: current.rolesJson.includes(role) ? current.rolesJson.filter((item) => item !== role) : [...current.rolesJson, role] }));
+  const toggleRole = (role: string) => setForm((current) => {
+    if (role === "Above Property") {
+      return {
+        ...current,
+        department: "Above Property",
+        rolesJson: current.rolesJson.includes(role) ? [] : [role],
+      };
+    }
+    return {
+      ...current,
+      department: current.department === "Above Property" ? "Managers" : current.department,
+      rolesJson: current.rolesJson.includes(role)
+        ? current.rolesJson.filter((item) => item !== role)
+        : [...current.rolesJson.filter((item) => item !== "Above Property"), role],
+    };
+  });
 
   return (
     <div className={`min-h-screen ${C.page}`}>

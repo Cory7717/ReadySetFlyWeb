@@ -20,21 +20,20 @@ export function LeafletAviationBaseLayers({
 
   return (
     <>
-      {style !== "sectional" && (
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-      )}
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
       {style === "sectional" && (
         <WMSTileLayer
           attribution="FAA SUA Geoserver Charts"
           url={getRsfSectionalSourceBaseUrl()}
           layers="SUA:us_sectionals"
           format="image/png"
-          transparent={false}
+          transparent
           version="1.1.1"
           opacity={1}
+          zIndex={500}
         />
       )}
       {style === "radar" && radarTileUrl && !radarFallbackActive && (

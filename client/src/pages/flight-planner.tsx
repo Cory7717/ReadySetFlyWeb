@@ -1497,14 +1497,15 @@ export default function FlightPlanner() {
   const queryClient = useQueryClient();
   const pressDemo = usePressDemo(FLIGHT_PLANNER_PRESS_STEPS);
   const entitlements = (user as any)?.entitlements;
-  const isPro = entitlements?.canPersist ?? (user?.logbookProStatus === "active");
+  const hasPaidPlannerAccess = entitlements?.canPersist ?? (user?.logbookProStatus === "active");
+  const isPro = isAuthenticated || hasPaidPlannerAccess;
   const tfmsTier: TfmsTier = entitlements?.tier === "pro_plus"
     ? "pro_plus"
     : entitlements?.tier === "pro"
       ? "pro_core"
       : "free";
   const isGuest = !isAuthenticated;
-  const isFree = isAuthenticated && !isPro;
+  const isFree = isAuthenticated && !hasPaidPlannerAccess;
   const isStudent = Boolean(
     studentProfile?.wizardJson || studentProfile?.roadmapJson || studentProfile?.progressJson
   );
@@ -2201,10 +2202,21 @@ export default function FlightPlanner() {
     };
   }, [form.destination]);
 
-  const { data: savedPlans = [], isLoading: plansLoading } = useQuery<FlightPlan[]>({
+  const { data: savedPlansRaw = [], isLoading: plansLoading } = useQuery<FlightPlan[]>({
     queryKey: ["/api/flight-plans"],
     enabled: isAuthenticated,
   });
+  const currentUserId = user?.id || null;
+  const savedPlans = useMemo(() => {
+    const plansCarryOwner = savedPlansRaw.some((plan) => typeof (plan as any).userId === "string");
+    if (!plansCarryOwner || !currentUserId) return savedPlansRaw;
+    return savedPlansRaw.filter((plan) => (plan as any).userId === currentUserId);
+  }, [currentUserId, savedPlansRaw]);
+  const activeEditingPlan = useMemo(() => {
+    if (!editingPlan || !currentUserId) return editingPlan;
+    const ownerId = (editingPlan as any).userId;
+    return typeof ownerId === "string" && ownerId !== currentUserId ? null : editingPlan;
+  }, [currentUserId, editingPlan]);
 
   const mergePlanIntoList = useCallback((plans: FlightPlan[], nextPlan: FlightPlan | null | undefined) => {
     if (!nextPlan?.id) return plans;
@@ -2219,9 +2231,18 @@ export default function FlightPlanner() {
   }, []);
 
   const savedPlansView = useMemo(
-    () => mergePlanIntoList(savedPlans, editingPlan),
-    [editingPlan, mergePlanIntoList, savedPlans]
+    () => mergePlanIntoList(savedPlans, activeEditingPlan),
+    [activeEditingPlan, mergePlanIntoList, savedPlans]
   );
+
+  useEffect(() => {
+    if (!editingPlan || !currentUserId) return;
+    const ownerId = (editingPlan as any).userId;
+    if (typeof ownerId === "string" && ownerId !== currentUserId) {
+      setEditingPlan(null);
+      setDraftPlanId(null);
+    }
+  }, [currentUserId, editingPlan]);
 
   useEffect(() => {
     if (!isAuthenticated || activeTab !== "file") return;
@@ -4992,7 +5013,12 @@ export default function FlightPlanner() {
     }
 
     const currentEditingPlan = editingPlanRef.current;
-    if (currentEditingPlan?.id) {
+    const currentEditingPlanOwnerId = (currentEditingPlan as any)?.userId;
+    const currentEditingPlanBelongsToUser =
+      !currentUserId ||
+      typeof currentEditingPlanOwnerId !== "string" ||
+      currentEditingPlanOwnerId === currentUserId;
+    if (currentEditingPlan?.id && currentEditingPlanBelongsToUser) {
       trackEvent("planner_save_plan", { action: "update" });
       updatePlanMutation.mutate(currentEditingPlan.id);
       return;
@@ -5327,7 +5353,7 @@ export default function FlightPlanner() {
   const guestFlightPlanFilesRemaining = Math.max(0, 2 - guestFlightPlanFiles);
   const filingStateText = filingPreviewMutation.isPending ? "Preview building" : "Packet ready";
   const filingStateTone = filingPreviewMutation.isPending ? "text-amber-300" : "text-emerald-300";
-  const currentSavedPlan = editingPlan || savedPlans.find((plan) => plan.id === draftPlanId) || null;
+  const currentSavedPlan = activeEditingPlan || savedPlans.find((plan) => plan.id === draftPlanId) || null;
   const currentSavedPlanFlightRules = (currentSavedPlan?.filingFlightRules || filingDraft.flightRules || "VFR").toUpperCase();
   const currentSavedPlanStatus = filingStatusLabel(currentSavedPlan?.filingStatus);
   const currentSavedPlanCanAmend = canSubmitAmendForPlan(currentSavedPlan);
@@ -5568,7 +5594,7 @@ export default function FlightPlanner() {
 
   sendToLogbookActionRef.current = async () => {
     if (!isAuthenticated) return;
-    if (!isPro) {
+    if (!hasPaidPlannerAccess) {
       toast({
         title: "Upgrade to RSF Pro",
         description: "RSF Pro membership is required to sync to logbook.",

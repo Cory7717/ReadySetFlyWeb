@@ -27,7 +27,7 @@ export function getRsfSectionalSourceLabel(source = getRsfSectionalSourceKey()) 
 }
 
 export function getRsfSectionalWmsTileUrl(source = getRsfSectionalSourceKey()) {
-  return `${getRsfSectionalSourceBaseUrl(source)}?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=false&version=1.1.1&srs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}`;
+  return `${getRsfSectionalSourceBaseUrl(source)}?service=WMS&request=GetMap&layers=SUA:us_sectionals&styles=&format=image/png&transparent=true&version=1.1.1&srs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}`;
 }
 
 export function getRsfPlannerRenderer(

@@ -165,28 +165,42 @@ const AviationBasemapLayer = ({ mode }: { mode: BasemapMode }) => {
 
   if (mode === "sectional") {
     return (
-      <WMSTileLayer
-        url={FAA_WMS_URL}
-        layers="SUA:us_sectionals"
-        format="image/png"
-        transparent={false}
-        version="1.1.1"
-        attribution='FAA SUA Geoserver Charts'
-      />
+      <>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <WMSTileLayer
+          url={FAA_WMS_URL}
+          layers="SUA:us_sectionals"
+          format="image/png"
+          transparent
+          version="1.1.1"
+          attribution='FAA SUA Geoserver Charts'
+          zIndex={500}
+        />
+      </>
     );
   }
 
   if (mode === "ifr") {
     return (
-      <WMSTileLayer
-        key={ifrLayer}
-        url={FAA_WMS_URL}
-        layers={ifrLayer}
-        format="image/png"
-        transparent={false}
-        version="1.1.1"
-        attribution='FAA SUA Geoserver Charts'
-      />
+      <>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <WMSTileLayer
+          key={ifrLayer}
+          url={FAA_WMS_URL}
+          layers={ifrLayer}
+          format="image/png"
+          transparent
+          version="1.1.1"
+          attribution='FAA SUA Geoserver Charts'
+          zIndex={500}
+        />
+      </>
     );
   }
 

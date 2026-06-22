@@ -1535,6 +1535,12 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if ((action === "file" || action === "amend") && !plan.filingPlannedAltitudeFt) {
     errors.push("Planned altitude is required before sending this filing action to Leidos.");
   }
+  if ((action === "file" || action === "amend") && !plan.filingEstimatedEnrouteMinutes) {
+    errors.push("Estimated enroute time is required before sending this filing action to Leidos.");
+  }
+  if ((action === "file" || action === "amend") && !plan.filingEnduranceMinutes) {
+    errors.push("Endurance is required before sending this filing action to Leidos.");
+  }
   if ((action === "file" || action === "amend") && !plan.filingEquipment) {
     errors.push("Aircraft equipment is required before sending this filing action to Leidos.");
   }

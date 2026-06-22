@@ -1825,6 +1825,8 @@ export default function FlightPlanner() {
     departureName: "",
     destinationName: "",
     alternateName: "",
+    manualEstimatedEnrouteMinutes: "",
+    manualEnduranceMinutes: "",
   });
   const selectedEquipmentCodes = useMemo(
     () => Array.from(new Set(parseIcaoEquipmentCodes(filingDraft.equipment))),
@@ -3172,6 +3174,16 @@ export default function FlightPlanner() {
     () => form.alternate.trim().toUpperCase(),
     [form.alternate],
   );
+  const manualEstimatedEnrouteMinutes = useMemo(() => {
+    const value = Number(filingDraft.manualEstimatedEnrouteMinutes);
+    return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+  }, [filingDraft.manualEstimatedEnrouteMinutes]);
+  const manualEnduranceMinutes = useMemo(() => {
+    const value = Number(filingDraft.manualEnduranceMinutes);
+    return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+  }, [filingDraft.manualEnduranceMinutes]);
+  const filingEstimatedEnrouteMinutes = manualEstimatedEnrouteMinutes ?? (eteMinutes || null);
+  const filingEnduranceMinutes = manualEnduranceMinutes ?? (Math.round(enduranceMinutes) || null);
   const filingPacket = useMemo(() => ({
     filingLive: false,
     provider: "pending-flight-service-handoff",
@@ -3188,8 +3200,8 @@ export default function FlightPlanner() {
     destinationTimeZone,
     trueAirspeedKtas: Math.round(planningCruise),
     plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
-    estimatedEnrouteMinutes: eteMinutes || null,
-    enduranceMinutes: Math.round(enduranceMinutes) || null,
+    estimatedEnrouteMinutes: filingEstimatedEnrouteMinutes,
+    enduranceMinutes: filingEnduranceMinutes,
     fuelRequiredGallons: totalFuel ? Number(totalFuel.toFixed(1)) : null,
     fuelOnBoardGallons: fuelAvailableGallons ? Number(fuelAvailableGallons.toFixed(1)) : null,
     aircraftId: filingDraft.aircraftId.trim().toUpperCase() || form.tailNumber.trim().toUpperCase() || null,
@@ -3228,8 +3240,8 @@ export default function FlightPlanner() {
     destinationTimeZone,
     planningCruise,
     plannedAltitude,
-    eteMinutes,
-    enduranceMinutes,
+    filingEstimatedEnrouteMinutes,
+    filingEnduranceMinutes,
     totalFuel,
     fuelAvailableGallons,
     selectedProfile,
@@ -4705,6 +4717,8 @@ export default function FlightPlanner() {
         departureName: "",
         destinationName: "",
         alternateName: "",
+        manualEstimatedEnrouteMinutes: "",
+        manualEnduranceMinutes: "",
       });
     };
 
@@ -5134,8 +5148,8 @@ export default function FlightPlanner() {
           filingAlternateName: filingDraft.alternateName.trim() || null,
           filingTrueAirspeedKtas: Math.round(planningCruise) || null,
           filingPlannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
-          filingEstimatedEnrouteMinutes: Math.round(eteMinutes) || null,
-          filingEnduranceMinutes: Math.round(enduranceMinutes) || null,
+          filingEstimatedEnrouteMinutes,
+          filingEnduranceMinutes,
           plannerState: buildPlannerStateSnapshot({
             selectedProfileId,
             selectedTypeId,
@@ -5221,8 +5235,8 @@ export default function FlightPlanner() {
         filingAlternateName: filingDraft.alternateName.trim() || null,
         filingTrueAirspeedKtas: Math.round(planningCruise) || null,
         filingPlannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
-        filingEstimatedEnrouteMinutes: Math.round(eteMinutes) || null,
-        filingEnduranceMinutes: Math.round(enduranceMinutes) || null,
+        filingEstimatedEnrouteMinutes,
+        filingEnduranceMinutes,
         plannerState: buildPlannerStateSnapshot({
           selectedProfileId,
           selectedTypeId,
@@ -5714,6 +5728,12 @@ export default function FlightPlanner() {
       departureName: editingPlan.filingDepartureName || current.departureName,
       destinationName: editingPlan.filingDestinationName || current.destinationName,
       alternateName: editingPlan.filingAlternateName || current.alternateName,
+      manualEstimatedEnrouteMinutes: editingPlan.filingEstimatedEnrouteMinutes
+        ? String(editingPlan.filingEstimatedEnrouteMinutes)
+        : current.manualEstimatedEnrouteMinutes,
+      manualEnduranceMinutes: editingPlan.filingEnduranceMinutes
+        ? String(editingPlan.filingEnduranceMinutes)
+        : current.manualEnduranceMinutes,
     }));
     const normalizedSavedRoute = normalizeRouteText(editingPlan.route || "");
     const savedRouteTokens = normalizedSavedRoute ? normalizedSavedRoute.split(/\s+/) : [];
@@ -8158,7 +8178,27 @@ export default function FlightPlanner() {
                     placeholder="PBN/... NAV/... DAT/... SUR/..."
                   />
                 </div>
-                {form.departure.trim().toUpperCase() === "ZZZZ" && (
+                <div className="space-y-2">
+                  <Label>Manual ETE Minutes <span className="text-xs text-muted-foreground">(ZZZZ/IFR test)</span></Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={filingDraft.manualEstimatedEnrouteMinutes}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, manualEstimatedEnrouteMinutes: e.target.value }))}
+                    placeholder={eteMinutes ? String(eteMinutes) : "90"}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Manual Endurance Minutes <span className="text-xs text-muted-foreground">(ZZZZ/IFR test)</span></Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={filingDraft.manualEnduranceMinutes}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, manualEnduranceMinutes: e.target.value }))}
+                    placeholder={Math.round(enduranceMinutes) ? String(Math.round(enduranceMinutes)) : "180"}
+                  />
+                </div>
+                {effectiveDepartureCode === "ZZZZ" && (
                   <div className="space-y-2">
                     <Label>Departure Location Name <span className="text-amber-400 text-xs">(ZZZZ required)</span></Label>
                     <Input
@@ -8168,7 +8208,7 @@ export default function FlightPlanner() {
                     />
                   </div>
                 )}
-                {form.destination.trim().toUpperCase() === "ZZZZ" && (
+                {effectiveDestinationCode === "ZZZZ" && (
                   <div className="space-y-2">
                     <Label>Destination Location Name <span className="text-amber-400 text-xs">(ZZZZ required)</span></Label>
                     <Input
@@ -8178,7 +8218,7 @@ export default function FlightPlanner() {
                     />
                   </div>
                 )}
-                {form.alternate.trim().toUpperCase() === "ZZZZ" && (
+                {effectiveAlternateCode === "ZZZZ" && (
                   <div className="space-y-2">
                     <Label>Alternate Location Name <span className="text-amber-400 text-xs">(ZZZZ required)</span></Label>
                     <Input
@@ -8204,11 +8244,11 @@ export default function FlightPlanner() {
                 </div>
                 <div className={plannerMetricClass}>
                   <div className="text-xs text-[#A9BBCD]">Fuel on board / endurance</div>
-                  <div className="font-semibold text-[#F5F8FC]">{fuelAvailableGallons.toFixed(1)} gal / {formatMinutesLabel(enduranceMinutes)}</div>
+                  <div className="font-semibold text-[#F5F8FC]">{fuelAvailableGallons.toFixed(1)} gal / {filingEnduranceMinutes ? formatMinutesLabel(filingEnduranceMinutes) : "-"}</div>
                 </div>
                 <div className={plannerMetricClass}>
                   <div className="text-xs text-[#A9BBCD]">Estimated Enroute</div>
-                  <div className="font-semibold text-[#F5F8FC]">{eteHours ? `${Math.round(eteHours * 60)} min` : "-"}</div>
+                  <div className="font-semibold text-[#F5F8FC]">{filingEstimatedEnrouteMinutes ? `${filingEstimatedEnrouteMinutes} min` : "-"}</div>
                 </div>
                 <div className={plannerMetricClass}>
                   <div className="text-xs text-[#A9BBCD]">Filing status</div>

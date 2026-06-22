@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { FlightPlan } from "../../shared/schema";
-import { validateFlightPlanForAction } from "../../server/services/flight-plan-filing/provider";
+import { normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction } from "../../server/services/flight-plan-filing/provider";
 
 function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
   return {
@@ -98,6 +98,13 @@ test("filing does not silently default operational ICAO fields", () => {
   assert.ok(result.errors.some((error) => /wake turbulence/i.test(error)));
   assert.ok(result.errors.some((error) => /type of flight/i.test(error)));
   assert.ok(result.errors.some((error) => /surveillance equipment/i.test(error)));
+});
+
+test("Leidos otherInfo transmission omits duplicated remarks", () => {
+  assert.equal(
+    normalizeLeidosOtherInfoForTransmission("DOF/260623 RMK/RSF_INTERNAL_FILING_PREVIEW"),
+    "DOF/260623",
+  );
 });
 
 test("VFR and IFR lifecycle action matrix matches the Leidos demo", () => {

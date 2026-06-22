@@ -639,21 +639,15 @@ const normalizeLeidosBeaconCode = (value?: string | null) => {
   return octalMatch?.[0] || (normalized.length >= 4 && normalized.length <= 8 ? normalized : null);
 };
 
-const normalizeAtcRemarksForOtherInfo = (value?: string | null) => {
-  const normalized = String(value || "")
+export const normalizeLeidosOtherInfoForTransmission = (otherInfo: string | null) => {
+  const normalized = String(otherInfo || "")
     .toUpperCase()
-    .replace(/[^A-Z0-9 .,'/-]/g, " ")
+    .replace(/(?:^|\s)RMK\/\S*/gi, " ")
+    .replace(/_/g, "")
+    .replace(/[^A-Z0-9/ -]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  if (!normalized) return null;
-  return normalized.replace(/\s+/g, "_").slice(0, 180);
-};
-
-const mergeRemarksIntoOtherInfo = (otherInfo: string | null, remarks?: string | null) => {
-  const base = String(otherInfo || "").replace(/(?:^|\s)RMK\/\S*/gi, " ").replace(/\s+/g, " ").trim();
-  const normalizedRemarks = normalizeAtcRemarksForOtherInfo(remarks);
-  const merged = [base, normalizedRemarks ? `RMK/${normalizedRemarks}` : null].filter(Boolean).join(" ").trim();
-  return merged || null;
+  return normalized || null;
 };
 
 const normalizeLeidosAircraftColorExtended = (value?: string | null) => {
@@ -1002,11 +996,11 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("pilotPhone", plan.filingPilotPhone);
     append("aircraftHomeBase", plan.filingAircraftHomeBase);
     append("suppRemarksExtended", plan.filingRemarks || plan.notes);
-    const mergedOtherInfo = mergeRemarksIntoOtherInfo(injectZzzzSupplementals(otherInfoResult.otherInfo, {
+    const mergedOtherInfo = normalizeLeidosOtherInfoForTransmission(injectZzzzSupplementals(otherInfoResult.otherInfo, {
       departureName: plan.departure?.toUpperCase() === "ZZZZ" ? plan.filingDepartureName : null,
       destinationName: plan.destination?.toUpperCase() === "ZZZZ" ? plan.filingDestinationName : null,
       alternateName: plan.alternate?.toUpperCase() === "ZZZZ" ? plan.filingAlternateName : null,
-    }), plan.filingRemarks || plan.notes);
+    }));
     append("otherInfo", mergedOtherInfo);
     appendLeidosAltitudeFields(params, plan.filingPlannedAltitudeFt);
     if (action === "amend") {

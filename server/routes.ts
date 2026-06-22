@@ -21856,9 +21856,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           ? error.message
           : "Failed to stage flight plan filing action";
       const isTimeout = /timed out before Flight Service responded|connect timeout|timed out/i.test(message);
-      const isProviderRejected = /Leidos returned an unsuccessful|Webservice\.Cannot|not in the PROPOSED state|could not be cancelled/i.test(message);
+      const isProviderValidationError = /Webservice\.ValidationError/i.test(message);
+      const isProviderStateRejected = /Webservice\.Cannot|not in the PROPOSED state|could not be cancelled/i.test(message);
+      const isProviderRejected = /Leidos returned an unsuccessful/i.test(message);
       let syncedPlan: any = null;
-      if (planForErrorSync?.filingProviderPlanId) {
+      if (isProviderStateRejected && planForErrorSync?.filingProviderPlanId) {
         try {
           const mismatchSync = await syncLeidosPlanMetadata(planForErrorSync as any);
           syncedPlan = await persistLeidosProviderSync(planForErrorSync as any, mismatchSync, {
@@ -21879,8 +21881,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           console.warn("Leidos mismatch sync failed:", syncError?.message || syncError);
         }
       }
-      res.status(isTimeout ? 504 : isProviderRejected ? 409 : 500).json({
-        error: isProviderRejected
+      res.status(isTimeout ? 504 : isProviderStateRejected ? 409 : isProviderValidationError ? 400 : isProviderRejected ? 502 : 500).json({
+        error: isProviderStateRejected
           ? "Leidos says this flight plan is no longer in the provider state required for that action. RSF refreshed the provider record; review the current status and available actions."
           : message,
         providerMessage: message,

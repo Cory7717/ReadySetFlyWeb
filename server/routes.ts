@@ -4793,9 +4793,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (user) {
         user = await maybeSyncLogbookProSubscription(storage, user);
       }
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
 
       const entitlements = getEntitlementsForUser(user);
-      res.json({ ...user, entitlements });
+      const {
+        hashedPassword: _hashedPassword,
+        passwordCreatedAt: _passwordCreatedAt,
+        emailVerificationToken: _emailVerificationToken,
+        emailVerificationExpires: _emailVerificationExpires,
+        ...userResponse
+      } = user as any;
+      res.json({ ...userResponse, hasPassword: Boolean(user.hashedPassword), entitlements });
     } catch (error: any) {
       // Postgres error 42703 = "undefined_column" — column exists in schema but not in DB.
       // This means a migration hasn't been applied yet. Log a clear message.

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { FormEvent } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -17,15 +18,22 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-import { Trash2, User as UserIcon, FileText, ShieldCheck } from "lucide-react";
+import { Trash2, User as UserIcon, FileText, ShieldCheck, LockKeyhole } from "lucide-react";
 import { Link } from "wouter";
 
+type SettingsUser = User & {
+  hasPassword?: boolean;
+};
+
 export default function Settings() {
-  const { data: user, isLoading } = useQuery<User>({
+  const { data: user, isLoading } = useQuery<SettingsUser>({
     queryKey: ["/api/auth/user"],
   });
   const { toast } = useToast();
   const [confirmText, setConfirmText] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   const deleteAccountMutation = useMutation({
     mutationFn: async () => {
@@ -48,6 +56,57 @@ export default function Settings() {
       });
     },
   });
+
+  const passwordMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/auth/password", {
+        currentPassword: user?.hasPassword ? currentPassword : undefined,
+        newPassword,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: user?.hasPassword ? "Password updated" : "Password sign-in enabled",
+        description: "You can now use this email with RSF password sign-in. Google sign-in will still work.",
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Password not saved",
+        description: error.message || "Failed to update password. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handlePasswordSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (newPassword.length < 8) {
+      toast({
+        title: "Password too short",
+        description: "Use at least 8 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Passwords do not match",
+        description: "Re-enter the same new password in both fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    passwordMutation.mutate();
+  };
 
   const handleDeleteAccount = () => {
     if (confirmText !== "DELETE") {
@@ -121,6 +180,79 @@ export default function Settings() {
                 {user.isVerified ? "Verified" : "Not Verified"}
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Password Sign-In */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <LockKeyhole className="h-5 w-5" />
+              <CardTitle>Password Sign-In</CardTitle>
+            </div>
+            <CardDescription>
+              {user.hasPassword
+                ? "Update your RSF password. Google sign-in will continue to work for this email."
+                : "Set an RSF password so this same email can sign in with either password or Google."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" onSubmit={handlePasswordSubmit}>
+              {user.hasPassword && (
+                <div className="space-y-2">
+                  <label htmlFor="current-password" className="text-sm font-medium">
+                    Current password
+                  </label>
+                  <Input
+                    id="current-password"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    autoComplete="current-password"
+                    data-testid="input-current-password"
+                  />
+                </div>
+              )}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label htmlFor="new-password" className="text-sm font-medium">
+                    New password
+                  </label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    autoComplete="new-password"
+                    data-testid="input-new-password"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="confirm-password" className="text-sm font-medium">
+                    Confirm new password
+                  </label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                    data-testid="input-confirm-password"
+                  />
+                </div>
+              </div>
+              <Button
+                type="submit"
+                disabled={passwordMutation.isPending || !newPassword || !confirmPassword}
+                data-testid="button-save-password"
+              >
+                {passwordMutation.isPending
+                  ? "Saving..."
+                  : user.hasPassword
+                    ? "Update Password"
+                    : "Enable Password Sign-In"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
 

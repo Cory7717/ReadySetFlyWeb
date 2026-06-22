@@ -105,6 +105,11 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+const setPasswordSchema = z.object({
+  currentPassword: z.string().optional(),
+  newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
 const refreshSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
 });
@@ -135,6 +140,17 @@ function parseOptionalDate(value?: string | null): Date | null {
 
 function normalizeAuthEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+function getAuthenticatedUserId(req: any): string | null {
+  const sessionUserId = req.user?.claims?.sub || req.session?.userId;
+  if (sessionUserId) return String(sessionUserId);
+
+  const authHeader = String(req.headers.authorization || '');
+  if (!authHeader.startsWith('Bearer ')) return null;
+
+  const payload = verifyAccessToken(authHeader.substring(7));
+  return payload?.userId || null;
 }
 
 /**
@@ -314,6 +330,68 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
     } catch (error) {
       console.error('Login error:', error);
       res.status(500).json({ error: 'Failed to login' });
+    }
+  });
+
+  /**
+   * POST /api/auth/password
+   * Set or update the RSF password for the authenticated account.
+   */
+  router.post('/password', loginRateLimiter, async (req: any, res: Response): Promise<void> => {
+    try {
+      const userId = getAuthenticatedUserId(req);
+      if (!userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const result = setPasswordSchema.safeParse(req.body);
+      if (!result.success) {
+        res.status(400).json({
+          error: 'Validation failed',
+          details: result.error.format(),
+        });
+        return;
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      if (user.isSuspended) {
+        res.status(403).json({
+          error: 'Account suspended',
+          reason: user.suspensionReason || 'Your account has been suspended',
+        });
+        return;
+      }
+
+      const { currentPassword, newPassword } = result.data;
+      if (user.hashedPassword) {
+        if (!currentPassword) {
+          res.status(400).json({ error: 'Current password is required' });
+          return;
+        }
+
+        const currentPasswordValid = await bcrypt.compare(currentPassword, user.hashedPassword);
+        if (!currentPasswordValid) {
+          res.status(401).json({ error: 'Current password is incorrect' });
+          return;
+        }
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      await storage.updateUserPassword(user.id, hashedPassword);
+
+      res.status(200).json({
+        message: user.hashedPassword ? 'Password updated' : 'Password set',
+        hasPassword: true,
+      });
+    } catch (error) {
+      console.error('Set password error:', error);
+      res.status(500).json({ error: 'Failed to update password' });
     }
   });
 

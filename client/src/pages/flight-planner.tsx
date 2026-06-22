@@ -5985,13 +5985,13 @@ export default function FlightPlanner() {
           </div>
         </CardContent>
       </Card>
-      <Alert className="border-[#6b5828] bg-[linear-gradient(180deg,rgba(36,28,14,0.96),rgba(24,18,10,0.98))] text-[#e7c27b]">
+      <Alert className="border-[#5d6f85]/24 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] text-[#A9BBCD] shadow-[0_18px_38px_-30px_rgba(0,0,0,0.9)]">
         <AlertDescription className="space-y-1 text-sm">
-          <div className="font-semibold text-[#F5E6BF]">Flight Planner testing notice</div>
+          <div className="font-semibold text-[#F5F8FC]">Flight Planner testing notice</div>
           <div>
             RSF flight planning and filing workflow is still undergoing testing. Treat the planner as a beta feature and do not rely on RSF for operational live filing yet.
           </div>
-          <div className="text-[#D9A441]/90">
+          <div className="text-[#8fa6c0]">
             Live Leidos filing remains limited to controlled testing while validation is in progress.
           </div>
         </AlertDescription>

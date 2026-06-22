@@ -832,10 +832,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
+    const normalizedEmail = email.trim().toLowerCase();
     const result = await db
       .select()
       .from(users)
-      .where(ilike(users.email, email))
+      .where(sql`lower(${users.email}) = ${normalizedEmail}`)
+      .orderBy(sql`case when ${users.email} = ${normalizedEmail} then 0 else 1 end`, desc(users.createdAt))
       .limit(1);
     return result[0];
   }

@@ -193,11 +193,11 @@ function getBearerToken(req: any): string | null {
 // 1) If existing user by email, use that (keeps uuid ids)
 // 2) Else create user (uuid default via DB if you omit id)
 async function resolveUserFromGoogle(profile: GoogleProfile) {
-  const email = profile.emails?.[0]?.value;
+  const email = profile.emails?.[0]?.value?.trim().toLowerCase() || null;
 
   // Prefer stable email match (best for migration / prevents duplicate accounts)
   if (email) {
-    const byEmail = await storage.getUserByEmail(String(email));
+    const byEmail = await storage.getUserByEmail(email);
     if (byEmail) {
       await storage.updateUser(byEmail.id, {
         // Keep id and user-entered profile names stable when linking OAuth.
@@ -216,7 +216,7 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
 
   // Create new user (uuid default is handled by DB if InsertUser allows omitting id)
   const created = await storage.createUser({
-    email: email ?? null,
+    email,
     firstName: profile.name?.givenName ?? null,
     lastName: profile.name?.familyName ?? null,
     profileImageUrl: profile.photos?.[0]?.value ?? null,

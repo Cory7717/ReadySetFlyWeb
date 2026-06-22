@@ -4739,6 +4739,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      const userEmail = String(user.email || "").trim();
+      if (userEmail) {
+        const canonicalUser = await storage.getUserByEmail(userEmail);
+        if (canonicalUser && canonicalUser.id !== user.id) {
+          logDebug("[AUTH /api/auth/user] Session user differed from canonical email user; switching session to:", canonicalUser.id);
+          if (req.session) {
+            req.session.userId = canonicalUser.id;
+            req.session.save?.(() => undefined);
+          }
+          req.user = {
+            claims: {
+              sub: canonicalUser.id,
+              email: canonicalUser.email ?? null,
+              first_name: canonicalUser.firstName ?? null,
+              last_name: canonicalUser.lastName ?? null,
+              profile_image_url: canonicalUser.profileImageUrl ?? null,
+            },
+            isAdmin: Boolean(canonicalUser.isAdmin),
+            isSuperAdmin: Boolean(canonicalUser.isSuperAdmin),
+          };
+          user = canonicalUser;
+        }
+      }
+
       // Backfill email from auth claims for legacy users that may have a null email in DB.
       const claimsEmail = String(req.user?.claims?.email || "").trim().toLowerCase();
       if (user && !user.email && claimsEmail) {

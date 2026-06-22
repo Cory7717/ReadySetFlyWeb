@@ -693,6 +693,10 @@ const LEIDOS_AIRCRAFT_TYPE_ALIASES: Record<string, string> = {
   B300C: "B350",
 };
 
+const LEIDOS_AIRCRAFT_TYPE_WAKE_OVERRIDES: Record<string, "LIGHT" | "MEDIUM" | "HEAVY" | "SUPER"> = {
+  C421: "LIGHT",
+};
+
 const normalizeLeidosAircraftTypeCode = (value?: string | null) => {
   const normalized = String(value || "").trim().toUpperCase();
   if (!normalized) return null;
@@ -722,8 +726,15 @@ const getLeidosWakeTurbulence = (plan: FlightPlan) => {
     plannerState && typeof plannerState.selectedProfileMaxGrossWeightLb === "number"
       ? plannerState.selectedProfileMaxGrossWeightLb
       : null;
-  const inferredWakeTurbulence = inferWakeTurbulenceCategoryFromWeightLb(selectedProfileMaxGrossWeightLb);
-  return inferredWakeTurbulence || normalizeWakeTurbulenceCategory(plan.filingWakeTurbulence);
+  const selectedTypeMaxGrossWeightLb =
+    plannerState && typeof plannerState.selectedTypeMaxGrossWeightLb === "number"
+      ? plannerState.selectedTypeMaxGrossWeightLb
+      : null;
+  const inferredWakeTurbulence =
+    inferWakeTurbulenceCategoryFromWeightLb(selectedProfileMaxGrossWeightLb) ||
+    inferWakeTurbulenceCategoryFromWeightLb(selectedTypeMaxGrossWeightLb);
+  const aircraftTypeWake = LEIDOS_AIRCRAFT_TYPE_WAKE_OVERRIDES[getLeidosAircraftTypeCode(plan) || ""];
+  return inferredWakeTurbulence || aircraftTypeWake || normalizeWakeTurbulenceCategory(plan.filingWakeTurbulence);
 };
 
 const buildProviderMessages = ({
@@ -951,6 +962,21 @@ export const buildZzzzSupplementalRemarks = (
   if (departureName) base = base.replace(/(?:^|\s)DEP\/\S*/gi, " ").replace(/\s+/g, " ").trim();
   if (destinationName) base = base.replace(/(?:^|\s)DEST\/\S*/gi, " ").replace(/\s+/g, " ").trim();
   if (alternateName) base = base.replace(/(?:^|\s)ALTN\/\S*/gi, " ").replace(/\s+/g, " ").trim();
+  return base || null;
+};
+
+export const buildZzzzOtherInfoForLeidos = (
+  otherInfo: string | null,
+  { departureName, destinationName, alternateName }: {
+    departureName?: string | null;
+    destinationName?: string | null;
+    alternateName?: string | null;
+  },
+): string | null => {
+  let base = String(otherInfo || "").trim();
+  if (departureName) base = base.replace(/(?:^|\s)DEP\/[^/]*(?=\s+[A-Z]{3,5}\/|$)/gi, " ").replace(/\s+/g, " ").trim();
+  if (destinationName) base = base.replace(/(?:^|\s)DEST\/[^/]*(?=\s+[A-Z]{3,5}\/|$)/gi, " ").replace(/\s+/g, " ").trim();
+  if (alternateName) base = base.replace(/(?:^|\s)ALTN\/[^/]*(?=\s+[A-Z]{3,5}\/|$)/gi, " ").replace(/\s+/g, " ").trim();
   const supplementals: string[] = [];
   if (departureName) supplementals.push(`DEP/${departureName.trim().replace(/\s+/g, " ").toUpperCase()}`);
   if (destinationName) supplementals.push(`DEST/${destinationName.trim().replace(/\s+/g, " ").toUpperCase()}`);
@@ -1007,7 +1033,11 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
       alternateName: plan.alternate?.toUpperCase() === "ZZZZ" ? plan.filingAlternateName : null,
     });
     append("suppRemarksExtended", supplementalRemarks);
-    const mergedOtherInfo = normalizeLeidosOtherInfoForTransmission(otherInfoResult.otherInfo);
+    const mergedOtherInfo = normalizeLeidosOtherInfoForTransmission(buildZzzzOtherInfoForLeidos(otherInfoResult.otherInfo, {
+      departureName: plan.departure?.toUpperCase() === "ZZZZ" ? plan.filingDepartureName : null,
+      destinationName: plan.destination?.toUpperCase() === "ZZZZ" ? plan.filingDestinationName : null,
+      alternateName: plan.alternate?.toUpperCase() === "ZZZZ" ? plan.filingAlternateName : null,
+    }));
     append("otherInfo", mergedOtherInfo);
     appendLeidosAltitudeFields(params, plan.filingPlannedAltitudeFt);
     if (action === "amend") {

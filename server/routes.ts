@@ -21770,6 +21770,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const validation = validateFlightPlanForAction(effectivePlanForAction, action);
       if (!validation.ready) {
+        console.warn(JSON.stringify({
+          event: "flight_plan_filing_validation_failed",
+          planId: plan.id,
+          action,
+          departure: plan.departure || null,
+          destination: plan.destination || null,
+          alternate: plan.alternate || null,
+          tailNumber: plan.tailNumber || null,
+          filingDepartureName: plan.filingDepartureName || null,
+          filingDestinationName: plan.filingDestinationName || null,
+          filingAlternateName: plan.filingAlternateName || null,
+          errors: validation.errors,
+          warnings: validation.warnings,
+        }));
         return res.status(400).json({
           error: "Flight plan is not ready for this action.",
           validation,
@@ -22036,6 +22050,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const payload = { ...req.body };
       if (payload.fuelOnBoard === "") payload.fuelOnBoard = null;
       if (payload.fuelRequired === "") payload.fuelRequired = null;
+      for (const field of ["departure", "destination", "alternate", "tailNumber"]) {
+        if (typeof payload[field] === "string") {
+          payload[field] = payload[field].trim().toUpperCase();
+        }
+      }
       const result = insertFlightPlanSchema.safeParse(payload);
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
@@ -22084,6 +22103,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const payload = { ...req.body };
       if (payload.fuelOnBoard === "") payload.fuelOnBoard = null;
       if (payload.fuelRequired === "") payload.fuelRequired = null;
+      for (const field of ["departure", "destination", "alternate", "tailNumber"]) {
+        if (typeof payload[field] === "string") {
+          payload[field] = payload[field].trim().toUpperCase();
+        }
+      }
       const result = insertFlightPlanSchema.partial().safeParse(payload);
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });

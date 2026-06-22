@@ -3160,14 +3160,26 @@ export default function FlightPlanner() {
   }, [fuelAvailableGallons, legNavRows, reserveFuel]);
   const fuelSurplus = fuelPlanSummary.reserveBalanceGallons;
   const surplusMinutes = planningBurn > 0 ? (fuelSurplus / planningBurn) * 60 : 0;
+  const effectiveDepartureCode = useMemo(
+    () => (departureResolved || form.departure).trim().toUpperCase(),
+    [departureResolved, form.departure],
+  );
+  const effectiveDestinationCode = useMemo(
+    () => (destinationResolved || form.destination).trim().toUpperCase(),
+    [destinationResolved, form.destination],
+  );
+  const effectiveAlternateCode = useMemo(
+    () => form.alternate.trim().toUpperCase(),
+    [form.alternate],
+  );
   const filingPacket = useMemo(() => ({
     filingLive: false,
     provider: "pending-flight-service-handoff",
     flightRules: filingDraft.flightRules,
-    departure: form.departure.trim().toUpperCase() || null,
-    destination: form.destination.trim().toUpperCase() || null,
+    departure: effectiveDepartureCode || null,
+    destination: effectiveDestinationCode || null,
     route: activeFiledRoute || null,
-    alternate: form.alternate.trim().toUpperCase() || null,
+    alternate: effectiveAlternateCode || null,
     plannedDepartureLocal: form.plannedDepartureAt || null,
     plannedDepartureUtc: form.plannedDepartureAt ? toUtcIso(form.plannedDepartureAt, departureTimeZone) : null,
     departureTimeZone,
@@ -3203,9 +3215,9 @@ export default function FlightPlanner() {
     remarks: [filingDraft.remarks.trim(), form.notes.trim()].filter(Boolean).join(" | ") || null,
   }), [
     filingDraft,
-    form.departure,
-    form.destination,
-    form.alternate,
+    effectiveDepartureCode,
+    effectiveDestinationCode,
+    effectiveAlternateCode,
     form.plannedDepartureAt,
     form.plannedArrivalAt,
     form.tailNumber,
@@ -5092,6 +5104,9 @@ export default function FlightPlanner() {
     mutationFn: async () => {
         const payload = {
           ...form,
+          departure: effectiveDepartureCode,
+          destination: effectiveDestinationCode,
+          alternate: effectiveAlternateCode,
           tailNumber: filingDraft.aircraftId.trim().toUpperCase() || form.tailNumber.trim().toUpperCase(),
           fuelOnBoard: form.fuelOnBoard?.trim() ? form.fuelOnBoard.trim() : "",
           route: activeFiledRoute || null,
@@ -5176,6 +5191,9 @@ export default function FlightPlanner() {
     mutationFn: async (planId: string) => {
       const payload = {
         ...form,
+        departure: effectiveDepartureCode,
+        destination: effectiveDestinationCode,
+        alternate: effectiveAlternateCode,
         tailNumber: filingDraft.aircraftId.trim().toUpperCase() || form.tailNumber.trim().toUpperCase(),
         fuelOnBoard: form.fuelOnBoard?.trim() ? form.fuelOnBoard.trim() : "",
         route: activeFiledRoute || null,

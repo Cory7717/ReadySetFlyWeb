@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { FlightPlan } from "../../shared/schema";
-import { normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction } from "../../server/services/flight-plan-filing/provider";
+import { extractFilingProviderPlanId } from "../../shared/flight-plan-filing";
+import { buildZzzzSupplementalRemarks, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction } from "../../server/services/flight-plan-filing/provider";
 
 function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
   return {
@@ -104,6 +105,29 @@ test("Leidos otherInfo transmission omits duplicated remarks", () => {
   assert.equal(
     normalizeLeidosOtherInfoForTransmission("DOF/260623 RMK/RSF_INTERNAL_FILING_PREVIEW"),
     "DOF/260623",
+  );
+});
+
+test("ZZZZ location names are transmitted as supplemental remarks, not ICAO other info", () => {
+  assert.equal(
+    buildZzzzSupplementalRemarks("LEIDOS DEMO", {
+      departureName: "Demo departure strip",
+      destinationName: "Demo destination strip",
+      alternateName: "Demo alternate strip",
+    }),
+    "LEIDOS DEMO DEP/DEMO_DEPARTURE_STRIP DEST/DEMO_DESTINATION_STRIP ALTN/DEMO_ALTERNATE_STRIP",
+  );
+  assert.equal(normalizeLeidosOtherInfoForTransmission("DOF/260623"), "DOF/260623");
+});
+
+test("Leidos FILE flightIdentifier is accepted as the provider plan id", () => {
+  assert.equal(
+    extractFilingProviderPlanId({
+      returnStatus: true,
+      versionStamp: "20260622153435610",
+      flightIdentifier: "651864278_696243_7021",
+    }),
+    "651864278_696243_7021",
   );
 });
 

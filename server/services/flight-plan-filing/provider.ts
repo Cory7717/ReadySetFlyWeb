@@ -933,15 +933,15 @@ const buildProviderSnapshot = ({
   };
 };
 
-const injectZzzzSupplementals = (
-  otherInfo: string | null,
+export const buildZzzzSupplementalRemarks = (
+  remarks: string | null,
   { departureName, destinationName, alternateName }: {
     departureName?: string | null;
     destinationName?: string | null;
     alternateName?: string | null;
   },
 ): string | null => {
-  let base = String(otherInfo || "").trim();
+  let base = String(remarks || "").trim();
   if (departureName) base = base.replace(/(?:^|\s)DEP\/\S*/gi, " ").replace(/\s+/g, " ").trim();
   if (destinationName) base = base.replace(/(?:^|\s)DEST\/\S*/gi, " ").replace(/\s+/g, " ").trim();
   if (alternateName) base = base.replace(/(?:^|\s)ALTN\/\S*/gi, " ").replace(/\s+/g, " ").trim();
@@ -995,12 +995,13 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("pilotInCommandExtended", plan.filingPilotName);
     append("pilotPhone", plan.filingPilotPhone);
     append("aircraftHomeBase", plan.filingAircraftHomeBase);
-    append("suppRemarksExtended", plan.filingRemarks || plan.notes);
-    const mergedOtherInfo = normalizeLeidosOtherInfoForTransmission(injectZzzzSupplementals(otherInfoResult.otherInfo, {
+    const supplementalRemarks = buildZzzzSupplementalRemarks(plan.filingRemarks || plan.notes || null, {
       departureName: plan.departure?.toUpperCase() === "ZZZZ" ? plan.filingDepartureName : null,
       destinationName: plan.destination?.toUpperCase() === "ZZZZ" ? plan.filingDestinationName : null,
       alternateName: plan.alternate?.toUpperCase() === "ZZZZ" ? plan.filingAlternateName : null,
-    }));
+    });
+    append("suppRemarksExtended", supplementalRemarks);
+    const mergedOtherInfo = normalizeLeidosOtherInfoForTransmission(otherInfoResult.otherInfo);
     append("otherInfo", mergedOtherInfo);
     appendLeidosAltitudeFields(params, plan.filingPlannedAltitudeFt);
     if (action === "amend") {
@@ -1832,8 +1833,9 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       throw new Error(`Leidos returned an unsuccessful ${action.toUpperCase()} response: ${details}`);
     }
 
+    const returnedProviderPlanId = extractFilingProviderPlanId(parsedResponse);
     const providerPlanId =
-      extractFilingProviderPlanId(parsedResponse) ||
+      returnedProviderPlanId ||
       plan.filingProviderPlanId ||
       buildProviderPlanId(plan, action);
     let versionStamp = extractFilingVersionStamp(parsedResponse);
@@ -1862,7 +1864,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       }));
     }
 
-    if (action === "file" && providerPlanId === buildProviderPlanId(plan, action)) {
+    if (action === "file" && !returnedProviderPlanId) {
       console.info(JSON.stringify({
         event: "leidos_file_missing_provider_plan_id",
         action,

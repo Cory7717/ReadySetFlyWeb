@@ -2235,14 +2235,25 @@ export default function FlightPlanner() {
     [activeEditingPlan, mergePlanIntoList, savedPlans]
   );
 
+  const clearActiveSavedPlanIdentity = useCallback(() => {
+    setDraftPlanId(null);
+    setEditingPlan(null);
+    setPendingFilingActionAfterSave(null);
+    setReturnToFileAfterSave(false);
+  }, []);
+
+  const isPlanAccessDeniedError = useCallback((error: unknown) => {
+    const message = String((error as any)?.message || error || "").trim();
+    return /^Access denied$/i.test(message) || /flight plan.*not.*available/i.test(message);
+  }, []);
+
   useEffect(() => {
     if (!editingPlan || !currentUserId) return;
     const ownerId = (editingPlan as any).userId;
     if (typeof ownerId === "string" && ownerId !== currentUserId) {
-      setEditingPlan(null);
-      setDraftPlanId(null);
+      clearActiveSavedPlanIdentity();
     }
-  }, [currentUserId, editingPlan]);
+  }, [clearActiveSavedPlanIdentity, currentUserId, editingPlan]);
 
   useEffect(() => {
     if (!isAuthenticated || activeTab !== "file") return;
@@ -5024,10 +5035,17 @@ export default function FlightPlanner() {
       return;
     }
 
-    if (draftPlanIdRef.current) {
+    const savedDraftPlan = draftPlanIdRef.current
+      ? savedPlans.find((plan) => plan.id === draftPlanIdRef.current)
+      : null;
+    if (savedDraftPlan) {
       trackEvent("planner_save_plan", { action: "update" });
-      updatePlanMutation.mutate(draftPlanIdRef.current);
+      updatePlanMutation.mutate(savedDraftPlan.id);
       return;
+    }
+
+    if (currentEditingPlan?.id || draftPlanIdRef.current) {
+      clearActiveSavedPlanIdentity();
     }
 
     trackEvent("planner_save_plan", { action: "create" });
@@ -5248,6 +5266,15 @@ export default function FlightPlanner() {
     onError: (error: any) => {
       setPendingFilingActionAfterSave(null);
       setReturnToFileAfterSave(false);
+      if (isPlanAccessDeniedError(error)) {
+        clearActiveSavedPlanIdentity();
+        toast({
+          title: "Save needs a fresh copy",
+          description: "That saved plan belongs to a different session or account. Click Save Flight Plan again to save this draft under the current user.",
+          variant: "destructive",
+        });
+        return;
+      }
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
     },
   });
@@ -5432,6 +5459,21 @@ export default function FlightPlanner() {
       setPendingFilingActionAfterSave(null);
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
+      if (isPlanAccessDeniedError(error)) {
+        clearActiveSavedPlanIdentity();
+        const message = "That saved plan is not available to the current user. Save this draft again before filing.";
+        setFilingActionFeedback({
+          tone: "error",
+          title: "Save plan again",
+          message,
+        });
+        toast({
+          title: "Save plan again",
+          description: message,
+          variant: "destructive",
+        });
+        return;
+      }
       const message = summarizePlannerError(error?.message);
       setFilingActionFeedback({
         tone: "error",
@@ -5478,6 +5520,15 @@ export default function FlightPlanner() {
       });
     },
     onError: (error: any) => {
+      if (isPlanAccessDeniedError(error)) {
+        clearActiveSavedPlanIdentity();
+        toast({
+          title: "Provider sync unavailable",
+          description: "That saved plan belongs to a different session or account. Save this draft again before syncing or filing.",
+          variant: "destructive",
+        });
+        return;
+      }
       toast({
         title: "Provider sync failed",
         description: summarizePlannerError(error?.message),

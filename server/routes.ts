@@ -21932,7 +21932,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           console.warn("Leidos mismatch sync failed:", syncError?.message || syncError);
         }
       }
-      res.status(isTimeout ? 504 : isProviderStateRejected ? 409 : isProviderValidationError ? 400 : isProviderRejected ? 502 : 500).json({
+      res.status(isTimeout ? 504 : isProviderStateRejected ? 409 : (isProviderValidationError || isProviderRejected) ? 400 : 500).json({
         error: isProviderStateRejected
           ? "Leidos says this flight plan is no longer in the provider state required for that action. RSF refreshed the provider record; review the current status and available actions."
           : message,

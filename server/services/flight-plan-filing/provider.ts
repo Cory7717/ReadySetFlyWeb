@@ -967,20 +967,35 @@ export const buildZzzzSupplementalRemarks = (
 
 export const buildZzzzOtherInfoForLeidos = (
   otherInfo: string | null,
-  { departureName, destinationName, alternateName }: {
+  { departureName, destinationName, alternateName, departureReference, destinationReference, alternateReference }: {
     departureName?: string | null;
     destinationName?: string | null;
     alternateName?: string | null;
+    departureReference?: string | null;
+    destinationReference?: string | null;
+    alternateReference?: string | null;
   },
 ): string | null => {
   let base = String(otherInfo || "").trim();
   if (departureName) base = base.replace(/(?:^|\s)DEP\/[^/]*(?=\s+[A-Z]{3,5}\/|$)/gi, " ").replace(/\s+/g, " ").trim();
   if (destinationName) base = base.replace(/(?:^|\s)DEST\/[^/]*(?=\s+[A-Z]{3,5}\/|$)/gi, " ").replace(/\s+/g, " ").trim();
   if (alternateName) base = base.replace(/(?:^|\s)ALTN\/[^/]*(?=\s+[A-Z]{3,5}\/|$)/gi, " ").replace(/\s+/g, " ").trim();
+  const formatLocation = (description?: string | null, reference?: string | null) => {
+    const normalizedDescription = String(description || "").trim().replace(/\s+/g, " ").toUpperCase();
+    if (!normalizedDescription) return null;
+    const normalizedReference = String(reference || "").trim().toUpperCase();
+    if (!normalizedReference || normalizedDescription.startsWith(`${normalizedReference} `) || normalizedDescription === normalizedReference) {
+      return normalizedDescription;
+    }
+    return `${normalizedReference} ${normalizedDescription}`;
+  };
   const supplementals: string[] = [];
-  if (departureName) supplementals.push(`DEP/${departureName.trim().replace(/\s+/g, " ").toUpperCase()}`);
-  if (destinationName) supplementals.push(`DEST/${destinationName.trim().replace(/\s+/g, " ").toUpperCase()}`);
-  if (alternateName) supplementals.push(`ALTN/${alternateName.trim().replace(/\s+/g, " ").toUpperCase()}`);
+  const departureLocation = formatLocation(departureName, departureReference);
+  const destinationLocation = formatLocation(destinationName, destinationReference);
+  const alternateLocation = formatLocation(alternateName, alternateReference);
+  if (departureLocation) supplementals.push(`DEP/${departureLocation}`);
+  if (destinationLocation) supplementals.push(`DEST/${destinationLocation}`);
+  if (alternateLocation) supplementals.push(`ALTN/${alternateLocation}`);
   const merged = [base, ...supplementals].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   return merged || null;
 };
@@ -1037,6 +1052,9 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
       departureName: plan.departure?.toUpperCase() === "ZZZZ" ? plan.filingDepartureName : null,
       destinationName: plan.destination?.toUpperCase() === "ZZZZ" ? plan.filingDestinationName : null,
       alternateName: plan.alternate?.toUpperCase() === "ZZZZ" ? plan.filingAlternateName : null,
+      departureReference: plan.departure?.toUpperCase() === "ZZZZ" ? getPlannerStateString(plan, "planningReferenceDepartureAirport") : null,
+      destinationReference: plan.destination?.toUpperCase() === "ZZZZ" ? getPlannerStateString(plan, "planningReferenceDestinationAirport") : null,
+      alternateReference: plan.alternate?.toUpperCase() === "ZZZZ" ? getPlannerStateString(plan, "planningReferenceAlternateAirport") : null,
     }));
     append("otherInfo", mergedOtherInfo);
     appendLeidosAltitudeFields(params, plan.filingPlannedAltitudeFt);

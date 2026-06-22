@@ -21781,6 +21781,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           filingDepartureName: plan.filingDepartureName || null,
           filingDestinationName: plan.filingDestinationName || null,
           filingAlternateName: plan.filingAlternateName || null,
+          planningReferenceDepartureAirport: (plan.plannerState as any)?.planningReferenceDepartureAirport || null,
+          planningReferenceDestinationAirport: (plan.plannerState as any)?.planningReferenceDestinationAirport || null,
+          planningReferenceAlternateAirport: (plan.plannerState as any)?.planningReferenceAlternateAirport || null,
           errors: validation.errors,
           warnings: validation.warnings,
         }));

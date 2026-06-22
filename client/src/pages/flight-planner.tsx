@@ -237,6 +237,9 @@ const buildPlannerStateSnapshot = ({
   selectedProfileMaxGrossWeightLb,
   departureTimeZone,
   destinationTimeZone,
+  planningReferenceDepartureAirport,
+  planningReferenceDestinationAirport,
+  planningReferenceAlternateAirport,
   customProfile,
   routeMode,
 }: {
@@ -247,6 +250,9 @@ const buildPlannerStateSnapshot = ({
   selectedProfileMaxGrossWeightLb: number | null;
   departureTimeZone: string | null;
   destinationTimeZone: string | null;
+  planningReferenceDepartureAirport?: string | null;
+  planningReferenceDestinationAirport?: string | null;
+  planningReferenceAlternateAirport?: string | null;
   customProfile: {
     name: string;
     cruiseKtasOverride: string;
@@ -263,6 +269,9 @@ const buildPlannerStateSnapshot = ({
   selectedProfileMaxGrossWeightLb,
   departureTimeZone,
   destinationTimeZone,
+  planningReferenceDepartureAirport,
+  planningReferenceDestinationAirport,
+  planningReferenceAlternateAirport,
   customProfile,
   routeMode,
 });
@@ -1822,6 +1831,9 @@ export default function FlightPlanner() {
     typeOfFlight: "",
     surveillanceEquipment: "",
     otherInfo: "",
+    planningReferenceDepartureAirport: "",
+    planningReferenceDestinationAirport: "",
+    planningReferenceAlternateAirport: "",
     departureName: "",
     destinationName: "",
     alternateName: "",
@@ -2400,12 +2412,35 @@ export default function FlightPlanner() {
     selectedType.usable_fuel_gal_effective ??
     FALLBACK_TYPE.usable_fuel_gal_effective ??
     null;
+  const filedDepartureCode = form.departure.trim().toUpperCase();
+  const filedDestinationCode = form.destination.trim().toUpperCase();
+  const filedAlternateCode = form.alternate.trim().toUpperCase();
+  const planningReferenceDepartureAirport = filingDraft.planningReferenceDepartureAirport.trim().toUpperCase();
+  const planningReferenceDestinationAirport = filingDraft.planningReferenceDestinationAirport.trim().toUpperCase();
+  const planningReferenceAlternateAirport = filingDraft.planningReferenceAlternateAirport.trim().toUpperCase();
+  const planningDepartureCode = filedDepartureCode === "ZZZZ"
+    ? planningReferenceDepartureAirport
+    : departureResolved.trim().toUpperCase();
+  const planningDestinationCode = filedDestinationCode === "ZZZZ"
+    ? planningReferenceDestinationAirport
+    : destinationResolved.trim().toUpperCase();
+  const planningAlternateCode = filedAlternateCode === "ZZZZ"
+    ? planningReferenceAlternateAirport
+    : filedAlternateCode;
+  const hasZzzzLocation = filedDepartureCode === "ZZZZ" || filedDestinationCode === "ZZZZ" || filedAlternateCode === "ZZZZ";
+  const zzzzPlanningReferenceError = [
+    filedDepartureCode === "ZZZZ" && (!planningReferenceDepartureAirport || !ICAO_REGEX.test(planningReferenceDepartureAirport) || !filingDraft.departureName.trim()),
+    filedDestinationCode === "ZZZZ" && (!planningReferenceDestinationAirport || !ICAO_REGEX.test(planningReferenceDestinationAirport) || !filingDraft.destinationName.trim()),
+    filedAlternateCode === "ZZZZ" && (!planningReferenceAlternateAirport || !ICAO_REGEX.test(planningReferenceAlternateAirport) || !filingDraft.alternateName.trim()),
+  ].some(Boolean)
+    ? "ZZZZ requires a planning reference airport and actual location description so RSF can calculate the route and file the plan correctly."
+    : null;
 
   const routeSuggestionQuery = useQuery<RouteSuggestionResponse>({
     queryKey: [
       "/api/airports/route-suggestions",
-      departureResolved,
-      destinationResolved,
+      planningDepartureCode,
+      planningDestinationCode,
       planningCruise,
       planningBurn,
       planningFuel,
@@ -2414,8 +2449,8 @@ export default function FlightPlanner() {
     ],
     queryFn: async () => {
       const params = new URLSearchParams({
-        departure: departureResolved,
-        destination: destinationResolved,
+        departure: planningDepartureCode,
+        destination: planningDestinationCode,
         cruiseKtas: String(planningCruise),
         fuelBurnGph: String(planningBurn),
         usableFuelGal: String(planningFuel),
@@ -2435,25 +2470,25 @@ export default function FlightPlanner() {
       return res.json();
     },
     enabled:
-      Boolean(departureResolved && destinationResolved) &&
+      Boolean(planningDepartureCode && planningDestinationCode) &&
       isAuthenticated &&
-      ICAO_REGEX.test(departureResolved.trim().toUpperCase()) &&
-      ICAO_REGEX.test(destinationResolved.trim().toUpperCase()),
+      ICAO_REGEX.test(planningDepartureCode) &&
+      ICAO_REGEX.test(planningDestinationCode),
     staleTime: 1000 * 60 * 10,
   });
 
   const leidosRouteQuery = useQuery<LeidosRouteSearchResponse>({
     queryKey: [
       "/api/flight-plans/route-search",
-      departureResolved,
-      destinationResolved,
+      planningDepartureCode,
+      planningDestinationCode,
       plannedAltitude,
       filingDraft.flightRules,
     ],
     queryFn: async () => {
       const params = new URLSearchParams({
-        departure: departureResolved.trim().toUpperCase(),
-        destination: destinationResolved.trim().toUpperCase(),
+        departure: planningDepartureCode,
+        destination: planningDestinationCode,
       });
       if (plannedAltitude) {
         params.set("altitudeFt", plannedAltitude);
@@ -2469,9 +2504,9 @@ export default function FlightPlanner() {
     },
     enabled:
       filingDraft.flightRules === "IFR" &&
-      Boolean(departureResolved && destinationResolved) &&
-      ICAO_REGEX.test(departureResolved.trim().toUpperCase()) &&
-      ICAO_REGEX.test(destinationResolved.trim().toUpperCase()),
+      Boolean(planningDepartureCode && planningDestinationCode) &&
+      ICAO_REGEX.test(planningDepartureCode) &&
+      ICAO_REGEX.test(planningDestinationCode),
     staleTime: 1000 * 60 * 10,
     retry: false,
   });
@@ -2505,15 +2540,15 @@ export default function FlightPlanner() {
   const shouldOrderSuggestions = isUsingSuggestedWaypoints || isUsingSuggestedStops;
 
   const autoSuggestedIntermediates = useMemo(() => {
-    if (!departureResolved || !destinationResolved) return [];
+    if (!planningDepartureCode || !planningDestinationCode) return [];
     if (plannedStops.length > 0 || waypoints.length > 0 || filedRouteAirportTokens.length > 0) return [];
     return [...suggestedStops, ...suggestedWaypoints]
       .map((icao) => icao.trim().toUpperCase())
       .filter(Boolean)
       .filter((icao, index, arr) => ICAO_REGEX.test(icao) && arr.indexOf(icao) === index);
   }, [
-    departureResolved,
-    destinationResolved,
+    planningDepartureCode,
+    planningDestinationCode,
     plannedStops.length,
     waypoints.length,
     filedRouteAirportTokens,
@@ -2533,13 +2568,13 @@ export default function FlightPlanner() {
 
   const routeSequenceRaw = useMemo(() => {
     return [
-      departureResolved.trim().toUpperCase(),
+      planningDepartureCode,
       ...routeIntermediates,
-      destinationResolved.trim().toUpperCase(),
+      planningDestinationCode,
     ]
       .filter(Boolean)
       .filter((icao) => ICAO_REGEX.test(icao));
-  }, [departureResolved, destinationResolved, routeIntermediates]);
+  }, [planningDepartureCode, planningDestinationCode, routeIntermediates]);
 
   const routeIcaos = useMemo(() => {
     return Array.from(new Set(routeSequenceRaw));
@@ -2633,12 +2668,12 @@ export default function FlightPlanner() {
   const orderedIntermediates = useMemo(() => {
     const combined = routeIntermediates.filter((icao) => ICAO_REGEX.test(icao));
     if (!shouldOrderSuggestions) return combined;
-    const departureKey = departureResolved.trim().toUpperCase();
+    const departureKey = planningDepartureCode;
     const departurePoint = airportMap.get(departureKey);
     if (!departurePoint || !Number.isFinite(departurePoint.lat) || !Number.isFinite(departurePoint.lon)) {
       return combined;
     }
-    const destinationKey = destinationResolved.trim().toUpperCase();
+    const destinationKey = planningDestinationCode;
     const destinationPoint = airportMap.get(destinationKey);
     if (!destinationPoint || !Number.isFinite(destinationPoint.lat) || !Number.isFinite(destinationPoint.lon)) {
       return combined;
@@ -2679,7 +2714,7 @@ export default function FlightPlanner() {
         return a.order - b.order;
       })
       .map((item) => item.icao);
-  }, [routeIntermediates, shouldOrderSuggestions, airportMap, departureResolved, destinationResolved]);
+  }, [routeIntermediates, shouldOrderSuggestions, airportMap, planningDepartureCode, planningDestinationCode]);
 
   const orderedPlannedStops = useMemo(
     () => orderedIntermediates.filter((icao) => plannedStops.includes(icao)),
@@ -2700,13 +2735,13 @@ export default function FlightPlanner() {
 
   const routeSequenceOrdered = useMemo(() => {
     return [
-      departureResolved.trim().toUpperCase(),
+      planningDepartureCode,
       ...orderedIntermediates,
-      destinationResolved.trim().toUpperCase(),
+      planningDestinationCode,
     ]
       .filter(Boolean)
       .filter((icao) => ICAO_REGEX.test(icao));
-  }, [departureResolved, destinationResolved, orderedIntermediates]);
+  }, [planningDepartureCode, planningDestinationCode, orderedIntermediates]);
 
   const terrainAdvisorOptions = useMemo<TerrainRouteAdvisorOption[]>(() => {
     const options: TerrainRouteAdvisorOption[] = [];
@@ -2720,7 +2755,7 @@ export default function FlightPlanner() {
         applyKind: "current",
       });
     }
-    if (departureResolved && destinationResolved && (suggestedWaypoints.length > 0 || suggestedStops.length > 0)) {
+    if (planningDepartureCode && planningDestinationCode && (suggestedWaypoints.length > 0 || suggestedStops.length > 0)) {
       options.push({
         id: "assist",
         label: suggestionMeta?.overwaterLikely ? "Direct / overwater assist" : "Route assist",
@@ -2728,25 +2763,25 @@ export default function FlightPlanner() {
           ? "Direct helper route with the current overwater planning assist."
           : "RSF helper route using suggested waypoints and fuel stops.",
         icaos: [
-          departureResolved.trim().toUpperCase(),
+          planningDepartureCode,
           ...suggestedStops,
           ...suggestedWaypoints,
-          destinationResolved.trim().toUpperCase(),
+          planningDestinationCode,
         ].filter((icao, index, arr) => Boolean(icao) && arr.indexOf(icao) === index),
         stopIcaos: suggestedStops,
         applyKind: "assist",
       });
     }
-    if (departureResolved && destinationResolved && hasCoastlineRouteOption) {
+    if (planningDepartureCode && planningDestinationCode && hasCoastlineRouteOption) {
       options.push({
         id: "coastline",
         label: "Coastline assist",
         description: "Land-biased helper route intended to stay closer to shore.",
         icaos: [
-          departureResolved.trim().toUpperCase(),
+          planningDepartureCode,
           ...suggestedCoastlineStops,
           ...suggestedCoastlineWaypoints,
-          destinationResolved.trim().toUpperCase(),
+          planningDestinationCode,
         ].filter((icao, index, arr) => Boolean(icao) && arr.indexOf(icao) === index),
         stopIcaos: suggestedCoastlineStops,
         applyKind: "coastline",
@@ -2757,8 +2792,8 @@ export default function FlightPlanner() {
       arr.findIndex((candidate) => candidate.id === option.id) === index
     );
   }, [
-    departureResolved,
-    destinationResolved,
+    planningDepartureCode,
+    planningDestinationCode,
     hasCoastlineRouteOption,
     routeSequenceOrdered,
     suggestedCoastlineStops,
@@ -2867,14 +2902,14 @@ export default function FlightPlanner() {
   );
 
   const departureTimeZone = useMemo(() => {
-    const tz = airportMap.get(departureResolved)?.timezone;
+    const tz = airportMap.get(planningDepartureCode)?.timezone;
     return normalizeTimeZone(tz || browserTimeZone);
-  }, [airportMap, departureResolved, browserTimeZone]);
+  }, [airportMap, planningDepartureCode, browserTimeZone]);
 
   const destinationTimeZone = useMemo(() => {
-    const tz = airportMap.get(destinationResolved)?.timezone;
+    const tz = airportMap.get(planningDestinationCode)?.timezone;
     return normalizeTimeZone(tz || browserTimeZone);
-  }, [airportMap, destinationResolved, browserTimeZone]);
+  }, [airportMap, planningDestinationCode, browserTimeZone]);
 
   const plannedDepartureUtc = useMemo(() => {
     if (!form.plannedDepartureAt) return null;
@@ -3163,16 +3198,16 @@ export default function FlightPlanner() {
   const fuelSurplus = fuelPlanSummary.reserveBalanceGallons;
   const surplusMinutes = planningBurn > 0 ? (fuelSurplus / planningBurn) * 60 : 0;
   const effectiveDepartureCode = useMemo(
-    () => (departureResolved || form.departure).trim().toUpperCase(),
-    [departureResolved, form.departure],
+    () => filedDepartureCode,
+    [filedDepartureCode],
   );
   const effectiveDestinationCode = useMemo(
-    () => (destinationResolved || form.destination).trim().toUpperCase(),
-    [destinationResolved, form.destination],
+    () => filedDestinationCode,
+    [filedDestinationCode],
   );
   const effectiveAlternateCode = useMemo(
-    () => form.alternate.trim().toUpperCase(),
-    [form.alternate],
+    () => filedAlternateCode,
+    [filedAlternateCode],
   );
   const manualEstimatedEnrouteMinutes = useMemo(() => {
     const value = Number(filingDraft.manualEstimatedEnrouteMinutes);
@@ -3851,15 +3886,16 @@ export default function FlightPlanner() {
 
   const weatherIcaos = useMemo(() => {
     const list = [
-      departureResolved.trim().toUpperCase(),
+      planningDepartureCode,
       ...plannedStops,
       ...waypoints,
-      destinationResolved.trim().toUpperCase(),
+      planningDestinationCode,
+      planningAlternateCode,
     ].filter(Boolean);
     return Array.from(new Set(list))
       .filter((icao) => ICAO_REGEX.test(icao))
       .slice(0, 8);
-  }, [departureResolved, destinationResolved, plannedStops, waypoints]);
+  }, [planningDepartureCode, planningDestinationCode, planningAlternateCode, plannedStops, waypoints]);
 
   const weatherQueries = useQueries({
     queries: weatherIcaos.map((icao) => ({
@@ -3886,7 +3922,7 @@ export default function FlightPlanner() {
     }));
   }, [weatherData]);
 
-  const primaryIcao = departureResolved.trim().toUpperCase();
+  const primaryIcao = planningDepartureCode;
   const hasPrimaryIcao = ICAO_REGEX.test(primaryIcao);
 
   const windsSummaryQuery = useQuery({
@@ -4309,16 +4345,16 @@ export default function FlightPlanner() {
   const isVfrFlight = !isIfrFlight;
 
   const departureMetar = useMemo(() => {
-    return weatherData.find((item) => item.icao === departureResolved.trim().toUpperCase())?.data?.metar;
-  }, [weatherData, departureResolved]);
+    return weatherData.find((item) => item.icao === planningDepartureCode)?.data?.metar;
+  }, [weatherData, planningDepartureCode]);
 
   const departureTempC = useMemo(() => parseMetarTempC(departureMetar), [departureMetar]);
   const departureElevationFt = useMemo(() => {
-    const airport = airportMap.get(departureResolved.trim().toUpperCase());
+    const airport = airportMap.get(planningDepartureCode);
     const elevation = airport?.elevationFt ?? airport?.elevation_ft ?? airport?.elevation ?? null;
     const value = Number(elevation);
     return Number.isFinite(value) ? value : null;
-  }, [airportMap, departureResolved]);
+  }, [airportMap, planningDepartureCode]);
 
   const departureRunwayOptions = useMemo(() => {
     const runways = departureRunwayBriefingQuery.data?.runways || [];
@@ -4395,7 +4431,7 @@ export default function FlightPlanner() {
   }, [departureRunwayBriefingQuery.data, departureRunwayOptions]);
 
   useEffect(() => {
-    const departureIcao = departureResolved.trim().toUpperCase();
+    const departureIcao = planningDepartureCode;
     if (!ICAO_REGEX.test(departureIcao)) {
       departureRunwayAutoAirportRef.current = null;
       return;
@@ -4418,7 +4454,7 @@ export default function FlightPlanner() {
       setDepartureRunway(departureSuggestedRunway);
       departureRunwayAutoAirportRef.current = departureIcao;
     }
-  }, [departureResolved, departureRunway, departureRunwayOptions, departureSuggestedRunway]);
+  }, [planningDepartureCode, departureRunway, departureRunwayOptions, departureSuggestedRunway]);
 
   const runwayHeading = useMemo(() => parseRunwayHeading(departureRunway), [departureRunway]);
   const metarWind = useMemo(() => parseMetarWind(departureMetar), [departureMetar]);
@@ -4435,12 +4471,13 @@ export default function FlightPlanner() {
 
   const routeAirports = useMemo(() => {
     return [
-      departureResolved.trim().toUpperCase(),
-      destinationResolved.trim().toUpperCase(),
+      planningDepartureCode,
+      planningDestinationCode,
+      planningAlternateCode,
       ...plannedStops,
       ...waypoints,
     ].filter(Boolean);
-  }, [departureResolved, destinationResolved, plannedStops, waypoints]);
+  }, [planningDepartureCode, planningDestinationCode, planningAlternateCode, plannedStops, waypoints]);
   const approachOfferAirports = useMemo(() => {
     return Array.from(new Set(routeAirports))
       .filter((icao) => ICAO_REGEX.test(icao))
@@ -4544,17 +4581,17 @@ export default function FlightPlanner() {
   const [briefingLocked, setBriefingLocked] = useState(false);
   const briefingKey = useMemo(() => {
     return [
-      departureResolved.trim().toUpperCase(),
-      destinationResolved.trim().toUpperCase(),
+      planningDepartureCode,
+      planningDestinationCode,
       waypointsInput.trim().toUpperCase(),
       plannedStopsInput.trim().toUpperCase(),
       plannedAltitude.trim(),
     ]
       .filter(Boolean)
       .join("|");
-  }, [departureResolved, destinationResolved, waypointsInput, plannedStopsInput, plannedAltitude]);
+  }, [planningDepartureCode, planningDestinationCode, waypointsInput, plannedStopsInput, plannedAltitude]);
 
-  const briefingReady = Boolean(departureResolved && destinationResolved);
+  const briefingReady = Boolean(planningDepartureCode && planningDestinationCode);
 
   useEffect(() => {
     if (!briefingReady || approachOfferAirports.length < 2 || !approachOfferKey) return;
@@ -4598,10 +4635,10 @@ export default function FlightPlanner() {
   const enrouteFindings = useMemo(() => {
     return weatherFindings.filter(
       (item) =>
-        item.icao !== departureResolved.trim().toUpperCase() &&
-        item.icao !== destinationResolved.trim().toUpperCase()
+        item.icao !== planningDepartureCode &&
+        item.icao !== planningDestinationCode
     );
-  }, [weatherFindings, departureResolved, destinationResolved]);
+  }, [weatherFindings, planningDepartureCode, planningDestinationCode]);
 
   const enrouteIfr = useMemo(
     () =>
@@ -4714,6 +4751,9 @@ export default function FlightPlanner() {
         typeOfFlight: "G",
         surveillanceEquipment: "N",
         otherInfo: "",
+        planningReferenceDepartureAirport: "",
+        planningReferenceDestinationAirport: "",
+        planningReferenceAlternateAirport: "",
         departureName: "",
         destinationName: "",
         alternateName: "",
@@ -5042,8 +5082,50 @@ export default function FlightPlanner() {
     });
   };
 
+  const validateZzzzPlanningReferences = async () => {
+    if (!hasZzzzLocation) return true;
+    if (zzzzPlanningReferenceError) {
+      toast({
+        title: "ZZZZ planning reference needed",
+        description: zzzzPlanningReferenceError,
+        variant: "destructive",
+      });
+      return false;
+    }
+    const references = [
+      effectiveDepartureCode === "ZZZZ" ? planningReferenceDepartureAirport : null,
+      effectiveDestinationCode === "ZZZZ" ? planningReferenceDestinationAirport : null,
+      effectiveAlternateCode === "ZZZZ" ? planningReferenceAlternateAirport : null,
+    ].filter((value): value is string => Boolean(value));
+
+    for (const icao of references) {
+      try {
+        const res = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(icao)}`), { credentials: "include" });
+        const matches = res.ok ? await res.json().catch(() => []) : [];
+        const exists = Array.isArray(matches) && matches.some((airport) => String(airport?.icao || "").trim().toUpperCase() === icao);
+        if (!exists) {
+          toast({
+            title: "ZZZZ planning reference needed",
+            description: `Planning reference airport ${icao} was not found in RSF airport data.`,
+            variant: "destructive",
+          });
+          return false;
+        }
+      } catch {
+        toast({
+          title: "ZZZZ planning reference needed",
+          description: "RSF could not verify the planning reference airport. Try again before saving.",
+          variant: "destructive",
+        });
+        return false;
+      }
+    }
+    return true;
+  };
+
   const saveCurrentPlan = async (options?: { returnToFile?: boolean }) => {
     if (!isAuthenticated) return;
+    if (!(await validateZzzzPlanningReferences())) return;
 
     if (options?.returnToFile) {
       setReturnToFileAfterSave(true);
@@ -5105,8 +5187,8 @@ export default function FlightPlanner() {
     const nextRoute = route.trim().toUpperCase();
     const intermediateAirports = extractIntermediateAirportTokensForAppliedRoute({
       route: nextRoute,
-      departure: departureResolved || form.departure || "",
-      destination: destinationResolved || form.destination || "",
+      departure: planningDepartureCode || form.departure || "",
+      destination: planningDestinationCode || form.destination || "",
     });
 
     setForm((current) => ({ ...current, route: nextRoute }));
@@ -5158,6 +5240,9 @@ export default function FlightPlanner() {
             selectedProfileMaxGrossWeightLb: selectedProfile?.max_gross_weight_lb_effective ?? null,
             departureTimeZone,
             destinationTimeZone,
+            planningReferenceDepartureAirport: planningReferenceDepartureAirport || null,
+            planningReferenceDestinationAirport: planningReferenceDestinationAirport || null,
+            planningReferenceAlternateAirport: planningReferenceAlternateAirport || null,
             customProfile,
             routeMode,
           }),
@@ -5245,6 +5330,9 @@ export default function FlightPlanner() {
           selectedProfileMaxGrossWeightLb: selectedProfile?.max_gross_weight_lb_effective ?? null,
           departureTimeZone,
           destinationTimeZone,
+          planningReferenceDepartureAirport: planningReferenceDepartureAirport || null,
+          planningReferenceDestinationAirport: planningReferenceDestinationAirport || null,
+          planningReferenceAlternateAirport: planningReferenceAlternateAirport || null,
           customProfile,
           routeMode,
         }),
@@ -5725,6 +5813,15 @@ export default function FlightPlanner() {
       typeOfFlight: editingPlan.filingTypeOfFlight || current.typeOfFlight,
       surveillanceEquipment: editingPlan.filingSurveillanceEquipment || current.surveillanceEquipment,
       otherInfo: editingPlan.filingOtherInfo || current.otherInfo,
+      planningReferenceDepartureAirport: typeof (editingPlan.plannerState as any)?.planningReferenceDepartureAirport === "string"
+        ? String((editingPlan.plannerState as any).planningReferenceDepartureAirport)
+        : current.planningReferenceDepartureAirport,
+      planningReferenceDestinationAirport: typeof (editingPlan.plannerState as any)?.planningReferenceDestinationAirport === "string"
+        ? String((editingPlan.plannerState as any).planningReferenceDestinationAirport)
+        : current.planningReferenceDestinationAirport,
+      planningReferenceAlternateAirport: typeof (editingPlan.plannerState as any)?.planningReferenceAlternateAirport === "string"
+        ? String((editingPlan.plannerState as any).planningReferenceAlternateAirport)
+        : current.planningReferenceAlternateAirport,
       departureName: editingPlan.filingDepartureName || current.departureName,
       destinationName: editingPlan.filingDestinationName || current.destinationName,
       alternateName: editingPlan.filingAlternateName || current.alternateName,
@@ -6321,7 +6418,7 @@ export default function FlightPlanner() {
                   RSF is previewing the helper route on the map and in ETE until you enter custom waypoints, planned stops, or a filed airport route.
                 </p>
               )}
-              {routeSuggestionQuery.isFetching && departureResolved && destinationResolved && (
+              {routeSuggestionQuery.isFetching && planningDepartureCode && planningDestinationCode && (
                 <div className="text-xs text-muted-foreground">Calculating route-assist waypoints...</div>
               )}
               {suggestedWaypoints.length > 0 && (
@@ -6358,7 +6455,7 @@ export default function FlightPlanner() {
               <p className="text-xs text-muted-foreground">
                 Optional planning aids for fuel or rest stops. Pilots can keep these, replace them, or ignore them entirely.
               </p>
-              {routeSuggestionQuery.isFetching && departureResolved && destinationResolved && (
+              {routeSuggestionQuery.isFetching && planningDepartureCode && planningDestinationCode && (
                 <div className="text-xs text-muted-foreground">Estimating suggested fuel stops...</div>
               )}
               {suggestedStops.length > 0 && (
@@ -7567,8 +7664,8 @@ export default function FlightPlanner() {
       </Card>
 
       <OperationalIntelligencePanel
-        dep={departureResolved.trim().toUpperCase()}
-        dest={destinationResolved.trim().toUpperCase()}
+        dep={planningDepartureCode}
+        dest={planningDestinationCode}
         route={activeFiledRoute}
         tier={tfmsTier}
         mapStyle={mapStyle}
@@ -8199,33 +8296,78 @@ export default function FlightPlanner() {
                   />
                 </div>
                 {effectiveDepartureCode === "ZZZZ" && (
-                  <div className="space-y-2">
-                    <Label>Departure Location Name <span className="text-amber-400 text-xs">(ZZZZ required)</span></Label>
-                    <Input
-                      value={filingDraft.departureName}
-                      onChange={(e) => setFilingDraft((current) => ({ ...current, departureName: e.target.value }))}
-                      placeholder="Northwood Private Airstrip"
-                    />
+                  <div className="space-y-3 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-3 md:col-span-2">
+                    <div className="text-xs text-[#D9C28A]">
+                      Use ZZZZ when the actual airport/location is not in the ICAO database. RSF will use the planning reference airport only for calculations. Your filed flight plan will still use ZZZZ with your actual location description.
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Planning Reference Departure Airport <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Input
+                          value={filingDraft.planningReferenceDepartureAirport}
+                          onChange={(e) => setFilingDraft((current) => ({ ...current, planningReferenceDepartureAirport: e.target.value.toUpperCase() }))}
+                          placeholder="KEDC"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Actual Departure Description <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Input
+                          value={filingDraft.departureName}
+                          onChange={(e) => setFilingDraft((current) => ({ ...current, departureName: e.target.value }))}
+                          placeholder="PRIVATE STRIP 3NM NORTH OF KEDC"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
                 {effectiveDestinationCode === "ZZZZ" && (
-                  <div className="space-y-2">
-                    <Label>Destination Location Name <span className="text-amber-400 text-xs">(ZZZZ required)</span></Label>
-                    <Input
-                      value={filingDraft.destinationName}
-                      onChange={(e) => setFilingDraft((current) => ({ ...current, destinationName: e.target.value }))}
-                      placeholder="Crystal Lakes Airport"
-                    />
+                  <div className="space-y-3 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-3 md:col-span-2">
+                    <div className="text-xs text-[#D9C28A]">
+                      RSF will use the planning reference airport only for calculations. The filed destination remains ZZZZ.
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Planning Reference Destination Airport <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Input
+                          value={filingDraft.planningReferenceDestinationAirport}
+                          onChange={(e) => setFilingDraft((current) => ({ ...current, planningReferenceDestinationAirport: e.target.value.toUpperCase() }))}
+                          placeholder="KMIA"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Actual Destination Description <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Input
+                          value={filingDraft.destinationName}
+                          onChange={(e) => setFilingDraft((current) => ({ ...current, destinationName: e.target.value }))}
+                          placeholder="PRIVATE AIRFIELD NEAR MIAMI"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
                 {effectiveAlternateCode === "ZZZZ" && (
-                  <div className="space-y-2">
-                    <Label>Alternate Location Name <span className="text-amber-400 text-xs">(ZZZZ required)</span></Label>
-                    <Input
-                      value={filingDraft.alternateName}
-                      onChange={(e) => setFilingDraft((current) => ({ ...current, alternateName: e.target.value }))}
-                      placeholder="Ridgeview Grass Strip"
-                    />
+                  <div className="space-y-3 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-3 md:col-span-2">
+                    <div className="text-xs text-[#D9C28A]">
+                      RSF will use the planning reference airport only for calculations. The filed alternate remains ZZZZ.
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Planning Reference Alternate Airport <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Input
+                          value={filingDraft.planningReferenceAlternateAirport}
+                          onChange={(e) => setFilingDraft((current) => ({ ...current, planningReferenceAlternateAirport: e.target.value.toUpperCase() }))}
+                          placeholder="KTMB"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Actual Alternate Description <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Input
+                          value={filingDraft.alternateName}
+                          onChange={(e) => setFilingDraft((current) => ({ ...current, alternateName: e.target.value }))}
+                          placeholder="PRIVATE STRIP NEAR TAMIAMI"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -8678,6 +8820,20 @@ export default function FlightPlanner() {
                     const beaconCode = getPlanBeaconCode(plan);
                     const providerLifecycleMessage = getProviderLifecycleAvailabilityMessage(plan);
                     const deletable = canDeleteLocalDraftPlan(plan);
+                    const plannerState = plan.plannerState && typeof plan.plannerState === "object" && !Array.isArray(plan.plannerState)
+                      ? plan.plannerState as Record<string, any>
+                      : {};
+                    const zzzzSummary = [
+                      String(plan.departure || "").toUpperCase() === "ZZZZ"
+                        ? { label: "Departure", filed: "ZZZZ", reference: plannerState.planningReferenceDepartureAirport, actual: plan.filingDepartureName }
+                        : null,
+                      String(plan.destination || "").toUpperCase() === "ZZZZ"
+                        ? { label: "Destination", filed: "ZZZZ", reference: plannerState.planningReferenceDestinationAirport, actual: plan.filingDestinationName }
+                        : null,
+                      String(plan.alternate || "").toUpperCase() === "ZZZZ"
+                        ? { label: "Alternate", filed: "ZZZZ", reference: plannerState.planningReferenceAlternateAirport, actual: plan.filingAlternateName }
+                        : null,
+                    ].filter(Boolean) as Array<{ label: string; filed: string; reference?: string | null; actual?: string | null }>;
                     return (
               <div key={plan.id} className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between flex-wrap gap-2">
@@ -8778,6 +8934,23 @@ export default function FlightPlanner() {
                 {beaconCode && (
                   <div className={cn("p-3 text-sm", plannerSubpanelSuccessClass)}>
                     Assigned Beacon Code: <span className="font-mono font-semibold">{beaconCode}</span>
+                  </div>
+                )}
+                {zzzzSummary.length > 0 && (
+                  <div className="rounded-lg border border-[#D9A441]/30 bg-[#1f1a0f]/60 p-3 text-sm text-[#E8EDF4]">
+                    <div className="mb-2 font-semibold text-[#F5F8FC]">ZZZZ Planning References</div>
+                    <div className="grid gap-2 md:grid-cols-3">
+                      {zzzzSummary.map((item) => (
+                        <div key={item.label}>
+                          <div className="text-xs text-[#A9BBCD]">Filed {item.label}</div>
+                          <div className="font-mono">{item.filed}</div>
+                          <div className="mt-1 text-xs text-[#A9BBCD]">Planning Reference</div>
+                          <div>{item.reference || "-"}</div>
+                          <div className="mt-1 text-xs text-[#A9BBCD]">Actual {item.label}</div>
+                          <div>{item.actual || "-"}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">

@@ -80,6 +80,11 @@ test("ZZZZ airports require their supplemental location names", () => {
     filingDepartureName: "Demo departure strip",
     filingDestinationName: "Demo destination strip",
     filingAlternateName: "Demo alternate strip",
+    plannerState: {
+      planningReferenceDepartureAirport: "KEDC",
+      planningReferenceDestinationAirport: "KDAL",
+      planningReferenceAlternateAirport: "KADS",
+    },
   }), "file");
   assert.equal(complete.ready, true);
 });
@@ -115,7 +120,7 @@ test("ZZZZ location names are transmitted as supplemental remarks, not ICAO othe
       destinationName: "Demo destination strip",
       alternateName: "Demo alternate strip",
     }),
-    "LEIDOS DEMO DEP/DEMO_DEPARTURE_STRIP DEST/DEMO_DESTINATION_STRIP ALTN/DEMO_ALTERNATE_STRIP",
+    "LEIDOS DEMO DEP/DEMO DEPARTURE STRIP DEST/DEMO DESTINATION STRIP ALTN/DEMO ALTERNATE STRIP",
   );
   assert.equal(normalizeLeidosOtherInfoForTransmission("DOF/260623"), "DOF/260623");
 });

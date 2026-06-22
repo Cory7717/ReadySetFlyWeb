@@ -535,6 +535,12 @@ const getPlannerTimeZone = (plan: FlightPlan) => {
   return departureTimeZone || "UTC";
 };
 
+const getPlannerStateString = (plan: FlightPlan, key: string) => {
+  const plannerState = getPlannerStateRecord(plan);
+  const value = plannerState?.[key];
+  return typeof value === "string" ? value.trim().toUpperCase() : "";
+};
+
 const getRecord = (value: unknown) =>
   value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -946,9 +952,9 @@ export const buildZzzzSupplementalRemarks = (
   if (destinationName) base = base.replace(/(?:^|\s)DEST\/\S*/gi, " ").replace(/\s+/g, " ").trim();
   if (alternateName) base = base.replace(/(?:^|\s)ALTN\/\S*/gi, " ").replace(/\s+/g, " ").trim();
   const supplementals: string[] = [];
-  if (departureName) supplementals.push(`DEP/${departureName.trim().replace(/\s+/g, "_").toUpperCase()}`);
-  if (destinationName) supplementals.push(`DEST/${destinationName.trim().replace(/\s+/g, "_").toUpperCase()}`);
-  if (alternateName) supplementals.push(`ALTN/${alternateName.trim().replace(/\s+/g, "_").toUpperCase()}`);
+  if (departureName) supplementals.push(`DEP/${departureName.trim().replace(/\s+/g, " ").toUpperCase()}`);
+  if (destinationName) supplementals.push(`DEST/${destinationName.trim().replace(/\s+/g, " ").toUpperCase()}`);
+  if (alternateName) supplementals.push(`ALTN/${alternateName.trim().replace(/\s+/g, " ").toUpperCase()}`);
   const merged = [base, ...supplementals].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   return merged || null;
 };
@@ -1520,12 +1526,30 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if (plan.departure?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend") && !plan.filingDepartureName) {
     errors.push("Departure is ZZZZ — enter the actual departure location name.");
   }
+  if (plan.departure?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend")) {
+    const reference = getPlannerStateString(plan, "planningReferenceDepartureAirport");
+    if (!reference || reference === "ZZZZ") {
+      errors.push("Departure ZZZZ requires a planning reference airport so RSF can calculate the route and file the plan correctly.");
+    }
+  }
   if (!plan.destination) errors.push("Destination airport is required.");
   if (plan.destination?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend") && !plan.filingDestinationName) {
     errors.push("Destination is ZZZZ — enter the actual destination location name.");
   }
+  if (plan.destination?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend")) {
+    const reference = getPlannerStateString(plan, "planningReferenceDestinationAirport");
+    if (!reference || reference === "ZZZZ") {
+      errors.push("Destination ZZZZ requires a planning reference airport so RSF can calculate the route and file the plan correctly.");
+    }
+  }
   if (plan.alternate?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend") && !plan.filingAlternateName) {
     errors.push("Alternate is ZZZZ — enter the actual alternate location name.");
+  }
+  if (plan.alternate?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend")) {
+    const reference = getPlannerStateString(plan, "planningReferenceAlternateAirport");
+    if (!reference || reference === "ZZZZ") {
+      errors.push("Alternate ZZZZ requires a planning reference airport so RSF can calculate the route and file the plan correctly.");
+    }
   }
   if (!plan.tailNumber) errors.push("Aircraft ID / tail number is required.");
   if (!plan.aircraftType) errors.push("Aircraft type is required.");

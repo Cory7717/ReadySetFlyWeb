@@ -984,10 +984,7 @@ export const buildZzzzOtherInfoForLeidos = (
     const normalizedDescription = String(description || "").trim().replace(/\s+/g, " ").toUpperCase();
     if (!normalizedDescription) return null;
     const normalizedReference = String(reference || "").trim().toUpperCase();
-    if (!normalizedReference || normalizedDescription.startsWith(`${normalizedReference} `) || normalizedDescription === normalizedReference) {
-      return normalizedDescription;
-    }
-    return `${normalizedReference} ${normalizedDescription}`;
+    return normalizedReference || normalizedDescription;
   };
   const supplementals: string[] = [];
   const departureLocation = formatLocation(departureName, departureReference);

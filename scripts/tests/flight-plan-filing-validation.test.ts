@@ -131,7 +131,7 @@ test("ZZZZ location names are transmitted in otherInfo while supplemental remark
       destinationReference: "KDAL",
       alternateReference: "KADS",
     }),
-    "DOF/260623 DEP/KEDC DEMO DEPARTURE STRIP DEST/KDAL DEMO DESTINATION STRIP ALTN/KADS DEMO ALTERNATE STRIP",
+    "DOF/260623 DEP/KEDC DEST/KDAL ALTN/KADS",
   );
   assert.equal(
     normalizeLeidosOtherInfoForTransmission("DOF/260623 DEP/Demo departure strip"),

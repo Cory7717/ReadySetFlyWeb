@@ -3087,6 +3087,14 @@ export default function FlightPlanner() {
     },
     [filedRouteInputNormalized, generatedRouteCore, routeMode]
   );
+  const leidosFiledRoute = useMemo(
+    () => {
+      if (routeMode === "manual") return filedRouteInputNormalized || "DCT";
+      if (routeMode === "direct") return "DCT";
+      return filedRouteInputNormalized || "DCT";
+    },
+    [filedRouteInputNormalized, routeMode],
+  );
   const routePreviewFull = useMemo(
     () => buildRoutePreview(form.departure, activeFiledRoute, form.destination),
     [form.departure, activeFiledRoute, form.destination]
@@ -3225,7 +3233,7 @@ export default function FlightPlanner() {
     flightRules: filingDraft.flightRules,
     departure: effectiveDepartureCode || null,
     destination: effectiveDestinationCode || null,
-    route: activeFiledRoute || null,
+    route: leidosFiledRoute || null,
     alternate: effectiveAlternateCode || null,
     plannedDepartureLocal: form.plannedDepartureAt || null,
     plannedDepartureUtc: form.plannedDepartureAt ? toUtcIso(form.plannedDepartureAt, departureTimeZone) : null,
@@ -3270,7 +3278,7 @@ export default function FlightPlanner() {
     form.tailNumber,
     form.aircraftType,
     form.notes,
-    activeFiledRoute,
+    leidosFiledRoute,
     departureTimeZone,
     destinationTimeZone,
     planningCruise,
@@ -5205,7 +5213,7 @@ export default function FlightPlanner() {
           alternate: effectiveAlternateCode,
           tailNumber: filingDraft.aircraftId.trim().toUpperCase() || form.tailNumber.trim().toUpperCase(),
           fuelOnBoard: form.fuelOnBoard?.trim() ? form.fuelOnBoard.trim() : "",
-          route: activeFiledRoute || null,
+          route: leidosFiledRoute || null,
           aircraftType: getPlannerAircraftTypeValue({
             manualAircraftType: form.aircraftType,
             selectedProfile,
@@ -5295,7 +5303,7 @@ export default function FlightPlanner() {
         alternate: effectiveAlternateCode,
         tailNumber: filingDraft.aircraftId.trim().toUpperCase() || form.tailNumber.trim().toUpperCase(),
         fuelOnBoard: form.fuelOnBoard?.trim() ? form.fuelOnBoard.trim() : "",
-        route: activeFiledRoute || null,
+        route: leidosFiledRoute || null,
         aircraftType: getPlannerAircraftTypeValue({
           manualAircraftType: form.aircraftType,
           selectedProfile,
@@ -5514,7 +5522,7 @@ export default function FlightPlanner() {
       getDraftAmendAvailabilityMessage({
         plan: currentSavedPlan,
         flightRules: filingDraft.flightRules,
-        route: activeFiledRoute || null,
+        route: leidosFiledRoute || null,
         plannedDepartureAt: form.plannedDepartureAt || null,
         trueAirspeedKtas: Math.round(planningCruise) || null,
         plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
@@ -5522,7 +5530,7 @@ export default function FlightPlanner() {
     [
       currentSavedPlan,
       filingDraft.flightRules,
-      activeFiledRoute,
+      leidosFiledRoute,
       form.plannedDepartureAt,
       planningCruise,
       plannedAltitude,
@@ -8097,7 +8105,10 @@ export default function FlightPlanner() {
             </div>
             <div>
               <div className="text-muted-foreground">Filed Enroute String</div>
-              <div>{activeFiledRoute || "-"}</div>
+              <div>{leidosFiledRoute || "-"}</div>
+              {activeFiledRoute && activeFiledRoute !== leidosFiledRoute && (
+                <div className="text-xs text-muted-foreground">Planning route assist: {activeFiledRoute}</div>
+              )}
             </div>
             <div>
               <div className="text-muted-foreground">Estimated Time</div>
@@ -8971,7 +8982,7 @@ export default function FlightPlanner() {
                       const draftMessage = getDraftAmendAvailabilityMessage({
                         plan,
                         flightRules: filingDraft.flightRules,
-                        route: activeFiledRoute || null,
+                        route: leidosFiledRoute || null,
                         plannedDepartureAt: form.plannedDepartureAt || null,
                         trueAirspeedKtas: Math.round(planningCruise) || null,
                         plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
@@ -9000,7 +9011,7 @@ export default function FlightPlanner() {
                     {getDraftAmendAvailabilityMessage({
                       plan,
                       flightRules: filingDraft.flightRules,
-                      route: activeFiledRoute || null,
+                      route: leidosFiledRoute || null,
                       plannedDepartureAt: form.plannedDepartureAt || null,
                       trueAirspeedKtas: Math.round(planningCruise) || null,
                       plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,

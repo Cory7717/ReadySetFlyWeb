@@ -200,9 +200,11 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
     const byEmail = await storage.getUserByEmail(String(email));
     if (byEmail) {
       await storage.updateUser(byEmail.id, {
-        // keep id stable; just refresh profile data
-        firstName: profile.name?.givenName ?? byEmail.firstName,
-        lastName: profile.name?.familyName ?? byEmail.lastName,
+        // Keep id and user-entered profile names stable when linking OAuth.
+        // Google profile names can differ from an RSF test/profile identity that
+        // already exists for the same verified email.
+        firstName: byEmail.firstName || profile.name?.givenName || null,
+        lastName: byEmail.lastName || profile.name?.familyName || null,
         profileImageUrl: profile.photos?.[0]?.value ?? byEmail.profileImageUrl,
         emailVerified: true,
       });

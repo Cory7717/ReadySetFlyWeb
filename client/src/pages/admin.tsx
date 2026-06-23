@@ -420,6 +420,25 @@ const normalizeBannerVideoOrientation = (
   value: string | null | undefined
 ): BannerVideoOrientation => (value === "portrait" ? "portrait" : "landscape");
 
+const isBannerExpired = (banner: BannerAd) =>
+  Boolean(banner.endDate && new Date(banner.endDate).getTime() < Date.now());
+
+const getBannerReactivationSchedule = (banner: BannerAd) => {
+  const startDate = new Date();
+  if (!banner.endDate) {
+    return { startDate, endDate: undefined };
+  }
+
+  const originalStart = new Date(banner.startDate).getTime();
+  const originalEnd = new Date(banner.endDate).getTime();
+  const durationMs = Math.max(originalEnd - originalStart, 24 * 60 * 60 * 1000);
+
+  return {
+    startDate,
+    endDate: new Date(startDate.getTime() + durationMs),
+  };
+};
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
@@ -1425,6 +1444,16 @@ export default function AdminDashboard() {
     },
   });
 
+  const markNotificationUnreadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("PATCH", `/api/admin/notifications/${id}/unread`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications/unread"] });
+    },
+  });
+
   const deleteNotificationMutation = useMutation({
     mutationFn: async (id: string) => {
       return await apiRequest("DELETE", `/api/admin/notifications/${id}`, {});
@@ -1977,6 +2006,27 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ads"] });
       toast({ title: "Banner ad status updated" });
+    },
+  });
+
+  const reactivateBannerAdMutation = useMutation({
+    mutationFn: async ({ id, startDate, endDate }: { id: string; startDate: Date; endDate?: Date }) => {
+      return await apiRequest("PATCH", `/api/admin/banner-ads/${id}`, {
+        isActive: true,
+        startDate,
+        endDate,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ads"] });
+      toast({ title: "Banner ad reactivated", description: "The ad is back in its previous rotation." });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reactivate banner ad",
+        variant: "destructive",
+      });
     },
   });
 
@@ -5610,7 +5660,7 @@ export default function AdminDashboard() {
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
-                            {!notification.isRead && (
+                            {!notification.isRead ? (
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -5618,6 +5668,16 @@ export default function AdminDashboard() {
                                 data-testid={`button-mark-read-${notification.id}`}
                               >
                                 <CheckCircle className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => markNotificationUnreadMutation.mutate(notification.id)}
+                                data-testid={`button-reopen-notification-${notification.id}`}
+                              >
+                                <RefreshCw className="h-4 w-4 mr-1" />
+                                Reopen
                               </Button>
                             )}
                             <Button
@@ -5986,7 +6046,10 @@ export default function AdminDashboard() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {bannerAds.map((banner) => (
+                  {bannerAds.map((banner) => {
+                    const bannerExpired = isBannerExpired(banner);
+
+                    return (
                     <Card key={banner.id} data-testid={`banner-card-${banner.id}`}>
                       <CardContent className="p-4">
                         <div className="flex items-start gap-4">
@@ -6017,6 +6080,9 @@ export default function AdminDashboard() {
                               <Badge variant={banner.isActive ? "default" : "secondary"}>
                                 {banner.isActive ? "Active" : "Inactive"}
                               </Badge>
+                              {bannerExpired && (
+                                <Badge variant="destructive">Expired</Badge>
+                              )}
                               {banner.placements && banner.placements.length > 0 && (
                                 <Badge variant="outline" className="capitalize">
                                   {banner.placements[0].replace('_', ' ')}
@@ -6132,6 +6198,25 @@ export default function AdminDashboard() {
                           
                           {/* Actions */}
                           <div className="flex items-center gap-2">
+                            {bannerExpired && (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => {
+                                  const schedule = getBannerReactivationSchedule(banner);
+                                  reactivateBannerAdMutation.mutate({
+                                    id: banner.id,
+                                    startDate: schedule.startDate,
+                                    endDate: schedule.endDate,
+                                  });
+                                }}
+                                disabled={reactivateBannerAdMutation.isPending}
+                                data-testid={`button-reactivate-banner-${banner.id}`}
+                              >
+                                <RefreshCw className="h-4 w-4 mr-1" />
+                                Reactivate
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="ghost"
@@ -6202,7 +6287,8 @@ export default function AdminDashboard() {
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

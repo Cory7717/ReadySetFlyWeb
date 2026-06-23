@@ -588,6 +588,7 @@ export interface IStorage {
   getUnreadAdminNotifications(): Promise<AdminNotification[]>;
   createAdminNotification(notification: InsertAdminNotification): Promise<AdminNotification>;
   markNotificationAsRead(id: string): Promise<AdminNotification | undefined>;
+  markNotificationAsUnread(id: string): Promise<AdminNotification | undefined>;
   markNotificationAsActionable(id: string, isActionable: boolean): Promise<AdminNotification | undefined>;
   deleteAdminNotification(id: string): Promise<boolean>;
   
@@ -3500,6 +3501,15 @@ export class DatabaseStorage implements IStorage {
     const [notification] = await db
       .update(adminNotifications)
       .set({ isRead: true, readAt: new Date() })
+      .where(eq(adminNotifications.id, id))
+      .returning();
+    return notification;
+  }
+
+  async markNotificationAsUnread(id: string): Promise<AdminNotification | undefined> {
+    const [notification] = await db
+      .update(adminNotifications)
+      .set({ isRead: false, readAt: null })
       .where(eq(adminNotifications.id, id))
       .returning();
     return notification;

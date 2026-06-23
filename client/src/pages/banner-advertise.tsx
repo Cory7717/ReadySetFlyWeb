@@ -148,47 +148,47 @@ export default function BannerAdvertise() {
   };
 
   return (
-    <div className="min-h-screen bg-muted/20">
+    <div className="min-h-screen bg-slate-50 text-slate-950">
       <div className="container mx-auto max-w-5xl px-4 py-10 space-y-8">
         <div className="text-center space-y-3">
           <h1 className="text-3xl sm:text-4xl font-bold">Become a Sponsored Business</h1>
-          <p className="text-muted-foreground">
+          <p className="text-slate-600">
             Promote your aviation business inside Ready Set Fly and reach pilots actively planning flights.
           </p>
         </div>
 
-        <Card>
+        <Card className="border-slate-200 bg-white text-slate-950">
           <CardHeader>
             <CardTitle>Banner Ad Pricing</CardTitle>
-            <CardDescription>
+            <CardDescription className="text-slate-600">
               All plans include placement targeting and RSF performance tracking. A one-time ad creation fee applies.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {Object.entries(BANNER_AD_TIERS).map(([key, tier]) => (
-              <div key={key} className="rounded-xl border bg-white p-4 shadow-sm">
-                <div className="text-sm text-muted-foreground">{tier.label}</div>
+              <div key={key} className="rounded-xl border border-slate-200 bg-white p-4 text-slate-950 shadow-sm">
+                <div className="text-sm text-slate-600">{tier.label}</div>
                 <div className="text-2xl font-semibold">${tier.monthlyRate.toFixed(0)}/mo</div>
-                <div className="text-xs text-muted-foreground">Total ${tier.totalPrice.toFixed(0)}</div>
-                <div className="mt-2 text-xs text-muted-foreground">{tier.description}</div>
+                <div className="text-xs text-slate-600">Total ${tier.totalPrice.toFixed(0)}</div>
+                <div className="mt-2 text-xs text-slate-600">{tier.description}</div>
               </div>
             ))}
-            <div className="rounded-xl border border-dashed bg-white p-4 shadow-sm">
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-4 text-slate-950 shadow-sm">
               <div className="text-sm font-semibold">Ad Creation Fee</div>
               <div className="text-2xl font-semibold">${BANNER_AD_CREATION_FEE.toFixed(0)}</div>
-              <div className="text-xs text-muted-foreground">One-time creative setup</div>
+              <div className="text-xs text-slate-600">One-time creative setup</div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-slate-200 bg-white text-slate-950">
           <CardHeader>
             <CardTitle>Performance Analytics Included</CardTitle>
-            <CardDescription>
+            <CardDescription className="text-slate-600">
               Every sponsor receives performance metrics for transparency and ROI.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-2 text-sm text-muted-foreground">
+          <CardContent className="grid gap-2 text-sm text-slate-700">
             <span>• Impressions and clicks tracked per placement</span>
             <span>• Click-through rate (CTR) reporting</span>
             <span>• Date-range performance summaries</span>
@@ -196,14 +196,14 @@ export default function BannerAdvertise() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-slate-200 bg-white text-slate-950">
           <CardHeader>
             <CardTitle>What to Send RSF</CardTitle>
-            <CardDescription>
+            <CardDescription className="text-slate-600">
               Provide the details below so we can build the banner ad quickly.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-2 text-sm text-muted-foreground">
+          <CardContent className="grid gap-2 text-sm text-slate-700">
             <span>• Business logo (PNG or SVG preferred)</span>
             <span>• Banner headline (short, aviation-focused)</span>
             <span>• 1–2 sentence description/tagline</span>
@@ -214,10 +214,10 @@ export default function BannerAdvertise() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-slate-200 bg-white text-slate-950">
           <CardHeader>
             <CardTitle>Request Sponsorship Info</CardTitle>
-            <CardDescription>
+            <CardDescription className="text-slate-600">
               Submit your details and we will follow up with next steps.
             </CardDescription>
           </CardHeader>
@@ -404,19 +404,19 @@ export default function BannerAdvertise() {
                   )}
                 />
 
-                <div className="rounded-xl border bg-white p-4 space-y-4">
+                <div className="rounded-xl border border-slate-200 bg-white p-4 text-slate-950 space-y-4">
                   <div>
                     <h3 className="text-base font-semibold">Banner Advertising Agreement</h3>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-slate-600">
                       Review the agreement below and sign electronically to submit your inquiry.
                     </p>
                   </div>
 
-                  <div className="max-h-72 overflow-y-auto rounded-lg border bg-muted/30 p-4 text-sm leading-relaxed space-y-4">
+                  <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed text-slate-800 space-y-4">
                     {agreementSections.map((section) => (
                       <div key={section.title} className="space-y-1">
-                        <div className="font-semibold">{section.title}</div>
-                        <p className="text-muted-foreground">{section.body}</p>
+                        <div className="font-semibold text-slate-950">{section.title}</div>
+                        <p>{section.body}</p>
                       </div>
                     ))}
                   </div>
@@ -471,12 +471,12 @@ export default function BannerAdvertise() {
                     />
                   </div>
 
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-slate-600">
                     Signature date: {new Date().toLocaleDateString("en-US")}
                   </p>
                 </div>
 
-                <Button type="submit" disabled={isSubmitting}>
+                <Button type="submit" disabled={isSubmitting} className="bg-slate-950 text-white hover:bg-slate-800">
                   {isSubmitting ? "Sending..." : "Send inquiry"}
                 </Button>
               </form>

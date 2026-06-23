@@ -737,32 +737,36 @@ export function AdminUsersManager() {
       </Card>
 
       <AlertDialog open={confirmSendOpen} onOpenChange={setConfirmSendOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Send marketing email?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will send the current message to {audiencePreview?.eligibleCount || 0} eligible recipient
-              {(audiencePreview?.eligibleCount || 0) === 1 ? "" : "s"}. Missing, invalid, duplicate, and opted-out emails are skipped automatically.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="rounded-md border bg-muted/20 p-3 text-sm">
-            <div className="font-medium">{emailSubject.trim() || "No subject"}</div>
-            <div className="mt-2 whitespace-pre-wrap text-muted-foreground">
-              {emailBody.trim() || "No body"}
+        <AlertDialogContent className="max-h-[90vh] max-w-2xl overflow-hidden p-0">
+          <div className="flex max-h-[90vh] flex-col">
+            <AlertDialogHeader className="border-b px-6 py-4 text-left">
+              <AlertDialogTitle>Send marketing email?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will send the current message to {audiencePreview?.eligibleCount || 0} eligible recipient
+                {(audiencePreview?.eligibleCount || 0) === 1 ? "" : "s"}. Missing, invalid, duplicate, and opted-out emails are skipped automatically.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="min-h-0 overflow-y-auto px-6 py-4">
+              <div className="rounded-md border bg-muted/20 p-3 text-sm">
+                <div className="font-medium">{emailSubject.trim() || "No subject"}</div>
+                <div className="mt-2 whitespace-pre-wrap text-muted-foreground">
+                  {emailBody.trim() || "No body"}
+                </div>
+              </div>
             </div>
+            <AlertDialogFooter className="border-t px-6 py-4">
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(event) => {
+                  event.preventDefault();
+                  sendMarketingEmailMutation.mutate();
+                }}
+                disabled={sendMarketingEmailMutation.isPending}
+              >
+                {sendMarketingEmailMutation.isPending ? "Sending..." : "Confirm send"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
           </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault();
-                sendMarketingEmailMutation.mutate();
-              }}
-              disabled={sendMarketingEmailMutation.isPending}
-            >
-              {sendMarketingEmailMutation.isPending ? "Sending..." : "Confirm send"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 

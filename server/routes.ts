@@ -13202,6 +13202,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/admin/notifications/:id/unread", isAuthenticated, requireNotificationsAdmin, async (req, res) => {
+    try {
+      const notification = await storage.markNotificationAsUnread(req.params.id);
+      if (!notification) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      res.json(notification);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to reopen notification" });
+    }
+  });
+
   app.patch("/api/admin/notifications/:id/actionable", isAuthenticated, requireNotificationsAdmin, async (req, res) => {
     try {
       const { isActionable } = req.body;

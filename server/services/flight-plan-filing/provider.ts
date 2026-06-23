@@ -399,6 +399,92 @@ const formatDepartureInstant = (value?: Date | string | null) => {
   return parsed.toISOString();
 };
 
+const isValidIanaTimeZone = (value?: string | null) => {
+  if (!value) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const parseDateTimeLocal = (value?: string | null) => {
+  const match = String(value || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match;
+  const parsed = {
+    year: Number(year),
+    month: Number(month),
+    day: Number(day),
+    hour: Number(hour),
+    minute: Number(minute),
+  };
+  if (
+    !Number.isInteger(parsed.year) ||
+    parsed.month < 1 ||
+    parsed.month > 12 ||
+    parsed.day < 1 ||
+    parsed.day > 31 ||
+    parsed.hour < 0 ||
+    parsed.hour > 23 ||
+    parsed.minute < 0 ||
+    parsed.minute > 59
+  ) {
+    return null;
+  }
+  return parsed;
+};
+
+const getTimeZoneOffsetMinutes = (date: Date, timeZone: string) => {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+  });
+  const parts = dtf.formatToParts(date);
+  const map: Record<string, string> = {};
+  parts.forEach((part) => {
+    if (part.type !== "literal") {
+      map[part.type] = part.value;
+    }
+  });
+  const asUtc = Date.UTC(
+    Number(map.year),
+    Number(map.month) - 1,
+    Number(map.day),
+    Number(map.hour),
+    Number(map.minute),
+    Number(map.second),
+  );
+  return (asUtc - date.getTime()) / 60000;
+};
+
+export const zonedLocalDateTimeToUtcIso = (localDateTime: string, timeZone: string) => {
+  if (!isValidIanaTimeZone(timeZone)) return null;
+  const parts = parseDateTimeLocal(localDateTime);
+  if (!parts) return null;
+  const guess = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0));
+  const firstOffset = getTimeZoneOffsetMinutes(guess, timeZone);
+  const firstUtc = new Date(guess.getTime() - firstOffset * 60000);
+  const secondOffset = getTimeZoneOffsetMinutes(firstUtc, timeZone);
+  const utc = secondOffset === firstOffset
+    ? firstUtc
+    : new Date(guess.getTime() - secondOffset * 60000);
+  return utc.toISOString();
+};
+
+const normalizeLocalDateTimeInput = (value?: string | null) => {
+  const trimmed = String(value || "").trim();
+  return parseDateTimeLocal(trimmed) ? trimmed.slice(0, 16) : null;
+};
+
 const looksLikeHtml = (value?: string | null) =>
   /<!doctype html|<html[\s>]|<body[\s>]|<head[\s>]/i.test(String(value || ""));
 
@@ -533,7 +619,51 @@ const getPlannerTimeZone = (plan: FlightPlan) => {
     plannerState && typeof plannerState.departureTimeZone === "string"
       ? plannerState.departureTimeZone.trim()
       : "";
-  return departureTimeZone || "UTC";
+  return departureTimeZone || "";
+};
+
+const getSelectedDepartureLocalDateTime = (plan: FlightPlan) => {
+  const plannerState = getPlannerStateRecord(plan);
+  const localFromPlanner =
+    plannerState && typeof plannerState.userDisplayDepartureTimeLocal === "string"
+      ? normalizeLocalDateTimeInput(plannerState.userDisplayDepartureTimeLocal)
+      : null;
+  if (localFromPlanner) return localFromPlanner;
+
+  const departureTimeZone = getPlannerTimeZone(plan);
+  if (!plan.plannedDepartureAt || !isValidIanaTimeZone(departureTimeZone)) return null;
+  const parsed = new Date(plan.plannedDepartureAt);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  try {
+    const dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone: departureTimeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      hourCycle: "h23",
+    });
+    const parts = dtf.formatToParts(parsed);
+    const map: Record<string, string> = {};
+    parts.forEach((part) => {
+      if (part.type !== "literal") map[part.type] = part.value;
+    });
+    return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`;
+  } catch {
+    return null;
+  }
+};
+
+export const getProviderDepartureInstantForPlan = (plan: FlightPlan) => {
+  const departureTimeZone = getPlannerTimeZone(plan);
+  const selectedLocalDepartureTime = getSelectedDepartureLocalDateTime(plan);
+  if (selectedLocalDepartureTime && isValidIanaTimeZone(departureTimeZone)) {
+    return zonedLocalDateTimeToUtcIso(selectedLocalDepartureTime, departureTimeZone);
+  }
+  return formatDepartureInstant(plan.plannedDepartureAt);
 };
 
 const getPlannerStateString = (plan: FlightPlan, key: string) => {
@@ -1001,15 +1131,13 @@ export const buildZzzzOtherInfoForLeidos = (
 const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingAction, config: LeidosFlightServiceConfig) => {
   const params = new URLSearchParams();
   const routeNormalization = normalizeRouteForProvider(plan.route || "DCT");
-  const plannerState = getPlannerStateRecord(plan);
-  const selectedLocalDepartureTime =
-    plannerState && typeof plannerState.userDisplayDepartureTimeLocal === "string"
-      ? plannerState.userDisplayDepartureTimeLocal
-      : null;
+  const selectedLocalDepartureTime = getSelectedDepartureLocalDateTime(plan);
+  const departureTimeZone = getPlannerTimeZone(plan);
+  const providerDepartureInstant = getProviderDepartureInstantForPlan(plan);
   const otherInfoResult = buildOtherInfoWithDof({
     existingOtherInfo: plan.filingOtherInfo || config.otherInfo,
-    plannedDepartureAt: plan.plannedDepartureAt,
-    operationalTimeZone: getPlannerTimeZone(plan),
+    plannedDepartureAt: providerDepartureInstant || plan.plannedDepartureAt,
+    operationalTimeZone: departureTimeZone,
   });
 
   const append = (key: string, value: unknown) => {
@@ -1022,13 +1150,26 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
   append("includeCodedMessages", "true");
 
   if (action === "file" || action === "amend") {
+    console.info(JSON.stringify({
+      event: "flight_time_conversion_started",
+      action,
+      planId: plan.id,
+      selectedDepartureDateLocal: selectedLocalDepartureTime?.slice(0, 10) || null,
+      selectedDepartureTimeLocal: selectedLocalDepartureTime?.slice(11, 16) || null,
+      departureAirport: plan.departure || null,
+      departureTimezone: departureTimeZone || null,
+      computedDepartureInstantUtc: providerDepartureInstant,
+      browserTimezoneForDebugOnly: null,
+      providerPayloadDepartureInstant: providerDepartureInstant,
+    }));
+
     append("type", "ICAO");
     append("flightRules", normalizeFlightRules(plan.filingFlightRules));
     append("aircraftIdentifier", plan.tailNumber);
     append("departure", plan.departure);
     append("destination", plan.destination);
     append("altDestination1", plan.alternate);
-    append("departureInstant", formatDepartureInstant(plan.plannedDepartureAt));
+    append("departureInstant", providerDepartureInstant);
     append("flightDuration", minutesToIsoDuration(plan.filingEstimatedEnrouteMinutes));
     append("speedKnots", plan.filingTrueAirspeedKtas);
     append("aircraftType", getLeidosAircraftTypeCode(plan));
@@ -1072,10 +1213,10 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
       provider: "Leidos Flight Service",
       action,
       builtAt: new Date().toISOString(),
-      departureInstant: formatDepartureInstant(plan.plannedDepartureAt),
+      departureInstant: providerDepartureInstant,
       selectedLocalDepartureTime,
       departureOperationalDate: plan.plannedDepartureAt
-        ? formatOperationalDateKey(plan.plannedDepartureAt, getPlannerTimeZone(plan))
+        ? formatOperationalDateKey(providerDepartureInstant || plan.plannedDepartureAt, departureTimeZone)
         : null,
       dof: otherInfoResult.dof,
       dofInjected: otherInfoResult.injected,
@@ -1662,6 +1803,12 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
 
   if ((action === "file" || action === "amend" || action === "activate") && !plan.plannedDepartureAt) {
     errors.push("Planned departure time is required before staging this action.");
+  }
+  if ((action === "file" || action === "amend") && !getSelectedDepartureLocalDateTime(plan)) {
+    errors.push("Departure date and time are required before filing.");
+  }
+  if ((action === "file" || action === "amend") && !isValidIanaTimeZone(getPlannerTimeZone(plan))) {
+    errors.push("Departure airport timezone could not be determined. Please select the departure timezone before filing.");
   }
 
   if (rules === "IFR" && !routeNormalization.normalizedRoute) {

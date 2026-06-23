@@ -1202,22 +1202,26 @@ function getTimeZoneOffsetMinutes(date: Date, timeZone: string) {
 }
 
 function normalizeTimeZone(value?: string | null) {
-  const fallback = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  if (!value) return fallback;
+  if (!value) return "";
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date());
     return value;
   } catch {
-    return fallback;
+    return "";
   }
 }
 
 function zonedDateTimeToUtc(value: string, timeZone: string) {
   const parts = parseDateTimeLocal(value);
   if (!parts) return null;
+  if (!timeZone) return null;
   const guess = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0));
-  const offset = getTimeZoneOffsetMinutes(guess, timeZone);
-  return new Date(guess.getTime() - offset * 60000);
+  try {
+    const offset = getTimeZoneOffsetMinutes(guess, timeZone);
+    return new Date(guess.getTime() - offset * 60000);
+  } catch {
+    return null;
+  }
 }
 
 function formatDateTimeLocal(date: Date, timeZone: string) {
@@ -1247,7 +1251,7 @@ function formatDateTimeLocal(date: Date, timeZone: string) {
 function toUtcIso(value: string, timeZone: string) {
   const utcDate = zonedDateTimeToUtc(value, timeZone);
   if (utcDate) return utcDate.toISOString();
-  return new Date(value).toISOString();
+  return null;
 }
 
 const checklistDefaults = {

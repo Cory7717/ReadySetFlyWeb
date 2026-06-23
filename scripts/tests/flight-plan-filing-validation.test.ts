@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { FlightPlan } from "../../shared/schema";
 import { extractFilingProviderPlanId } from "../../shared/flight-plan-filing";
 import { ICAO_OTHER_INFO_VALUE_OPTIONS, buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
-import { buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction } from "../../server/services/flight-plan-filing/provider";
+import { buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
 
 function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
   return {
@@ -52,13 +52,79 @@ function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
     filingAssignedBeaconCode: null,
     filingRaw: null,
     filingActionHistory: [],
-    plannerState: null,
+    plannerState: {
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-06-22T10:00",
+    },
     notes: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
   } as FlightPlan;
 }
+
+test("provider departure instant uses departure airport timezone, not browser timezone", () => {
+  const cases = [
+    ["America/Phoenix", "2026-06-23T09:30", "2026-06-23T16:30:00.000Z"],
+    ["America/Chicago", "2026-06-23T09:30", "2026-06-23T14:30:00.000Z"],
+    ["America/Denver", "2026-06-23T09:30", "2026-06-23T15:30:00.000Z"],
+    ["America/New_York", "2026-06-23T09:30", "2026-06-23T13:30:00.000Z"],
+    ["America/Los_Angeles", "2026-06-23T09:30", "2026-06-23T16:30:00.000Z"],
+    ["Pacific/Honolulu", "2026-06-23T09:30", "2026-06-23T19:30:00.000Z"],
+    ["America/Anchorage", "2026-06-23T09:30", "2026-06-23T17:30:00.000Z"],
+  ] as const;
+
+  for (const [timeZone, localDateTime, expectedUtc] of cases) {
+    assert.equal(zonedLocalDateTimeToUtcIso(localDateTime, timeZone), expectedUtc);
+    assert.equal(getProviderDepartureInstantForPlan(filingPlan({
+      plannedDepartureAt: new Date("2026-06-23T14:30:00.000Z"),
+      plannerState: {
+        departureTimeZone: timeZone,
+        userDisplayDepartureTimeLocal: localDateTime,
+      },
+    })), expectedUtc);
+  }
+});
+
+test("reopened Arizona plan preserves selected local departure time as provider source", () => {
+  const plan = filingPlan({
+    departure: "KPHX",
+    plannedDepartureAt: new Date("2026-06-23T14:30:00.000Z"),
+    plannerState: {
+      departureTimeZone: "America/Phoenix",
+      userDisplayDepartureTimeLocal: "2026-06-23T09:30",
+    },
+  });
+
+  assert.equal(getProviderDepartureInstantForPlan(plan), "2026-06-23T16:30:00.000Z");
+});
+
+test("ZZZZ departure uses planning reference airport timezone stored in planner state", () => {
+  const plan = filingPlan({
+    departure: "ZZZZ",
+    filingDepartureName: "Private air strip",
+    plannedDepartureAt: new Date("2026-06-23T14:30:00.000Z"),
+    plannerState: {
+      planningReferenceDepartureAirport: "KFFZ",
+      departureTimeZone: "America/Phoenix",
+      userDisplayDepartureTimeLocal: "2026-06-23T09:30",
+    },
+  });
+
+  assert.equal(validateFlightPlanForAction(plan, "file").ready, true);
+  assert.equal(getProviderDepartureInstantForPlan(plan), "2026-06-23T16:30:00.000Z");
+});
+
+test("filing validation rejects plans without a resolvable departure timezone", () => {
+  const result = validateFlightPlanForAction(filingPlan({
+    plannerState: {
+      userDisplayDepartureTimeLocal: "2026-06-23T09:30",
+    },
+  }), "file");
+
+  assert.equal(result.ready, false);
+  assert.ok(result.errors.includes("Departure airport timezone could not be determined. Please select the departure timezone before filing."));
+});
 
 test("ZZZZ is accepted as the aircraft identifier", () => {
   const result = validateFlightPlanForAction(filingPlan({ tailNumber: "ZZZZ" }), "file");
@@ -85,6 +151,8 @@ test("ZZZZ airports require their supplemental location names", () => {
       planningReferenceDepartureAirport: "KEDC",
       planningReferenceDestinationAirport: "KDAL",
       planningReferenceAlternateAirport: "KADS",
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-06-22T10:00",
     },
   }), "file");
   assert.equal(complete.ready, true);

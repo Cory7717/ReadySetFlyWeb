@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { FlightPlan } from "../../shared/schema";
 import { extractFilingProviderPlanId } from "../../shared/flight-plan-filing";
-import { buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
+import { ICAO_OTHER_INFO_VALUE_OPTIONS, buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
 import { buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction } from "../../server/services/flight-plan-filing/provider";
 
 function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
@@ -109,6 +109,8 @@ test("filing does not silently default operational ICAO fields", () => {
 
 test("ICAO filing controls normalize surveillance and Other Info entries", () => {
   assert.deepEqual(parseIcaoSurveillanceCodes("B2 U2"), ["B2", "U2"]);
+  assert.ok(ICAO_OTHER_INFO_VALUE_OPTIONS["PBN/"]?.some((option) => option.value === "B2" && /RNAV 5 GNSS/i.test(option.description)));
+  assert.ok(ICAO_OTHER_INFO_VALUE_OPTIONS["STS/"]?.some((option) => option.value === "MEDEVAC"));
   assert.equal(
     buildIcaoOtherInfo([
       { prefix: "PBN/", value: "a1b2c2d2s1" },
@@ -128,6 +130,14 @@ test("ICAO validation rejects bad surveillance and warns for equipment dependenc
   const invalidSurveillance = validateFlightPlanForAction(filingPlan({ filingSurveillanceEquipment: "Q9" }), "file");
   assert.equal(invalidSurveillance.ready, false);
   assert.ok(invalidSurveillance.errors.some((error) => /surveillance equipment must use approved/i.test(error)));
+
+  const flightServiceUnsupportedSurveillance = validateFlightPlanForAction(filingPlan({ filingSurveillanceEquipment: "B2" }), "file");
+  assert.equal(flightServiceUnsupportedSurveillance.ready, false);
+  assert.ok(flightServiceUnsupportedSurveillance.errors.some((error) => /Flight Service currently accepts N, A, C, or S/i.test(error)));
+
+  const missingPbn = validateFlightPlanForAction(filingPlan({ filingEquipment: "SCR" }), "file");
+  assert.equal(missingPbn.ready, false);
+  assert.ok(missingPbn.errors.some((error) => /PBN approved.*PBN\//i.test(error)));
 
   const missingEquipment = validateFlightPlanForAction(filingPlan({
     filingEquipment: "S",

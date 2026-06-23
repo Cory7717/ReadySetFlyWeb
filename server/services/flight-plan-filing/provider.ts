@@ -14,7 +14,7 @@ import {
   type FilingProviderSnapshot,
 } from "@shared/flight-plan-filing-workflow";
 import { normalizeIcaoEquipmentCodes, hasOnlyKnownIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
-import { getIcaoOtherInfoEquipmentWarnings, hasOnlyKnownIcaoSurveillanceCodes } from "@shared/icao-filing";
+import { getIcaoOtherInfoEquipmentWarnings, hasOnlyFlightServiceSurveillanceCodes, hasOnlyKnownIcaoSurveillanceCodes } from "@shared/icao-filing";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -1647,6 +1647,9 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if ((action === "file" || action === "amend") && plan.filingSurveillanceEquipment && !hasOnlyKnownIcaoSurveillanceCodes(plan.filingSurveillanceEquipment)) {
     errors.push("Surveillance equipment must use approved ICAO surveillance codes.");
   }
+  if ((action === "file" || action === "amend") && plan.filingSurveillanceEquipment && !hasOnlyFlightServiceSurveillanceCodes(plan.filingSurveillanceEquipment)) {
+    errors.push("Flight Service currently accepts N, A, C, or S in the Surveillance Equipment field. Put ADS-B or ADS-C details in Other ICAO Information using SUR/ if needed.");
+  }
   if ((action === "file" || action === "amend") && !plan.filingAircraftHomeBase) {
     errors.push("Aircraft home base is required before sending this filing action to Leidos.");
   }
@@ -1720,6 +1723,9 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   }
   if (action === "file" || action === "amend") {
     const otherInfoWarnings = getIcaoOtherInfoEquipmentWarnings(plan.filingOtherInfo, plan.filingEquipment);
+    if (otherInfoWarnings.missingPbn) {
+      errors.push("Aircraft equipment code R means PBN approved, so Other ICAO Information must include PBN/ capability data.");
+    }
     if (otherInfoWarnings.missingR || otherInfoWarnings.missingZ) {
       warnings.push("Selected ICAO information requires additional aircraft equipment codes.");
     }

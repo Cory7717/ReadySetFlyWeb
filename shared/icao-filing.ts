@@ -3,6 +3,9 @@ export const ICAO_SURVEILLANCE_OPTIONS = [
   { code: "A", label: "A - Mode A transponder" },
   { code: "C", label: "C - Mode A/C transponder" },
   { code: "S", label: "S - Mode S transponder" },
+] as const;
+
+export const ICAO_EXTENDED_SURVEILLANCE_OPTIONS = [
   { code: "B1", label: "B1 - ADS-B Out (1090ES)" },
   { code: "B2", label: "B2 - ADS-B Out/In (1090ES)" },
   { code: "U1", label: "U1 - ADS-B Out (UAT)" },
@@ -11,6 +14,11 @@ export const ICAO_SURVEILLANCE_OPTIONS = [
   { code: "V2", label: "V2 - ADS-B Out/In (VDL Mode 4)" },
   { code: "D1", label: "D1 - ADS-C FANS 1/A" },
   { code: "G1", label: "G1 - ADS-C ATN" },
+] as const;
+
+export const ICAO_ALL_SURVEILLANCE_OPTIONS = [
+  ...ICAO_SURVEILLANCE_OPTIONS,
+  ...ICAO_EXTENDED_SURVEILLANCE_OPTIONS,
 ] as const;
 
 export const ICAO_OTHER_INFO_PREFIXES = [
@@ -42,8 +50,101 @@ export type IcaoOtherInfoEntry = {
   value: string;
 };
 
-const SURVEILLANCE_CODES = ICAO_SURVEILLANCE_OPTIONS.map((option) => option.code).sort((a, b) => b.length - a.length);
-const SURVEILLANCE_CODE_SET = new Set<string>(ICAO_SURVEILLANCE_OPTIONS.map((option) => option.code));
+export type IcaoOtherInfoValueOption = {
+  value: string;
+  label: string;
+  description: string;
+};
+
+export const ICAO_OTHER_INFO_VALUE_OPTIONS: Partial<Record<IcaoOtherInfoPrefix, IcaoOtherInfoValueOption[]>> = {
+  "STS/": [
+    { value: "ALTRV", label: "ALTRV", description: "Altitude reservation" },
+    { value: "ATFMX", label: "ATFMX", description: "Exempt from ATFM measures" },
+    { value: "FFR", label: "FFR", description: "Fire-fighting flight" },
+    { value: "FLTCK", label: "FLTCK", description: "Flight check for navaids" },
+    { value: "HAZMAT", label: "HAZMAT", description: "Hazardous materials" },
+    { value: "HEAD", label: "HEAD", description: "Head of state status" },
+    { value: "HOSP", label: "HOSP", description: "Medical flight declared by authorities" },
+    { value: "HUM", label: "HUM", description: "Humanitarian flight" },
+    { value: "MARSA", label: "MARSA", description: "Military assumes separation responsibility" },
+    { value: "MEDEVAC", label: "MEDEVAC", description: "Life-critical medical evacuation" },
+    { value: "NONRVSM", label: "NONRVSM", description: "Non-RVSM capable flight" },
+    { value: "SAR", label: "SAR", description: "Search and rescue" },
+    { value: "STATE", label: "STATE", description: "Military, customs, or police service" },
+  ],
+  "PBN/": [
+    { value: "A1", label: "A1", description: "RNAV 10 / RNP 10" },
+    { value: "B1", label: "B1", description: "RNAV 5 all permitted sensors" },
+    { value: "B2", label: "B2", description: "RNAV 5 GNSS" },
+    { value: "B3", label: "B3", description: "RNAV 5 DME/DME" },
+    { value: "B4", label: "B4", description: "RNAV 5 VOR/DME" },
+    { value: "B5", label: "B5", description: "RNAV 5 INS or IRS" },
+    { value: "B6", label: "B6", description: "RNAV 5 LORAN C" },
+    { value: "C1", label: "C1", description: "RNAV 2 all permitted sensors" },
+    { value: "C2", label: "C2", description: "RNAV 2 GNSS" },
+    { value: "C3", label: "C3", description: "RNAV 2 DME/DME" },
+    { value: "C4", label: "C4", description: "RNAV 2 DME/DME/IRU" },
+    { value: "D1", label: "D1", description: "RNAV 1 all permitted sensors" },
+    { value: "D2", label: "D2", description: "RNAV 1 GNSS" },
+    { value: "D3", label: "D3", description: "RNAV 1 DME/DME" },
+    { value: "D4", label: "D4", description: "RNAV 1 DME/DME/IRU" },
+    { value: "L1", label: "L1", description: "RNP 4" },
+    { value: "O1", label: "O1", description: "Basic RNP 1 all permitted sensors" },
+    { value: "O2", label: "O2", description: "Basic RNP 1 GNSS" },
+    { value: "O3", label: "O3", description: "Basic RNP 1 DME/DME" },
+    { value: "O4", label: "O4", description: "Basic RNP 1 DME/DME/IRU" },
+    { value: "S1", label: "S1", description: "RNP APCH" },
+    { value: "S2", label: "S2", description: "RNP APCH with BARO-VNAV" },
+    { value: "T1", label: "T1", description: "RNP AR APCH with RF" },
+    { value: "T2", label: "T2", description: "RNP AR APCH without RF" },
+  ],
+  "NAV/": [
+    { value: "GPS", label: "GPS", description: "GPS navigation capability" },
+    { value: "GNSS", label: "GNSS", description: "Global navigation satellite system" },
+    { value: "SBAS", label: "SBAS", description: "Satellite-based augmentation" },
+    { value: "GBAS", label: "GBAS", description: "Ground-based augmentation" },
+    { value: "DME/DME", label: "DME/DME", description: "DME/DME area navigation" },
+    { value: "INS", label: "INS", description: "Inertial navigation system" },
+    { value: "IRS", label: "IRS", description: "Inertial reference system" },
+    { value: "RNAV", label: "RNAV", description: "Area navigation details" },
+    { value: "RNP", label: "RNP", description: "Required navigation performance details" },
+  ],
+  "COM/": [
+    { value: "VHF", label: "VHF", description: "VHF communication details" },
+    { value: "UHF", label: "UHF", description: "UHF communication details" },
+    { value: "HF", label: "HF", description: "HF communication details" },
+    { value: "8.33KHZ", label: "8.33KHZ", description: "8.33 kHz channel spacing" },
+    { value: "CPDLC", label: "CPDLC", description: "Controller-pilot datalink communications" },
+    { value: "SATVOICE", label: "SATVOICE", description: "Satellite voice capability" },
+  ],
+  "DAT/": [
+    { value: "CPDLC", label: "CPDLC", description: "Controller-pilot datalink communications" },
+    { value: "FANS1A", label: "FANS 1/A", description: "FANS 1/A datalink" },
+    { value: "ATN", label: "ATN", description: "Aeronautical telecommunication network" },
+    { value: "VDL2", label: "VDL Mode 2", description: "VDL Mode 2 datalink" },
+    { value: "SATCOM", label: "SATCOM", description: "Satellite datalink" },
+  ],
+  "SUR/": [
+    { value: "ADSB", label: "ADS-B", description: "ADS-B surveillance detail" },
+    { value: "ADSC", label: "ADS-C", description: "ADS-C surveillance detail" },
+    { value: "DO260", label: "DO-260", description: "1090ES ADS-B standard" },
+    { value: "DO260A", label: "DO-260A", description: "1090ES ADS-B standard" },
+    { value: "DO260B", label: "DO-260B", description: "1090ES ADS-B standard" },
+    { value: "DO282B", label: "DO-282B", description: "UAT ADS-B standard" },
+  ],
+  "PER/": [
+    { value: "A", label: "A", description: "Aircraft performance category A" },
+    { value: "B", label: "B", description: "Aircraft performance category B" },
+    { value: "C", label: "C", description: "Aircraft performance category C" },
+    { value: "D", label: "D", description: "Aircraft performance category D" },
+    { value: "E", label: "E", description: "Aircraft performance category E" },
+    { value: "H", label: "H", description: "Helicopter performance category" },
+  ],
+};
+
+const SURVEILLANCE_CODES = ICAO_ALL_SURVEILLANCE_OPTIONS.map((option) => option.code).sort((a, b) => b.length - a.length);
+const SURVEILLANCE_CODE_SET = new Set<string>(ICAO_ALL_SURVEILLANCE_OPTIONS.map((option) => option.code));
+const FLIGHT_SERVICE_SURVEILLANCE_CODE_SET = new Set<string>(ICAO_SURVEILLANCE_OPTIONS.map((option) => option.code));
 const OTHER_INFO_PREFIX_SET = new Set<string>(ICAO_OTHER_INFO_PREFIXES);
 
 export const parseIcaoSurveillanceCodes = (input: string | null | undefined) => {
@@ -68,6 +169,11 @@ export const hasOnlyKnownIcaoSurveillanceCodes = (input: string | null | undefin
   const raw = String(input || "").trim();
   if (!raw) return false;
   return normalizeIcaoSurveillanceCodes(parseIcaoSurveillanceCodes(raw)) === raw.toUpperCase().replace(/[\s,/.-]+/g, "");
+};
+
+export const hasOnlyFlightServiceSurveillanceCodes = (input: string | null | undefined) => {
+  const codes = parseIcaoSurveillanceCodes(input);
+  return codes.length > 0 && codes.every((code) => FLIGHT_SERVICE_SURVEILLANCE_CODE_SET.has(code));
 };
 
 export const parseIcaoOtherInfoEntries = (input: string | null | undefined): IcaoOtherInfoEntry[] => {
@@ -101,10 +207,13 @@ export const getIcaoOtherInfoEquipmentWarnings = (otherInfo: string | null | und
   const equipmentCodes = new Set(String(equipment || "").toUpperCase().replace(/[^A-Z0-9]/g, "").split(""));
   const requiresR = entries.some((entry) => entry.prefix === "PBN/");
   const requiresZ = entries.some((entry) => ["NAV/", "COM/", "DAT/"].includes(entry.prefix));
+  const equipmentHasR = equipmentCodes.has("R");
   return {
     requiresR,
     requiresZ,
     missingR: requiresR && !equipmentCodes.has("R"),
     missingZ: requiresZ && !equipmentCodes.has("Z"),
+    equipmentHasR,
+    missingPbn: equipmentHasR && !requiresR,
   };
 };

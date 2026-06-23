@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { parseFlightCategory as getFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import {
   ICAO_OTHER_INFO_PREFIXES,
+  ICAO_OTHER_INFO_VALUE_OPTIONS,
   ICAO_SURVEILLANCE_OPTIONS,
   buildIcaoOtherInfo,
   getIcaoOtherInfoEquipmentWarnings,
@@ -8387,15 +8388,43 @@ export default function FlightPlanner() {
                             ))}
                           </SelectContent>
                         </Select>
-                        <Input
-                          value={entry.value}
-                          onChange={(e) => {
-                            const next = [...icaoOtherInfoEntries];
-                            next[index] = { ...entry, value: e.target.value.toUpperCase() };
-                            setIcaoOtherInfoEntries(next);
-                          }}
-                          placeholder="Enter value"
-                        />
+                        <div className="space-y-2">
+                          {ICAO_OTHER_INFO_VALUE_OPTIONS[entry.prefix]?.length ? (
+                            <Select
+                              value=""
+                              onValueChange={(value) => {
+                                const next = [...icaoOtherInfoEntries];
+                                const optionValue = value.toUpperCase();
+                                const currentValue = String(entry.value || "").toUpperCase();
+                                const nextValue = entry.prefix === "PBN/" && currentValue && !currentValue.includes(optionValue)
+                                  ? `${currentValue}${optionValue}`
+                                  : optionValue;
+                                next[index] = { ...entry, value: nextValue };
+                                setIcaoOtherInfoEntries(next);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select value" />
+                              </SelectTrigger>
+                              <SelectContent className={plannerSelectContentClass}>
+                                {ICAO_OTHER_INFO_VALUE_OPTIONS[entry.prefix]?.map((option) => (
+                                  <SelectItem key={`${entry.prefix}-${option.value}`} value={option.value}>
+                                    {option.label} - {option.description}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : null}
+                          <Input
+                            value={entry.value}
+                            onChange={(e) => {
+                              const next = [...icaoOtherInfoEntries];
+                              next[index] = { ...entry, value: e.target.value.toUpperCase() };
+                              setIcaoOtherInfoEntries(next);
+                            }}
+                            placeholder={ICAO_OTHER_INFO_VALUE_OPTIONS[entry.prefix]?.length ? "Selected value or custom entry" : "Enter value"}
+                          />
+                        </div>
                         <Button
                           type="button"
                           size="icon"
@@ -8412,10 +8441,11 @@ export default function FlightPlanner() {
                     <div className="mb-1 font-semibold text-foreground">ICAO Item 18 Preview</div>
                     <div className="break-words font-mono text-muted-foreground">{filingDraft.otherInfo.trim() || "-"}</div>
                   </div>
-                  {(icaoEquipmentWarnings.missingR || icaoEquipmentWarnings.missingZ) && (
+                  {(icaoEquipmentWarnings.missingR || icaoEquipmentWarnings.missingZ || icaoEquipmentWarnings.missingPbn) && (
                     <Alert className="border-amber-300 bg-amber-900/20 text-amber-100">
                       <AlertDescription>
                         Selected ICAO information requires additional aircraft equipment codes.
+                        {icaoEquipmentWarnings.missingPbn ? " R means PBN approved, so add a PBN/ entry describing the approved capabilities." : ""}
                         {icaoEquipmentWarnings.missingR ? " Add R for PBN/." : ""}
                         {icaoEquipmentWarnings.missingZ ? " Add Z for NAV/, COM/, or DAT/." : ""}
                       </AlertDescription>

@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import {
   ICAO_OTHER_INFO_PREFIXES,
+  ICAO_OTHER_INFO_VALUE_OPTIONS,
   ICAO_SURVEILLANCE_OPTIONS,
   buildIcaoOtherInfo,
   normalizeIcaoSurveillanceCodes,
@@ -349,15 +350,43 @@ export default function MyAircraft() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <Input
-                        value={entry.value}
-                        onChange={(e) => {
-                          const next = [...icaoOtherInfoEntries];
-                          next[index] = { ...entry, value: e.target.value.toUpperCase() };
-                          setIcaoOtherInfoEntries(next);
-                        }}
-                        placeholder="Enter value"
-                      />
+                      <div className="space-y-2">
+                        {ICAO_OTHER_INFO_VALUE_OPTIONS[entry.prefix]?.length ? (
+                          <Select
+                            value=""
+                            onValueChange={(value) => {
+                              const next = [...icaoOtherInfoEntries];
+                              const optionValue = value.toUpperCase();
+                              const currentValue = String(entry.value || "").toUpperCase();
+                              const nextValue = entry.prefix === "PBN/" && currentValue && !currentValue.includes(optionValue)
+                                ? `${currentValue}${optionValue}`
+                                : optionValue;
+                              next[index] = { ...entry, value: nextValue };
+                              setIcaoOtherInfoEntries(next);
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select value" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ICAO_OTHER_INFO_VALUE_OPTIONS[entry.prefix]?.map((option) => (
+                                <SelectItem key={`${entry.prefix}-${option.value}`} value={option.value}>
+                                  {option.label} - {option.description}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : null}
+                        <Input
+                          value={entry.value}
+                          onChange={(e) => {
+                            const next = [...icaoOtherInfoEntries];
+                            next[index] = { ...entry, value: e.target.value.toUpperCase() };
+                            setIcaoOtherInfoEntries(next);
+                          }}
+                          placeholder={ICAO_OTHER_INFO_VALUE_OPTIONS[entry.prefix]?.length ? "Selected value or custom entry" : "Enter value"}
+                        />
+                      </div>
                       <Button type="button" size="sm" variant="ghost" onClick={() => setIcaoOtherInfoEntries(icaoOtherInfoEntries.filter((_, entryIndex) => entryIndex !== index))}>
                         Remove
                       </Button>

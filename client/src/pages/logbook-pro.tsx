@@ -32,7 +32,7 @@ export default function LogbookProPage() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedTier, setSelectedTier] = useState<MembershipTier>("pro");
+  const [selectedTier, setSelectedTier] = useState<MembershipTier>("premium");
   const [selectedInterval, setSelectedInterval] = useState<MembershipInterval>("monthly");
   const [loading, setLoading] = useState(false);
   const sourcePage = getSourceFromWindow();
@@ -105,7 +105,7 @@ export default function LogbookProPage() {
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({
         title: "Offer redeemed",
-        description: `${data.offer?.partnerName || "Partner"} unlocked ${data.offer?.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"} on this account.`,
+        description: `${data.offer?.partnerName || "Partner"} unlocked RSF Premium on this account.`,
       });
       setPartnerMemberNumber("");
       clearClaimFromUrl();
@@ -137,7 +137,7 @@ export default function LogbookProPage() {
       <div className="container mx-auto px-4 py-10">
         <Card>
           <CardHeader>
-            <CardTitle>RSF Pro Membership</CardTitle>
+            <CardTitle>RSF Premium Membership</CardTitle>
             <CardDescription>
               {offerSlug
                 ? "Create or sign in to a free RSF account first, then redeem your partner membership offer."
@@ -172,7 +172,7 @@ export default function LogbookProPage() {
   const isTrialing = membershipStatus === "trialing";
 
   const currentTierLabel =
-    membershipTierInfo[membershipTier as MembershipTier]?.title || "Free";
+    membershipTier === "free" ? "Free" : membershipTierInfo.premium.title;
 
   const planOptions = membershipPlanOptions[selectedTier];
   const selectedPlan = useMemo(
@@ -193,9 +193,9 @@ export default function LogbookProPage() {
         totalToday: selectedPlanTotal,
       });
       pixelEvent("StartTrial", {
-        content_name: selectedTier === "pro_plus" ? "RSF Pro Plus Trial" : "RSF Pro Core Trial",
+        content_name: "RSF Premium",
         currency: "USD",
-        value: selectedTier === "pro_plus" ? 11.99 : 5.99,
+        value: 7.99,
       });
       const res = await apiRequest("POST", "/api/paypal/membership/subscribe", {
         tier: selectedTier,
@@ -214,7 +214,7 @@ export default function LogbookProPage() {
   };
 
   const handleCancel = async () => {
-    if (!confirm("Cancel RSF Pro? You can continue using the free tools.")) return;
+    if (!confirm("Cancel RSF Premium? You can continue using the free tools.")) return;
     setLoading(true);
     try {
       trackEvent("subscription_cancel_requested", { page: "/logbook/pro" });
@@ -223,7 +223,7 @@ export default function LogbookProPage() {
       if (!res.ok) {
         throw new Error(data.error || "Unable to cancel subscription");
       }
-      toast({ title: "Subscription cancelled", description: "RSF Pro is now cancelled." });
+      toast({ title: "Subscription cancelled", description: "RSF Premium is now cancelled." });
       window.location.reload();
     } catch (error: any) {
       toast({ title: "Cancellation failed", description: error.message, variant: "destructive" });
@@ -235,11 +235,11 @@ export default function LogbookProPage() {
   return (
     <PageShell
       kicker="Membership"
-      title="Upgrade when RSF starts saving you real time."
-      description="Free gets you browsing, core tools, and basic workflow. RSF Pro becomes worth it once you want saved planning, repeat-flight convenience, cleaner records, and fewer moving parts."
+      title="Simple plans for Ready Set Fly."
+      description="Free includes RSF Flight Planner Basic. RSF Premium unlocks the complete aviation ecosystem for $7.99/month."
       actions={
         <>
-          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">14-day monthly trial</Badge>
+          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">$7.99/month</Badge>
           <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">PayPal Business/Commerce</Badge>
         </>
       }
@@ -317,9 +317,9 @@ export default function LogbookProPage() {
               </div>
 
               <div className={`${logbookSubpanelClass} mt-4 p-4`}>
-                <div className="text-sm font-semibold">What {membershipTierInfo[selectedTier].title} changes in daily use</div>
+                <div className="text-sm font-semibold">What {membershipTierInfo.premium.title} changes in daily use</div>
                 <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-                  {membershipTierInfo[selectedTier].features.map((feature) => (
+                  {membershipTierInfo.premium.features.map((feature) => (
                     <li key={feature}>{feature}</li>
                   ))}
                 </ul>
@@ -333,7 +333,7 @@ export default function LogbookProPage() {
                     </p>
                   ) : null}
                   <div className="flex flex-wrap gap-3">
-                    <Button variant="destructive" onClick={handleCancel} disabled={loading}>Cancel membership</Button>
+                    <Button variant="destructive" onClick={handleCancel} disabled={loading}>Cancel Premium</Button>
                     <Badge variant="outline">Free tools remain available if you cancel</Badge>
                   </div>
                 </div>
@@ -350,7 +350,7 @@ export default function LogbookProPage() {
                     <div>
                       <h3 className="mt-2 text-xl font-semibold text-[#F5F8FC]">{partnerOffer.name}</h3>
                       <p className="mt-2 text-sm text-[#A9BBCD]">
-                        {partnerOffer.partnerName} members can unlock {partnerOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"} for {partnerOffer.durationDays} days by entering their member number below.
+                        {partnerOffer.partnerName} members can unlock RSF Premium for {partnerOffer.durationDays} days by entering their member number below.
                       </p>
                       {partnerOffer.description ? (
                         <p className="mt-2 text-xs text-[#A9BBCD]">{partnerOffer.description}</p>
@@ -361,7 +361,7 @@ export default function LogbookProPage() {
                       <div className="rounded-[1rem] border border-primary/12 bg-white/70 p-4">
                         <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Tier</div>
                         <div className="mt-2 text-sm font-semibold text-slate-900">
-                          {partnerOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
+                          RSF Premium
                         </div>
                       </div>
                       <div className="rounded-[1rem] border border-primary/12 bg-white/70 p-4">
@@ -444,34 +444,24 @@ export default function LogbookProPage() {
           <div className={`${logbookSubpanelClass} space-y-4 p-5`}>
             <div>
               <span className="rsf-kicker">Choose a plan</span>
-              <h3 className="mt-2 text-2xl font-semibold text-[#F5F8FC]">Pick the point where saved workflow becomes worth paying for.</h3>
+              <h3 className="mt-2 text-2xl font-semibold text-[#F5F8FC]">Choose Free or RSF Premium.</h3>
             </div>
-            <div className="flex flex-wrap gap-3">
-              {(Object.keys(membershipTierInfo) as MembershipTier[]).map((tier) => {
-                const monthly = membershipPlanOptions[tier].find((plan) => plan.interval === "monthly")?.price;
-                return (
-                  <button
-                    key={tier}
-                    className={`rounded-[1rem] border px-4 py-3 text-left transition-all ${
-                      selectedTier === tier
-                        ? "border-primary/50 bg-primary/10 shadow-[0_12px_24px_rgba(15,23,42,0.10)]"
-                        : "border-primary/14 bg-white/70"
-                    }`}
-                    onClick={() => setSelectedTier(tier)}
-                  >
-                    <div className="text-sm font-semibold text-slate-900">{membershipTierInfo[tier].title}</div>
-                    <div className="text-xs text-muted-foreground">{membershipTierInfo[tier].subtitle}</div>
-                    {monthly !== undefined ? (
-                      <div className="mt-2 text-xs text-muted-foreground">From ${monthly.toFixed(2)}/mo</div>
-                    ) : null}
-                  </button>
-                );
-              })}
+            <div className="grid gap-3">
+              <div className="rounded-[1rem] border border-primary/14 bg-white/70 px-4 py-3 text-left">
+                <div className="text-sm font-semibold text-slate-900">Free</div>
+                <div className="text-xs text-muted-foreground">Plan and file flights with RSF Flight Planner Basic.</div>
+                <div className="mt-2 text-xs text-muted-foreground">$0/month</div>
+              </div>
+              <div className="rounded-[1rem] border border-primary/50 bg-primary/10 px-4 py-3 text-left shadow-[0_12px_24px_rgba(15,23,42,0.10)]">
+                <div className="text-sm font-semibold text-slate-900">{membershipTierInfo.premium.title}</div>
+                <div className="text-xs text-muted-foreground">{membershipTierInfo.premium.subtitle}</div>
+                <div className="mt-2 text-xs text-muted-foreground">$7.99/month</div>
+              </div>
             </div>
 
             {hasAccess ? null : (
               <>
-                <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-1">
+                <div className="grid gap-4">
                   {planOptions.map((plan) => {
                     const isSelected = plan.interval === selectedInterval;
                     return (
@@ -489,10 +479,7 @@ export default function LogbookProPage() {
                           {plan.badge ? <Badge variant="outline">{plan.badge}</Badge> : null}
                         </div>
                         <div className="mt-2 text-2xl font-semibold text-slate-900">${plan.price.toFixed(2)}</div>
-                        <div className="text-xs text-muted-foreground">{membershipTierInfo[selectedTier].subtitle}</div>
-                        {plan.trialDays ? (
-                          <div className="mt-2 text-xs text-emerald-600">{plan.trialDays}-day free trial</div>
-                        ) : null}
+                        <div className="text-xs text-muted-foreground">{membershipTierInfo.premium.subtitle}</div>
                       </button>
                     );
                   })}
@@ -517,15 +504,10 @@ export default function LogbookProPage() {
                 </div>
 
                 <Button className={logbookPrimaryButtonClass} onClick={handleSubscribe} disabled={loading}>
-                  {loading
-                    ? "Redirecting..."
-                    : hasTrial
-                      ? "Start 14-day trial"
-                      : "Start subscription"}
+                  {loading ? "Redirecting..." : "Upgrade to Premium"}
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  Recurring billing applies at the selected interval.
-                  {hasTrial ? " Monthly billing begins automatically after the 14-day trial unless canceled first." : ""}
+                  Recurring billing is $7.99/month until cancelled.
                 </p>
               </>
             )}

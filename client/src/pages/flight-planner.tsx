@@ -1529,15 +1529,18 @@ export default function FlightPlanner() {
   const queryClient = useQueryClient();
   const pressDemo = usePressDemo(FLIGHT_PLANNER_PRESS_STEPS);
   const entitlements = (user as any)?.entitlements;
-  const hasPaidPlannerAccess = entitlements?.canPersist ?? (user?.logbookProStatus === "active");
-  const isPro = isAuthenticated || hasPaidPlannerAccess;
-  const tfmsTier: TfmsTier = entitlements?.tier === "pro_plus"
+  const hasPlannerPersistence = entitlements?.canPersist ?? isAuthenticated;
+  const hasPremiumAccess = entitlements?.tier === "premium" || entitlements?.tier === "pro" || entitlements?.tier === "pro_plus" || user?.logbookProStatus === "active";
+  const isPro = isAuthenticated || hasPlannerPersistence;
+  const tfmsTier: TfmsTier = entitlements?.tier === "premium"
+    ? "pro_plus"
+    : entitlements?.tier === "pro_plus"
     ? "pro_plus"
     : entitlements?.tier === "pro"
       ? "pro_core"
       : "free";
   const isGuest = !isAuthenticated;
-  const isFree = isAuthenticated && !hasPaidPlannerAccess;
+  const isFree = isAuthenticated && !hasPremiumAccess;
   const isStudent = Boolean(
     studentProfile?.wizardJson || studentProfile?.roadmapJson || studentProfile?.progressJson
   );
@@ -5821,10 +5824,10 @@ export default function FlightPlanner() {
 
   sendToLogbookActionRef.current = async () => {
     if (!isAuthenticated) return;
-    if (!hasPaidPlannerAccess) {
+    if (!hasPremiumAccess) {
       toast({
-        title: "Upgrade to RSF Pro",
-        description: "RSF Pro membership is required to sync to logbook.",
+        title: "Unlock RSF Premium",
+        description: "RSF Premium is required to sync to logbook.",
       });
       trackEvent("planner_upgrade_prompt", { action: "send_to_logbook" });
       window.location.href = "/logbook/pro";
@@ -7183,7 +7186,7 @@ export default function FlightPlanner() {
                 disabled={!isPro}
                 placeholder="0"
               />
-              {!isPro && <p className="text-xs text-muted-foreground">RSF Pro unlocks wind-adjusted ETE.</p>}
+              {!isPro && <p className="text-xs text-muted-foreground">RSF Premium unlocks wind-adjusted ETE.</p>}
             </div>
             <div className="space-y-2">
               <Label>Planned Altitude (ft)</Label>
@@ -8930,12 +8933,12 @@ export default function FlightPlanner() {
       <Card className={plannerPanelClass}>
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Saved Plans</CardTitle>
-          <CardDescription className={plannerCardDescriptionClass}>Access saved routes and fuel notes. Free accounts keep one plan.</CardDescription>
+          <CardDescription className={plannerCardDescriptionClass}>Access saved routes, filing history, and fuel notes. Free accounts keep one active plan.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!isPro && (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              <div>Free accounts keep one active plan. RSF Pro unlocks unlimited storage and per-leg breakdowns.</div>
+              <div>Free accounts keep one active plan. RSF Premium unlocks unlimited active flight plans and premium planning intelligence.</div>
               {isFree && (
                 <div className="mt-3">
                   <Button asChild size="sm" variant="outline">
@@ -8946,7 +8949,7 @@ export default function FlightPlanner() {
                         trackEvent("subscription_cta_click", { source_page: "/flight-planner", target: "/logbook/pro", context: "planner_saved_plans" });
                       }}
                     >
-                      Start 14-day Pro trial
+                      Upgrade to Premium
                     </Link>
                   </Button>
                 </div>

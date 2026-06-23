@@ -11,8 +11,7 @@ export type TfmsAccessType = "alerts" | "overlay" | "risk";
 
 export function getPlanTier(user?: User | null): PlanTier {
   const entitlements = getEntitlementsForUser(user || null);
-  if (entitlements.tier === "pro_plus") return PlanTier.PRO_PLUS;
-  if (entitlements.tier === "pro") return PlanTier.PRO_CORE;
+  if (entitlements.tier === "premium") return PlanTier.PRO_PLUS;
   return PlanTier.FREE;
 }
 

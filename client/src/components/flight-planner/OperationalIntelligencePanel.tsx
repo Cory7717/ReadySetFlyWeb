@@ -1,5 +1,4 @@
-import { useEffect, useRef } from "react";
-import { Link } from "wouter";
+import React, { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -56,8 +55,8 @@ type OperationalIntelligencePanelProps = {
 const lockedBullets = [
   "Ground Delay Programs",
   "Flow Restrictions",
-  "Congestion Overlay (Pro+)",
-  "Departure Risk Score (Pro+)",
+  "Congestion Overlay",
+  "Departure Risk Score",
 ];
 
 const getSeverityBadge = (severity: TfmsAlert["severity"]) => {
@@ -120,7 +119,7 @@ export function OperationalIntelligencePanelView({
               </ul>
             </div>
             <Button asChild className="rsf-metal-button-primary">
-              <Link href="/logbook/pro">Upgrade to Pro Core</Link>
+              <a href="/logbook/pro">Upgrade to Premium</a>
             </Button>
           </div>
         )}
@@ -185,10 +184,10 @@ export function OperationalIntelligencePanelView({
 
             {tier === "pro_core" && (
               <div className={`${plannerSubpanelClass} p-3 text-xs ${plannerMutedClass}`}>
-                Congestion overlay and risk score are available in Pro+.
+                Congestion overlay and risk score are available in RSF Premium.
                 <div className="mt-2">
                   <Button asChild size="sm" variant="outline" className={plannerSelectActionClass}>
-                    <Link href="/logbook/pro">Upgrade to Pro+</Link>
+                    <a href="/logbook/pro">Upgrade to Premium</a>
                   </Button>
                 </div>
               </div>

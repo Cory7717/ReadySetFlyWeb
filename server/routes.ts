@@ -69,6 +69,7 @@ import {
 } from "./services/flight-plan-filing/provider";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import { analyzeFiledRoute } from "@shared/flight-plan-route";
+import { ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE, canCreateAnotherActiveFlightPlan } from "@shared/flight-plan-access";
 import {
   buildFilingEventId,
   buildOtherInfoWithDof,
@@ -5009,7 +5010,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     };
   };
 
-  const createMembershipSubscription = async (userId: string, tier: "pro" | "pro_plus", interval: "monthly" | "biannual" | "annual") => {
+  const createMembershipSubscription = async (userId: string, tier: "premium" | "pro" | "pro_plus", interval: "monthly" | "biannual" | "annual") => {
     const user = await storage.getUser(userId);
     if (!user) {
       throw new Error("User not found");
@@ -5129,7 +5130,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/paypal/membership/subscribe", isAuthenticated, async (req: any, res) => {
     try {
       const requesterId = req.user.claims.sub;
-      const tier = req.body?.tier === "pro_plus" ? "pro_plus" : req.body?.tier === "pro" ? "pro" : null;
+      const tier = req.body?.tier === "premium" ? "premium" : req.body?.tier === "pro_plus" ? "pro_plus" : req.body?.tier === "pro" ? "pro" : null;
       const interval = parseBillingInterval(req.body?.interval);
       if (!tier || !interval) {
         return res.status(400).json({ error: "Invalid membership tier or interval" });
@@ -5175,7 +5176,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/paypal/logbook/subscribe", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { subscription, approveUrl } = await createMembershipSubscription(userId, "pro", "monthly");
+      const { subscription, approveUrl } = await createMembershipSubscription(userId, "premium", "monthly");
       res.json({ id: subscription.id, approveUrl });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to create subscription" });
@@ -21825,6 +21826,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (plan.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
 
       const parsed = filingLifecycleActionSchema.safeParse(req.body ?? {});
       if (!parsed.success) {
@@ -21834,6 +21839,22 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const action = parsed.data.action as FlightPlanFilingAction;
       const closeLocation = parsed.data.closeLocation || null;
       const flightRules = (plan.filingFlightRules || "VFR").toUpperCase();
+      if (action === "file") {
+        const entitlements = getEntitlementsForUser(user);
+        const plans = await storage.getFlightPlansByUser(userId);
+        const activePlanAccess = canCreateAnotherActiveFlightPlan({
+          isPremium: Boolean(entitlements.canUseUnlimitedActiveFlightPlans),
+          existingPlans: plans,
+          exceptPlanId: plan.id,
+        });
+        if (!activePlanAccess.allowed) {
+          return res.status(403).json({
+            error: activePlanAccess.message || ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE,
+            code: "ACTIVE_FLIGHT_PLAN_LIMIT",
+            activeFlightPlanCount: activePlanAccess.activeCount,
+          });
+        }
+      }
       const actionProviderSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
       if (action === "amend" && actionProviderSnapshot.providerPendingReview === true) {
         return res.status(409).json({
@@ -22164,6 +22185,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const result = insertFlightPlanSchema.safeParse(payload);
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
+      }
+      const entitlements = getEntitlementsForUser(user);
+      const plans = await storage.getFlightPlansByUser(userId);
+      const activePlanAccess = canCreateAnotherActiveFlightPlan({
+        isPremium: Boolean(entitlements.canUseUnlimitedActiveFlightPlans),
+        existingPlans: plans,
+      });
+      if (!activePlanAccess.allowed) {
+        return res.status(403).json({
+          error: activePlanAccess.message || ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE,
+          code: "ACTIVE_FLIGHT_PLAN_LIMIT",
+          activeFlightPlanCount: activePlanAccess.activeCount,
+        });
       }
       const plan = await storage.createFlightPlan({ ...result.data, userId } as any);
       res.status(201).json(plan);

@@ -1,6 +1,7 @@
 import type { User } from "@shared/schema";
+import { normalizeMembershipTier, type StoredMembershipTier } from "@shared/membership-plans";
 
-export type MembershipTier = "free" | "pro" | "pro_plus";
+export type MembershipTier = "free" | "premium" | "pro" | "pro_plus" | "pro_core" | "core";
 export type MembershipStatus = "active" | "inactive" | "cancelled" | "past_due" | "trialing";
 export type BillingInterval = "monthly" | "biannual" | "annual";
 
@@ -32,17 +33,20 @@ function addStoreProduct(productId: string | undefined, tier: MembershipTier, in
   STORE_PRODUCT_ENV_MAP[productId] = { tier, interval };
 }
 
-// RSF Pro plans
+// RSF Premium plans
+addPlan(process.env.PAYPAL_PLAN_PREMIUM_MONTHLY, "premium", "monthly");
+
+// Legacy paid plan IDs now grant RSF Premium.
 addPlan(process.env.PAYPAL_PLAN_PRO_MONTHLY, "pro", "monthly");
 addPlan(process.env.PAYPAL_PLAN_PRO_BIANNUAL, "pro", "biannual");
 addPlan(process.env.PAYPAL_PLAN_PRO_ANNUAL, "pro", "annual");
 
-// RSF Pro+ plans
+// Legacy higher-tier paid plan IDs now grant RSF Premium.
 addPlan(process.env.PAYPAL_PLAN_PROPLUS_MONTHLY, "pro_plus", "monthly");
 addPlan(process.env.PAYPAL_PLAN_PROPLUS_BIANNUAL, "pro_plus", "biannual");
 addPlan(process.env.PAYPAL_PLAN_PROPLUS_ANNUAL, "pro_plus", "annual");
 
-// Legacy Logbook Pro plans (map to RSF Pro core)
+// Legacy logbook plan IDs now grant RSF Premium.
 addPlan(process.env.PAYPAL_LOGBOOK_PLAN_MONTHLY_ID, "pro", "monthly");
 addPlan(process.env.PAYPAL_LOGBOOK_PLAN_BIANNUAL_ID, "pro", "biannual");
 addPlan(process.env.PAYPAL_LOGBOOK_PLAN_YEARLY_ID, "pro", "annual");
@@ -54,9 +58,16 @@ addStoreProduct(process.env.REVENUECAT_PRO_ANNUAL_PRODUCT_ID, "pro", "annual");
 addStoreProduct(process.env.REVENUECAT_PROPLUS_MONTHLY_PRODUCT_ID, "pro_plus", "monthly");
 addStoreProduct(process.env.REVENUECAT_PROPLUS_BIANNUAL_PRODUCT_ID, "pro_plus", "biannual");
 addStoreProduct(process.env.REVENUECAT_PROPLUS_ANNUAL_PRODUCT_ID, "pro_plus", "annual");
+addStoreProduct(process.env.REVENUECAT_PREMIUM_MONTHLY_PRODUCT_ID, "premium", "monthly");
 
-export function resolvePayPalPlanId(tier: "pro" | "pro_plus", interval: BillingInterval): string {
-  const mapping: Record<"pro" | "pro_plus", Record<BillingInterval, string | undefined>> = {
+export function resolvePayPalPlanId(tier: "premium" | "pro" | "pro_plus", interval: BillingInterval): string {
+  const normalizedTier = normalizeMembershipTier(tier) === "premium" ? "premium" : tier;
+  const mapping: Record<"premium" | "pro" | "pro_plus", Record<BillingInterval, string | undefined>> = {
+    premium: {
+      monthly: process.env.PAYPAL_PLAN_PREMIUM_MONTHLY || process.env.PAYPAL_PLAN_PROPLUS_MONTHLY || process.env.PAYPAL_PLAN_PRO_MONTHLY,
+      biannual: undefined,
+      annual: undefined,
+    },
     pro: {
       monthly: process.env.PAYPAL_PLAN_PRO_MONTHLY,
       biannual: process.env.PAYPAL_PLAN_PRO_BIANNUAL,
@@ -69,7 +80,7 @@ export function resolvePayPalPlanId(tier: "pro" | "pro_plus", interval: BillingI
     },
   };
 
-  const planId = mapping[tier]?.[interval];
+  const planId = mapping[normalizedTier]?.[interval];
   if (!planId) {
     throw new Error("Missing PayPal plan ID for selected tier and interval");
   }
@@ -187,7 +198,7 @@ export function getEffectiveMembership(user?: User | null) {
 
   if (tier === "free" || status === "inactive") {
     if (legacyStatus !== "inactive") {
-      tier = "pro";
+      tier = "premium";
       status = legacyStatus;
       endsAt = legacyEndsAt || endsAt;
       interval = interval || (user.logbookProPlan as BillingInterval | null);
@@ -198,15 +209,15 @@ export function getEffectiveMembership(user?: User | null) {
 
   const grantTierRaw = user.membershipGrantTier;
   const grantTier =
-    grantTierRaw === "pro" || grantTierRaw === "pro_plus"
-      ? grantTierRaw
+    normalizeMembershipTier(grantTierRaw as StoredMembershipTier) === "premium"
+      ? "premium"
       : null;
   const grantEndsAt = user.membershipGrantEndsAt
     ? new Date(user.membershipGrantEndsAt)
     : null;
   const grantActive = !!grantTier && !!grantEndsAt && grantEndsAt > now;
-  const tierRank = (value: MembershipTier) =>
-    value === "pro_plus" ? 2 : value === "pro" ? 1 : 0;
+  const tierRank = (value: MembershipTier | "free") =>
+    normalizeMembershipTier(value) === "premium" ? 1 : 0;
 
   if (grantActive) {
     const currentRank = tierRank(tier);
@@ -248,8 +259,10 @@ export function getEntitlementsForUser(user?: User | null) {
     if (user.isSuperAdmin || isSuperAdminEmail(user.email)) {
       return {
         isGuest: false,
-        tier: "pro_plus" as MembershipTier,
+        tier: "premium" as const,
         canPersist: true,
+        canUseFlightPlanner: true,
+        canUseUnlimitedActiveFlightPlans: true,
         canUseLogbook: true,
         canUseAlerts: true,
         canUseHistory: true,
@@ -280,8 +293,8 @@ export function getEntitlementsForUser(user?: User | null) {
     membership.status === "trialing" ||
     (membership.status !== "inactive" && hasTimeRemaining);
   const tier = isActive ? membership.tier : "free";
-  const isPro = tier === "pro" || tier === "pro_plus";
-  const isProPlus = tier === "pro_plus";
+  const normalizedTier = normalizeMembershipTier(tier);
+  const isPremium = normalizedTier === "premium";
   const cfiTrialEndsAt = user?.cfiTrialEndsAt ? new Date(user.cfiTrialEndsAt) : null;
   const cfiGrantEndsAt = user?.cfiGrantEndsAt ? new Date(user.cfiGrantEndsAt) : null;
   const cfiTrialActive = cfiTrialEndsAt ? cfiTrialEndsAt > now : false;
@@ -289,22 +302,25 @@ export function getEntitlementsForUser(user?: User | null) {
   const cfiAccessEndsAt = [cfiTrialEndsAt, cfiGrantEndsAt]
     .filter((value): value is Date => !!value)
     .sort((a, b) => b.getTime() - a.getTime())[0];
-  const canUseCfi = isPro || cfiTrialActive || cfiGrantActive;
+  const canUseCfi = isPremium || cfiTrialActive || cfiGrantActive;
 
   return {
     isGuest,
-    tier,
-    canPersist: isPro,
-    canUseLogbook: isPro,
-    canUseAlerts: isPro,
-    canUseHistory: isPro,
-    canUseAnalytics: isPro,
-    canUseScenarioScoring: isPro,
-    canUseAdvancedTrends: isProPlus,
-    canUseGpsSims: isPro,
+    tier: normalizedTier,
+    legacyTier: tier,
+    canPersist: !isGuest,
+    canUseFlightPlanner: !isGuest,
+    canUseUnlimitedActiveFlightPlans: isPremium,
+    canUseLogbook: isPremium,
+    canUseAlerts: isPremium,
+    canUseHistory: isPremium,
+    canUseAnalytics: isPremium,
+    canUseScenarioScoring: isPremium,
+    canUseAdvancedTrends: isPremium,
+    canUseGpsSims: isPremium,
     canCreateEvents: !isGuest,
-    canCreateListings: isPro,
-    canUseVorGuided: isPro,
+    canCreateListings: isPremium,
+    canUseVorGuided: isPremium,
     canUseCfi,
     membershipEndsAt: membership.endsAt ? membership.endsAt.toISOString() : undefined,
     membershipTrialEndsAt: membership.trialEndsAt ? membership.trialEndsAt.toISOString() : undefined,

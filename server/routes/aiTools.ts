@@ -71,7 +71,7 @@ async function resolveAiAccess(req: Request, res: Response) {
     return {
       userId,
       anonId: null,
-      isPro: entitlements.tier === "pro" || entitlements.tier === "pro_plus",
+      isPro: entitlements.tier === "premium",
       ipHash: hashIp((req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? ""),
     };
   }
@@ -125,9 +125,9 @@ async function recordUsage(identity: { userId: string | null; anonId: string | n
 
 function buildLimitErrorMessage(isAuthenticated: boolean) {
   if (isAuthenticated) {
-    return "Free AI usage limit reached. Upgrade to Pro Core to continue using AI weather and NOTAM translation.";
+    return "Free AI usage limit reached. Upgrade to RSF Premium to continue using AI weather and NOTAM translation.";
   }
-  return "Free AI usage limit reached. Sign in and upgrade to Pro Core to continue using AI weather and NOTAM translation.";
+  return "Free AI usage limit reached. Sign in and upgrade to RSF Premium to continue using AI weather and NOTAM translation.";
 }
 
 function parseCabinBriefContent(content: string) {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,16 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
+import {
+  ICAO_OTHER_INFO_PREFIXES,
+  ICAO_SURVEILLANCE_OPTIONS,
+  buildIcaoOtherInfo,
+  normalizeIcaoSurveillanceCodes,
+  parseIcaoOtherInfoEntries,
+  parseIcaoSurveillanceCodes,
+  type IcaoOtherInfoEntry,
+  type IcaoOtherInfoPrefix,
+} from "@shared/icao-filing";
 
 type AircraftType = {
   id: string;
@@ -65,7 +75,7 @@ const emptyForm = {
   filingRemarksDefault: "",
   filingWakeTurbulenceDefault: "MEDIUM",
   filingTypeOfFlightDefault: "G",
-  filingSurveillanceEquipmentDefault: "N",
+  filingSurveillanceEquipmentDefault: "",
   filingOtherInfoDefault: "",
 };
 
@@ -88,6 +98,26 @@ export default function MyAircraft() {
     () => typeOptions.find((type) => type.id === form.typeId) || null,
     [form.typeId, typeOptions],
   );
+  const selectedSurveillanceCodes = useMemo(
+    () => parseIcaoSurveillanceCodes(form.filingSurveillanceEquipmentDefault),
+    [form.filingSurveillanceEquipmentDefault],
+  );
+  const setSurveillanceCodes = useCallback((codes: string[]) => {
+    setForm((current) => ({ ...current, filingSurveillanceEquipmentDefault: normalizeIcaoSurveillanceCodes(codes) }));
+  }, []);
+  const [icaoOtherInfoEntries, setIcaoOtherInfoEntriesState] = useState<IcaoOtherInfoEntry[]>([]);
+  const lastIcaoOtherInfoRef = useRef("");
+  useEffect(() => {
+    if (form.filingOtherInfoDefault === lastIcaoOtherInfoRef.current) return;
+    lastIcaoOtherInfoRef.current = form.filingOtherInfoDefault;
+    setIcaoOtherInfoEntriesState(parseIcaoOtherInfoEntries(form.filingOtherInfoDefault));
+  }, [form.filingOtherInfoDefault]);
+  const setIcaoOtherInfoEntries = useCallback((entries: IcaoOtherInfoEntry[]) => {
+    setIcaoOtherInfoEntriesState(entries);
+    const nextOtherInfo = buildIcaoOtherInfo(entries);
+    lastIcaoOtherInfoRef.current = nextOtherInfo;
+    setForm((current) => ({ ...current, filingOtherInfoDefault: nextOtherInfo }));
+  }, []);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -257,11 +287,87 @@ export default function MyAircraft() {
               </div>
               <div className="space-y-2">
                 <Label>Surveillance Equipment</Label>
-                <Input value={form.filingSurveillanceEquipmentDefault} onChange={(e) => setForm({ ...form, filingSurveillanceEquipmentDefault: e.target.value.toUpperCase() })} placeholder="N" />
+                <Select
+                  value=""
+                  onValueChange={(code) => {
+                    if (!code) return;
+                    setSurveillanceCodes(code === "N" ? ["N"] : [...selectedSurveillanceCodes.filter((entry) => entry !== "N"), code]);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select surveillance equipment" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ICAO_SURVEILLANCE_OPTIONS.map((entry) => (
+                      <SelectItem key={entry.code} value={entry.code}>
+                        {entry.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex flex-wrap gap-1 text-xs">
+                  {selectedSurveillanceCodes.length > 0 ? selectedSurveillanceCodes.map((code) => (
+                    <span key={code} className="rounded border bg-background px-2 py-1">
+                      {code}
+                      <button type="button" className="ml-2 text-muted-foreground" onClick={() => setSurveillanceCodes(selectedSurveillanceCodes.filter((entry) => entry !== code))}>
+                        Remove
+                      </button>
+                    </span>
+                  )) : <span className="text-muted-foreground">Select one or more ICAO surveillance codes.</span>}
+                </div>
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label>Other ICAO Info</Label>
-                <Input value={form.filingOtherInfoDefault} onChange={(e) => setForm({ ...form, filingOtherInfoDefault: e.target.value.toUpperCase() })} placeholder="PBN/... NAV/... SUR/..." />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label>Other ICAO Information</Label>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setIcaoOtherInfoEntries([...icaoOtherInfoEntries, { prefix: "RMK/", value: "" }])}>
+                    Add ICAO Entry
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {icaoOtherInfoEntries.length === 0 ? (
+                    <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                      Add ICAO Item 18 entries only when normally required for this aircraft.
+                    </div>
+                  ) : icaoOtherInfoEntries.map((entry, index) => (
+                    <div key={`${entry.prefix}-${index}`} className="grid gap-2 md:grid-cols-[12rem_minmax(0,1fr)_auto]">
+                      <Select
+                        value={entry.prefix}
+                        onValueChange={(value) => {
+                          const next = [...icaoOtherInfoEntries];
+                          next[index] = { ...entry, prefix: value as IcaoOtherInfoPrefix };
+                          setIcaoOtherInfoEntries(next);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select ICAO Prefix" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ICAO_OTHER_INFO_PREFIXES.map((prefix) => (
+                            <SelectItem key={prefix} value={prefix}>
+                              {prefix}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={entry.value}
+                        onChange={(e) => {
+                          const next = [...icaoOtherInfoEntries];
+                          next[index] = { ...entry, value: e.target.value.toUpperCase() };
+                          setIcaoOtherInfoEntries(next);
+                        }}
+                        placeholder="Enter value"
+                      />
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setIcaoOtherInfoEntries(icaoOtherInfoEntries.filter((_, entryIndex) => entryIndex !== index))}>
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-md border bg-background p-3 text-xs">
+                  <div className="mb-1 font-semibold text-foreground">ICAO Item 18 Preview</div>
+                  <div className="break-words font-mono text-muted-foreground">{form.filingOtherInfoDefault.trim() || "-"}</div>
+                </div>
               </div>
             </div>
           </div>
@@ -318,7 +424,7 @@ export default function MyAircraft() {
                           filingRemarksDefault: profile.filingRemarksDefault || "",
                           filingWakeTurbulenceDefault: profile.filingWakeTurbulenceDefault || "MEDIUM",
                           filingTypeOfFlightDefault: profile.filingTypeOfFlightDefault || "G",
-                          filingSurveillanceEquipmentDefault: profile.filingSurveillanceEquipmentDefault || "N",
+                          filingSurveillanceEquipmentDefault: profile.filingSurveillanceEquipmentDefault || "",
                           filingOtherInfoDefault: profile.filingOtherInfoDefault || "",
                         });
                       }}

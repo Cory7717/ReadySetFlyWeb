@@ -42,6 +42,17 @@ import { buildLegs, sumDistance, distanceNm, type AirportPoint } from "@/lib/fli
 import { cn } from "@/lib/utils";
 import { parseFlightCategory as getFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import {
+  ICAO_OTHER_INFO_PREFIXES,
+  ICAO_SURVEILLANCE_OPTIONS,
+  buildIcaoOtherInfo,
+  getIcaoOtherInfoEquipmentWarnings,
+  normalizeIcaoSurveillanceCodes,
+  parseIcaoOtherInfoEntries,
+  parseIcaoSurveillanceCodes,
+  type IcaoOtherInfoEntry,
+  type IcaoOtherInfoPrefix,
+} from "@shared/icao-filing";
+import {
   RSF_PLANNER_MAP_STYLE_OPTIONS,
   type RsfPlannerMapStyle,
 } from "@/map/rsfMapSpec";
@@ -543,7 +554,7 @@ const getPlannerAircraftTypeValue = ({
     return selectedProfile.name.trim();
   }
 
-  if (selectedTypeId && selectedTypeId !== CUSTOM_TYPE_ID && selectedTypeLabel) {
+  if (selectedTypeId && selectedTypeId !== CUSTOM_TYPE_ID && selectedTypeId !== "fallback" && selectedTypeLabel) {
     if (!manual) return selectedTypeLabel;
     const normalizedManual = normalizeAircraftLabel(manual);
     const normalizedSelected = normalizeAircraftLabel(selectedTypeLabel);
@@ -768,8 +779,8 @@ type RunwayBriefingResponse = {
 
 const FALLBACK_TYPE: AircraftType = {
   id: "fallback",
-  make: "Generic",
-  model: "Trainer",
+  make: "Select",
+  model: "your aircraft",
   category: "trainer",
   engineType: "piston",
   cruise_ktas_effective: 110,
@@ -1854,6 +1865,31 @@ export default function FlightPlanner() {
     const next = normalizeIcaoEquipmentCodes(codes.join(""));
     setFilingDraft((current) => ({ ...current, equipment: next || "" }));
   }, []);
+  const selectedSurveillanceCodes = useMemo(
+    () => parseIcaoSurveillanceCodes(filingDraft.surveillanceEquipment),
+    [filingDraft.surveillanceEquipment]
+  );
+  const setSurveillanceCodes = useCallback((codes: string[]) => {
+    const next = normalizeIcaoSurveillanceCodes(codes);
+    setFilingDraft((current) => ({ ...current, surveillanceEquipment: next }));
+  }, []);
+  const [icaoOtherInfoEntries, setIcaoOtherInfoEntriesState] = useState<IcaoOtherInfoEntry[]>([]);
+  const lastIcaoOtherInfoRef = useRef("");
+  useEffect(() => {
+    if (filingDraft.otherInfo === lastIcaoOtherInfoRef.current) return;
+    lastIcaoOtherInfoRef.current = filingDraft.otherInfo;
+    setIcaoOtherInfoEntriesState(parseIcaoOtherInfoEntries(filingDraft.otherInfo));
+  }, [filingDraft.otherInfo]);
+  const setIcaoOtherInfoEntries = useCallback((entries: IcaoOtherInfoEntry[]) => {
+    setIcaoOtherInfoEntriesState(entries);
+    const nextOtherInfo = buildIcaoOtherInfo(entries);
+    lastIcaoOtherInfoRef.current = nextOtherInfo;
+    setFilingDraft((current) => ({ ...current, otherInfo: nextOtherInfo }));
+  }, []);
+  const icaoEquipmentWarnings = useMemo(
+    () => getIcaoOtherInfoEquipmentWarnings(filingDraft.otherInfo, filingDraft.equipment),
+    [filingDraft.equipment, filingDraft.otherInfo]
+  );
   const [checklist, setChecklist] = useState(checklistDefaults);
   const [departureSuggestions, setDepartureSuggestions] = useState<AirportSearchResult[]>([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState<AirportSearchResult[]>([]);
@@ -4713,68 +4749,81 @@ export default function FlightPlanner() {
       window.localStorage.removeItem(FLIGHT_PLANNER_DRAFT_KEY);
     }
     setActiveTab("route");
+    setPendingSectionJump(null);
     setReturnToFileAfterSave(false);
     setPendingFilingActionAfterSave(null);
     setDraftPlanId(null);
     setEditingPlan(null);
-      setFilingPreview(null);
-      setShowFilingPayload(false);
-      setForm({
-        title: "",
-        departure: "",
-        destination: "",
-        route: "",
-        alternate: "",
-        plannedDepartureAt: "",
-        plannedArrivalAt: "",
-        aircraftType: "",
-        tailNumber: "",
-        fuelOnBoard: "",
-        notes: "",
-      });
-      setWaypointsInput("");
-      setPlannedStopsInput("");
-      setDepartureRunway("");
-      setSelectedProfileId("none");
-      setSelectedTypeId(FALLBACK_TYPE.id);
-      setFuelBurnMode("standard");
-      setReserveMinutes("45");
-      setHeadwind("0");
-      setPlannedAltitude("");
-      setArrivalAuto(true);
-      setRouteSuggestion("direct");
-      setCustomProfile({
-        name: "",
-        cruiseKtasOverride: "",
-        fuelBurnOverrideGph: "",
-        usableFuelOverrideGal: "",
-        maxGrossWeightOverrideLb: "",
-      });
-      setPlannedFuelUplifts({});
-      setFilingDraft({
-        flightRules: "VFR",
-        aircraftId: "",
-        equipment: "S/C",
-        soulsOnBoard: "1",
-        aircraftColor: "",
-        pilotName: "",
-        pilotPhone: String((user as any)?.phone || ""),
-        aircraftHomeBase: String((user as any)?.homeBase || "").toUpperCase(),
-        remarks: "",
-        wakeTurbulence: "MEDIUM",
-        typeOfFlight: "G",
-        surveillanceEquipment: "N",
-        otherInfo: "",
-        planningReferenceDepartureAirport: "",
-        planningReferenceDestinationAirport: "",
-        planningReferenceAlternateAirport: "",
-        departureName: "",
-        destinationName: "",
-        alternateName: "",
-        manualEstimatedEnrouteMinutes: "",
-        manualEnduranceMinutes: "",
-      });
-    };
+    setProviderUpdatesPlan(null);
+    setFilingActionFeedback(null);
+    setFilingPreview(null);
+    setShowFilingPayload(false);
+    setExpandedPlanIds({});
+    setDeleteConfirmPlan(null);
+    setShowApproachOffer(false);
+    setActiveWeatherDetail(null);
+    departureLookupRef.current = null;
+    destinationLookupRef.current = null;
+    lastApproachOfferKeyRef.current = null;
+    queryClient.removeQueries({ queryKey: ["/api/flight-plans/route-analysis"] });
+    queryClient.removeQueries({ queryKey: ["/api/flight-plans/route-search"] });
+    setForm({
+      title: "",
+      departure: "",
+      destination: "",
+      route: "",
+      alternate: "",
+      plannedDepartureAt: "",
+      plannedArrivalAt: "",
+      aircraftType: "",
+      tailNumber: "",
+      fuelOnBoard: "",
+      notes: "",
+    });
+    setWaypointsInput("");
+    setPlannedStopsInput("");
+    setDepartureRunway("");
+    setSelectedProfileId("none");
+    setSelectedTypeId(FALLBACK_TYPE.id);
+    setFuelBurnMode("standard");
+    setReserveMinutes("45");
+    setHeadwind("0");
+    setPlannedAltitude("");
+    setArrivalAuto(true);
+    setRouteSuggestion("direct");
+    setRouteMode("direct");
+    setCustomProfile({
+      name: "",
+      cruiseKtasOverride: "",
+      fuelBurnOverrideGph: "",
+      usableFuelOverrideGal: "",
+      maxGrossWeightOverrideLb: "",
+    });
+    setPlannedFuelUplifts({});
+    setFilingDraft({
+      flightRules: "VFR",
+      aircraftId: "",
+      equipment: "S/C",
+      soulsOnBoard: "1",
+      aircraftColor: "",
+      pilotName: "",
+      pilotPhone: String((user as any)?.phone || ""),
+      aircraftHomeBase: String((user as any)?.homeBase || "").toUpperCase(),
+      remarks: "",
+      wakeTurbulence: "MEDIUM",
+      typeOfFlight: "G",
+      surveillanceEquipment: "",
+      otherInfo: "",
+      planningReferenceDepartureAirport: "",
+      planningReferenceDestinationAirport: "",
+      planningReferenceAlternateAirport: "",
+      departureName: "",
+      destinationName: "",
+      alternateName: "",
+      manualEstimatedEnrouteMinutes: "",
+      manualEnduranceMinutes: "",
+    });
+  };
 
   const plannerHasDraftContent = Boolean(
     editingPlan ||
@@ -6388,9 +6437,7 @@ export default function FlightPlanner() {
                     </SelectTrigger>
                     <SelectContent className={cn("max-h-72 overflow-y-auto", plannerSelectContentClass)}>
                       <SelectItem value={CUSTOM_TYPE_ID}>Custom entry</SelectItem>
-                      <SelectItem value={FALLBACK_TYPE.id}>
-                        {FALLBACK_TYPE.make} {FALLBACK_TYPE.model}
-                      </SelectItem>
+                      <SelectItem value={FALLBACK_TYPE.id}>Select your aircraft</SelectItem>
                       {aircraftTypes.map((type) => (
                         <SelectItem key={type.id} value={type.id}>
                           {type.make} {type.model}{type.icaoType ? ` (${type.icaoType})` : ""}
@@ -7032,14 +7079,6 @@ export default function FlightPlanner() {
               placeholder="KBDL"
             />
           </div>
-            <div className="space-y-2">
-              <Label>Tail Number</Label>
-              <Input
-                value={form.tailNumber}
-                onChange={(e) => setForm({ ...form, tailNumber: e.target.value })}
-                placeholder="N12345"
-              />
-            </div>
             <div className="space-y-2">
               <Label>Planned Departure</Label>
               <Input
@@ -8181,7 +8220,7 @@ export default function FlightPlanner() {
                   <Input
                     value={filingDraft.aircraftId}
                     onChange={(e) => setFilingDraft((current) => ({ ...current, aircraftId: e.target.value.toUpperCase() }))}
-                    placeholder="N123RS"
+                    placeholder="Enter aircraft ID / tail number"
                   />
                 </div>
                 <div className="space-y-2">
@@ -8290,19 +8329,107 @@ export default function FlightPlanner() {
                 </div>
                 <div className="space-y-2">
                   <Label>Surveillance Equipment</Label>
-                  <Input
-                    value={filingDraft.surveillanceEquipment}
-                    onChange={(e) => setFilingDraft((current) => ({ ...current, surveillanceEquipment: e.target.value.toUpperCase() }))}
-                    placeholder="N"
-                  />
+                  <Select
+                    value=""
+                    onValueChange={(code) => {
+                      if (!code) return;
+                      setSurveillanceCodes(code === "N" ? ["N"] : [...selectedSurveillanceCodes.filter((entry) => entry !== "N"), code]);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select surveillance equipment" />
+                    </SelectTrigger>
+                    <SelectContent className={plannerSelectContentClass}>
+                      {ICAO_SURVEILLANCE_OPTIONS.map((entry) => (
+                        <SelectItem key={entry.code} value={entry.code}>
+                          {entry.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedSurveillanceCodes.length > 0 ? selectedSurveillanceCodes.map((code) => (
+                      <Badge key={code} variant="secondary" className="gap-1">
+                        {code}
+                        <button type="button" onClick={() => setSurveillanceCodes(selectedSurveillanceCodes.filter((entry) => entry !== code))} aria-label={`Remove surveillance code ${code}`}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    )) : <span className="text-xs text-muted-foreground">Select one or more ICAO surveillance codes.</span>}
+                  </div>
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Other ICAO Info</Label>
-                  <Input
-                    value={filingDraft.otherInfo}
-                    onChange={(e) => setFilingDraft((current) => ({ ...current, otherInfo: e.target.value.toUpperCase() }))}
-                    placeholder="PBN/... NAV/... DAT/... SUR/..."
-                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label>Other ICAO Information</Label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIcaoOtherInfoEntries([...icaoOtherInfoEntries, { prefix: "RMK/", value: "" }])}
+                    >
+                      Add ICAO Entry
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {icaoOtherInfoEntries.length === 0 ? (
+                      <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                        Add ICAO Item 18 entries only when required for this aircraft or flight.
+                      </div>
+                    ) : icaoOtherInfoEntries.map((entry, index) => (
+                      <div key={`${entry.prefix}-${index}`} className="grid gap-2 md:grid-cols-[12rem_minmax(0,1fr)_auto]">
+                        <Select
+                          value={entry.prefix}
+                          onValueChange={(value) => {
+                            const next = [...icaoOtherInfoEntries];
+                            next[index] = { ...entry, prefix: value as IcaoOtherInfoPrefix };
+                            setIcaoOtherInfoEntries(next);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select ICAO Prefix" />
+                          </SelectTrigger>
+                          <SelectContent className={plannerSelectContentClass}>
+                            {ICAO_OTHER_INFO_PREFIXES.map((prefix) => (
+                              <SelectItem key={prefix} value={prefix}>
+                                {prefix}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          value={entry.value}
+                          onChange={(e) => {
+                            const next = [...icaoOtherInfoEntries];
+                            next[index] = { ...entry, value: e.target.value.toUpperCase() };
+                            setIcaoOtherInfoEntries(next);
+                          }}
+                          placeholder="Enter value"
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => setIcaoOtherInfoEntries(icaoOtherInfoEntries.filter((_, entryIndex) => entryIndex !== index))}
+                          aria-label={`Remove ${entry.prefix} entry`}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-md border bg-background/40 p-3 text-xs">
+                    <div className="mb-1 font-semibold text-foreground">ICAO Item 18 Preview</div>
+                    <div className="break-words font-mono text-muted-foreground">{filingDraft.otherInfo.trim() || "-"}</div>
+                  </div>
+                  {(icaoEquipmentWarnings.missingR || icaoEquipmentWarnings.missingZ) && (
+                    <Alert className="border-amber-300 bg-amber-900/20 text-amber-100">
+                      <AlertDescription>
+                        Selected ICAO information requires additional aircraft equipment codes.
+                        {icaoEquipmentWarnings.missingR ? " Add R for PBN/." : ""}
+                        {icaoEquipmentWarnings.missingZ ? " Add Z for NAV/, COM/, or DAT/." : ""}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Manual ETE Minutes <span className="text-xs text-muted-foreground">(ZZZZ/IFR test)</span></Label>

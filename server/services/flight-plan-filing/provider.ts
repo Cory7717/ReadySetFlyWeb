@@ -14,6 +14,7 @@ import {
   type FilingProviderSnapshot,
 } from "@shared/flight-plan-filing-workflow";
 import { normalizeIcaoEquipmentCodes, hasOnlyKnownIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
+import { getIcaoOtherInfoEquipmentWarnings, hasOnlyKnownIcaoSurveillanceCodes } from "@shared/icao-filing";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -1034,7 +1035,8 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("wakeTurbulence", getLeidosWakeTurbulence(plan));
     append("aircraftEquipment", normalizeLeidosEquipmentCode(plan.filingEquipment));
     append("route", routeNormalization.normalizedRoute || "DCT");
-    append("remarks", plan.filingRemarks || plan.notes);
+    const primaryRemarks = String(plan.filingRemarks || plan.notes || "").trim();
+    append("remarks", primaryRemarks);
     append("fuelOnBoard", minutesToIsoDuration(plan.filingEnduranceMinutes));
     append("pilotData", plan.filingPilotName);
     append("peopleOnBoardExtended", plan.filingSoulsOnBoard);
@@ -1049,7 +1051,9 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
       destinationName: plan.destination?.toUpperCase() === "ZZZZ" ? plan.filingDestinationName : null,
       alternateName: plan.alternate?.toUpperCase() === "ZZZZ" ? plan.filingAlternateName : null,
     });
-    append("suppRemarksExtended", supplementalRemarks);
+    if (supplementalRemarks && supplementalRemarks !== primaryRemarks) {
+      append("suppRemarksExtended", supplementalRemarks);
+    }
     const mergedOtherInfo = normalizeLeidosOtherInfoForTransmission(buildZzzzOtherInfoForLeidos(otherInfoResult.otherInfo, {
       departureName: plan.departure?.toUpperCase() === "ZZZZ" ? plan.filingDepartureName : null,
       destinationName: plan.destination?.toUpperCase() === "ZZZZ" ? plan.filingDestinationName : null,
@@ -1640,11 +1644,14 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if ((action === "file" || action === "amend") && !plan.filingSurveillanceEquipment) {
     errors.push("Surveillance equipment is required before sending this filing action to Leidos.");
   }
+  if ((action === "file" || action === "amend") && plan.filingSurveillanceEquipment && !hasOnlyKnownIcaoSurveillanceCodes(plan.filingSurveillanceEquipment)) {
+    errors.push("Surveillance equipment must use approved ICAO surveillance codes.");
+  }
   if ((action === "file" || action === "amend") && !plan.filingAircraftHomeBase) {
     errors.push("Aircraft home base is required before sending this filing action to Leidos.");
   }
   if ((action === "file" || action === "amend") && !plan.filingRemarks && !plan.notes) {
-    errors.push("Filing Remarks / ATC Remarks are required before sending this filing action to Leidos.");
+    errors.push("Filing Remarks / ATC Remarks are required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && rules === "VFR" && Number(plan.filingPlannedAltitudeFt || 0) >= 18000) {
     errors.push("VFR flight plans cannot be filed at or above FL180. Use IFR or choose a lower altitude.");
@@ -1710,6 +1717,12 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
 
   if (!routeNormalization.normalizedRoute && rules === "VFR") {
     warnings.push("VFR filing can proceed direct, but adding route detail improves the handoff packet.");
+  }
+  if (action === "file" || action === "amend") {
+    const otherInfoWarnings = getIcaoOtherInfoEquipmentWarnings(plan.filingOtherInfo, plan.filingEquipment);
+    if (otherInfoWarnings.missingR || otherInfoWarnings.missingZ) {
+      warnings.push("Selected ICAO information requires additional aircraft equipment codes.");
+    }
   }
   warnings.push(...routeNormalization.notes.filter((note) => !warnings.includes(note)));
 
@@ -1836,6 +1849,9 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         timezoneUsed: getPlannerTimeZone(effectivePlan),
         computedProviderDepartureInstant: payloadContext.payloadSnapshot.departureInstant,
         savedDisplayTime: (payloadContext.payloadSnapshot as Record<string, unknown>).selectedLocalDepartureTime ?? null,
+        remarksPopulated: Boolean(requestPayloadRecord.remarks),
+        suppRemarksExtendedPopulated: Boolean(requestPayloadRecord.suppRemarksExtended),
+        otherInfoPopulated: Boolean(requestPayloadRecord.otherInfo),
         payload: redactPayloadForLog(payloadContext.payloadSnapshot.transmittedFields),
       }));
     }

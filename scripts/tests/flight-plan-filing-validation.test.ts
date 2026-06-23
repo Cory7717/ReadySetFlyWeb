@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { FlightPlan } from "../../shared/schema";
 import { extractFilingProviderPlanId } from "../../shared/flight-plan-filing";
+import { buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
 import { buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction } from "../../server/services/flight-plan-filing/provider";
 
 function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
@@ -104,6 +105,36 @@ test("filing does not silently default operational ICAO fields", () => {
   assert.ok(result.errors.some((error) => /wake turbulence/i.test(error)));
   assert.ok(result.errors.some((error) => /type of flight/i.test(error)));
   assert.ok(result.errors.some((error) => /surveillance equipment/i.test(error)));
+});
+
+test("ICAO filing controls normalize surveillance and Other Info entries", () => {
+  assert.deepEqual(parseIcaoSurveillanceCodes("B2 U2"), ["B2", "U2"]);
+  assert.equal(
+    buildIcaoOtherInfo([
+      { prefix: "PBN/", value: "a1b2c2d2s1" },
+      { prefix: "NAV/", value: "gps" },
+      { prefix: "RMK/", value: "training flight" },
+    ]),
+    "PBN/A1B2C2D2S1 NAV/GPS RMK/TRAINING FLIGHT",
+  );
+  assert.deepEqual(parseIcaoOtherInfoEntries("PBN/A1B2C2D2S1 NAV/GPS RMK/TRAINING FLIGHT"), [
+    { prefix: "PBN/", value: "A1B2C2D2S1" },
+    { prefix: "NAV/", value: "GPS" },
+    { prefix: "RMK/", value: "TRAINING FLIGHT" },
+  ]);
+});
+
+test("ICAO validation rejects bad surveillance and warns for equipment dependencies", () => {
+  const invalidSurveillance = validateFlightPlanForAction(filingPlan({ filingSurveillanceEquipment: "Q9" }), "file");
+  assert.equal(invalidSurveillance.ready, false);
+  assert.ok(invalidSurveillance.errors.some((error) => /surveillance equipment must use approved/i.test(error)));
+
+  const missingEquipment = validateFlightPlanForAction(filingPlan({
+    filingEquipment: "S",
+    filingOtherInfo: "PBN/A1B2C2D2S1 NAV/GPS",
+  }), "file");
+  assert.equal(missingEquipment.ready, true);
+  assert.ok(missingEquipment.warnings.some((warning) => /requires additional aircraft equipment codes/i.test(warning)));
 });
 
 test("Leidos otherInfo transmission omits duplicated remarks", () => {

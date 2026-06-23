@@ -21433,15 +21433,31 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const isAlert = notificationType.toUpperCase().includes("ALERT");
         const inAppType = isAlert ? "flight_alert" : "flight_change";
         const pushTitle = isAlert ? "Flight Alert" : "Flight Plan Update";
-        const notificationTitle = isAlert
-          ? `Flight Alert${alertType ? `: ${alertType}` : ""}`
-          : `Flight Plan Change${changeType ? `: ${changeType}` : ""}`;
+        const hasExplicitProviderChange = Boolean(
+          flightVersionStamp ||
+          flightState ||
+          expectedRoute ||
+          artccState ||
+          artccInfo ||
+          changeType ||
+          alertType ||
+          notificationType,
+        );
+        const notificationTitle = hasExplicitProviderChange
+          ? isAlert
+            ? `Flight Alert${alertType ? `: ${alertType}` : ""}`
+            : `Flight Plan Change${changeType ? `: ${changeType}` : ""}`
+          : "Flight Service push received";
+        const providerMessageDetails = hasExplicitProviderChange
+          ? extractedMessage
+          : "Flight Service pushed an update for this flight plan. RSF refreshed provider sync; no route, status, ARTCC, or notice changes were reported in the push payload.";
+        const pushReceivedAt = String(payload.notificationTimestamp || payload.timestamp || new Date().toISOString());
         const providerMessage: FilingProviderMessage = {
-          id: buildFilingEventId("webhook", flightIdentifier, notificationTitle, extractedMessage, payload.notificationTimestamp ?? payload.timestamp),
-          timestamp: String(payload.notificationTimestamp || payload.timestamp || new Date().toISOString()),
+          id: buildFilingEventId("webhook", flightIdentifier, notificationTitle, extractedMessage, pushReceivedAt),
+          timestamp: pushReceivedAt,
           severity: isAlert ? "warning" : "info",
           title: notificationTitle,
-          details: extractedMessage,
+          details: providerMessageDetails,
           source: "webhook",
           provider: "Leidos Flight Service",
           providerPlanId: flightIdentifier,
@@ -21454,7 +21470,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           userId: matchedPlan.userId,
           type: inAppType,
           title: notificationTitle,
-          message: extractedMessage,
+          message: providerMessageDetails,
           meta: {
             flightPlanId: matchedPlan.id,
             providerPlanId: flightIdentifier,
@@ -21472,7 +21488,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               tokens.map((token) => ({
                 to: token.token,
                 title: pushTitle,
-                body: extractedMessage.slice(0, 100),
+                body: providerMessageDetails.slice(0, 100),
                 data: {
                   flightPlanId: matchedPlan.id,
                   type: inAppType,
@@ -21488,8 +21504,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           providerFlightState: flightState || null,
           providerArtccState: artccState || null,
           providerArtccInfo: artccInfo || null,
-          providerModifiedBySpecialist: true,
-          providerPendingReview: true,
+          providerModifiedBySpecialist: hasExplicitProviderChange,
+          providerPendingReview: hasExplicitProviderChange,
+          providerLastPushTitle: notificationTitle,
+          providerLastPushMessage: providerMessageDetails,
           lastProviderUpdateAt: new Date().toISOString(),
         };
 
@@ -21501,6 +21519,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               ? syncedPlan.filingProviderSnapshot as Record<string, unknown>
               : {};
           await storage.updateFlightPlan(matchedPlan.id, {
+            filingProviderMessages: appendPlanProviderMessages(
+              (syncedPlan as Record<string, unknown>)?.filingProviderMessages,
+              [providerMessage],
+            ) as any,
             filingProviderSnapshot: {
               ...syncedSnapshot,
               ...providerReviewSnapshot,

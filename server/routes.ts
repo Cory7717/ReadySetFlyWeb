@@ -21331,9 +21331,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       // STEP 1 — Log the full raw payload for debugging during Leidos lab testing.
       const payload = req.body ?? {};
+      const alert =
+        payload.flightAlert && typeof payload.flightAlert === "object" && !Array.isArray(payload.flightAlert)
+          ? payload.flightAlert
+          : payload;
 
       // Determine notification type (FLIGHT_CHANGE or FLIGHT_ALERT).
       const notificationType: string =
+        alert.notificationType ??
+        alert.type ??
+        alert.eventType ??
         payload.notificationType ??
         payload.type ??
         payload.eventType ??
@@ -21341,11 +21348,25 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       // Defensive extraction — Leidos lab payload field names may vary.
       const flightIdentifier: string | null =
+        alert.flightIdentifier ??
+        alert.planId ??
+        alert.flightPlanId ??
+        alert.id ??
         payload.flightIdentifier ??
         payload.planId ??
         payload.flightPlanId ??
         payload.id ??
         null;
+      const flightVersionStamp: string | null =
+        alert.flightVersionStamp ??
+        alert.versionStamp ??
+        payload.flightVersionStamp ??
+        payload.versionStamp ??
+        null;
+      const flightState: string | null = alert.flightState ?? payload.flightState ?? null;
+      const expectedRoute: string | null = alert.expectedRoute ?? payload.expectedRoute ?? null;
+      const artccState: string | null = alert.artccState ?? payload.artccState ?? null;
+      const artccInfo = alert.artccInfo ?? payload.artccInfo ?? null;
 
       console.info(JSON.stringify({
         event: "leidos_push_received",
@@ -21357,16 +21378,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }));
 
       const changeType: string | null =
+        alert.changeType ??
+        alert.change ??
         payload.changeType ??
         payload.change ??
         null;
 
       const alertType: string | null =
+        alert.alertType ??
+        alert.alert ??
         payload.alertType ??
         payload.alert ??
         null;
 
       const extractedMessage: string =
+        alert.alertMessage ??
+        alert.message ??
+        alert.description ??
+        alert.detail ??
         payload.alertMessage ??
         payload.message ??
         payload.description ??
@@ -21453,16 +21482,47 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           });
         }
 
+        const providerReviewSnapshot = {
+          versionStamp: flightVersionStamp || null,
+          providerExpectedRoute: expectedRoute || null,
+          providerFlightState: flightState || null,
+          providerArtccState: artccState || null,
+          providerArtccInfo: artccInfo || null,
+          providerModifiedBySpecialist: true,
+          providerPendingReview: true,
+          lastProviderUpdateAt: new Date().toISOString(),
+        };
+
         const syncResult = await syncLeidosPlanMetadata(matchedPlan as any).catch(() => null);
         if (syncResult) {
-          await persistLeidosProviderSync(matchedPlan as any, syncResult, { extraMessages: [providerMessage] });
+          const syncedPlan = await persistLeidosProviderSync(matchedPlan as any, syncResult, { extraMessages: [providerMessage] });
+          const syncedSnapshot =
+            syncedPlan?.filingProviderSnapshot && typeof syncedPlan.filingProviderSnapshot === "object" && !Array.isArray(syncedPlan.filingProviderSnapshot)
+              ? syncedPlan.filingProviderSnapshot as Record<string, unknown>
+              : {};
+          await storage.updateFlightPlan(matchedPlan.id, {
+            filingProviderSnapshot: {
+              ...syncedSnapshot,
+              ...providerReviewSnapshot,
+              versionStamp: providerReviewSnapshot.versionStamp || syncedSnapshot.versionStamp || null,
+            },
+          } as any);
         } else {
+          const existingSnapshot =
+            matchedPlan.filingProviderSnapshot && typeof matchedPlan.filingProviderSnapshot === "object" && !Array.isArray(matchedPlan.filingProviderSnapshot)
+              ? matchedPlan.filingProviderSnapshot as Record<string, unknown>
+              : {};
           const mergedMessages = appendPlanProviderMessages(
             (matchedPlan as Record<string, unknown>).filingProviderMessages,
             [providerMessage],
           );
           await storage.updateFlightPlan(matchedPlan.id, {
             filingProviderMessages: mergedMessages as any,
+            filingProviderSnapshot: {
+              ...existingSnapshot,
+              ...providerReviewSnapshot,
+              versionStamp: providerReviewSnapshot.versionStamp || existingSnapshot.versionStamp || null,
+            },
           } as any);
         }
       } catch (innerError) {
@@ -21740,6 +21800,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const action = parsed.data.action as FlightPlanFilingAction;
       const closeLocation = parsed.data.closeLocation || null;
       const flightRules = (plan.filingFlightRules || "VFR").toUpperCase();
+      const actionProviderSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+      if (action === "amend" && actionProviderSnapshot.providerPendingReview === true) {
+        return res.status(409).json({
+          error: "Flight Service has updated this flight plan. Review and accept or reconcile those changes before submitting another amendment.",
+          requiresProviderReview: true,
+          providerSnapshot: actionProviderSnapshot,
+          plan,
+        });
+      }
       if (["cancel", "close", "activate"].includes(action) && plan.filingProviderPlanId) {
         const providerSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
         const availability = asRecord(providerSnapshot.providerActionAvailability);

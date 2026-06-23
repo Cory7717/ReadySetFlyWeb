@@ -25,6 +25,7 @@ export type FilingPayloadSnapshot = {
   action: string;
   builtAt: string;
   departureInstant: string | null;
+  selectedLocalDepartureTime?: string | null;
   departureOperationalDate: string | null;
   dof: string | null;
   dofInjected: boolean;

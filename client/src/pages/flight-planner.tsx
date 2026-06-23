@@ -143,15 +143,15 @@ const summarizePlannerError = (value: unknown) => {
   }
 
   if (/Leidos .* timed out before Flight Service responded/i.test(message)) {
-    return "Leidos is taking longer than usual to respond. Wait a few minutes, then try again.";
+    return "The filing provider is taking longer than usual to respond. Wait a few minutes, then try again.";
   }
 
   if (/connect timeout|timed out|fetch failed/i.test(message)) {
-    return "Leidos is taking longer than usual to respond. Wait a few minutes, then try again.";
+    return "The filing provider is taking longer than usual to respond. Wait a few minutes, then try again.";
   }
 
   if (/<!doctype html|<html[\s>]|<body[\s>]|<head[\s>]/i.test(message)) {
-    return "Leidos returned HTML instead of a REST response. Check the configured endpoint paths, credentials, and lab environment settings.";
+    return "The filing provider returned HTML instead of a REST response. Check the configured endpoint paths, credentials, and lab environment settings.";
   }
 
   if (/<[^>]+>/.test(message)) {
@@ -237,6 +237,8 @@ const buildPlannerStateSnapshot = ({
   selectedProfileMaxGrossWeightLb,
   departureTimeZone,
   destinationTimeZone,
+  userDisplayDepartureTimeLocal,
+  userDisplayArrivalTimeLocal,
   planningReferenceDepartureAirport,
   planningReferenceDestinationAirport,
   planningReferenceAlternateAirport,
@@ -250,6 +252,8 @@ const buildPlannerStateSnapshot = ({
   selectedProfileMaxGrossWeightLb: number | null;
   departureTimeZone: string | null;
   destinationTimeZone: string | null;
+  userDisplayDepartureTimeLocal?: string | null;
+  userDisplayArrivalTimeLocal?: string | null;
   planningReferenceDepartureAirport?: string | null;
   planningReferenceDestinationAirport?: string | null;
   planningReferenceAlternateAirport?: string | null;
@@ -269,6 +273,8 @@ const buildPlannerStateSnapshot = ({
   selectedProfileMaxGrossWeightLb,
   departureTimeZone,
   destinationTimeZone,
+  userDisplayDepartureTimeLocal,
+  userDisplayArrivalTimeLocal,
   planningReferenceDepartureAirport,
   planningReferenceDestinationAirport,
   planningReferenceAlternateAirport,
@@ -430,27 +436,27 @@ const formatPlanLocalZulu = (value: string | Date | null | undefined, timeZone: 
 
 const getAmendAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
   if (!plan) {
-    return "Save this plan first, then file it before trying to amend it through Leidos.";
+    return "Save this plan first, then file it before trying to amend it through the filing provider.";
   }
 
   const status = normalizedClientFilingStatus(plan);
   const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
 
   if (!plan.filingIsLive) {
-    return "This saved plan is still local or staged. File it live with Leidos first, then amend it from the filed record.";
+    return "This saved plan is still local or staged. File it live with the filing provider first, then amend it from the filed record.";
   }
 
   if (!plan.filingProviderPlanId) {
-    return "This filed record is missing the Leidos flight identifier. File it again so RSF can refresh the amend tracking.";
+    return "This filed record is missing the provider flight identifier. File it again so RSF can refresh the amend tracking.";
   }
 
   if (!extractClientVersionStamp(plan)) {
-    return "This filed record is still waiting on the Leidos amend token. Refresh provider sync in a few minutes, then try amend again.";
+    return "This filed record is still waiting on the provider amend token. Refresh provider sync in a few minutes, then try amend again.";
   }
 
   const provider = getProviderActionAvailability(plan);
   if (!provider.providerStatusKnown) {
-    return provider.reason || "Refresh provider sync before taking Leidos lifecycle actions. RSF could not determine the current provider state.";
+    return provider.reason || "Refresh provider sync before taking filing provider lifecycle actions. RSF could not determine the current provider state.";
   }
 
   if (rules === "IFR" && status !== "filed") {
@@ -480,7 +486,7 @@ const getDraftAmendAvailabilityMessage = ({
   plannedAltitudeFt: number | null | undefined;
 }) => {
   if (!plan) {
-    return "Save this plan first, then file it before trying to amend it through Leidos.";
+    return "Save this plan first, then file it before trying to amend it through the filing provider.";
   }
 
   const normalizedRules = String(flightRules || "VFR").toUpperCase();
@@ -490,7 +496,7 @@ const getDraftAmendAvailabilityMessage = ({
   }
 
   if (normalizedRules === "IFR" && !String(route || "").trim()) {
-    return "IFR amendments require a filed route before RSF can send the update to Leidos.";
+    return "IFR amendments require a filed route before RSF can send the update to the filing provider.";
   }
 
   if (!plannedDepartureAt) {
@@ -1751,7 +1757,7 @@ export default function FlightPlanner() {
   const [plannedAltitude, setPlannedAltitude] = useState("");
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
-  const [routeMode, setRouteMode] = useState<"auto" | "direct" | "manual">("auto");
+  const [routeMode, setRouteMode] = useState<"auto" | "direct" | "manual">("direct");
   const [mapStyle, setMapStyle] = useState<RsfPlannerMapStyle>("sectional");
   const [mapRenderVersion, setMapRenderVersion] = useState(0);
   const [airportLabelMode, setAirportLabelMode] = useState<"icao" | "full" | "markers">("icao");
@@ -2289,7 +2295,7 @@ export default function FlightPlanner() {
             mergePlanIntoList(current, result.plan)
           );
           if (nextProviderState !== previousProviderState) {
-            toast({ title: "Leidos update received", description: `${result.plan.departure} to ${result.plan.destination} refreshed from provider sync.` });
+            toast({ title: "Provider update received", description: `${result.plan.departure} to ${result.plan.destination} refreshed from provider sync.` });
           }
         } catch {
           // Background sync should not interrupt planner work.
@@ -2498,7 +2504,7 @@ export default function FlightPlanner() {
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
-        throw new Error(payload?.error || "Failed to load Leidos route suggestions");
+        throw new Error(payload?.error || "Failed to load route suggestions");
       }
       return res.json();
     },
@@ -5187,7 +5193,7 @@ export default function FlightPlanner() {
     setActiveTab("route");
     toast({
       title: "Filed plan loaded for amendment",
-      description: "Make your changes anywhere in the planner, then return to File & Save and click Amend to submit the updated plan to Leidos.",
+      description: "Make your changes anywhere in the planner, then return to File & Save and click Amend to submit the updated plan to the filing provider.",
     });
   };
 
@@ -5248,6 +5254,8 @@ export default function FlightPlanner() {
             selectedProfileMaxGrossWeightLb: selectedProfile?.max_gross_weight_lb_effective ?? null,
             departureTimeZone,
             destinationTimeZone,
+            userDisplayDepartureTimeLocal: form.plannedDepartureAt || null,
+            userDisplayArrivalTimeLocal: form.plannedArrivalAt || null,
             planningReferenceDepartureAirport: planningReferenceDepartureAirport || null,
             planningReferenceDestinationAirport: planningReferenceDestinationAirport || null,
             planningReferenceAlternateAirport: planningReferenceAlternateAirport || null,
@@ -5338,6 +5346,8 @@ export default function FlightPlanner() {
           selectedProfileMaxGrossWeightLb: selectedProfile?.max_gross_weight_lb_effective ?? null,
           departureTimeZone,
           destinationTimeZone,
+          userDisplayDepartureTimeLocal: form.plannedDepartureAt || null,
+          userDisplayArrivalTimeLocal: form.plannedArrivalAt || null,
           planningReferenceDepartureAirport: planningReferenceDepartureAirport || null,
           planningReferenceDestinationAirport: planningReferenceDestinationAirport || null,
           planningReferenceAlternateAirport: planningReferenceAlternateAirport || null,
@@ -5370,7 +5380,7 @@ export default function FlightPlanner() {
         setReturnToFileAfterSave(false);
         toast({
           title: "Flight plan updated",
-          description: "Submitting the amended plan to Leidos.",
+          description: "Submitting the amended plan to the filing provider.",
         });
         filingActionMutation.mutate({ planId: updatedPlan.id, action: pendingFilingActionAfterSave.action });
         setPendingFilingActionAfterSave(null);
@@ -5491,8 +5501,8 @@ export default function FlightPlanner() {
         title: result.readyToFile ? "Filing preview ready" : "Filing preview generated",
         description: result.readyToFile
           ? (result.liveAvailable
-            ? "RSF validated the packet and the Leidos live filing path is available."
-            : "RSF validated the packet and kept the handoff staged until live Leidos paths are fully configured.")
+            ? "RSF validated the packet and the live filing path is available."
+            : "RSF validated the packet and kept the handoff staged until live filing paths are fully configured.")
           : "Review the filing errors and warnings before continuing to Flight Service.",
       });
     },
@@ -5549,7 +5559,7 @@ export default function FlightPlanner() {
       setFilingActionFeedback({
         tone: "pending",
         title: `${variables.action.charAt(0).toUpperCase()}${variables.action.slice(1)} request in progress`,
-        message: "RSF is sending the action to Leidos Flight Service.",
+        message: "RSF is sending the action to the filing provider Flight Service.",
       });
     },
     onSuccess: (result: any, variables) => {
@@ -5574,7 +5584,7 @@ export default function FlightPlanner() {
       setFilingActionFeedback({
         tone: live ? "success" : "warning",
         title: actionTitles[variables.action] ?? (live ? "Request accepted" : "Request staged"),
-        message: result?.message || (live ? "Leidos accepted the request." : "The request is staged and has not been accepted live by Leidos."),
+        message: result?.message || (live ? "The filing provider accepted the request." : "The request is staged and has not been accepted live by the filing provider."),
         providerPlanId: result?.providerPlanId || updatedPlan?.filingProviderPlanId || null,
         beaconCode: getPlanBeaconCode(updatedPlan) || null,
       });
@@ -5609,9 +5619,9 @@ export default function FlightPlanner() {
         message,
       });
       toast({
-        title: /provider state|Leidos says|PROPOSED/i.test(String(error?.message || ""))
+        title: /provider state|The filing provider says|PROPOSED/i.test(String(error?.message || ""))
           ? "Provider state changed"
-          : isLeidosTimeoutMessage(error?.message) ? "Leidos is taking longer than usual" : "Flight plan action failed",
+          : isLeidosTimeoutMessage(error?.message) ? "The filing provider is taking longer than usual" : "Flight plan action failed",
         description: message,
         variant: "destructive",
       });
@@ -5644,7 +5654,7 @@ export default function FlightPlanner() {
         title: routeChanged ? "Provider updated your route" : (result?.versionStamp ? "Provider sync complete" : "Provider sync checked"),
         description: routeChanged
           ? "The provider returned a different effective route. See Provider Updates for details."
-          : result?.message || "RSF checked the latest state from Leidos.",
+          : result?.message || "RSF checked the latest state from the filing provider.",
       });
     },
     onError: (error: any) => {
@@ -5749,7 +5759,7 @@ export default function FlightPlanner() {
       toast({
         title: result.live ? "Guest flight plan submitted" : "Guest filing staged",
         description: result.live
-          ? "RSF submitted this guest filing to Leidos. Create a free account to save future plans and manage amendments."
+          ? "RSF submitted this guest filing to the filing provider. Create a free account to save future plans and manage amendments."
           : (result.message || "RSF processed the guest filing request."),
       });
     },
@@ -5793,14 +5803,22 @@ export default function FlightPlanner() {
       return;
     }
     setDraftPlanId(editingPlan.id);
+    const savedPlannerState =
+      editingPlan.plannerState && typeof editingPlan.plannerState === "object" && !Array.isArray(editingPlan.plannerState)
+        ? editingPlan.plannerState as Record<string, any>
+        : {};
     setForm({
       title: editingPlan.title || "",
       departure: editingPlan.departure || "",
       destination: editingPlan.destination || "",
       route: editingPlan.route || "",
       alternate: editingPlan.alternate || "",
-      plannedDepartureAt: editingPlan.plannedDepartureAt ? new Date(editingPlan.plannedDepartureAt).toISOString().slice(0, 16) : "",
-      plannedArrivalAt: editingPlan.plannedArrivalAt ? new Date(editingPlan.plannedArrivalAt).toISOString().slice(0, 16) : "",
+      plannedDepartureAt: typeof savedPlannerState.userDisplayDepartureTimeLocal === "string"
+        ? savedPlannerState.userDisplayDepartureTimeLocal
+        : editingPlan.plannedDepartureAt ? new Date(editingPlan.plannedDepartureAt).toISOString().slice(0, 16) : "",
+      plannedArrivalAt: typeof savedPlannerState.userDisplayArrivalTimeLocal === "string"
+        ? savedPlannerState.userDisplayArrivalTimeLocal
+        : editingPlan.plannedArrivalAt ? new Date(editingPlan.plannedArrivalAt).toISOString().slice(0, 16) : "",
       aircraftType: editingPlan.aircraftType || "",
       tailNumber: editingPlan.tailNumber || "",
       fuelOnBoard: editingPlan.fuelOnBoard ? String(editingPlan.fuelOnBoard) : "",
@@ -5844,7 +5862,7 @@ export default function FlightPlanner() {
     const savedRouteTokens = normalizedSavedRoute ? normalizedSavedRoute.split(/\s+/) : [];
     const savedRouteIsAirportOnly = savedRouteTokens.length > 0 && savedRouteTokens.every((token) => ICAO_REGEX.test(token));
     setWaypointsInput(savedRouteIsAirportOnly ? normalizedSavedRoute : "");
-    setRouteMode(normalizedSavedRoute === "DCT" ? "direct" : (normalizedSavedRoute ? "manual" : "auto"));
+    setRouteMode(normalizedSavedRoute === "DCT" || !normalizedSavedRoute ? "direct" : "manual");
     setPlannedStopsInput("");
     setPlannedAltitude(editingPlan.filingPlannedAltitudeFt ? String(editingPlan.filingPlannedAltitudeFt) : "");
     const plannerState =
@@ -5974,7 +5992,7 @@ export default function FlightPlanner() {
               className="rsf-metal-button-secondary"
               onClick={openScratchPad}
             >
-              ✏ Scratch Pad
+              ? Scratch Pad
             </Button>
           </>
         )
@@ -6135,7 +6153,7 @@ export default function FlightPlanner() {
             RSF flight planning and filing workflow is still undergoing testing. Treat the planner as a beta feature and do not rely on RSF for operational live filing yet.
           </div>
           <div className="text-[#8fa6c0]">
-            Live Leidos filing remains limited to controlled testing while validation is in progress.
+            Live filing remains limited to controlled testing while validation is in progress.
           </div>
         </AlertDescription>
       </Alert>
@@ -6746,7 +6764,7 @@ export default function FlightPlanner() {
               </div>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <Label>Filed route (ATC / Leidos)</Label>
+                  <Label>Filed route (ATC / filing provider)</Label>
                   <p className="text-xs text-muted-foreground">
                     This is the route that actually matters for filing. Enter the enroute string you want to file, including fixes, VORs, airways, SIDs, STARs, or `DCT`.
                   </p>
@@ -6793,7 +6811,7 @@ export default function FlightPlanner() {
                     <div>
                       <div className="text-sm font-semibold">Parsed Route Structure</div>
                       <div className="text-xs text-muted-foreground">
-                        RSF now recognizes route token types for review. Airports can drive map/frequency lookups; airways, fixes, navaids, and procedures stay in the filed route for ATC/Leidos while deeper route resolution is phased in.
+                        RSF now recognizes route token types for review. Airports can drive map/frequency lookups; airways, fixes, navaids, and procedures stay in the filed route for ATC/filing provider while deeper route resolution is phased in.
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
@@ -6918,7 +6936,7 @@ export default function FlightPlanner() {
                 <div className={cn("space-y-3", plannerSubpanelClass)}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <div className="text-sm font-semibold">Leidos Route Assist</div>
+                      <div className="text-sm font-semibold">Route Assist</div>
                       <div className="text-xs text-muted-foreground">
                         Optional IFR routing help from Flight Service. Use it as a starting point, but review and edit the filed route yourself before filing.
                       </div>
@@ -6929,12 +6947,12 @@ export default function FlightPlanner() {
                   </div>
                   <div className="mt-3 space-y-3 text-sm">
                     {leidosRouteQuery.isFetching && (
-                      <div className="text-xs text-muted-foreground">Checking Leidos for recommended routes...</div>
+                      <div className="text-xs text-muted-foreground">Checking the filing provider for recommended routes...</div>
                     )}
                     {leidosRouteQuery.error && (
                       <Alert>
                         <AlertDescription>
-                          {(leidosRouteQuery.error as Error).message || "Leidos route search is unavailable right now."}
+                          {(leidosRouteQuery.error as Error).message || "Route search is unavailable right now."}
                         </AlertDescription>
                       </Alert>
                     )}
@@ -6999,7 +7017,7 @@ export default function FlightPlanner() {
                       !(leidosRouteQuery.data?.faaPreferredRoutes?.length) &&
                       !(leidosRouteQuery.data?.codedDepartureRoutes?.length) && (
                         <div className="text-xs text-muted-foreground">
-                          No Leidos route assist suggestions came back for this city pair yet. You can still file a custom route or use the planning helpers above.
+                          No Route Assist suggestions came back for this city pair yet. You can still file a custom route or use the planning helpers above.
                         </div>
                       )}
                   </div>
@@ -7213,7 +7231,7 @@ export default function FlightPlanner() {
               <div>
                 <div className="font-semibold">Planned Fuel Uplifts</div>
                 <div className="text-xs text-muted-foreground">
-                  Add the gallons you expect to take on at each planned fuel stop. This is used for planner fuel math only and is not filed with ATC or Leidos.
+                  Add the gallons you expect to take on at each planned fuel stop. This is used for planner fuel math only and is not filed with ATC or the filing provider.
                 </div>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
@@ -7354,10 +7372,10 @@ export default function FlightPlanner() {
                 : "border-red-300 bg-red-50 text-red-800"
             )}>
               {fuelPlanSummary.firstUnreachableLeg
-                ? `⚠ You cannot reach ${fuelPlanSummary.firstUnreachableLeg.to} on current fuel planning. Short by ${Math.abs(fuelPlanSummary.firstUnreachableLeg.fuelAfterLeg).toFixed(1)} gal before planned uplift.`
+                ? `? You cannot reach ${fuelPlanSummary.firstUnreachableLeg.to} on current fuel planning. Short by ${Math.abs(fuelPlanSummary.firstUnreachableLeg.fuelAfterLeg).toFixed(1)} gal before planned uplift.`
                 : fuelSurplus >= 0
                   ? `Fuel surplus after planned stops: +${fuelSurplus.toFixed(1)} gal (${formatMinutesLabel(surplusMinutes)} beyond reserve)`
-                  : `⚠ Fuel deficit after planned stops: ${fuelSurplus.toFixed(1)} gal — add fuel, adjust stop uplifts, or reduce route`}
+                  : `? Fuel deficit after planned stops: ${fuelSurplus.toFixed(1)} gal — add fuel, adjust stop uplifts, or reduce route`}
             </div>
           )}
           <div className="text-xs text-muted-foreground">
@@ -8059,7 +8077,7 @@ export default function FlightPlanner() {
               currency: "Pilot currency verified",
               notams: "NOTAMs acknowledged",
               tfr: "No TFR conflicts on route",
-              fuelSufficient: "Fuel on board ≥ fuel required",
+              fuelSufficient: "Fuel on board = fuel required",
             };
             return (Object.keys(checklistDefaults) as Array<keyof typeof checklistDefaults>).map((key) => {
               const isAutoSatisfied = autoChecklist[key as keyof typeof autoChecklist];
@@ -8094,7 +8112,7 @@ export default function FlightPlanner() {
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Flight Plan Summary &amp; Filing</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>
-            Review the current packet, validate it against Leidos, and run filing actions for the plan you are actively editing.
+            Review the current packet, save the plan, and run filing actions for the plan you are actively editing.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
@@ -8129,7 +8147,7 @@ export default function FlightPlanner() {
                 <div>
                   <div className="font-semibold">Filing Identity</div>
                   <div className="text-xs text-muted-foreground">
-                    These are the core ICAO-style details Leidos expects for the aircraft and pilot.
+                    These are the core ICAO-style details the filing provider expects for the aircraft and pilot.
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -8433,7 +8451,7 @@ export default function FlightPlanner() {
           </div>
           <Alert>
             <AlertDescription>
-              Filing guidance: validate the packet first, then use the filing actions below on the saved plan you are editing. RSF now sends Leidos actions live when the lab/production environment is enabled and fully configured.
+              Filing guidance: save the plan, then use the filing actions below on the saved plan you are editing. RSF validates the packet before sending it to the filing provider.
             </AlertDescription>
           </Alert>
           {terrainOperationalNotes.length > 0 && (
@@ -8455,12 +8473,6 @@ export default function FlightPlanner() {
             </Alert>
           )}
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button type="button" variant="outline" onClick={copyFilingPacket}>
-              Copy filing packet
-            </Button>
-            <Button type="button" variant="outline" onClick={openFlightServiceHandoff} disabled={filingPreviewMutation.isPending}>
-              {filingPreviewMutation.isPending ? "Building preview..." : "Validate filing packet"}
-            </Button>
             {isGuest && (
               <Button
                 type="button"
@@ -8474,11 +8486,6 @@ export default function FlightPlanner() {
                 Create or sign in to your RSF account to file flight plans.
               </Button>
             )}
-            <Button type="button" variant="ghost" asChild>
-              <a href="https://www.1800wxbrief.com/" target="_blank" rel="noopener noreferrer">
-                Open Flight Service
-              </a>
-            </Button>
           </div>
           {isGuest && (
             <div className={cn(plannerSubpanelMutedClass, "border-dashed p-4 text-sm text-[#A9BBCD]")}>
@@ -8634,13 +8641,13 @@ export default function FlightPlanner() {
               )}
               {isPlanOverdueForClose(currentSavedPlan) && normalizedClientFilingStatus(currentSavedPlan) === "activated" && (
                 <div className="text-xs text-amber-400/80">
-                  This plan is overdue — you'll be asked for your actual close location before submitting to Leidos.
+                  This plan is overdue — you'll be asked for your actual close location before submitting to the filing provider.
                 </div>
               )}
             </div>
           ) : (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              Save this plan once to enable Leidos filing lifecycle actions from this tab. The packet preview works before save, but file/amend/activate/cancel/close actions require a saved plan record.
+              Save this plan once to enable filing provider lifecycle actions from this tab. The packet preview works before save, but file/amend/activate/cancel/close actions require a saved plan record.
             </div>
           )}
         </CardContent>
@@ -8930,7 +8937,7 @@ export default function FlightPlanner() {
                   </div>
                   <div>
                     <div className="text-muted-foreground">Provider</div>
-                    <div>{plan.filingProvider || "Leidos Flight Service"}</div>
+                    <div>{plan.filingProvider || "Flight Service"}</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground">Provider reference</div>
@@ -9938,19 +9945,6 @@ export default function FlightPlanner() {
                     {JSON.stringify(filingPreview.packet, null, 2)}
                   </pre>
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button type="button" variant="outline" onClick={copyFilingPacket}>
-                    Copy filing packet
-                  </Button>
-                  <Button type="button" disabled>
-                    {filingPreview.live ? "Use saved-plan actions to file live" : "Live filing not currently available"}
-                  </Button>
-                  <Button type="button" variant="ghost" asChild>
-                    <a href={filingPreview.providerUrl} target="_blank" rel="noopener noreferrer">
-                      Continue with Flight Service
-                    </a>
-                  </Button>
-                </div>
               </>
             ) : (
               <div className="text-muted-foreground">Building filing preview...</div>
@@ -9991,7 +9985,7 @@ export default function FlightPlanner() {
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="text-lg font-bold tracking-tight">
-                      ✏ IFR Clearance Scratch Pad
+                      ? IFR Clearance Scratch Pad
                     </span>
                     <span className="rounded-full border border-[#5d6f85]/30 bg-[#141b24] px-2 py-0.5 text-xs font-mono tracking-widest text-[#A9BBCD]">
                       INK + CRAFT
@@ -10175,8 +10169,8 @@ export default function FlightPlanner() {
               <span>Content auto-saved - Escape to close</span>
               <span className="font-mono">
                 {scratchPadHasContent
-                  ? "● Notes present"
-                  : "○ Empty"}
+                  ? "? Notes present"
+                  : "? Empty"}
               </span>
             </div>
           </Tabs>
@@ -10196,7 +10190,7 @@ export default function FlightPlanner() {
           <AlertDialogTitle>Delete this flight plan?</AlertDialogTitle>
           <AlertDialogDescription>
             {deleteConfirmPlan && !canDeleteLocalDraftPlan(deleteConfirmPlan)
-              ? "Filed or provider-synced flight plans cannot be deleted. Close or cancel through Leidos instead."
+              ? "Filed or provider-synced flight plans cannot be deleted. Close or cancel through the filing provider instead."
               : deleteConfirmPlan
               ? `This will permanently remove "${deleteConfirmPlan.title}" from your saved plans in RSF.`
               : "This will permanently remove this flight plan from your saved plans in RSF."}
@@ -10222,7 +10216,7 @@ export default function FlightPlanner() {
         <DialogHeader>
           <DialogTitle>Close overdue VFR flight plan</DialogTitle>
           <DialogDescription>
-            This flight plan is past its planned arrival time. Leidos requires your actual close location for overdue closures.
+            This flight plan is past its planned arrival time. The filing provider requires your actual close location for overdue closures.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-2">
@@ -10261,3 +10255,4 @@ export default function FlightPlanner() {
     </>
   );
 }
+

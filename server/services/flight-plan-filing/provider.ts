@@ -999,7 +999,12 @@ export const buildZzzzOtherInfoForLeidos = (
 
 const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingAction, config: LeidosFlightServiceConfig) => {
   const params = new URLSearchParams();
-  const routeNormalization = normalizeRouteForProvider(plan.route);
+  const routeNormalization = normalizeRouteForProvider(plan.route || "DCT");
+  const plannerState = getPlannerStateRecord(plan);
+  const selectedLocalDepartureTime =
+    plannerState && typeof plannerState.userDisplayDepartureTimeLocal === "string"
+      ? plannerState.userDisplayDepartureTimeLocal
+      : null;
   const otherInfoResult = buildOtherInfoWithDof({
     existingOtherInfo: plan.filingOtherInfo || config.otherInfo,
     plannedDepartureAt: plan.plannedDepartureAt,
@@ -1064,6 +1069,7 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
       action,
       builtAt: new Date().toISOString(),
       departureInstant: formatDepartureInstant(plan.plannedDepartureAt),
+      selectedLocalDepartureTime,
       departureOperationalDate: plan.plannedDepartureAt
         ? formatOperationalDateKey(plan.plannedDepartureAt, getPlannerTimeZone(plan))
         : null,
@@ -1565,7 +1571,7 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   const warnings: string[] = [];
   const rules = normalizeFlightRules(plan.filingFlightRules);
   const lifecycleStatus = String(plan.filingStatus || "").toLowerCase();
-  const routeNormalization = normalizeRouteForProvider(plan.route);
+  const routeNormalization = normalizeRouteForProvider(plan.route || "DCT");
 
   if (!plan.departure) errors.push("Departure airport is required.");
   if (plan.departure?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend") && !plan.filingDepartureName) {
@@ -1826,6 +1832,10 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         routeChanged: payloadContext.payloadSnapshot.route.changedForTransmission,
         routeLocal: payloadContext.payloadSnapshot.route.localEnteredRoute,
         routeTransmitted: payloadContext.payloadSnapshot.route.normalizedTransmittedRoute,
+        selectedLocalDepartureTime: (payloadContext.payloadSnapshot as Record<string, unknown>).selectedLocalDepartureTime ?? null,
+        timezoneUsed: getPlannerTimeZone(effectivePlan),
+        computedProviderDepartureInstant: payloadContext.payloadSnapshot.departureInstant,
+        savedDisplayTime: (payloadContext.payloadSnapshot as Record<string, unknown>).selectedLocalDepartureTime ?? null,
         payload: redactPayloadForLog(payloadContext.payloadSnapshot.transmittedFields),
       }));
     }

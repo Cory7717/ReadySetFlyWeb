@@ -1900,7 +1900,6 @@ export default function FlightPlanner() {
   const departureSelectedRef = useRef<string | null>(null);
   const destinationSelectedRef = useRef<string | null>(null);
   const departureRunwayAutoAirportRef = useRef<string | null>(null);
-  const lastApproachOfferKeyRef = useRef<string | null>(null);
   const plannedAltitudeFt = Number(plannedAltitude);
   const plannedAltitudeValue = Number.isFinite(plannedAltitudeFt) ? plannedAltitudeFt : undefined;
   const windsAltitudeFt = windsAltitudeChoice === "planned"
@@ -4533,7 +4532,6 @@ export default function FlightPlanner() {
       .filter((icao) => ICAO_REGEX.test(icao))
       .slice(0, 8);
   }, [routeAirports]);
-  const approachOfferKey = useMemo(() => approachOfferAirports.join("|"), [approachOfferAirports]);
 
   const hasControlledAirport = useMemo(
     () => routeAirports.some((icao) => CONTROLLED_AIRPORTS.has(icao)),
@@ -4644,20 +4642,6 @@ export default function FlightPlanner() {
   const briefingReady = Boolean(planningDepartureCode && planningDestinationCode);
 
   useEffect(() => {
-    if (!briefingReady || approachOfferAirports.length < 2 || !approachOfferKey) return;
-    if (typeof window === "undefined") return;
-    if (lastApproachOfferKeyRef.current === approachOfferKey) return;
-    const storageKey = `rsf.approachOfferSeen.${approachOfferKey}`;
-    if (window.localStorage.getItem(storageKey) === "1") {
-      lastApproachOfferKeyRef.current = approachOfferKey;
-      return;
-    }
-    window.localStorage.setItem(storageKey, "1");
-    lastApproachOfferKeyRef.current = approachOfferKey;
-    setShowApproachOffer(true);
-  }, [briefingReady, approachOfferAirports.length, approachOfferKey]);
-
-  useEffect(() => {
     if (!isGuest || !briefingReady) {
       setBriefingLocked(false);
       return;
@@ -4764,7 +4748,6 @@ export default function FlightPlanner() {
     setActiveWeatherDetail(null);
     departureLookupRef.current = null;
     destinationLookupRef.current = null;
-    lastApproachOfferKeyRef.current = null;
     queryClient.removeQueries({ queryKey: ["/api/flight-plans/route-analysis"] });
     queryClient.removeQueries({ queryKey: ["/api/flight-plans/route-search"] });
     setForm({

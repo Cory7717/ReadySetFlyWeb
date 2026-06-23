@@ -42,8 +42,9 @@ import { buildLegs, sumDistance, distanceNm, type AirportPoint } from "@/lib/fli
 import { cn } from "@/lib/utils";
 import { parseFlightCategory as getFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import {
-  ICAO_OTHER_INFO_PREFIXES,
   ICAO_OTHER_INFO_VALUE_OPTIONS,
+  ICAO_ALL_SURVEILLANCE_OPTIONS,
+  ICAO_OTHER_INFO_PREFIX_OPTIONS,
   ICAO_SURVEILLANCE_OPTIONS,
   buildIcaoOtherInfo,
   getIcaoOtherInfoEquipmentWarnings,
@@ -8332,7 +8333,7 @@ export default function FlightPlanner() {
                       <SelectValue placeholder="Select surveillance equipment" />
                     </SelectTrigger>
                     <SelectContent className={plannerSelectContentClass}>
-                      {ICAO_SURVEILLANCE_OPTIONS.map((entry) => (
+                      {ICAO_ALL_SURVEILLANCE_OPTIONS.map((entry) => (
                         <SelectItem key={entry.code} value={entry.code}>
                           {entry.label}
                         </SelectItem>
@@ -8349,6 +8350,13 @@ export default function FlightPlanner() {
                       </Badge>
                     )) : <span className="text-xs text-muted-foreground">Select one or more ICAO surveillance codes.</span>}
                   </div>
+                  {selectedSurveillanceCodes.some((code) => !ICAO_SURVEILLANCE_OPTIONS.some((option) => option.code === code)) && (
+                    <Alert className="border-amber-300 bg-amber-900/20 text-amber-100">
+                      <AlertDescription>
+                        Flight Service filing currently accepts N, A, C, or S here. Put ADS-B or ADS-C details in Other ICAO Information using SUR/ if needed.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -8357,7 +8365,7 @@ export default function FlightPlanner() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => setIcaoOtherInfoEntries([...icaoOtherInfoEntries, { prefix: "RMK/", value: "" }])}
+                      onClick={() => setIcaoOtherInfoEntries([...icaoOtherInfoEntries, { prefix: "PBN/", value: "" }])}
                     >
                       Add ICAO Entry
                     </Button>
@@ -8381,9 +8389,9 @@ export default function FlightPlanner() {
                             <SelectValue placeholder="Select ICAO Prefix" />
                           </SelectTrigger>
                           <SelectContent className={plannerSelectContentClass}>
-                            {ICAO_OTHER_INFO_PREFIXES.map((prefix) => (
-                              <SelectItem key={prefix} value={prefix}>
-                                {prefix}
+                            {ICAO_OTHER_INFO_PREFIX_OPTIONS.map((option) => (
+                              <SelectItem key={option.prefix} value={option.prefix}>
+                                {option.label} - {option.description}
                               </SelectItem>
                             ))}
                           </SelectContent>

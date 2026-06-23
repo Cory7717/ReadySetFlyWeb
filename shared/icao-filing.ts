@@ -45,6 +45,34 @@ export const ICAO_OTHER_INFO_PREFIXES = [
 
 export type IcaoOtherInfoPrefix = typeof ICAO_OTHER_INFO_PREFIXES[number];
 
+export type IcaoOtherInfoPrefixOption = {
+  prefix: IcaoOtherInfoPrefix;
+  label: string;
+  description: string;
+};
+
+export const ICAO_OTHER_INFO_PREFIX_OPTIONS: IcaoOtherInfoPrefixOption[] = [
+  { prefix: "STS/", label: "STS/ - Special handling", description: "Operational status such as MEDEVAC, SAR, or STATE." },
+  { prefix: "PBN/", label: "PBN/ - Performance based navigation", description: "Required when aircraft equipment includes R." },
+  { prefix: "NAV/", label: "NAV/ - Navigation details", description: "Navigation capabilities not fully described in equipment codes." },
+  { prefix: "COM/", label: "COM/ - Communication details", description: "Communication capabilities or exemptions." },
+  { prefix: "DAT/", label: "DAT/ - Datalink details", description: "Datalink capabilities such as CPDLC or FANS." },
+  { prefix: "SUR/", label: "SUR/ - Surveillance details", description: "ADS-B, ADS-C, or surveillance details beyond Item 10b." },
+  { prefix: "DEP/", label: "DEP/ - Departure details", description: "Departure location details, commonly for ZZZZ." },
+  { prefix: "DEST/", label: "DEST/ - Destination details", description: "Destination location details, commonly for ZZZZ." },
+  { prefix: "DOF/", label: "DOF/ - Date of flight", description: "Flight date in YYMMDD format." },
+  { prefix: "REG/", label: "REG/ - Registration", description: "Aircraft registration if different from aircraft ID." },
+  { prefix: "EET/", label: "EET/ - Elapsed time points", description: "Significant point or FIR elapsed times." },
+  { prefix: "SEL/", label: "SEL/ - SELCAL", description: "SELCAL code when applicable." },
+  { prefix: "OPR/", label: "OPR/ - Operator", description: "Aircraft operator when not obvious from aircraft ID." },
+  { prefix: "PER/", label: "PER/ - Performance category", description: "Aircraft performance category." },
+  { prefix: "ALTN/", label: "ALTN/ - Alternate details", description: "Alternate aerodrome details." },
+  { prefix: "RALT/", label: "RALT/ - Enroute alternate", description: "Enroute alternate aerodrome." },
+  { prefix: "TALT/", label: "TALT/ - Takeoff alternate", description: "Takeoff alternate aerodrome." },
+  { prefix: "RIF/", label: "RIF/ - Reclearance route", description: "Reclearance route and revised destination." },
+  { prefix: "RMK/", label: "RMK/ - Remarks", description: "Operational remarks accepted in ICAO Other Info." },
+];
+
 export type IcaoOtherInfoEntry = {
   prefix: IcaoOtherInfoPrefix;
   value: string;
@@ -139,6 +167,13 @@ export const ICAO_OTHER_INFO_VALUE_OPTIONS: Partial<Record<IcaoOtherInfoPrefix, 
     { value: "D", label: "D", description: "Aircraft performance category D" },
     { value: "E", label: "E", description: "Aircraft performance category E" },
     { value: "H", label: "H", description: "Helicopter performance category" },
+  ],
+  "RMK/": [
+    { value: "TRAINING FLIGHT", label: "TRAINING FLIGHT", description: "Training or practice flight" },
+    { value: "STUDENT PILOT", label: "STUDENT PILOT", description: "Student pilot operation" },
+    { value: "CHECKRIDE", label: "CHECKRIDE", description: "Practical test or evaluation flight" },
+    { value: "DEMO FLIGHT", label: "DEMO FLIGHT", description: "Demonstration flight" },
+    { value: "PILOT REVIEWED", label: "PILOT REVIEWED", description: "Pilot-reviewed planning note" },
   ],
 };
 

@@ -10,8 +10,9 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import {
-  ICAO_OTHER_INFO_PREFIXES,
   ICAO_OTHER_INFO_VALUE_OPTIONS,
+  ICAO_ALL_SURVEILLANCE_OPTIONS,
+  ICAO_OTHER_INFO_PREFIX_OPTIONS,
   ICAO_SURVEILLANCE_OPTIONS,
   buildIcaoOtherInfo,
   normalizeIcaoSurveillanceCodes,
@@ -299,7 +300,7 @@ export default function MyAircraft() {
                     <SelectValue placeholder="Select surveillance equipment" />
                   </SelectTrigger>
                   <SelectContent>
-                    {ICAO_SURVEILLANCE_OPTIONS.map((entry) => (
+                    {ICAO_ALL_SURVEILLANCE_OPTIONS.map((entry) => (
                       <SelectItem key={entry.code} value={entry.code}>
                         {entry.label}
                       </SelectItem>
@@ -316,11 +317,18 @@ export default function MyAircraft() {
                     </span>
                   )) : <span className="text-muted-foreground">Select one or more ICAO surveillance codes.</span>}
                 </div>
+                {selectedSurveillanceCodes.some((code) => !ICAO_SURVEILLANCE_OPTIONS.some((option) => option.code === code)) && (
+                  <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+                    <AlertDescription>
+                      Flight Service filing currently accepts N, A, C, or S here. Store ADS-B or ADS-C details in Other ICAO Information using SUR/ when needed.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
               <div className="space-y-2 md:col-span-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Label>Other ICAO Information</Label>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setIcaoOtherInfoEntries([...icaoOtherInfoEntries, { prefix: "RMK/", value: "" }])}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setIcaoOtherInfoEntries([...icaoOtherInfoEntries, { prefix: "PBN/", value: "" }])}>
                     Add ICAO Entry
                   </Button>
                 </div>
@@ -343,9 +351,9 @@ export default function MyAircraft() {
                           <SelectValue placeholder="Select ICAO Prefix" />
                         </SelectTrigger>
                         <SelectContent>
-                          {ICAO_OTHER_INFO_PREFIXES.map((prefix) => (
-                            <SelectItem key={prefix} value={prefix}>
-                              {prefix}
+                          {ICAO_OTHER_INFO_PREFIX_OPTIONS.map((option) => (
+                            <SelectItem key={option.prefix} value={option.prefix}>
+                              {option.label} - {option.description}
                             </SelectItem>
                           ))}
                         </SelectContent>

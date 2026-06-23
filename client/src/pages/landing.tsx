@@ -397,7 +397,7 @@ export default function Landing() {
     },
     {
       title: "Filing / Briefing",
-      description: "Preflight packet review and FAA filing through Leidos / 1-800-WX-BRIEF.",
+      description: "Preflight packet review and FAA Flight Service filing from one RSF workflow.",
       icon: FileText,
     },
     {
@@ -424,7 +424,7 @@ export default function Landing() {
     },
     {
       title: "File to the FAA",
-      description: "Submit through Leidos / 1-800-WX-BRIEF, then pick the plan up with ATC when you are ready.",
+      description: "Submit to FAA Flight Service, then pick the plan up with ATC when you are ready.",
       icon: FileText,
     },
     {
@@ -1757,7 +1757,7 @@ export default function Landing() {
                 {[
                   "One shared workflow from planning to post-flight follow-through",
                   "Web-to-app continuity instead of disconnected tools",
-                  "Live flight plan submission to the FAA through Leidos",
+                  "Live flight plan submission to FAA Flight Service",
                   "Training, rentals, marketplace, and pilot tools under one account",
                 ].map((item) => (
                   <div key={item} className={`${metallicSubpanelClass} px-4 py-3 text-sm text-[#E0E7F1]`}>
@@ -2204,7 +2204,7 @@ export default function Landing() {
                 Plan on the web. File with the FAA. Follow the flight in the app.
               </h2>
               <p className="text-base leading-7 text-[#C0CDDC]">
-                RSF is built around continuity. Start the flight plan on the web, send it through Leidos / 1-800-WX-BRIEF, pick it up with ATC when ready, then continue the flight in the app with the same operational context still intact.
+                RSF is built around continuity. Start the flight plan on the web, submit it to FAA Flight Service, pick it up with ATC when ready, then continue the flight in the app with the same operational context still intact.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {[

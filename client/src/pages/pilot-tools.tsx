@@ -1477,7 +1477,7 @@ export default function PilotTools() {
                     onClick={() => window.open(`https://www.1800wxbrief.com/`, "_blank", "noopener,noreferrer")}
                   >
                     <Radio className="h-4 w-4 mr-2" />
-                    1800WXBRIEF
+                    Flight Service briefing
                     <ExternalLink className="h-3 w-3 ml-auto" />
                   </Button>
 

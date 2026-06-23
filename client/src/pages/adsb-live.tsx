@@ -3596,7 +3596,7 @@ export default function AdsbLive() {
                   <div className="font-medium text-foreground">Next integrations</div>
                   <div>- Vertical profile visualization and top-of-climb style route context</div>
                   <div>- Terrain labels and corridor hotspot annotations directly on the map</div>
-                  <div>- Leidos route briefings linked from the active plan</div>
+                  <div>- Flight Service route briefings linked from the active plan</div>
                   <div>- Direct portable ADS-B receiver ingestion for stronger in-flight traffic fidelity</div>
                 </div>
               </CardContent>

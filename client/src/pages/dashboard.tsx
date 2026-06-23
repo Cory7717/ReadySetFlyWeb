@@ -23,6 +23,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { apiUrl } from "@/lib/api";
+import { WORKFLOW_NAV_GROUPS } from "@/lib/workflow-nav";
 
 function RentalReviewAction({
   rentalId,
@@ -219,6 +220,39 @@ export default function Dashboard() {
             Manage your rentals, listings, and earnings
           </p>
         </div>
+
+        <Card className="mb-8 border-primary/25 bg-card">
+          <CardContent className="p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Recommended first action</div>
+                <h2 className="mt-1 text-2xl font-semibold">Start with a flight plan</h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                  Create, review, and manage flight plans from one place, then branch into weather, training, aircraft, and marketplace workflows.
+                </p>
+              </div>
+              <Button size="lg" onClick={() => navigate("/flight-planner")} data-testid="dashboard-start-flight-plan">
+                <Plane className="h-4 w-4" />
+                Start Flight Plan
+              </Button>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {WORKFLOW_NAV_GROUPS.map((group) => (
+                <div key={group.id} className="rounded-lg border border-border bg-background/60 p-3">
+                  <div className="text-sm font-semibold">{group.label}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{group.description}</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {group.items.slice(0, 3).map((item) => (
+                      <Button key={`${group.id}-${item.label}`} variant="outline" size="sm" onClick={() => navigate(item.href)}>
+                        {item.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

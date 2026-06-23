@@ -224,6 +224,7 @@ function Router() {
       <Route path="/radio-comms-trainer" component={() => <PaidToolAccess component={RadioCommsTrainer} />} />
       <Route path="/adsb-receiver-help" component={() => <PaidToolAccess component={AdsbReceiverHelp} />} />
       <Route path="/live-traffic" component={() => <PaidToolAccess component={AdsbLive} />} />
+      <Route path="/adsb-live" component={() => <RedirectTo to="/live-traffic" />} />
       <Route path="/events" component={() => <StudentPageLoader component={EventsPage} />} />
       <Route path="/admin/invite" component={RequireAuth} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />

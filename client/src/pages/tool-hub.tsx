@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { canUseInternalPreview } from "@/lib/internal-preview";
 import { getCurrentReturnTo, withReturnTo, withSourceParam } from "@/lib/returnTo";
 import { RSF_TOOLS, TOOL_GROUP_LABELS, type ToolGroupId, type ToolRegistryItem } from "@/lib/tool-registry";
+import { WORKFLOW_NAV_GROUPS } from "@/lib/workflow-nav";
 
 const RECENT_TOOLS_KEY = "rsf.toolHub.recent";
 const PINNED_TOOLS_KEY = "rsf.toolHub.pinned";
@@ -57,7 +58,7 @@ const MARKETPLACE_PATHS: PathEntry[] = [
 const PILOT_TOOL_PATHS: PathEntry[] = [
   { path: "/pilot-tools", label: "Pilot Tools", desc: "Full suite of aviation calculators and references", Icon: Calculator },
   { path: "/weight-balance", label: "Weight & Balance", desc: "Load calculations and CG envelope checks", Icon: Calculator },
-  { path: "/e6b", label: "E6B Calculator", desc: "Flight computer for time, speed, distance, and fuel", Icon: Calculator },
+  { path: "/tools/e6b", label: "E6B Calculator", desc: "Flight computer for time, speed, distance, and fuel", Icon: Calculator },
   { path: "/ifr-tools", label: "IFR Tools", desc: "Approach, hold, and instrument procedure references", Icon: Radio },
 ];
 
@@ -163,17 +164,50 @@ export default function ToolHub() {
             <span className="rounded-full border border-[#29415e] bg-[#0d1622] px-3 py-1">TRAINING & CALCULATORS</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button asChild className="rsf-metal-button-primary" onClick={() => trackEvent("tool_hub_click", { target: "/marketplace" })}>
-              <Link href="/marketplace">Open Marketplace</Link>
+            <Button asChild className="rsf-metal-button-primary" onClick={() => trackEvent("tool_hub_click", { target: "/flight-planner" })}>
+              <Link href="/flight-planner">Start Flight Plan</Link>
             </Button>
             <Button variant="outline" asChild className="rsf-metal-button-secondary">
-              <Link href="/rentals">Browse Rentals</Link>
+              <Link href="#workflow-tools">Explore Tools</Link>
             </Button>
           </div>
         </div>
       </section>
 
       <section className="container mx-auto px-4 py-8 sm:py-10 space-y-8">
+
+        <div id="workflow-tools" className="rsf-card-shell p-5">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#6D88A6]">Workflow navigation</div>
+              <h2 className="mt-1 text-2xl font-semibold text-[#F1F5FA]">Find tools by phase of flight.</h2>
+              <p className="mt-1 text-sm text-[#A9BBCD]">Start with Plan, then move into Fly, Train, Manage, Marketplace, or Schools & CFIs.</p>
+            </div>
+            <Button asChild className="rsf-metal-button-primary">
+              <Link href="/flight-planner">Start Flight Plan</Link>
+            </Button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {WORKFLOW_NAV_GROUPS.map((group) => (
+              <div key={group.id} className="rsf-metal-subpanel rounded-[1rem] p-4">
+                <div className="text-sm font-semibold text-[#F5F8FC]">{group.label}</div>
+                <div className="mt-1 text-xs leading-5 text-[#A9BBCD]">{group.description}</div>
+                <div className="mt-3 grid gap-1">
+                  {group.items.slice(0, 5).map((item) => (
+                    <Link
+                      key={`${group.id}-${item.label}`}
+                      href={item.href}
+                      className="rounded-md px-2 py-1.5 text-sm text-[#E8EDF4] hover:bg-[#203249]"
+                      onClick={() => trackEvent("tool_hub_workflow_click", { group: group.id, target: item.href, label: item.label })}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Quick Open */}
         <div className="rsf-card-shell p-5">

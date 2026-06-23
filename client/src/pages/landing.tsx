@@ -1746,11 +1746,11 @@ export default function Landing() {
               </div>
               <div className="space-y-4">
                 <h1 className="max-w-4xl text-4xl font-semibold tracking-[-0.045em] text-[#F6F8FC] sm:text-5xl xl:text-6xl [font-family:var(--font-display)]">
-                  Stop bouncing from app to app.
-                  <span className="block text-[#cdd9ee]">Everything general aviation needs, in one place.</span>
+                  Plan, train, fly, and manage your aviation workflow.
+                  <span className="block text-[#cdd9ee]">Ready Set Fly keeps the pilot workflow in one place.</span>
                 </h1>
                 <p className="max-w-3xl text-lg leading-8 text-[#CCD6E4]">
-                  Plan on the web, file directly to the FAA via Leidos / 1-800-WX-BRIEF, then pick it up with ATC and follow the flight in the app with full FMS capability, live traffic, en route weather, and ADS-B connectivity. A connected rental and traditional marketplace that you can't find anywhere else.
+                  Plan, train, fly, and manage your aviation workflow in one place. Start with a flight plan, then review weather, route context, aircraft records, training tools, and marketplace access without hunting through disconnected menus.
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -1771,7 +1771,7 @@ export default function Landing() {
                     href="/flight-planner"
                     onClick={() => trackEvent("cta_click", { label: "landing_hero_open_planner", target: "/flight-planner" })}
                   >
-                    Open Flight Planner
+                    Start Flight Plan
                   </Link>
                 </Button>
                 <Button
@@ -1779,11 +1779,11 @@ export default function Landing() {
                   variant="outline"
                   className={metallicSecondaryButtonClass}
                   onClick={() => {
-                    trackEvent("cta_click", { label: "landing_hero_explore_ecosystem", target: "#landing-quickstart-section" });
-                    document.getElementById("landing-quickstart-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    trackEvent("cta_click", { label: "landing_hero_explore_tools", target: "#landing-workflow-section" });
+                    document.getElementById("landing-workflow-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }}
                 >
-                  Explore the Ecosystem
+                  Explore Tools
                 </Button>
               </div>
               <p className="text-sm text-[#9aafcc] leading-relaxed">
@@ -1792,7 +1792,7 @@ export default function Landing() {
               </p>
               <div className="flex flex-wrap items-center gap-3 text-xs text-[#A8B8CC]">
                 <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141a22] text-[#d2dbe8]">US-only</Badge>
-                <span className="tracking-[0.16em] text-[#8fa6c8]">Plan. File. Fly. Follow.</span>
+                <span className="tracking-[0.16em] text-[#8fa6c8]">Plan. Train. Fly. Manage.</span>
               </div>
             </div>
 
@@ -1925,6 +1925,74 @@ export default function Landing() {
           </div>
         </div>
       </div>
+
+      <section id="landing-workflow-section" className="rsf-metal-section border-y border-white/8 px-4 py-8 sm:py-10">
+        <div className="container mx-auto space-y-8">
+          <div className="max-w-3xl space-y-2">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9cb8df]">Pilot workflow</div>
+            <h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#F5F8FC] sm:text-3xl">
+              Start where pilots actually start.
+            </h2>
+            <p className="text-sm leading-6 text-[#B8C8DA]">
+              RSF is organized around the work: plan the flight, fly smarter, train and track progress, then manage the records and aircraft details that support the next flight.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              {
+                title: "Plan a Flight",
+                copy: "Build routes, review weather, brief airports, and prepare flight plans.",
+                cta: "Open Flight Planner",
+                href: "/flight-planner",
+                icon: Plane,
+              },
+              {
+                title: "Fly Smarter",
+                copy: "Use flight deck, ADS-B, synthetic vision, and route awareness tools.",
+                cta: "Explore Flight Tools",
+                href: "/live-traffic",
+                icon: Smartphone,
+              },
+              {
+                title: "Train & Track",
+                copy: "Student tools, logbook, syllabi, currency tracking, and proficiency tools.",
+                cta: "Open Training Hub",
+                href: "/student",
+                icon: BookOpen,
+              },
+              {
+                title: "Manage Aviation",
+                copy: "Aircraft profiles, records, ownership tools, listings, and notifications.",
+                cta: "Open Dashboard",
+                href: "/dashboard",
+                icon: FileText,
+              },
+            ].map((card) => (
+              <div key={card.title} className={`${metallicPanelInteractiveClass} flex h-full flex-col rounded-[1.2rem] p-5 text-[#E8EDF4]`}>
+                <div className="rsf-metal-icon-chip mb-4 flex h-11 w-11 items-center justify-center rounded-full text-[#9ebdff]">
+                  <card.icon className="h-5 w-5" />
+                </div>
+                <h3 className="text-lg font-semibold text-[#F5F8FC]">{card.title}</h3>
+                <p className="mt-2 flex-1 text-sm leading-6 text-[#B8C8DA]">{card.copy}</p>
+                <Button asChild className={`mt-4 w-full ${card.href === "/flight-planner" ? metallicPrimaryButtonClass : metallicSecondaryButtonClass}`} variant={card.href === "/flight-planner" ? "default" : "outline"}>
+                  <Link href={card.href}>{card.cta}</Link>
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className={`${metallicPanelClass} rounded-[1.25rem] p-5 text-[#E8EDF4] sm:p-6`}>
+            <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9cb8df]">Featured capability</div>
+                <h2 className="mt-2 text-2xl font-semibold text-[#F5F8FC]">Weather-Aware Route Planning</h2>
+              </div>
+              <p className="text-sm leading-6 text-[#B8C8DA]">
+                RSF can assist route planning by evaluating weather and route conditions before the pilot reviews and files. The workflow is AI-assisted, weather-aware, and pilot-reviewed; route suggestions support judgment, they do not replace it.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section id="landing-quickstart-section" className="rsf-metal-section border-y border-white/8 px-4 py-8 sm:py-10">
         <div className="container mx-auto">

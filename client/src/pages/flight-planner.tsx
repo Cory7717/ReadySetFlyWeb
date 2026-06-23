@@ -6028,9 +6028,9 @@ export default function FlightPlanner() {
     <>
     <PageShell
       kicker="Plan"
-      title="Plan a Flight"
+      title="Flight Planner"
       description={
-        "Build the route, check the conditions, and keep the trip ready to save or file."
+        "Create, review, and manage flight plans from one place."
       }
       actions={
         pressDemo.enabled ? undefined : (
@@ -6075,6 +6075,14 @@ export default function FlightPlanner() {
           onExit={pressDemo.exitDemo}
         />
       )}
+      <div className="rounded-[1rem] border border-[#5d6f85]/25 bg-[#111822]/90 px-4 py-3 text-sm text-[#DCE6F3]">
+        <span className="font-semibold text-[#F5F8FC]">Current step:</span>{" "}
+        {activeTab === "route" && "Route setup and aircraft planning"}
+        {activeTab === "weather" && "Weather, hazards, and airport context"}
+        {activeTab === "navlog" && "Navigation log and leg review"}
+        {activeTab === "analysis" && "Route analysis and terrain review"}
+        {activeTab === "file" && "Save, preview, and filing actions"}
+      </div>
       {!pressDemo.enabled && (
       <Card className={plannerPanelClass}>
         <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">

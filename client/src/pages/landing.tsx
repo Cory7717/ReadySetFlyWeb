@@ -899,6 +899,38 @@ export default function Landing() {
         isPaidUser={isPaidUser}
         onSelectTab={setActiveMobileTab}
       />
+      <div className="border-b border-[#5d6f85]/18 bg-[#0d1219]">
+        <div className="container mx-auto px-4 py-2.5">
+          <div className="flex flex-col gap-2 rounded-xl border border-[#5d6f85]/22 bg-[linear-gradient(135deg,rgba(17,24,34,0.96),rgba(24,33,45,0.92))] px-4 py-3 text-[#E8EDF4] shadow-[0_18px_50px_-35px_rgba(0,0,0,0.9)] sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <Badge className="border border-[#D9A441]/35 bg-[#D9A441]/12 text-[#F6D788] hover:bg-[#D9A441]/12">
+                New flat rate
+              </Badge>
+              <div className="text-sm font-semibold text-[#F5F8FC]">
+                Full RSF Premium access for $7.99/month.
+              </div>
+              <div className="text-xs text-[#A9BBCD]">
+                Unlimited active flight plans, AI tools, logbook, training, and advanced aviation features.
+              </div>
+            </div>
+            <Button
+              asChild
+              size="sm"
+              className="h-8 shrink-0 rounded-lg bg-[#4F8DFF] px-3 text-xs font-semibold text-white hover:bg-[#3F7BE8]"
+              onClick={() => {
+                trackEvent("subscription_cta_click", {
+                  source_page: "/",
+                  target: "/logbook/pro",
+                  context: "landing_premium_banner",
+                  tier: "premium",
+                });
+              }}
+            >
+              <Link href="/logbook/pro">Upgrade to Premium</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
       {activeMobileTab === "weather" && (
         <div className="md:hidden">
           <div className="container mx-auto space-y-4 px-4 pt-4 text-[#E8EDF4]">

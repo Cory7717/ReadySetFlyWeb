@@ -72,6 +72,7 @@ import {
 import { extractFilingVersionStamp } from "@shared/flight-plan-filing";
 import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
 import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
+import { formatFlightPlanDepartureTime, formatZulu } from "@shared/flight-plan-time";
 import { ICAO_EQUIPMENT_CODES, parseIcaoEquipmentCodes, normalizeIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
@@ -4971,6 +4972,9 @@ export default function FlightPlanner() {
       if (Number.isNaN(parsed.getTime())) return "—";
       return parsed.toLocaleString();
     };
+    const departureSummary = formatFlightPlanDepartureTime(plan, {
+      instantUtc: typeof payload?.departureInstant === "string" ? payload.departureInstant : plan.plannedDepartureAt,
+    });
 
     const title = plan.title || `${plan.departure || "Departure"} to ${plan.destination || "Destination"}`;
     const status = filingStatusLabel(plan.filingStatus);
@@ -5079,7 +5083,7 @@ export default function FlightPlanner() {
             <div class="cell"><div class="label">Destination</div><div class="value">${escapeHtml(plan.destination || "—")}</div></div>
             <div class="cell"><div class="label">Alternate</div><div class="value">${escapeHtml(plan.alternate || "—")}</div></div>
             <div class="cell"><div class="label">Flight Rules</div><div class="value">${escapeHtml(plan.filingFlightRules || "VFR")}</div></div>
-            <div class="cell"><div class="label">Planned Departure</div><div class="value">${escapeHtml(formatDateTime(plan.plannedDepartureAt))}</div></div>
+            <div class="cell"><div class="label">Planned Departure</div><div class="value">${escapeHtml(`${departureSummary.displayDepartureAirportTime} / ${departureSummary.displayZulu}`)}</div></div>
             <div class="cell"><div class="label">Planned Arrival</div><div class="value">${escapeHtml(formatDateTime(plan.plannedArrivalAt))}</div></div>
             <div class="cell"><div class="label">Aircraft / Tail</div><div class="value">${escapeHtml(plan.tailNumber || "—")}</div></div>
             <div class="cell"><div class="label">Aircraft Type</div><div class="value">${escapeHtml(plan.aircraftType || "—")}</div></div>
@@ -9082,7 +9086,11 @@ export default function FlightPlanner() {
                   <div key={`group-hdr-${k}`} className={cn("text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground", gi > 0 && "pt-2 border-t border-border/30")}>{bucketLabel[k]}</div>,
                   ...plans.map((plan) => {
                     const expanded = expandedPlanIds[plan.id] ?? false;
-                    const departureTime = formatPlanLocalZulu(plan.plannedDepartureAt, getPlanTimeZone(plan, "departureTimeZone", departureTimeZone));
+                    const departureSummary = formatFlightPlanDepartureTime(plan);
+                    const departureTime = {
+                      local: departureSummary.displayDepartureAirportTime,
+                      zulu: departureSummary.displayZulu,
+                    };
                     const arrivalTime = formatPlanLocalZulu(plan.plannedArrivalAt, getPlanTimeZone(plan, "destinationTimeZone", destinationTimeZone));
                     const syncTime = formatPlanLocalZulu(plan.filingLastProviderSyncAt, getPlanTimeZone(plan, "departureTimeZone", departureTimeZone));
                     const beaconCode = getPlanBeaconCode(plan);

@@ -1184,6 +1184,24 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
         ? `${String(new Date(providerDepartureInstant).getUTCHours()).padStart(2, "0")}${String(new Date(providerDepartureInstant).getUTCMinutes()).padStart(2, "0")}Z`
         : null,
     }));
+    console.info(JSON.stringify({
+      event: "flight_plan_time_consistency",
+      planId: plan.id,
+      departureAirport: plan.departure || null,
+      destinationAirport: plan.destination || null,
+      departureTimezone: departureTimeZone || null,
+      departureDateLocal: selectedLocalDepartureTime?.slice(0, 10) || null,
+      departureTimeLocal: selectedLocalDepartureTime?.slice(11, 16) || null,
+      departureInstantUtc: providerDepartureInstant,
+      displayDepartureAirportTime: selectedLocalDepartureTime && departureTimeZone
+        ? `${selectedLocalDepartureTime.replace("T", " ")} ${departureTimeZone}`
+        : null,
+      displayZulu: providerDepartureInstant
+        ? `${String(new Date(providerDepartureInstant).getUTCHours()).padStart(2, "0")}${String(new Date(providerDepartureInstant).getUTCMinutes()).padStart(2, "0")}Z`
+        : null,
+      browserTimezoneDebugOnly: null,
+      anyUserLocalDisplayTime: null,
+    }));
 
     append("type", "ICAO");
     append("flightRules", normalizeFlightRules(plan.filingFlightRules));

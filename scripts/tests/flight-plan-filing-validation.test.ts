@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { FlightPlan } from "../../shared/schema";
 import { resolveDepartureAirportTimezone } from "../../shared/airport-timezones";
+import { formatFlightPlanDepartureTime } from "../../shared/flight-plan-time";
 import { extractFilingProviderPlanId } from "../../shared/flight-plan-filing";
 import { ICAO_OTHER_INFO_VALUE_OPTIONS, buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
 import { buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
@@ -118,6 +119,39 @@ test("KPHX 10:45 local files as 1745Z even if stale saved timezone says Chicago"
   });
 
   assert.equal(getProviderDepartureInstantForPlan(plan), "2026-06-24T17:45:00.000Z");
+});
+
+test("KPHX departure display uses airport timezone for 08:45 and 10:45 local", () => {
+  const early = filingPlan({
+    departure: "KPHX",
+    destination: "KEDC",
+    plannedDepartureAt: new Date("2026-06-24T15:45:00.000Z"),
+    plannerState: {
+      departureTimeZone: "America/Phoenix",
+      userDisplayDepartureTimeLocal: "2026-06-24T08:45",
+    },
+  });
+  const later = filingPlan({
+    departure: "KPHX",
+    destination: "KEDC",
+    plannedDepartureAt: new Date("2026-06-24T17:45:00.000Z"),
+    plannerState: {
+      departureTimeZone: "America/Phoenix",
+      userDisplayDepartureTimeLocal: "2026-06-24T10:45",
+    },
+  });
+
+  const earlyDisplay = formatFlightPlanDepartureTime(early);
+  assert.equal(earlyDisplay.departureTimezone, "America/Phoenix");
+  assert.equal(earlyDisplay.displayTime, "8:45 AM");
+  assert.equal(earlyDisplay.displayTimezoneAbbreviation, "MST");
+  assert.equal(earlyDisplay.displayZulu, "1545Z");
+
+  const laterDisplay = formatFlightPlanDepartureTime(later);
+  assert.equal(laterDisplay.departureTimezone, "America/Phoenix");
+  assert.equal(laterDisplay.displayTime, "10:45 AM");
+  assert.equal(laterDisplay.displayTimezoneAbbreviation, "MST");
+  assert.equal(laterDisplay.displayZulu, "1745Z");
 });
 
 test("ZZZZ departure resolves timezone from planning reference airport", () => {

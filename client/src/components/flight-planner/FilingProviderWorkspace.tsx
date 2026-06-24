@@ -1,6 +1,7 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import type { FlightPlan } from "@shared/schema";
+import { formatFlightPlanDepartureTime } from "@shared/flight-plan-time";
 
 type ProviderMessage = {
   id: string;
@@ -67,6 +68,10 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
   const filedPilotPhone = asString((plan as any).filingPilotPhone) || pilotPhone;
   const filedHomeBase = asString((plan as any).filingAircraftHomeBase) || pilotHomeBase;
   const assignedBeaconCode = asString((plan as any).filingAssignedBeaconCode) || asString(providerSnapshot.beaconCode);
+  const plannedDeparture = formatFlightPlanDepartureTime(plan);
+  const filedDeparture = formatFlightPlanDepartureTime(plan, {
+    instantUtc: asString(payload.departureInstant) || plan.plannedDepartureAt,
+  });
 
   return (
     <div className="grid gap-3 lg:grid-cols-3">
@@ -79,7 +84,8 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
           </div>
           <div>
             <div className="text-xs text-muted-foreground">Planned departure</div>
-            <div className="font-medium">{formatDateTime(plan.plannedDepartureAt)}</div>
+            <div className="font-medium">{plannedDeparture.displayDepartureAirportTime}</div>
+            <div className="font-mono text-xs text-muted-foreground">{plannedDeparture.displayZulu}</div>
           </div>
           <div>
             <div className="text-xs text-muted-foreground">Local other info</div>
@@ -119,6 +125,11 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
             {localRoute && transmittedRoute && localRoute !== transmittedRoute && (
               <div className="mt-1 text-[11px] text-amber-200">Normalized by RSF for provider filing</div>
             )}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Filed departure</div>
+            <div className="font-medium">{filedDeparture.displayDepartureAirportTime}</div>
+            <div className="font-mono text-xs text-muted-foreground">{filedDeparture.displayZulu}</div>
           </div>
           <div>
             <div className="text-xs text-muted-foreground">ICAO DOF</div>

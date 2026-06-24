@@ -1,9 +1,17 @@
 export const ICAO_SURVEILLANCE_OPTIONS = [
   { code: "N", label: "N - No surveillance equipment" },
+  { code: "I", label: "I - Mode S transponder, no aircraft ID or pressure altitude" },
+  { code: "P", label: "P - Mode S transponder with pressure altitude, no aircraft ID" },
+  { code: "X", label: "X - Mode S transponder with aircraft ID, no pressure altitude" },
   { code: "A", label: "A - Mode A transponder" },
   { code: "C", label: "C - Mode A/C transponder" },
+  { code: "E", label: "E - Mode S transponder with aircraft ID, pressure altitude, extended squitter" },
+  { code: "H", label: "H - Mode S transponder with aircraft ID, pressure altitude, enhanced surveillance" },
+  { code: "L", label: "L - Mode S transponder with aircraft ID, pressure altitude, extended squitter, enhanced surveillance" },
   { code: "S", label: "S - Mode S transponder" },
 ] as const;
+
+export const FLIGHT_SERVICE_DIRECT_SURVEILLANCE_CODES = new Set(["N", "A", "C", "S"]);
 
 export const ICAO_EXTENDED_SURVEILLANCE_OPTIONS = [
   { code: "B1", label: "B1 - ADS-B Out (1090ES)" },
@@ -179,7 +187,7 @@ export const ICAO_OTHER_INFO_VALUE_OPTIONS: Partial<Record<IcaoOtherInfoPrefix, 
 
 const SURVEILLANCE_CODES = ICAO_ALL_SURVEILLANCE_OPTIONS.map((option) => option.code).sort((a, b) => b.length - a.length);
 const SURVEILLANCE_CODE_SET = new Set<string>(ICAO_ALL_SURVEILLANCE_OPTIONS.map((option) => option.code));
-const FLIGHT_SERVICE_SURVEILLANCE_CODE_SET = new Set<string>(ICAO_SURVEILLANCE_OPTIONS.map((option) => option.code));
+const FLIGHT_SERVICE_SURVEILLANCE_CODE_SET = FLIGHT_SERVICE_DIRECT_SURVEILLANCE_CODES;
 const OTHER_INFO_PREFIX_SET = new Set<string>(ICAO_OTHER_INFO_PREFIXES);
 
 export const parseIcaoSurveillanceCodes = (input: string | null | undefined) => {

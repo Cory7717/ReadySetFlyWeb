@@ -44,6 +44,7 @@ import { parseFlightCategory as getFlightCategory, parseWeatherHazards } from "@
 import {
   ICAO_OTHER_INFO_VALUE_OPTIONS,
   ICAO_ALL_SURVEILLANCE_OPTIONS,
+  FLIGHT_SERVICE_DIRECT_SURVEILLANCE_CODES,
   ICAO_OTHER_INFO_PREFIX_OPTIONS,
   ICAO_SURVEILLANCE_OPTIONS,
   buildIcaoOtherInfo,
@@ -3178,21 +3179,25 @@ export default function FlightPlanner() {
         .join(" "),
     [plannedStopsInput, waypointsInput]
   );
+  const routeAssistRouteCore = useMemo(
+    () => normalizeRouteText(routeIntermediates.join(" ")),
+    [routeIntermediates],
+  );
   const activeFiledRoute = useMemo(
     () => {
       if (routeMode === "direct") return "DCT";
       if (routeMode === "manual") return filedRouteInputNormalized;
-      return filedRouteInputNormalized || generatedRouteCore;
+      return filedRouteInputNormalized || generatedRouteCore || routeAssistRouteCore;
     },
-    [filedRouteInputNormalized, generatedRouteCore, routeMode]
+    [filedRouteInputNormalized, generatedRouteCore, routeAssistRouteCore, routeMode]
   );
   const leidosFiledRoute = useMemo(
     () => {
       if (routeMode === "manual") return filedRouteInputNormalized || "DCT";
       if (routeMode === "direct") return "DCT";
-      return filedRouteInputNormalized || "DCT";
+      return filedRouteInputNormalized || generatedRouteCore || routeAssistRouteCore || "DCT";
     },
-    [filedRouteInputNormalized, routeMode],
+    [filedRouteInputNormalized, generatedRouteCore, routeAssistRouteCore, routeMode],
   );
   const routePreviewFull = useMemo(
     () => buildRoutePreview(form.departure, activeFiledRoute, form.destination),
@@ -8448,7 +8453,7 @@ export default function FlightPlanner() {
                       </Badge>
                     )) : <span className="text-xs text-muted-foreground">Select one or more ICAO surveillance codes.</span>}
                   </div>
-                  {selectedSurveillanceCodes.some((code) => !ICAO_SURVEILLANCE_OPTIONS.some((option) => option.code === code)) && (
+                  {selectedSurveillanceCodes.some((code) => !FLIGHT_SERVICE_DIRECT_SURVEILLANCE_CODES.has(code)) && (
                     <Alert className="border-amber-300 bg-amber-900/20 text-amber-100">
                       <AlertDescription>
                         Flight Service filing currently accepts N, A, C, or S here. Put ADS-B or ADS-C details in Other ICAO Information using SUR/ if needed.

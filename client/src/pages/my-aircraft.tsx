@@ -12,6 +12,7 @@ import { apiUrl } from "@/lib/api";
 import {
   ICAO_OTHER_INFO_VALUE_OPTIONS,
   ICAO_ALL_SURVEILLANCE_OPTIONS,
+  FLIGHT_SERVICE_DIRECT_SURVEILLANCE_CODES,
   ICAO_OTHER_INFO_PREFIX_OPTIONS,
   ICAO_SURVEILLANCE_OPTIONS,
   buildIcaoOtherInfo,
@@ -317,7 +318,7 @@ export default function MyAircraft() {
                     </span>
                   )) : <span className="text-muted-foreground">Select one or more ICAO surveillance codes.</span>}
                 </div>
-                {selectedSurveillanceCodes.some((code) => !ICAO_SURVEILLANCE_OPTIONS.some((option) => option.code === code)) && (
+                {selectedSurveillanceCodes.some((code) => !FLIGHT_SERVICE_DIRECT_SURVEILLANCE_CODES.has(code)) && (
                   <Alert className="border-amber-200 bg-amber-50 text-amber-900">
                     <AlertDescription>
                       Flight Service filing currently accepts N, A, C, or S here. Store ADS-B or ADS-C details in Other ICAO Information using SUR/ when needed.

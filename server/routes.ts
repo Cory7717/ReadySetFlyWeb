@@ -21708,10 +21708,31 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             providerMessages: syncResult.providerMessages,
             fallback: providerMessageDetails,
           });
+          const providerChangeSummaryMessage: FilingProviderMessage | null = syncedNotificationMessage
+            ? {
+              id: buildFilingEventId("webhook", flightIdentifier, "provider_changes_detected", syncedNotificationMessage, pushReceivedAt),
+              timestamp: pushReceivedAt,
+              severity: syncedNotificationChanges.length > 0 ? "warning" : isAlert ? "warning" : "info",
+              title: syncedNotificationChanges.length > 0 ? "Provider changes detected" : notificationTitle,
+              details: syncedNotificationChanges.length > 0
+                ? `Flight Service changed this plan: ${syncedNotificationChanges.join(" ")}`
+                : syncedNotificationMessage,
+              source: "webhook",
+              provider: "FAA Flight Service",
+              providerPlanId: flightIdentifier,
+              providerReferenceId: String(payload.messageId || payload.referenceId || "").trim() || null,
+              raw: {
+                changedFields: syncedNotificationChanges,
+                notificationType,
+                changeType,
+                alertType,
+              },
+            }
+            : null;
           await storage.updateFlightPlan(matchedPlan.id, {
             filingProviderMessages: appendPlanProviderMessages(
               (syncedPlan as Record<string, unknown>)?.filingProviderMessages,
-              [providerMessage],
+              [providerMessage, providerChangeSummaryMessage].filter(Boolean) as FilingProviderMessage[],
             ) as any,
             filingProviderSnapshot: {
               ...syncedSnapshot,
@@ -22292,6 +22313,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const planLabel = plan.title || `${plan.departure} to ${plan.destination}`;
         const providerRoute = (syncResult.providerSnapshot?.route as any)?.providerRoute ?? null;
         const previousSnapshot = getProviderSnapshotRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+        const changedFields = describeProviderSnapshotChanges({ previousSnapshot, nextSnapshot });
         const syncNotificationMessage = buildFlightPlanNotificationMessage({
           plan,
           previousSnapshot,
@@ -22303,6 +22325,27 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             ? `Your filed route for "${planLabel}" was adjusted by the provider. Effective route: ${providerRoute || "see Provider Updates for details"}.`
             : `Provider sync completed for "${planLabel}". Your plan is current with the provider record.`,
         });
+        if (syncNotificationMessage) {
+          const summaryMessage: FilingProviderMessage = {
+            id: buildFilingEventId("sync", plan.id, "provider_changes_detected", syncNotificationMessage, String(syncResult.versionStamp || "")),
+            timestamp: new Date().toISOString(),
+            severity: changedFields.length > 0 || nextSnapshot.externalChangeDetected ? "warning" : "info",
+            title: changedFields.length > 0 ? "Provider changes detected" : "Provider sync update",
+            details: changedFields.length > 0
+              ? `Flight Service changed this plan: ${changedFields.join(" ")}`
+              : syncNotificationMessage,
+            source: "sync",
+            provider: "FAA Flight Service",
+            providerPlanId: syncResult.providerPlanId,
+            raw: { changedFields, providerRoute },
+          };
+          await storage.updateFlightPlan(plan.id, {
+            filingProviderMessages: appendPlanProviderMessages(
+              (updated as Record<string, unknown>).filingProviderMessages,
+              [summaryMessage],
+            ) as any,
+          } as any);
+        }
         const today = new Date();
         storage.upsertUserNotification({
           userId,
@@ -22317,7 +22360,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             planTitle: plan.title,
             providerPlanId: syncResult.providerPlanId,
             changedByProvider: routeChangedByProvider,
-            changedFields: describeProviderSnapshotChanges({ previousSnapshot, nextSnapshot }),
+            changedFields,
             providerRoute,
           } as any,
         }).catch((err) => console.warn("Failed to create sync notification:", err));

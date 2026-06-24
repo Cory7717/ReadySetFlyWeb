@@ -8728,7 +8728,7 @@ export default function FlightPlanner() {
                         The planning reference is only for route, weather, terrain, ETE, and timezone calculations. Flight Service receives the actual departure location below for filing and search-and-rescue purposes.
                       </div>
                     </div>
-                    <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                    <div className="grid gap-3">
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Planning Reference Airport <span className="text-amber-400 text-xs">(required)</span></Label>
                         <Input
@@ -8740,26 +8740,38 @@ export default function FlightPlanner() {
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Departure Location <span className="text-amber-400 text-xs">(required)</span></Label>
-                        <div className="grid gap-2 sm:grid-cols-[14rem_minmax(0,1fr)]">
-                          <Select
-                            value={filingDraft.actualDepartureLocationMode}
-                            onValueChange={(value) => setFilingDraft((current) => ({ ...current, actualDepartureLocationMode: value as ZzzzActualLocationMode }))}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className={plannerSelectContentClass}>
-                              <SelectItem value="identifier">FAA private field code</SelectItem>
-                              <SelectItem value="latlong">Latitude / Longitude</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {(["identifier", "latlong"] as ZzzzActualLocationMode[]).map((mode) => (
+                            <Button
+                              key={mode}
+                              type="button"
+                              variant={filingDraft.actualDepartureLocationMode === mode ? "default" : "outline"}
+                              className="justify-start"
+                              onClick={() => setFilingDraft((current) => ({
+                                ...current,
+                                actualDepartureLocationMode: mode,
+                                actualDepartureLocation: "",
+                              }))}
+                            >
+                              {zzzzActualLocationModeCopy[mode].label}
+                            </Button>
+                          ))}
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-[#D9C28A]">
+                            {filingDraft.actualDepartureLocationMode === "latlong" ? "Enter coordinates" : "Enter private field code"}
+                          </Label>
                           <Input
                             value={filingDraft.actualDepartureLocation}
                             onChange={(e) => setFilingDraft((current) => ({ ...current, actualDepartureLocation: e.target.value.toUpperCase() }))}
                             placeholder={zzzzActualLocationModeCopy[filingDraft.actualDepartureLocationMode].placeholder}
+                            className="font-mono text-base"
                           />
                         </div>
                         <div className="text-xs leading-5 text-[#A9BBCD]">{zzzzActualLocationModeCopy[filingDraft.actualDepartureLocationMode].help}</div>
+                        {filingDraft.actualDepartureLocationMode === "latlong" && (
+                          <div className="text-xs text-[#D9C28A]">This coordinate value is what RSF transmits in DEP/ when departure is ZZZZ.</div>
+                        )}
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3 lg:col-span-2">
                         <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
@@ -8780,7 +8792,7 @@ export default function FlightPlanner() {
                         The planning reference is only for route, weather, terrain, ETE, and timezone calculations. Flight Service receives the actual destination location below.
                       </div>
                     </div>
-                    <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                    <div className="grid gap-3">
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Planning Reference Airport <span className="text-amber-400 text-xs">(required)</span></Label>
                         <Input
@@ -8792,26 +8804,38 @@ export default function FlightPlanner() {
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Destination Location <span className="text-amber-400 text-xs">(required)</span></Label>
-                        <div className="grid gap-2 sm:grid-cols-[14rem_minmax(0,1fr)]">
-                          <Select
-                            value={filingDraft.actualDestinationLocationMode}
-                            onValueChange={(value) => setFilingDraft((current) => ({ ...current, actualDestinationLocationMode: value as ZzzzActualLocationMode }))}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className={plannerSelectContentClass}>
-                              <SelectItem value="identifier">FAA private field code</SelectItem>
-                              <SelectItem value="latlong">Latitude / Longitude</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {(["identifier", "latlong"] as ZzzzActualLocationMode[]).map((mode) => (
+                            <Button
+                              key={mode}
+                              type="button"
+                              variant={filingDraft.actualDestinationLocationMode === mode ? "default" : "outline"}
+                              className="justify-start"
+                              onClick={() => setFilingDraft((current) => ({
+                                ...current,
+                                actualDestinationLocationMode: mode,
+                                actualDestinationLocation: "",
+                              }))}
+                            >
+                              {zzzzActualLocationModeCopy[mode].label}
+                            </Button>
+                          ))}
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-[#D9C28A]">
+                            {filingDraft.actualDestinationLocationMode === "latlong" ? "Enter coordinates" : "Enter private field code"}
+                          </Label>
                           <Input
                             value={filingDraft.actualDestinationLocation}
                             onChange={(e) => setFilingDraft((current) => ({ ...current, actualDestinationLocation: e.target.value.toUpperCase() }))}
                             placeholder={zzzzActualLocationModeCopy[filingDraft.actualDestinationLocationMode].placeholder}
+                            className="font-mono text-base"
                           />
                         </div>
                         <div className="text-xs leading-5 text-[#A9BBCD]">{zzzzActualLocationModeCopy[filingDraft.actualDestinationLocationMode].help}</div>
+                        {filingDraft.actualDestinationLocationMode === "latlong" && (
+                          <div className="text-xs text-[#D9C28A]">This coordinate value is what RSF transmits in DEST/ when destination is ZZZZ.</div>
+                        )}
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3 lg:col-span-2">
                         <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
@@ -8832,7 +8856,7 @@ export default function FlightPlanner() {
                         The planning reference is only for route, weather, terrain, ETE, and timezone calculations. Flight Service receives the actual alternate location below.
                       </div>
                     </div>
-                    <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                    <div className="grid gap-3">
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Planning Reference Airport <span className="text-amber-400 text-xs">(required)</span></Label>
                         <Input
@@ -8844,26 +8868,38 @@ export default function FlightPlanner() {
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Alternate Location <span className="text-amber-400 text-xs">(required)</span></Label>
-                        <div className="grid gap-2 sm:grid-cols-[14rem_minmax(0,1fr)]">
-                          <Select
-                            value={filingDraft.actualAlternateLocationMode}
-                            onValueChange={(value) => setFilingDraft((current) => ({ ...current, actualAlternateLocationMode: value as ZzzzActualLocationMode }))}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className={plannerSelectContentClass}>
-                              <SelectItem value="identifier">FAA private field code</SelectItem>
-                              <SelectItem value="latlong">Latitude / Longitude</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {(["identifier", "latlong"] as ZzzzActualLocationMode[]).map((mode) => (
+                            <Button
+                              key={mode}
+                              type="button"
+                              variant={filingDraft.actualAlternateLocationMode === mode ? "default" : "outline"}
+                              className="justify-start"
+                              onClick={() => setFilingDraft((current) => ({
+                                ...current,
+                                actualAlternateLocationMode: mode,
+                                actualAlternateLocation: "",
+                              }))}
+                            >
+                              {zzzzActualLocationModeCopy[mode].label}
+                            </Button>
+                          ))}
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-[#D9C28A]">
+                            {filingDraft.actualAlternateLocationMode === "latlong" ? "Enter coordinates" : "Enter private field code"}
+                          </Label>
                           <Input
                             value={filingDraft.actualAlternateLocation}
                             onChange={(e) => setFilingDraft((current) => ({ ...current, actualAlternateLocation: e.target.value.toUpperCase() }))}
                             placeholder={zzzzActualLocationModeCopy[filingDraft.actualAlternateLocationMode].placeholder}
+                            className="font-mono text-base"
                           />
                         </div>
                         <div className="text-xs leading-5 text-[#A9BBCD]">{zzzzActualLocationModeCopy[filingDraft.actualAlternateLocationMode].help}</div>
+                        {filingDraft.actualAlternateLocationMode === "latlong" && (
+                          <div className="text-xs text-[#D9C28A]">This coordinate value is what RSF transmits in ALT/ when alternate is ZZZZ.</div>
+                        )}
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3 lg:col-span-2">
                         <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>

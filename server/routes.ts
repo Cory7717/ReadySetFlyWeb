@@ -19,7 +19,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, insertFlyingClubSquawkSchema, insertFlyingClubMaintenanceItemSchema, insertFlyingClubBlackoutSchema, insertMembershipPartnerOfferSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, flightPlans, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type LeadCategory, type LeadStatus, type PromoCode, type MembershipPartnerOffer } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, insertFlyingClubSquawkSchema, insertFlyingClubMaintenanceItemSchema, insertFlyingClubBlackoutSchema, insertMembershipPartnerOfferSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, userNotifications, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, flightPlans, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type LeadCategory, type LeadStatus, type PromoCode, type MembershipPartnerOffer } from "@shared/schema";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
@@ -75,6 +75,7 @@ import {
   buildOtherInfoWithDof,
   mergeProviderMessages,
   normalizeRouteForProvider,
+  type FilingFieldDiff,
   type FilingProviderMessage,
 } from "@shared/flight-plan-filing-workflow";
 import { buildWeeklyDigestProfile, type WeeklyDigestSegment } from "./weeklyEmailPersonalization";
@@ -21179,6 +21180,152 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     return null;
   };
 
+  const normalizeNotificationValue = (value: unknown) => {
+    const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+    return normalized || null;
+  };
+
+  const getProviderSnapshotRecord = (value: unknown) =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+
+  const getFlightPlanNotificationLabel = (plan: any) => {
+    const title = normalizeNotificationValue(plan?.title);
+    if (title) return title;
+    const departure = normalizeNotificationValue(plan?.departure);
+    const destination = normalizeNotificationValue(plan?.destination);
+    if (departure && destination) return `${departure} -> ${destination}`;
+    return departure || destination || "this flight plan";
+  };
+
+  const addUniqueNotificationLine = (lines: string[], line: string | null | undefined) => {
+    const normalized = normalizeNotificationValue(line);
+    if (normalized && !lines.includes(normalized)) lines.push(normalized);
+  };
+
+  const describeProviderSnapshotChanges = ({
+    previousSnapshot,
+    nextSnapshot,
+  }: {
+    previousSnapshot?: Record<string, unknown> | null;
+    nextSnapshot?: Record<string, unknown> | null;
+  }) => {
+    const lines: string[] = [];
+    const previous = previousSnapshot || {};
+    const next = nextSnapshot || {};
+    const previousRoute = getProviderSnapshotRecord(previous.route);
+    const nextRoute = getProviderSnapshotRecord(next.route);
+    const previousLifecycle = normalizeNotificationValue(previous.providerLifecycleStatus || previous.providerStatus);
+    const nextLifecycle = normalizeNotificationValue(next.providerLifecycleStatus || next.providerStatus);
+    if (nextLifecycle && previousLifecycle && nextLifecycle !== previousLifecycle) {
+      addUniqueNotificationLine(lines, `Provider status changed from ${previousLifecycle} to ${nextLifecycle}.`);
+    } else if (nextLifecycle && !previousLifecycle) {
+      addUniqueNotificationLine(lines, `Provider status is now ${nextLifecycle}.`);
+    }
+
+    const previousArtcc = normalizeNotificationValue(previous.artccState);
+    const nextArtcc = normalizeNotificationValue(next.artccState);
+    if (nextArtcc && previousArtcc && nextArtcc !== previousArtcc) {
+      addUniqueNotificationLine(lines, `ARTCC state changed from ${previousArtcc} to ${nextArtcc}.`);
+    } else if (nextArtcc && !previousArtcc) {
+      addUniqueNotificationLine(lines, `ARTCC state is now ${nextArtcc}.`);
+    }
+
+    const previousBeacon = normalizeNotificationValue(previous.beaconCode);
+    const nextBeacon = normalizeNotificationValue(next.beaconCode);
+    if (nextBeacon && previousBeacon !== nextBeacon) {
+      addUniqueNotificationLine(lines, previousBeacon ? `Beacon code changed from ${previousBeacon} to ${nextBeacon}.` : `Beacon code assigned: ${nextBeacon}.`);
+    }
+
+    const providerRoute = normalizeNotificationValue(nextRoute.providerRoute);
+    const previousProviderRoute = normalizeNotificationValue(previousRoute.providerRoute);
+    const transmittedRoute = normalizeNotificationValue(nextRoute.normalizedTransmittedRoute);
+    if (providerRoute && previousProviderRoute && providerRoute !== previousProviderRoute) {
+      addUniqueNotificationLine(lines, `Provider route changed from ${previousProviderRoute} to ${providerRoute}.`);
+    } else if (providerRoute && Boolean(nextRoute.changedByProvider)) {
+      addUniqueNotificationLine(lines, `Provider route differs from RSF filing: ${transmittedRoute || "filed route"} -> ${providerRoute}.`);
+    }
+
+    const fieldDiffs = Array.isArray(next.fieldDiffs) ? next.fieldDiffs as FilingFieldDiff[] : [];
+    for (const diff of fieldDiffs) {
+      if (!diff?.changedByProvider || diff.field === "route") continue;
+      const label = diff.field === "otherInfo" ? "Other Information" : diff.field;
+      addUniqueNotificationLine(lines, `${label} changed by provider from ${diff.transmittedValue || "blank"} to ${diff.providerValue || "blank"}.`);
+    }
+
+    const previousNotices = new Set((Array.isArray(previous.notices) ? previous.notices : []).map((notice) => String(notice)));
+    const addedNotices = (Array.isArray(next.notices) ? next.notices : [])
+      .map((notice) => normalizeNotificationValue(notice))
+      .filter((notice): notice is string => Boolean(notice && !previousNotices.has(notice)));
+    for (const notice of addedNotices.slice(0, 2)) {
+      addUniqueNotificationLine(lines, `Provider notice: ${notice}`);
+    }
+
+    return lines;
+  };
+
+  const buildFlightPlanNotificationMessage = ({
+    plan,
+    previousSnapshot,
+    nextSnapshot,
+    pushFields,
+    providerMessages,
+    fallback,
+  }: {
+    plan: any;
+    previousSnapshot?: Record<string, unknown> | null;
+    nextSnapshot?: Record<string, unknown> | null;
+    pushFields?: {
+      changeType?: string | null;
+      alertType?: string | null;
+      notificationType?: string | null;
+      flightState?: string | null;
+      expectedRoute?: string | null;
+      artccState?: string | null;
+      artccInfo?: unknown;
+      flightVersionStamp?: string | null;
+    };
+    providerMessages?: FilingProviderMessage[];
+    fallback?: string | null;
+  }) => {
+    const lines: string[] = [];
+    const planLabel = getFlightPlanNotificationLabel(plan);
+    const push = pushFields || {};
+    const providerFlightState = normalizeNotificationValue(push.flightState);
+    const expectedRoute = normalizeNotificationValue(push.expectedRoute);
+    const artccState = normalizeNotificationValue(push.artccState);
+    const artccInfo = normalizeNotificationValue(push.artccInfo);
+    const changeType = normalizeNotificationValue(push.changeType || push.alertType);
+
+    if (changeType && !/^flight[_\s-]*(change|alert)$/i.test(changeType)) {
+      addUniqueNotificationLine(lines, `Provider reported ${changeType} for ${planLabel}.`);
+    }
+    if (providerFlightState) addUniqueNotificationLine(lines, `Provider flight state: ${providerFlightState}.`);
+    if (expectedRoute) addUniqueNotificationLine(lines, `Expected route from provider: ${expectedRoute}.`);
+    if (artccState) addUniqueNotificationLine(lines, `ARTCC state: ${artccState}.`);
+    if (artccInfo) addUniqueNotificationLine(lines, `ARTCC info: ${artccInfo}.`);
+
+    for (const line of describeProviderSnapshotChanges({ previousSnapshot, nextSnapshot })) {
+      addUniqueNotificationLine(lines, line);
+    }
+
+    for (const message of (providerMessages || []).slice(0, 2)) {
+      addUniqueNotificationLine(lines, message.details);
+    }
+
+    const fallbackText = normalizeNotificationValue(fallback);
+    if (fallbackText && !/^flight[_\s-]*(change|alert)$/i.test(fallbackText)) {
+      addUniqueNotificationLine(lines, fallbackText);
+    }
+
+    if (lines.length === 0) {
+      addUniqueNotificationLine(lines, `Flight Service pushed an update for ${planLabel}. RSF refreshed the provider record, but the push did not identify a specific changed field.`);
+    }
+
+    return lines.slice(0, 4).join(" ");
+  };
+
   const addProviderStateMismatchNotice = (plan: any, snapshot: Record<string, unknown>, forceNotice?: string | null) => {
     const providerStatus = getPlanStatusFromProviderLifecycle(snapshot);
     const localStatus = String(plan.filingStatus || "draft").toLowerCase();
@@ -21461,9 +21608,25 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             ? `Flight Alert${alertType ? `: ${alertType}` : ""}`
             : `Flight Plan Change${changeType ? `: ${changeType}` : ""}`
           : "Flight Service push received";
-        const providerMessageDetails = hasExplicitProviderChange
-          ? extractedMessage
-          : "Flight Service pushed an update for this flight plan. RSF refreshed provider sync; no route, status, ARTCC, or notice changes were reported in the push payload.";
+        const previousProviderSnapshot = getProviderSnapshotRecord((matchedPlan as Record<string, unknown>).filingProviderSnapshot);
+        const pushContext = {
+          changeType,
+          alertType,
+          notificationType,
+          flightState,
+          expectedRoute,
+          artccState,
+          artccInfo,
+          flightVersionStamp,
+        };
+        const providerMessageDetails = buildFlightPlanNotificationMessage({
+          plan: matchedPlan,
+          previousSnapshot: previousProviderSnapshot,
+          pushFields: pushContext,
+          fallback: hasExplicitProviderChange
+            ? extractedMessage
+            : "Flight Service pushed an update for this flight plan. RSF refreshed provider sync; no route, status, ARTCC, or notice changes were reported in the push payload.",
+        });
         const pushReceivedAt = String(payload.notificationTimestamp || payload.timestamp || new Date().toISOString());
         const providerMessage: FilingProviderMessage = {
           id: buildFilingEventId("webhook", flightIdentifier, notificationTitle, extractedMessage, pushReceivedAt),
@@ -21479,7 +21642,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         };
 
         // STEP 3 — Create in-app notification.
-        await storage.createUserNotification({
+        const providerPushNotification = await storage.createUserNotification({
           userId: matchedPlan.userId,
           type: inAppType,
           title: notificationTitle,
@@ -21524,6 +21687,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           lastProviderUpdateAt: new Date().toISOString(),
         };
 
+        let syncedNotificationMessage = providerMessageDetails;
+        let syncedNotificationChanges: string[] = [];
         const syncResult = await syncLeidosPlanMetadata(matchedPlan as any).catch(() => null);
         if (syncResult) {
           const syncedPlan = await persistLeidosProviderSync(matchedPlan as any, syncResult, { extraMessages: [providerMessage] });
@@ -21531,6 +21696,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             syncedPlan?.filingProviderSnapshot && typeof syncedPlan.filingProviderSnapshot === "object" && !Array.isArray(syncedPlan.filingProviderSnapshot)
               ? syncedPlan.filingProviderSnapshot as Record<string, unknown>
               : {};
+          syncedNotificationChanges = describeProviderSnapshotChanges({
+            previousSnapshot: previousProviderSnapshot,
+            nextSnapshot: syncedSnapshot,
+          });
+          syncedNotificationMessage = buildFlightPlanNotificationMessage({
+            plan: syncedPlan || matchedPlan,
+            previousSnapshot: previousProviderSnapshot,
+            nextSnapshot: syncedSnapshot,
+            pushFields: pushContext,
+            providerMessages: syncResult.providerMessages,
+            fallback: providerMessageDetails,
+          });
           await storage.updateFlightPlan(matchedPlan.id, {
             filingProviderMessages: appendPlanProviderMessages(
               (syncedPlan as Record<string, unknown>)?.filingProviderMessages,
@@ -21559,6 +21736,21 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               versionStamp: providerReviewSnapshot.versionStamp || existingSnapshot.versionStamp || null,
             },
           } as any);
+        }
+        if (syncedNotificationMessage !== providerMessageDetails || syncedNotificationChanges.length > 0) {
+          await db
+            .update(userNotifications)
+            .set({
+              message: syncedNotificationMessage,
+              meta: {
+                flightPlanId: matchedPlan.id,
+                providerPlanId: flightIdentifier,
+                changedFields: syncedNotificationChanges,
+                raw: payload,
+              } as any,
+              updatedAt: new Date(),
+            })
+            .where(eq(userNotifications.id, providerPushNotification.id));
         }
       } catch (innerError) {
         console.error(JSON.stringify({
@@ -22099,16 +22291,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (routeChangedByProvider || hasProviderMessages) {
         const planLabel = plan.title || `${plan.departure} to ${plan.destination}`;
         const providerRoute = (syncResult.providerSnapshot?.route as any)?.providerRoute ?? null;
+        const previousSnapshot = getProviderSnapshotRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+        const syncNotificationMessage = buildFlightPlanNotificationMessage({
+          plan,
+          previousSnapshot,
+          nextSnapshot,
+          providerMessages: syncResult.providerMessages,
+          fallback: nextSnapshot.externalChangeDetected
+            ? String(nextSnapshot.externalChangeNotice || "Leidos returned a provider state that differs from RSF's prior local state.")
+            : routeChangedByProvider
+            ? `Your filed route for "${planLabel}" was adjusted by the provider. Effective route: ${providerRoute || "see Provider Updates for details"}.`
+            : `Provider sync completed for "${planLabel}". Your plan is current with the provider record.`,
+        });
         const today = new Date();
         storage.upsertUserNotification({
           userId,
           type: `provider_sync:${plan.id}`,
           title: nextSnapshot.externalChangeDetected ? "External provider change detected" : routeChangedByProvider ? "Route updated by provider" : "Provider sync complete",
-          message: nextSnapshot.externalChangeDetected
-            ? String(nextSnapshot.externalChangeNotice || "Leidos returned a provider state that differs from RSF's prior local state.")
-            : routeChangedByProvider
-            ? `Your filed route for "${planLabel}" was adjusted by the provider. Effective route: ${providerRoute || "see Provider Updates for details"}.`
-            : `Provider sync completed for "${planLabel}". Your plan is current with the Leidos record.`,
+          message: syncNotificationMessage,
           referenceDate: today as any,
           channels: ["in_app"],
           isRead: false,
@@ -22117,6 +22317,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             planTitle: plan.title,
             providerPlanId: syncResult.providerPlanId,
             changedByProvider: routeChangedByProvider,
+            changedFields: describeProviderSnapshotChanges({ previousSnapshot, nextSnapshot }),
             providerRoute,
           } as any,
         }).catch((err) => console.warn("Failed to create sync notification:", err));

@@ -562,6 +562,16 @@ const getProviderLifecycleAvailabilityMessage = (plan: FlightPlan | null | undef
   return null;
 };
 
+const formatFilingProviderDisplayName = (provider?: string | null) => {
+  const normalized = String(provider || "").trim().toLowerCase();
+  if (!normalized || normalized === "leidos_flight_service") return "FAA Flight Service";
+  return normalized
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+};
+
 const getPlannerAircraftTypeValue = ({
   manualAircraftType,
   selectedProfile,
@@ -4978,7 +4988,7 @@ export default function FlightPlanner() {
 
     const title = plan.title || `${plan.departure || "Departure"} to ${plan.destination || "Destination"}`;
     const status = filingStatusLabel(plan.filingStatus);
-    const provider = plan.filingProvider || "leidos_flight_service";
+    const provider = formatFilingProviderDisplayName(plan.filingProvider);
     const providerPlanId = plan.filingProviderPlanId || "—";
     const versionStamp = extractClientVersionStamp(plan) || "—";
     const history = Array.isArray(plan.filingActionHistory) ? [...plan.filingActionHistory].slice().reverse().slice(0, 8) : [];
@@ -9195,7 +9205,7 @@ export default function FlightPlanner() {
                   </div>
                   <div>
                     <div className="text-muted-foreground">Provider</div>
-                    <div>{plan.filingProvider || "Flight Service"}</div>
+                    <div>{formatFilingProviderDisplayName(plan.filingProvider)}</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground">Provider reference</div>

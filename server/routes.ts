@@ -22340,6 +22340,75 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  app.post("/api/flight-plans/:id/provider-review/accept", isAuthenticated, flightFilingRateLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const plan = await storage.getFlightPlanById(req.params.id);
+      if (!plan) {
+        return res.status(404).json({ error: "Flight plan not found" });
+      }
+      if (plan.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      let currentPlan: any = plan;
+      if (plan.filingProviderPlanId) {
+        try {
+          const syncResult = await syncLeidosPlanMetadata(plan as any);
+          currentPlan = await persistLeidosProviderSync(plan as any, syncResult);
+        } catch (syncError: any) {
+          console.warn("Leidos provider review accept sync failed:", syncError?.message || syncError);
+        }
+      }
+
+      const now = new Date();
+      const currentSnapshot = getProviderSnapshotRecord((currentPlan as Record<string, unknown>).filingProviderSnapshot);
+      const acceptedSnapshot = {
+        ...currentSnapshot,
+        providerPendingReview: false,
+        providerModifiedBySpecialist: false,
+        providerReviewAcceptedAt: now.toISOString(),
+        providerReviewAcceptedBy: userId,
+      };
+      const acceptanceMessage: FilingProviderMessage = {
+        id: buildFilingEventId("rsf", currentPlan.id, "provider_review_accepted", now.toISOString()),
+        timestamp: now.toISOString(),
+        severity: "success",
+        title: "Provider changes accepted",
+        details: "Pilot reviewed and accepted the current Flight Service provider version in RSF. Amendments can be submitted again from this provider state.",
+        source: "rsf",
+        action: null,
+        provider: "Leidos Flight Service",
+        providerPlanId: currentPlan.filingProviderPlanId || null,
+      };
+      const updated = await storage.updateFlightPlan(currentPlan.id, {
+        filingProviderSnapshot: acceptedSnapshot as any,
+        filingProviderMessages: appendPlanProviderMessages(
+          (currentPlan as Record<string, unknown>).filingProviderMessages,
+          [acceptanceMessage],
+        ) as any,
+        filingLastProviderSyncAt: now,
+      } as any);
+
+      res.json({
+        ok: true,
+        message: "Provider changes accepted. You can submit an amendment from the current Flight Service version.",
+        plan: updated,
+      });
+    } catch (error: any) {
+      console.error("Failed to accept flight plan provider review:", error);
+      res.status(500).json({
+        error: error instanceof Error && error.message
+          ? error.message
+          : "Failed to accept provider changes",
+      });
+    }
+  });
+
   app.get("/api/flight-plans", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;

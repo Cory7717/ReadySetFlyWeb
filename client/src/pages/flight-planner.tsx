@@ -305,6 +305,9 @@ const getProviderSnapshot = (plan: FlightPlan | null | undefined) => {
     : {};
 };
 
+const hasPendingProviderReview = (plan: FlightPlan | null | undefined) =>
+  getProviderSnapshot(plan).providerPendingReview === true;
+
 const getProviderActionAvailability = (plan: FlightPlan | null | undefined) => {
   const snapshot = getProviderSnapshot(plan);
   const availability = snapshot.providerActionAvailability;
@@ -5720,6 +5723,45 @@ export default function FlightPlanner() {
     },
   });
 
+  const acceptProviderReviewMutation = useMutation({
+    mutationFn: async (planId: string) => {
+      const res = await apiRequest("POST", `/api/flight-plans/${planId}/provider-review/accept`, {});
+      return res.json();
+    },
+    onSuccess: (result: any) => {
+      const updatedPlan = result?.plan as FlightPlan | undefined;
+      if (updatedPlan) {
+        queryClient.setQueryData<FlightPlan[]>(["/api/flight-plans"], (current = []) =>
+          mergePlanIntoList(current, updatedPlan)
+        );
+        setDraftPlanId(updatedPlan.id);
+        setEditingPlan(updatedPlan);
+        setProviderUpdatesPlan((current) => current?.id === updatedPlan.id ? updatedPlan : current);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      toast({
+        title: "Provider changes accepted",
+        description: result?.message || "You can submit an amendment from the current Flight Service version.",
+      });
+    },
+    onError: (error: any) => {
+      if (isPlanAccessDeniedError(error)) {
+        clearActiveSavedPlanIdentity();
+        toast({
+          title: "Provider review unavailable",
+          description: "That saved plan belongs to a different session or account. Save this draft again before accepting provider changes.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: "Could not accept provider changes",
+        description: summarizePlannerError(error?.message),
+        variant: "destructive",
+      });
+    },
+  });
+
   const insertComfortStopMutation = useMutation({
     mutationFn: async ({
       from,
@@ -8731,6 +8773,16 @@ export default function FlightPlanner() {
                 >
                   {filingSyncMutation.isPending ? "Refreshing sync..." : "Refresh provider sync"}
                 </Button>
+                {hasPendingProviderReview(currentSavedPlan) && (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => acceptProviderReviewMutation.mutate(currentSavedPlan!.id)}
+                    disabled={filingActionMutation.isPending || filingSyncMutation.isPending || acceptProviderReviewMutation.isPending}
+                  >
+                    {acceptProviderReviewMutation.isPending ? "Accepting..." : "Accept provider changes"}
+                  </Button>
+                )}
                 {currentSavedPlanFlightRules === "VFR" && (
                   <>
                     <Button
@@ -9199,6 +9251,16 @@ export default function FlightPlanner() {
                   >
                     {filingSyncMutation.isPending ? "Refreshing sync..." : "Refresh provider sync"}
                   </Button>
+                  {hasPendingProviderReview(plan) && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => acceptProviderReviewMutation.mutate(plan.id)}
+                      disabled={filingActionMutation.isPending || filingSyncMutation.isPending || acceptProviderReviewMutation.isPending}
+                    >
+                      {acceptProviderReviewMutation.isPending ? "Accepting..." : "Accept provider changes"}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"
@@ -10132,6 +10194,22 @@ export default function FlightPlanner() {
               Flight Service provider events are shown in reverse chronological order. Use Refresh provider sync after a filing action if you need the latest effective route or ARTCC state.
             </DialogDescription>
           </DialogHeader>
+          {providerUpdatesPlan && hasPendingProviderReview(providerUpdatesPlan) && (
+            <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100">
+              <div className="font-semibold">Provider changes need review</div>
+              <div className="mt-1 text-amber-100/85">
+                Flight Service has updated this plan. Accept the current provider version before submitting another amendment.
+              </div>
+              <Button
+                className="mt-3"
+                size="sm"
+                onClick={() => acceptProviderReviewMutation.mutate(providerUpdatesPlan.id)}
+                disabled={acceptProviderReviewMutation.isPending || filingSyncMutation.isPending || filingActionMutation.isPending}
+              >
+                {acceptProviderReviewMutation.isPending ? "Accepting..." : "Accept provider changes"}
+              </Button>
+            </div>
+          )}
           {providerUpdatesPlan ? <FilingProviderUpdatesList plan={providerUpdatesPlan} /> : null}
         </DialogContent>
       </Dialog>

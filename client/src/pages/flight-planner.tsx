@@ -1582,6 +1582,7 @@ export default function FlightPlanner() {
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [guestFlightPlanFiles, setGuestFlightPlanFiles] = useState(() => getAnonFlightPlanFileCount());
   const [activeTab, setActiveTab] = useState<FlightPlannerTab>("route");
+  const vfrRouteIfrWarningToastKeyRef = useRef("");
   const [returnToFileAfterSave, setReturnToFileAfterSave] = useState(false);
   const [pendingFilingActionAfterSave, setPendingFilingActionAfterSave] = useState<{
     planId: string;
@@ -4791,6 +4792,54 @@ export default function FlightPlanner() {
     }
     return risk;
   }, [weatherFindings, worstTerrainSegment]);
+
+  const routeWeatherIcaoSet = useMemo(() => {
+    return new Set(
+      [
+        planningDepartureCode,
+        ...plannedStops,
+        ...waypoints,
+        planningDestinationCode,
+      ].filter(Boolean)
+    );
+  }, [planningDepartureCode, plannedStops, waypoints, planningDestinationCode]);
+
+  const vfrRouteIfrWeatherPoints = useMemo(() => {
+    const seen = new Set<string>();
+    return weatherFindings.filter((item) => {
+      if (!routeWeatherIcaoSet.has(item.icao)) return false;
+      if (item.category !== "IFR" && item.category !== "LIFR") return false;
+      if (seen.has(item.icao)) return false;
+      seen.add(item.icao);
+      return true;
+    });
+  }, [weatherFindings, routeWeatherIcaoSet]);
+
+  const vfrRouteIfrWarningStations = useMemo(
+    () => vfrRouteIfrWeatherPoints.map((item) => `${item.icao} ${item.category}`).join(", "),
+    [vfrRouteIfrWeatherPoints]
+  );
+  const vfrRouteIfrWarningActive =
+    filingDraft.flightRules.toUpperCase() === "VFR" && vfrRouteIfrWeatherPoints.length > 0;
+  const vfrRouteIfrWarningKey = `${filingDraft.flightRules.toUpperCase()}|${vfrRouteIfrWarningStations}`;
+
+  useEffect(() => {
+    if (!vfrRouteIfrWarningActive) {
+      vfrRouteIfrWarningToastKeyRef.current = "";
+      return;
+    }
+    if (activeTab !== "file") return;
+    if (vfrRouteIfrWarningToastKeyRef.current === vfrRouteIfrWarningKey) return;
+    vfrRouteIfrWarningToastKeyRef.current = vfrRouteIfrWarningKey;
+    toast({
+      title: "IFR conditions detected on this VFR route",
+      description: vfrRouteIfrWarningStations
+        ? `${vfrRouteIfrWarningStations}. Select a different VFR route or file an IFR flight plan.`
+        : "Select a different VFR route or file an IFR flight plan.",
+      variant: "destructive",
+    });
+  }, [activeTab, toast, vfrRouteIfrWarningActive, vfrRouteIfrWarningKey, vfrRouteIfrWarningStations]);
+
   const resetForm = () => {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(FLIGHT_PLANNER_DRAFT_KEY);
@@ -8251,6 +8300,21 @@ export default function FlightPlanner() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
+          {vfrRouteIfrWarningActive && (
+            <Alert className="border-red-400/60 bg-red-950/35 text-red-50">
+              <AlertDescription className="space-y-1">
+                <div className="font-semibold">IFR conditions detected along this VFR route.</div>
+                <div>
+                  Select a different VFR route or file an IFR flight plan before sending this to Flight Service.
+                </div>
+                {vfrRouteIfrWarningStations && (
+                  <div className="text-xs text-red-100/85">
+                    Current route weather: {vfrRouteIfrWarningStations}
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="grid gap-2 md:grid-cols-2">
             <div>
               <div className="text-muted-foreground">Full Route Preview</div>

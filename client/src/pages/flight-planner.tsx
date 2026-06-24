@@ -2607,14 +2607,18 @@ export default function FlightPlanner() {
   ]);
 
   const routeIntermediates = useMemo(() => {
+    if (routeMode === "direct") {
+      return [];
+    }
     if (plannedStops.length > 0 || waypoints.length > 0) {
       return [...plannedStops, ...waypoints];
     }
-    if (filedRouteAirportTokens.length > 0) {
+    if (routeMode === "manual" && filedRouteAirportTokens.length > 0) {
       return filedRouteAirportTokens;
     }
+    if (routeMode !== "auto") return [];
     return autoSuggestedIntermediates;
-  }, [plannedStops, waypoints, filedRouteAirportTokens, autoSuggestedIntermediates]);
+  }, [routeMode, plannedStops, waypoints, filedRouteAirportTokens, autoSuggestedIntermediates]);
 
   const routeSequenceRaw = useMemo(() => {
     return [
@@ -6781,9 +6785,9 @@ export default function FlightPlanner() {
                 <Label>Route Mode</Label>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { value: "auto", label: "Auto route / suggested waypoints" },
+                    { value: "auto", label: "Route Assist" },
                     { value: "direct", label: "Direct" },
-                    { value: "manual", label: "Manual route" },
+                    { value: "manual", label: "Route Builder" },
                   ].map((option) => (
                     <Button
                       key={option.value}
@@ -6806,7 +6810,7 @@ export default function FlightPlanner() {
                     ? "RSF will file DCT without injecting route-assist waypoints."
                     : routeMode === "manual"
                       ? "RSF will file the route text you enter below."
-                      : "RSF may use selected route-assist waypoints when no manual route is entered."}
+                      : "RSF will preview selected Route Assist waypoints on the map."}
                 </p>
               </div>
               <div className="flex flex-wrap items-start justify-between gap-2">

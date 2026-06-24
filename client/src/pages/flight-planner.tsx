@@ -75,6 +75,7 @@ import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
 import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
 import { formatFlightPlanDepartureTime, formatZulu } from "@shared/flight-plan-time";
 import { ICAO_EQUIPMENT_CODES, parseIcaoEquipmentCodes, normalizeIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
+import { isValidZzzzActualLocation } from "@shared/zzzz-location";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
 import {
@@ -258,6 +259,9 @@ const buildPlannerStateSnapshot = ({
   planningReferenceDepartureAirport,
   planningReferenceDestinationAirport,
   planningReferenceAlternateAirport,
+  actualDepartureLocation,
+  actualDestinationLocation,
+  actualAlternateLocation,
   customProfile,
   routeMode,
 }: {
@@ -273,6 +277,9 @@ const buildPlannerStateSnapshot = ({
   planningReferenceDepartureAirport?: string | null;
   planningReferenceDestinationAirport?: string | null;
   planningReferenceAlternateAirport?: string | null;
+  actualDepartureLocation?: string | null;
+  actualDestinationLocation?: string | null;
+  actualAlternateLocation?: string | null;
   customProfile: {
     name: string;
     cruiseKtasOverride: string;
@@ -294,6 +301,9 @@ const buildPlannerStateSnapshot = ({
   planningReferenceDepartureAirport,
   planningReferenceDestinationAirport,
   planningReferenceAlternateAirport,
+  actualDepartureLocation,
+  actualDestinationLocation,
+  actualAlternateLocation,
   customProfile,
   routeMode,
 });
@@ -1896,6 +1906,9 @@ export default function FlightPlanner() {
     planningReferenceDepartureAirport: "",
     planningReferenceDestinationAirport: "",
     planningReferenceAlternateAirport: "",
+    actualDepartureLocation: "",
+    actualDestinationLocation: "",
+    actualAlternateLocation: "",
     departureName: "",
     destinationName: "",
     alternateName: "",
@@ -2504,6 +2517,9 @@ export default function FlightPlanner() {
   const planningReferenceDepartureAirport = filingDraft.planningReferenceDepartureAirport.trim().toUpperCase();
   const planningReferenceDestinationAirport = filingDraft.planningReferenceDestinationAirport.trim().toUpperCase();
   const planningReferenceAlternateAirport = filingDraft.planningReferenceAlternateAirport.trim().toUpperCase();
+  const actualDepartureLocation = filingDraft.actualDepartureLocation.trim().toUpperCase();
+  const actualDestinationLocation = filingDraft.actualDestinationLocation.trim().toUpperCase();
+  const actualAlternateLocation = filingDraft.actualAlternateLocation.trim().toUpperCase();
   const planningDepartureCode = filedDepartureCode === "ZZZZ"
     ? planningReferenceDepartureAirport
     : departureResolved.trim().toUpperCase();
@@ -2515,11 +2531,11 @@ export default function FlightPlanner() {
     : filedAlternateCode;
   const hasZzzzLocation = filedDepartureCode === "ZZZZ" || filedDestinationCode === "ZZZZ" || filedAlternateCode === "ZZZZ";
   const zzzzPlanningReferenceError = [
-    filedDepartureCode === "ZZZZ" && (!planningReferenceDepartureAirport || !ICAO_REGEX.test(planningReferenceDepartureAirport) || !filingDraft.departureName.trim()),
-    filedDestinationCode === "ZZZZ" && (!planningReferenceDestinationAirport || !ICAO_REGEX.test(planningReferenceDestinationAirport) || !filingDraft.destinationName.trim()),
-    filedAlternateCode === "ZZZZ" && (!planningReferenceAlternateAirport || !ICAO_REGEX.test(planningReferenceAlternateAirport) || !filingDraft.alternateName.trim()),
+    filedDepartureCode === "ZZZZ" && (!planningReferenceDepartureAirport || !ICAO_REGEX.test(planningReferenceDepartureAirport) || !isValidZzzzActualLocation(actualDepartureLocation)),
+    filedDestinationCode === "ZZZZ" && (!planningReferenceDestinationAirport || !ICAO_REGEX.test(planningReferenceDestinationAirport) || !isValidZzzzActualLocation(actualDestinationLocation)),
+    filedAlternateCode === "ZZZZ" && (!planningReferenceAlternateAirport || !ICAO_REGEX.test(planningReferenceAlternateAirport) || !isValidZzzzActualLocation(actualAlternateLocation)),
   ].some(Boolean)
-    ? "ZZZZ requires a planning reference airport and actual location description so RSF can calculate the route and file the plan correctly."
+    ? "ZZZZ requires a planning reference airport plus an actual FAA identifier or latitude/longitude for filing."
     : null;
 
   const routeSuggestionQuery = useQuery<RouteSuggestionResponse>({
@@ -3369,6 +3385,9 @@ export default function FlightPlanner() {
     typeOfFlight: filingDraft.typeOfFlight.trim() || null,
     surveillanceEquipment: filingDraft.surveillanceEquipment.trim() || null,
     otherInfo: filingDraft.otherInfo.trim() || null,
+    actualDepartureLocation: actualDepartureLocation || null,
+    actualDestinationLocation: actualDestinationLocation || null,
+    actualAlternateLocation: actualAlternateLocation || null,
     departureName: filingDraft.departureName.trim() || null,
     destinationName: filingDraft.destinationName.trim() || null,
     alternateName: filingDraft.alternateName.trim() || null,
@@ -4912,6 +4931,9 @@ export default function FlightPlanner() {
       planningReferenceDepartureAirport: "",
       planningReferenceDestinationAirport: "",
       planningReferenceAlternateAirport: "",
+      actualDepartureLocation: "",
+      actualDestinationLocation: "",
+      actualAlternateLocation: "",
       departureName: "",
       destinationName: "",
       alternateName: "",
@@ -5406,6 +5428,9 @@ export default function FlightPlanner() {
             planningReferenceDepartureAirport: planningReferenceDepartureAirport || null,
             planningReferenceDestinationAirport: planningReferenceDestinationAirport || null,
             planningReferenceAlternateAirport: planningReferenceAlternateAirport || null,
+            actualDepartureLocation: actualDepartureLocation || null,
+            actualDestinationLocation: actualDestinationLocation || null,
+            actualAlternateLocation: actualAlternateLocation || null,
             customProfile,
             routeMode,
           }),
@@ -5498,6 +5523,9 @@ export default function FlightPlanner() {
           planningReferenceDepartureAirport: planningReferenceDepartureAirport || null,
           planningReferenceDestinationAirport: planningReferenceDestinationAirport || null,
           planningReferenceAlternateAirport: planningReferenceAlternateAirport || null,
+          actualDepartureLocation: actualDepartureLocation || null,
+          actualDestinationLocation: actualDestinationLocation || null,
+          actualAlternateLocation: actualAlternateLocation || null,
           customProfile,
           routeMode,
         }),
@@ -6034,6 +6062,15 @@ export default function FlightPlanner() {
       planningReferenceAlternateAirport: typeof (editingPlan.plannerState as any)?.planningReferenceAlternateAirport === "string"
         ? String((editingPlan.plannerState as any).planningReferenceAlternateAirport)
         : current.planningReferenceAlternateAirport,
+      actualDepartureLocation: typeof (editingPlan.plannerState as any)?.actualDepartureLocation === "string"
+        ? String((editingPlan.plannerState as any).actualDepartureLocation)
+        : current.actualDepartureLocation,
+      actualDestinationLocation: typeof (editingPlan.plannerState as any)?.actualDestinationLocation === "string"
+        ? String((editingPlan.plannerState as any).actualDestinationLocation)
+        : current.actualDestinationLocation,
+      actualAlternateLocation: typeof (editingPlan.plannerState as any)?.actualAlternateLocation === "string"
+        ? String((editingPlan.plannerState as any).actualAlternateLocation)
+        : current.actualAlternateLocation,
       departureName: editingPlan.filingDepartureName || current.departureName,
       destinationName: editingPlan.filingDestinationName || current.destinationName,
       alternateName: editingPlan.filingAlternateName || current.alternateName,
@@ -8650,9 +8687,9 @@ export default function FlightPlanner() {
                 {effectiveDepartureCode === "ZZZZ" && (
                   <div className="space-y-3 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-3 md:col-span-2">
                     <div className="text-xs text-[#D9C28A]">
-                      Use ZZZZ when the actual airport/location is not in the ICAO database. RSF will use the planning reference airport only for calculations. Your filed flight plan will still use ZZZZ with your actual location description.
+                      Use ZZZZ when the filed departure is not an ICAO airport. RSF uses the planning reference only for calculations; Flight Service receives the actual FAA identifier or lat/long below.
                     </div>
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <div className="grid gap-3 md:grid-cols-3">
                       <div className="space-y-2">
                         <Label>Planning Reference Departure Airport <span className="text-amber-400 text-xs">(required)</span></Label>
                         <Input
@@ -8662,11 +8699,19 @@ export default function FlightPlanner() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Actual Departure Description <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Label>Actual Departure Location <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Input
+                          value={filingDraft.actualDepartureLocation}
+                          onChange={(e) => setFilingDraft((current) => ({ ...current, actualDepartureLocation: e.target.value.toUpperCase() }))}
+                          placeholder="52TS or 3027N09749W"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
                         <Input
                           value={filingDraft.departureName}
                           onChange={(e) => setFilingDraft((current) => ({ ...current, departureName: e.target.value }))}
-                          placeholder="PRIVATE STRIP 3NM NORTH OF KEDC"
+                          placeholder="PRIVATE FIELD"
                         />
                       </div>
                     </div>
@@ -8675,9 +8720,9 @@ export default function FlightPlanner() {
                 {effectiveDestinationCode === "ZZZZ" && (
                   <div className="space-y-3 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-3 md:col-span-2">
                     <div className="text-xs text-[#D9C28A]">
-                      RSF will use the planning reference airport only for calculations. The filed destination remains ZZZZ.
+                      RSF will use the planning reference airport only for calculations. The filed destination remains ZZZZ and Flight Service receives the actual location below.
                     </div>
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <div className="grid gap-3 md:grid-cols-3">
                       <div className="space-y-2">
                         <Label>Planning Reference Destination Airport <span className="text-amber-400 text-xs">(required)</span></Label>
                         <Input
@@ -8687,11 +8732,19 @@ export default function FlightPlanner() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Actual Destination Description <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Label>Actual Destination Location <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Input
+                          value={filingDraft.actualDestinationLocation}
+                          onChange={(e) => setFilingDraft((current) => ({ ...current, actualDestinationLocation: e.target.value.toUpperCase() }))}
+                          placeholder="52TS or 3001N09015W"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
                         <Input
                           value={filingDraft.destinationName}
                           onChange={(e) => setFilingDraft((current) => ({ ...current, destinationName: e.target.value }))}
-                          placeholder="PRIVATE AIRFIELD NEAR MIAMI"
+                          placeholder="PRIVATE FIELD"
                         />
                       </div>
                     </div>
@@ -8700,9 +8753,9 @@ export default function FlightPlanner() {
                 {effectiveAlternateCode === "ZZZZ" && (
                   <div className="space-y-3 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-3 md:col-span-2">
                     <div className="text-xs text-[#D9C28A]">
-                      RSF will use the planning reference airport only for calculations. The filed alternate remains ZZZZ.
+                      RSF will use the planning reference airport only for calculations. The filed alternate remains ZZZZ and Flight Service receives the actual location below.
                     </div>
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <div className="grid gap-3 md:grid-cols-3">
                       <div className="space-y-2">
                         <Label>Planning Reference Alternate Airport <span className="text-amber-400 text-xs">(required)</span></Label>
                         <Input
@@ -8712,11 +8765,19 @@ export default function FlightPlanner() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Actual Alternate Description <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Label>Actual Alternate Location <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Input
+                          value={filingDraft.actualAlternateLocation}
+                          onChange={(e) => setFilingDraft((current) => ({ ...current, actualAlternateLocation: e.target.value.toUpperCase() }))}
+                          placeholder="52TS or 3015N09122W"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
                         <Input
                           value={filingDraft.alternateName}
                           onChange={(e) => setFilingDraft((current) => ({ ...current, alternateName: e.target.value }))}
-                          placeholder="PRIVATE STRIP NEAR TAMIAMI"
+                          placeholder="PRIVATE FIELD"
                         />
                       </div>
                     </div>
@@ -9180,15 +9241,15 @@ export default function FlightPlanner() {
                       : {};
                     const zzzzSummary = [
                       String(plan.departure || "").toUpperCase() === "ZZZZ"
-                        ? { label: "Departure", filed: "ZZZZ", reference: plannerState.planningReferenceDepartureAirport, actual: plan.filingDepartureName }
+                        ? { label: "Departure", filed: "ZZZZ", reference: plannerState.planningReferenceDepartureAirport, actual: plannerState.actualDepartureLocation, description: plan.filingDepartureName }
                         : null,
                       String(plan.destination || "").toUpperCase() === "ZZZZ"
-                        ? { label: "Destination", filed: "ZZZZ", reference: plannerState.planningReferenceDestinationAirport, actual: plan.filingDestinationName }
+                        ? { label: "Destination", filed: "ZZZZ", reference: plannerState.planningReferenceDestinationAirport, actual: plannerState.actualDestinationLocation, description: plan.filingDestinationName }
                         : null,
                       String(plan.alternate || "").toUpperCase() === "ZZZZ"
-                        ? { label: "Alternate", filed: "ZZZZ", reference: plannerState.planningReferenceAlternateAirport, actual: plan.filingAlternateName }
+                        ? { label: "Alternate", filed: "ZZZZ", reference: plannerState.planningReferenceAlternateAirport, actual: plannerState.actualAlternateLocation, description: plan.filingAlternateName }
                         : null,
-                    ].filter(Boolean) as Array<{ label: string; filed: string; reference?: string | null; actual?: string | null }>;
+                    ].filter(Boolean) as Array<{ label: string; filed: string; reference?: string | null; actual?: string | null; description?: string | null }>;
                     return (
               <div key={plan.id} className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between flex-wrap gap-2">
@@ -9303,6 +9364,8 @@ export default function FlightPlanner() {
                           <div>{item.reference || "-"}</div>
                           <div className="mt-1 text-xs text-[#A9BBCD]">Actual {item.label}</div>
                           <div>{item.actual || "-"}</div>
+                          <div className="mt-1 text-xs text-[#A9BBCD]">Description</div>
+                          <div>{item.description || "-"}</div>
                         </div>
                       ))}
                     </div>

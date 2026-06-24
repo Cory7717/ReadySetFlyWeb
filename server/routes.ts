@@ -70,6 +70,7 @@ import {
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import { analyzeFiledRoute } from "@shared/flight-plan-route";
 import { ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE, canCreateAnotherActiveFlightPlan } from "@shared/flight-plan-access";
+import { isValidZzzzActualLocation } from "@shared/zzzz-location";
 import {
   buildFilingEventId,
   buildOtherInfoWithDof,
@@ -21448,6 +21449,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     typeOfFlight: z.string().trim().optional().nullable(),
     surveillanceEquipment: z.string().trim().optional().nullable(),
     otherInfo: z.string().trim().optional().nullable(),
+    actualDepartureLocation: z.string().trim().optional().nullable(),
+    actualDestinationLocation: z.string().trim().optional().nullable(),
+    actualAlternateLocation: z.string().trim().optional().nullable(),
     departureName: z.string().trim().optional().nullable(),
     destinationName: z.string().trim().optional().nullable(),
     alternateName: z.string().trim().optional().nullable(),
@@ -21824,14 +21828,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!packet.typeOfFlight) errors.push("Type of flight is required.");
       if (!packet.surveillanceEquipment) errors.push("Surveillance equipment is required.");
       if (!packet.remarks) errors.push("Filing Remarks / ATC Remarks are required.");
-      if (packet.departure?.toUpperCase() === "ZZZZ" && !packet.departureName) {
-        errors.push("Departure is ZZZZ - enter the actual departure location name.");
+      if (packet.departure?.toUpperCase() === "ZZZZ" && !isValidZzzzActualLocation(packet.actualDepartureLocation)) {
+        errors.push("Departure is ZZZZ - enter an actual departure FAA identifier or latitude/longitude.");
       }
-      if (packet.destination?.toUpperCase() === "ZZZZ" && !packet.destinationName) {
-        errors.push("Destination is ZZZZ - enter the actual destination location name.");
+      if (packet.destination?.toUpperCase() === "ZZZZ" && !isValidZzzzActualLocation(packet.actualDestinationLocation)) {
+        errors.push("Destination is ZZZZ - enter an actual destination FAA identifier or latitude/longitude.");
       }
-      if (packet.alternate?.toUpperCase() === "ZZZZ" && !packet.alternateName) {
-        errors.push("Alternate is ZZZZ - enter the actual alternate location name.");
+      if (packet.alternate?.toUpperCase() === "ZZZZ" && !isValidZzzzActualLocation(packet.actualAlternateLocation)) {
+        errors.push("Alternate is ZZZZ - enter an actual alternate FAA identifier or latitude/longitude.");
       }
       if (flightRules === "IFR" && !routeNormalization.normalizedRoute) {
         errors.push("IFR filing requires a route before handoff.");

@@ -16,6 +16,7 @@ import {
 import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
 import { normalizeIcaoEquipmentCodes, hasOnlyKnownIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
 import { getIcaoOtherInfoEquipmentWarnings, hasOnlyFlightServiceSurveillanceCodes, hasOnlyKnownIcaoSurveillanceCodes } from "@shared/icao-filing";
+import { normalizeZzzzActualLocation } from "@shared/zzzz-location";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -1117,32 +1118,35 @@ export const buildZzzzSupplementalRemarks = (
 
 export const buildZzzzOtherInfoForLeidos = (
   otherInfo: string | null,
-  { departureName, destinationName, alternateName, departureReference, destinationReference, alternateReference }: {
+  { departureName, destinationName, alternateName, departureLocation, destinationLocation, alternateLocation }: {
     departureName?: string | null;
     destinationName?: string | null;
     alternateName?: string | null;
-    departureReference?: string | null;
-    destinationReference?: string | null;
-    alternateReference?: string | null;
+    departureLocation?: string | null;
+    destinationLocation?: string | null;
+    alternateLocation?: string | null;
   },
 ): string | null => {
   let base = String(otherInfo || "").trim();
-  if (departureName) base = base.replace(/(?:^|\s)DEP\/[^/]*(?=\s+[A-Z]{3,5}\/|$)/gi, " ").replace(/\s+/g, " ").trim();
-  if (destinationName) base = base.replace(/(?:^|\s)DEST\/[^/]*(?=\s+[A-Z]{3,5}\/|$)/gi, " ").replace(/\s+/g, " ").trim();
-  if (alternateName) base = base.replace(/(?:^|\s)ALTN\/[^/]*(?=\s+[A-Z]{3,5}\/|$)/gi, " ").replace(/\s+/g, " ").trim();
-  const formatLocation = (description?: string | null, reference?: string | null) => {
+  const stripSubfield = (source: string, prefix: string) =>
+    source.replace(new RegExp(`(?:^|\\s)${prefix}\\\/.*?(?=\\s+[A-Z]{2,5}\\\/|$)`, "gi"), " ").replace(/\s+/g, " ").trim();
+  base = stripSubfield(base, "DEP");
+  base = stripSubfield(base, "DEST");
+  base = stripSubfield(base, "ALT");
+  base = stripSubfield(base, "ALTN");
+  const formatLocation = (location?: string | null, description?: string | null) => {
+    const normalizedLocation = normalizeZzzzActualLocation(location);
+    if (!normalizedLocation) return null;
     const normalizedDescription = String(description || "").trim().replace(/\s+/g, " ").toUpperCase();
-    if (!normalizedDescription) return null;
-    const normalizedReference = String(reference || "").trim().toUpperCase();
-    return normalizedReference || normalizedDescription;
+    return [normalizedLocation, normalizedDescription].filter(Boolean).join(" ");
   };
   const supplementals: string[] = [];
-  const departureLocation = formatLocation(departureName, departureReference);
-  const destinationLocation = formatLocation(destinationName, destinationReference);
-  const alternateLocation = formatLocation(alternateName, alternateReference);
-  if (departureLocation) supplementals.push(`DEP/${departureLocation}`);
-  if (destinationLocation) supplementals.push(`DEST/${destinationLocation}`);
-  if (alternateLocation) supplementals.push(`ALTN/${alternateLocation}`);
+  const formattedDepartureLocation = formatLocation(departureLocation, departureName);
+  const formattedDestinationLocation = formatLocation(destinationLocation, destinationName);
+  const formattedAlternateLocation = formatLocation(alternateLocation, alternateName);
+  if (formattedDepartureLocation) supplementals.push(`DEP/${formattedDepartureLocation}`);
+  if (formattedDestinationLocation) supplementals.push(`DEST/${formattedDestinationLocation}`);
+  if (formattedAlternateLocation) supplementals.push(`ALT/${formattedAlternateLocation}`);
   const merged = [base, ...supplementals].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   return merged || null;
 };
@@ -1235,14 +1239,56 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     if (supplementalRemarks && supplementalRemarks !== primaryRemarks) {
       append("suppRemarksExtended", supplementalRemarks);
     }
+    const zzzzLocationCompliance = {
+      departure: plan.departure?.toUpperCase() === "ZZZZ"
+        ? {
+          filedDeparture: "ZZZZ",
+          planningReferenceDepartureAirport: getPlannerStateString(plan, "planningReferenceDepartureAirport") || null,
+          actualDepartureLocation: getPlannerStateString(plan, "actualDepartureLocation") || null,
+          formattedLeidosDepartureLocation: normalizeZzzzActualLocation(getPlannerStateString(plan, "actualDepartureLocation")) || null,
+        }
+        : null,
+      destination: plan.destination?.toUpperCase() === "ZZZZ"
+        ? {
+          filedDestination: "ZZZZ",
+          planningReferenceDestinationAirport: getPlannerStateString(plan, "planningReferenceDestinationAirport") || null,
+          actualDestinationLocation: getPlannerStateString(plan, "actualDestinationLocation") || null,
+          formattedLeidosDestinationLocation: normalizeZzzzActualLocation(getPlannerStateString(plan, "actualDestinationLocation")) || null,
+        }
+        : null,
+      alternate: plan.alternate?.toUpperCase() === "ZZZZ"
+        ? {
+          filedAlternate: "ZZZZ",
+          planningReferenceAlternateAirport: getPlannerStateString(plan, "planningReferenceAlternateAirport") || null,
+          actualAlternateLocation: getPlannerStateString(plan, "actualAlternateLocation") || null,
+          formattedLeidosAlternateLocation: normalizeZzzzActualLocation(getPlannerStateString(plan, "actualAlternateLocation")) || null,
+        }
+        : null,
+    };
     const mergedOtherInfo = normalizeLeidosOtherInfoForTransmission(buildZzzzOtherInfoForLeidos(otherInfoResult.otherInfo, {
       departureName: plan.departure?.toUpperCase() === "ZZZZ" ? plan.filingDepartureName : null,
       destinationName: plan.destination?.toUpperCase() === "ZZZZ" ? plan.filingDestinationName : null,
       alternateName: plan.alternate?.toUpperCase() === "ZZZZ" ? plan.filingAlternateName : null,
-      departureReference: plan.departure?.toUpperCase() === "ZZZZ" ? getPlannerStateString(plan, "planningReferenceDepartureAirport") : null,
-      destinationReference: plan.destination?.toUpperCase() === "ZZZZ" ? getPlannerStateString(plan, "planningReferenceDestinationAirport") : null,
-      alternateReference: plan.alternate?.toUpperCase() === "ZZZZ" ? getPlannerStateString(plan, "planningReferenceAlternateAirport") : null,
+      departureLocation: zzzzLocationCompliance.departure?.formattedLeidosDepartureLocation || null,
+      destinationLocation: zzzzLocationCompliance.destination?.formattedLeidosDestinationLocation || null,
+      alternateLocation: zzzzLocationCompliance.alternate?.formattedLeidosAlternateLocation || null,
     }));
+    if (zzzzLocationCompliance.departure || zzzzLocationCompliance.destination || zzzzLocationCompliance.alternate) {
+      console.info(JSON.stringify({
+        event: "leidos_zzzz_location_compliance",
+        action,
+        planId: plan.id,
+        departure: zzzzLocationCompliance.departure
+          ? { ...zzzzLocationCompliance.departure, generatedOtherInfo: mergedOtherInfo?.match(/\bDEP\/.*?(?=\s+[A-Z]{2,5}\/|$)/)?.[0] || null }
+          : null,
+        destination: zzzzLocationCompliance.destination
+          ? { ...zzzzLocationCompliance.destination, generatedOtherInfo: mergedOtherInfo?.match(/\bDEST\/.*?(?=\s+[A-Z]{2,5}\/|$)/)?.[0] || null }
+          : null,
+        alternate: zzzzLocationCompliance.alternate
+          ? { ...zzzzLocationCompliance.alternate, generatedOtherInfo: mergedOtherInfo?.match(/\bALT\/.*?(?=\s+[A-Z]{2,5}\/|$)/)?.[0] || null }
+          : null,
+      }));
+    }
     append("otherInfo", mergedOtherInfo);
     appendLeidosAltitudeFields(params, plan.filingPlannedAltitudeFt);
     if (action === "amend") {
@@ -1759,32 +1805,32 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   const routeNormalization = normalizeRouteForProvider(plan.route || "DCT");
 
   if (!plan.departure) errors.push("Departure airport is required.");
-  if (plan.departure?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend") && !plan.filingDepartureName) {
-    errors.push("Departure is ZZZZ — enter the actual departure location name.");
-  }
   if (plan.departure?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend")) {
+    if (!normalizeZzzzActualLocation(getPlannerStateString(plan, "actualDepartureLocation"))) {
+      errors.push("Departure is ZZZZ - enter an actual departure FAA identifier or latitude/longitude.");
+    }
     const reference = getPlannerStateString(plan, "planningReferenceDepartureAirport");
     if (!reference || reference === "ZZZZ") {
-      errors.push("Departure ZZZZ requires a planning reference airport so RSF can calculate the route and file the plan correctly.");
+      errors.push("Departure ZZZZ requires a planning reference airport so RSF can calculate the route.");
     }
   }
   if (!plan.destination) errors.push("Destination airport is required.");
-  if (plan.destination?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend") && !plan.filingDestinationName) {
-    errors.push("Destination is ZZZZ — enter the actual destination location name.");
-  }
   if (plan.destination?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend")) {
+    if (!normalizeZzzzActualLocation(getPlannerStateString(plan, "actualDestinationLocation"))) {
+      errors.push("Destination is ZZZZ - enter an actual destination FAA identifier or latitude/longitude.");
+    }
     const reference = getPlannerStateString(plan, "planningReferenceDestinationAirport");
     if (!reference || reference === "ZZZZ") {
-      errors.push("Destination ZZZZ requires a planning reference airport so RSF can calculate the route and file the plan correctly.");
+      errors.push("Destination ZZZZ requires a planning reference airport so RSF can calculate the route.");
     }
   }
-  if (plan.alternate?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend") && !plan.filingAlternateName) {
-    errors.push("Alternate is ZZZZ — enter the actual alternate location name.");
-  }
   if (plan.alternate?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend")) {
+    if (!normalizeZzzzActualLocation(getPlannerStateString(plan, "actualAlternateLocation"))) {
+      errors.push("Alternate is ZZZZ - enter an actual alternate FAA identifier or latitude/longitude.");
+    }
     const reference = getPlannerStateString(plan, "planningReferenceAlternateAirport");
     if (!reference || reference === "ZZZZ") {
-      errors.push("Alternate ZZZZ requires a planning reference airport so RSF can calculate the route and file the plan correctly.");
+      errors.push("Alternate ZZZZ requires a planning reference airport so RSF can calculate the route.");
     }
   }
   if (!plan.tailNumber) errors.push("Aircraft ID / tail number is required.");

@@ -5,6 +5,7 @@ import { resolveDepartureAirportTimezone } from "../../shared/airport-timezones"
 import { formatFlightPlanDepartureTime } from "../../shared/flight-plan-time";
 import { extractFilingProviderPlanId } from "../../shared/flight-plan-filing";
 import { ICAO_OTHER_INFO_VALUE_OPTIONS, buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
+import { formatDecimalCoordinatesForLeidos, normalizeZzzzActualLocation } from "../../shared/zzzz-location";
 import { buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
 
 function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
@@ -184,6 +185,7 @@ test("ZZZZ departure uses planning reference airport timezone stored in planner 
     plannedDepartureAt: new Date("2026-06-23T14:30:00.000Z"),
     plannerState: {
       planningReferenceDepartureAirport: "KFFZ",
+      actualDepartureLocation: "52TS",
       departureTimeZone: "America/Phoenix",
       userDisplayDepartureTimeLocal: "2026-06-23T09:30",
     },
@@ -198,6 +200,7 @@ test("filing validation rejects plans without a resolvable departure timezone", 
     departure: "ZZZZ",
     filingDepartureName: "Private strip",
     plannerState: {
+      actualDepartureLocation: "52TS",
       userDisplayDepartureTimeLocal: "2026-06-23T09:30",
     },
   }), "file");
@@ -212,13 +215,13 @@ test("ZZZZ is accepted as the aircraft identifier", () => {
   assert.equal(result.errors.some((error) => /aircraft id/i.test(error)), false);
 });
 
-test("ZZZZ airports require their supplemental location names", () => {
+test("ZZZZ airports require actual FAA identifiers or lat/long locations", () => {
   const missing = validateFlightPlanForAction(filingPlan({
     departure: "ZZZZ",
     destination: "ZZZZ",
     alternate: "ZZZZ",
   }), "file");
-  assert.deepEqual(missing.errors.filter((error) => /actual .* location name/i.test(error)).length, 3);
+  assert.deepEqual(missing.errors.filter((error) => /FAA identifier or latitude\/longitude/i.test(error)).length, 3);
 
   const complete = validateFlightPlanForAction(filingPlan({
     departure: "ZZZZ",
@@ -231,11 +234,16 @@ test("ZZZZ airports require their supplemental location names", () => {
       planningReferenceDepartureAirport: "KEDC",
       planningReferenceDestinationAirport: "KDAL",
       planningReferenceAlternateAirport: "KADS",
+      actualDepartureLocation: "52TS",
+      actualDestinationLocation: "3001N09015W",
+      actualAlternateLocation: "3015N09122W",
       departureTimeZone: "America/Chicago",
       userDisplayDepartureTimeLocal: "2026-06-22T10:00",
     },
   }), "file");
   assert.equal(complete.ready, true);
+  assert.equal(normalizeZzzzActualLocation("3027N/09749W"), "3027N/09749W");
+  assert.equal(formatDecimalCoordinatesForLeidos(30.45, -97.8167), "3027N09749W");
 });
 
 test("filing does not silently default operational ICAO fields", () => {
@@ -316,15 +324,22 @@ test("ZZZZ location names are transmitted in otherInfo while supplemental remark
       departureName: "Demo departure strip",
       destinationName: "Demo destination strip",
       alternateName: "Demo alternate strip",
-      departureReference: "KEDC",
-      destinationReference: "KDAL",
-      alternateReference: "KADS",
+      departureLocation: "52TS",
+      destinationLocation: "3001N09015W",
+      alternateLocation: "3015N09122W",
     }),
-    "DOF/260623 DEP/KEDC DEST/KDAL ALTN/KADS",
+    "DOF/260623 DEP/52TS DEMO DEPARTURE STRIP DEST/3001N09015W DEMO DESTINATION STRIP ALT/3015N09122W DEMO ALTERNATE STRIP",
   );
   assert.equal(
     normalizeLeidosOtherInfoForTransmission("DOF/260623 DEP/Demo departure strip"),
     "DOF/260623 DEP/DEMO DEPARTURE STRIP",
+  );
+  assert.equal(
+    buildZzzzOtherInfoForLeidos("DOF/260623 DEP/OLD VALUE", {
+      departureName: "Private field",
+      departureLocation: "3027N/09749W",
+    }),
+    "DOF/260623 DEP/3027N/09749W PRIVATE FIELD",
   );
 });
 

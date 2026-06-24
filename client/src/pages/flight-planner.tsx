@@ -71,6 +71,7 @@ import {
 } from "@shared/flight-plan-route";
 import { extractFilingVersionStamp } from "@shared/flight-plan-filing";
 import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
+import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
 import { ICAO_EQUIPMENT_CODES, parseIcaoEquipmentCodes, normalizeIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
@@ -430,8 +431,27 @@ const getPlanTimeZone = (plan: FlightPlan | null | undefined, key: "departureTim
   const value = plannerState && typeof plannerState === "object" && !Array.isArray(plannerState)
     ? String((plannerState as Record<string, unknown>)[key] || "").trim()
     : "";
-  return value || fallback || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const planningReferenceDepartureAirport =
+    plannerState && typeof plannerState === "object" && !Array.isArray(plannerState)
+      ? String((plannerState as Record<string, unknown>).planningReferenceDepartureAirport || "").trim().toUpperCase()
+      : "";
+  const airportCode = key === "departureTimeZone" ? plan?.departure : plan?.destination;
+  const resolved = resolveDepartureAirportTimezone({
+    departureAirport: airportForTimezoneResolution(airportCode, { timezone: value }),
+    planningReferenceDepartureAirport: key === "departureTimeZone" && planningReferenceDepartureAirport
+      ? airportForTimezoneResolution(planningReferenceDepartureAirport, null)
+      : null,
+    explicitDepartureTimezone: value || fallback || null,
+  });
+  return resolved.timezone || value || fallback || "UTC";
 };
+
+const airportForTimezoneResolution = (icao: string | null | undefined, airport?: any | null) => ({
+  icao: String(icao || airport?.icao || "").trim().toUpperCase() || null,
+  timezone: airport?.timezone ?? null,
+  lat: airport?.lat ?? null,
+  lon: airport?.lon ?? null,
+});
 
 const formatPlanLocalZulu = (value: string | Date | null | undefined, timeZone: string) => {
   if (!value) return { local: "-", zulu: "-" };
@@ -2628,10 +2648,13 @@ export default function FlightPlanner() {
       planningDepartureCode,
       ...routeIntermediates,
       planningDestinationCode,
+      planningReferenceDepartureAirport,
+      planningReferenceDestinationAirport,
+      planningReferenceAlternateAirport,
     ]
       .filter(Boolean)
       .filter((icao) => ICAO_REGEX.test(icao));
-  }, [planningDepartureCode, planningDestinationCode, routeIntermediates]);
+  }, [planningDepartureCode, planningDestinationCode, planningReferenceAlternateAirport, planningReferenceDepartureAirport, planningReferenceDestinationAirport, routeIntermediates]);
 
   const routeIcaos = useMemo(() => {
     return Array.from(new Set(routeSequenceRaw));
@@ -2959,14 +2982,22 @@ export default function FlightPlanner() {
   );
 
   const departureTimeZone = useMemo(() => {
-    const tz = airportMap.get(planningDepartureCode)?.timezone;
-    return normalizeTimeZone(tz || browserTimeZone);
-  }, [airportMap, planningDepartureCode, browserTimeZone]);
+    const departureAirport = airportMap.get(planningDepartureCode);
+    const referenceAirport = airportMap.get(planningReferenceDepartureAirport);
+    return resolveDepartureAirportTimezone({
+      departureAirport: airportForTimezoneResolution(planningDepartureCode, departureAirport),
+      planningReferenceDepartureAirport: airportForTimezoneResolution(planningReferenceDepartureAirport, referenceAirport),
+      explicitDepartureTimezone: null,
+    }).timezone || "";
+  }, [airportMap, planningDepartureCode, planningReferenceDepartureAirport]);
 
   const destinationTimeZone = useMemo(() => {
-    const tz = airportMap.get(planningDestinationCode)?.timezone;
-    return normalizeTimeZone(tz || browserTimeZone);
-  }, [airportMap, planningDestinationCode, browserTimeZone]);
+    const airport = airportMap.get(planningDestinationCode);
+    return resolveDepartureAirportTimezone({
+      departureAirport: airportForTimezoneResolution(planningDestinationCode, airport),
+      explicitDepartureTimezone: null,
+    }).timezone || "";
+  }, [airportMap, planningDestinationCode]);
 
   const plannedDepartureUtc = useMemo(() => {
     if (!form.plannedDepartureAt) return null;

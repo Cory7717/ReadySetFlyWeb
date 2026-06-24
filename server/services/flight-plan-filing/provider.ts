@@ -13,6 +13,7 @@ import {
   type FilingProviderMessage,
   type FilingProviderSnapshot,
 } from "@shared/flight-plan-filing-workflow";
+import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
 import { normalizeIcaoEquipmentCodes, hasOnlyKnownIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
 import { getIcaoOtherInfoEquipmentWarnings, hasOnlyFlightServiceSurveillanceCodes, hasOnlyKnownIcaoSurveillanceCodes } from "@shared/icao-filing";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
@@ -613,13 +614,31 @@ const getPlannerStateRecord = (plan: FlightPlan) => {
     : null;
 };
 
-const getPlannerTimeZone = (plan: FlightPlan) => {
+const getPlannerTimeZoneFromState = (plan: FlightPlan) => {
   const plannerState = getPlannerStateRecord(plan);
   const departureTimeZone =
     plannerState && typeof plannerState.departureTimeZone === "string"
       ? plannerState.departureTimeZone.trim()
       : "";
   return departureTimeZone || "";
+};
+
+const getPlannerTimeZone = (plan: FlightPlan) => {
+  const plannerState = getPlannerStateRecord(plan);
+  const planningReferenceDepartureAirport =
+    plannerState && typeof plannerState.planningReferenceDepartureAirport === "string"
+      ? plannerState.planningReferenceDepartureAirport.trim().toUpperCase()
+      : null;
+  return resolveDepartureAirportTimezone({
+    departureAirport: {
+      icao: plan.departure || null,
+      timezone: getPlannerTimeZoneFromState(plan),
+    },
+    planningReferenceDepartureAirport: planningReferenceDepartureAirport
+      ? { icao: planningReferenceDepartureAirport }
+      : null,
+    explicitDepartureTimezone: getPlannerTimeZoneFromState(plan),
+  }).timezone || "";
 };
 
 const getSelectedDepartureLocalDateTime = (plan: FlightPlan) => {
@@ -1151,16 +1170,19 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
 
   if (action === "file" || action === "amend") {
     console.info(JSON.stringify({
-      event: "flight_time_conversion_started",
+      event: "flight_time_conversion",
       action,
       planId: plan.id,
-      selectedDepartureDateLocal: selectedLocalDepartureTime?.slice(0, 10) || null,
-      selectedDepartureTimeLocal: selectedLocalDepartureTime?.slice(11, 16) || null,
+      departureDateLocal: selectedLocalDepartureTime?.slice(0, 10) || null,
+      departureTimeLocal: selectedLocalDepartureTime?.slice(11, 16) || null,
       departureAirport: plan.departure || null,
+      planningReferenceDepartureAirport: getPlannerStateString(plan, "planningReferenceDepartureAirport") || null,
       departureTimezone: departureTimeZone || null,
       computedDepartureInstantUtc: providerDepartureInstant,
       browserTimezoneForDebugOnly: null,
-      providerPayloadDepartureInstant: providerDepartureInstant,
+      expectedProviderZulu: providerDepartureInstant
+        ? `${String(new Date(providerDepartureInstant).getUTCHours()).padStart(2, "0")}${String(new Date(providerDepartureInstant).getUTCMinutes()).padStart(2, "0")}Z`
+        : null,
     }));
 
     append("type", "ICAO");
@@ -1808,7 +1830,11 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     errors.push("Departure date and time are required before filing.");
   }
   if ((action === "file" || action === "amend") && !isValidIanaTimeZone(getPlannerTimeZone(plan))) {
-    errors.push("Departure airport timezone could not be determined. Please select the departure timezone before filing.");
+    if (String(plan.departure || "").trim().toUpperCase() === "ZZZZ" && !getPlannerStateString(plan, "planningReferenceDepartureAirport")) {
+      errors.push("Departure timezone is required when using ZZZZ without a planning reference airport.");
+    } else {
+      errors.push("Departure airport timezone could not be determined. Please select the departure timezone before filing.");
+    }
   }
 
   if (rules === "IFR" && !routeNormalization.normalizedRoute) {

@@ -96,6 +96,21 @@ import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
 const CesiumGlobe = lazy(() => import("@/components/flight-planner/CesiumGlobe"));
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+type ZzzzActualLocationMode = "identifier" | "latlong";
+const inferZzzzActualLocationMode = (value?: string | null): ZzzzActualLocationMode =>
+  /^\s*\d/.test(String(value || "")) ? "latlong" : "identifier";
+const zzzzActualLocationModeCopy: Record<ZzzzActualLocationMode, { label: string; placeholder: string; help: string }> = {
+  identifier: {
+    label: "FAA private field code",
+    placeholder: "52TS",
+    help: "Enter the FAA-recognized private airport identifier shown on sectional charts or in the FAA airport database.",
+  },
+  latlong: {
+    label: "Latitude / Longitude",
+    placeholder: "3027N09749W or 3027N/09749W",
+    help: "Use DDMMNDDDMMW format, optionally with a slash after latitude. Example: 3027N09749W.",
+  },
+};
 const CONTROLLED_AIRPORTS = new Set([
   "KATL", "KDFW", "KDEN", "KORD", "KLAX", "KJFK", "KSFO", "KSEA", "KLAS", "KPHX",
   "KCLT", "KIAH", "KMIA", "KBOS", "KMSP", "KDCA", "KIAD", "KEWR", "KLGA", "KPDX",
@@ -1909,6 +1924,9 @@ export default function FlightPlanner() {
     actualDepartureLocation: "",
     actualDestinationLocation: "",
     actualAlternateLocation: "",
+    actualDepartureLocationMode: "identifier" as ZzzzActualLocationMode,
+    actualDestinationLocationMode: "identifier" as ZzzzActualLocationMode,
+    actualAlternateLocationMode: "identifier" as ZzzzActualLocationMode,
     departureName: "",
     destinationName: "",
     alternateName: "",
@@ -4934,6 +4952,9 @@ export default function FlightPlanner() {
       actualDepartureLocation: "",
       actualDestinationLocation: "",
       actualAlternateLocation: "",
+      actualDepartureLocationMode: "identifier",
+      actualDestinationLocationMode: "identifier",
+      actualAlternateLocationMode: "identifier",
       departureName: "",
       destinationName: "",
       alternateName: "",
@@ -6071,6 +6092,21 @@ export default function FlightPlanner() {
       actualAlternateLocation: typeof (editingPlan.plannerState as any)?.actualAlternateLocation === "string"
         ? String((editingPlan.plannerState as any).actualAlternateLocation)
         : current.actualAlternateLocation,
+      actualDepartureLocationMode: inferZzzzActualLocationMode(
+        typeof (editingPlan.plannerState as any)?.actualDepartureLocation === "string"
+          ? String((editingPlan.plannerState as any).actualDepartureLocation)
+          : current.actualDepartureLocation
+      ),
+      actualDestinationLocationMode: inferZzzzActualLocationMode(
+        typeof (editingPlan.plannerState as any)?.actualDestinationLocation === "string"
+          ? String((editingPlan.plannerState as any).actualDestinationLocation)
+          : current.actualDestinationLocation
+      ),
+      actualAlternateLocationMode: inferZzzzActualLocationMode(
+        typeof (editingPlan.plannerState as any)?.actualAlternateLocation === "string"
+          ? String((editingPlan.plannerState as any).actualAlternateLocation)
+          : current.actualAlternateLocation
+      ),
       departureName: editingPlan.filingDepartureName || current.departureName,
       destinationName: editingPlan.filingDestinationName || current.destinationName,
       alternateName: editingPlan.filingAlternateName || current.alternateName,
@@ -8685,28 +8721,47 @@ export default function FlightPlanner() {
                   />
                 </div>
                 {effectiveDepartureCode === "ZZZZ" && (
-                  <div className="space-y-3 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-3 md:col-span-2">
-                    <div className="text-xs text-[#D9C28A]">
-                      Use ZZZZ when the filed departure is not an ICAO airport. RSF uses the planning reference only for calculations; Flight Service receives the actual FAA identifier or lat/long below.
+                  <div className="space-y-4 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-4 md:col-span-2">
+                    <div className="space-y-1">
+                      <div className="font-semibold text-[#F5E6B8]">ZZZZ Departure Details</div>
+                      <div className="text-xs leading-5 text-[#D9C28A]">
+                        The planning reference is only for route, weather, terrain, ETE, and timezone calculations. Flight Service receives the actual departure location below for filing and search-and-rescue purposes.
+                      </div>
                     </div>
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <div className="space-y-2">
-                        <Label>Planning Reference Departure Airport <span className="text-amber-400 text-xs">(required)</span></Label>
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
+                        <Label>Planning Reference Airport <span className="text-amber-400 text-xs">(required)</span></Label>
                         <Input
                           value={filingDraft.planningReferenceDepartureAirport}
                           onChange={(e) => setFilingDraft((current) => ({ ...current, planningReferenceDepartureAirport: e.target.value.toUpperCase() }))}
                           placeholder="KEDC"
                         />
+                        <div className="text-xs text-[#A9BBCD]">Nearby airport used by RSF for calculations only. This is not sent as DEP unless it is the actual airport.</div>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Departure Location <span className="text-amber-400 text-xs">(required)</span></Label>
-                        <Input
-                          value={filingDraft.actualDepartureLocation}
-                          onChange={(e) => setFilingDraft((current) => ({ ...current, actualDepartureLocation: e.target.value.toUpperCase() }))}
-                          placeholder="52TS or 3027N09749W"
-                        />
+                        <div className="grid gap-2 sm:grid-cols-[14rem_minmax(0,1fr)]">
+                          <Select
+                            value={filingDraft.actualDepartureLocationMode}
+                            onValueChange={(value) => setFilingDraft((current) => ({ ...current, actualDepartureLocationMode: value as ZzzzActualLocationMode }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className={plannerSelectContentClass}>
+                              <SelectItem value="identifier">FAA private field code</SelectItem>
+                              <SelectItem value="latlong">Latitude / Longitude</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            value={filingDraft.actualDepartureLocation}
+                            onChange={(e) => setFilingDraft((current) => ({ ...current, actualDepartureLocation: e.target.value.toUpperCase() }))}
+                            placeholder={zzzzActualLocationModeCopy[filingDraft.actualDepartureLocationMode].placeholder}
+                          />
+                        </div>
+                        <div className="text-xs leading-5 text-[#A9BBCD]">{zzzzActualLocationModeCopy[filingDraft.actualDepartureLocationMode].help}</div>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3 lg:col-span-2">
                         <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
                         <Input
                           value={filingDraft.departureName}
@@ -8718,28 +8773,47 @@ export default function FlightPlanner() {
                   </div>
                 )}
                 {effectiveDestinationCode === "ZZZZ" && (
-                  <div className="space-y-3 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-3 md:col-span-2">
-                    <div className="text-xs text-[#D9C28A]">
-                      RSF will use the planning reference airport only for calculations. The filed destination remains ZZZZ and Flight Service receives the actual location below.
+                  <div className="space-y-4 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-4 md:col-span-2">
+                    <div className="space-y-1">
+                      <div className="font-semibold text-[#F5E6B8]">ZZZZ Destination Details</div>
+                      <div className="text-xs leading-5 text-[#D9C28A]">
+                        The planning reference is only for route, weather, terrain, ETE, and timezone calculations. Flight Service receives the actual destination location below.
+                      </div>
                     </div>
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <div className="space-y-2">
-                        <Label>Planning Reference Destination Airport <span className="text-amber-400 text-xs">(required)</span></Label>
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
+                        <Label>Planning Reference Airport <span className="text-amber-400 text-xs">(required)</span></Label>
                         <Input
                           value={filingDraft.planningReferenceDestinationAirport}
                           onChange={(e) => setFilingDraft((current) => ({ ...current, planningReferenceDestinationAirport: e.target.value.toUpperCase() }))}
                           placeholder="KMIA"
                         />
+                        <div className="text-xs text-[#A9BBCD]">Nearby airport used by RSF for calculations only. This is not sent as DEST unless it is the actual airport.</div>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Destination Location <span className="text-amber-400 text-xs">(required)</span></Label>
-                        <Input
-                          value={filingDraft.actualDestinationLocation}
-                          onChange={(e) => setFilingDraft((current) => ({ ...current, actualDestinationLocation: e.target.value.toUpperCase() }))}
-                          placeholder="52TS or 3001N09015W"
-                        />
+                        <div className="grid gap-2 sm:grid-cols-[14rem_minmax(0,1fr)]">
+                          <Select
+                            value={filingDraft.actualDestinationLocationMode}
+                            onValueChange={(value) => setFilingDraft((current) => ({ ...current, actualDestinationLocationMode: value as ZzzzActualLocationMode }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className={plannerSelectContentClass}>
+                              <SelectItem value="identifier">FAA private field code</SelectItem>
+                              <SelectItem value="latlong">Latitude / Longitude</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            value={filingDraft.actualDestinationLocation}
+                            onChange={(e) => setFilingDraft((current) => ({ ...current, actualDestinationLocation: e.target.value.toUpperCase() }))}
+                            placeholder={zzzzActualLocationModeCopy[filingDraft.actualDestinationLocationMode].placeholder}
+                          />
+                        </div>
+                        <div className="text-xs leading-5 text-[#A9BBCD]">{zzzzActualLocationModeCopy[filingDraft.actualDestinationLocationMode].help}</div>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3 lg:col-span-2">
                         <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
                         <Input
                           value={filingDraft.destinationName}
@@ -8751,28 +8825,47 @@ export default function FlightPlanner() {
                   </div>
                 )}
                 {effectiveAlternateCode === "ZZZZ" && (
-                  <div className="space-y-3 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-3 md:col-span-2">
-                    <div className="text-xs text-[#D9C28A]">
-                      RSF will use the planning reference airport only for calculations. The filed alternate remains ZZZZ and Flight Service receives the actual location below.
+                  <div className="space-y-4 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-4 md:col-span-2">
+                    <div className="space-y-1">
+                      <div className="font-semibold text-[#F5E6B8]">ZZZZ Alternate Details</div>
+                      <div className="text-xs leading-5 text-[#D9C28A]">
+                        The planning reference is only for route, weather, terrain, ETE, and timezone calculations. Flight Service receives the actual alternate location below.
+                      </div>
                     </div>
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <div className="space-y-2">
-                        <Label>Planning Reference Alternate Airport <span className="text-amber-400 text-xs">(required)</span></Label>
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
+                        <Label>Planning Reference Airport <span className="text-amber-400 text-xs">(required)</span></Label>
                         <Input
                           value={filingDraft.planningReferenceAlternateAirport}
                           onChange={(e) => setFilingDraft((current) => ({ ...current, planningReferenceAlternateAirport: e.target.value.toUpperCase() }))}
                           placeholder="KTMB"
                         />
+                        <div className="text-xs text-[#A9BBCD]">Nearby airport used by RSF for calculations only. This is not sent as ALT unless it is the actual airport.</div>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Alternate Location <span className="text-amber-400 text-xs">(required)</span></Label>
-                        <Input
-                          value={filingDraft.actualAlternateLocation}
-                          onChange={(e) => setFilingDraft((current) => ({ ...current, actualAlternateLocation: e.target.value.toUpperCase() }))}
-                          placeholder="52TS or 3015N09122W"
-                        />
+                        <div className="grid gap-2 sm:grid-cols-[14rem_minmax(0,1fr)]">
+                          <Select
+                            value={filingDraft.actualAlternateLocationMode}
+                            onValueChange={(value) => setFilingDraft((current) => ({ ...current, actualAlternateLocationMode: value as ZzzzActualLocationMode }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className={plannerSelectContentClass}>
+                              <SelectItem value="identifier">FAA private field code</SelectItem>
+                              <SelectItem value="latlong">Latitude / Longitude</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            value={filingDraft.actualAlternateLocation}
+                            onChange={(e) => setFilingDraft((current) => ({ ...current, actualAlternateLocation: e.target.value.toUpperCase() }))}
+                            placeholder={zzzzActualLocationModeCopy[filingDraft.actualAlternateLocationMode].placeholder}
+                          />
+                        </div>
+                        <div className="text-xs leading-5 text-[#A9BBCD]">{zzzzActualLocationModeCopy[filingDraft.actualAlternateLocationMode].help}</div>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3 lg:col-span-2">
                         <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
                         <Input
                           value={filingDraft.alternateName}

@@ -8740,13 +8740,13 @@ export default function FlightPlanner() {
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Departure Location <span className="text-amber-400 text-xs">(required)</span></Label>
-                        <div className="grid gap-2 md:grid-cols-2">
+                        <div className="grid gap-2">
                           {(["identifier", "latlong"] as ZzzzActualLocationMode[]).map((mode) => (
                             <Button
                               key={mode}
                               type="button"
                               variant={filingDraft.actualDepartureLocationMode === mode ? "default" : "outline"}
-                              className="h-auto min-h-9 justify-start whitespace-normal text-left leading-snug"
+                              className="h-auto min-h-10 w-full justify-start whitespace-normal text-left leading-snug"
                               onClick={() => setFilingDraft((current) => ({
                                 ...current,
                                 actualDepartureLocationMode: mode,
@@ -8804,13 +8804,13 @@ export default function FlightPlanner() {
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Destination Location <span className="text-amber-400 text-xs">(required)</span></Label>
-                        <div className="grid gap-2 md:grid-cols-2">
+                        <div className="grid gap-2">
                           {(["identifier", "latlong"] as ZzzzActualLocationMode[]).map((mode) => (
                             <Button
                               key={mode}
                               type="button"
                               variant={filingDraft.actualDestinationLocationMode === mode ? "default" : "outline"}
-                              className="h-auto min-h-9 justify-start whitespace-normal text-left leading-snug"
+                              className="h-auto min-h-10 w-full justify-start whitespace-normal text-left leading-snug"
                               onClick={() => setFilingDraft((current) => ({
                                 ...current,
                                 actualDestinationLocationMode: mode,
@@ -8868,13 +8868,13 @@ export default function FlightPlanner() {
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Alternate Location <span className="text-amber-400 text-xs">(required)</span></Label>
-                        <div className="grid gap-2 md:grid-cols-2">
+                        <div className="grid gap-2">
                           {(["identifier", "latlong"] as ZzzzActualLocationMode[]).map((mode) => (
                             <Button
                               key={mode}
                               type="button"
                               variant={filingDraft.actualAlternateLocationMode === mode ? "default" : "outline"}
-                              className="h-auto min-h-9 justify-start whitespace-normal text-left leading-snug"
+                              className="h-auto min-h-10 w-full justify-start whitespace-normal text-left leading-snug"
                               onClick={() => setFilingDraft((current) => ({
                                 ...current,
                                 actualAlternateLocationMode: mode,

@@ -2667,6 +2667,9 @@ export default function FlightPlanner() {
   const actualDepartureLocation = filingDraft.actualDepartureLocation.trim().toUpperCase();
   const actualDestinationLocation = filingDraft.actualDestinationLocation.trim().toUpperCase();
   const actualAlternateLocation = filingDraft.actualAlternateLocation.trim().toUpperCase();
+  const zzzzDepartureDescription = filingDraft.departureName.trim();
+  const zzzzDestinationDescription = filingDraft.destinationName.trim();
+  const zzzzAlternateDescription = filingDraft.alternateName.trim();
   const actualAircraftType = filingDraft.actualAircraftType.trim().toUpperCase().replace(/\s+/g, "");
   const basePlannerAircraftType = getPlannerAircraftTypeValue({
     manualAircraftType: form.aircraftType,
@@ -2693,6 +2696,13 @@ export default function FlightPlanner() {
     filedAlternateCode === "ZZZZ" && (!planningReferenceAlternateAirport || !ICAO_REGEX.test(planningReferenceAlternateAirport) || !isValidZzzzActualLocation(actualAlternateLocation)),
   ].some(Boolean)
     ? "ZZZZ requires a planning reference airport plus an actual FAA identifier or latitude/longitude for filing."
+    : null;
+  const zzzzDescriptionError = [
+    filedDepartureCode === "ZZZZ" && !zzzzDepartureDescription,
+    filedDestinationCode === "ZZZZ" && !zzzzDestinationDescription,
+    filedAlternateCode === "ZZZZ" && !zzzzAlternateDescription,
+  ].some(Boolean)
+    ? "Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad)."
     : null;
 
   const routeSuggestionQuery = useQuery<RouteSuggestionResponse>({
@@ -5421,6 +5431,14 @@ export default function FlightPlanner() {
       toast({
         title: "ZZZZ planning reference needed",
         description: zzzzPlanningReferenceError,
+        variant: "destructive",
+      });
+      return false;
+    }
+    if (zzzzDescriptionError) {
+      toast({
+        title: "ZZZZ location description needed",
+        description: zzzzDescriptionError,
         variant: "destructive",
       });
       return false;
@@ -8906,6 +8924,15 @@ export default function FlightPlanner() {
                         <div className="text-xs text-[#A9BBCD]">Nearby airport used by RSF for calculations only. This is not sent as DEP unless it is the actual airport.</div>
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
+                        <Label>Location Description <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Input
+                          value={filingDraft.departureName}
+                          onChange={(e) => setFilingDraft((current) => ({ ...current, departureName: e.target.value }))}
+                          placeholder="Private Strip, Smith Ranch, Grass Airstrip, Helipad"
+                        />
+                        <div className="text-xs text-[#A9BBCD]">Concise human-readable description appended to DEP/ for Flight Service.</div>
+                      </div>
+                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Departure Location <span className="text-amber-400 text-xs">(required)</span></Label>
                         <div className="grid gap-2">
                           {(["identifier", "latlong"] as ZzzzActualLocationMode[]).map((mode) => (
@@ -8940,14 +8967,6 @@ export default function FlightPlanner() {
                           <div className="text-xs text-[#D9C28A]">This coordinate value is what RSF transmits in DEP/ when departure is ZZZZ.</div>
                         )}
                       </div>
-                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3 lg:col-span-2">
-                        <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
-                        <Input
-                          value={filingDraft.departureName}
-                          onChange={(e) => setFilingDraft((current) => ({ ...current, departureName: e.target.value }))}
-                          placeholder="PRIVATE FIELD"
-                        />
-                      </div>
                     </div>
                   </div>
                 )}
@@ -8968,6 +8987,15 @@ export default function FlightPlanner() {
                           placeholder="KMIA"
                         />
                         <div className="text-xs text-[#A9BBCD]">Nearby airport used by RSF for calculations only. This is not sent as DEST unless it is the actual airport.</div>
+                      </div>
+                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
+                        <Label>Location Description <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Input
+                          value={filingDraft.destinationName}
+                          onChange={(e) => setFilingDraft((current) => ({ ...current, destinationName: e.target.value }))}
+                          placeholder="Private Strip, Smith Ranch, Grass Airstrip, Helipad"
+                        />
+                        <div className="text-xs text-[#A9BBCD]">Concise human-readable description appended to DEST/ for Flight Service.</div>
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Destination Location <span className="text-amber-400 text-xs">(required)</span></Label>
@@ -9004,14 +9032,6 @@ export default function FlightPlanner() {
                           <div className="text-xs text-[#D9C28A]">This coordinate value is what RSF transmits in DEST/ when destination is ZZZZ.</div>
                         )}
                       </div>
-                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3 lg:col-span-2">
-                        <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
-                        <Input
-                          value={filingDraft.destinationName}
-                          onChange={(e) => setFilingDraft((current) => ({ ...current, destinationName: e.target.value }))}
-                          placeholder="PRIVATE FIELD"
-                        />
-                      </div>
                     </div>
                   </div>
                 )}
@@ -9032,6 +9052,15 @@ export default function FlightPlanner() {
                           placeholder="KTMB"
                         />
                         <div className="text-xs text-[#A9BBCD]">Nearby airport used by RSF for calculations only. This is not sent as ALTN unless it is the actual airport.</div>
+                      </div>
+                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
+                        <Label>Location Description <span className="text-amber-400 text-xs">(required)</span></Label>
+                        <Input
+                          value={filingDraft.alternateName}
+                          onChange={(e) => setFilingDraft((current) => ({ ...current, alternateName: e.target.value }))}
+                          placeholder="Private Strip, Smith Ranch, Grass Airstrip, Helipad"
+                        />
+                        <div className="text-xs text-[#A9BBCD]">Concise human-readable description appended to ALTN/ for Flight Service.</div>
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Alternate Location <span className="text-amber-400 text-xs">(required)</span></Label>
@@ -9067,14 +9096,6 @@ export default function FlightPlanner() {
                         {filingDraft.actualAlternateLocationMode === "latlong" && (
                           <div className="text-xs text-[#D9C28A]">This coordinate value is what RSF transmits in ALTN/ when alternate is ZZZZ.</div>
                         )}
-                      </div>
-                      <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3 lg:col-span-2">
-                        <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
-                        <Input
-                          value={filingDraft.alternateName}
-                          onChange={(e) => setFilingDraft((current) => ({ ...current, alternateName: e.target.value }))}
-                          placeholder="PRIVATE FIELD"
-                        />
                       </div>
                     </div>
                   </div>

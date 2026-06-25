@@ -63,6 +63,7 @@ import {
   getLeidosFlightServiceDiagnostics,
   getLeidosFlightServicePlanDebug,
   buildOtherInfoWithAircraftType,
+  buildZzzzOtherInfoForLeidos,
   normalizeActualAircraftTypeForIcao,
   searchLeidosRoute,
   syncLeidosPlanMetadata,
@@ -21952,6 +21953,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const previewOtherInfo = packet.aircraftType?.toUpperCase() === "ZZZZ"
         ? buildOtherInfoWithAircraftType(dofPreview.otherInfo, packet.actualAircraftType)
         : dofPreview.otherInfo;
+      const zzzzPreviewOtherInfo = buildZzzzOtherInfoForLeidos(previewOtherInfo, {
+        departureName: packet.departure?.toUpperCase() === "ZZZZ" ? packet.departureName : null,
+        destinationName: packet.destination?.toUpperCase() === "ZZZZ" ? packet.destinationName : null,
+        alternateName: packet.alternate?.toUpperCase() === "ZZZZ" ? packet.alternateName : null,
+        departureLocation: packet.departure?.toUpperCase() === "ZZZZ" ? packet.actualDepartureLocation : null,
+        destinationLocation: packet.destination?.toUpperCase() === "ZZZZ" ? packet.actualDestinationLocation : null,
+        alternateLocation: packet.alternate?.toUpperCase() === "ZZZZ" ? packet.actualAlternateLocation : null,
+      });
       const errors: string[] = [];
       const warnings: string[] = [];
       if (!packet.departure) errors.push("Departure airport is required.");
@@ -21972,11 +21981,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (packet.departure?.toUpperCase() === "ZZZZ" && !isValidZzzzActualLocation(packet.actualDepartureLocation)) {
         errors.push("Departure is ZZZZ - enter an actual departure FAA identifier or latitude/longitude.");
       }
+      if (packet.departure?.toUpperCase() === "ZZZZ" && !String(packet.departureName || "").trim()) {
+        errors.push("Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad).");
+      }
       if (packet.destination?.toUpperCase() === "ZZZZ" && !isValidZzzzActualLocation(packet.actualDestinationLocation)) {
         errors.push("Destination is ZZZZ - enter an actual destination FAA identifier or latitude/longitude.");
       }
+      if (packet.destination?.toUpperCase() === "ZZZZ" && !String(packet.destinationName || "").trim()) {
+        errors.push("Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad).");
+      }
       if (packet.alternate?.toUpperCase() === "ZZZZ" && !isValidZzzzActualLocation(packet.actualAlternateLocation)) {
         errors.push("Alternate is ZZZZ - enter an actual alternate FAA identifier or latitude/longitude.");
+      }
+      if (packet.alternate?.toUpperCase() === "ZZZZ" && !String(packet.alternateName || "").trim()) {
+        errors.push("Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad).");
       }
       if (flightRules === "IFR" && !routeNormalization.normalizedRoute) {
         errors.push("IFR filing requires a route before handoff.");
@@ -22006,7 +22024,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         flightRules,
         route: routeNormalization.localEnteredRoute,
         normalizedRoute: routeNormalization.normalizedRoute,
-        otherInfo: previewOtherInfo,
+        otherInfo: zzzzPreviewOtherInfo,
         dof: dofPreview.dof,
         dofInjected: dofPreview.injected,
         provider: "flight-service-handoff-staged",
@@ -22051,7 +22069,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           dof: dofPreview.dof,
           dofInjected: dofPreview.injected,
           localOtherInfo: packet.otherInfo || null,
-          transmittedOtherInfo: dofPreview.otherInfo,
+          transmittedOtherInfo: zzzzPreviewOtherInfo,
         },
         packet: normalizedPacket,
       });

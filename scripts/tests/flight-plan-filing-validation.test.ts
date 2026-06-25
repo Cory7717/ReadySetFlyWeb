@@ -240,6 +240,30 @@ test("ZZZZ airports require actual FAA identifiers or lat/long locations", () =>
   assert.equal(formatDecimalCoordinatesForLeidos(30.45, -97.8167), "3027N09749W");
 });
 
+test("ZZZZ airports require human-readable location descriptions", () => {
+  const missingDescription = validateFlightPlanForAction(filingPlan({
+    departure: "ZZZZ",
+    destination: "ZZZZ",
+    alternate: "ZZZZ",
+    plannerState: {
+      planningReferenceDepartureAirport: "KEDC",
+      planningReferenceDestinationAirport: "KDAL",
+      planningReferenceAlternateAirport: "KADS",
+      actualDepartureLocation: "3027N09749W",
+      actualDestinationLocation: "3001N09015W",
+      actualAlternateLocation: "3015N09122W",
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-06-22T10:00",
+    },
+  }), "file");
+
+  assert.equal(missingDescription.ready, false);
+  assert.equal(
+    missingDescription.errors.filter((error) => /brief description of this location/i.test(error)).length,
+    3,
+  );
+});
+
 test("ZZZZ aircraft type requires TYP details in Other Info", () => {
   const missing = validateFlightPlanForAction(filingPlan({
     aircraftType: "ZZZZ",
@@ -412,6 +436,55 @@ test("ZZZZ location names are transmitted in otherInfo while supplemental remark
     }),
     "DOF/260623 DEP/3027N/09749W PRIVATE FIELD",
   );
+});
+
+test("ZZZZ departure, destination, and alternate Field 18 entries include coordinates and descriptions", () => {
+  assert.equal(
+    buildZzzzOtherInfoForLeidos(null, {
+      departureLocation: "3027N09749W",
+      departureName: "Private Strip",
+    }),
+    "DEP/3027N09749W PRIVATE STRIP",
+  );
+  assert.equal(
+    buildZzzzOtherInfoForLeidos(null, {
+      destinationLocation: "3027N09749W",
+      destinationName: "Smith Ranch",
+    }),
+    "DEST/3027N09749W SMITH RANCH",
+  );
+  assert.equal(
+    buildZzzzOtherInfoForLeidos(null, {
+      alternateLocation: "3839N09045W",
+      alternateName: "Grass Airstrip",
+    }),
+    "ALTN/3839N09045W GRASS AIRSTRIP",
+  );
+});
+
+test("non-ZZZZ filing does not add ZZZZ location Field 18 entries", () => {
+  const payload = buildLeidosActionPayload(filingPlan({
+    departure: "KAUS",
+    destination: "KDEN",
+    alternate: "KCOS",
+    filingOtherInfo: "PBN/A1",
+    filingDepartureName: "Private Strip",
+    filingDestinationName: "Smith Ranch",
+    filingAlternateName: "Grass Airstrip",
+    plannerState: {
+      actualDepartureLocation: "3027N09749W",
+      actualDestinationLocation: "3027N09749W",
+      actualAlternateLocation: "3839N09045W",
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-06-22T10:00",
+    },
+  }), "file", { otherInfo: null } as any);
+  const fields = Object.fromEntries(payload.params.entries());
+
+  assert.equal(fields.otherInfo, "PBN/A1 RMK/LEIDOS DEMO");
+  assert.doesNotMatch(String(fields.otherInfo), /\bDEP\//);
+  assert.doesNotMatch(String(fields.otherInfo), /\bDEST\//);
+  assert.doesNotMatch(String(fields.otherInfo), /\bALTN\//);
 });
 
 test("Leidos FILE flightIdentifier is accepted as the provider plan id", () => {

@@ -845,6 +845,9 @@ const normalizeLeidosAircraftColorExtended = (value?: string | null) => {
   return parts.slice(0, 3).join(":");
 };
 
+const hasZzzzLocationDescription = (value?: string | null) =>
+  Boolean(String(value || "").trim().replace(/\s+/g, " "));
+
 const normalizeWakeTurbulenceCategory = (value?: string | null) => {
   const normalized = String(value || "").trim().toUpperCase();
   if (!normalized) return null;
@@ -1873,6 +1876,9 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     if (!normalizeZzzzActualLocation(getPlannerStateString(plan, "actualDepartureLocation"))) {
       errors.push("Departure is ZZZZ - enter an actual departure FAA identifier or latitude/longitude.");
     }
+    if (!hasZzzzLocationDescription(plan.filingDepartureName)) {
+      errors.push("Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad).");
+    }
     const reference = getPlannerStateString(plan, "planningReferenceDepartureAirport");
     if (!reference || reference === "ZZZZ") {
       errors.push("Departure ZZZZ requires a planning reference airport so RSF can calculate the route.");
@@ -1883,6 +1889,9 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     if (!normalizeZzzzActualLocation(getPlannerStateString(plan, "actualDestinationLocation"))) {
       errors.push("Destination is ZZZZ - enter an actual destination FAA identifier or latitude/longitude.");
     }
+    if (!hasZzzzLocationDescription(plan.filingDestinationName)) {
+      errors.push("Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad).");
+    }
     const reference = getPlannerStateString(plan, "planningReferenceDestinationAirport");
     if (!reference || reference === "ZZZZ") {
       errors.push("Destination ZZZZ requires a planning reference airport so RSF can calculate the route.");
@@ -1891,6 +1900,9 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if (plan.alternate?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend")) {
     if (!normalizeZzzzActualLocation(getPlannerStateString(plan, "actualAlternateLocation"))) {
       errors.push("Alternate is ZZZZ - enter an actual alternate FAA identifier or latitude/longitude.");
+    }
+    if (!hasZzzzLocationDescription(plan.filingAlternateName)) {
+      errors.push("Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad).");
     }
     const reference = getPlannerStateString(plan, "planningReferenceAlternateAirport");
     if (!reference || reference === "ZZZZ") {

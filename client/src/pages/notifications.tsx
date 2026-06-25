@@ -33,6 +33,8 @@ export default function NotificationsPage() {
 
   const { data: notifications = [], isLoading } = useQuery<UserNotification[]>({
     queryKey: ["/api/notifications"],
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 
   const markReadMutation = useMutation({

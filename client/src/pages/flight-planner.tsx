@@ -2370,6 +2370,8 @@ export default function FlightPlanner() {
   const { data: savedPlansRaw = [], isLoading: plansLoading } = useQuery<FlightPlan[]>({
     queryKey: ["/api/flight-plans"],
     enabled: isAuthenticated,
+    refetchInterval: isAuthenticated && activeTab === "file" ? 15_000 : false,
+    refetchOnWindowFocus: true,
   });
   const currentUserId = user?.id || null;
   const savedPlans = useMemo(() => {
@@ -2419,6 +2421,24 @@ export default function FlightPlanner() {
       clearActiveSavedPlanIdentity();
     }
   }, [clearActiveSavedPlanIdentity, currentUserId, editingPlan]);
+
+  useEffect(() => {
+    if (!editingPlan?.id || savedPlans.length === 0) return;
+    const refreshedPlan = savedPlans.find((plan) => plan.id === editingPlan.id);
+    if (!refreshedPlan) return;
+    const previousProviderState = buildProviderUpdateSignature(editingPlan);
+    const nextProviderState = buildProviderUpdateSignature(refreshedPlan);
+    const previousHistoryCount = Array.isArray((editingPlan as any).filingActionHistory)
+      ? (editingPlan as any).filingActionHistory.length
+      : 0;
+    const nextHistoryCount = Array.isArray((refreshedPlan as any).filingActionHistory)
+      ? (refreshedPlan as any).filingActionHistory.length
+      : 0;
+    if (previousProviderState === nextProviderState && previousHistoryCount === nextHistoryCount) return;
+    skipNextEditingPlanHydrationRef.current = true;
+    setEditingPlan((current) => current?.id === refreshedPlan.id ? { ...current, ...refreshedPlan } : current);
+    setProviderUpdatesPlan((current) => current?.id === refreshedPlan.id ? { ...current, ...refreshedPlan } : current);
+  }, [editingPlan, savedPlans]);
 
   useEffect(() => {
     if (!isAuthenticated || activeTab !== "file") return;

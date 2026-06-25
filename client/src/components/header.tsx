@@ -70,6 +70,8 @@ export function Header() {
   const { data: unreadNotifications } = useQuery<{ count: number }>({
     queryKey: ["/api/notifications/unread"],
     enabled: !!user,
+    refetchInterval: user ? 15_000 : false,
+    refetchOnWindowFocus: true,
   });
   const unreadCount = unreadNotifications?.count ?? 0;
   const activeGroup = findWorkflowGroupForPath(location);

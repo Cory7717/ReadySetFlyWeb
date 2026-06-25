@@ -799,12 +799,35 @@ const normalizeLeidosBeaconCode = (value?: string | null) => {
 export const normalizeLeidosOtherInfoForTransmission = (otherInfo: string | null) => {
   const normalized = String(otherInfo || "")
     .toUpperCase()
-    .replace(/(?:^|\s)RMK\/\S*/gi, " ")
     .replace(/_/g, "")
     .replace(/[^A-Z0-9/ -]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   return normalized || null;
+};
+
+const normalizeLeidosRemarksText = (value?: string | null) => {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/^RMK\//i, "")
+    .replace(/_/g, " ")
+    .replace(/[^A-Z0-9/ -]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+  return normalized || null;
+};
+
+export const buildOtherInfoWithRemarks = (otherInfo: string | null, remarks?: string | null) => {
+  const source = String(otherInfo || "").trim();
+  const existingRmkMatch = source.match(/(?:^|\s)RMK\/.*?(?=\s+[A-Z]{2,5}\/|$)/i);
+  const existingRmkText = normalizeLeidosRemarksText(existingRmkMatch?.[0]?.replace(/^\s*RMK\//i, ""));
+  const remarksText = normalizeLeidosRemarksText(remarks) || existingRmkText;
+  const base = source
+    .replace(/(?:^|\s)RMK\/.*?(?=\s+[A-Z]{2,5}\/|$)/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return [base, remarksText ? `RMK/${remarksText}` : null].filter(Boolean).join(" ").replace(/\s+/g, " ").trim() || null;
 };
 
 const normalizeLeidosAircraftColorExtended = (value?: string | null) => {
@@ -1175,7 +1198,7 @@ export const buildZzzzOtherInfoForLeidos = (
   return merged || null;
 };
 
-const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingAction, config: LeidosFlightServiceConfig) => {
+export const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingAction, config: LeidosFlightServiceConfig) => {
   const params = new URLSearchParams();
   const routeNormalization = normalizeRouteForProvider(plan.route || "DCT");
   const selectedLocalDepartureTime = getSelectedDepartureLocalDateTime(plan);
@@ -1289,7 +1312,8 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
         }
         : null,
     };
-    const zzzzMergedOtherInfo = buildZzzzOtherInfoForLeidos(otherInfoResult.otherInfo, {
+    const remarksMergedOtherInfo = buildOtherInfoWithRemarks(otherInfoResult.otherInfo, primaryRemarks);
+    const zzzzMergedOtherInfo = buildZzzzOtherInfoForLeidos(remarksMergedOtherInfo, {
       departureName: plan.departure?.toUpperCase() === "ZZZZ" ? plan.filingDepartureName : null,
       destinationName: plan.destination?.toUpperCase() === "ZZZZ" ? plan.filingDestinationName : null,
       alternateName: plan.alternate?.toUpperCase() === "ZZZZ" ? plan.filingAlternateName : null,
@@ -1958,6 +1982,12 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if (action !== "file" && !plan.filingProviderPlanId) {
     errors.push("Stage or file the plan first so a provider plan ID exists before using this action.");
   }
+  const providerSnapshot = plan.filingProviderSnapshot && typeof plan.filingProviderSnapshot === "object" && !Array.isArray(plan.filingProviderSnapshot)
+    ? plan.filingProviderSnapshot as Record<string, unknown>
+    : null;
+  if (action !== "file" && providerSnapshot?.providerPendingReview === true) {
+    errors.push("Flight Service has updated this flight plan. Review and accept or reconcile those changes before submitting another provider action.");
+  }
 
   if (action === "amend") {
     const amendableStatuses = rules === "VFR" ? ["filed", "activated"] : ["filed"];
@@ -2136,8 +2166,12 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         computedProviderDepartureInstant: payloadContext.payloadSnapshot.departureInstant,
         savedDisplayTime: (payloadContext.payloadSnapshot as Record<string, unknown>).selectedLocalDepartureTime ?? null,
         remarksPopulated: Boolean(requestPayloadRecord.remarks),
+        remarksInput: requestPayloadRecord.remarks ? "[redacted]" : null,
+        otherInfoGenerated: requestPayloadRecord.otherInfo || null,
         suppRemarksExtendedPopulated: Boolean(requestPayloadRecord.suppRemarksExtended),
         otherInfoPopulated: Boolean(requestPayloadRecord.otherInfo),
+        pilotPhonePopulated: Boolean(requestPayloadRecord.pilotPhone),
+        aircraftHomeBasePopulated: Boolean(requestPayloadRecord.aircraftHomeBase),
         payload: redactPayloadForLog(payloadContext.payloadSnapshot.transmittedFields),
       }));
     }

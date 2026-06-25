@@ -6,7 +6,7 @@ import { formatFlightPlanDepartureTime } from "../../shared/flight-plan-time";
 import { extractFilingProviderPlanId } from "../../shared/flight-plan-filing";
 import { ICAO_OTHER_INFO_VALUE_OPTIONS, buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
 import { formatDecimalCoordinatesForLeidos, normalizeZzzzActualLocation } from "../../shared/zzzz-location";
-import { buildOtherInfoWithAircraftType, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
+import { buildLeidosActionPayload, buildOtherInfoWithAircraftType, buildOtherInfoWithRemarks, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
 
 function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
   return {
@@ -319,11 +319,54 @@ test("ICAO validation rejects bad surveillance and warns for equipment dependenc
   assert.ok(missingEquipment.warnings.some((warning) => /requires additional aircraft equipment codes/i.test(warning)));
 });
 
-test("Leidos otherInfo transmission omits duplicated remarks", () => {
+test("Flight Service otherInfo transmission preserves ICAO RMK remarks", () => {
   assert.equal(
-    normalizeLeidosOtherInfoForTransmission("DOF/260623 RMK/RSF_INTERNAL_FILING_PREVIEW"),
-    "DOF/260623",
+    normalizeLeidosOtherInfoForTransmission(buildOtherInfoWithRemarks("DOF/260623", "TEST MESSAGE")),
+    "DOF/260623 RMK/TEST MESSAGE",
   );
+  assert.equal(
+    normalizeLeidosOtherInfoForTransmission(buildOtherInfoWithRemarks("DOF/260623", "RMK/TEST MESSAGE")),
+    "DOF/260623 RMK/TEST MESSAGE",
+  );
+  assert.equal(
+    normalizeLeidosOtherInfoForTransmission(buildOtherInfoWithRemarks("DOF/260623 RMK/OLD MESSAGE", "RMK/TEST MESSAGE")),
+    "DOF/260623 RMK/TEST MESSAGE",
+  );
+  assert.equal(
+    normalizeLeidosOtherInfoForTransmission(buildOtherInfoWithRemarks("PBN/A1 RMK/TEST MESSAGE DOF/260623", null)),
+    "PBN/A1 DOF/260623 RMK/TEST MESSAGE",
+  );
+});
+
+test("Flight Service payload puts normal filing remarks in Field 18 RMK and keeps supplemental remarks empty", () => {
+  const payload = buildLeidosActionPayload(filingPlan({
+    filingRemarks: "TEST REMARK",
+    filingOtherInfo: "PBN/A1",
+  }), "file", { otherInfo: null } as any);
+  const fields = Object.fromEntries(payload.params.entries());
+
+  assert.equal(fields.remarks, "TEST REMARK");
+  assert.equal(fields.otherInfo, "PBN/A1 RMK/TEST REMARK");
+  assert.equal(fields.suppRemarksExtended, undefined);
+  assert.equal(fields.pilotPhone, "5125550100");
+  assert.equal(fields.aircraftHomeBase, "KEDC");
+});
+
+test("Flight Service payload collapses user-entered RMK prefix to one outbound RMK", () => {
+  const fromRemarks = Object.fromEntries(buildLeidosActionPayload(filingPlan({
+    filingRemarks: "RMK/TEST MESSAGE",
+    filingOtherInfo: "PBN/A1",
+  }), "file", { otherInfo: null } as any).params.entries());
+  assert.equal(fromRemarks.otherInfo, "PBN/A1 RMK/TEST MESSAGE");
+  assert.doesNotMatch(String(fromRemarks.otherInfo), /RMK\/RMK\//);
+
+  const fromOtherInfo = Object.fromEntries(buildLeidosActionPayload(filingPlan({
+    filingRemarks: null,
+    notes: "TEST MESSAGE",
+    filingOtherInfo: "PBN/A1 RMK/TEST MESSAGE",
+  }), "file", { otherInfo: null } as any).params.entries());
+  assert.equal(fromOtherInfo.otherInfo, "PBN/A1 RMK/TEST MESSAGE");
+  assert.doesNotMatch(String(fromOtherInfo.otherInfo), /RMK\/RMK\//);
 });
 
 test("ZZZZ location names are transmitted in otherInfo while supplemental remarks stay clean", () => {
@@ -397,6 +440,33 @@ test("VFR and IFR lifecycle action matrix matches the Leidos demo", () => {
   assert.equal(validateFlightPlanForAction(filedIfr, "cancel").ready, true);
   assert.equal(validateFlightPlanForAction(filedIfr, "activate").ready, false);
   assert.equal(validateFlightPlanForAction(filedIfr, "close").ready, false);
+});
+
+test("provider push review blocks filing actions until acknowledged", () => {
+  const pendingReview = filingPlan({
+    filingStatus: "filed",
+    filingProviderPlanId: "FS-PENDING-1",
+    filingIsLive: true,
+    filingProviderSnapshot: {
+      providerPendingReview: true,
+      providerLifecycleStatus: "filed",
+    } as any,
+  });
+
+  for (const action of ["amend", "activate", "cancel", "close"] as const) {
+    const result = validateFlightPlanForAction(pendingReview, action);
+    assert.equal(result.ready, false);
+    assert.ok(result.errors.some((error) => /Flight Service has updated/i.test(error)));
+  }
+
+  const accepted = filingPlan({
+    ...pendingReview,
+    filingProviderSnapshot: {
+      providerPendingReview: false,
+      providerLifecycleStatus: "filed",
+    } as any,
+  });
+  assert.equal(validateFlightPlanForAction(accepted, "amend").ready, true);
 });
 
 test("overdue VFR close requires an actual close location", () => {

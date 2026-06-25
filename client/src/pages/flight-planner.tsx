@@ -6295,26 +6295,12 @@ export default function FlightPlanner() {
       actions={
         pressDemo.enabled ? undefined : (
           <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-            <div className="rounded-[0.85rem] border border-[#5d6f85]/25 bg-[#111822]/90 p-2.5 text-left shadow-[0_18px_34px_-28px_rgba(0,0,0,0.9)] sm:w-[315px]">
-              <div className="flex items-center gap-2.5">
-                <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-[0.55rem] border border-white/10 bg-[#0c1118]">
-                  <span className="absolute left-[9px] top-[5px] h-0 w-0 border-y-[11px] border-l-[15px] border-y-transparent border-l-[#5AA9FF]" />
-                  <span className="absolute left-[10px] top-[5px] h-0 w-0 border-y-[11px] border-l-[15px] border-y-transparent border-l-[#59D37D] opacity-70 [clip-path:polygon(0_0,100%_50%,0_50%)]" />
-                  <span className="absolute left-[10px] top-[16px] h-0 w-0 border-y-[11px] border-l-[15px] border-y-transparent border-l-[#F4D35E] opacity-80 [clip-path:polygon(0_50%,100%_0,0_100%)]" />
-                  <span className="absolute left-[18px] top-[10px] h-0 w-0 border-y-[6px] border-l-[9px] border-y-transparent border-l-[#EF6A5B]" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#A9BBCD]">Native app</div>
-                  <div className="truncate text-sm font-semibold text-[#F5F8FC]">In-flight tracking</div>
-                </div>
-              </div>
-              <div className="mt-1.5 text-xs leading-5 text-[#A9BBCD]">
-                Use web for planning. Open the app for tablet ADS-B and ownship tracking.
-              </div>
+            <div className="rounded-[0.85rem] border border-[#5d6f85]/25 bg-[#111822]/90 p-2.5 text-left shadow-[0_18px_34px_-28px_rgba(0,0,0,0.9)] sm:w-[390px]">
               <AppDownloadBadges
                 source="flight_planner_header"
-                className="mt-2"
-                badgeClassName="sm:w-full"
+                forceRow
+                rowClassName="justify-start gap-2"
+                badgeClassName="min-h-0"
                 showSupportText={false}
               />
               <div className="mt-1 text-xs leading-5 text-[#A9BBCD]">

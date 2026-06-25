@@ -89,27 +89,36 @@ export function AppStoreBadge({ className, imageClassName, source = "unknown" }:
 type AppDownloadBadgesProps = {
   className?: string;
   badgeClassName?: string;
+  rowClassName?: string;
   source?: string;
+  forceRow?: boolean;
   showSupportText?: boolean;
 };
 
 export function AppDownloadBadges({
   className,
   badgeClassName,
+  rowClassName,
   source = "unknown",
+  forceRow = false,
   showSupportText = true,
 }: AppDownloadBadgesProps) {
   return (
     <div className={cn("space-y-2", className)}>
-      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-center">
+      <div className={cn(
+        forceRow
+          ? "flex flex-row flex-wrap items-start justify-center gap-3"
+          : "flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-center",
+        rowClassName,
+      )}>
         <GooglePlayBadge
           source={source}
-          className={cn("sm:w-fit", badgeClassName)}
+          className={cn(forceRow ? "w-fit" : "sm:w-fit", badgeClassName)}
           imageClassName="h-14"
         />
         <AppStoreBadge
           source={source}
-          className={cn("sm:w-fit", badgeClassName)}
+          className={cn(forceRow ? "w-fit" : "sm:w-fit", badgeClassName)}
           imageClassName="h-10"
         />
       </div>

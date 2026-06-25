@@ -83,6 +83,7 @@ import {
   FilingProviderWorkspace,
   summarizeProviderUpdates,
 } from "@/components/flight-planner/FilingProviderWorkspace";
+import { getSavedPlanStatusChip, groupSavedFlightPlans } from "@/components/flight-planner/savedPlanSorting";
 import { AppDownloadBadges } from "@/components/GooglePlayBadge";
 import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
 import { PageShell } from "@/components/layout/PageShell";
@@ -9425,27 +9426,8 @@ export default function FlightPlanner() {
                 )}
               </div>
               {(() => {
-                const statusBucket = (p: FlightPlan) => {
-                  const s = normalizedClientFilingStatus(p);
-                  if (s === "activated") return isPlanOverdueForClose(p) ? "overdue" : "active";
-                  if (s === "filed") return "filed";
-                  if (s === "cancelled" || s === "closed") return "done";
-                  return "draft";
-                };
-                const bucketOrder = ["active", "overdue", "filed", "draft", "done"] as const;
-                const bucketLabel: Record<string, string> = {
-                  active: "Active",
-                  overdue: "Overdue",
-                  filed: "Filed / Proposed",
-                  draft: "Staged / Draft",
-                  done: "Closed / Cancelled",
-                };
-                const grouped = bucketOrder
-                  .map((k) => ({ k, plans: savedPlansView.filter((p) => statusBucket(p) === k) }))
-                  .filter((g) => g.plans.length > 0);
-                return grouped.flatMap(({ k, plans }, gi) => [
-                  <div key={`group-hdr-${k}`} className={cn("text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground", gi > 0 && "pt-2 border-t border-border/30")}>{bucketLabel[k]}</div>,
-                  ...plans.map((plan) => {
+                const { currentPlans, pastPlans } = groupSavedFlightPlans(savedPlansView);
+                const renderPlanCards = (plans: FlightPlan[]) => plans.map((plan) => {
                     const expanded = expandedPlanIds[plan.id] ?? false;
                     const departureSummary = formatFlightPlanDepartureTime(plan);
                     const departureTime = {
@@ -9457,6 +9439,7 @@ export default function FlightPlanner() {
                     const beaconCode = getPlanBeaconCode(plan);
                     const providerLifecycleMessage = getProviderLifecycleAvailabilityMessage(plan);
                     const deletable = canDeleteLocalDraftPlan(plan);
+                    const statusChip = getSavedPlanStatusChip(plan);
                     const plannerState = plan.plannerState && typeof plan.plannerState === "object" && !Array.isArray(plan.plannerState)
                       ? plan.plannerState as Record<string, any>
                       : {};
@@ -9481,7 +9464,12 @@ export default function FlightPlanner() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline">{filingStatusLabel(plan.filingStatus)}</Badge>
+                    <Badge
+                      variant={statusChip.tone === "past" ? "secondary" : statusChip.tone === "review" ? "default" : "outline"}
+                      className={cn(statusChip.tone === "past" && "opacity-75")}
+                    >
+                      {statusChip.label}
+                    </Badge>
                     {plan.filingPendingAction && (
                       <Badge variant="secondary">Pending {plan.filingPendingAction}</Badge>
                     )}
@@ -9791,8 +9779,36 @@ export default function FlightPlanner() {
                 )}
               </div>
                     );
-                  })
-                ]);
+                  });
+                return (
+                  <div className="space-y-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Current / Active Plans
+                    </div>
+                    {currentPlans.length > 0 ? (
+                      renderPlanCards(currentPlans)
+                    ) : (
+                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                        <div className="font-medium text-foreground">No current flight plans.</div>
+                        <div className="mt-1">Start a new plan or open Past Flight Plans to review previous filings.</div>
+                      </div>
+                    )}
+                    {pastPlans.length > 0 && (
+                      <Accordion type="single" collapsible className="border-t border-border/30 pt-2">
+                        <AccordionItem value="past-flight-plans" className="border-b-0">
+                          <AccordionTrigger className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground hover:no-underline">
+                            Past Flight Plans ({pastPlans.length})
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="space-y-4 pt-2">
+                              {renderPlanCards(pastPlans)}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+                    )}
+                  </div>
+                );
               })()}
             </div>
           )}

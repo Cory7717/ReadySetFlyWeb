@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatArtccInfo, formatProviderNotificationValue, sanitizeNotificationMessage } from "../../shared/provider-notification-format";
+import { formatArtccInfo, formatProviderNotificationValue, sanitizeNotificationMessage, summarizeProviderChangeDetails } from "../../shared/provider-notification-format";
 
 test("formatArtccInfo handles null and empty object", () => {
   assert.equal(formatArtccInfo(null), "");
@@ -28,4 +28,25 @@ test("notification sanitizer removes legacy object placeholder", () => {
   const message = sanitizeNotificationMessage("Provider flight state: PROPOSED. ARTCC state: ROGERED. ARTCC info: [object Object].");
   assert.equal(message, "Provider flight state: PROPOSED. ARTCC state: ROGERED.");
   assert.equal(message.includes("[object Object]"), false);
+});
+
+test("provider change summary separates added and unchanged ICAO Other Info fields", () => {
+  const summary = summarizeProviderChangeDetails(
+    "Flight Service changed this plan: Other Information changed from PBN/A1 RMK/TEST VFR TO CHECK to PBN/A1 EET/KZMA0257 RMK/TEST VFR TO CHECK.",
+  );
+
+  assert.ok(summary);
+  assert.deepEqual(summary.added, ["EET/KZMA0257"]);
+  assert.deepEqual(summary.removed, []);
+  assert.deepEqual(summary.modified, []);
+  assert.deepEqual(summary.unchanged, ["PBN/A1", "RMK/TEST VFR TO CHECK"]);
+  assert.equal(summary.technicalDetails[0].previous, "PBN/A1 RMK/TEST VFR TO CHECK");
+  assert.equal(summary.technicalDetails[0].current, "PBN/A1 EET/KZMA0257 RMK/TEST VFR TO CHECK");
+});
+
+test("provider change summary suppresses whitespace-only changes", () => {
+  const summary = summarizeProviderChangeDetails(
+    "Flight Service changed this plan: Other Information changed from PBN/A1  RMK/TEST to PBN/A1 RMK/TEST.",
+  );
+  assert.equal(summary, null);
 });

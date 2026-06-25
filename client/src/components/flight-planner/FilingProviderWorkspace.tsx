@@ -2,6 +2,8 @@ import React from "react";
 import { Badge } from "@/components/ui/badge";
 import type { FlightPlan } from "@shared/schema";
 import { formatFlightPlanDepartureTime } from "@shared/flight-plan-time";
+import { sanitizeNotificationMessage, summarizeProviderChangeDetails } from "@shared/provider-notification-format";
+import { ProviderChangeSummaryView } from "./ProviderChangeSummaryView";
 
 type ProviderMessage = {
   id: string;
@@ -10,6 +12,7 @@ type ProviderMessage = {
   title: string;
   details: string;
   providerPlanId?: string | null;
+  raw?: Record<string, unknown> | null;
 };
 
 const asRecord = (value: unknown) =>
@@ -217,7 +220,16 @@ export function FilingProviderUpdatesList({ plan }: { plan: FlightPlan }) {
             <div className="font-medium">{message.title}</div>
             <div className="text-xs opacity-80">{formatDateTime(message.timestamp)}</div>
           </div>
-          <div className="mt-2 text-sm break-words">{message.details}</div>
+          {(() => {
+            const summary = summarizeProviderChangeDetails(message.details, message.raw?.changedFields);
+            return summary ? (
+              <ProviderChangeSummaryView summary={summary} />
+            ) : (
+              <div className="mt-2 text-sm break-words">
+                {sanitizeNotificationMessage(message.details) || "Flight Service pushed an update for this flight plan."}
+              </div>
+            );
+          })()}
           {message.providerPlanId && (
             <div className="mt-2 text-[11px] opacity-80">Provider reference: {message.providerPlanId}</div>
           )}

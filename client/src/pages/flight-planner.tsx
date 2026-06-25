@@ -9482,42 +9482,42 @@ export default function FlightPlanner() {
                 )}
                 {expanded && (
                 <>
-                <div className="grid gap-2 md:grid-cols-4 text-sm">
-                  <div>
+                <div className="grid gap-3 text-sm md:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">
+                  <div className="min-w-0">
                     <div className="text-muted-foreground">User-entered route</div>
-                    <div>{plan.route || "-"}</div>
+                    <div className="break-words">{plan.route || "-"}</div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-muted-foreground">Departure</div>
-                    <div>{departureTime.local}</div>
+                    <div className="break-words">{departureTime.local}</div>
                     <div className="font-mono text-xs text-muted-foreground">{departureTime.zulu}</div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-muted-foreground">Arrival</div>
-                    <div>{arrivalTime.local}</div>
+                    <div className="break-words">{arrivalTime.local}</div>
                     <div className="font-mono text-xs text-muted-foreground">{arrivalTime.zulu}</div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-muted-foreground">Filed live</div>
                     <div>{plan.filingIsLive ? "Yes" : "No"}</div>
                   </div>
                 </div>
-                <div className="grid gap-2 md:grid-cols-4 text-sm">
-                  <div>
+                <div className="grid gap-3 text-sm md:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">
+                  <div className="min-w-0">
                     <div className="text-muted-foreground">Flight rules</div>
                     <div>{plan.filingFlightRules || "VFR"}</div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-muted-foreground">Provider</div>
-                    <div>{formatFilingProviderDisplayName(plan.filingProvider)}</div>
+                    <div className="break-words">{formatFilingProviderDisplayName(plan.filingProvider)}</div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-muted-foreground">Provider reference</div>
-                    <div>{plan.filingProviderPlanId || "-"}</div>
+                    <div className="break-all font-mono text-xs sm:text-sm">{plan.filingProviderPlanId || "-"}</div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-muted-foreground">Last sync</div>
-                    <div>{plan.filingLastProviderSyncAt ? syncTime.local : "-"}</div>
+                    <div className="break-words">{plan.filingLastProviderSyncAt ? syncTime.local : "-"}</div>
                     {plan.filingLastProviderSyncAt && <div className="font-mono text-xs text-muted-foreground">{syncTime.zulu}</div>}
                   </div>
                 </div>

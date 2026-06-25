@@ -4,7 +4,7 @@ import type { FlightPlan } from "../../shared/schema";
 import { resolveDepartureAirportTimezone } from "../../shared/airport-timezones";
 import { formatFlightPlanDepartureTime } from "../../shared/flight-plan-time";
 import { extractFilingProviderPlanId } from "../../shared/flight-plan-filing";
-import { ICAO_OTHER_INFO_VALUE_OPTIONS, buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
+import { ICAO_OTHER_INFO_GUIDANCE, ICAO_OTHER_INFO_PREFIX_OPTIONS, ICAO_OTHER_INFO_VALUE_OPTIONS, buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
 import { formatDecimalCoordinatesForLeidos, normalizeZzzzActualLocation } from "../../shared/zzzz-location";
 import { buildLeidosActionPayload, buildOtherInfoWithAircraftType, buildOtherInfoWithRemarks, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
 
@@ -296,6 +296,18 @@ test("ICAO filing controls normalize surveillance and Other Info entries", () =>
     { prefix: "NAV/", value: "GPS" },
     { prefix: "RMK/", value: "TRAINING FLIGHT" },
   ]);
+});
+
+test("ICAO Other Info guidance covers every prefix option", () => {
+  for (const option of ICAO_OTHER_INFO_PREFIX_OPTIONS) {
+    const guidance = ICAO_OTHER_INFO_GUIDANCE[option.prefix];
+    assert.ok(guidance, `${option.prefix} should have guidance metadata`);
+    assert.ok(["automatic", "common", "special"].includes(guidance.level));
+    assert.ok(guidance.levelLabel);
+    assert.ok(guidance.title.includes(option.prefix.replace("/", "")));
+    assert.ok(guidance.help);
+    assert.ok(guidance.examples.length > 0);
+  }
 });
 
 test("ICAO validation rejects bad surveillance and warns for equipment dependencies", () => {

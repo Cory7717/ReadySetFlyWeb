@@ -60,6 +60,17 @@ export type IcaoOtherInfoPrefixOption = {
   description: string;
 };
 
+export type IcaoOtherInfoGuidanceLevel = "automatic" | "common" | "special";
+
+export type IcaoOtherInfoGuidance = {
+  level: IcaoOtherInfoGuidanceLevel;
+  levelLabel: string;
+  title: string;
+  help: string;
+  note?: string;
+  examples: string[];
+};
+
 export const ICAO_OTHER_INFO_PREFIX_OPTIONS: IcaoOtherInfoPrefixOption[] = [
   { prefix: "STS/", label: "STS/ - Special handling", description: "Operational status such as MEDEVAC, SAR, or STATE." },
   { prefix: "PBN/", label: "PBN/ - Performance based navigation", description: "Required when aircraft equipment includes R." },
@@ -82,6 +93,154 @@ export const ICAO_OTHER_INFO_PREFIX_OPTIONS: IcaoOtherInfoPrefixOption[] = [
   { prefix: "RIF/", label: "RIF/ - Reclearance route", description: "Reclearance route and revised destination." },
   { prefix: "RMK/", label: "RMK/ - Remarks", description: "Operational remarks accepted in ICAO Other Info." },
 ];
+
+export const ICAO_OTHER_INFO_GUIDANCE: Record<IcaoOtherInfoPrefix, IcaoOtherInfoGuidance> = {
+  "STS/": {
+    level: "special",
+    levelLabel: "Special Operations",
+    title: "Special Handling (STS)",
+    help: "Used when the flight has an operational status that requires special handling.",
+    note: "Use only when the operation actually qualifies.",
+    examples: ["STS/MEDEVAC", "STS/SAR", "STS/STATE"],
+  },
+  "PBN/": {
+    level: "automatic",
+    levelLabel: "Normally Automatic",
+    title: "Performance Based Navigation (PBN)",
+    help: "Describes approved RNAV/RNP capabilities when aircraft equipment includes R.",
+    note: "Usually comes from the aircraft profile or filing setup.",
+    examples: ["PBN/A1", "PBN/B2", "PBN/D2"],
+  },
+  "NAV/": {
+    level: "common",
+    levelLabel: "Commonly Used",
+    title: "Navigation Details (NAV)",
+    help: "Adds navigation capabilities or limitations not fully described by equipment codes.",
+    examples: ["NAV/GPS", "NAV/SBAS"],
+  },
+  "COM/": {
+    level: "special",
+    levelLabel: "Special Operations",
+    title: "Communication Details (COM)",
+    help: "Adds communication capabilities or exemptions for specific operational needs.",
+    examples: ["COM/CPDLC", "COM/SATVOICE"],
+  },
+  "DAT/": {
+    level: "special",
+    levelLabel: "Special Operations",
+    title: "Datalink Details (DAT)",
+    help: "Describes datalink capabilities used for advanced or international operations.",
+    examples: ["DAT/CPDLC", "DAT/FANS1A"],
+  },
+  "SUR/": {
+    level: "automatic",
+    levelLabel: "Normally Automatic",
+    title: "Surveillance Details (SUR)",
+    help: "Adds ADS-B, ADS-C, or surveillance details beyond standard surveillance equipment.",
+    note: "Often derived from aircraft equipment.",
+    examples: ["SUR/ADSB", "SUR/DO260B"],
+  },
+  "DEP/": {
+    level: "common",
+    levelLabel: "Commonly Used",
+    title: "Departure Details (DEP)",
+    help: "Required when departing from a location without an ICAO airport identifier, such as ZZZZ.",
+    examples: ["DEP/304512N0974012W", "DEP/PRIVATE STRIP"],
+  },
+  "DEST/": {
+    level: "common",
+    levelLabel: "Commonly Used",
+    title: "Destination Details (DEST)",
+    help: "Required when the destination is a location without an ICAO airport identifier, such as ZZZZ.",
+    examples: ["DEST/3839N09045W", "DEST/PRIVATE FIELD"],
+  },
+  "DOF/": {
+    level: "common",
+    levelLabel: "Commonly Used",
+    title: "Date of Flight (DOF)",
+    help: "Specifies the flight date in YYMMDD format.",
+    note: "RSF injects this when the provider needs it for future-dated filings.",
+    examples: ["DOF/260625"],
+  },
+  "REG/": {
+    level: "automatic",
+    levelLabel: "Normally Automatic",
+    title: "Registration (REG)",
+    help: "Aircraft registration when different from the aircraft identifier.",
+    examples: ["REG/N7717CA"],
+  },
+  "EET/": {
+    level: "automatic",
+    levelLabel: "Normally Automatic",
+    title: "Estimated Elapsed Time (EET)",
+    help: "Used to specify estimated elapsed time to FIR or ARTCC boundaries during flight.",
+    note: "Flight Service often calculates or updates this after filing.",
+    examples: ["EET/KZMA0257"],
+  },
+  "SEL/": {
+    level: "special",
+    levelLabel: "Special Operations",
+    title: "SELCAL (SEL)",
+    help: "SELCAL code for aircraft equipped and operated with SELCAL procedures.",
+    examples: ["SEL/ABCD"],
+  },
+  "OPR/": {
+    level: "common",
+    levelLabel: "Commonly Used",
+    title: "Operator (OPR)",
+    help: "Aircraft operator when it is not obvious from the aircraft identifier.",
+    examples: ["OPR/READY SET FLY"],
+  },
+  "PER/": {
+    level: "common",
+    levelLabel: "Commonly Used",
+    title: "Performance Category (PER)",
+    help: "Aircraft performance category when required for the operation.",
+    examples: ["PER/B", "PER/C"],
+  },
+  "TYP/": {
+    level: "common",
+    levelLabel: "Commonly Used",
+    title: "Actual Aircraft Type (TYP)",
+    help: "Required when Aircraft Type is filed as ZZZZ.",
+    examples: ["TYP/TBM700", "TYP/C182"],
+  },
+  "ALTN/": {
+    level: "common",
+    levelLabel: "Commonly Used",
+    title: "Alternate Details (ALTN)",
+    help: "Alternate airport details when the alternate is filed as ZZZZ.",
+    examples: ["ALTN/3839N09045W", "ALTN/PRIVATE AIRFIELD"],
+  },
+  "RALT/": {
+    level: "special",
+    levelLabel: "Special Operations",
+    title: "Enroute Alternate (RALT)",
+    help: "Enroute alternate aerodrome used for applicable operational planning.",
+    examples: ["RALT/KICT"],
+  },
+  "TALT/": {
+    level: "special",
+    levelLabel: "Special Operations",
+    title: "Takeoff Alternate (TALT)",
+    help: "Takeoff alternate aerodrome when operational rules require one.",
+    examples: ["TALT/KDAL"],
+  },
+  "RIF/": {
+    level: "special",
+    levelLabel: "Special Operations",
+    title: "Reclearance Route (RIF)",
+    help: "Reclearance route and revised destination for specialized operations.",
+    examples: ["RIF/DCT ABC DCT KDEN"],
+  },
+  "RMK/": {
+    level: "common",
+    levelLabel: "Commonly Used",
+    title: "Remarks (RMK)",
+    help: "Additional operational information for Flight Service or ATC.",
+    examples: ["RMK/TRAINING FLIGHT", "RMK/STUDENT PILOT", "RMK/CHECKRIDE"],
+  },
+};
 
 export type IcaoOtherInfoEntry = {
   prefix: IcaoOtherInfoPrefix;

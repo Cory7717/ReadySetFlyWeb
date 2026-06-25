@@ -1,6 +1,6 @@
 ﻿
 import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
-import { Bell, ChevronDown, ChevronRight, X } from "lucide-react";
+import { Bell, ChevronDown, ChevronRight, Info, X } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -44,6 +45,7 @@ import { parseFlightCategory as getFlightCategory, parseWeatherHazards } from "@
 import {
   ICAO_OTHER_INFO_VALUE_OPTIONS,
   ICAO_ALL_SURVEILLANCE_OPTIONS,
+  ICAO_OTHER_INFO_GUIDANCE,
   FLIGHT_SERVICE_DIRECT_SURVEILLANCE_CODES,
   ICAO_OTHER_INFO_PREFIX_OPTIONS,
   ICAO_SURVEILLANCE_OPTIONS,
@@ -1023,6 +1025,78 @@ const filingStatusLabel = (status?: string | null) => {
       return "Draft";
   }
 };
+
+const icaoGuidanceDotClass: Record<string, string> = {
+  automatic: "bg-emerald-400 shadow-[0_0_0_2px_rgba(52,211,153,0.16)]",
+  common: "bg-amber-300 shadow-[0_0_0_2px_rgba(252,211,77,0.16)]",
+  special: "bg-red-400 shadow-[0_0_0_2px_rgba(248,113,113,0.16)]",
+};
+
+function IcaoOtherInfoOptionRow({ option }: { option: (typeof ICAO_OTHER_INFO_PREFIX_OPTIONS)[number] }) {
+  const guidance = ICAO_OTHER_INFO_GUIDANCE[option.prefix];
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <span
+        className={cn("h-2 w-2 shrink-0 rounded-full", icaoGuidanceDotClass[guidance.level])}
+        aria-label={guidance.levelLabel}
+      />
+      <span className="min-w-0 flex-1 truncate">
+        {option.label} - {option.description}
+      </span>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="ml-2 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/60"
+            aria-label={`${option.prefix} guidance`}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <Info className="h-3.5 w-3.5" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          side="right"
+          className="z-[1200] w-72 text-xs"
+          onPointerDown={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <div className="space-y-2">
+            <div>
+              <div className="text-sm font-semibold">{guidance.title}</div>
+              <div className="mt-1 text-muted-foreground">{guidance.help}</div>
+            </div>
+            <div className="flex items-center gap-2 font-medium">
+              <span className={cn("h-2 w-2 rounded-full", icaoGuidanceDotClass[guidance.level])} />
+              {guidance.levelLabel}
+            </div>
+            {guidance.note && <div className="text-muted-foreground">{guidance.note}</div>}
+            {guidance.examples.length > 0 && (
+              <div>
+                <div className="font-medium">Example{guidance.examples.length > 1 ? "s" : ""}</div>
+                <div className="mt-1 space-y-1 font-mono text-muted-foreground">
+                  {guidance.examples.map((example) => (
+                    <div key={example}>{example}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
 
 const escapeHtml = (value: unknown) =>
   String(value ?? "")
@@ -8723,8 +8797,8 @@ export default function FlightPlanner() {
                           </SelectTrigger>
                           <SelectContent className={plannerSelectContentClass}>
                             {ICAO_OTHER_INFO_PREFIX_OPTIONS.map((option) => (
-                              <SelectItem key={option.prefix} value={option.prefix}>
-                                {option.label} - {option.description}
+                              <SelectItem key={option.prefix} value={option.prefix} className="pr-2">
+                                <IcaoOtherInfoOptionRow option={option} />
                               </SelectItem>
                             ))}
                           </SelectContent>

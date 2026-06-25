@@ -8864,7 +8864,7 @@ export default function FlightPlanner() {
                           onChange={(e) => setFilingDraft((current) => ({ ...current, planningReferenceAlternateAirport: e.target.value.toUpperCase() }))}
                           placeholder="KTMB"
                         />
-                        <div className="text-xs text-[#A9BBCD]">Nearby airport used by RSF for calculations only. This is not sent as ALT unless it is the actual airport.</div>
+                        <div className="text-xs text-[#A9BBCD]">Nearby airport used by RSF for calculations only. This is not sent as ALTN unless it is the actual airport.</div>
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Alternate Location <span className="text-amber-400 text-xs">(required)</span></Label>
@@ -8898,7 +8898,7 @@ export default function FlightPlanner() {
                         </div>
                         <div className="text-xs leading-5 text-[#A9BBCD]">{zzzzActualLocationModeCopy[filingDraft.actualAlternateLocationMode].help}</div>
                         {filingDraft.actualAlternateLocationMode === "latlong" && (
-                          <div className="text-xs text-[#D9C28A]">This coordinate value is what RSF transmits in ALT/ when alternate is ZZZZ.</div>
+                          <div className="text-xs text-[#D9C28A]">This coordinate value is what RSF transmits in ALTN/ when alternate is ZZZZ.</div>
                         )}
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3 lg:col-span-2">

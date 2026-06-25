@@ -1146,7 +1146,7 @@ export const buildZzzzOtherInfoForLeidos = (
   const formattedAlternateLocation = formatLocation(alternateLocation, alternateName);
   if (formattedDepartureLocation) supplementals.push(`DEP/${formattedDepartureLocation}`);
   if (formattedDestinationLocation) supplementals.push(`DEST/${formattedDestinationLocation}`);
-  if (formattedAlternateLocation) supplementals.push(`ALT/${formattedAlternateLocation}`);
+  if (formattedAlternateLocation) supplementals.push(`ALTN/${formattedAlternateLocation}`);
   const merged = [base, ...supplementals].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   return merged || null;
 };
@@ -1285,7 +1285,7 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
           ? { ...zzzzLocationCompliance.destination, generatedOtherInfo: mergedOtherInfo?.match(/\bDEST\/.*?(?=\s+[A-Z]{2,5}\/|$)/)?.[0] || null }
           : null,
         alternate: zzzzLocationCompliance.alternate
-          ? { ...zzzzLocationCompliance.alternate, generatedOtherInfo: mergedOtherInfo?.match(/\bALT\/.*?(?=\s+[A-Z]{2,5}\/|$)/)?.[0] || null }
+          ? { ...zzzzLocationCompliance.alternate, generatedOtherInfo: mergedOtherInfo?.match(/\bALTN\/.*?(?=\s+[A-Z]{2,5}\/|$)/)?.[0] || null }
           : null,
       }));
     }

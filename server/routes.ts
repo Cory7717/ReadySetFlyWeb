@@ -2240,6 +2240,13 @@ const TFR_ARCGIS_URLS = TFR_ARCGIS_URLS_ENV
 const TFR_WFS_ENABLED = String(process.env.TFR_WFS_ENABLED || "true").toLowerCase() === "true";
 const TFR_WFS_URL = (process.env.TFR_WFS_URL || "https://sua.faa.gov/geoserver/wfs").trim();
 const TFR_WFS_TIMEOUT_MS = boundedEnvNumber(process.env.TFR_WFS_TIMEOUT_MS, 3000, 1000, 10000);
+const TFR_WFS_ACCESS_DENIED_COOLDOWN_MS = boundedEnvNumber(
+  process.env.TFR_WFS_ACCESS_DENIED_COOLDOWN_MS,
+  15 * 60 * 1000,
+  60 * 1000,
+  60 * 60 * 1000,
+);
+let tfrWfsAccessDeniedUntil = 0;
 const TFR_ARCGIS_TIMEOUT_MS = boundedEnvNumber(process.env.TFR_ARCGIS_TIMEOUT_MS, 3500, 1000, 10000);
 const TFR_ARCGIS_MAX_ATTEMPTS = boundedEnvNumber(
   process.env.TFR_ARCGIS_MAX_ATTEMPTS,
@@ -2852,6 +2859,13 @@ async function fetchSuaWfsTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
   if (!TFR_WFS_ENABLED || !TFR_WFS_URL) {
     return { data: null, error: "WFS fallback disabled", attempts: [] as Array<{ url: string; ok: boolean; status?: number; error?: string }> };
   }
+  if (tfrWfsAccessDeniedUntil > Date.now()) {
+    return {
+      data: null,
+      error: `WFS access denied cooldown active until ${new Date(tfrWfsAccessDeniedUntil).toISOString()}`,
+      attempts: [] as Array<{ url: string; ok: boolean; status?: number; error?: string }>,
+    };
+  }
 
   const params = new URLSearchParams({
     service: "WFS",
@@ -2886,6 +2900,9 @@ async function fetchSuaWfsTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
       const errorText = await response.text().catch(() => "");
       const snippet = errorText.trim().slice(0, 200);
       const message = `HTTP ${response.status}${snippet ? `: ${snippet}` : ""}`;
+      if (response.status === 403 || /access denied/i.test(message)) {
+        tfrWfsAccessDeniedUntil = Date.now() + TFR_WFS_ACCESS_DENIED_COOLDOWN_MS;
+      }
       attempts.push({ url, ok: false, status: response.status, error: message });
       return { data: null, error: message, attempts };
     }

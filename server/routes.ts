@@ -21286,6 +21286,74 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     return lines;
   };
 
+  const buildProviderHistoryChanges = ({
+    previousSnapshot,
+    nextSnapshot,
+  }: {
+    previousSnapshot?: Record<string, unknown> | null;
+    nextSnapshot?: Record<string, unknown> | null;
+  }) => {
+    const lines: string[] = [];
+    const previous = previousSnapshot || {};
+    const next = nextSnapshot || {};
+    const previousRoute = getProviderSnapshotRecord(previous.route);
+    const nextRoute = getProviderSnapshotRecord(next.route);
+    const addLine = (line: string | null | undefined) => addUniqueNotificationLine(lines, line);
+    const formatArrow = (before: unknown, after: unknown) => {
+      const from = normalizeNotificationValue(before) || "blank";
+      const to = normalizeNotificationValue(after) || "blank";
+      return `${from} -> ${to}`;
+    };
+
+    const previousRouteText = normalizeNotificationValue(previousRoute.providerRoute);
+    const nextRouteText = normalizeNotificationValue(nextRoute.providerRoute);
+    if (nextRouteText && previousRouteText && nextRouteText !== previousRouteText) {
+      addLine(`Flight Service changed route: ${previousRouteText} -> ${nextRouteText}`);
+    } else if (nextRouteText && Boolean(nextRoute.changedByProvider)) {
+      addLine(`Flight Service returned a modified route: ${formatArrow(nextRoute.normalizedTransmittedRoute, nextRouteText)}`);
+    }
+
+    const previousArtcc = normalizeNotificationValue(previous.artccState);
+    const nextArtcc = normalizeNotificationValue(next.artccState);
+    if (nextArtcc && previousArtcc && nextArtcc !== previousArtcc) {
+      addLine(`ARTCC state changed: ${formatArrow(previousArtcc, nextArtcc)}`);
+    } else if (nextArtcc && !previousArtcc) {
+      addLine(`ARTCC state received: ${nextArtcc}`);
+    }
+
+    const previousFlightState = normalizeNotificationValue(previous.providerLifecycleStatus || previous.providerStatus);
+    const nextFlightState = normalizeNotificationValue(next.providerLifecycleStatus || next.providerStatus);
+    if (nextFlightState && previousFlightState && nextFlightState !== previousFlightState) {
+      addLine(`Flight state changed: ${formatArrow(previousFlightState, nextFlightState)}`);
+    } else if (nextFlightState && !previousFlightState) {
+      addLine(`Flight state received: ${nextFlightState}`);
+    }
+
+    const previousVersion = normalizeNotificationValue(previous.versionStamp);
+    const nextVersion = normalizeNotificationValue(next.versionStamp);
+    if (nextVersion && previousVersion && nextVersion !== previousVersion) {
+      addLine(`Provider version updated: ${formatArrow(previousVersion, nextVersion)}`);
+    }
+
+    const previousNotices = new Set((Array.isArray(previous.notices) ? previous.notices : []).map((notice) => String(notice)));
+    const addedNotices = (Array.isArray(next.notices) ? next.notices : [])
+      .map((notice) => normalizeNotificationValue(notice))
+      .filter((notice): notice is string => Boolean(notice && !previousNotices.has(notice)));
+    for (const notice of addedNotices.slice(0, 3)) {
+      addLine(`Provider notice received: ${notice}`);
+    }
+
+    return lines.filter((line) => !/\[object Object\]/.test(line));
+  };
+
+  const appendFilingHistoryEntry = (existingHistory: unknown, entry: Record<string, unknown> | null) => {
+    const history = Array.isArray(existingHistory) ? existingHistory as Array<Record<string, unknown>> : [];
+    if (!entry) return history;
+    const nextId = String(entry.id || "").trim();
+    if (nextId && history.some((item) => String(item?.id || "").trim() === nextId)) return history;
+    return [...history, entry];
+  };
+
   const buildFlightPlanNotificationMessage = ({
     plan,
     previousSnapshot,
@@ -21742,6 +21810,31 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             previousSnapshot: previousProviderSnapshot,
             nextSnapshot: syncedSnapshot,
           });
+          const providerHistoryChanges = buildProviderHistoryChanges({
+            previousSnapshot: previousProviderSnapshot,
+            nextSnapshot: syncedSnapshot,
+          });
+          const providerHistoryVersion = String(syncedSnapshot.versionStamp || providerReviewSnapshot.versionStamp || flightVersionStamp || "").trim();
+          const providerHistoryEntry = providerHistoryChanges.length > 0
+            ? {
+              id: buildFilingEventId("webhook-history", flightIdentifier, "provider_changes_detected", providerHistoryVersion || pushReceivedAt),
+              action: "flight_service",
+              stagedAt: new Date().toISOString(),
+              live: true,
+              message: "Flight Service pushed provider changes for this flight plan.",
+              providerPlanId: flightIdentifier,
+              providerVersionStamp: providerHistoryVersion || null,
+              changeSummary: {
+                providerChanges: providerHistoryChanges,
+              },
+              raw: {
+                notificationType,
+                changeType,
+                alertType,
+                versionStamp: providerHistoryVersion || null,
+              },
+            }
+            : null;
           syncedNotificationMessage = sanitizeNotificationMessage(buildFlightPlanNotificationMessage({
             plan: syncedPlan || matchedPlan,
             previousSnapshot: previousProviderSnapshot,
@@ -21775,6 +21868,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             filingProviderMessages: appendPlanProviderMessages(
               (syncedPlan as Record<string, unknown>)?.filingProviderMessages,
               [providerMessage, providerChangeSummaryMessage].filter(Boolean) as FilingProviderMessage[],
+            ) as any,
+            filingActionHistory: appendFilingHistoryEntry(
+              (syncedPlan as Record<string, unknown>)?.filingActionHistory,
+              providerHistoryEntry,
             ) as any,
             filingProviderSnapshot: {
               ...syncedSnapshot,

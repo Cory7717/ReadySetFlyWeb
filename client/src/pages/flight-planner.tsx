@@ -601,6 +601,35 @@ const formatFilingProviderDisplayName = (provider?: string | null) => {
     .join(" ");
 };
 
+const formatFilingHistoryMessage = (value: unknown) =>
+  String(value || "")
+    .replace(/Leidos Flight Service/g, "FAA Flight Service")
+    .replace(/Leidos/g, "Flight Service")
+    .replace(/\[object Object\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const formatFilingHistoryActionLabel = (value: unknown) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "flight_service" || normalized === "provider_update" || normalized === "webhook") return "Flight Service";
+  return normalized || "Unknown action";
+};
+
+const getFilingHistoryChangeSections = (entry: any) => {
+  const summary = entry?.changeSummary && typeof entry.changeSummary === "object" && !Array.isArray(entry.changeSummary)
+    ? entry.changeSummary as Record<string, unknown>
+    : {};
+  const asLines = (value: unknown) =>
+    (Array.isArray(value) ? value : [])
+      .map((line) => formatFilingHistoryMessage(line))
+      .filter(Boolean);
+  return [
+    { title: "Changes submitted", lines: asLines(summary.pilotChanges) },
+    { title: "RSF processing", lines: asLines(summary.rsfProcessingChanges) },
+    { title: "Flight Service", lines: asLines(summary.providerChanges) },
+  ].filter((section) => section.lines.length > 0);
+};
+
 const getPlannerAircraftTypeValue = ({
   manualAircraftType,
   selectedProfile,
@@ -9692,26 +9721,48 @@ export default function FlightPlanner() {
                       {[...plan.filingActionHistory]
                         .slice()
                         .reverse()
-                        .map((entry: any, index: number) => (
-                          <div key={`${entry?.action || "entry"}-${entry?.stagedAt || index}`} className="rounded-[0.95rem] border border-[#5d6f85]/18 bg-[#0f141a]/94 p-3 shadow-[0_14px_28px_-24px_rgba(0,0,0,0.88)]">
+                        .map((entry: any, index: number) => {
+                          const changeSections = getFilingHistoryChangeSections(entry);
+                          const historyMessage = formatFilingHistoryMessage(entry?.message);
+                          const actionLabel = formatFilingHistoryActionLabel(entry?.action);
+                          return (
+                          <div key={`${entry?.id || entry?.action || "entry"}-${entry?.stagedAt || index}`} className="rounded-[0.95rem] border border-[#5d6f85]/18 bg-[#0f141a]/94 p-3 shadow-[0_14px_28px_-24px_rgba(0,0,0,0.88)]">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="font-medium capitalize">{String(entry?.action || "Unknown action")}</div>
+                              <div className="font-medium capitalize">{actionLabel}</div>
                               <div className="text-xs text-muted-foreground">
                                 {entry?.stagedAt ? new Date(entry.stagedAt).toLocaleString() : "Unknown time"}
                               </div>
                             </div>
-                            {entry?.message && (
-                              <div className="mt-1 text-sm text-muted-foreground">{String(entry.message)}</div>
+                            {historyMessage && (
+                              <div className="mt-1 text-sm text-muted-foreground">{historyMessage}</div>
+                            )}
+                            {changeSections.length > 0 && (
+                              <div className="mt-3 space-y-3">
+                                {changeSections.map((section) => (
+                                  <div key={section.title}>
+                                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#A9BBCD]">{section.title}</div>
+                                    <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                                      {section.lines.map((line) => (
+                                        <li key={line}>{line}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ))}
+                              </div>
                             )}
                             {Array.isArray(entry?.warnings) && entry.warnings.length > 0 && (
-                              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-                                {entry.warnings.map((warning: string) => (
-                                  <li key={warning}>{warning}</li>
-                                ))}
-                              </ul>
+                              <div className="mt-3">
+                                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#A9BBCD]">Warnings</div>
+                                <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                                  {entry.warnings.map((warning: string) => (
+                                    <li key={warning}>{formatFilingHistoryMessage(warning)}</li>
+                                  ))}
+                                </ul>
+                              </div>
                             )}
                           </div>
-                        ))}
+                          );
+                        })}
                     </div>
                   </div>
                 )}

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Bell, CheckCircle2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { sanitizeNotificationMessage } from "@shared/provider-notification-format";
 
 type UserNotification = {
   id: string;
@@ -76,7 +77,9 @@ export default function NotificationsPage() {
                       {formatDisplayDate(notification.createdAt || null)}
                     </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">{notification.message}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {sanitizeNotificationMessage(notification.message) || "Flight Service pushed an update for this flight plan."}
+                  </p>
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                     {!isFlightPlanNotification(notification.type) && notification.referenceDate && (
                       <div>Due: {formatDisplayDate(notification.referenceDate)}</div>

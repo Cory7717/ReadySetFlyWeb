@@ -71,6 +71,7 @@ import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import { analyzeFiledRoute } from "@shared/flight-plan-route";
 import { ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE, canCreateAnotherActiveFlightPlan } from "@shared/flight-plan-access";
 import { isValidZzzzActualLocation } from "@shared/zzzz-location";
+import { formatArtccInfo, formatProviderNotificationValue, sanitizeNotificationMessage } from "@shared/provider-notification-format";
 import {
   buildFilingEventId,
   buildOtherInfoWithDof,
@@ -21182,7 +21183,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   };
 
   const normalizeNotificationValue = (value: unknown) => {
-    const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+    const normalized = formatProviderNotificationValue(value).replace(/\s+/g, " ").trim();
     return normalized || null;
   };
 
@@ -21296,7 +21297,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     const providerFlightState = normalizeNotificationValue(push.flightState);
     const expectedRoute = normalizeNotificationValue(push.expectedRoute);
     const artccState = normalizeNotificationValue(push.artccState);
-    const artccInfo = normalizeNotificationValue(push.artccInfo);
+    const artccInfo = formatArtccInfo(push.artccInfo);
     const changeType = normalizeNotificationValue(push.changeType || push.alertType);
 
     if (changeType && !/^flight[_\s-]*(change|alert)$/i.test(changeType)) {
@@ -21305,7 +21306,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     if (providerFlightState) addUniqueNotificationLine(lines, `Provider flight state: ${providerFlightState}.`);
     if (expectedRoute) addUniqueNotificationLine(lines, `Expected route from provider: ${expectedRoute}.`);
     if (artccState) addUniqueNotificationLine(lines, `ARTCC state: ${artccState}.`);
-    if (artccInfo) addUniqueNotificationLine(lines, `ARTCC info: ${artccInfo}.`);
+    if (artccInfo) addUniqueNotificationLine(lines, `ARTCC: ${artccInfo}.`);
 
     for (const line of describeProviderSnapshotChanges({ previousSnapshot, nextSnapshot })) {
       addUniqueNotificationLine(lines, line);
@@ -21324,7 +21325,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       addUniqueNotificationLine(lines, `Flight Service pushed an update for ${planLabel}. RSF refreshed the provider record, but the push did not identify a specific changed field.`);
     }
 
-    return lines.slice(0, 4).join(" ");
+    return sanitizeNotificationMessage(lines.slice(0, 4).join(" "));
   };
 
   const addProviderStateMismatchNotice = (plan: any, snapshot: Record<string, unknown>, forceNotice?: string | null) => {
@@ -21623,6 +21624,23 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           artccInfo,
           flightVersionStamp,
         };
+        console.info(JSON.stringify({
+          event: "provider_update_notification_context",
+          timestamp: new Date().toISOString(),
+          flightIdentifier,
+          notificationType,
+          artccInfoRaw: (() => {
+            try {
+              return JSON.stringify(artccInfo);
+            } catch {
+              return null;
+            }
+          })(),
+          artccInfoFormatted: formatArtccInfo(artccInfo) || null,
+          hasExpectedRoute: Boolean(expectedRoute),
+          hasFlightState: Boolean(flightState),
+          hasArtccState: Boolean(artccState),
+        }));
         const providerMessageDetails = buildFlightPlanNotificationMessage({
           plan: matchedPlan,
           previousSnapshot: previousProviderSnapshot,
@@ -21704,14 +21722,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             previousSnapshot: previousProviderSnapshot,
             nextSnapshot: syncedSnapshot,
           });
-          syncedNotificationMessage = buildFlightPlanNotificationMessage({
+          syncedNotificationMessage = sanitizeNotificationMessage(buildFlightPlanNotificationMessage({
             plan: syncedPlan || matchedPlan,
             previousSnapshot: previousProviderSnapshot,
             nextSnapshot: syncedSnapshot,
             pushFields: pushContext,
             providerMessages: syncResult.providerMessages,
             fallback: providerMessageDetails,
-          });
+          }));
           const providerChangeSummaryMessage: FilingProviderMessage | null = syncedNotificationMessage
             ? {
               id: buildFilingEventId("webhook", flightIdentifier, "provider_changes_detected", syncedNotificationMessage, pushReceivedAt),

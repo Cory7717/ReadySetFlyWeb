@@ -1,5 +1,6 @@
 import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 function SummaryTile({ label, value }: { label: string; value: string }) {
@@ -43,12 +44,18 @@ function SupportAction({
 }
 
 export default function HelpSupportScreen({ navigation }: any) {
+  const appVersion = Constants.expoConfig?.version || '1.0.1';
+
   const handleOpenPrivacyPolicy = () => {
     Linking.openURL('https://readysetfly.us/privacy-policy');
   };
 
   const handleOpenTerms = () => {
     Linking.openURL('https://readysetfly.us/terms-of-service');
+  };
+
+  const handleOpenWebsite = () => {
+    Linking.openURL('https://readysetfly.us');
   };
 
   return (
@@ -99,7 +106,21 @@ export default function HelpSupportScreen({ navigation }: any) {
             subtitle="Setup guidance for receiver-backed cockpit features."
             onPress={() => navigation.navigate('ReceiverHelp')}
           />
+          <SupportAction
+            icon="globe-outline"
+            title="Ready Set Fly website"
+            subtitle="Open readysetfly.us for web planning, account tools, and marketplace access."
+            onPress={handleOpenWebsite}
+            external
+          />
         </View>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>App information</Text>
+        <Text style={styles.sectionSubtitle}>
+          Ready Set Fly mobile app version {appVersion}. Android is available on Google Play; iPhone version is in development.
+        </Text>
       </View>
 
       <View style={styles.sectionCard}>

@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import { sanitizeProviderText } from '../utils/providerFormatting';
 
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
@@ -82,6 +83,14 @@ export default function NotificationsScreen() {
 
   useEffect(() => {
     loadData();
+  }, [isAuthenticated, isPro]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const timer = setInterval(() => {
+      void loadData();
+    }, 15000);
+    return () => clearInterval(timer);
   }, [isAuthenticated, isPro]);
 
   const handleOpenSettings = async () => {
@@ -211,14 +220,16 @@ export default function NotificationsScreen() {
           notifications.map((notification) => (
             <View key={notification.id} style={styles.notificationCard}>
               <View style={styles.notificationHeader}>
-                <Text style={styles.notificationTitle}>{notification.title}</Text>
+                <Text style={styles.notificationTitle}>{sanitizeProviderText(notification.title) || 'Notification'}</Text>
                 <Text style={styles.notificationDate}>
                   {notification.createdAt
                     ? new Date(notification.createdAt).toLocaleDateString()
                     : '—'}
                 </Text>
               </View>
-              <Text style={styles.notificationBody}>{notification.message}</Text>
+              <Text style={styles.notificationBody}>
+                {sanitizeProviderText(notification.message) || 'Notification update received.'}
+              </Text>
               <View style={styles.notificationActions}>
                 {notification.referenceDate ? (
                   <Text style={styles.notificationMeta}>

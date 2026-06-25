@@ -91,6 +91,13 @@ import {
 import FormDateTimeField from '../components/FormDateTimeField';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { diagnosticsEnabled, logDiagnostic, warnDiagnostic } from '../utils/diagnostics';
+import {
+  formatProviderName,
+  formatProviderMessage,
+  formatFilingActionLabel,
+  getFilingHistorySections,
+  sanitizeProviderText,
+} from '../utils/providerFormatting';
 
 type AirportMeta = {
   icao: string;
@@ -137,6 +144,8 @@ type AircraftProfile = {
 type FilingDraftState = {
   flightRules: 'VFR' | 'IFR' | 'DVFR';
   aircraftId: string;
+  aircraftType: string;
+  actualAircraftType: string;
   equipment: string;
   soulsOnBoard: string;
   aircraftColor: string;
@@ -148,6 +157,15 @@ type FilingDraftState = {
   typeOfFlight: string;
   surveillanceEquipment: string;
   otherInfo: string;
+  planningReferenceDepartureAirport: string;
+  planningReferenceDestinationAirport: string;
+  planningReferenceAlternateAirport: string;
+  actualDepartureLocation: string;
+  actualDestinationLocation: string;
+  actualAlternateLocation: string;
+  departureName: string;
+  destinationName: string;
+  alternateName: string;
 };
 
 type AircraftPerformanceState = {
@@ -266,6 +284,14 @@ const getProviderSnapshot = (plan: FlightPlan | null | undefined) => {
   return snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
     ? snapshot as Record<string, any>
     : {};
+};
+
+const hasPendingProviderReview = (plan: FlightPlan | null | undefined) =>
+  getProviderSnapshot(plan).providerPendingReview === true;
+
+const formatProviderState = (value: unknown) => {
+  const text = sanitizeProviderText(value).toUpperCase();
+  return text || '-';
 };
 
 const getProviderActionAvailability = (plan: FlightPlan | null | undefined) => {
@@ -1682,6 +1708,8 @@ export default function FlightPlannerScreen() {
   const [filingDraft, setFilingDraft] = useState<FilingDraftState>({
     flightRules: 'VFR',
     aircraftId: '',
+    aircraftType: '',
+    actualAircraftType: '',
     equipment: 'S',
     soulsOnBoard: '1',
     aircraftColor: '',
@@ -1693,6 +1721,15 @@ export default function FlightPlannerScreen() {
     typeOfFlight: 'G',
     surveillanceEquipment: 'N',
     otherInfo: '',
+    planningReferenceDepartureAirport: '',
+    planningReferenceDestinationAirport: '',
+    planningReferenceAlternateAirport: '',
+    actualDepartureLocation: '',
+    actualDestinationLocation: '',
+    actualAlternateLocation: '',
+    departureName: '',
+    destinationName: '',
+    alternateName: '',
   });
   const [diversionCandidates, setDiversionCandidates] = useState<NearbyDiversionAirport[]>([]);
   const [diversionLoading, setDiversionLoading] = useState(false);
@@ -6497,9 +6534,13 @@ export default function FlightPlannerScreen() {
   const buildFlightPlanPayload = () => {
     const dep = departure.trim().toUpperCase();
     const dest = destination.trim().toUpperCase();
+    const alt = alternate.trim().toUpperCase();
     const routeText = activeFiledRoute || null;
     const selectedTypeLabel = selectedType ? `${selectedType.make || ''} ${selectedType.model || ''}`.trim() : '';
-    const aircraftType = selectedType?.icaoType || selectedTypeLabel || activeAircraftLabel;
+    const aircraftType = filingDraft.aircraftType.trim().toUpperCase() === 'ZZZZ'
+      ? 'ZZZZ'
+      : selectedType?.icaoType || selectedTypeLabel || activeAircraftLabel;
+    const actualAircraftType = filingDraft.actualAircraftType.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     const onboardGallons = Number(fuelOnBoard);
     const enduranceMinutes = Number.isFinite(onboardGallons) && onboardGallons > 0 && burn > 0
       ? (onboardGallons / burn) * 60
@@ -6509,7 +6550,7 @@ export default function FlightPlannerScreen() {
       departure: dep,
       destination: dest,
       route: routeText,
-      alternate: alternate.trim().toUpperCase() || null,
+      alternate: alt || null,
       plannedDepartureAt: plannedDepartureUtc ? plannedDepartureUtc.toISOString() : null,
       plannedArrivalAt: plannedArrivalUtc ? plannedArrivalUtc.toISOString() : null,
       aircraftType: aircraftType || null,
@@ -6528,6 +6569,9 @@ export default function FlightPlannerScreen() {
       filingTypeOfFlight: filingDraft.typeOfFlight.trim() || null,
       filingSurveillanceEquipment: filingDraft.surveillanceEquipment.trim() || null,
       filingOtherInfo: filingDraft.otherInfo.trim().toUpperCase() || null,
+      filingDepartureName: dep === 'ZZZZ' ? filingDraft.departureName.trim() || null : null,
+      filingDestinationName: dest === 'ZZZZ' ? filingDraft.destinationName.trim() || null : null,
+      filingAlternateName: alt === 'ZZZZ' ? filingDraft.alternateName.trim() || null : null,
       filingTrueAirspeedKtas: Math.round(cruise) || null,
       filingPlannedAltitudeFt: plannedAltitudeValue ? Math.round(plannedAltitudeValue) : null,
       filingEstimatedEnrouteMinutes: eteMinutes ? Math.round(eteMinutes) : null,
@@ -6537,9 +6581,39 @@ export default function FlightPlannerScreen() {
         departureTimeZone: resolvedDepartureTimeZone,
         destinationTimeZone: resolvedDestinationTimeZone,
         routeMode,
+        actualAircraftType: aircraftType === 'ZZZZ' ? actualAircraftType : undefined,
+        planningReferenceDepartureAirport: dep === 'ZZZZ' ? filingDraft.planningReferenceDepartureAirport.trim().toUpperCase() : undefined,
+        planningReferenceDestinationAirport: dest === 'ZZZZ' ? filingDraft.planningReferenceDestinationAirport.trim().toUpperCase() : undefined,
+        planningReferenceAlternateAirport: alt === 'ZZZZ' ? filingDraft.planningReferenceAlternateAirport.trim().toUpperCase() : undefined,
+        actualDepartureLocation: dep === 'ZZZZ' ? filingDraft.actualDepartureLocation.trim().toUpperCase() : undefined,
+        actualDestinationLocation: dest === 'ZZZZ' ? filingDraft.actualDestinationLocation.trim().toUpperCase() : undefined,
+        actualAlternateLocation: alt === 'ZZZZ' ? filingDraft.actualAlternateLocation.trim().toUpperCase() : undefined,
       },
       notes: notes.trim() || null,
     };
+  };
+
+  const getMobileFilingPreflightErrors = () => {
+    const dep = departure.trim().toUpperCase();
+    const dest = destination.trim().toUpperCase();
+    const alt = alternate.trim().toUpperCase();
+    const errors: string[] = [];
+    if (filingDraft.aircraftType.trim().toUpperCase() === 'ZZZZ' && !filingDraft.actualAircraftType.trim()) {
+      errors.push('Actual aircraft type is required when Aircraft Type is ZZZZ.');
+    }
+    if (dep === 'ZZZZ') {
+      if (!filingDraft.planningReferenceDepartureAirport.trim()) errors.push('ZZZZ departure requires a planning reference airport.');
+      if (!filingDraft.actualDepartureLocation.trim()) errors.push('ZZZZ departure requires the actual departure location.');
+    }
+    if (dest === 'ZZZZ') {
+      if (!filingDraft.planningReferenceDestinationAirport.trim()) errors.push('ZZZZ destination requires a planning reference airport.');
+      if (!filingDraft.actualDestinationLocation.trim()) errors.push('ZZZZ destination requires the actual destination location.');
+    }
+    if (alt === 'ZZZZ') {
+      if (!filingDraft.planningReferenceAlternateAirport.trim()) errors.push('ZZZZ alternate requires a planning reference airport.');
+      if (!filingDraft.actualAlternateLocation.trim()) errors.push('ZZZZ alternate requires the actual alternate location.');
+    }
+    return errors;
   };
 
   const saveCurrentFlightPlan = async () => {
@@ -6555,7 +6629,7 @@ export default function FlightPlannerScreen() {
         : await api.post<FlightPlan>('/api/flight-plans', payload);
       setSavedPlans((current) => mergeSavedPlan(current, res.data));
       setActiveSavedPlanId(res.data.id);
-      Alert.alert('Flight plan saved', 'This plan is ready for Leidos lifecycle actions.');
+      Alert.alert('Flight plan saved', 'This plan is ready for FAA Flight Service lifecycle actions.');
       return res.data;
     } catch (error: any) {
       Alert.alert('Save failed', error?.response?.data?.error || 'Unable to save flight plan.');
@@ -6572,6 +6646,13 @@ export default function FlightPlannerScreen() {
     }
     setFilingBusy(action);
     try {
+      if (action === 'file' || action === 'amend') {
+        const preflightErrors = getMobileFilingPreflightErrors();
+        if (preflightErrors.length > 0) {
+          Alert.alert('Flight plan needs details', preflightErrors.join('\n'));
+          return;
+        }
+      }
       const targetPlan = plan || (activeSavedPlanId ? savedPlans.find((entry) => entry.id === activeSavedPlanId) : null) || await saveCurrentFlightPlan();
       if (!targetPlan) return;
       if (action !== 'file' && !canSubmitProviderAction(targetPlan, action)) {
@@ -6579,7 +6660,7 @@ export default function FlightPlannerScreen() {
         Alert.alert(
           'Refresh provider sync',
           provider.providerStatusKnown
-            ? `Leidos currently reports ${provider.lifecycle}. ${action.toUpperCase()} is not available.`
+            ? `FAA Flight Service currently reports ${provider.lifecycle}. ${action.toUpperCase()} is not available.`
             : provider.reason || 'Provider state is unknown. Refresh provider sync before taking this action.',
         );
         return;
@@ -6589,14 +6670,14 @@ export default function FlightPlannerScreen() {
         setSavedPlans((current) => mergeSavedPlan(current, res.data.plan));
         setActiveSavedPlanId(res.data.plan.id);
       }
-      Alert.alert(action === 'file' ? 'Flight plan filed' : 'Leidos action submitted', res.data?.message || 'Provider request accepted.');
+      Alert.alert(action === 'file' ? 'Flight plan filed' : 'Flight Service action submitted', sanitizeProviderText(res.data?.message) || 'Provider request accepted.');
     } catch (error: any) {
       if (error?.response?.data?.plan) {
         setSavedPlans((current) => mergeSavedPlan(current, error.response.data.plan));
       } else {
         void loadSavedPlans();
       }
-      Alert.alert('Leidos action failed', error?.response?.data?.error || 'Unable to submit this provider action.');
+      Alert.alert('Flight Service action failed', sanitizeProviderText(error?.response?.data?.error) || 'Unable to submit this provider action.');
     } finally {
       setFilingBusy(null);
     }
@@ -6612,19 +6693,19 @@ export default function FlightPlannerScreen() {
         setSavedPlans((current) => mergeSavedPlan(current, res.data.plan));
         if (notify) {
           Alert.alert(
-            nextProviderState !== previousProviderState ? 'Leidos update received' : 'Provider sync checked',
-            res.data?.message || 'Provider sync refreshed.',
+            nextProviderState !== previousProviderState ? 'Flight Service update received' : 'Provider sync checked',
+            sanitizeProviderText(res.data?.message) || 'Provider sync refreshed.',
           );
         }
       }
     } catch (error: any) {
-      if (notify) Alert.alert('Provider sync failed', error?.response?.data?.error || 'Unable to refresh Leidos sync.');
+      if (notify) Alert.alert('Provider sync failed', sanitizeProviderText(error?.response?.data?.error) || 'Unable to refresh provider sync.');
     }
   };
 
   const deleteDraftPlan = async (plan: FlightPlan) => {
     if (!canDeleteLocalDraftPlan(plan)) {
-      Alert.alert('Cannot delete filed plan', 'Filed or provider-synced flight plans must be closed or cancelled through Leidos.');
+      Alert.alert('Cannot delete filed plan', 'Filed or provider-synced flight plans must be closed or cancelled through FAA Flight Service.');
       return;
     }
     try {
@@ -6640,6 +6721,9 @@ export default function FlightPlannerScreen() {
   const loadSavedPlanIntoPlanner = (plan: FlightPlan) => {
     const depZone = getPlanTimeZone(plan, 'departureTimeZone', resolvedDepartureTimeZone);
     const destZone = getPlanTimeZone(plan, 'destinationTimeZone', resolvedDestinationTimeZone);
+    const savedPlannerState = (plan as any).plannerState && typeof (plan as any).plannerState === 'object' && !Array.isArray((plan as any).plannerState)
+      ? (plan as any).plannerState as Record<string, any>
+      : {};
     setActiveSavedPlanId(plan.id);
     setDeparture(plan.departure || '');
     setDestination(plan.destination || '');
@@ -6656,6 +6740,8 @@ export default function FlightPlannerScreen() {
       ...current,
       flightRules: (plan.filingFlightRules as FilingDraftState['flightRules']) || current.flightRules,
       aircraftId: plan.tailNumber || current.aircraftId,
+      aircraftType: String(plan.aircraftType || '').trim().toUpperCase() === 'ZZZZ' ? 'ZZZZ' : '',
+      actualAircraftType: String(savedPlannerState.actualAircraftType || current.actualAircraftType || ''),
       equipment: plan.filingEquipment || current.equipment,
       soulsOnBoard: plan.filingSoulsOnBoard || current.soulsOnBoard,
       aircraftColor: plan.filingAircraftColor || current.aircraftColor,
@@ -6667,6 +6753,15 @@ export default function FlightPlannerScreen() {
       typeOfFlight: plan.filingTypeOfFlight || current.typeOfFlight,
       surveillanceEquipment: plan.filingSurveillanceEquipment || current.surveillanceEquipment,
       otherInfo: plan.filingOtherInfo || current.otherInfo,
+      planningReferenceDepartureAirport: String(savedPlannerState.planningReferenceDepartureAirport || current.planningReferenceDepartureAirport || ''),
+      planningReferenceDestinationAirport: String(savedPlannerState.planningReferenceDestinationAirport || current.planningReferenceDestinationAirport || ''),
+      planningReferenceAlternateAirport: String(savedPlannerState.planningReferenceAlternateAirport || current.planningReferenceAlternateAirport || ''),
+      actualDepartureLocation: String(savedPlannerState.actualDepartureLocation || current.actualDepartureLocation || ''),
+      actualDestinationLocation: String(savedPlannerState.actualDestinationLocation || current.actualDestinationLocation || ''),
+      actualAlternateLocation: String(savedPlannerState.actualAlternateLocation || current.actualAlternateLocation || ''),
+      departureName: String((plan as any).filingDepartureName || current.departureName || ''),
+      destinationName: String((plan as any).filingDestinationName || current.destinationName || ''),
+      alternateName: String((plan as any).filingAlternateName || current.alternateName || ''),
     }));
   };
 
@@ -8784,12 +8879,12 @@ export default function FlightPlannerScreen() {
           </Text>
         </View>
         <Text style={styles.helperText}>
-          Mobile filing uses your authenticated RSF account and the same Leidos provider workflow as web.
+          Mobile filing uses your authenticated RSF account and the same FAA Flight Service workflow as web.
         </Text>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Leidos Filing</Text>
+        <Text style={styles.sectionTitle}>FAA Flight Service Filing</Text>
         <Text style={styles.sectionSubtitle}>Create or sign in to your RSF account to file flight plans.</Text>
         {!isAuthenticated ? (
           <TouchableOpacity style={styles.primaryButton} onPress={() => navigation?.navigate?.('Auth')}>
@@ -8810,6 +8905,34 @@ export default function FlightPlannerScreen() {
             </View>
             <Text style={styles.fieldLabel}>Aircraft ID / Tail</Text>
             <TextInput style={styles.input} value={filingDraft.aircraftId} onChangeText={(value) => setFilingDraft((current) => ({ ...current, aircraftId: value.toUpperCase() }))} placeholder="N123RS" />
+            <Text style={styles.fieldLabel}>Aircraft Type Override</Text>
+            <View style={styles.suggestionRow}>
+              <TouchableOpacity
+                style={[styles.suggestionButton, filingDraft.aircraftType !== 'ZZZZ' && styles.suggestionButtonActive]}
+                onPress={() => setFilingDraft((current) => ({ ...current, aircraftType: '', actualAircraftType: '' }))}
+              >
+                <Text style={styles.suggestionButtonText}>Use selected aircraft</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.suggestionButton, filingDraft.aircraftType === 'ZZZZ' && styles.suggestionButtonActive]}
+                onPress={() => setFilingDraft((current) => ({ ...current, aircraftType: 'ZZZZ' }))}
+              >
+                <Text style={styles.suggestionButtonText}>ZZZZ aircraft type</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.helperText}>Use ZZZZ only if the aircraft type is not listed or not recognized. Do not use ZZZZ for Aircraft ID.</Text>
+            {filingDraft.aircraftType === 'ZZZZ' && (
+              <>
+                <Text style={styles.fieldLabel}>Actual Aircraft Type</Text>
+                <TextInput
+                  style={styles.input}
+                  value={filingDraft.actualAircraftType}
+                  onChangeText={(value) => setFilingDraft((current) => ({ ...current, actualAircraftType: value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))}
+                  placeholder="TBM700"
+                />
+                <Text style={styles.helperText}>FAA Flight Service receives aircraftType ZZZZ and RSF adds TYP/&lt;actual type&gt; to Other Information.</Text>
+              </>
+            )}
             <Text style={styles.fieldLabel}>Aircraft Equipment</Text>
             <TouchableOpacity
               style={styles.dropdownButton}
@@ -8860,6 +8983,34 @@ export default function FlightPlannerScreen() {
             <TextInput style={styles.input} value={filingDraft.aircraftColor} onChangeText={(value) => setFilingDraft((current) => ({ ...current, aircraftColor: value }))} placeholder="White / Blue" />
             <Text style={styles.fieldLabel}>Other ICAO Info</Text>
             <TextInput style={[styles.input, styles.textArea]} value={filingDraft.otherInfo} onChangeText={(value) => setFilingDraft((current) => ({ ...current, otherInfo: value.toUpperCase() }))} placeholder="PBN/... NAV/... DAT/... SUR/..." multiline />
+            {departure.trim().toUpperCase() === 'ZZZZ' && (
+              <View style={styles.zzzzBox}>
+                <Text style={styles.subTitle}>ZZZZ departure</Text>
+                <Text style={styles.helperText}>Enter the nearby planning airport for calculations, then the actual departure location sent to FAA Flight Service.</Text>
+                <TextInput style={styles.input} value={filingDraft.planningReferenceDepartureAirport} onChangeText={(value) => setFilingDraft((current) => ({ ...current, planningReferenceDepartureAirport: value.toUpperCase() }))} placeholder="Planning reference, e.g. KEDC" />
+                <TextInput style={styles.input} value={filingDraft.actualDepartureLocation} onChangeText={(value) => setFilingDraft((current) => ({ ...current, actualDepartureLocation: value.toUpperCase() }))} placeholder="Actual location, e.g. 52TS or 3027N09749W" />
+                <TextInput style={styles.input} value={filingDraft.departureName} onChangeText={(value) => setFilingDraft((current) => ({ ...current, departureName: value }))} placeholder="Description, e.g. Private runway" />
+                <Text style={styles.helperText}>RSF will generate DEP/ in Other Information.</Text>
+              </View>
+            )}
+            {destination.trim().toUpperCase() === 'ZZZZ' && (
+              <View style={styles.zzzzBox}>
+                <Text style={styles.subTitle}>ZZZZ destination</Text>
+                <TextInput style={styles.input} value={filingDraft.planningReferenceDestinationAirport} onChangeText={(value) => setFilingDraft((current) => ({ ...current, planningReferenceDestinationAirport: value.toUpperCase() }))} placeholder="Planning reference, e.g. KSUS" />
+                <TextInput style={styles.input} value={filingDraft.actualDestinationLocation} onChangeText={(value) => setFilingDraft((current) => ({ ...current, actualDestinationLocation: value.toUpperCase() }))} placeholder="Actual location, e.g. 52TS or 3839N09045W" />
+                <TextInput style={styles.input} value={filingDraft.destinationName} onChangeText={(value) => setFilingDraft((current) => ({ ...current, destinationName: value }))} placeholder="Description, e.g. Private runway" />
+                <Text style={styles.helperText}>This actual location is what FAA Flight Service uses for destination/search-and-rescue context.</Text>
+              </View>
+            )}
+            {alternate.trim().toUpperCase() === 'ZZZZ' && (
+              <View style={styles.zzzzBox}>
+                <Text style={styles.subTitle}>ZZZZ alternate</Text>
+                <TextInput style={styles.input} value={filingDraft.planningReferenceAlternateAirport} onChangeText={(value) => setFilingDraft((current) => ({ ...current, planningReferenceAlternateAirport: value.toUpperCase() }))} placeholder="Planning reference, e.g. KBTR" />
+                <TextInput style={styles.input} value={filingDraft.actualAlternateLocation} onChangeText={(value) => setFilingDraft((current) => ({ ...current, actualAlternateLocation: value.toUpperCase() }))} placeholder="Actual location, e.g. 3839N09045W" />
+                <TextInput style={styles.input} value={filingDraft.alternateName} onChangeText={(value) => setFilingDraft((current) => ({ ...current, alternateName: value }))} placeholder="Description, e.g. Private airfield" />
+                <Text style={styles.helperText}>RSF will generate ALTN/ in Other Information.</Text>
+              </View>
+            )}
             <Text style={styles.fieldLabel}>Filing Remarks / ATC Remarks</Text>
             <TextInput style={[styles.input, styles.textArea]} value={filingDraft.remarks} onChangeText={(value) => setFilingDraft((current) => ({ ...current, remarks: value }))} placeholder="ATC remarks required for filing" multiline />
             <View style={styles.suggestionRow}>
@@ -8867,7 +9018,7 @@ export default function FlightPlannerScreen() {
                 <Text style={styles.primaryButtonText}>{filingBusy === 'save' ? 'Saving...' : activeSavedPlanId ? 'Save plan changes' : 'Save flight plan'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => void submitFilingAction('file')} disabled={Boolean(filingBusy)}>
-                <Text style={styles.secondaryButtonText}>{filingBusy === 'file' ? 'Filing...' : 'File with Leidos'}</Text>
+                <Text style={styles.secondaryButtonText}>{filingBusy === 'file' ? 'Filing...' : 'File with Flight Service'}</Text>
               </TouchableOpacity>
             </View>
             {savedPlansLoading ? <ActivityIndicator color={colors.primary} /> : null}
@@ -8879,7 +9030,15 @@ export default function FlightPlannerScreen() {
                   const depTime = formatLocalZulu(plan.plannedDepartureAt, getPlanTimeZone(plan, 'departureTimeZone', resolvedDepartureTimeZone));
                   const arrTime = formatLocalZulu(plan.plannedArrivalAt, getPlanTimeZone(plan, 'destinationTimeZone', resolvedDestinationTimeZone));
                   const beacon = getPlanBeaconCode(plan);
-                  const providerMessage = String(getProviderSnapshot(plan).externalChangeNotice || getProviderActionAvailability(plan).reason || '');
+                  const providerSnapshot = getProviderSnapshot(plan);
+                  const providerRoute = providerSnapshot.route && typeof providerSnapshot.route === 'object' && !Array.isArray(providerSnapshot.route)
+                    ? providerSnapshot.route as Record<string, any>
+                    : {};
+                  const providerMessage = formatProviderMessage(providerSnapshot.externalChangeNotice || getProviderActionAvailability(plan).reason);
+                  const providerName = formatProviderName((plan as any).filingProvider);
+                  const history = Array.isArray((plan as any).filingActionHistory)
+                    ? [...(plan as any).filingActionHistory].slice().reverse().slice(0, 5)
+                    : [];
                   return (
                     <View key={plan.id} style={styles.savedPlanCard}>
                       <TouchableOpacity onPress={() => setExpandedPlanIds((current) => ({ ...current, [plan.id]: !expanded }))}>
@@ -8890,10 +9049,40 @@ export default function FlightPlannerScreen() {
                         <Text style={styles.helperText}>{plan.departure} to {plan.destination} | {plan.tailNumber || 'No aircraft'} | Assigned Squawk {beacon || '-'}</Text>
                         <Text style={styles.helperText}>Departure: {depTime.local} / {depTime.zulu}</Text>
                         <Text style={styles.helperText}>Arrival: {arrTime.local} / {arrTime.zulu}</Text>
+                        <Text style={styles.helperText}>Provider: {providerName} | Filed live: {(plan as any).filingIsLive ? 'Yes' : 'No'}</Text>
+                        {(plan as any).filingProviderPlanId ? <Text style={styles.helperText}>Provider reference: {(plan as any).filingProviderPlanId}</Text> : null}
+                        {(plan as any).filingLastProviderSyncAt ? <Text style={styles.helperText}>Last sync: {new Date((plan as any).filingLastProviderSyncAt).toLocaleString()}</Text> : null}
+                        <Text style={styles.helperText}>Flight state: {formatProviderState(providerSnapshot.providerLifecycleStatus || providerSnapshot.providerStatus)} | ARTCC: {formatProviderState(providerSnapshot.artccState)}</Text>
+                        {providerRoute.providerRoute ? <Text style={styles.helperText}>Effective route: {sanitizeProviderText(providerRoute.providerRoute)}</Text> : null}
+                        {hasPendingProviderReview(plan) ? <Text style={styles.warningText}>Flight Service has changes for review. Accept changes on the web before amending.</Text> : null}
                         {providerMessage ? <Text style={styles.warningText}>{providerMessage}</Text> : null}
                       </TouchableOpacity>
                       {expanded && (
                         <View style={styles.savedPlanActions}>
+                          {history.length > 0 ? (
+                            <View style={styles.historyBox}>
+                              <Text style={styles.subTitle}>Filing History</Text>
+                              {history.map((entry: any, index: number) => {
+                                const sections = getFilingHistorySections(entry);
+                                const message = sanitizeProviderText(entry?.message);
+                                return (
+                                  <View key={`${entry?.id || entry?.action || 'history'}-${entry?.stagedAt || index}`} style={styles.historyEntry}>
+                                    <Text style={styles.historyTitle}>{formatFilingActionLabel(entry?.action)}</Text>
+                                    {entry?.stagedAt ? <Text style={styles.helperText}>{new Date(entry.stagedAt).toLocaleString()}</Text> : null}
+                                    {message ? <Text style={styles.helperText}>{message}</Text> : null}
+                                    {sections.map((section) => (
+                                      <View key={section.title} style={styles.historySection}>
+                                        <Text style={styles.historySectionTitle}>{section.title}</Text>
+                                        {section.lines.map((line) => (
+                                          <Text key={line} style={styles.helperText}>- {line}</Text>
+                                        ))}
+                                      </View>
+                                    ))}
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          ) : null}
                           <TouchableOpacity style={styles.secondaryButton} onPress={() => loadSavedPlanIntoPlanner(plan)}>
                             <Text style={styles.secondaryButtonText}>Edit</Text>
                           </TouchableOpacity>
@@ -11480,6 +11669,11 @@ const styles = StyleSheet.create({
   savedPlanCard: { padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, marginTop: spacing.sm },
   savedPlanTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text, paddingRight: spacing.sm },
   savedPlanActions: { gap: spacing.xs, marginTop: spacing.sm },
+  historyBox: { padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted, gap: spacing.xs },
+  historyEntry: { paddingTop: spacing.xs, borderTopWidth: 1, borderTopColor: colors.border },
+  historyTitle: { fontSize: 12, fontWeight: '800', color: colors.text },
+  historySection: { marginTop: spacing.xs },
+  historySectionTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, color: colors.textSoft, textTransform: 'uppercase' },
   dangerButton: { backgroundColor: 'rgba(239,68,68,0.12)', borderRadius: radius.md, paddingVertical: 13, alignItems: 'center', marginBottom: spacing.sm, borderWidth: 1, borderColor: 'rgba(239,68,68,0.35)' },
   dangerButtonText: { color: '#ef4444', fontWeight: '700' },
   suggestionList: { backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, marginBottom: spacing.sm },
@@ -11494,6 +11688,7 @@ const styles = StyleSheet.create({
   altitudeCard: { marginTop: spacing.sm, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
   altitudeTitle: { fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: 4 },
   altitudeText: { fontSize: 12, color: colors.textMuted },
+  zzzzBox: { marginTop: spacing.sm, marginBottom: spacing.sm, padding: spacing.sm, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
   weatherCard: { backgroundColor: colors.surfaceMuted, padding: spacing.sm, borderRadius: radius.md, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border },
   weatherTitle: { fontSize: 12, color: colors.textMuted },
   weatherValue: { fontSize: 16, fontWeight: '700', color: colors.text, marginTop: spacing.xs },

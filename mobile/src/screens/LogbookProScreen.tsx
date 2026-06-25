@@ -33,7 +33,7 @@ function toDateOnlyValue(value?: string | null) {
 export default function LogbookProScreen({ navigation }: any) {
   const queryClient = useQueryClient();
   const { isAuthenticated, user } = useIsAuthenticated();
-  const [selectedTier, setSelectedTier] = useState<MembershipTier>('pro');
+  const [selectedTier, setSelectedTier] = useState<MembershipTier>('premium');
   const [selectedInterval, setSelectedInterval] = useState<MembershipInterval>('annual');
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<any>(null);

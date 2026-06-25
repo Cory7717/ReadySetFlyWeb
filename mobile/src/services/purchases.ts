@@ -288,11 +288,12 @@ export async function syncMembershipCustomerInfo(customerInfo: CustomerInfo | nu
 
 export function selectOfferingPackage(
   offering: PurchasesOffering | null,
-  tier: 'pro' | 'pro_plus',
+  tier: 'premium' | 'pro' | 'pro_plus',
   interval: 'monthly' | 'annual' | 'biannual',
 ): PurchasesPackage | null {
   if (!offering) return null;
   const normalizedTier = tier.toLowerCase();
+  const legacyTier = tier === 'premium' ? 'pro' : tier;
   const intervalHints =
     interval === 'monthly'
       ? ['monthly', 'month']
@@ -303,9 +304,9 @@ export function selectOfferingPackage(
   const packages = offering.availablePackages || [];
   const exactIdentifiers: Record<'pro' | 'pro_plus', Record<'monthly' | 'annual' | 'biannual', string[]>> = {
     pro: {
-      monthly: ['$rc_monthly', 'pro_monthly'],
-      annual: ['$rc_annual', 'pro_annual'],
-      biannual: ['pro_biannual', 'pro_6month', 'pro_6-month'],
+      monthly: ['$rc_monthly', 'premium_monthly', 'pro_monthly'],
+      annual: ['$rc_annual', 'premium_annual', 'pro_annual'],
+      biannual: ['premium_biannual', 'premium_6month', 'premium_6-month', 'pro_biannual', 'pro_6month', 'pro_6-month'],
     },
     pro_plus: {
       monthly: ['pro_plus_monthly'],
@@ -316,7 +317,7 @@ export function selectOfferingPackage(
 
   const exactMatch = packages.find((pkg) => {
     const identifiers = [`${pkg.identifier}`, `${pkg.product.identifier}`].map((value) => value.toLowerCase());
-    return exactIdentifiers[tier][interval].some((expected) => identifiers.includes(expected.toLowerCase()));
+    return exactIdentifiers[legacyTier][interval].some((expected) => identifiers.includes(expected.toLowerCase()));
   });
   if (exactMatch) return exactMatch;
 
@@ -327,8 +328,8 @@ export function selectOfferingPackage(
 
   if (match) return match;
 
-  if (tier === 'pro' && interval === 'monthly') return offering.monthly ?? null;
-  if (tier === 'pro' && interval === 'annual') return offering.annual ?? null;
+  if ((tier === 'premium' || tier === 'pro') && interval === 'monthly') return offering.monthly ?? null;
+  if ((tier === 'premium' || tier === 'pro') && interval === 'annual') return offering.annual ?? null;
   if (interval === 'biannual') return packages.find((pkg) => `${pkg.identifier}`.toLowerCase().includes('6')) ?? null;
   return null;
 }

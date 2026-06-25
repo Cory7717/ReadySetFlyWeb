@@ -23,7 +23,7 @@ import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
 import { useAuth } from "@/hooks/useAuth";
 import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
-import { GooglePlayBadge } from "@/components/GooglePlayBadge";
+import { AppDownloadBadges } from "@/components/GooglePlayBadge";
 import { clearResumeFlow, getPrimaryResumeFlow, saveResumeFlow, type ResumeFlowRecord } from "@/lib/firstSessionFlow";
 import { extractAtisIdentifier, extractRunwayInUse, parseFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1819,10 +1819,9 @@ export default function Landing() {
                   Explore Tools
                 </Button>
               </div>
-              <GooglePlayBadge
+              <AppDownloadBadges
                 source="landing_hero"
-                className="justify-start sm:w-fit"
-                imageClassName="h-14"
+                className="sm:inline-block"
               />
               <p className="text-sm text-[#9aafcc] leading-relaxed">
                 Pilots are already using RSF to plan, file, and track flights in one place.{" "}

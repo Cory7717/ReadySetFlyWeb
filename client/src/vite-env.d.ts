@@ -2,6 +2,7 @@ interface ImportMetaEnv {
   readonly DEV: boolean;
   readonly BASE_URL: string;
   readonly VITE_API_BASE_URL?: string;
+  readonly VITE_APP_STORE_URL?: string;
   readonly VITE_CESIUM_ION_TOKEN?: string;
   readonly VITE_GPS_PANEL_BASE_URL?: string;
   readonly VITE_SIX_PACK_PANEL_URL?: string;

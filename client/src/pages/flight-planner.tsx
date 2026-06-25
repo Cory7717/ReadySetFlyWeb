@@ -83,7 +83,7 @@ import {
   FilingProviderWorkspace,
   summarizeProviderUpdates,
 } from "@/components/flight-planner/FilingProviderWorkspace";
-import { GooglePlayBadge } from "@/components/GooglePlayBadge";
+import { AppDownloadBadges } from "@/components/GooglePlayBadge";
 import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
 import { PageShell } from "@/components/layout/PageShell";
 import { RsfModeToggle } from "@/components/map/RsfModeToggle";
@@ -6311,11 +6311,15 @@ export default function FlightPlanner() {
               <div className="mt-1.5 text-xs leading-5 text-[#A9BBCD]">
                 Use web for planning. Open the app for tablet ADS-B and ownship tracking.
               </div>
-              <GooglePlayBadge
+              <AppDownloadBadges
                 source="flight_planner_header"
-                className="mt-2 justify-start sm:w-full"
-                imageClassName="h-10"
+                className="mt-2"
+                badgeClassName="sm:w-full"
+                showSupportText={false}
               />
+              <div className="mt-1 text-xs leading-5 text-[#A9BBCD]">
+                Available today on Android. iPhone version coming soon.
+              </div>
             </div>
             <Button
               variant="outline"

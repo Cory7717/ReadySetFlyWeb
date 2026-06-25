@@ -240,7 +240,7 @@ test("ZZZZ airports require actual FAA identifiers or lat/long locations", () =>
   assert.equal(formatDecimalCoordinatesForLeidos(30.45, -97.8167), "3027N09749W");
 });
 
-test("ZZZZ aircraft type requires TYPE details in Other Info", () => {
+test("ZZZZ aircraft type requires TYP details in Other Info", () => {
   const missing = validateFlightPlanForAction(filingPlan({
     aircraftType: "ZZZZ",
   }), "file");
@@ -256,8 +256,9 @@ test("ZZZZ aircraft type requires TYPE details in Other Info", () => {
     },
   }), "file");
   assert.equal(complete.ready, true);
-  assert.equal(buildOtherInfoWithAircraftType("PBN/A1", "TBM9"), "PBN/A1 TYPE/TBM9");
-  assert.equal(buildOtherInfoWithAircraftType("PBN/A1 TYPE/OLD", "tbm9"), "PBN/A1 TYPE/TBM9");
+  assert.equal(buildOtherInfoWithAircraftType("PBN/A1", "TBM9"), "PBN/A1 TYP/TBM9");
+  assert.equal(buildOtherInfoWithAircraftType("PBN/A1 TYPE/OLD", "tbm9"), "PBN/A1 TYP/TBM9");
+  assert.equal(buildOtherInfoWithAircraftType("PBN/A1 TYP/OLD", "TBM700"), "PBN/A1 TYP/TBM700");
   assert.equal(buildOtherInfoWithAircraftType("PBN/A1", "TBM-9"), "PBN/A1");
 });
 

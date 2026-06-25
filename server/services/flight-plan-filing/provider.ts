@@ -867,8 +867,12 @@ export const buildOtherInfoWithAircraftType = (otherInfo: string | null, actualA
   const normalizedType = normalizeActualAircraftTypeForIcao(actualAircraftType);
   let base = String(otherInfo || "").trim();
   if (!normalizedType) return base || null;
-  base = base.replace(/(?:^|\s)TYPE\/[A-Z0-9]+/gi, " ").replace(/\s+/g, " ").trim();
-  return [base, `TYPE/${normalizedType}`].filter(Boolean).join(" ").replace(/\s+/g, " ").trim() || null;
+  base = base
+    .replace(/(?:^|\s)TYPE\/[A-Z0-9]+/gi, " ")
+    .replace(/(?:^|\s)TYP\/[A-Z0-9]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return [base, `TYP/${normalizedType}`].filter(Boolean).join(" ").replace(/\s+/g, " ").trim() || null;
 };
 
 const getLeidosAircraftTypeCode = (plan: FlightPlan) => {
@@ -1306,7 +1310,7 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
         planId: plan.id,
         aircraftType: "ZZZZ",
         actualAircraftType,
-        generatedOtherInfoType: actualAircraftType ? `TYPE/${actualAircraftType}` : null,
+        generatedOtherInfoType: actualAircraftType ? `TYP/${actualAircraftType}` : null,
       }));
     }
     if (zzzzLocationCompliance.departure || zzzzLocationCompliance.destination || zzzzLocationCompliance.alternate) {

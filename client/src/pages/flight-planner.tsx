@@ -8497,7 +8497,7 @@ export default function FlightPlanner() {
                       className="font-mono"
                     />
                     <div className="text-xs text-muted-foreground">
-                      RSF will transmit aircraftType ZZZZ and add TYPE/{actualAircraftType || "TBM9"} to ICAO Other Information.
+                      RSF will transmit aircraftType ZZZZ and add TYP/{actualAircraftType || "TBM9"} to ICAO Other Information.
                     </div>
                   </div>
                 )}

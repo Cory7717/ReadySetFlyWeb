@@ -83,6 +83,7 @@ import {
   FilingProviderWorkspace,
   summarizeProviderUpdates,
 } from "@/components/flight-planner/FilingProviderWorkspace";
+import { GooglePlayBadge } from "@/components/GooglePlayBadge";
 import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
 import { PageShell } from "@/components/layout/PageShell";
 import { RsfModeToggle } from "@/components/map/RsfModeToggle";
@@ -4516,19 +4517,6 @@ export default function FlightPlanner() {
       tfrRouteQuery.dataUpdatedAt,
     ]
   );
-  const plannerAppDeepLink = useMemo(() => {
-    const params = new URLSearchParams();
-    const departureCode = form.departure.trim().toUpperCase();
-    const destinationCode = form.destination.trim().toUpperCase();
-    if (departureCode) params.set("departure", departureCode);
-    if (destinationCode) params.set("destination", destinationCode);
-    return `readysetfly://flight-planner${params.toString() ? `?${params.toString()}` : ""}`;
-  }, [form.departure, form.destination]);
-  const openPlannerInApp = useCallback(() => {
-    trackEvent("open_in_app_click", { deepLink: plannerAppDeepLink, source: "flight_planner_header" });
-    if (typeof window === "undefined") return;
-    window.location.href = plannerAppDeepLink;
-  }, [plannerAppDeepLink]);
   const isBriefingStale = latestBriefingUpdatedAtMs > 0 && Date.now() - latestBriefingUpdatedAtMs > 20 * 60 * 1000;
   const briefingUpdatedLabel = latestBriefingUpdatedAtMs
     ? new Date(latestBriefingUpdatedAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -6319,18 +6307,15 @@ export default function FlightPlanner() {
                   <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#A9BBCD]">Native app</div>
                   <div className="truncate text-sm font-semibold text-[#F5F8FC]">In-flight tracking</div>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={openPlannerInApp}
-                  className="h-8 shrink-0 rsf-metal-button-primary"
-                >
-                  Open
-                </Button>
               </div>
               <div className="mt-1.5 text-xs leading-5 text-[#A9BBCD]">
                 Use web for planning. Open the app for tablet ADS-B and ownship tracking.
               </div>
+              <GooglePlayBadge
+                source="flight_planner_header"
+                className="mt-2 justify-start sm:w-full"
+                imageClassName="h-10"
+              />
             </div>
             <Button
               variant="outline"

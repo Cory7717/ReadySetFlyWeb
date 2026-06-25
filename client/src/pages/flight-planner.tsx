@@ -277,6 +277,7 @@ const buildPlannerStateSnapshot = ({
   actualDepartureLocation,
   actualDestinationLocation,
   actualAlternateLocation,
+  actualAircraftType,
   customProfile,
   routeMode,
 }: {
@@ -295,6 +296,7 @@ const buildPlannerStateSnapshot = ({
   actualDepartureLocation?: string | null;
   actualDestinationLocation?: string | null;
   actualAlternateLocation?: string | null;
+  actualAircraftType?: string | null;
   customProfile: {
     name: string;
     cruiseKtasOverride: string;
@@ -319,6 +321,7 @@ const buildPlannerStateSnapshot = ({
   actualDepartureLocation,
   actualDestinationLocation,
   actualAlternateLocation,
+  actualAircraftType,
   customProfile,
   routeMode,
 });
@@ -1907,6 +1910,8 @@ export default function FlightPlanner() {
   const [filingDraft, setFilingDraft] = useState({
     flightRules: "VFR",
     aircraftId: "",
+    aircraftType: "",
+    actualAircraftType: "",
     equipment: "",
     soulsOnBoard: "",
     aircraftColor: "",
@@ -2538,6 +2543,16 @@ export default function FlightPlanner() {
   const actualDepartureLocation = filingDraft.actualDepartureLocation.trim().toUpperCase();
   const actualDestinationLocation = filingDraft.actualDestinationLocation.trim().toUpperCase();
   const actualAlternateLocation = filingDraft.actualAlternateLocation.trim().toUpperCase();
+  const actualAircraftType = filingDraft.actualAircraftType.trim().toUpperCase().replace(/\s+/g, "");
+  const basePlannerAircraftType = getPlannerAircraftTypeValue({
+    manualAircraftType: form.aircraftType,
+    selectedProfile,
+    selectedType,
+    selectedTypeId,
+  });
+  const filingAircraftType = filingDraft.aircraftType.trim().toUpperCase() === "ZZZZ"
+    ? "ZZZZ"
+    : basePlannerAircraftType;
   const planningDepartureCode = filedDepartureCode === "ZZZZ"
     ? planningReferenceDepartureAirport
     : departureResolved.trim().toUpperCase();
@@ -3387,12 +3402,8 @@ export default function FlightPlanner() {
     fuelRequiredGallons: totalFuel ? Number(totalFuel.toFixed(1)) : null,
     fuelOnBoardGallons: fuelAvailableGallons ? Number(fuelAvailableGallons.toFixed(1)) : null,
     aircraftId: filingDraft.aircraftId.trim().toUpperCase() || form.tailNumber.trim().toUpperCase() || null,
-    aircraftType: getPlannerAircraftTypeValue({
-      manualAircraftType: form.aircraftType,
-      selectedProfile,
-      selectedType,
-      selectedTypeId,
-    }),
+    aircraftType: filingAircraftType,
+    actualAircraftType: actualAircraftType || null,
     equipment: filingDraft.equipment.trim() || null,
     soulsOnBoard: filingDraft.soulsOnBoard.trim() || null,
     aircraftColor: filingDraft.aircraftColor.trim() || null,
@@ -4935,6 +4946,8 @@ export default function FlightPlanner() {
     setFilingDraft({
       flightRules: "VFR",
       aircraftId: "",
+      aircraftType: "",
+      actualAircraftType: "",
       equipment: "S/C",
       soulsOnBoard: "1",
       aircraftColor: "",
@@ -5410,12 +5423,7 @@ export default function FlightPlanner() {
           tailNumber: filingDraft.aircraftId.trim().toUpperCase() || form.tailNumber.trim().toUpperCase(),
           fuelOnBoard: form.fuelOnBoard?.trim() ? form.fuelOnBoard.trim() : "",
           route: leidosFiledRoute || null,
-          aircraftType: getPlannerAircraftTypeValue({
-            manualAircraftType: form.aircraftType,
-            selectedProfile,
-            selectedType,
-            selectedTypeId,
-          }),
+          aircraftType: filingAircraftType,
           fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
           filingFlightRules: filingDraft.flightRules,
           filingEquipment: filingDraft.equipment.trim() || null,
@@ -5452,6 +5460,7 @@ export default function FlightPlanner() {
             actualDepartureLocation: actualDepartureLocation || null,
             actualDestinationLocation: actualDestinationLocation || null,
             actualAlternateLocation: actualAlternateLocation || null,
+            actualAircraftType: actualAircraftType || null,
             customProfile,
             routeMode,
           }),
@@ -5505,12 +5514,7 @@ export default function FlightPlanner() {
         tailNumber: filingDraft.aircraftId.trim().toUpperCase() || form.tailNumber.trim().toUpperCase(),
         fuelOnBoard: form.fuelOnBoard?.trim() ? form.fuelOnBoard.trim() : "",
         route: leidosFiledRoute || null,
-        aircraftType: getPlannerAircraftTypeValue({
-          manualAircraftType: form.aircraftType,
-          selectedProfile,
-          selectedType,
-          selectedTypeId,
-        }),
+        aircraftType: filingAircraftType,
         fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
         filingFlightRules: filingDraft.flightRules,
         filingEquipment: filingDraft.equipment.trim() || null,
@@ -5547,6 +5551,7 @@ export default function FlightPlanner() {
           actualDepartureLocation: actualDepartureLocation || null,
           actualDestinationLocation: actualDestinationLocation || null,
           actualAlternateLocation: actualAlternateLocation || null,
+          actualAircraftType: actualAircraftType || null,
           customProfile,
           routeMode,
         }),
@@ -6063,6 +6068,10 @@ export default function FlightPlanner() {
       ...current,
       flightRules: editingPlan.filingFlightRules || current.flightRules,
       aircraftId: editingPlan.tailNumber || current.aircraftId,
+      aircraftType: String(editingPlan.aircraftType || "").trim().toUpperCase() === "ZZZZ" ? "ZZZZ" : "",
+      actualAircraftType: typeof (editingPlan.plannerState as any)?.actualAircraftType === "string"
+        ? String((editingPlan.plannerState as any).actualAircraftType)
+        : current.actualAircraftType,
       equipment: editingPlan.filingEquipment || current.equipment,
       soulsOnBoard: editingPlan.filingSoulsOnBoard || current.soulsOnBoard,
       aircraftColor: editingPlan.filingAircraftColor || current.aircraftColor,
@@ -8456,6 +8465,42 @@ export default function FlightPlanner() {
                     placeholder="Enter aircraft ID / tail number"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Aircraft Type</Label>
+                  <Select
+                    value={filingDraft.aircraftType || "normal"}
+                    onValueChange={(value) => setFilingDraft((current) => ({
+                      ...current,
+                      aircraftType: value === "ZZZZ" ? "ZZZZ" : "",
+                      actualAircraftType: value === "ZZZZ" ? current.actualAircraftType : "",
+                    }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={plannerSelectContentClass}>
+                      <SelectItem value="normal">Use selected aircraft type ({basePlannerAircraftType || "not selected"})</SelectItem>
+                      <SelectItem value="ZZZZ">ZZZZ - enter actual type in Other Info</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="text-xs text-muted-foreground">
+                    Aircraft ID remains the callsign/tail number. Use ZZZZ here only when the aircraft type is not supported by Flight Service.
+                  </div>
+                </div>
+                {filingDraft.aircraftType === "ZZZZ" && (
+                  <div className="space-y-2">
+                    <Label>Actual Aircraft Type <span className="text-amber-400 text-xs">(required)</span></Label>
+                    <Input
+                      value={filingDraft.actualAircraftType}
+                      onChange={(e) => setFilingDraft((current) => ({ ...current, actualAircraftType: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
+                      placeholder="TBM9"
+                      className="font-mono"
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      RSF will transmit aircraftType ZZZZ and add TYPE/{actualAircraftType || "TBM9"} to ICAO Other Information.
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Aircraft Equipment</Label>
                   <Select

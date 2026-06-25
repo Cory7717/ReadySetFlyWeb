@@ -6,7 +6,7 @@ import { formatFlightPlanDepartureTime } from "../../shared/flight-plan-time";
 import { extractFilingProviderPlanId } from "../../shared/flight-plan-filing";
 import { ICAO_OTHER_INFO_VALUE_OPTIONS, buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
 import { formatDecimalCoordinatesForLeidos, normalizeZzzzActualLocation } from "../../shared/zzzz-location";
-import { buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
+import { buildOtherInfoWithAircraftType, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
 
 function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
   return {
@@ -209,12 +209,6 @@ test("filing validation rejects plans without a resolvable departure timezone", 
   assert.ok(result.errors.includes("Departure timezone is required when using ZZZZ without a planning reference airport."));
 });
 
-test("ZZZZ is accepted as the aircraft identifier", () => {
-  const result = validateFlightPlanForAction(filingPlan({ tailNumber: "ZZZZ" }), "file");
-  assert.equal(result.ready, true);
-  assert.equal(result.errors.some((error) => /aircraft id/i.test(error)), false);
-});
-
 test("ZZZZ airports require actual FAA identifiers or lat/long locations", () => {
   const missing = validateFlightPlanForAction(filingPlan({
     departure: "ZZZZ",
@@ -244,6 +238,27 @@ test("ZZZZ airports require actual FAA identifiers or lat/long locations", () =>
   assert.equal(complete.ready, true);
   assert.equal(normalizeZzzzActualLocation("3027N/09749W"), "3027N/09749W");
   assert.equal(formatDecimalCoordinatesForLeidos(30.45, -97.8167), "3027N09749W");
+});
+
+test("ZZZZ aircraft type requires TYPE details in Other Info", () => {
+  const missing = validateFlightPlanForAction(filingPlan({
+    aircraftType: "ZZZZ",
+  }), "file");
+  assert.equal(missing.ready, false);
+  assert.ok(missing.errors.includes("Actual aircraft type is required when Aircraft Type is ZZZZ."));
+
+  const complete = validateFlightPlanForAction(filingPlan({
+    aircraftType: "ZZZZ",
+    plannerState: {
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-06-22T10:00",
+      actualAircraftType: "TBM9",
+    },
+  }), "file");
+  assert.equal(complete.ready, true);
+  assert.equal(buildOtherInfoWithAircraftType("PBN/A1", "TBM9"), "PBN/A1 TYPE/TBM9");
+  assert.equal(buildOtherInfoWithAircraftType("PBN/A1 TYPE/OLD", "tbm9"), "PBN/A1 TYPE/TBM9");
+  assert.equal(buildOtherInfoWithAircraftType("PBN/A1", "TBM-9"), "PBN/A1");
 });
 
 test("filing does not silently default operational ICAO fields", () => {

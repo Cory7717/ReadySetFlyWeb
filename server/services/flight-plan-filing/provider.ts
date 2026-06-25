@@ -854,8 +854,28 @@ const normalizeLeidosAircraftTypeCode = (value?: string | null) => {
   return LEIDOS_AIRCRAFT_TYPE_ALIASES[normalized] || normalized;
 };
 
+export const normalizeActualAircraftTypeForIcao = (value?: string | null) => {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  if (!normalized || !/^[A-Z0-9]{2,8}$/.test(normalized)) return null;
+  return normalized;
+};
+
+export const buildOtherInfoWithAircraftType = (otherInfo: string | null, actualAircraftType?: string | null) => {
+  const normalizedType = normalizeActualAircraftTypeForIcao(actualAircraftType);
+  let base = String(otherInfo || "").trim();
+  if (!normalizedType) return base || null;
+  base = base.replace(/(?:^|\s)TYPE\/[A-Z0-9]+/gi, " ").replace(/\s+/g, " ").trim();
+  return [base, `TYPE/${normalizedType}`].filter(Boolean).join(" ").replace(/\s+/g, " ").trim() || null;
+};
+
 const getLeidosAircraftTypeCode = (plan: FlightPlan) => {
   const plannerState = getPlannerStateRecord(plan);
+  if (String(plan.aircraftType || "").trim().toUpperCase() === "ZZZZ") {
+    return "ZZZZ";
+  }
   const selectedTypeIcao =
     plannerState && typeof plannerState.selectedTypeIcao === "string"
       ? plannerState.selectedTypeIcao.trim().toUpperCase()
@@ -1265,14 +1285,30 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
         }
         : null,
     };
-    const mergedOtherInfo = normalizeLeidosOtherInfoForTransmission(buildZzzzOtherInfoForLeidos(otherInfoResult.otherInfo, {
+    const zzzzMergedOtherInfo = buildZzzzOtherInfoForLeidos(otherInfoResult.otherInfo, {
       departureName: plan.departure?.toUpperCase() === "ZZZZ" ? plan.filingDepartureName : null,
       destinationName: plan.destination?.toUpperCase() === "ZZZZ" ? plan.filingDestinationName : null,
       alternateName: plan.alternate?.toUpperCase() === "ZZZZ" ? plan.filingAlternateName : null,
       departureLocation: zzzzLocationCompliance.departure?.formattedLeidosDepartureLocation || null,
       destinationLocation: zzzzLocationCompliance.destination?.formattedLeidosDestinationLocation || null,
       alternateLocation: zzzzLocationCompliance.alternate?.formattedLeidosAlternateLocation || null,
-    }));
+    });
+    const aircraftTypeCode = getLeidosAircraftTypeCode(plan);
+    const actualAircraftType = normalizeActualAircraftTypeForIcao(getPlannerStateString(plan, "actualAircraftType"));
+    const mergedOtherInfo = normalizeLeidosOtherInfoForTransmission(
+      aircraftTypeCode === "ZZZZ"
+        ? buildOtherInfoWithAircraftType(zzzzMergedOtherInfo, actualAircraftType)
+        : zzzzMergedOtherInfo
+    );
+    if (aircraftTypeCode === "ZZZZ") {
+      console.info(JSON.stringify({
+        event: "leidos_aircraft_type_zzzz_compliance",
+        planId: plan.id,
+        aircraftType: "ZZZZ",
+        actualAircraftType,
+        generatedOtherInfoType: actualAircraftType ? `TYPE/${actualAircraftType}` : null,
+      }));
+    }
     if (zzzzLocationCompliance.departure || zzzzLocationCompliance.destination || zzzzLocationCompliance.alternate) {
       console.info(JSON.stringify({
         event: "leidos_zzzz_location_compliance",
@@ -1835,6 +1871,9 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   }
   if (!plan.tailNumber) errors.push("Aircraft ID / tail number is required.");
   if (!plan.aircraftType) errors.push("Aircraft type is required.");
+  if ((action === "file" || action === "amend") && getLeidosAircraftTypeCode(plan) === "ZZZZ" && !normalizeActualAircraftTypeForIcao(getPlannerStateString(plan, "actualAircraftType"))) {
+    errors.push("Actual aircraft type is required when Aircraft Type is ZZZZ.");
+  }
   if ((action === "file" || action === "amend") && !plan.filingTrueAirspeedKtas) {
     errors.push("Cruise speed is required before sending this filing action to Leidos.");
   }

@@ -62,6 +62,8 @@ import {
   flightPlanFilingProvider,
   getLeidosFlightServiceDiagnostics,
   getLeidosFlightServicePlanDebug,
+  buildOtherInfoWithAircraftType,
+  normalizeActualAircraftTypeForIcao,
   searchLeidosRoute,
   syncLeidosPlanMetadata,
   validateFlightPlanForAction,
@@ -21440,6 +21442,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     fuelOnBoardGallons: z.coerce.number().nullable().optional(),
     aircraftId: z.string().trim().optional().nullable(),
     aircraftType: z.string().trim().optional().nullable(),
+    actualAircraftType: z.string().trim().optional().nullable(),
     equipment: z.string().trim().optional().nullable(),
     soulsOnBoard: z.string().trim().optional().nullable(),
     aircraftColor: z.string().trim().optional().nullable(),
@@ -21832,12 +21835,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         plannedDepartureAt: packet.plannedDepartureUtc,
         operationalTimeZone: packet.departureTimeZone || undefined,
       });
+      const previewOtherInfo = packet.aircraftType?.toUpperCase() === "ZZZZ"
+        ? buildOtherInfoWithAircraftType(dofPreview.otherInfo, packet.actualAircraftType)
+        : dofPreview.otherInfo;
       const errors: string[] = [];
       const warnings: string[] = [];
       if (!packet.departure) errors.push("Departure airport is required.");
       if (!packet.destination) errors.push("Destination airport is required.");
       if (!packet.aircraftId) errors.push("Aircraft ID / tail number is required.");
       if (!packet.aircraftType) errors.push("Aircraft type is required.");
+      if (packet.aircraftType?.toUpperCase() === "ZZZZ" && !normalizeActualAircraftTypeForIcao(packet.actualAircraftType)) {
+        errors.push("Actual aircraft type is required when Aircraft Type is ZZZZ.");
+      }
       if (!packet.pilotName) errors.push("Pilot in command name is required.");
       if (!packet.pilotPhone) errors.push("Pilot phone number is required.");
       if (!packet.aircraftHomeBase) errors.push("Aircraft home base is required.");
@@ -21883,7 +21892,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         flightRules,
         route: routeNormalization.localEnteredRoute,
         normalizedRoute: routeNormalization.normalizedRoute,
-        otherInfo: dofPreview.otherInfo,
+        otherInfo: previewOtherInfo,
         dof: dofPreview.dof,
         dofInjected: dofPreview.injected,
         provider: "flight-service-handoff-staged",

@@ -83,7 +83,6 @@ import {
   FilingProviderWorkspace,
   summarizeProviderUpdates,
 } from "@/components/flight-planner/FilingProviderWorkspace";
-import { OpenInAppBanner } from "@/components/OpenInAppBanner";
 import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
 import { PageShell } from "@/components/layout/PageShell";
 import { RsfModeToggle } from "@/components/map/RsfModeToggle";
@@ -4525,6 +4524,11 @@ export default function FlightPlanner() {
     if (destinationCode) params.set("destination", destinationCode);
     return `readysetfly://flight-planner${params.toString() ? `?${params.toString()}` : ""}`;
   }, [form.departure, form.destination]);
+  const openPlannerInApp = useCallback(() => {
+    trackEvent("open_in_app_click", { deepLink: plannerAppDeepLink, source: "flight_planner_header" });
+    if (typeof window === "undefined") return;
+    window.location.href = plannerAppDeepLink;
+  }, [plannerAppDeepLink]);
   const isBriefingStale = latestBriefingUpdatedAtMs > 0 && Date.now() - latestBriefingUpdatedAtMs > 20 * 60 * 1000;
   const briefingUpdatedLabel = latestBriefingUpdatedAtMs
     ? new Date(latestBriefingUpdatedAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -6302,7 +6306,32 @@ export default function FlightPlanner() {
       }
       actions={
         pressDemo.enabled ? undefined : (
-          <>
+          <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+            <div className="rounded-[0.85rem] border border-[#5d6f85]/25 bg-[#111822]/90 p-2.5 text-left shadow-[0_18px_34px_-28px_rgba(0,0,0,0.9)] sm:w-[315px]">
+              <div className="flex items-center gap-2.5">
+                <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-[0.55rem] border border-white/10 bg-[#0c1118]">
+                  <span className="absolute left-[9px] top-[5px] h-0 w-0 border-y-[11px] border-l-[15px] border-y-transparent border-l-[#5AA9FF]" />
+                  <span className="absolute left-[10px] top-[5px] h-0 w-0 border-y-[11px] border-l-[15px] border-y-transparent border-l-[#59D37D] opacity-70 [clip-path:polygon(0_0,100%_50%,0_50%)]" />
+                  <span className="absolute left-[10px] top-[16px] h-0 w-0 border-y-[11px] border-l-[15px] border-y-transparent border-l-[#F4D35E] opacity-80 [clip-path:polygon(0_50%,100%_0,0_100%)]" />
+                  <span className="absolute left-[18px] top-[10px] h-0 w-0 border-y-[6px] border-l-[9px] border-y-transparent border-l-[#EF6A5B]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#A9BBCD]">Native app</div>
+                  <div className="truncate text-sm font-semibold text-[#F5F8FC]">In-flight tracking</div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={openPlannerInApp}
+                  className="h-8 shrink-0 rsf-metal-button-primary"
+                >
+                  Open
+                </Button>
+              </div>
+              <div className="mt-1.5 text-xs leading-5 text-[#A9BBCD]">
+                Use web for planning. Open the app for tablet ADS-B and ownship tracking.
+              </div>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -6311,7 +6340,7 @@ export default function FlightPlanner() {
             >
               ? Scratch Pad
             </Button>
-          </>
+          </div>
         )
       }
       canopyClassName="rsf-metal-hero border-b border-white/10"
@@ -6482,12 +6511,6 @@ export default function FlightPlanner() {
           </div>
         </AlertDescription>
       </Alert>
-      <OpenInAppBanner
-        title="Use the app for native in-flight tracking"
-        description="RSF on the web is the right place to build routes, review hazards, save plans, and file with Flight Service. For tablet flying with direct ADS-B receiver traffic and native ownship tracking, open the RSF app."
-        deepLink={plannerAppDeepLink}
-        note="Your web plan stays useful for planning and testing. Opening the app is mainly for native cockpit use."
-      />
       {isMobile && (
         <Card className={plannerPanelClass}>
           <CardContent className="space-y-3 p-3">

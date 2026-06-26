@@ -281,6 +281,9 @@ const buildPlannerStateSnapshot = ({
   actualDepartureLocation,
   actualDestinationLocation,
   actualAlternateLocation,
+  actualDepartureLocationMode,
+  actualDestinationLocationMode,
+  actualAlternateLocationMode,
   actualAircraftType,
   customProfile,
   routeMode,
@@ -300,6 +303,9 @@ const buildPlannerStateSnapshot = ({
   actualDepartureLocation?: string | null;
   actualDestinationLocation?: string | null;
   actualAlternateLocation?: string | null;
+  actualDepartureLocationMode?: ZzzzActualLocationMode | null;
+  actualDestinationLocationMode?: ZzzzActualLocationMode | null;
+  actualAlternateLocationMode?: ZzzzActualLocationMode | null;
   actualAircraftType?: string | null;
   customProfile: {
     name: string;
@@ -325,10 +331,31 @@ const buildPlannerStateSnapshot = ({
   actualDepartureLocation,
   actualDestinationLocation,
   actualAlternateLocation,
+  actualDepartureLocationMode,
+  actualDestinationLocationMode,
+  actualAlternateLocationMode,
   actualAircraftType,
   customProfile,
   routeMode,
 });
+
+const logZzzzPlannerStateEvent = (event: string, details: Record<string, unknown>) => {
+  const hasZzzz = ["departure", "destination", "alternate"].some((field) => String(details[field] || "").toUpperCase() === "ZZZZ");
+  if (!hasZzzz) return;
+  console.debug(JSON.stringify({
+    event,
+    planId: details.planId || null,
+    departure: details.departure || null,
+    destination: details.destination || null,
+    alternate: details.alternate || null,
+    departureMode: details.departureMode || null,
+    departureActualLocation: details.departureActualLocation || null,
+    destinationMode: details.destinationMode || null,
+    destinationActualLocation: details.destinationActualLocation || null,
+    alternateMode: details.alternateMode || null,
+    alternateActualLocation: details.alternateActualLocation || null,
+  }));
+};
 
 const hasLiveProviderPlan = (plan: FlightPlan | null | undefined) =>
   Boolean(plan?.filingIsLive && plan?.filingProviderPlanId);
@@ -5610,6 +5637,9 @@ export default function FlightPlanner() {
             actualDepartureLocation: actualDepartureLocation || null,
             actualDestinationLocation: actualDestinationLocation || null,
             actualAlternateLocation: actualAlternateLocation || null,
+            actualDepartureLocationMode: filingDraft.actualDepartureLocationMode,
+            actualDestinationLocationMode: filingDraft.actualDestinationLocationMode,
+            actualAlternateLocationMode: filingDraft.actualAlternateLocationMode,
             actualAircraftType: actualAircraftType || null,
             customProfile,
             routeMode,
@@ -5621,6 +5651,17 @@ export default function FlightPlanner() {
             ? toUtcIso(form.plannedArrivalAt, destinationTimeZone)
             : null,
         };
+      logZzzzPlannerStateEvent("zzzz_location_state_saved", {
+        departure: payload.departure,
+        destination: payload.destination,
+        alternate: payload.alternate,
+        departureMode: payload.plannerState.actualDepartureLocationMode,
+        departureActualLocation: payload.plannerState.actualDepartureLocation,
+        destinationMode: payload.plannerState.actualDestinationLocationMode,
+        destinationActualLocation: payload.plannerState.actualDestinationLocation,
+        alternateMode: payload.plannerState.actualAlternateLocationMode,
+        alternateActualLocation: payload.plannerState.actualAlternateLocation,
+      });
       const res = await apiRequest("POST", "/api/flight-plans", payload);
       return res.json();
     },
@@ -5701,6 +5742,9 @@ export default function FlightPlanner() {
           actualDepartureLocation: actualDepartureLocation || null,
           actualDestinationLocation: actualDestinationLocation || null,
           actualAlternateLocation: actualAlternateLocation || null,
+          actualDepartureLocationMode: filingDraft.actualDepartureLocationMode,
+          actualDestinationLocationMode: filingDraft.actualDestinationLocationMode,
+          actualAlternateLocationMode: filingDraft.actualAlternateLocationMode,
           actualAircraftType: actualAircraftType || null,
           customProfile,
           routeMode,
@@ -5712,6 +5756,18 @@ export default function FlightPlanner() {
           ? toUtcIso(form.plannedArrivalAt, destinationTimeZone)
           : null,
       };
+      logZzzzPlannerStateEvent("zzzz_location_state_saved", {
+        planId,
+        departure: payload.departure,
+        destination: payload.destination,
+        alternate: payload.alternate,
+        departureMode: payload.plannerState.actualDepartureLocationMode,
+        departureActualLocation: payload.plannerState.actualDepartureLocation,
+        destinationMode: payload.plannerState.actualDestinationLocationMode,
+        destinationActualLocation: payload.plannerState.actualDestinationLocation,
+        alternateMode: payload.plannerState.actualAlternateLocationMode,
+        alternateActualLocation: payload.plannerState.actualAlternateLocation,
+      });
       const res = await apiRequest("PATCH", `/api/flight-plans/${planId}`, payload);
       return res.json();
     },
@@ -6251,21 +6307,27 @@ export default function FlightPlanner() {
       actualAlternateLocation: typeof (editingPlan.plannerState as any)?.actualAlternateLocation === "string"
         ? String((editingPlan.plannerState as any).actualAlternateLocation)
         : current.actualAlternateLocation,
-      actualDepartureLocationMode: inferZzzzActualLocationMode(
-        typeof (editingPlan.plannerState as any)?.actualDepartureLocation === "string"
-          ? String((editingPlan.plannerState as any).actualDepartureLocation)
-          : current.actualDepartureLocation
-      ),
-      actualDestinationLocationMode: inferZzzzActualLocationMode(
-        typeof (editingPlan.plannerState as any)?.actualDestinationLocation === "string"
-          ? String((editingPlan.plannerState as any).actualDestinationLocation)
-          : current.actualDestinationLocation
-      ),
-      actualAlternateLocationMode: inferZzzzActualLocationMode(
-        typeof (editingPlan.plannerState as any)?.actualAlternateLocation === "string"
-          ? String((editingPlan.plannerState as any).actualAlternateLocation)
-          : current.actualAlternateLocation
-      ),
+      actualDepartureLocationMode: (editingPlan.plannerState as any)?.actualDepartureLocationMode === "latlong" || (editingPlan.plannerState as any)?.actualDepartureLocationMode === "identifier"
+        ? (editingPlan.plannerState as any).actualDepartureLocationMode
+        : inferZzzzActualLocationMode(
+          typeof (editingPlan.plannerState as any)?.actualDepartureLocation === "string"
+            ? String((editingPlan.plannerState as any).actualDepartureLocation)
+            : current.actualDepartureLocation
+        ),
+      actualDestinationLocationMode: (editingPlan.plannerState as any)?.actualDestinationLocationMode === "latlong" || (editingPlan.plannerState as any)?.actualDestinationLocationMode === "identifier"
+        ? (editingPlan.plannerState as any).actualDestinationLocationMode
+        : inferZzzzActualLocationMode(
+          typeof (editingPlan.plannerState as any)?.actualDestinationLocation === "string"
+            ? String((editingPlan.plannerState as any).actualDestinationLocation)
+            : current.actualDestinationLocation
+        ),
+      actualAlternateLocationMode: (editingPlan.plannerState as any)?.actualAlternateLocationMode === "latlong" || (editingPlan.plannerState as any)?.actualAlternateLocationMode === "identifier"
+        ? (editingPlan.plannerState as any).actualAlternateLocationMode
+        : inferZzzzActualLocationMode(
+          typeof (editingPlan.plannerState as any)?.actualAlternateLocation === "string"
+            ? String((editingPlan.plannerState as any).actualAlternateLocation)
+            : current.actualAlternateLocation
+        ),
       departureName: editingPlan.filingDepartureName || current.departureName,
       destinationName: editingPlan.filingDestinationName || current.destinationName,
       alternateName: editingPlan.filingAlternateName || current.alternateName,
@@ -6276,6 +6338,18 @@ export default function FlightPlanner() {
         ? String(editingPlan.filingEnduranceMinutes)
         : current.manualEnduranceMinutes,
     }));
+    logZzzzPlannerStateEvent("zzzz_location_state_hydrated", {
+      planId: editingPlan.id,
+      departure: editingPlan.departure,
+      destination: editingPlan.destination,
+      alternate: editingPlan.alternate,
+      departureMode: savedPlannerState.actualDepartureLocationMode || null,
+      departureActualLocation: savedPlannerState.actualDepartureLocation || null,
+      destinationMode: savedPlannerState.actualDestinationLocationMode || null,
+      destinationActualLocation: savedPlannerState.actualDestinationLocation || null,
+      alternateMode: savedPlannerState.actualAlternateLocationMode || null,
+      alternateActualLocation: savedPlannerState.actualAlternateLocation || null,
+    });
     const normalizedSavedRoute = normalizeRouteText(editingPlan.route || "");
     const savedRouteTokens = normalizedSavedRoute ? normalizedSavedRoute.split(/\s+/) : [];
     const savedRouteIsAirportOnly = savedRouteTokens.length > 0 && savedRouteTokens.every((token) => ICAO_REGEX.test(token));

@@ -692,6 +692,11 @@ const getPlannerStateString = (plan: FlightPlan, key: string) => {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 };
 
+const getPlannerStateLocationMode = (plan: FlightPlan, key: string) => {
+  const value = getPlannerStateString(plan, key);
+  return value === "LATLONG" ? "latlong" : value === "IDENTIFIER" ? "identifier" : null;
+};
+
 const getRecord = (value: unknown) =>
   value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -1187,7 +1192,10 @@ export const buildZzzzOtherInfoForLeidos = (
   const formatLocation = (location?: string | null, description?: string | null) => {
     const normalizedLocation = normalizeZzzzActualLocation(location);
     if (!normalizedLocation) return null;
-    const normalizedDescription = String(description || "").trim().replace(/\s+/g, " ").toUpperCase();
+    const shouldAppendDescription = /^\d{4}[NS]?\/?\d{4,5}[EW]?$/i.test(normalizedLocation);
+    const normalizedDescription = shouldAppendDescription
+      ? String(description || "").trim().replace(/\s+/g, " ").toUpperCase()
+      : "";
     return [normalizedLocation, normalizedDescription].filter(Boolean).join(" ");
   };
   const supplementals: string[] = [];
@@ -1295,6 +1303,7 @@ export const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFil
           filedDeparture: "ZZZZ",
           planningReferenceDepartureAirport: getPlannerStateString(plan, "planningReferenceDepartureAirport") || null,
           actualDepartureLocation: getPlannerStateString(plan, "actualDepartureLocation") || null,
+          actualDepartureLocationMode: getPlannerStateLocationMode(plan, "actualDepartureLocationMode"),
           formattedLeidosDepartureLocation: normalizeZzzzActualLocation(getPlannerStateString(plan, "actualDepartureLocation")) || null,
         }
         : null,
@@ -1303,6 +1312,7 @@ export const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFil
           filedDestination: "ZZZZ",
           planningReferenceDestinationAirport: getPlannerStateString(plan, "planningReferenceDestinationAirport") || null,
           actualDestinationLocation: getPlannerStateString(plan, "actualDestinationLocation") || null,
+          actualDestinationLocationMode: getPlannerStateLocationMode(plan, "actualDestinationLocationMode"),
           formattedLeidosDestinationLocation: normalizeZzzzActualLocation(getPlannerStateString(plan, "actualDestinationLocation")) || null,
         }
         : null,
@@ -1311,6 +1321,7 @@ export const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFil
           filedAlternate: "ZZZZ",
           planningReferenceAlternateAirport: getPlannerStateString(plan, "planningReferenceAlternateAirport") || null,
           actualAlternateLocation: getPlannerStateString(plan, "actualAlternateLocation") || null,
+          actualAlternateLocationMode: getPlannerStateLocationMode(plan, "actualAlternateLocationMode"),
           formattedLeidosAlternateLocation: normalizeZzzzActualLocation(getPlannerStateString(plan, "actualAlternateLocation")) || null,
         }
         : null,

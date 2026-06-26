@@ -423,7 +423,7 @@ test("ZZZZ location names are transmitted in otherInfo while supplemental remark
       destinationLocation: "3001N09015W",
       alternateLocation: "3015N09122W",
     }),
-    "DOF/260623 DEP/52TS DEMO DEPARTURE STRIP DEST/3001N09015W DEMO DESTINATION STRIP ALTN/3015N09122W DEMO ALTERNATE STRIP",
+    "DOF/260623 DEP/52TS DEST/3001N09015W DEMO DESTINATION STRIP ALTN/3015N09122W DEMO ALTERNATE STRIP",
   );
   assert.equal(
     normalizeLeidosOtherInfoForTransmission("DOF/260623 DEP/Demo departure strip"),
@@ -460,6 +460,136 @@ test("ZZZZ departure, destination, and alternate Field 18 entries include coordi
     }),
     "ALTN/3839N09045W GRASS AIRSTRIP",
   );
+});
+
+test("ZZZZ alternate private field code does not append airport name", () => {
+  assert.equal(
+    buildZzzzOtherInfoForLeidos("DOF/260627 RMK/ZZZZ ALTERNATE VALIDATION TEST ALTN/RUTHERFORD RANCH AIRPORT", {
+      alternateLocation: "85TX",
+      alternateName: "Rutherford Ranch Airport",
+    }),
+    "DOF/260627 RMK/ZZZZ ALTERNATE VALIDATION TEST ALTN/85TX",
+  );
+});
+
+test("ZZZZ alternate private field filing keeps altDestination1 ZZZZ and sends only ALTN code", () => {
+  const payload = buildLeidosActionPayload(filingPlan({
+    departure: "KDWH",
+    destination: "KSDL",
+    alternate: "ZZZZ",
+    route: "DCT",
+    filingOtherInfo: "DOF/260627",
+    filingRemarks: "ZZZZ ALTERNATE VALIDATION TEST",
+    filingAlternateName: "Rutherford Ranch Airport",
+    plannerState: {
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-06-27T10:00",
+      planningReferenceAlternateAirport: "KSDL",
+      actualAlternateLocationMode: "identifier",
+      actualAlternateLocation: "85TX",
+    },
+  }), "file", { otherInfo: null } as any);
+  const fields = Object.fromEntries(payload.params.entries());
+
+  assert.equal(fields.altDestination1, "ZZZZ");
+  assert.equal(fields.otherInfo, "DOF/260627 RMK/ZZZZ ALTERNATE VALIDATION TEST ALTN/85TX");
+  assert.doesNotMatch(String(fields.otherInfo), /RUTHERFORD/i);
+  assert.equal(String(fields.otherInfo).match(/\bALTN\//g)?.length, 1);
+});
+
+test("ZZZZ departure private field filing keeps departure ZZZZ and sends only DEP code", () => {
+  const payload = buildLeidosActionPayload(filingPlan({
+    departure: "ZZZZ",
+    destination: "KSDL",
+    alternate: null,
+    route: "DCT",
+    filingOtherInfo: "DOF/260627",
+    filingRemarks: "ZZZZ DEPARTURE VALIDATION TEST",
+    filingDepartureName: "Rutherford Ranch Airport",
+    plannerState: {
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-06-27T10:00",
+      planningReferenceDepartureAirport: "KDWH",
+      actualDepartureLocationMode: "identifier",
+      actualDepartureLocation: "85TX",
+    },
+  }), "file", { otherInfo: null } as any);
+  const fields = Object.fromEntries(payload.params.entries());
+
+  assert.equal(fields.departure, "ZZZZ");
+  assert.equal(fields.destination, "KSDL");
+  assert.match(String(fields.otherInfo), /\bDEP\/85TX\b/);
+  assert.doesNotMatch(String(fields.otherInfo), /DEP\/RUTHERFORD/i);
+  assert.doesNotMatch(String(fields.otherInfo), /RUTHERFORD/i);
+  assert.equal(String(fields.otherInfo).match(/\bDEP\//g)?.length, 1);
+});
+
+test("ZZZZ destination private field filing keeps destination ZZZZ and sends only DEST code", () => {
+  const payload = buildLeidosActionPayload(filingPlan({
+    departure: "KDWH",
+    destination: "ZZZZ",
+    alternate: null,
+    route: "DCT",
+    filingOtherInfo: "DOF/260627",
+    filingRemarks: "ZZZZ DESTINATION VALIDATION TEST",
+    filingDestinationName: "Rutherford Ranch Airport",
+    plannerState: {
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-06-27T10:00",
+      planningReferenceDestinationAirport: "KSDL",
+      actualDestinationLocationMode: "identifier",
+      actualDestinationLocation: "85TX",
+    },
+  }), "file", { otherInfo: null } as any);
+  const fields = Object.fromEntries(payload.params.entries());
+
+  assert.equal(fields.departure, "KDWH");
+  assert.equal(fields.destination, "ZZZZ");
+  assert.match(String(fields.otherInfo), /\bDEST\/85TX\b/);
+  assert.doesNotMatch(String(fields.otherInfo), /DEST\/RUTHERFORD/i);
+  assert.doesNotMatch(String(fields.otherInfo), /RUTHERFORD/i);
+  assert.equal(String(fields.otherInfo).match(/\bDEST\//g)?.length, 1);
+});
+
+test("ZZZZ private field codes for departure destination and alternate do not append names or duplicate subfields", () => {
+  const payload = buildLeidosActionPayload(filingPlan({
+    departure: "ZZZZ",
+    destination: "ZZZZ",
+    alternate: "ZZZZ",
+    route: "DCT",
+    filingOtherInfo: "DOF/260627",
+    filingRemarks: "ZZZZ ALL PRIVATE FIELD VALIDATION TEST",
+    filingDepartureName: "Rutherford Ranch Airport",
+    filingDestinationName: "Private Destination Airport",
+    filingAlternateName: "Private Alternate Airport",
+    plannerState: {
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-06-27T10:00",
+      planningReferenceDepartureAirport: "KDWH",
+      planningReferenceDestinationAirport: "KSDL",
+      planningReferenceAlternateAirport: "KSDL",
+      actualDepartureLocationMode: "identifier",
+      actualDepartureLocation: "85TX",
+      actualDestinationLocationMode: "identifier",
+      actualDestinationLocation: "TX03",
+      actualAlternateLocationMode: "identifier",
+      actualAlternateLocation: "87TX",
+    },
+  }), "file", { otherInfo: null } as any);
+  const fields = Object.fromEntries(payload.params.entries());
+  const otherInfo = String(fields.otherInfo);
+
+  assert.equal(fields.departure, "ZZZZ");
+  assert.equal(fields.destination, "ZZZZ");
+  assert.equal(fields.altDestination1, "ZZZZ");
+  assert.match(otherInfo, /\bDEP\/85TX\b/);
+  assert.match(otherInfo, /\bDEST\/TX03\b/);
+  assert.match(otherInfo, /\bALTN\/87TX\b/);
+  assert.equal(otherInfo.match(/\bDEP\//g)?.length, 1);
+  assert.equal(otherInfo.match(/\bDEST\//g)?.length, 1);
+  assert.equal(otherInfo.match(/\bALTN\//g)?.length, 1);
+  assert.doesNotMatch(otherInfo, /RUTHERFORD|PRIVATE DESTINATION|PRIVATE ALTERNATE/i);
+  assert.doesNotMatch(otherInfo, /\b\d{4}[NS]\/?\d{4,5}[EW]\b/);
 });
 
 test("non-ZZZZ filing does not add ZZZZ location Field 18 entries", () => {

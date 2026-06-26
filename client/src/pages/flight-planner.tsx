@@ -76,6 +76,7 @@ import { extractFilingVersionStamp } from "@shared/flight-plan-filing";
 import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
 import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
 import { formatFlightPlanDepartureTime, formatZulu } from "@shared/flight-plan-time";
+import { analyzeRouteWeatherTokens, buildRouteWeatherIcaoList } from "@shared/route-weather-tokens";
 import { ICAO_EQUIPMENT_CODES, parseIcaoEquipmentCodes, normalizeIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
 import { isValidZzzzActualLocation } from "@shared/zzzz-location";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
@@ -4179,18 +4180,33 @@ export default function FlightPlanner() {
     setForm((prev) => ({ ...prev, plannedArrivalAt: arrivalLocal }));
   }, [arrivalAuto, form.plannedDepartureAt, eteMinutes, departureTimeZone, destinationTimeZone]);
 
-  const weatherIcaos = useMemo(() => {
-    const list = [
-      planningDepartureCode,
-      ...plannedStops,
-      ...waypoints,
-      planningDestinationCode,
-      planningAlternateCode,
-    ].filter(Boolean);
-    return Array.from(new Set(list))
-      .filter((icao) => ICAO_REGEX.test(icao))
-      .slice(0, 8);
-  }, [planningDepartureCode, planningDestinationCode, planningAlternateCode, plannedStops, waypoints]);
+  const routeWeatherSource = useMemo(
+    () => [form.route, plannedStopsInput, waypointsInput].filter(Boolean).join(" "),
+    [form.route, plannedStopsInput, waypointsInput],
+  );
+  const routeWeatherTokenFilter = useMemo(
+    () => analyzeRouteWeatherTokens(routeWeatherSource),
+    [routeWeatherSource],
+  );
+  useEffect(() => {
+    if ((filingDraft.flightRules || "VFR").toUpperCase() !== "VFR") return;
+    if (routeWeatherTokenFilter.tokensOriginal.length === 0 || routeWeatherTokenFilter.tokensIgnored.length === 0) return;
+    console.debug(JSON.stringify({
+      event: "route_weather_tokens_filtered",
+      route: routeWeatherSource,
+      tokensOriginal: routeWeatherTokenFilter.tokensOriginal,
+      tokensFiltered: routeWeatherTokenFilter.tokensFiltered,
+      tokensIgnored: routeWeatherTokenFilter.tokensIgnored,
+      flightRules: "VFR",
+    }));
+  }, [filingDraft.flightRules, routeWeatherSource, routeWeatherTokenFilter]);
+  const weatherIcaos = useMemo(() => buildRouteWeatherIcaoList({
+    departure: planningDepartureCode,
+    destination: planningDestinationCode,
+    alternate: planningAlternateCode,
+    route: routeWeatherSource,
+    limit: 8,
+  }), [planningDepartureCode, planningDestinationCode, planningAlternateCode, routeWeatherSource]);
 
   const weatherQueries = useQueries({
     queries: weatherIcaos.map((icao) => ({

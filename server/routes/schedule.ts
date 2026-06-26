@@ -9,6 +9,7 @@ import bcrypt from "bcrypt";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
 import { and, asc, desc, eq, inArray, isNull, lte, lt } from "drizzle-orm";
+import { normalizeAgilysysScreenshotDays } from "@shared/schedule-agilysys-screenshot";
 import { db } from "../db";
 import { createSoftAuthRateLimiter } from "../middleware/rateLimit";
 import { getUncachableResendClient } from "../resendClient";
@@ -1199,17 +1200,6 @@ function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
   return scheduleDays.map((day) => forecastByDate.get(day)).filter(Boolean);
 }
 
-const agilysysScreenshotSchema = z.object({
-  days: z.array(z.object({
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    arriving: z.coerce.number().int().min(0).max(10000),
-    departing: z.coerce.number().int().min(0).max(10000),
-    stayover: z.coerce.number().int().min(0).max(10000),
-    roomsSold: z.coerce.number().int().min(0).max(10000),
-    outOfOrderRooms: z.coerce.number().int().min(0).max(10000).default(0),
-  })).min(1).max(31),
-});
-
 function inferForecastCapacity(day: any, outOfOrderRooms = 0) {
   const candidates = [
     [Number(day?.otbRoomsSold || 0), Number(day?.otbOccupancyPercent || 0)],
@@ -1230,11 +1220,13 @@ async function forecastFromAgilysysScreenshot(
   if (!openai) throw new Error("Screenshot parsing is unavailable because the AI service is not configured.");
   const prompt = `Extract the Agilysys housekeeping forecasting grid from this screenshot.
 Return JSON only in this exact shape:
-{"days":[{"date":"YYYY-MM-DD","arriving":0,"departing":0,"stayover":0,"roomsSold":0,"outOfOrderRooms":0}]}
+{"days":[{"date":"YYYY-MM-DD","columnIndex":0,"arriving":0,"departing":0,"stayover":0,"roomsSold":0,"outOfOrderRooms":0}]}
 
 The schedule dates that must be present exactly once are: ${scheduleDays.join(", ")}.
+Map visible day columns left-to-right to those schedule dates when the screenshot spans two months or the month/year is ambiguous.
+Use columnIndex as the zero-based position in the visible forecast grid, where the first schedule date is columnIndex 0.
 Read only the rows labeled Arriving, Departing, Stayover, Rooms Sold, and Out of Order Rooms.
-Use the month and year displayed in the screenshot when constructing each date.
+If the screenshot shows only day numbers, prefer the schedule date list above over guessing the month.
 Do not estimate, forecast, alter, or infer unreadable numbers. If a required value is unreadable, omit that date.`;
   const completion = await openai.chat.completions.create({
     model: process.env.SCHEDULE_AI_VISION_MODEL || process.env.SCHEDULE_AI_MODEL || "gpt-4o-mini",
@@ -1253,10 +1245,8 @@ Do not estimate, forecast, alter, or infer unreadable numbers. If a required val
     temperature: 0,
   });
   const parsedJson = JSON.parse(completion.choices[0]?.message?.content || "{}");
-  const parsed = agilysysScreenshotSchema.safeParse(parsedJson);
-  if (!parsed.success) throw new Error("The screenshot could not be read as an Agilysys forecast grid.");
-
-  const extractedByDate = new Map(parsed.data.days.map((day) => [day.date, day]));
+  const parsedDays = normalizeAgilysysScreenshotDays(parsedJson, scheduleDays);
+  const extractedByDate = new Map(parsedDays.map((day) => [day.date, day]));
   const missingDates = scheduleDays.filter((day) => !extractedByDate.has(day));
   if (missingDates.length) {
     throw new Error(`The screenshot is missing readable forecast data for: ${missingDates.join(", ")}.`);

@@ -739,6 +739,10 @@ function cleanTime(value?: string | null) {
 }
 
 function shiftTone(assignment: ShiftAssignment | undefined, shiftType: ShiftType | undefined, shiftTypes: Map<string, ShiftType>) {
+  const roleText = String(assignment?.roleWorked || "").toLowerCase();
+  if (shiftType && normalizeDepartment(shiftType.departmentHint || shiftType.label) === "Bistro" && (roleText.includes("bistro") || roleText.includes("breakfast"))) {
+    return shiftType;
+  }
   const roleShift = assignment?.roleWorked
     ? Array.from(shiftTypes.values()).find((shift) => {
         const role = String(assignment.roleWorked).toLowerCase();
@@ -809,9 +813,36 @@ function fmtHours(value: unknown) {
 }
 
 function rolesArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map(String).filter(Boolean);
-  if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean);
-  return [];
+  const source = Array.isArray(value)
+    ? value.map(String)
+    : typeof value === "string"
+      ? value.split(",")
+      : [];
+  return Array.from(new Set(source.map(normalizeScheduleRole).filter(Boolean)));
+}
+
+function normalizeScheduleRole(value: unknown) {
+  const role = String(value || "").trim();
+  if (!role) return "";
+  const normalized = role.toLowerCase();
+  if (["bistro am", "bistro pm", "breakfast"].includes(normalized)) return "Bistro Attendant";
+  return role;
+}
+
+function normalizeRoleRates(value: Record<string, number | string> | null | undefined) {
+  const rates: Record<string, number | string> = {};
+  for (const [role, rate] of Object.entries(value || {})) {
+    const normalizedRole = normalizeScheduleRole(role);
+    if (!normalizedRole || rate === "" || rate == null) continue;
+    rates[normalizedRole] = rate;
+  }
+  return rates;
+}
+
+function roleRateValue(rates: Record<string, number | string> | null | undefined, role: string) {
+  const normalizedRole = normalizeScheduleRole(role);
+  const normalizedRates = normalizeRoleRates(rates);
+  return normalizedRates[normalizedRole] ?? "";
 }
 
 function inferRoomCapacity(day: ForecastDay) {
@@ -1500,12 +1531,12 @@ function ShiftEditDialog({
   };
   const roleOptions = rowDepartment === "Bistro"
     ? Array.from(new Set([
-        ...(employee?.rolesJson || []).filter((role) => !["Bistro AM", "Bistro PM", "Breakfast"].includes(role)),
+        ...rolesArray(employee?.rolesJson).filter((role) => !["Bistro AM", "Bistro PM", "Breakfast"].includes(role)),
         "Bistro Manager",
         "Bistro Attendant",
       ].filter(Boolean)))
     : employee
-      ? Array.from(new Set([...(employee.rolesJson || []), rowDepartment || ""].filter(Boolean)))
+      ? Array.from(new Set([...rolesArray(employee.rolesJson), rowDepartment || ""].filter(Boolean)))
       : Array.from(new Set([rowDepartment || "", ...SCHEDULE_ROLES].filter(Boolean)));
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -2524,14 +2555,16 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
   const employeePatch = (employee: ScheduleEmployee) => editing[employee.id] || employee;
   const saveEmployee = (employee: ScheduleEmployee) => {
     const patch = employeePatch(employee);
+    const normalizedRoles = rolesArray(patch.rolesJson);
     const roleRatesJson = Object.fromEntries(
-      Object.entries(patch.roleRatesJson || {})
+      Object.entries(normalizeRoleRates(patch.roleRatesJson || {}))
         .filter(([, rate]) => rate !== "" && rate != null)
-        .map(([role, rate]) => [role, Number(rate)]),
+        .map(([role, rate]) => [normalizeScheduleRole(role), Number(rate)]),
     );
     onUpdate(employee.id, {
       ...patch,
       hourlyRate: patch.hourlyRate === "" || patch.hourlyRate == null ? null : Number(patch.hourlyRate),
+      rolesJson: normalizedRoles,
       roleRatesJson,
     });
   };
@@ -2654,7 +2687,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
                       step="0.01"
                       min="0"
                       placeholder={form.hourlyRate ? `Base $${form.hourlyRate}` : "Use base rate"}
-                      value={form.roleRatesJson[role] || ""}
+                      value={roleRateValue(form.roleRatesJson, role)}
                       onChange={(event) => setForm({ ...form, roleRatesJson: { ...form.roleRatesJson, [role]: event.target.value } })}
                     />
                   </div>
@@ -2803,7 +2836,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
                                 step="0.01"
                                 min="0"
                                 placeholder={draft.hourlyRate ? `Base $${draft.hourlyRate}` : "Use base rate"}
-                                value={draft.roleRatesJson?.[role] ?? ""}
+                                value={roleRateValue(draft.roleRatesJson, role)}
                                 onChange={(event) => setEditing({
                                   ...editing,
                                   [employee.id]: {

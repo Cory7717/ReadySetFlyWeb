@@ -225,9 +225,32 @@ function hourlyRateForAssignment(employee: any, assignment: any, shiftType: any)
 }
 
 function rolesArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
-  if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean);
-  return [];
+  const source = Array.isArray(value)
+    ? value.map(String)
+    : typeof value === "string"
+      ? value.split(",")
+      : [];
+  return Array.from(new Set(source.map(normalizeScheduleRole).filter(Boolean)));
+}
+
+function normalizeRoleRates(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const rates: Record<string, number> = {};
+  for (const [role, rate] of Object.entries(value as Record<string, unknown>)) {
+    const normalizedRole = normalizeScheduleRole(role);
+    const numericRate = Number(rate);
+    if (!normalizedRole || !Number.isFinite(numericRate)) continue;
+    rates[normalizedRole] = numericRate;
+  }
+  return Object.keys(rates).length ? rates : null;
+}
+
+function normalizeScheduleRole(value: unknown) {
+  const role = String(value || "").trim();
+  if (!role) return "";
+  const normalized = role.toLowerCase();
+  if (["bistro am", "bistro pm", "breakfast"].includes(normalized)) return "Bistro Attendant";
+  return role;
 }
 
 function employeeDepartmentCandidates(employee: any, fallback?: string | null) {
@@ -3284,9 +3307,9 @@ export function registerScheduleRoutes(app: Express) {
       const employeeValues = scheduleEmployeeValuesWithAbovePropertyState({
         ...parsed.data,
         hourlyRate: isSuperAdmin && parsed.data.hourlyRate != null ? parsed.data.hourlyRate.toFixed(2) : null,
-        roleRatesJson: isSuperAdmin ? parsed.data.roleRatesJson || null : null,
+        roleRatesJson: isSuperAdmin ? normalizeRoleRates(parsed.data.roleRatesJson) : null,
         department: normalizeDepartment(parsed.data.department),
-        rolesJson: parsed.data.rolesJson || rolesArray(parsed.data.position || parsed.data.department),
+        rolesJson: rolesArray(parsed.data.rolesJson || parsed.data.position || parsed.data.department),
         isSalaried: Boolean(parsed.data.isSalaried),
         isDepartmentManager: Boolean(parsed.data.isDepartmentManager),
         sortOrder: parsed.data.sortOrder || 0,
@@ -3320,11 +3343,11 @@ export function registerScheduleRoutes(app: Express) {
           ? parsed.data.hourlyRate == null ? null : parsed.data.hourlyRate.toFixed(2)
           : undefined,
         roleRatesJson: isSuperAdmin && Object.prototype.hasOwnProperty.call(parsed.data, "roleRatesJson")
-          ? parsed.data.roleRatesJson || null
+          ? normalizeRoleRates(parsed.data.roleRatesJson)
           : undefined,
         department: effectiveDepartment,
         position: effectivePosition,
-        rolesJson: effectiveRolesJson,
+        rolesJson: rolesArray(effectiveRolesJson),
         isSalaried: parsed.data.isSalaried,
         isDepartmentManager: parsed.data.isDepartmentManager,
         sortOrder: parsed.data.sortOrder,

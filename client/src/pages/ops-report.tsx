@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileSpreadsheet, FileText, LockKeyhole, LogOut, Trash2, Upload } from "lucide-react";
 import { apiUrl } from "@/lib/api";
@@ -36,7 +36,8 @@ const C = {
 
 type OpsAccess = { unlocked: boolean; user: { employeeDisplayName: string; email: string; isAdmin: boolean } | null; hasPin?: boolean; passwordChangeRequired?: boolean };
 type Row = Record<string, string>;
-type LaborHoursResponse = { weekStart: string; scheduleId?: string | null; departments: Record<string, number> };
+type LaborHoursBreakdown = Record<string, Array<{ label: string; hours: number }>>;
+type LaborHoursResponse = { weekStart: string; scheduleId?: string | null; departments: Record<string, number>; breakdown?: LaborHoursBreakdown };
 type OpsImportResponse = {
   uploadId: string;
   originalFileName: string;
@@ -870,8 +871,27 @@ function YtdMetricCard({
   );
 }
 
-function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: string; label: string; wide?: boolean; readOnly?: boolean }>; rows: Row[]; onChange: (rows: Row[]) => void }) {
+function EditableTable({
+  columns,
+  rows,
+  onChange,
+  getCellPreview,
+}: {
+  columns: Array<{ key: string; label: string; wide?: boolean; readOnly?: boolean }>;
+  rows: Row[];
+  onChange: (rows: Row[]) => void;
+  getCellPreview?: (row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean }) => { label: string; text: string } | null;
+}) {
   const [preview, setPreview] = useState<{ label: string; text: string; x: number; y: number } | null>(null);
+  const showPreview = (event: MouseEvent<HTMLInputElement> | FocusEvent<HTMLInputElement>, row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean }) => {
+    const customPreview = getCellPreview?.(row, column);
+    const text = customPreview?.text || String(row[column.key] || "").trim();
+    const label = customPreview?.label || column.label;
+    if (!customPreview && (!isLongTextColumn(column.key, column.label) || !text)) return;
+    if (!text) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setPreview({ label, text, x: Math.min(rect.left, window.innerWidth - 460), y: rect.bottom + 8 });
+  };
   return (
     <div className="relative overflow-x-auto">
       <table className="w-full min-w-[720px] border-collapse text-sm">
@@ -891,19 +911,9 @@ function EditableTable({ columns, rows, onChange }: { columns: Array<{ key: stri
                     readOnly={column.readOnly || column.key === "priorWeek" || column.key === "weekVariance"}
                     className={`h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white ${column.readOnly || column.key === "priorWeek" || column.key === "weekVariance" ? "!bg-[#f3efe7] !text-[#5f5247]" : ""}`}
                     value={row[column.key] || ""}
-                    onMouseEnter={(event) => {
-                      const text = String(row[column.key] || "").trim();
-                      if (!isLongTextColumn(column.key, column.label) || !text) return;
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      setPreview({ label: column.label, text, x: Math.min(rect.left, window.innerWidth - 460), y: rect.bottom + 8 });
-                    }}
+                    onMouseEnter={(event) => showPreview(event, row, column)}
                     onMouseLeave={() => setPreview(null)}
-                    onFocus={(event) => {
-                      const text = String(row[column.key] || "").trim();
-                      if (!isLongTextColumn(column.key, column.label) || !text) return;
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      setPreview({ label: column.label, text, x: Math.min(rect.left, window.innerWidth - 460), y: rect.bottom + 8 });
-                    }}
+                    onFocus={(event) => showPreview(event, row, column)}
                     onBlur={() => {
                       setPreview(null);
                       if (!isMoneyColumn(column.key, column.label) && !isPercentColumn(column.key, column.label)) return;
@@ -1264,6 +1274,21 @@ export default function OpsReportPage() {
       ? fmtHours(num(row.actualHours) - num(row.budget))
       : "",
   })), [effectiveLabor]);
+  const laborDepartmentPreview = useMemo(() => {
+    const breakdown = scheduledLabor.data?.breakdown || {};
+    return (row: Row, column: { key: string; label: string }) => {
+      if (column.key !== "department") return null;
+      const department = String(row.department || "").trim();
+      const items = breakdown[department] || [];
+      if (!items.length) return null;
+      const total = items.reduce((sum, item) => sum + num(item.hours), 0);
+      const lines = items.map((item) => `${item.label}: ${fmtHours(item.hours)} hrs`);
+      return {
+        label: `${department} schedule detail`,
+        text: [`Scheduled total: ${fmtHours(total)} hrs`, "", ...lines].join("\n"),
+      };
+    };
+  }, [scheduledLabor.data?.breakdown]);
   const adjustmentTotal = useMemo(() => adjustments.reduce((sum, row) => sum + num(row.amount), 0), [adjustments]);
   const arTotal = num(ar.current) + num(ar.d30) + num(ar.d60) + num(ar.d90);
   const previousGssRows = (previousDraft.data?.draft?.payload?.gssRows || []) as Row[];
@@ -2555,6 +2580,7 @@ export default function OpsReportPage() {
                 ]}
                 rows={laborRows}
                 onChange={(rows) => setLabor(rows.map(({ variance, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
+                getCellPreview={laborDepartmentPreview}
               />
             </Section>
             <Section title="Staffing">

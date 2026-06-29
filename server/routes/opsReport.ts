@@ -288,6 +288,18 @@ function emptyLaborDepartments() {
   } as Record<string, number>;
 }
 
+function emptyLaborBreakdown() {
+  return Object.fromEntries(Object.keys(emptyLaborDepartments()).map((department) => [department, []])) as Record<string, Array<{ label: string; hours: number }>>;
+}
+
+function addLaborBreakdown(breakdown: Record<string, Array<{ label: string; hours: number }>>, department: string, label: string, hours: number) {
+  const target = breakdown[department] || (breakdown[department] = []);
+  const normalizedLabel = String(label || department).trim() || department;
+  const existing = target.find((item) => item.label === normalizedLabel);
+  if (existing) existing.hours += hours;
+  else target.push({ label: normalizedLabel, hours });
+}
+
 function parseEmployeeLaborTotals(text: string, employees: any[], departments: Record<string, number>) {
   const employeeHours: Array<{ name: string; employeeNumber: string; hours: number; department: string; matchedEmployeeId: string | null }> = [];
   const unmatchedEmployees: Array<{ name: string; employeeNumber: string; hours: number }> = [];
@@ -684,7 +696,8 @@ export function registerOpsReportRoutes(app: Express) {
         "MAINTENANCE HOURS": 0,
         OTHER: 0,
       };
-      if (!schedule) return res.json({ weekStart: parsed.data.weekStart, scheduleId: null, departments });
+      const breakdown = emptyLaborBreakdown();
+      if (!schedule) return res.json({ weekStart: parsed.data.weekStart, scheduleId: null, departments, breakdown });
 
       const [assignments, employees, shiftTypes] = await Promise.all([
         db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, schedule.id)),
@@ -699,9 +712,14 @@ export function registerOpsReportRoutes(app: Express) {
         const shiftType = assignment.shiftTypeId ? shiftTypeById.get(assignment.shiftTypeId) : null;
         const hours = shiftHours(assignment, shiftType);
         if (hours <= 0) continue;
-        addDepartmentHours(departments, opsDepartmentForSchedule(employee, assignment, shiftType), hours);
+        const department = opsDepartmentForSchedule(employee, assignment, shiftType);
+        const roleLabel = String(assignment.roleWorked || shiftType?.label || shiftType?.departmentHint || "Unlabeled shift").trim();
+        const detailLabel = department === "OTHER" && employee?.displayName ? `${roleLabel} (${employee.displayName})` : roleLabel;
+        addDepartmentHours(departments, department, hours);
+        addLaborBreakdown(breakdown, department, detailLabel, hours);
       }
-      res.json({ weekStart: parsed.data.weekStart, scheduleId: schedule.id, departments });
+      for (const items of Object.values(breakdown)) items.sort((a, b) => b.hours - a.hours || a.label.localeCompare(b.label));
+      res.json({ weekStart: parsed.data.weekStart, scheduleId: schedule.id, departments, breakdown });
     } catch (error) {
       next(error);
     }

@@ -207,6 +207,37 @@ function shiftHours(assignment: any, shiftType: any) {
   return Math.max(0, (duration - breakMinutes) / 60);
 }
 
+function resolveOpsShiftTypeFromRole(role: string, shiftTypeByLabel: Map<string, any>) {
+  const normalized = String(role || "").trim().toUpperCase();
+  if (!normalized) return null;
+  return shiftTypeByLabel.get(normalized)
+    || (normalized.includes("FRONT DESK SUPERVISOR") ? shiftTypeByLabel.get("FRONT DESK SUPERVISOR") : null)
+    || (normalized.includes("AUDIT") || normalized.includes("NIGHT") ? shiftTypeByLabel.get("NIGHT AUDIT") || shiftTypeByLabel.get("AUDIT") : null)
+    || (normalized.includes("FD AM") ? shiftTypeByLabel.get("FD AM") : null)
+    || (normalized.includes("FD PM") ? shiftTypeByLabel.get("FD PM") : null)
+    || (normalized.includes("FRONT DESK") ? shiftTypeByLabel.get("FD AM") || shiftTypeByLabel.get("FRONT DESK") : null)
+    || (normalized.includes("BISTRO AM") ? shiftTypeByLabel.get("BISTRO AM") : null)
+    || (normalized.includes("BISTRO PM") ? shiftTypeByLabel.get("BISTRO PM") : null)
+    || (normalized.includes("BREAKFAST") ? shiftTypeByLabel.get("BREAKFAST") : null)
+    || (normalized.includes("ROOM ATTENDANT") ? shiftTypeByLabel.get("ROOM ATTENDANT") || shiftTypeByLabel.get("HOUSEKEEPING") : null)
+    || (normalized.includes("EXECUTIVE HOUSEKEEPER") || normalized.includes("EXEC HK") ? shiftTypeByLabel.get("EXEC HK") || shiftTypeByLabel.get("HOUSEKEEPING") : null)
+    || (normalized.includes("LAUNDRY") ? shiftTypeByLabel.get("LAUNDRY") : null)
+    || (normalized.includes("HOUSEPERSON") || normalized.includes("HOUSEMAN") ? shiftTypeByLabel.get("HOUSEPERSON") : null)
+    || (normalized.includes("INSPECTOR") ? shiftTypeByLabel.get("ROOM INSPECTOR") : null)
+    || (normalized.includes("MAINTENANCE") ? shiftTypeByLabel.get("MAINTENANCE") : null)
+    || null;
+}
+
+function resolveOpsShiftTypeForAssignment(assignment: any, directShiftType: any, shiftTypeByLabel: Map<string, any>) {
+  const roleResolved = resolveOpsShiftTypeFromRole(assignment?.roleWorked || "", shiftTypeByLabel);
+  if (!roleResolved) return directShiftType;
+  const roleDepartment = String(roleResolved.departmentHint || roleResolved.label || "").trim().toLowerCase();
+  const directDepartment = String(directShiftType?.departmentHint || directShiftType?.label || "").trim().toLowerCase();
+  if (!directShiftType || roleDepartment && roleDepartment !== directDepartment) return roleResolved;
+  if (String(assignment?.roleWorked || "").trim().toLowerCase() === String(roleResolved.label || "").trim().toLowerCase()) return roleResolved;
+  return directShiftType;
+}
+
 function opsLaborBucketForSchedule(employee: any, assignment: any, shiftType: any) {
   const shiftText = [assignment?.roleWorked, shiftType?.label, shiftType?.departmentHint].filter(Boolean).join(" ");
   if (isFrontDeskSupervisorForOps(employee) || isFrontDeskSupervisorText(shiftText)) {
@@ -771,15 +802,20 @@ export function registerOpsReportRoutes(app: Express) {
       ]);
       const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
       const shiftTypeById = new Map(shiftTypes.map((shiftType) => [shiftType.id, shiftType]));
+      const shiftTypeByLabel = new Map(shiftTypes.map((shiftType) => [String(shiftType.label || "").trim().toUpperCase(), shiftType]));
       for (const assignment of assignments) {
         if (assignment.isOpenShift) continue;
         const employee = assignment.employeeId ? employeeById.get(assignment.employeeId) : null;
-        const shiftType = assignment.shiftTypeId ? shiftTypeById.get(assignment.shiftTypeId) : null;
+        const directShiftType = assignment.shiftTypeId ? shiftTypeById.get(assignment.shiftTypeId) : null;
+        const shiftType = resolveOpsShiftTypeForAssignment(assignment, directShiftType, shiftTypeByLabel);
         const hours = shiftHours(assignment, shiftType);
         if (hours <= 0) continue;
         const bucket = opsLaborBucketForSchedule(employee, assignment, shiftType);
         addDepartmentHours(departments, bucket.department, hours);
-        addLaborBreakdown(breakdown, bucket.department, bucket.label, hours);
+        const detailLabel = bucket.department === "FRONT DESK / NIGHT AUDIT HOURS" && employee?.displayName
+          ? `${bucket.label} (${employee.displayName}, ${assignment.shiftDate})`
+          : bucket.label;
+        addLaborBreakdown(breakdown, bucket.department, detailLabel, hours);
       }
       for (const items of Object.values(breakdown)) items.sort((a, b) => b.hours - a.hours || a.label.localeCompare(b.label));
       res.json({ weekStart: parsed.data.weekStart, scheduleId: schedule.id, departments, breakdown });

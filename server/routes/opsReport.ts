@@ -207,10 +207,33 @@ function shiftHours(assignment: any, shiftType: any) {
   return Math.max(0, (duration - breakMinutes) / 60);
 }
 
-function opsDepartmentForSchedule(employee: any, assignment: any, shiftType: any) {
-  if (isFrontDeskSupervisorForOps(employee) || isFrontDeskSupervisorText(assignment?.roleWorked || shiftType?.label || "")) return "OTHER";
-  const value = String(assignment?.roleWorked || shiftType?.departmentHint || shiftType?.label || employee?.department || "").toLowerCase();
-  return opsDepartmentFromText(value);
+function opsLaborBucketForSchedule(employee: any, assignment: any, shiftType: any) {
+  const shiftText = [assignment?.roleWorked, shiftType?.label, shiftType?.departmentHint].filter(Boolean).join(" ");
+  if (isFrontDeskSupervisorForOps(employee) || isFrontDeskSupervisorText(shiftText)) {
+    return {
+      department: "OTHER",
+      label: employee?.displayName ? `Front Desk Supervisor (${employee.displayName})` : "Front Desk Supervisor",
+    };
+  }
+  const text = String(shiftText || employee?.department || "").toLowerCase();
+  if (text.includes("audit") || text.includes("night")) return { department: "FRONT DESK / NIGHT AUDIT HOURS", label: "Night Audit" };
+  if (text.includes("front") || text.includes("fd ") || text === "fd" || text.includes("desk")) return { department: "FRONT DESK / NIGHT AUDIT HOURS", label: "Front Desk" };
+  return { department: opsDepartmentFromText(text), label: canonicalOpsLaborLabel(text) };
+}
+
+function canonicalOpsLaborLabel(value: unknown) {
+  const text = String(value || "").toLowerCase();
+  if (text.includes("house") || text.includes("hk") || text.includes("laundry") || text.includes("room attendant") || text.includes("inspector")) {
+    if (text.includes("exec hk") || text.includes("executive housekeeper")) return "Exec HK";
+    if (text.includes("laundry")) return "Laundry";
+    if (text.includes("houseperson") || text.includes("houseman")) return "Houseperson";
+    if (text.includes("inspector")) return "Room Inspector";
+    if (text.includes("room attendant")) return "Room Attendant";
+    return "Housekeeping";
+  }
+  if (text.includes("bistro") || text.includes("breakfast") || text.includes("barista") || text.includes("cook") || text.includes("f&b") || text.includes("restaurant")) return "Breakfast / Bistro";
+  if (text.includes("maintenance") || text.includes("engineer") || text.includes("r&m")) return "Maintenance";
+  return "Other";
 }
 
 function isFrontDeskSupervisorText(value: unknown) {
@@ -725,11 +748,9 @@ export function registerOpsReportRoutes(app: Express) {
         const shiftType = assignment.shiftTypeId ? shiftTypeById.get(assignment.shiftTypeId) : null;
         const hours = shiftHours(assignment, shiftType);
         if (hours <= 0) continue;
-        const department = opsDepartmentForSchedule(employee, assignment, shiftType);
-        const roleLabel = String(assignment.roleWorked || shiftType?.label || shiftType?.departmentHint || "Unlabeled shift").trim();
-        const detailLabel = department === "OTHER" && employee?.displayName ? `${roleLabel} (${employee.displayName})` : roleLabel;
-        addDepartmentHours(departments, department, hours);
-        addLaborBreakdown(breakdown, department, detailLabel, hours);
+        const bucket = opsLaborBucketForSchedule(employee, assignment, shiftType);
+        addDepartmentHours(departments, bucket.department, hours);
+        addLaborBreakdown(breakdown, bucket.department, bucket.label, hours);
       }
       for (const items of Object.values(breakdown)) items.sort((a, b) => b.hours - a.hours || a.label.localeCompare(b.label));
       res.json({ weekStart: parsed.data.weekStart, scheduleId: schedule.id, departments, breakdown });

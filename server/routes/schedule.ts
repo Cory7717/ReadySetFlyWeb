@@ -78,6 +78,7 @@ const DEFAULT_SHIFT_TYPES = [
   { label: "BREAKFAST", startTime: "06:00", endTime: "12:00", color: "#fde68a", textColor: "#713f12", departmentHint: "Bistro" },
   { label: "HOUSEKEEPING", startTime: "09:00", endTime: "17:00", color: "#dcfce7", textColor: "#14532d", departmentHint: "Housekeeping" },
   { label: "Room Attendant", startTime: "09:00", endTime: "17:00", color: "#dcfce7", textColor: "#14532d", departmentHint: "Housekeeping" },
+  { label: "Exec HK", startTime: "09:00", endTime: "17:00", color: "#bbf7d0", textColor: "#14532d", departmentHint: "Housekeeping" },
   { label: "LAUNDRY", startTime: "08:00", endTime: "15:00", color: "#ccfbf1", textColor: "#134e4a", departmentHint: "Housekeeping" },
   { label: "Laundry", startTime: "08:00", endTime: "15:00", color: "#ccfbf1", textColor: "#134e4a", departmentHint: "Housekeeping" },
   { label: "Houseperson", startTime: "09:00", endTime: "16:00", color: "#fef9c3", textColor: "#713f12", departmentHint: "Housekeeping" },
@@ -96,8 +97,8 @@ const DEFAULT_SHIFT_TYPES = [
 const HOUSEKEEPING_ROLE_SHIFT_FALLBACKS: Record<string, any> = {
   "ROOM ATTENDANT": { label: "Room Attendant", startTime: "09:00", endTime: "17:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
   HOUSEKEEPING: { label: "HOUSEKEEPING", startTime: "09:00", endTime: "17:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
-  "EXECUTIVE HOUSEKEEPER": { label: "HOUSEKEEPING", startTime: "09:00", endTime: "17:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
-  "EXEC HK": { label: "HOUSEKEEPING", startTime: "09:00", endTime: "17:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
+  "EXECUTIVE HOUSEKEEPER": { label: "Exec HK", startTime: "09:00", endTime: "17:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
+  "EXEC HK": { label: "Exec HK", startTime: "09:00", endTime: "17:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
   LAUNDRY: { label: "Laundry", startTime: "08:00", endTime: "15:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
   HOUSEPERSON: { label: "Houseperson", startTime: "09:00", endTime: "16:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
   HOUSEMAN: { label: "Houseperson", startTime: "09:00", endTime: "16:00", unpaidBreakMinutes: 0, departmentHint: "Housekeeping" },
@@ -456,7 +457,7 @@ function resolveShiftTypeFromRole(role: string, shiftTypeByLabel: Map<string, an
     || (normalized.includes("AUDIT") || normalized.includes("NIGHT") ? shiftTypeByLabel.get("NIGHT AUDIT") || shiftTypeByLabel.get("AUDIT") : null)
     || (normalized.includes("DOS") || normalized.includes("SALES") ? shiftTypeByLabel.get("DOS / SALES") : null)
     || (normalized.includes("ROOM ATTENDANT") ? shiftTypeByLabel.get("ROOM ATTENDANT") || shiftTypeByLabel.get("HOUSEKEEPING") : null)
-    || (normalized.includes("EXECUTIVE HOUSEKEEPER") || normalized.includes("EXEC HK") ? shiftTypeByLabel.get("HOUSEKEEPING") || HOUSEKEEPING_ROLE_SHIFT_FALLBACKS["EXECUTIVE HOUSEKEEPER"] : null)
+    || (normalized.includes("EXECUTIVE HOUSEKEEPER") || normalized.includes("EXEC HK") ? shiftTypeByLabel.get("EXEC HK") || HOUSEKEEPING_ROLE_SHIFT_FALLBACKS["EXECUTIVE HOUSEKEEPER"] : null)
     || (normalized.includes("LAUNDRY") ? shiftTypeByLabel.get("LAUNDRY") : null)
     || (normalized.includes("HOUSEPERSON") || normalized.includes("HOUSEMAN") ? shiftTypeByLabel.get("HOUSEPERSON") : null)
     || (normalized.includes("INSPECTOR") ? shiftTypeByLabel.get("ROOM INSPECTOR") : null)

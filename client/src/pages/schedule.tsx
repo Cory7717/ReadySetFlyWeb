@@ -745,7 +745,7 @@ function shiftTone(assignment: ShiftAssignment | undefined, shiftType: ShiftType
         const label = shift.label.toLowerCase();
         return label === role
           || (role.includes("room attendant") && (label === "room attendant" || label === "housekeeping"))
-          || ((role.includes("executive housekeeper") || role.includes("exec hk")) && label === "housekeeping")
+          || ((role.includes("executive housekeeper") || role.includes("exec hk")) && label === "exec hk")
           || (role.includes("laundry") && label === "laundry")
           || ((role.includes("houseperson") || role.includes("houseman")) && label === "houseperson")
           || (role.includes("inspector") && label === "room inspector")
@@ -769,7 +769,7 @@ function matchingShiftForRole(roleWorked: string, shiftTypes: ShiftType[]) {
       || (role.includes("audit") && (label === "night audit" || label === "audit"))
       || ((role.includes("dos") || role.includes("sales")) && label === "dos / sales")
       || (role.includes("room attendant") && (label === "room attendant" || label === "housekeeping"))
-      || ((role.includes("executive housekeeper") || role.includes("exec hk")) && label === "housekeeping")
+      || ((role.includes("executive housekeeper") || role.includes("exec hk")) && label === "exec hk")
       || (role.includes("laundry") && label === "laundry")
       || ((role.includes("houseperson") || role.includes("houseman")) && label === "houseperson")
       || (role.includes("inspector") && label === "room inspector")

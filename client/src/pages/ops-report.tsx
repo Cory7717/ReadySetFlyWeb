@@ -904,12 +904,12 @@ function EditableTable({
         </thead>
         <tbody>
           {rows.map((row, rowIndex) => (
-            <tr key={rowIndex} className="odd:bg-white even:bg-[#fbf6ee]">
+            <tr key={rowIndex} className={`${row.__readOnly === "true" ? "bg-[#e8f0e9] font-semibold" : "odd:bg-white even:bg-[#fbf6ee]"}`}>
               {columns.map((column) => (
                 <td key={column.key} className="border border-[#e0d3c1] p-1 align-top">
                   <Input
-                    readOnly={column.readOnly || column.key === "priorWeek" || column.key === "weekVariance"}
-                    className={`h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white ${column.readOnly || column.key === "priorWeek" || column.key === "weekVariance" ? "!bg-[#f3efe7] !text-[#5f5247]" : ""}`}
+                    readOnly={row.__readOnly === "true" || column.readOnly || column.key === "priorWeek" || column.key === "weekVariance"}
+                    className={`h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white ${row.__readOnly === "true" || column.readOnly || column.key === "priorWeek" || column.key === "weekVariance" ? "!bg-[#f3efe7] !text-[#5f5247]" : ""}`}
                     value={row[column.key] || ""}
                     onMouseEnter={(event) => showPreview(event, row, column)}
                     onMouseLeave={() => setPreview(null)}
@@ -924,7 +924,7 @@ function EditableTable({
                       onChange(next);
                     }}
                     onChange={(event) => {
-                      if (column.readOnly || column.key === "priorWeek" || column.key === "weekVariance") return;
+                      if (row.__readOnly === "true" || column.readOnly || column.key === "priorWeek" || column.key === "weekVariance") return;
                       const next = rows.map((item, index) => index === rowIndex ? { ...item, [column.key]: event.target.value } : item);
                       onChange(next);
                     }}
@@ -1268,12 +1268,33 @@ export default function OpsReportPage() {
   const laborTotal = actualLaborTotal || scheduledLaborTotal;
   const laborBudget = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.budget), 0), [effectiveLabor]);
   const laborVariance = actualLaborTotal ? actualLaborTotal - laborBudget : 0;
-  const laborRows = useMemo(() => effectiveLabor.map((row) => ({
-    ...row,
-    variance: String(row.actualHours || "").trim() !== "" && String(row.budget || "").trim() !== ""
-      ? fmtHours(num(row.actualHours) - num(row.budget))
-      : "",
-  })), [effectiveLabor]);
+  const laborRows = useMemo(() => {
+    const rows: Row[] = effectiveLabor.map((row): Row => ({
+      ...row,
+      variance: String(row.actualHours || "").trim() !== "" && String(row.budget || "").trim() !== ""
+        ? fmtHours(num(row.actualHours) - num(row.budget))
+        : "",
+    }));
+    const scheduledTotal = rows.reduce((sum, row) => sum + num(row.scheduledHours), 0);
+    const actualTotal = rows.reduce((sum, row) => sum + num(row.actualHours), 0);
+    const budgetTotal = rows.reduce((sum, row) => sum + num(row.budget), 0);
+    const hasActual = rows.some((row) => String(row.actualHours || "").trim() !== "");
+    return [
+      ...rows,
+      {
+        __readOnly: "true",
+        department: "TOTAL",
+        scheduledHours: fmtHours(scheduledTotal),
+        actualHours: hasActual ? fmtHours(actualTotal) : "",
+        budget: fmtHours(budgetTotal),
+        variance: hasActual ? fmtHours(actualTotal - budgetTotal) : "",
+        calculatedMpor: "",
+        targetMpor: "",
+        mporVariance: "",
+        comments: "Calculated total",
+      },
+    ];
+  }, [effectiveLabor]);
   const laborDepartmentPreview = useMemo(() => {
     const breakdown = scheduledLabor.data?.breakdown || {};
     return (row: Row, column: { key: string; label: string }) => {
@@ -2579,7 +2600,9 @@ export default function OpsReportPage() {
                   { key: "comments", label: "Comments", wide: true },
                 ]}
                 rows={laborRows}
-                onChange={(rows) => setLabor(rows.map(({ variance, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
+                onChange={(rows) => setLabor(rows
+                  .filter((row) => row.__readOnly !== "true")
+                  .map(({ __readOnly, variance, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
                 getCellPreview={laborDepartmentPreview}
               />
             </Section>

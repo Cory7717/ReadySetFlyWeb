@@ -241,6 +241,7 @@ function canonicalOpsLaborLabel(value: unknown) {
   }
   if (text.includes("bistro") || text.includes("breakfast") || text.includes("barista") || text.includes("cook") || text.includes("f&b") || text.includes("restaurant")) {
     if (text.includes("manager") || text.includes("supervisor") || text.includes("lead")) return "Bistro Manager";
+    if (text.includes("attendant")) return "Bistro Attendant";
     return "Breakfast / Bistro";
   }
   if (text.includes("maintenance") || text.includes("engineer") || text.includes("r&m")) return "Maintenance";

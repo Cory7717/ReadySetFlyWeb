@@ -228,8 +228,7 @@ function canonicalOpsLaborLabel(value: unknown) {
     if (text.includes("laundry")) return "Laundry";
     if (text.includes("houseperson") || text.includes("houseman")) return "Houseperson";
     if (text.includes("inspector")) return "Room Inspector";
-    if (text.includes("room attendant")) return "Room Attendant";
-    return "Housekeeping";
+    return "Room Attendant";
   }
   if (text.includes("bistro") || text.includes("breakfast") || text.includes("barista") || text.includes("cook") || text.includes("f&b") || text.includes("restaurant")) return "Breakfast / Bistro";
   if (text.includes("maintenance") || text.includes("engineer") || text.includes("r&m")) return "Maintenance";

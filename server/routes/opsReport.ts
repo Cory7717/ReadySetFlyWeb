@@ -215,14 +215,23 @@ function opsLaborBucketForSchedule(employee: any, assignment: any, shiftType: an
       label: employee?.displayName ? `Front Desk Supervisor (${employee.displayName})` : "Front Desk Supervisor",
     };
   }
+  if (isBistroManagerForOps(employee) && isBistroText(shiftText || employee?.department)) {
+    return { department: "BREAKFAST / BISTRO HOURS", label: "Bistro Manager" };
+  }
   const text = String(shiftText || employee?.department || "").toLowerCase();
   if (text.includes("audit") || text.includes("night")) return { department: "FRONT DESK / NIGHT AUDIT HOURS", label: "Night Audit" };
   if (text.includes("front") || text.includes("fd ") || text === "fd" || text.includes("desk")) return { department: "FRONT DESK / NIGHT AUDIT HOURS", label: "Front Desk" };
-  return { department: opsDepartmentFromText(text), label: canonicalOpsLaborLabel(text) };
+  const department = opsDepartmentFromText(text);
+  const labelText = department === "OTHER"
+    ? [text, employee?.department, employee?.position, ...(Array.isArray(employee?.rolesJson) ? employee.rolesJson : [])].filter(Boolean).join(" ")
+    : text;
+  return { department, label: canonicalOpsLaborLabel(labelText) };
 }
 
 function canonicalOpsLaborLabel(value: unknown) {
   const text = String(value || "").toLowerCase();
+  if (text.includes("general manager") || /\bgm\b/.test(text)) return "GM";
+  if (text.includes("director of sales") || /\bdos\b/.test(text) || text.includes("sales")) return "DOS";
   if (text.includes("house") || text.includes("hk") || text.includes("laundry") || text.includes("room attendant") || text.includes("inspector")) {
     if (text.includes("exec hk") || text.includes("executive housekeeper")) return "Exec HK";
     if (text.includes("laundry")) return "Laundry";
@@ -230,7 +239,10 @@ function canonicalOpsLaborLabel(value: unknown) {
     if (text.includes("inspector")) return "Room Inspector";
     return "Room Attendant";
   }
-  if (text.includes("bistro") || text.includes("breakfast") || text.includes("barista") || text.includes("cook") || text.includes("f&b") || text.includes("restaurant")) return "Breakfast / Bistro";
+  if (text.includes("bistro") || text.includes("breakfast") || text.includes("barista") || text.includes("cook") || text.includes("f&b") || text.includes("restaurant")) {
+    if (text.includes("manager") || text.includes("supervisor") || text.includes("lead")) return "Bistro Manager";
+    return "Breakfast / Bistro";
+  }
   if (text.includes("maintenance") || text.includes("engineer") || text.includes("r&m")) return "Maintenance";
   return "Other";
 }
@@ -243,7 +255,24 @@ function isFrontDeskSupervisorText(value: unknown) {
 
 function isFrontDeskSupervisorForOps(employee: any) {
   const roles = Array.isArray(employee?.rolesJson) ? employee.rolesJson.join(" ") : "";
+  if (employee?.isDepartmentManager && isFrontDeskText(employee?.department)) return true;
   return isFrontDeskSupervisorText([employee?.department, employee?.position, roles].filter(Boolean).join(" "));
+}
+
+function isFrontDeskText(value: unknown) {
+  const text = String(value || "").toLowerCase();
+  return text.includes("front desk") || text.includes("front office") || /\bfd\b/.test(text) || text.includes("desk");
+}
+
+function isBistroText(value: unknown) {
+  const text = String(value || "").toLowerCase();
+  return text.includes("bistro") || text.includes("breakfast") || text.includes("barista") || text.includes("cook") || text.includes("f&b") || text.includes("restaurant");
+}
+
+function isBistroManagerForOps(employee: any) {
+  const roles = Array.isArray(employee?.rolesJson) ? employee.rolesJson.join(" ") : "";
+  const text = [employee?.department, employee?.position, roles].filter(Boolean).join(" ").toLowerCase();
+  return isBistroText(text) && (employee?.isDepartmentManager || text.includes("manager") || text.includes("supervisor") || text.includes("lead"));
 }
 
 function opsDepartmentFromText(value: string) {

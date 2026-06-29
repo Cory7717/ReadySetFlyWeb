@@ -245,6 +245,14 @@ function normalizeRoleRates(value: unknown) {
   return Object.keys(rates).length ? rates : null;
 }
 
+function normalizeScheduleEmployeeRoles(employee: any) {
+  return {
+    ...employee,
+    rolesJson: rolesArray(employee?.rolesJson),
+    roleRatesJson: normalizeRoleRates(employee?.roleRatesJson),
+  };
+}
+
 function normalizeScheduleRole(value: unknown) {
   const role = String(value || "").trim();
   if (!role) return "";
@@ -1727,8 +1735,9 @@ function summarizeHousekeepingBoard(board: any) {
 
 function stripPrivateScheduleRates(payload: any, user: any) {
   const publicUser = publicScheduleUser(user);
-  const editableDepartments = managerDepartmentsForUser(user, payload.employees);
-  const enriched = { ...payload, currentUserPermissions: { editableDepartments, canPublishFinal: publicUser.isSuperAdmin } };
+  const normalizedEmployees = payload.employees.map(normalizeScheduleEmployeeRoles);
+  const editableDepartments = managerDepartmentsForUser(user, normalizedEmployees);
+  const enriched = { ...payload, employees: normalizedEmployees, currentUserPermissions: { editableDepartments, canPublishFinal: publicUser.isSuperAdmin } };
   if (publicUser.isSuperAdmin) return enriched;
   const {
     totalWeeklyLaborDollars,
@@ -1746,7 +1755,10 @@ function stripPrivateScheduleRates(payload: any, user: any) {
   } = payload.totals || {};
   return {
     ...enriched,
-    employees: payload.employees.map(({ hourlyRate, roleRatesJson, ...employee }: any) => employee),
+    employees: payload.employees.map((source: any) => {
+      const { hourlyRate, roleRatesJson, ...employee } = normalizeScheduleEmployeeRoles(source);
+      return employee;
+    }),
     totals: {
       ...publicTotals,
       laborMetrics: laborMetrics
@@ -1767,8 +1779,12 @@ function stripPrivateScheduleRates(payload: any, user: any) {
 }
 
 function stripPrivateEmployeeRates(employees: any[], user: any) {
-  if (publicScheduleUser(user).isSuperAdmin) return employees;
-  return employees.map(({ hourlyRate, roleRatesJson, ...employee }: any) => employee);
+  const normalizedEmployees = employees.map(normalizeScheduleEmployeeRoles);
+  if (publicScheduleUser(user).isSuperAdmin) return normalizedEmployees;
+  return normalizedEmployees.map((source: any) => {
+    const { hourlyRate, roleRatesJson, ...employee } = normalizeScheduleEmployeeRoles(source);
+    return employee;
+  });
 }
 
 async function addRequestConflictInfo(rows: Array<{ request: any; user: any }>) {

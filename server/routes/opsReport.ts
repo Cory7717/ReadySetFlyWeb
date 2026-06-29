@@ -238,20 +238,14 @@ function resolveOpsShiftTypeForAssignment(assignment: any, directShiftType: any,
   return directShiftType;
 }
 
-function bistroScheduleLabelForAssignment(assignment: any, shiftType: any) {
+function bistroScheduleLabelForAssignment(employee: any, assignment: any, shiftType: any) {
   const text = [assignment?.roleWorked, shiftType?.label, shiftType?.departmentHint].filter(Boolean).join(" ").toLowerCase();
-  if (text.includes("manager") || text.includes("supervisor") || text.includes("lead")) return "Bistro Manager";
+  if (isBistroManagerForOps(employee) || text.includes("manager") || text.includes("supervisor") || text.includes("lead")) return "Bistro Manager";
   return "Bistro Attendant";
 }
 
 export function opsLaborBucketForSchedule(employee: any, assignment: any, shiftType: any) {
   const shiftText = [assignment?.roleWorked, shiftType?.label, shiftType?.departmentHint].filter(Boolean).join(" ");
-  if (isBistroText(shiftText)) {
-    return {
-      department: "BREAKFAST / BISTRO HOURS",
-      label: bistroScheduleLabelForAssignment(assignment, shiftType),
-    };
-  }
   if (isFrontDeskSupervisorForOps(employee) || isFrontDeskSupervisorText(shiftText)) {
     return {
       department: "OTHER",
@@ -259,7 +253,7 @@ export function opsLaborBucketForSchedule(employee: any, assignment: any, shiftT
     };
   }
   if (isBistroManagerForOps(employee) && isBistroText(shiftText || employee?.department)) {
-    return { department: "BREAKFAST / BISTRO HOURS", label: "Bistro Manager" };
+    return { department: "BREAKFAST / BISTRO HOURS", label: bistroScheduleLabelForAssignment(employee, assignment, shiftType) };
   }
   const text = String(shiftText || employee?.department || "").toLowerCase();
   if (text.includes("audit") || text.includes("night")) return { department: "FRONT DESK / NIGHT AUDIT HOURS", label: "Night Audit" };

@@ -18,7 +18,7 @@ test("Excel serial dates normalize without time-zone drift", () => {
   assert.equal(excelDateToIso(" May 30, 2026"), "2026-05-30");
 });
 
-test("OpsReport scheduled labor buckets Bistro worked shifts before employee profile fallback", () => {
+test("OpsReport scheduled labor keeps front desk supervisor fallback out of Bistro and labels Bistro managers correctly", () => {
   const crossTrainedFrontDeskEmployee = {
     displayName: "Avalon Fletcher",
     department: "Front Desk",
@@ -32,14 +32,14 @@ test("OpsReport scheduled labor buckets Bistro worked shifts before employee pro
     { label: "Bistro Attendant", departmentHint: "Bistro" },
   );
   assert.deepEqual(attendantBucket, {
-    department: "BREAKFAST / BISTRO HOURS",
-    label: "Bistro Attendant",
+    department: "OTHER",
+    label: "Front Desk Supervisor (Avalon Fletcher)",
   });
 
   const managerBucket = opsLaborBucketForSchedule(
     { displayName: "Michael Pracht", department: "Bistro", position: "Bistro Manager", rolesJson: ["Bistro Manager"], isDepartmentManager: true },
-    { roleWorked: "Bistro Manager", shiftDate: "2026-07-04" },
-    { label: "Bistro Manager", departmentHint: "Bistro" },
+    { roleWorked: "BISTRO AM", shiftDate: "2026-07-04" },
+    { label: "BISTRO AM", departmentHint: "Bistro" },
   );
   assert.deepEqual(managerBucket, {
     department: "BREAKFAST / BISTRO HOURS",

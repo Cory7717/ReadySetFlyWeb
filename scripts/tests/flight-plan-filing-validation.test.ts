@@ -355,6 +355,39 @@ test("ICAO validation rejects bad surveillance and warns for equipment dependenc
   assert.ok(missingEquipment.warnings.some((warning) => /requires additional aircraft equipment codes/i.test(warning)));
 });
 
+test("ICAO aircraft equipment validation blocks Flight Service-invalid equipment before file or amend", () => {
+  const invalidFile = validateFlightPlanForAction(filingPlan({
+    filingEquipment: "SCE",
+    filingSurveillanceEquipment: "S",
+  }), "file");
+  assert.equal(invalidFile.ready, false);
+  assert.ok(invalidFile.errors.some((error) => /aircraft equipment contains an invalid ICAO code/i.test(error)));
+
+  const invalidAmend = validateFlightPlanForAction(filingPlan({
+    filingStatus: "filed",
+    filingProviderPlanId: "123456789_123456_1234",
+    filingRaw: { versionStamp: "20260629123000000" } as any,
+    filingEquipment: "SCE",
+    filingSurveillanceEquipment: "S",
+  }), "amend");
+  assert.equal(invalidAmend.ready, false);
+  assert.ok(invalidAmend.errors.some((error) => /aircraft equipment contains an invalid ICAO code/i.test(error)));
+});
+
+test("ICAO aircraft equipment validation preserves valid equipment separately from surveillance", () => {
+  const plan = filingPlan({
+    filingEquipment: "SC",
+    filingSurveillanceEquipment: "S",
+  });
+  const validation = validateFlightPlanForAction(plan, "file");
+  assert.equal(validation.ready, true);
+
+  const payload = buildLeidosActionPayload(plan, "file", { otherInfo: null } as any);
+  const fields = Object.fromEntries(payload.params.entries());
+  assert.equal(fields.aircraftEquipment, "SC");
+  assert.equal(fields.surveillanceEquipment, "S");
+});
+
 test("Flight Service otherInfo transmission preserves ICAO RMK remarks", () => {
   assert.equal(
     normalizeLeidosOtherInfoForTransmission(buildOtherInfoWithRemarks("DOF/260623", "TEST MESSAGE")),
@@ -464,11 +497,11 @@ test("ZZZZ departure, destination, and alternate Field 18 entries include coordi
 
 test("ZZZZ alternate private field code does not append airport name", () => {
   assert.equal(
-    buildZzzzOtherInfoForLeidos("DOF/260627 RMK/ZZZZ ALTERNATE VALIDATION TEST ALTN/RUTHERFORD RANCH AIRPORT", {
+    buildZzzzOtherInfoForLeidos("DOF/260702 RMK/ZZZZ ALTERNATE VALIDATION TEST ALTN/RUTHERFORD RANCH AIRPORT", {
       alternateLocation: "85TX",
       alternateName: "Rutherford Ranch Airport",
     }),
-    "DOF/260627 RMK/ZZZZ ALTERNATE VALIDATION TEST ALTN/85TX",
+    "DOF/260702 RMK/ZZZZ ALTERNATE VALIDATION TEST ALTN/85TX",
   );
 });
 
@@ -478,12 +511,12 @@ test("ZZZZ alternate private field filing keeps altDestination1 ZZZZ and sends o
     destination: "KSDL",
     alternate: "ZZZZ",
     route: "DCT",
-    filingOtherInfo: "DOF/260627",
+    filingOtherInfo: "DOF/260702",
     filingRemarks: "ZZZZ ALTERNATE VALIDATION TEST",
     filingAlternateName: "Rutherford Ranch Airport",
     plannerState: {
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-06-27T10:00",
+      userDisplayDepartureTimeLocal: "2026-07-02T10:00",
       planningReferenceAlternateAirport: "KSDL",
       actualAlternateLocationMode: "identifier",
       actualAlternateLocation: "85TX",
@@ -492,7 +525,7 @@ test("ZZZZ alternate private field filing keeps altDestination1 ZZZZ and sends o
   const fields = Object.fromEntries(payload.params.entries());
 
   assert.equal(fields.altDestination1, "ZZZZ");
-  assert.equal(fields.otherInfo, "DOF/260627 RMK/ZZZZ ALTERNATE VALIDATION TEST ALTN/85TX");
+  assert.equal(fields.otherInfo, "DOF/260702 RMK/ZZZZ ALTERNATE VALIDATION TEST ALTN/85TX");
   assert.doesNotMatch(String(fields.otherInfo), /RUTHERFORD/i);
   assert.equal(String(fields.otherInfo).match(/\bALTN\//g)?.length, 1);
 });
@@ -503,12 +536,12 @@ test("ZZZZ departure private field filing keeps departure ZZZZ and sends only DE
     destination: "KSDL",
     alternate: null,
     route: "DCT",
-    filingOtherInfo: "DOF/260627",
+    filingOtherInfo: "DOF/260702",
     filingRemarks: "ZZZZ DEPARTURE VALIDATION TEST",
     filingDepartureName: "Rutherford Ranch Airport",
     plannerState: {
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-06-27T10:00",
+      userDisplayDepartureTimeLocal: "2026-07-02T10:00",
       planningReferenceDepartureAirport: "KDWH",
       actualDepartureLocationMode: "identifier",
       actualDepartureLocation: "85TX",
@@ -530,12 +563,12 @@ test("ZZZZ destination private field filing keeps destination ZZZZ and sends onl
     destination: "ZZZZ",
     alternate: null,
     route: "DCT",
-    filingOtherInfo: "DOF/260627",
+    filingOtherInfo: "DOF/260702",
     filingRemarks: "ZZZZ DESTINATION VALIDATION TEST",
     filingDestinationName: "Rutherford Ranch Airport",
     plannerState: {
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-06-27T10:00",
+      userDisplayDepartureTimeLocal: "2026-07-02T10:00",
       planningReferenceDestinationAirport: "KSDL",
       actualDestinationLocationMode: "identifier",
       actualDestinationLocation: "85TX",
@@ -557,14 +590,14 @@ test("ZZZZ private field codes for departure destination and alternate do not ap
     destination: "ZZZZ",
     alternate: "ZZZZ",
     route: "DCT",
-    filingOtherInfo: "DOF/260627",
+    filingOtherInfo: "DOF/260702",
     filingRemarks: "ZZZZ ALL PRIVATE FIELD VALIDATION TEST",
     filingDepartureName: "Rutherford Ranch Airport",
     filingDestinationName: "Private Destination Airport",
     filingAlternateName: "Private Alternate Airport",
     plannerState: {
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-06-27T10:00",
+      userDisplayDepartureTimeLocal: "2026-07-02T10:00",
       planningReferenceDepartureAirport: "KDWH",
       planningReferenceDestinationAirport: "KSDL",
       planningReferenceAlternateAirport: "KSDL",

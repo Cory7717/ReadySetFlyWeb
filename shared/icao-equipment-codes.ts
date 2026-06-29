@@ -33,6 +33,12 @@ export const ICAO_EQUIPMENT_CODES: IcaoEquipmentCode[] = [
 
 export const ICAO_EQUIPMENT_CODE_SET = new Set(ICAO_EQUIPMENT_CODES.map((entry) => entry.code));
 
+const FLIGHT_SERVICE_UNSUPPORTED_EQUIPMENT_CODES = new Set([
+  // Flight Service rejected aircraftEquipment=SCE during live testing. Keep
+  // ACARS details out of Field 10a unless/until Flight Service confirms support.
+  "E",
+]);
+
 export const parseIcaoEquipmentCodes = (value?: string | null) =>
   String(value || "")
     .toUpperCase()
@@ -49,4 +55,50 @@ export const normalizeIcaoEquipmentCodes = (value?: string | null) => {
 export const hasOnlyKnownIcaoEquipmentCodes = (value?: string | null) => {
   const codes = parseIcaoEquipmentCodes(value);
   return codes.length > 0 && codes.every((code) => ICAO_EQUIPMENT_CODE_SET.has(code));
+};
+
+export type FlightServiceAircraftEquipmentValidation = {
+  originalAircraftEquipment: string;
+  normalizedAircraftEquipment: string | null;
+  surveillanceEquipment: string | null;
+  invalidEquipmentCodes: string[];
+  duplicateEquipmentCodes: string[];
+  validationResult: "valid" | "invalid";
+  blockedBeforeLeidos: boolean;
+};
+
+export const validateFlightServiceAircraftEquipmentCodes = (
+  aircraftEquipment?: string | null,
+  surveillanceEquipment?: string | null,
+): FlightServiceAircraftEquipmentValidation => {
+  const originalAircraftEquipment = String(aircraftEquipment || "").trim();
+  const codes = parseIcaoEquipmentCodes(originalAircraftEquipment);
+  const normalizedAircraftEquipment = normalizeIcaoEquipmentCodes(originalAircraftEquipment);
+  const seenCodes = new Set<string>();
+  const duplicateEquipmentCodes: string[] = [];
+
+  for (const code of codes) {
+    if (seenCodes.has(code) && !duplicateEquipmentCodes.includes(code)) {
+      duplicateEquipmentCodes.push(code);
+    }
+    seenCodes.add(code);
+  }
+
+  const invalidEquipmentCodes = Array.from(new Set([
+    ...codes.filter((code) => !ICAO_EQUIPMENT_CODE_SET.has(code)),
+    ...codes.filter((code) => FLIGHT_SERVICE_UNSUPPORTED_EQUIPMENT_CODES.has(code)),
+    ...(codes.includes("N") && codes.length > 1 ? ["N"] : []),
+    ...duplicateEquipmentCodes,
+  ]));
+  const validationResult = codes.length > 0 && invalidEquipmentCodes.length === 0 ? "valid" : "invalid";
+
+  return {
+    originalAircraftEquipment,
+    normalizedAircraftEquipment,
+    surveillanceEquipment: String(surveillanceEquipment || "").trim().toUpperCase() || null,
+    invalidEquipmentCodes,
+    duplicateEquipmentCodes,
+    validationResult,
+    blockedBeforeLeidos: validationResult === "invalid",
+  };
 };

@@ -14,7 +14,7 @@ import {
   type FilingProviderSnapshot,
 } from "@shared/flight-plan-filing-workflow";
 import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
-import { normalizeIcaoEquipmentCodes, hasOnlyKnownIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
+import { normalizeIcaoEquipmentCodes, validateFlightServiceAircraftEquipmentCodes } from "@shared/icao-equipment-codes";
 import { getIcaoOtherInfoEquipmentWarnings, hasOnlyFlightServiceSurveillanceCodes, hasOnlyKnownIcaoSurveillanceCodes } from "@shared/icao-filing";
 import { normalizeZzzzActualLocation } from "@shared/zzzz-location";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
@@ -1940,8 +1940,26 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if ((action === "file" || action === "amend") && !plan.filingEquipment) {
     errors.push("Aircraft equipment is required before sending this filing action to Leidos.");
   }
-  if ((action === "file" || action === "amend") && plan.filingEquipment && !hasOnlyKnownIcaoEquipmentCodes(plan.filingEquipment)) {
-    errors.push("Aircraft equipment must use approved ICAO equipment codes.");
+  if ((action === "file" || action === "amend") && plan.filingEquipment) {
+    const equipmentValidation = validateFlightServiceAircraftEquipmentCodes(
+      plan.filingEquipment,
+      plan.filingSurveillanceEquipment,
+    );
+    console.info(JSON.stringify({
+      event: "leidos_aircraft_equipment_validation",
+      planId: plan.id,
+      action,
+      originalAircraftEquipment: equipmentValidation.originalAircraftEquipment,
+      normalizedAircraftEquipment: equipmentValidation.normalizedAircraftEquipment,
+      surveillanceEquipment: equipmentValidation.surveillanceEquipment,
+      invalidEquipmentCodes: equipmentValidation.invalidEquipmentCodes,
+      duplicateEquipmentCodes: equipmentValidation.duplicateEquipmentCodes,
+      validationResult: equipmentValidation.validationResult,
+      blockedBeforeLeidos: equipmentValidation.blockedBeforeLeidos,
+    }));
+    if (equipmentValidation.validationResult === "invalid") {
+      errors.push("Aircraft equipment contains an invalid ICAO code. Please update the aircraft equipment before filing.");
+    }
   }
   if ((action === "file" || action === "amend") && !plan.filingPilotPhone) {
     errors.push("Pilot phone number is required before sending this filing action to Leidos.");

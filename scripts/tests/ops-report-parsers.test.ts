@@ -38,8 +38,8 @@ test("OpsReport scheduled labor keeps front desk supervisor fallback out of Bist
 
   const managerBucket = opsLaborBucketForSchedule(
     { displayName: "Michael Pracht", department: "Bistro", position: "Bistro Manager", rolesJson: ["Bistro Manager"], isDepartmentManager: true },
-    { roleWorked: "BISTRO AM", shiftDate: "2026-07-04" },
-    { label: "BISTRO AM", departmentHint: "Bistro" },
+    { roleWorked: "Manager Coverage", shiftDate: "2026-07-04" },
+    { label: "MOD", departmentHint: "Managers" },
   );
   assert.deepEqual(managerBucket, {
     department: "BREAKFAST / BISTRO HOURS",

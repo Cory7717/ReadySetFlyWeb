@@ -246,14 +246,14 @@ function bistroScheduleLabelForAssignment(employee: any, assignment: any, shiftT
 
 export function opsLaborBucketForSchedule(employee: any, assignment: any, shiftType: any) {
   const shiftText = [assignment?.roleWorked, shiftType?.label, shiftType?.departmentHint].filter(Boolean).join(" ");
+  if (isBistroManagerForOps(employee)) {
+    return { department: "BREAKFAST / BISTRO HOURS", label: "Bistro Manager" };
+  }
   if (isFrontDeskSupervisorForOps(employee) || isFrontDeskSupervisorText(shiftText)) {
     return {
       department: "OTHER",
       label: employee?.displayName ? `Front Desk Supervisor (${employee.displayName})` : "Front Desk Supervisor",
     };
-  }
-  if (isBistroManagerForOps(employee) && isBistroText(shiftText || employee?.department)) {
-    return { department: "BREAKFAST / BISTRO HOURS", label: bistroScheduleLabelForAssignment(employee, assignment, shiftType) };
   }
   const text = String(shiftText || employee?.department || "").toLowerCase();
   if (text.includes("audit") || text.includes("night")) return { department: "FRONT DESK / NIGHT AUDIT HOURS", label: "Night Audit" };
@@ -308,9 +308,18 @@ function isBistroText(value: unknown) {
 }
 
 function isBistroManagerForOps(employee: any) {
-  const roles = Array.isArray(employee?.rolesJson) ? employee.rolesJson.join(" ") : "";
-  const text = [employee?.department, employee?.position, roles].filter(Boolean).join(" ").toLowerCase();
-  return isBistroText(text) && (employee?.isDepartmentManager || text.includes("manager") || text.includes("supervisor") || text.includes("lead"));
+  const roles = Array.isArray(employee?.rolesJson) ? employee.rolesJson : [];
+  const department = String(employee?.department || "").toLowerCase();
+  const position = String(employee?.position || "").toLowerCase();
+  const isManagerText = (value: unknown) => {
+    const text = String(value || "").toLowerCase();
+    return text.includes("manager") || text.includes("supervisor") || text.includes("lead");
+  };
+  return (
+    (isBistroText(department) && (employee?.isDepartmentManager || isManagerText(department) || isManagerText(position)))
+    || (isBistroText(position) && isManagerText(position))
+    || roles.some((role: unknown) => isBistroText(role) && isManagerText(role))
+  );
 }
 
 function opsDepartmentFromText(value: string) {

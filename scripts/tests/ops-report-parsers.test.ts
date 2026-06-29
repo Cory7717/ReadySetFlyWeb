@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { excelDateToIso, parseOpsReportFile } from "../../server/opsReportParsers";
+import { opsLaborBreakdownLabelForSchedule, opsLaborBucketForSchedule } from "../../server/routes/opsReport";
 
 const context = { weekStart: "2026-05-30", weekEnd: "2026-06-05", reportMonth: "2026-06" };
 
@@ -15,6 +16,46 @@ function csvFile(originalname: string, body: string) {
 test("Excel serial dates normalize without time-zone drift", () => {
   assert.equal(excelDateToIso("46177.488703703704"), "2026-06-04");
   assert.equal(excelDateToIso(" May 30, 2026"), "2026-05-30");
+});
+
+test("OpsReport scheduled labor buckets Bistro worked shifts before employee profile fallback", () => {
+  const crossTrainedFrontDeskEmployee = {
+    displayName: "Avalon Fletcher",
+    department: "Front Desk",
+    position: "Front Desk Supervisor",
+    rolesJson: ["FD AM", "FD PM", "Night Audit", "Bistro Attendant"],
+    isDepartmentManager: true,
+  };
+  const attendantBucket = opsLaborBucketForSchedule(
+    crossTrainedFrontDeskEmployee,
+    { roleWorked: "Bistro Attendant", shiftDate: "2026-07-04" },
+    { label: "Bistro Attendant", departmentHint: "Bistro" },
+  );
+  assert.deepEqual(attendantBucket, {
+    department: "BREAKFAST / BISTRO HOURS",
+    label: "Bistro Attendant",
+  });
+
+  const managerBucket = opsLaborBucketForSchedule(
+    { displayName: "Michael Pracht", department: "Bistro", position: "Bistro Manager", rolesJson: ["Bistro Manager"], isDepartmentManager: true },
+    { roleWorked: "Bistro Manager", shiftDate: "2026-07-04" },
+    { label: "Bistro Manager", departmentHint: "Bistro" },
+  );
+  assert.deepEqual(managerBucket, {
+    department: "BREAKFAST / BISTRO HOURS",
+    label: "Bistro Manager",
+  });
+});
+
+test("OpsReport Front Desk and Night Audit hover labels stay aggregated", () => {
+  assert.equal(
+    opsLaborBreakdownLabelForSchedule({ department: "FRONT DESK / NIGHT AUDIT HOURS", label: "Front Desk" }),
+    "Front Desk",
+  );
+  assert.equal(
+    opsLaborBreakdownLabelForSchedule({ department: "FRONT DESK / NIGHT AUDIT HOURS", label: "Night Audit" }),
+    "Night Audit",
+  );
 });
 
 test("OTB reports are classified by selected and next report month", async () => {

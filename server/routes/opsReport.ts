@@ -238,8 +238,20 @@ function resolveOpsShiftTypeForAssignment(assignment: any, directShiftType: any,
   return directShiftType;
 }
 
-function opsLaborBucketForSchedule(employee: any, assignment: any, shiftType: any) {
+function bistroScheduleLabelForAssignment(assignment: any, shiftType: any) {
+  const text = [assignment?.roleWorked, shiftType?.label, shiftType?.departmentHint].filter(Boolean).join(" ").toLowerCase();
+  if (text.includes("manager") || text.includes("supervisor") || text.includes("lead")) return "Bistro Manager";
+  return "Bistro Attendant";
+}
+
+export function opsLaborBucketForSchedule(employee: any, assignment: any, shiftType: any) {
   const shiftText = [assignment?.roleWorked, shiftType?.label, shiftType?.departmentHint].filter(Boolean).join(" ");
+  if (isBistroText(shiftText)) {
+    return {
+      department: "BREAKFAST / BISTRO HOURS",
+      label: bistroScheduleLabelForAssignment(assignment, shiftType),
+    };
+  }
   if (isFrontDeskSupervisorForOps(employee) || isFrontDeskSupervisorText(shiftText)) {
     return {
       department: "OTHER",
@@ -394,6 +406,13 @@ function addLaborBreakdown(breakdown: Record<string, Array<{ label: string; hour
   const existing = target.find((item) => item.label === normalizedLabel);
   if (existing) existing.hours += hours;
   else target.push({ label: normalizedLabel, hours });
+}
+
+export function opsLaborBreakdownLabelForSchedule(bucket: { department: string; label: string }) {
+  if (bucket.department === "FRONT DESK / NIGHT AUDIT HOURS") {
+    return bucket.label === "Night Audit" ? "Night Audit" : "Front Desk";
+  }
+  return bucket.label;
 }
 
 function parseEmployeeLaborTotals(text: string, employees: any[], departments: Record<string, number>) {
@@ -812,9 +831,7 @@ export function registerOpsReportRoutes(app: Express) {
         if (hours <= 0) continue;
         const bucket = opsLaborBucketForSchedule(employee, assignment, shiftType);
         addDepartmentHours(departments, bucket.department, hours);
-        const detailLabel = bucket.department === "FRONT DESK / NIGHT AUDIT HOURS" && employee?.displayName
-          ? `${bucket.label} (${employee.displayName}, ${assignment.shiftDate})`
-          : bucket.label;
+        const detailLabel = opsLaborBreakdownLabelForSchedule(bucket);
         addLaborBreakdown(breakdown, bucket.department, detailLabel, hours);
       }
       for (const items of Object.values(breakdown)) items.sort((a, b) => b.hours - a.hours || a.label.localeCompare(b.label));

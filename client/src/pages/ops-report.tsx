@@ -291,8 +291,11 @@ function compactReportMapping(reportType: OpsImportResponse["reportType"], mappi
     return {
       dateStart: mapping.dateStart,
       dateEnd: mapping.dateEnd,
+      businessDate: mapping.businessDate,
       reportRunDate: mapping.reportRunDate,
       total: mapping.total,
+      mtd: mapping.mtd ? { dateStart: mapping.mtd.dateStart, dateEnd: mapping.mtd.dateEnd, total: mapping.mtd.total } : undefined,
+      remainingMonth: mapping.remainingMonth ? { dateStart: mapping.remainingMonth.dateStart, dateEnd: mapping.remainingMonth.dateEnd, total: mapping.remainingMonth.total } : undefined,
     };
   }
   if (reportType === "detailed_flash") return { mtd: mapping.mtd, ytd: mapping.ytd };
@@ -352,17 +355,27 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
     };
   }
   if (resolvedReportType === "current_month_otb") {
+    const mtd = mapping.mtd?.dateStart ? mapping.mtd : null;
+    const remainingMonth = mapping.remainingMonth?.dateStart ? mapping.remainingMonth : null;
     const total = mapping.total || {};
     next.monthRows = (next.monthRows || []).map((row: Row) => {
       const label = String(row.label || "").toUpperCase();
-      if (label !== "MONTHLY TOTAL") return row;
+      const source = label === "MONTH TO DATE" && mtd
+        ? { total: mtd.total || {}, comments: `MTD OTB ${mtd.dateStart} to ${mtd.dateEnd}` }
+        : label === "FUTURE BOOKED" && remainingMonth
+          ? { total: remainingMonth.total || {}, comments: `Remaining month OTB ${remainingMonth.dateStart} to ${remainingMonth.dateEnd}` }
+          : label === "MONTHLY TOTAL"
+            ? { total, comments: `Imported ${mapping.dateStart} to ${mapping.dateEnd}` }
+            : null;
+      if (!source) return row;
       return {
         ...row,
-        occupancy: percentDisplay(total.occupancy),
-        rooms: rowValue(total.roomsSold, 0),
-        adr: accounting(total.adr),
-        revenue: accounting(total.roomRevenue),
-        comments: `Imported ${mapping.dateStart} to ${mapping.dateEnd}`,
+        occupancy: percentDisplay(source.total.occupancy),
+        rooms: rowValue(source.total.roomsSold, 0),
+        adr: accounting(source.total.adr),
+        revenue: accounting(source.total.roomRevenue),
+        availableRoomNights: rowValue(source.total.roomsActive || source.total.roomsAvailable, 0),
+        comments: source.comments,
       };
     });
     next.monthlyBudgets = mergeMonthlyActualFromOtb(next.monthlyBudgets || [], mapping);
@@ -517,6 +530,10 @@ function addDaysIso(value: string, days: number) {
   if (Number.isNaN(date.getTime())) return "";
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function localDateIso(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function monthKeyFromDate(value: string) {
@@ -1119,6 +1136,7 @@ export default function OpsReportPage() {
       form.append("weekStart", topMetrics.weekStart);
       form.append("weekEnd", weekEnd);
       form.append("reportMonth", monthKeyFromDate(weekEnd || topMetrics.weekStart));
+      form.append("businessDate", localDateIso());
       form.append("totalRooms", setup.totalRooms);
       const response = await fetch(apiUrl("/api/opsreport/import"), { method: "POST", credentials: "include", body: form });
       if (!response.ok) throw new Error(await response.text());
@@ -1453,12 +1471,12 @@ export default function OpsReportPage() {
     {
       name: "Current Month OTB",
       scope: `${displayOpsDate(reportMonthStart)} through ${displayOpsDate(reportMonthEnd)}`,
-      parameters: `Run the full ${monthLabelFromKey(reportMonthKey)} calendar month. Include all daily rows and the TOTAL row.`,
+      parameters: `Run the full ${monthLabelFromKey(reportMonthKey)} calendar month. Include all daily rows and the TOTAL row. The importer splits this into MTD through yesterday and Remaining Month from today through month end.`,
       fileName: `MMDDYYYY_${monthLabelFromKey(reportMonthKey).split(" ")[0]} Month OTB.csv`,
     },
     {
       name: "Remaining Month OTB",
-      scope: `Current business date through ${displayOpsDate(reportMonthEnd)}`,
+      scope: `Today through ${displayOpsDate(reportMonthEnd)}`,
       parameters: "Use only future on-the-books dates remaining in the selected report month. This populates Current Month Future Booked.",
       fileName: "MMDDYYYY_Remaining Month OTB.csv",
     },

@@ -27,6 +27,7 @@ export type OpsParserContext = {
   weekStart?: string;
   weekEnd?: string;
   reportMonth?: string;
+  businessDate?: string;
   totalRooms?: number;
 };
 
@@ -193,6 +194,13 @@ function nextMonthKey(value: string) {
   return new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7);
 }
 
+function addDaysIso(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function priorYearMonthKey(value: string) {
   const [year, month] = value.split("-").map(Number);
   if (!year || !month) return "";
@@ -319,26 +327,50 @@ function parseOtb(file: Express.Multer.File, rows: string[][], reportType: OpsRe
     }];
   });
   const totalSource = sourceRows.find((row) => /^total$/i.test(String(row[index.date] || "").trim()));
-  const sum = (key: keyof typeof daily[number]) => daily.reduce((total, row) => total + (typeof row[key] === "number" ? Number(row[key]) : 0), 0);
-  const roomsSold = totalSource ? numeric(totalSource[index.roomsSold]) : sum("roomsSold");
-  const roomRevenue = totalSource ? numeric(totalSource[index.revenue]) : sum("roomRevenue");
-  const roomsActive = totalSource ? numeric(totalSource[index.roomsActive]) : sum("roomsActive");
-  const total = {
-    roomsActive,
-    roomsAvailable: totalSource ? numeric(totalSource[index.roomsAvailable]) : sum("roomsAvailable"),
-    roomsSold,
-    groupPickup: totalSource ? numeric(totalSource[index.groupPickup]) : sum("groupPickup"),
-    groupUnpicked: totalSource ? numeric(totalSource[index.groupUnpicked]) : sum("groupUnpicked"),
-    occupancy: totalSource ? numeric(totalSource[index.occupancy]) : roomsActive ? roomsSold / roomsActive * 100 : 0,
-    guests: totalSource ? String(totalSource[index.guests] || "").trim() : "",
-    arrivals: totalSource ? numeric(totalSource[index.arrivals]) : sum("arrivals"),
-    departures: totalSource ? numeric(totalSource[index.departures]) : sum("departures"),
-    ooo: totalSource ? numeric(totalSource[index.ooo]) : sum("ooo"),
-    otm: totalSource ? numeric(totalSource[index.otm]) : sum("otm"),
-    adr: totalSource ? numeric(totalSource[index.adr]) : roomsSold ? roomRevenue / roomsSold : 0,
-    revpar: totalSource ? numeric(totalSource[index.revpar]) : roomsActive ? roomRevenue / roomsActive : 0,
-    roomRevenue,
+  const summarizeRows = (items: typeof daily, source?: string[]) => {
+    const sum = (key: keyof typeof daily[number]) => items.reduce((total, row) => total + (typeof row[key] === "number" ? Number(row[key]) : 0), 0);
+    const roomsSold = source ? numeric(source[index.roomsSold]) : sum("roomsSold");
+    const roomRevenue = source ? numeric(source[index.revenue]) : sum("roomRevenue");
+    const roomsActive = source ? numeric(source[index.roomsActive]) : sum("roomsActive");
+    const roomsAvailable = source ? numeric(source[index.roomsAvailable]) : sum("roomsAvailable");
+    return {
+      roomsActive,
+      roomsAvailable,
+      roomsSold,
+      groupPickup: source ? numeric(source[index.groupPickup]) : sum("groupPickup"),
+      groupUnpicked: source ? numeric(source[index.groupUnpicked]) : sum("groupUnpicked"),
+      occupancy: source ? numeric(source[index.occupancy]) : roomsActive ? roomsSold / roomsActive * 100 : 0,
+      guests: source ? String(source[index.guests] || "").trim() : "",
+      arrivals: source ? numeric(source[index.arrivals]) : sum("arrivals"),
+      departures: source ? numeric(source[index.departures]) : sum("departures"),
+      ooo: source ? numeric(source[index.ooo]) : sum("ooo"),
+      otm: source ? numeric(source[index.otm]) : sum("otm"),
+      adr: source ? numeric(source[index.adr]) : roomsSold ? roomRevenue / roomsSold : 0,
+      revpar: source ? numeric(source[index.revpar]) : roomsActive ? roomRevenue / roomsActive : 0,
+      roomRevenue,
+    };
   };
+  const total = summarizeRows(daily, totalSource);
+  const compactTotal = (value: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(value).map(([key, item]) => [key, typeof item === "number" ? round(item, 2) : item]));
+  const sliceMapping = (items: typeof daily) => ({
+    daily: items,
+    total: compactTotal(summarizeRows(items)),
+    dateStart: items[0]?.date || "",
+    dateEnd: items[items.length - 1]?.date || "",
+  });
+  const reportMonth = context.reportMonth || (context.weekStart ? monthKey(context.weekStart) : "");
+  const businessDate = /^\d{4}-\d{2}-\d{2}$/.test(String(context.businessDate || "")) ? String(context.businessDate) : "";
+  const monthStart = reportMonth ? `${reportMonth}-01` : "";
+  const monthEnd = reportMonth ? addDaysIso(`${nextMonthKey(reportMonth)}-01`, -1) : "";
+  const mtdEnd = businessDate ? addDaysIso(businessDate, -1) : "";
+  const currentMonthDaily = daily.filter((row) => !reportMonth || monthKey(row.date) === reportMonth);
+  const mtdDaily = reportType === "current_month_otb" && monthStart && mtdEnd
+    ? currentMonthDaily.filter((row) => row.date >= monthStart && row.date <= mtdEnd)
+    : [];
+  const remainingMonthDaily = reportType === "current_month_otb" && businessDate && monthEnd
+    ? currentMonthDaily.filter((row) => row.date >= businessDate && row.date <= monthEnd)
+    : [];
   if (reportType === "previous_week_otb" && context.weekStart && context.weekEnd) {
     const outside = daily.filter((row) => row.date < context.weekStart! || row.date > context.weekEnd!);
     if (outside.length) warnings.push(`${outside.length} OTB row(s) fall outside the selected report week.`);
@@ -349,7 +381,12 @@ function parseOtb(file: Express.Multer.File, rows: string[][], reportType: OpsRe
     preview: daily.slice(0, 10),
     mapping: {
       daily,
-      total: Object.fromEntries(Object.entries(total).map(([key, value]) => [key, typeof value === "number" ? round(value, 2) : value])),
+      total: compactTotal(total),
+      ...(reportType === "current_month_otb" && businessDate ? {
+        businessDate,
+        mtd: sliceMapping(mtdDaily),
+        remainingMonth: sliceMapping(remainingMonthDaily),
+      } : {}),
       dateStart: daily[0]?.date || "",
       dateEnd: daily[daily.length - 1]?.date || "",
     },

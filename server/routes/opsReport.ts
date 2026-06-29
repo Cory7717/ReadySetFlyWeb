@@ -598,6 +598,7 @@ export function registerOpsReportRoutes(app: Express) {
           weekStart: typeof req.body?.weekStart === "string" ? req.body.weekStart : undefined,
           weekEnd: typeof req.body?.weekEnd === "string" ? req.body.weekEnd : undefined,
           reportMonth: typeof req.body?.reportMonth === "string" ? req.body.reportMonth : undefined,
+          businessDate: typeof req.body?.businessDate === "string" ? req.body.businessDate : undefined,
           totalRooms: Number(req.body?.totalRooms || 0) || undefined,
         };
         const reports = await Promise.all(files.map(async (file) => {

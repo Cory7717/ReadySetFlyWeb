@@ -35,6 +35,28 @@ test("Remaining Month OTB is kept separate from the full current-month report", 
   assert.equal((report.mapping as any).dateStart, "2026-06-09");
 });
 
+test("Current Month OTB splits MTD through yesterday and remaining month from business date", async () => {
+  const header = "Date,Rms Active,Rms Available,Rms Sold,Group PU,Group UnPU,Occ %,Guests (A/C),Arr,Dept,OOO,OTM,Hold,ADR Occupied ($),ADR Sold ($),RevPAR ($),Rm Rev ($)";
+  const report = await parseOpsReportFile(csvFile("June Month OTB.csv", [
+    header,
+    "\"Jun 01, 2026\",118,118,10,0,0,8.47,10/0,2,2,0,0,0,100,100,8.47,1000",
+    "\"Jun 28, 2026\",118,118,5,0,0,4.24,5/0,1,1,0,0,0,120,120,5.08,600",
+    "\"Jun 29, 2026\",118,118,4,0,0,3.39,4/0,1,1,0,0,0,150,150,5.08,600",
+    "\"Jun 30, 2026\",118,118,2,0,0,1.69,2/0,1,1,0,0,0,200,200,3.39,400",
+    "TOTAL,472,472,21,0,0,Avg: 4.45,21/0,5,5,0,0,0,123.81,123.81,5.51,2600",
+  ].join("\n")), { ...context, businessDate: "2026-06-29" });
+  assert.equal(report.reportType, "current_month_otb");
+  assert.equal((report.mapping as any).businessDate, "2026-06-29");
+  assert.equal((report.mapping as any).mtd.dateStart, "2026-06-01");
+  assert.equal((report.mapping as any).mtd.dateEnd, "2026-06-28");
+  assert.equal((report.mapping as any).mtd.total.roomsSold, 15);
+  assert.equal((report.mapping as any).mtd.total.roomRevenue, 1600);
+  assert.equal((report.mapping as any).remainingMonth.dateStart, "2026-06-29");
+  assert.equal((report.mapping as any).remainingMonth.dateEnd, "2026-06-30");
+  assert.equal((report.mapping as any).remainingMonth.total.roomsSold, 6);
+  assert.equal((report.mapping as any).remainingMonth.total.roomRevenue, 1000);
+});
+
 test("Detailed Flash maps MTD and YTD room revenue from transient plus group", async () => {
   const report = await parseOpsReportFile(csvFile("Detailed Flash_AUSNL.csv", [
     "GROUP,CATEGORY,TODAY/ROOMS,TODAY/GUESTS #,TODAY/RATIO,MONTH-TO-DATE/ ROOMS,MONTH-TO-DATE/GUESTS #,MONTH-TO-DATE/RATIO,YEAR-TO-DATE/ ROOMS,YEAR-TO-DATE/GUESTS #,YEAR-TO-DATE/RATIO",

@@ -208,12 +208,25 @@ function shiftHours(assignment: any, shiftType: any) {
 }
 
 function opsDepartmentForSchedule(employee: any, assignment: any, shiftType: any) {
+  if (isFrontDeskSupervisorForOps(employee) || isFrontDeskSupervisorText(assignment?.roleWorked || shiftType?.label || "")) return "OTHER";
   const value = String(assignment?.roleWorked || shiftType?.departmentHint || shiftType?.label || employee?.department || "").toLowerCase();
   return opsDepartmentFromText(value);
 }
 
+function isFrontDeskSupervisorText(value: unknown) {
+  const text = String(value || "").toLowerCase();
+  return (text.includes("front desk") || text.includes("front office") || /\bfd\b/.test(text))
+    && (text.includes("supervisor") || text.includes("manager") || text.includes("lead"));
+}
+
+function isFrontDeskSupervisorForOps(employee: any) {
+  const roles = Array.isArray(employee?.rolesJson) ? employee.rolesJson.join(" ") : "";
+  return isFrontDeskSupervisorText([employee?.department, employee?.position, roles].filter(Boolean).join(" "));
+}
+
 function opsDepartmentFromText(value: string) {
   const text = String(value || "").toLowerCase();
+  if (isFrontDeskSupervisorText(text)) return "OTHER";
   if (text.includes("audit") || text.includes("night") || text.includes("front") || text.includes("fd ") || text.includes("desk")) return "FRONT DESK / NIGHT AUDIT HOURS";
   if (text.includes("house") || text.includes("hk") || text.includes("laundry") || text.includes("room attendant") || text.includes("inspector")) return "HOUSEKEEPING HOURS";
   if (text.includes("bistro") || text.includes("breakfast") || text.includes("barista") || text.includes("cook") || text.includes("f&b") || text.includes("restaurant")) return "BREAKFAST / BISTRO HOURS";

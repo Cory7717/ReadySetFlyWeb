@@ -68,6 +68,7 @@ const BISTRO_LABOR_SCALE = [
 const DEFAULT_SHIFT_TYPES = [
   { label: "FD AM", startTime: "07:00", endTime: "15:00", color: "#dbeafe", textColor: "#0f172a", departmentHint: "Front Desk" },
   { label: "FD PM", startTime: "15:00", endTime: "23:00", color: "#ede9fe", textColor: "#1e1b4b", departmentHint: "Front Desk" },
+  { label: "Front Desk Supervisor", startTime: "09:00", endTime: "17:00", color: "#bfdbfe", textColor: "#1e3a8a", departmentHint: "Front Desk" },
   { label: "Night Audit", startTime: "23:00", endTime: "07:00", color: "#111827", textColor: "#ffffff", departmentHint: "Night Audit", isOvernight: true },
   { label: "AM", startTime: "07:00", endTime: "15:00", color: "#dbeafe", textColor: "#0f172a", departmentHint: "Front Desk" },
   { label: "PM", startTime: "15:00", endTime: "23:00", color: "#ede9fe", textColor: "#1e1b4b", departmentHint: "Front Desk" },
@@ -496,6 +497,7 @@ function resolveShiftTypeFromRole(role: string, shiftTypeByLabel: Map<string, an
     || (normalized.includes("BISTRO AM") ? shiftTypeByLabel.get("BISTRO AM") : null)
     || (normalized.includes("BISTRO PM") ? shiftTypeByLabel.get("BISTRO PM") : null)
     || (normalized.includes("BREAKFAST") ? shiftTypeByLabel.get("BREAKFAST") : null)
+    || (normalized.includes("FRONT DESK SUPERVISOR") ? shiftTypeByLabel.get("FRONT DESK SUPERVISOR") : null)
     || (normalized.includes("FD AM") ? shiftTypeByLabel.get("FD AM") : null)
     || (normalized.includes("FD PM") ? shiftTypeByLabel.get("FD PM") : null)
     || (normalized.includes("FRONT DESK") ? shiftTypeByLabel.get("FD AM") || shiftTypeByLabel.get("FRONT DESK") : null)

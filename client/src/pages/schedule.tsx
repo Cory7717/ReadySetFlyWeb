@@ -758,6 +758,7 @@ function shiftTone(assignment: ShiftAssignment | undefined, shiftType: ShiftType
           || (role.includes("bistro am") && label === "bistro am")
           || (role.includes("bistro pm") && label === "bistro pm")
           || (role.includes("breakfast") && label === "breakfast")
+          || (role.includes("front desk supervisor") && label === "front desk supervisor")
           || (role.includes("fd am") && label === "fd am")
           || (role.includes("fd pm") && label === "fd pm")
           || (role.includes("audit") && label === "night audit");
@@ -782,6 +783,7 @@ function matchingShiftForRole(roleWorked: string, shiftTypes: ShiftType[]) {
       || (role.includes("bistro am") && label === "bistro am")
       || (role.includes("bistro pm") && label === "bistro pm")
       || (role.includes("breakfast") && label === "breakfast")
+      || (role.includes("front desk supervisor") && label === "front desk supervisor")
       || (role.includes("fd am") && label === "fd am")
       || (role.includes("fd pm") && label === "fd pm")
       || (role === "gm" && label === "gm");

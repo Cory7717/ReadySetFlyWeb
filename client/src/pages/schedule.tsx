@@ -20,6 +20,7 @@ import {
   Search,
   Share2,
   Sparkles,
+  Trash2,
   Users,
   X,
 } from "lucide-react";
@@ -3174,9 +3175,7 @@ export default function SchedulePage() {
 
   const createWeek = useMutation({
     mutationFn: async (mode: "blank" | "copyPrevious") => {
-      const selectedDate = new Date(`${weekStartDate}T00:00:00`);
-      const normalizedWeekStartDate = saturdayFor(selectedDate);
-      const response = await apiRequest("POST", "/api/schedule/weeks", { weekStartDate: normalizedWeekStartDate, propertyName: "Courtyard Austin Lakeline", mode });
+      const response = await apiRequest("POST", "/api/schedule/weeks", { weekStartDate, propertyName: "Courtyard Austin Lakeline", mode });
       return response.json();
     },
     onSuccess: (data: SchedulePayload) => {
@@ -3187,6 +3186,19 @@ export default function SchedulePage() {
       }
     },
     onError: (error: Error) => toast({ title: "Unable to create week", description: error.message, variant: "destructive" }),
+  });
+  const deleteDraftWeek = useMutation({
+    mutationFn: async () => {
+      if (!payload?.schedule.id) throw new Error("Select a draft schedule first.");
+      const response = await apiRequest("DELETE", `/api/schedule/weeks/${payload.schedule.id}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Draft deleted", description: "The unused draft schedule was removed." });
+      setSelectedWeekId("");
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks"] });
+    },
+    onError: (error: Error) => toast({ title: "Unable to delete draft", description: error.message, variant: "destructive" }),
   });
   const addEmployee = useMutation({
     mutationFn: (employee: any) => apiRequest("POST", "/api/schedule/employees", employee),
@@ -3581,6 +3593,20 @@ export default function SchedulePage() {
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline" className={statusBadge(payload.schedule.status)}>{payload.schedule.status}</Badge>
                   {payload.schedule.status === "draft" && payload.currentUserPermissions?.canPublishFinal && <Button className={C.green} onClick={() => action.mutate({ name: "publish" })}><CheckCircle2 className="mr-2 h-4 w-4" />Save & Publish Final Schedule</Button>}
+                  {payload.schedule.status === "draft" && payload.currentUserPermissions?.canPublishFinal && (
+                    <Button
+                      variant="outline"
+                      className="border-red-300 bg-white text-red-700 hover:bg-red-50"
+                      disabled={deleteDraftWeek.isPending}
+                      onClick={() => {
+                        if (window.confirm(`Delete draft schedule ${formatWeek(payload.schedule.weekStartDate, payload.schedule.weekEndDate)}? This cannot be undone.`)) {
+                          deleteDraftWeek.mutate();
+                        }
+                      }}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />Delete draft
+                    </Button>
+                  )}
                   {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "reopen", body: { reason: "Manager edit" } })}><RefreshCw className="mr-2 h-4 w-4" />{t("Reopen")}</Button>}
                   {payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => action.mutate({ name: "archive" })}><Archive className="mr-2 h-4 w-4" />{t("Archive")}</Button>}
                   {payload.schedule.status === "published" && payload.currentUserPermissions?.canPublishFinal && <Button variant="outline" className={C.outline} onClick={() => shareLink.mutate()}><Share2 className="mr-2 h-4 w-4" />{t("Copy share link")}</Button>}

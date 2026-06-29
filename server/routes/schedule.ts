@@ -4546,6 +4546,20 @@ export function registerScheduleRoutes(app: Express) {
     }
   });
 
+  router.delete("/weeks/:id", requireScheduleManager, async (req: any, res, next) => {
+    try {
+      if (!publicScheduleUser(req.scheduleUser).isSuperAdmin) return res.status(403).json({ error: "Only GM/admin can delete draft schedules." });
+      const current = await getScheduleOr404(req.params.id);
+      if (!current) return res.status(404).json({ error: "Schedule not found" });
+      if (current.status !== "draft") return res.status(409).json({ error: "Only draft schedules can be deleted. Archive published schedules instead." });
+      await audit(current.id, req.scheduleUser.id, "schedule_draft_deleted", { weekStartDate: current.weekStartDate, weekEndDate: current.weekEndDate });
+      await db.delete(weeklySchedules).where(eq(weeklySchedules.id, current.id));
+      res.json({ ok: true, deletedScheduleId: current.id });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get("/weeks/:id/pdf", requireScheduleAuth, async (req: any, res, next) => {
     try {
       const payload = await buildSchedulePayload(req.params.id);

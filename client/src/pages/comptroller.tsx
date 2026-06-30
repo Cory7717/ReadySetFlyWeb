@@ -299,17 +299,18 @@ export default function ComptrollerPage() {
             </div>
 
             {warnings.length > 0 && (
-              <Card className="border-amber-400 bg-[#fff7df] text-[#3f2a05] shadow-[0_12px_28px_rgba(72,52,31,0.10)]">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg text-[#3f2a05]"><AlertTriangle className="h-5 w-5 text-amber-700" /> Manual Review Flags</CardTitle>
-                  <CardDescription className="text-[#5c420e]">These do not override STAY posted payable totals. They mark items that should be reviewed before payment.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ul className="list-disc space-y-1 pl-5 text-sm font-medium text-[#4c3308]">
-                    {warnings.map((warning) => <li key={warning}>{warning}</li>)}
-                  </ul>
-                </CardContent>
-              </Card>
+              <div className="rounded-xl border border-amber-400 bg-[#fff7df] p-6 text-[#3f2a05] shadow-[0_12px_28px_rgba(72,52,31,0.10)]">
+                <div className="flex items-center gap-2 text-lg font-semibold text-[#3f2a05]">
+                  <AlertTriangle className="h-5 w-5 text-amber-700" />
+                  Manual Review Flags
+                </div>
+                <p className="mt-2 text-sm font-medium text-[#5c420e]">
+                  These do not override STAY posted payable totals. They mark items that should be reviewed before payment.
+                </p>
+                <ul className="mt-5 list-disc space-y-2 pl-5 text-sm font-semibold leading-6 text-[#4c3308]">
+                  {warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                </ul>
+              </div>
             )}
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

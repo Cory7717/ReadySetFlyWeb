@@ -94,6 +94,19 @@ function get(row: RowRecord, key: string) {
   return row[headerKey(key)] ?? "";
 }
 
+function excelCellText(value: unknown) {
+  if (value == null) return "";
+  if (typeof value === "object") {
+    const candidate = value as any;
+    if (candidate.text != null) return String(candidate.text).trim();
+    if (candidate.result != null) return String(candidate.result).trim();
+    if (candidate.value != null && typeof candidate.value !== "object") return String(candidate.value).trim();
+    return "";
+  }
+  if (String(value).trim() === "[object Object]") return "";
+  return String(value).trim();
+}
+
 function sum(rows: RowRecord[], key: string) {
   return money(rows.reduce((total, row) => total + numberValue(get(row, key)), 0));
 }
@@ -145,7 +158,7 @@ function parseSheetByHeaders(sheets: SheetRows[], requiredHeaders: string[], lab
     .map((header) => `${label}: missing expected column "${header}".`);
   const rows = selected.sheet.rows.slice(selected.headerIndex + 1)
     .filter((row) => row.some((cell) => String(cell || "").trim()))
-    .map((row) => Object.fromEntries(headers.map((header, index) => [header, String(row[index] ?? "").trim()])));
+    .map((row) => Object.fromEntries(headers.map((header, index) => [header, excelCellText(row[index])])));
   return { sheetName: selected.sheet.name, rows, headers, warnings };
 }
 
@@ -212,8 +225,72 @@ function accountingSummary(rows: RowRecord[]) {
     rows: Array.from(mapped.entries()).map(([label, amount]) => ({ label, amount })),
     debitTotal: money(debitTotal),
     creditTotal: money(creditTotal),
+    balance: money(debitTotal - creditTotal),
     balanced: Math.abs(debitTotal - creditTotal) < 1,
   };
+}
+
+const TAX_COLUMNS = [
+  "AUSTIN TOURISM PID FEE 2% EX",
+  "CITY TAX 11.22% EX",
+  "FEE CITY TAX 11.22% EX",
+  "FEE STATE TAX 6.12% EX",
+  "MEETING ROOM TAX 6% EX",
+  "SALES TAX 8.25% EX",
+  "STATE OCCUPANCY TAX 6.12% EX",
+];
+
+function rowHasNegativeValue(row: RowRecord) {
+  return numberValue(get(row, "AMOUNT")) < 0 || TAX_COLUMNS.some((column) => numberValue(get(row, column)) < 0);
+}
+
+function explainTaxPostingRows(rows: RowRecord[]) {
+  const explanations: Array<Record<string, unknown>> = [];
+  const negativeRows = rows.filter(rowHasNegativeValue).slice(0, 80);
+  const transferGroups = new Map<string, { positive: number; negative: number; count: number }>();
+
+  rows.forEach((row) => {
+    if (!String(get(row, "TRANSACTION TYPE")).toUpperCase().includes("TRANSFER")) return;
+    const name = get(row, "ACCOUNT NAME") || "Unknown account";
+    const group = transferGroups.get(name) || { positive: 0, negative: 0, count: 0 };
+    const amount = numberValue(get(row, "AMOUNT"));
+    if (amount >= 0) group.positive += amount;
+    else group.negative += amount;
+    group.count += 1;
+    transferGroups.set(name, group);
+  });
+
+  for (const row of negativeRows) {
+    const amount = numberValue(get(row, "AMOUNT"));
+    const cityTax = numberValue(get(row, "CITY TAX 11.22% EX"));
+    const name = get(row, "ACCOUNT NAME") || "Unknown account";
+    const transactionType = get(row, "TRANSACTION TYPE") || "transaction";
+    explanations.push({
+      report: "Tax Postings",
+      accountName: name,
+      item: get(row, "ITEM"),
+      transactionType,
+      amount,
+      cityTax,
+      propertyDate: excelDateToIso(get(row, "PROPERTY DATE")),
+      explanation: `${transactionType} rows with negative room revenue or negative tax reduce the payable tax totals because STAY posted them as reversals, corrections, transfers, credits, or tax adjustments. They should stay negative unless the PMS posting itself is wrong.`,
+    });
+  }
+
+  Array.from(transferGroups.entries()).forEach(([name, group]) => {
+    if (!group.positive || !group.negative) return;
+    explanations.unshift({
+      report: "Tax Postings",
+      accountName: name,
+      item: "Transfer activity",
+      transactionType: "TRANSFER",
+      amount: money(group.positive + group.negative),
+      explanation: `${name} has both positive and negative transfer postings. This usually means STAY moved charges between folios or group/reservation accounts. The negative entries, such as -$14 city tax style amounts, offset prior posted tax rather than creating a new payable charge.`,
+      rowCount: group.count,
+    });
+  });
+
+  return explanations.slice(0, 100);
 }
 
 function validateExemptions(groups: ReturnType<typeof exemptionGroups>) {
@@ -244,11 +321,17 @@ function parseAccountingFile(file?: Express.Multer.File) {
   if (!selected) return { sheetName: "", rows: [] as RowRecord[], warnings: ["Accounting Interface report had no readable sheets."] };
   const width = Math.max(...selected.rows.map((row) => row.length), 0);
   const headers = Array.from({ length: width }, (_, index) => `COL ${index + 1}`);
-  const rows = selected.rows.map((row) => Object.fromEntries(headers.map((header, index) => [header, String(row[index] ?? "").trim()])));
+  const rows = selected.rows.map((row) => Object.fromEntries(headers.map((header, index) => [header, excelCellText(row[index])])));
   return { sheetName: selected.name, rows, warnings: [] as string[] };
 }
 
-export function calculateComptrollerReports(files: UploadMap, options: {
+function buildComptrollerPayload(parsed: {
+  postingSheet: ParsedSheet;
+  exemptionSheet: ParsedSheet;
+  accounting: { sheetName: string; rows: RowRecord[]; warnings: string[] };
+  uploadedReports?: Array<Record<string, unknown>>;
+  sourceSheets?: Record<string, string>;
+}, options: {
   propertyId?: string;
   reportMonth?: string;
   includeMeetingRoomTaxInStateHOT?: boolean;
@@ -258,19 +341,14 @@ export function calculateComptrollerReports(files: UploadMap, options: {
     ...DEFAULT_COMPTROLLER_TAX_SETTINGS,
     includeMeetingRoomTaxInStateHOT: options.includeMeetingRoomTaxInStateHOT ?? DEFAULT_COMPTROLLER_TAX_SETTINGS.includeMeetingRoomTaxInStateHOT,
   };
-  const warnings: string[] = [];
-  const taxPostings = files.taxPostings;
-  if (!taxPostings) throw new Error("Tax Postings Dynamic XLSX is required.");
-  const postingSheet = parseSheetByHeaders(parseWorkbook(taxPostings), POSTING_REQUIRED, "Tax Postings Dynamic");
-  warnings.push(...postingSheet.warnings);
-
-  const exemptionSheet = files.taxExemptions
-    ? parseSheetByHeaders(parseWorkbook(files.taxExemptions), EXEMPTION_REQUIRED, "Tax Exemptions Dynamic")
-    : { sheetName: "", rows: [] as RowRecord[], headers: [], warnings: ["Tax Exemptions Dynamic report was not uploaded."] };
-  warnings.push(...exemptionSheet.warnings);
-
-  const accounting = parseAccountingFile(files.accountingInterface);
-  warnings.push(...accounting.warnings);
+  const warnings: string[] = [
+    ...parsed.postingSheet.warnings,
+    ...parsed.exemptionSheet.warnings,
+    ...parsed.accounting.warnings,
+  ];
+  const postingSheet = parsed.postingSheet;
+  const exemptionSheet = parsed.exemptionSheet;
+  const accounting = parsed.accounting;
 
   const postingMonth = detectReportMonth(postingSheet.rows);
   const exemptionMonth = detectReportMonth(exemptionSheet.rows);
@@ -289,6 +367,7 @@ export function calculateComptrollerReports(files: UploadMap, options: {
     meetingRoomTax: sum(postingSheet.rows, "MEETING ROOM TAX 6% EX"),
     salesTax: sum(postingSheet.rows, "SALES TAX 8.25% EX"),
   };
+  const postedAllTaxColumnsTotal = money(Object.values(posted).reduce((total, value) => total + value, 0));
   const finalStateHOT = money(posted.stateTax + (settings.includeMeetingRoomTaxInStateHOT ? posted.meetingRoomTax : 0));
   const finalTotalPayable = money(posted.tourismPidFee + posted.cityTax + finalStateHOT + posted.salesTax);
 
@@ -332,6 +411,9 @@ export function calculateComptrollerReports(files: UploadMap, options: {
       calculatedPostedTaxDue: posted.tourismPidFee,
       adjustmentAmount: money(posted.tourismPidFee - expected.tourismPidFee),
       finalPayableAmount: posted.tourismPidFee,
+      postedDue: posted.tourismPidFee,
+      expectedDue: expected.tourismPidFee,
+      variance: money(posted.tourismPidFee - expected.tourismPidFee),
       notes: "Posted STAY column is payable source of truth; expected equals 2% of taxable room-night sales.",
     },
     {
@@ -343,6 +425,9 @@ export function calculateComptrollerReports(files: UploadMap, options: {
       calculatedPostedTaxDue: posted.cityTax,
       adjustmentAmount: money(posted.cityTax - expected.cityTax),
       finalPayableAmount: posted.cityTax,
+      postedDue: posted.cityTax,
+      expectedDue: expected.cityTax,
+      variance: money(posted.cityTax - expected.cityTax),
       notes: "Austin local HOT is 9% occupancy plus 2% venue project tax.",
     },
     {
@@ -354,6 +439,9 @@ export function calculateComptrollerReports(files: UploadMap, options: {
       calculatedPostedTaxDue: posted.stateTax,
       adjustmentAmount: money(posted.stateTax - expected.stateTax),
       finalPayableAmount: finalStateHOT,
+      postedDue: posted.stateTax,
+      expectedDue: expected.stateTax,
+      variance: money(posted.stateTax - expected.stateTax),
       notes: settings.includeMeetingRoomTaxInStateHOT ? "Includes meeting room tax in state payment total." : "Meeting room tax shown separately.",
     },
     {
@@ -365,6 +453,9 @@ export function calculateComptrollerReports(files: UploadMap, options: {
       calculatedPostedTaxDue: posted.meetingRoomTax,
       adjustmentAmount: 0,
       finalPayableAmount: settings.includeMeetingRoomTaxInStateHOT ? 0 : posted.meetingRoomTax,
+      postedDue: posted.meetingRoomTax,
+      expectedDue: expected.meetingRoomTax,
+      variance: 0,
       notes: "Displayed separately and mapped according to Texas meeting/banquet room guidance.",
     },
     {
@@ -376,6 +467,9 @@ export function calculateComptrollerReports(files: UploadMap, options: {
       calculatedPostedTaxDue: posted.salesTax,
       adjustmentAmount: 0,
       finalPayableAmount: posted.salesTax,
+      postedDue: posted.salesTax,
+      expectedDue: expected.salesTax,
+      variance: 0,
       notes: "Sales tax is separated from hotel occupancy tax.",
     },
   ];
@@ -386,11 +480,11 @@ export function calculateComptrollerReports(files: UploadMap, options: {
     reportingMonth,
     settings,
     sourceSheets: {
-      taxPostings: postingSheet.sheetName,
-      taxExemptions: exemptionSheet.sheetName,
-      accountingInterface: accounting.sheetName,
+      taxPostings: parsed.sourceSheets?.taxPostings || postingSheet.sheetName,
+      taxExemptions: parsed.sourceSheets?.taxExemptions || exemptionSheet.sheetName,
+      accountingInterface: parsed.sourceSheets?.accountingInterface || accounting.sheetName,
     },
-    uploadedReports: Object.values(files).filter(Boolean).map((file) => ({ originalFileName: file!.originalname, size: file!.size })),
+    uploadedReports: parsed.uploadedReports || [],
     summary: {
       grossTaxableRoomRevenue: taxableRoomRevenue,
       inferredTaxableRoomNightSales,
@@ -404,16 +498,18 @@ export function calculateComptrollerReports(files: UploadMap, options: {
       totalTaxPaymentDue: finalTotalPayable,
     },
     posted,
+    postedAllTaxColumnsTotal,
     expected,
     exemptionTotals,
     exemptionGroups: groups,
     accounting: accountingResult,
     detailTable,
     warnings,
+    explanations: explainTaxPostingRows(postingSheet.rows),
     drilldown: {
-      taxPostings: postingSheet.rows.slice(0, 2000),
-      taxExemptions: exemptionSheet.rows.slice(0, 2000),
-      accountingInterface: accounting.rows.slice(0, 500),
+      taxPostings: postingSheet.rows,
+      taxExemptions: exemptionSheet.rows,
+      accountingInterface: accounting.rows,
     },
     officialGuidance: [
       { label: "Texas Comptroller Hotel Occupancy Tax", url: "https://comptroller.texas.gov/taxes/hotel/" },
@@ -423,6 +519,69 @@ export function calculateComptrollerReports(files: UploadMap, options: {
       { label: "Texas Comptroller STAR 202003026L", url: "https://star.comptroller.texas.gov/view/202003026L" },
     ],
   };
+}
+
+export function calculateComptrollerReports(files: UploadMap, options: {
+  propertyId?: string;
+  reportMonth?: string;
+  includeMeetingRoomTaxInStateHOT?: boolean;
+  overwrite?: boolean;
+} = {}) {
+  const warnings: string[] = [];
+  const taxPostings = files.taxPostings;
+  if (!taxPostings) throw new Error("Tax Postings Dynamic XLSX is required.");
+  const postingSheet = parseSheetByHeaders(parseWorkbook(taxPostings), POSTING_REQUIRED, "Tax Postings Dynamic");
+
+  const exemptionSheet = files.taxExemptions
+    ? parseSheetByHeaders(parseWorkbook(files.taxExemptions), EXEMPTION_REQUIRED, "Tax Exemptions Dynamic")
+    : { sheetName: "", rows: [] as RowRecord[], headers: [], warnings: ["Tax Exemptions Dynamic report was not uploaded."] };
+
+  const accounting = parseAccountingFile(files.accountingInterface);
+  warnings.push(...postingSheet.warnings, ...exemptionSheet.warnings, ...accounting.warnings);
+
+  return buildComptrollerPayload({
+    postingSheet,
+    exemptionSheet,
+    accounting,
+    uploadedReports: Object.values(files).filter(Boolean).map((file) => ({ originalFileName: file!.originalname, size: file!.size })),
+  }, options);
+}
+
+export function recalculateComptrollerPayload(existingPayload: any, edits: {
+  taxPostings?: RowRecord[];
+  taxExemptions?: RowRecord[];
+  accountingInterface?: RowRecord[];
+}, options: {
+  propertyId?: string;
+  reportMonth?: string;
+  includeMeetingRoomTaxInStateHOT?: boolean;
+} = {}) {
+  const sourceSheets = existingPayload?.sourceSheets || {};
+  return buildComptrollerPayload({
+    postingSheet: {
+      sheetName: sourceSheets.taxPostings || "Edited Tax Postings",
+      rows: edits.taxPostings || existingPayload?.drilldown?.taxPostings || [],
+      headers: [],
+      warnings: [],
+    },
+    exemptionSheet: {
+      sheetName: sourceSheets.taxExemptions || "Edited Tax Exemptions",
+      rows: edits.taxExemptions || existingPayload?.drilldown?.taxExemptions || [],
+      headers: [],
+      warnings: [],
+    },
+    accounting: {
+      sheetName: sourceSheets.accountingInterface || "Edited Accounting Interface",
+      rows: edits.accountingInterface || existingPayload?.drilldown?.accountingInterface || [],
+      warnings: [],
+    },
+    uploadedReports: existingPayload?.uploadedReports || [],
+    sourceSheets,
+  }, {
+    propertyId: options.propertyId || existingPayload?.propertyId,
+    reportMonth: options.reportMonth || existingPayload?.reportingMonth,
+    includeMeetingRoomTaxInStateHOT: options.includeMeetingRoomTaxInStateHOT ?? existingPayload?.settings?.includeMeetingRoomTaxInStateHOT,
+  });
 }
 
 export function comptrollerSummaryCsv(payload: any) {

@@ -5,7 +5,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { courtyardComptrollerReports, tipsKioskSettings, tipsUsers } from "@shared/schema";
-import { calculateComptrollerReports, comptrollerSummaryCsv, COMPTROLLER_PROPERTY_ID } from "../comptrollerTax";
+import { calculateComptrollerReports, comptrollerSummaryCsv, COMPTROLLER_PROPERTY_ID, recalculateComptrollerPayload } from "../comptrollerTax";
 
 const COMPTROLLER_ADMIN_EMAILS = new Set(
   (
@@ -232,6 +232,60 @@ export function registerComptrollerRoutes(app: Express) {
         eq(courtyardComptrollerReports.reportMonth, parsed.data.reportMonth),
       ));
       res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/report/:propertyId/:reportMonth/edits", requireComptrollerAccess as RequestHandler, async (req, res, next) => {
+    try {
+      const parsedParams = z.object({ propertyId: z.string(), reportMonth: z.string().regex(/^\d{4}-\d{2}$/) }).safeParse(req.params);
+      if (!parsedParams.success) return res.status(400).json({ error: "Invalid report identifier." });
+      const parsedBody = z.object({
+        reportKey: z.enum(["taxPostings", "taxExemptions", "accountingInterface"]),
+        rows: z.array(z.record(z.string(), z.any())).max(5000),
+        includeMeetingRoomTaxInStateHOT: z.coerce.boolean().optional(),
+      }).safeParse(req.body || {});
+      if (!parsedBody.success) return res.status(400).json({ error: "Invalid report edit payload." });
+
+      const [existing] = await db.select().from(courtyardComptrollerReports).where(and(
+        eq(courtyardComptrollerReports.propertyId, parsedParams.data.propertyId),
+        eq(courtyardComptrollerReports.reportMonth, parsedParams.data.reportMonth),
+      )).limit(1);
+      if (!existing) return res.status(404).json({ error: "Report not found." });
+
+      const existingPayload = (existing.payloadJson || {}) as any;
+      const editedRows = {
+        taxPostings: existingPayload.drilldown?.taxPostings || [],
+        taxExemptions: existingPayload.drilldown?.taxExemptions || [],
+        accountingInterface: existingPayload.drilldown?.accountingInterface || [],
+        [parsedBody.data.reportKey]: parsedBody.data.rows,
+      };
+      const payload = recalculateComptrollerPayload(existingPayload, editedRows, {
+        propertyId: parsedParams.data.propertyId,
+        reportMonth: parsedParams.data.reportMonth,
+        includeMeetingRoomTaxInStateHOT: parsedBody.data.includeMeetingRoomTaxInStateHOT,
+      });
+      const [saved] = await db.update(courtyardComptrollerReports).set({
+        payloadJson: payload,
+        settingsJson: payload.settings,
+        uploadedReportsJson: existing.uploadedReportsJson,
+        updatedBy: (req as any).comptrollerUser?.id || null,
+        updatedAt: new Date(),
+      }).where(and(
+        eq(courtyardComptrollerReports.propertyId, parsedParams.data.propertyId),
+        eq(courtyardComptrollerReports.reportMonth, parsedParams.data.reportMonth),
+      )).returning();
+      console.info(JSON.stringify({
+        event: "comptroller_report_rows_edited",
+        userId: (req as any).comptrollerUser?.id || null,
+        propertyId: parsedParams.data.propertyId,
+        reportMonth: parsedParams.data.reportMonth,
+        reportKey: parsedBody.data.reportKey,
+        rowCount: parsedBody.data.rows.length,
+        warnings: payload.warnings.length,
+      }));
+      res.json({ report: publicReport(saved) });
     } catch (error) {
       next(error);
     }

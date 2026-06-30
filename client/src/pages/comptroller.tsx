@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Calculator, Download, FileSpreadsheet, LockKeyhole, Printer, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, Calculator, Download, FileSpreadsheet, LockKeyhole, Printer, Save, Search, Trash2, Upload, X } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -34,6 +34,20 @@ type ComptrollerReport = {
   uploadedReports: Array<Record<string, any>>;
   settings: Record<string, any>;
   updatedAt: string;
+};
+
+type ReportKey = "taxPostings" | "taxExemptions" | "accountingInterface";
+type ReportEditorState = {
+  key: ReportKey;
+  title: string;
+  rows: Array<Record<string, string>>;
+  search: string;
+} | null;
+
+const REPORT_LABELS: Record<ReportKey, string> = {
+  taxPostings: "Tax Postings Dynamic",
+  taxExemptions: "Tax Exemptions Dynamic",
+  accountingInterface: "Accounting Interface / Error Report",
 };
 
 function money(value: unknown) {
@@ -104,12 +118,103 @@ function MetricCard({ label, value, note }: { label: string; value: string; note
   );
 }
 
+function reportColumns(rows: Array<Record<string, string>>) {
+  const columns: string[] = [];
+  rows.slice(0, 200).forEach((row) => {
+    Object.keys(row || {}).forEach((key) => {
+      if (!columns.includes(key)) columns.push(key);
+    });
+  });
+  return columns;
+}
+
+function ReportEditorModal({
+  editor,
+  saving,
+  onClose,
+  onSearch,
+  onCellChange,
+  onSave,
+}: {
+  editor: ReportEditorState;
+  saving: boolean;
+  onClose: () => void;
+  onSearch: (value: string) => void;
+  onCellChange: (rowIndex: number, column: string, value: string) => void;
+  onSave: () => void;
+}) {
+  if (!editor) return null;
+  const columns = reportColumns(editor.rows);
+  const query = editor.search.trim().toLowerCase();
+  const visibleRows = editor.rows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => !query || Object.values(row).join(" ").toLowerCase().includes(query));
+
+  return (
+    <div className="fixed inset-0 z-[1000] bg-[#f3efe7] text-[#201814]">
+      <div className="flex h-full flex-col">
+        <header className="border-b border-[#d7c8b5] bg-[#fffaf2] px-4 py-3 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">Editable STAY Report</div>
+              <h2 className="text-2xl font-semibold">{editor.title}</h2>
+              <p className="text-sm text-[#5f5247]">Edit source rows, then save to recalculate the tax payment totals from this report.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button className={C.green} disabled={saving} onClick={onSave}>
+                <Save className="mr-2 h-4 w-4" /> {saving ? "Saving..." : "Save & recalculate"}
+              </Button>
+              <Button variant="outline" className={C.outline} onClick={onClose}>
+                <X className="mr-2 h-4 w-4" /> Close
+              </Button>
+            </div>
+          </div>
+          <div className="relative mt-3 max-w-xl">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#76695d]" />
+            <Input className={`${C.field} pl-9`} value={editor.search} onChange={(event) => onSearch(event.target.value)} placeholder="Search report rows" />
+          </div>
+        </header>
+        <div className="flex-1 overflow-auto p-4">
+          <table className="min-w-full border-collapse text-xs">
+            <thead className="sticky top-0 z-10 bg-[#243746] text-white">
+              <tr>
+                <th className="border border-[#4a5360] px-2 py-2 text-left">#</th>
+                {columns.map((column) => (
+                  <th key={column} className="min-w-[160px] border border-[#4a5360] px-2 py-2 text-left">{column}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map(({ row, index }) => (
+                <tr key={index} className={index % 2 ? "bg-white" : "bg-[#fffaf2]"}>
+                  <td className="border border-[#eadfce] px-2 py-1 text-[#5f5247]">{index + 1}</td>
+                  {columns.map((column) => (
+                    <td key={column} className="border border-[#eadfce] p-0">
+                      <input
+                        className="h-9 w-full bg-transparent px-2 text-[#201814] outline-none focus:bg-[#fff3d4] focus:ring-1 focus:ring-[#b98435]"
+                        value={row[column] ?? ""}
+                        onChange={(event) => onCellChange(index, column, event.target.value)}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {visibleRows.length === 0 && <div className="rounded-lg border border-[#d7c8b5] bg-white p-6 text-center text-sm text-[#5f5247]">No rows match that search.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ComptrollerPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [reportMonth, setReportMonth] = useState(currentMonth());
   const [files, setFiles] = useState<Record<string, File | null>>({ taxPostings: null, taxExemptions: null, accountingInterface: null });
   const [includeMeetingRoomTaxInStateHOT, setIncludeMeetingRoomTaxInStateHOT] = useState(true);
+  const [editor, setEditor] = useState<ReportEditorState>(null);
 
   const access = useQuery<AccessResponse>({
     queryKey: ["/api/comptroller/access"],
@@ -167,6 +272,28 @@ export default function ComptrollerPage() {
     onError: (error: Error) => toast({ title: "Unable to remove report", description: error.message, variant: "destructive" }),
   });
 
+  const saveReportEdits = useMutation({
+    mutationFn: async ({ reportKey, rows }: { reportKey: ReportKey; rows: Array<Record<string, string>> }) => {
+      const report = reportQuery.data?.report;
+      if (!report) throw new Error("No report is loaded.");
+      const response = await apiRequest("PATCH", `/api/comptroller/report/${report.propertyId}/${report.reportMonth}/edits`, {
+        reportKey,
+        rows,
+        includeMeetingRoomTaxInStateHOT,
+      });
+      return response.json();
+    },
+    onSuccess: (data: { report?: ComptrollerReport }) => {
+      if (data.report) {
+        queryClient.setQueryData(["/api/comptroller/report", data.report.reportMonth], { report: data.report });
+        queryClient.invalidateQueries({ queryKey: ["/api/comptroller/report"] });
+      }
+      setEditor(null);
+      toast({ title: "Report edits saved", description: "Tax payment amounts were recalculated from the edited report rows." });
+    },
+    onError: (error: Error) => toast({ title: "Unable to save report edits", description: error.message, variant: "destructive" }),
+  });
+
   const report = reportQuery.data?.report;
   const payload = report?.payload || {};
   const summary = payload.summary || {};
@@ -177,7 +304,12 @@ export default function ComptrollerPage() {
   const exemptionGroups: any[] = Array.isArray(payload.exemptionGroups) ? payload.exemptionGroups : [];
   const accounting = payload.accounting || {};
   const uploaded = Array.isArray(report?.uploadedReports) ? report?.uploadedReports : [];
+  const explanations: any[] = Array.isArray(payload.explanations) ? payload.explanations : [];
   const canProcess = Boolean(files.taxPostings && files.taxExemptions && files.accountingInterface && reportMonth);
+  const openReportEditor = (key: ReportKey) => {
+    const rows = Array.isArray(payload?.drilldown?.[key]) ? payload.drilldown[key] : [];
+    setEditor({ key, title: REPORT_LABELS[key], rows: rows.map((row: Record<string, string>) => ({ ...row })), search: "" });
+  };
 
   const metricCards = useMemo(() => [
     { label: "Gross Taxable Room Revenue", value: money(summary.grossTaxableRoomRevenue), note: "Validation base from STAY item postings" },
@@ -298,6 +430,22 @@ export default function ComptrollerPage() {
               </div>
             </div>
 
+            <Card className={C.section}>
+              <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <div className="font-semibold">Open and edit source reports</div>
+                  <div className="text-sm text-[#5f5247]">Edits are saved into this Comptroller month and recalculate the payment totals without re-uploading the files.</div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(REPORT_LABELS) as ReportKey[]).map((key) => (
+                    <Button key={key} variant="outline" className={C.outline} onClick={() => openReportEditor(key)}>
+                      <FileSpreadsheet className="mr-2 h-4 w-4" /> {REPORT_LABELS[key]}
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
             {warnings.length > 0 && (
               <div className="rounded-xl border border-amber-400 bg-[#fff7df] p-6 text-[#3f2a05] shadow-[0_12px_28px_rgba(72,52,31,0.10)]">
                 <div className="flex items-center gap-2 text-lg font-semibold text-[#3f2a05]">
@@ -339,15 +487,15 @@ export default function ComptrollerPage() {
                   </thead>
                   <tbody>
                     {detailTable.map((row) => (
-                      <tr key={row.category} className="border-b border-[#eadfce] last:border-0">
-                        <td className="py-3 pr-3 font-semibold">{row.category}</td>
-                        <td className="px-3 py-3 text-xs text-[#5f5247]">{Array.isArray(row.sourceColumns) ? row.sourceColumns.join(", ") : ""}</td>
-                        <td className="px-3 py-3">{row.rateLabel}</td>
-                        <td className="px-3 py-3 text-right">{money(row.taxableBase)}</td>
-                        <td className="px-3 py-3 text-right">{money(row.exemptBase)}</td>
-                        <td className="px-3 py-3 text-right font-semibold">{money(row.postedDue)}</td>
+                      <tr key={row.taxCategory} className="border-b border-[#eadfce] last:border-0">
+                        <td className="py-3 pr-3 font-semibold">{row.taxCategory}</td>
+                        <td className="px-3 py-3 text-xs text-[#5f5247]">{row.sourceColumns}</td>
+                        <td className="px-3 py-3">{row.taxRateLabel}</td>
+                        <td className="px-3 py-3 text-right">{row.taxableBaseAmount == null ? "-" : money(row.taxableBaseAmount)}</td>
+                        <td className="px-3 py-3 text-right">{row.exemptAmount == null ? "-" : money(row.exemptAmount)}</td>
+                        <td className="px-3 py-3 text-right font-semibold">{money(row.calculatedPostedTaxDue ?? row.postedDue)}</td>
                         <td className="px-3 py-3 text-right">{money(row.expectedDue)}</td>
-                        <td className={`px-3 py-3 text-right ${Math.abs(Number(row.variance || 0)) > 1 ? "font-semibold text-amber-800" : ""}`}>{money(row.variance)}</td>
+                        <td className={`px-3 py-3 text-right ${Math.abs(Number((row.adjustmentAmount ?? row.variance) || 0)) > 1 ? "font-semibold text-amber-800" : ""}`}>{money(row.adjustmentAmount ?? row.variance)}</td>
                         <td className="px-3 py-3 text-xs text-[#5f5247]">{row.notes}</td>
                       </tr>
                     ))}
@@ -401,7 +549,7 @@ export default function ComptrollerPage() {
                     <MetricCard label="Accounting Debits" value={money(accounting.totalDebit)} />
                     <MetricCard label="Accounting Credits" value={money(accounting.totalCredit)} />
                     <MetricCard label="Accounting Balance" value={money(accounting.balance)} />
-                    <MetricCard label="Tax Postings Total" value={money(posted.allTaxColumnsTotal)} />
+                    <MetricCard label="Tax Postings Total" value={money(payload.postedAllTaxColumnsTotal)} />
                   </div>
                   <div className="rounded-lg border border-[#d7c8b5] bg-[#fffaf2] p-3 text-sm">
                     <div className="font-semibold">Expected validation totals</div>
@@ -416,6 +564,23 @@ export default function ComptrollerPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {explanations.length > 0 && (
+              <Card className={C.section}>
+                <CardHeader>
+                  <CardTitle>Posting Explanations</CardTitle>
+                  <CardDescription className={C.muted}>Common reasons STAY rows come across as negative amounts, credits, adjustments, or transfers.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {explanations.slice(0, 12).map((item, index) => (
+                    <div key={`${item.accountName}-${item.item}-${index}`} className="rounded-lg border border-[#d7c8b5] bg-[#fffaf2] p-3 text-sm">
+                      <div className="font-semibold">{item.accountName || "Account"} - {item.item || "Posting"} {item.amount != null ? `(${money(item.amount)})` : ""}</div>
+                      <div className="mt-1 text-[#5f5247]">{item.explanation}</div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
           </>
         ) : (
           <Card className={C.section}>
@@ -426,6 +591,21 @@ export default function ComptrollerPage() {
           </Card>
         )}
       </main>
+      <ReportEditorModal
+        editor={editor}
+        saving={saveReportEdits.isPending}
+        onClose={() => setEditor(null)}
+        onSearch={(search) => setEditor((current) => current ? { ...current, search } : current)}
+        onCellChange={(rowIndex, column, value) => setEditor((current) => {
+          if (!current) return current;
+          const rows = current.rows.map((row, index) => index === rowIndex ? { ...row, [column]: value } : row);
+          return { ...current, rows };
+        })}
+        onSave={() => {
+          if (!editor) return;
+          saveReportEdits.mutate({ reportKey: editor.key, rows: editor.rows });
+        }}
+      />
     </div>
   );
 }

@@ -257,7 +257,8 @@ export function addLaborWageEstimate(
     blendedHourlyRate: 0,
     blendedRateIncludingSalary: 0,
   });
-  const wages = hours * hourlyRate;
+  const payrollEstimateHours = isSalaried ? Math.min(hours, 40) : hours;
+  const wages = payrollEstimateHours * hourlyRate;
   target.scheduledHours += hours;
   target.scheduledWagesIncludingSalary += wages;
   if (!isSalaried) {

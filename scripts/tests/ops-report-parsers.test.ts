@@ -67,9 +67,10 @@ test("OpsReport wage estimates produce hourly-only and with-salary blended rates
   const finalized = finalizeLaborWageEstimates(estimates);
   assert.equal(finalized.OTHER.scheduledHourlyHours, 40);
   assert.equal(finalized.OTHER.scheduledWages, 1200);
-  assert.equal(finalized.OTHER.scheduledWagesIncludingSalary, 2775);
+  assert.equal(finalized.OTHER.scheduledHours, 85);
+  assert.equal(finalized.OTHER.scheduledWagesIncludingSalary, 2600);
   assert.equal(finalized.OTHER.blendedHourlyRate, 30);
-  assert.equal(finalized.OTHER.blendedRateIncludingSalary, 32.65);
+  assert.equal(finalized.OTHER.blendedRateIncludingSalary, 30.59);
   assert.equal(finalized["FRONT DESK / NIGHT AUDIT HOURS"].blendedHourlyRate, 22);
 });
 

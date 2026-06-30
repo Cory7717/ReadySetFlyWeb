@@ -2612,12 +2612,12 @@ export default function OpsReportPage() {
                 onChange={setLedgerExceptions}
               />
             </Section>
-            <Section title="Department Labor Review (Controllable)" right={<Badge variant="outline">Actual vs Budget {fmtHours(laborVariance)}</Badge>}>
+            <Section title="Department Labor Review (Controllable)" right={<Badge variant="outline">Actual vs Expected {fmtHours(laborVariance)}</Badge>}>
               <div className="flex flex-col gap-3 border-b border-[#e0d3c1] p-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
-                  <div className="text-sm font-semibold text-[#201814]">Scheduled, Actual, and Budgeted Hours</div>
+                  <div className="text-sm font-semibold text-[#201814]">Scheduled, Actual, and Expected Hours</div>
                   <p className="mt-1 max-w-2xl text-sm text-[#5f5247]">
-                    Every department's hours variance is Actual Hours minus Budgeted Hours. Only Housekeeping calculates MPOR using all HK department hours divided by rooms sold, with a 30-minute target.
+                    Every department's hours variance is Actual Hours minus Expected Hours. Expected Hours are modeled from final occupancy or rooms sold, not a pre-period labor budget.
                   </p>
                   <div className="mt-2 rounded-lg border border-[#d7c8b5] bg-[#fbf6ee] p-2 text-xs text-[#5f5247]">
                     <span className="font-semibold text-[#201814]">Required actual-hours report:</span>{" "}
@@ -2650,7 +2650,7 @@ export default function OpsReportPage() {
                   { key: "department", label: "Department", wide: true },
                   { key: "scheduledHours", label: "Scheduled Hours" },
                   { key: "actualHours", label: "Actual Hours" },
-                  { key: "budget", label: "Budgeted Hours" },
+                  { key: "budget", label: "Expected Hours" },
                   { key: "variance", label: "Hours Variance", readOnly: true },
                   { key: "estimatedActualWages", label: "Est. Wages", readOnly: true },
                   { key: "estimatedActualWagesWithSalary", label: "Est. Wages w/ Salary", readOnly: true },

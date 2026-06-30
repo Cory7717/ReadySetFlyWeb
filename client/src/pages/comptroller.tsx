@@ -510,13 +510,26 @@ export default function ComptrollerPage() {
 
             {(reviewIssues.length > 0 || warnings.length > 0) && (
               <div className="rounded-xl border border-amber-400 bg-[#fff7df] p-6 text-[#3f2a05] shadow-[0_12px_28px_rgba(72,52,31,0.10)]">
-                <div className="flex items-center gap-2 text-lg font-semibold text-[#3f2a05]">
-                  <AlertTriangle className="h-5 w-5 text-amber-700" />
-                  Manual Review Flags
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-lg font-semibold text-[#3f2a05]">
+                      <AlertTriangle className="h-5 w-5 text-amber-700" />
+                      Manual Review Flags
+                    </div>
+                    <p className="mt-2 text-sm font-medium text-[#5c420e]">
+                      These do not override STAY posted payable totals. They mark items that should be reviewed before payment.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className={`${C.outline} whitespace-nowrap`}
+                    disabled
+                    title="AI audit will analyze the deterministic issue set after this report is reprocessed with structured review issues."
+                  >
+                    AI check
+                  </Button>
                 </div>
-                <p className="mt-2 text-sm font-medium text-[#5c420e]">
-                  These do not override STAY posted payable totals. They mark items that should be reviewed before payment.
-                </p>
                 {reviewIssues.length > 0 ? (
                   <div className="mt-5 grid gap-3 lg:grid-cols-2">
                     {reviewIssues.map((issue) => (

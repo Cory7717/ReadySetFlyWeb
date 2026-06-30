@@ -207,6 +207,80 @@ function shiftHours(assignment: any, shiftType: any) {
   return Math.max(0, (duration - breakMinutes) / 60);
 }
 
+function hourlyRateForOpsAssignment(employee: any, assignment: any, shiftType: any) {
+  const roleRates = employee?.roleRatesJson && typeof employee.roleRatesJson === "object"
+    ? employee.roleRatesJson as Record<string, unknown>
+    : {};
+  const candidates = [assignment?.roleWorked, shiftType?.label]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+  for (const candidate of candidates) {
+    const match = Object.entries(roleRates).find(([role]) => role.trim().toLowerCase() === candidate);
+    if (!match) continue;
+    const rate = Number(match[1]);
+    if (Number.isFinite(rate) && rate >= 0) return rate;
+  }
+  const fallbackRate = Number(employee?.hourlyRate || 0);
+  return Number.isFinite(fallbackRate) && fallbackRate >= 0 ? fallbackRate : 0;
+}
+
+export function emptyLaborWageEstimates() {
+  return Object.fromEntries(Object.keys(emptyLaborDepartments()).map((department) => [department, {
+    scheduledHours: 0,
+    scheduledHourlyHours: 0,
+    scheduledWages: 0,
+    scheduledWagesIncludingSalary: 0,
+    blendedHourlyRate: 0,
+    blendedRateIncludingSalary: 0,
+  }])) as Record<string, {
+    scheduledHours: number;
+    scheduledHourlyHours: number;
+    scheduledWages: number;
+    scheduledWagesIncludingSalary: number;
+    blendedHourlyRate: number;
+    blendedRateIncludingSalary: number;
+  }>;
+}
+
+export function addLaborWageEstimate(
+  estimates: ReturnType<typeof emptyLaborWageEstimates>,
+  department: string,
+  hours: number,
+  hourlyRate: number,
+  isSalaried: boolean,
+) {
+  const target = estimates[department] || (estimates[department] = {
+    scheduledHours: 0,
+    scheduledHourlyHours: 0,
+    scheduledWages: 0,
+    scheduledWagesIncludingSalary: 0,
+    blendedHourlyRate: 0,
+    blendedRateIncludingSalary: 0,
+  });
+  const wages = hours * hourlyRate;
+  target.scheduledHours += hours;
+  target.scheduledWagesIncludingSalary += wages;
+  if (!isSalaried) {
+    target.scheduledHourlyHours += hours;
+    target.scheduledWages += wages;
+  }
+}
+
+export function finalizeLaborWageEstimates(estimates: ReturnType<typeof emptyLaborWageEstimates>) {
+  return Object.fromEntries(Object.entries(estimates).map(([department, value]) => {
+    const blendedHourlyRate = value.scheduledHourlyHours > 0 ? value.scheduledWages / value.scheduledHourlyHours : 0;
+    const blendedRateIncludingSalary = value.scheduledHours > 0 ? value.scheduledWagesIncludingSalary / value.scheduledHours : 0;
+    return [department, {
+      scheduledHours: Number(value.scheduledHours.toFixed(2)),
+      scheduledHourlyHours: Number(value.scheduledHourlyHours.toFixed(2)),
+      scheduledWages: Number(value.scheduledWages.toFixed(2)),
+      scheduledWagesIncludingSalary: Number(value.scheduledWagesIncludingSalary.toFixed(2)),
+      blendedHourlyRate: Number(blendedHourlyRate.toFixed(2)),
+      blendedRateIncludingSalary: Number(blendedRateIncludingSalary.toFixed(2)),
+    }];
+  }));
+}
+
 function resolveOpsShiftTypeFromRole(role: string, shiftTypeByLabel: Map<string, any>) {
   const normalized = String(role || "").trim().toUpperCase();
   if (!normalized) return null;
@@ -815,7 +889,8 @@ export function registerOpsReportRoutes(app: Express) {
         OTHER: 0,
       };
       const breakdown = emptyLaborBreakdown();
-      if (!schedule) return res.json({ weekStart: parsed.data.weekStart, scheduleId: null, departments, breakdown });
+      const wageEstimates = emptyLaborWageEstimates();
+      if (!schedule) return res.json({ weekStart: parsed.data.weekStart, scheduleId: null, departments, breakdown, wageEstimates: finalizeLaborWageEstimates(wageEstimates) });
 
       const [assignments, employees, shiftTypes] = await Promise.all([
         db.select().from(scheduleShiftAssignments).where(eq(scheduleShiftAssignments.scheduleId, schedule.id)),
@@ -834,11 +909,18 @@ export function registerOpsReportRoutes(app: Express) {
         if (hours <= 0) continue;
         const bucket = opsLaborBucketForSchedule(employee, assignment, shiftType);
         addDepartmentHours(departments, bucket.department, hours);
+        addLaborWageEstimate(
+          wageEstimates,
+          bucket.department,
+          hours,
+          hourlyRateForOpsAssignment(employee, assignment, shiftType),
+          Boolean(employee?.isSalaried),
+        );
         const detailLabel = opsLaborBreakdownLabelForSchedule(bucket);
         addLaborBreakdown(breakdown, bucket.department, detailLabel, hours);
       }
       for (const items of Object.values(breakdown)) items.sort((a, b) => b.hours - a.hours || a.label.localeCompare(b.label));
-      res.json({ weekStart: parsed.data.weekStart, scheduleId: schedule.id, departments, breakdown });
+      res.json({ weekStart: parsed.data.weekStart, scheduleId: schedule.id, departments, breakdown, wageEstimates: finalizeLaborWageEstimates(wageEstimates) });
     } catch (error) {
       next(error);
     }

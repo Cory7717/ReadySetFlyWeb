@@ -37,7 +37,21 @@ const C = {
 type OpsAccess = { unlocked: boolean; user: { employeeDisplayName: string; email: string; isAdmin: boolean } | null; hasPin?: boolean; passwordChangeRequired?: boolean };
 type Row = Record<string, string>;
 type LaborHoursBreakdown = Record<string, Array<{ label: string; hours: number }>>;
-type LaborHoursResponse = { weekStart: string; scheduleId?: string | null; departments: Record<string, number>; breakdown?: LaborHoursBreakdown };
+type LaborWageEstimate = {
+  scheduledHours: number;
+  scheduledHourlyHours: number;
+  scheduledWages: number;
+  scheduledWagesIncludingSalary: number;
+  blendedHourlyRate: number;
+  blendedRateIncludingSalary: number;
+};
+type LaborHoursResponse = {
+  weekStart: string;
+  scheduleId?: string | null;
+  departments: Record<string, number>;
+  breakdown?: LaborHoursBreakdown;
+  wageEstimates?: Record<string, LaborWageEstimate>;
+};
 type OpsImportResponse = {
   uploadId: string;
   originalFileName: string;
@@ -1292,7 +1306,17 @@ export default function OpsReportPage() {
   const laborVariance = actualLaborTotal ? actualLaborTotal - laborBudget : 0;
   const laborRows = useMemo(() => {
     const rows: Row[] = effectiveLabor.map((row): Row => ({
-      ...row,
+      ...(() => {
+        const department = String(row.department || "").trim();
+        const estimate = scheduledLabor.data?.wageEstimates?.[department];
+        const actualHours = num(row.actualHours);
+        const hasActualHours = String(row.actualHours || "").trim() !== "";
+        return {
+          ...row,
+          estimatedActualWages: hasActualHours && estimate ? money(actualHours * estimate.blendedHourlyRate) : "",
+          estimatedActualWagesWithSalary: hasActualHours && estimate ? money(actualHours * estimate.blendedRateIncludingSalary) : "",
+        };
+      })(),
       variance: String(row.actualHours || "").trim() !== "" && String(row.budget || "").trim() !== ""
         ? fmtHours(num(row.actualHours) - num(row.budget))
         : "",
@@ -1300,6 +1324,8 @@ export default function OpsReportPage() {
     const scheduledTotal = rows.reduce((sum, row) => sum + num(row.scheduledHours), 0);
     const actualTotal = rows.reduce((sum, row) => sum + num(row.actualHours), 0);
     const budgetTotal = rows.reduce((sum, row) => sum + num(row.budget), 0);
+    const estimatedActualWagesTotal = rows.reduce((sum, row) => sum + num(row.estimatedActualWages), 0);
+    const estimatedActualWagesWithSalaryTotal = rows.reduce((sum, row) => sum + num(row.estimatedActualWagesWithSalary), 0);
     const hasActual = rows.some((row) => String(row.actualHours || "").trim() !== "");
     return [
       ...rows,
@@ -1310,13 +1336,15 @@ export default function OpsReportPage() {
         actualHours: hasActual ? fmtHours(actualTotal) : "",
         budget: fmtHours(budgetTotal),
         variance: hasActual ? fmtHours(actualTotal - budgetTotal) : "",
+        estimatedActualWages: hasActual ? money(estimatedActualWagesTotal) : "",
+        estimatedActualWagesWithSalary: hasActual ? money(estimatedActualWagesWithSalaryTotal) : "",
         calculatedMpor: "",
         targetMpor: "",
         mporVariance: "",
         comments: "Calculated total",
       },
     ];
-  }, [effectiveLabor]);
+  }, [effectiveLabor, scheduledLabor.data?.wageEstimates]);
   const laborDepartmentPreview = useMemo(() => {
     const breakdown = scheduledLabor.data?.breakdown || {};
     return (row: Row, column: { key: string; label: string }) => {
@@ -1326,12 +1354,20 @@ export default function OpsReportPage() {
       if (!items.length) return null;
       const total = items.reduce((sum, item) => sum + num(item.hours), 0);
       const lines = items.map((item) => `${item.label}: ${fmtHours(item.hours)} hrs`);
+      const estimate = scheduledLabor.data?.wageEstimates?.[department];
+      const wageLines = estimate
+        ? [
+          "",
+          `Blended hourly rate: ${money(estimate.blendedHourlyRate)}/hr`,
+          `Blended rate with salary: ${money(estimate.blendedRateIncludingSalary)}/hr`,
+        ]
+        : [];
       return {
         label: `${department} schedule detail`,
-        text: [`Scheduled total: ${fmtHours(total)} hrs`, "", ...lines].join("\n"),
+        text: [`Scheduled total: ${fmtHours(total)} hrs`, "", ...lines, ...wageLines].join("\n"),
       };
     };
-  }, [scheduledLabor.data?.breakdown]);
+  }, [scheduledLabor.data?.breakdown, scheduledLabor.data?.wageEstimates]);
   const adjustmentTotal = useMemo(() => adjustments.reduce((sum, row) => sum + num(row.amount), 0), [adjustments]);
   const arTotal = num(ar.current) + num(ar.d30) + num(ar.d60) + num(ar.d90);
   const previousGssRows = (previousDraft.data?.draft?.payload?.gssRows || []) as Row[];
@@ -2616,6 +2652,8 @@ export default function OpsReportPage() {
                   { key: "actualHours", label: "Actual Hours" },
                   { key: "budget", label: "Budgeted Hours" },
                   { key: "variance", label: "Hours Variance", readOnly: true },
+                  { key: "estimatedActualWages", label: "Est. Wages", readOnly: true },
+                  { key: "estimatedActualWagesWithSalary", label: "Est. Wages w/ Salary", readOnly: true },
                   { key: "calculatedMpor", label: "Actual MPOR", readOnly: true },
                   { key: "targetMpor", label: "Target MPOR", readOnly: true },
                   { key: "mporVariance", label: "MPOR Variance", readOnly: true },
@@ -2624,7 +2662,7 @@ export default function OpsReportPage() {
                 rows={laborRows}
                 onChange={(rows) => setLabor(rows
                   .filter((row) => row.__readOnly !== "true")
-                  .map(({ __readOnly, variance, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
+                  .map(({ __readOnly, variance, estimatedActualWages, estimatedActualWagesWithSalary, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
                 getCellPreview={laborDepartmentPreview}
               />
             </Section>

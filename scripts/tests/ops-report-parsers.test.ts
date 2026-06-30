@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { excelDateToIso, parseOpsReportFile } from "../../server/opsReportParsers";
-import { opsLaborBreakdownLabelForSchedule, opsLaborBucketForSchedule } from "../../server/routes/opsReport";
+import { addLaborWageEstimate, emptyLaborWageEstimates, finalizeLaborWageEstimates, opsLaborBreakdownLabelForSchedule, opsLaborBucketForSchedule } from "../../server/routes/opsReport";
 
 const context = { weekStart: "2026-05-30", weekEnd: "2026-06-05", reportMonth: "2026-06" };
 
@@ -56,6 +56,21 @@ test("OpsReport Front Desk and Night Audit hover labels stay aggregated", () => 
     opsLaborBreakdownLabelForSchedule({ department: "FRONT DESK / NIGHT AUDIT HOURS", label: "Night Audit" }),
     "Night Audit",
   );
+});
+
+test("OpsReport wage estimates produce hourly-only and with-salary blended rates", () => {
+  const estimates = emptyLaborWageEstimates();
+  addLaborWageEstimate(estimates, "OTHER", 40, 30, false);
+  addLaborWageEstimate(estimates, "OTHER", 45, 35, true);
+  addLaborWageEstimate(estimates, "FRONT DESK / NIGHT AUDIT HOURS", 16, 22, false);
+
+  const finalized = finalizeLaborWageEstimates(estimates);
+  assert.equal(finalized.OTHER.scheduledHourlyHours, 40);
+  assert.equal(finalized.OTHER.scheduledWages, 1200);
+  assert.equal(finalized.OTHER.scheduledWagesIncludingSalary, 2775);
+  assert.equal(finalized.OTHER.blendedHourlyRate, 30);
+  assert.equal(finalized.OTHER.blendedRateIncludingSalary, 32.65);
+  assert.equal(finalized["FRONT DESK / NIGHT AUDIT HOURS"].blendedHourlyRate, 22);
 });
 
 test("OTB reports are classified by selected and next report month", async () => {

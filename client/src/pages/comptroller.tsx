@@ -299,13 +299,13 @@ export default function ComptrollerPage() {
             </div>
 
             {warnings.length > 0 && (
-              <Card className="border-amber-300 bg-amber-50 text-[#4b3714]">
+              <Card className="border-amber-400 bg-[#fff7df] text-[#3f2a05] shadow-[0_12px_28px_rgba(72,52,31,0.10)]">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg"><AlertTriangle className="h-5 w-5" /> Manual Review Flags</CardTitle>
-                  <CardDescription className="text-[#6b4c13]">These do not override STAY posted payable totals. They mark items that should be reviewed before payment.</CardDescription>
+                  <CardTitle className="flex items-center gap-2 text-lg text-[#3f2a05]"><AlertTriangle className="h-5 w-5 text-amber-700" /> Manual Review Flags</CardTitle>
+                  <CardDescription className="text-[#5c420e]">These do not override STAY posted payable totals. They mark items that should be reviewed before payment.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ul className="list-disc space-y-1 pl-5 text-sm">
+                  <ul className="list-disc space-y-1 pl-5 text-sm font-medium text-[#4c3308]">
                     {warnings.map((warning) => <li key={warning}>{warning}</li>)}
                   </ul>
                 </CardContent>

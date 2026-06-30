@@ -198,6 +198,20 @@ function fmtHours(value: string | number) {
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, "");
 }
 
+const DEFAULT_OPS_TOTAL_ROOMS = 118;
+
+function interpolateHours(value: number, minValue: number, maxValue: number, minHours: number, maxHours: number) {
+  if (value <= minValue) return minHours;
+  if (value >= maxValue) return maxHours;
+  return minHours + ((value - minValue) / (maxValue - minValue)) * (maxHours - minHours);
+}
+
+function bistroBudgetHoursForOccupancy(occupancyPercent: number) {
+  if (occupancyPercent <= 50) return interpolateHours(occupancyPercent, 40, 50, 100, 110);
+  if (occupancyPercent <= 65) return interpolateHours(occupancyPercent, 51, 65, 111, 119);
+  return interpolateHours(occupancyPercent, 66, 100, 120, 130);
+}
+
 function mergeLaborHours(rows: Row[], departments: Record<string, number>, field: "scheduledHours" | "actualHours") {
   const known = new Set(rows.map((row) => String(row.department || "").trim()));
   const updated = rows.map((row) => {
@@ -1242,13 +1256,21 @@ export default function OpsReportPage() {
     : null;
   const effectiveLabor = useMemo<Row[]>(() => labor.map((row): Row => {
     const department = String(row.department || "").trim().toUpperCase();
-    if (department !== "HOUSEKEEPING HOURS") {
+    if (department === "BREAKFAST / BISTRO HOURS") {
+      const occupancy = num(topMetrics.occupancy);
+      const totalRooms = num(setup.totalRooms) || DEFAULT_OPS_TOTAL_ROOMS;
+      const roomsSold = num(topMetrics.roomsSold);
+      const occupancyPercent = occupancy > 0 ? occupancy : totalRooms > 0 && roomsSold > 0 ? roomsSold / totalRooms * 100 : 0;
       return {
         ...row,
+        budget: occupancyPercent > 0 ? fmtHours(bistroBudgetHoursForOccupancy(occupancyPercent)) : row.budget,
         calculatedMpor: "",
         targetMpor: "",
         mporVariance: "",
       };
+    }
+    if (department !== "HOUSEKEEPING HOURS") {
+      return { ...row, calculatedMpor: "", targetMpor: "", mporVariance: "" };
     }
     const roomsSold = num(topMetrics.roomsSold);
     const budgetHours = roomsSold * 30 / 60;
@@ -1262,7 +1284,7 @@ export default function OpsReportPage() {
       targetMpor: "30.0",
       mporVariance: mporVariance == null ? "" : `${mporVariance > 0 ? "+" : ""}${mporVariance.toFixed(1)}`,
     };
-  }), [labor, topMetrics.roomsSold]);
+  }), [labor, setup.totalRooms, topMetrics.occupancy, topMetrics.roomsSold]);
   const scheduledLaborTotal = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.scheduledHours), 0), [effectiveLabor]);
   const actualLaborTotal = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.actualHours), 0), [effectiveLabor]);
   const laborTotal = actualLaborTotal || scheduledLaborTotal;

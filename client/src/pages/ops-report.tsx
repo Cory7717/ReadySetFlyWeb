@@ -149,6 +149,28 @@ const REPORT_TYPE_LABELS: Record<OpsImportResponse["reportType"], string> = {
 const emptyRows = (count: number, keys: string[]) =>
   Array.from({ length: count }, (_, index) => keys.reduce<Row>((row, key) => ({ ...row, [key]: key === "no" ? String(index + 1) : "" }), {}));
 
+const GSS_TRACKED_LABELS = ["ITR", "Elite Appreciation", "Cleanliness", "Staff Service", "Maintenance", "Food & Beverage"];
+
+function isTrackedGssLabel(value: unknown) {
+  return GSS_TRACKED_LABELS.some((label) => label.toLowerCase() === String(value || "").trim().toLowerCase());
+}
+
+function defaultGssRows(includePrevious = false) {
+  return GSS_TRACKED_LABELS.map((label) => ({
+    label,
+    hotel: "",
+    brand: "",
+    variance: "",
+    ...(includePrevious ? { priorWeek: "", weekVariance: "" } : {}),
+    sply: "",
+    comments: "",
+  }));
+}
+
+function normalizeGssRows(rows: Row[] | undefined | null) {
+  return (Array.isArray(rows) ? rows : []).filter((row) => isTrackedGssLabel(row.label));
+}
+
 function money(value: string | number) {
   const n = num(value);
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(Number.isFinite(n) ? n : 0);
@@ -338,7 +360,7 @@ function compactReportMapping(reportType: OpsImportResponse["reportType"], mappi
     adr: mapping.adr,
   };
   if (reportType === "ooo_rooms") return { rooms: mapping.rooms, reportRange: mapping.reportRange };
-  if (reportType === "gss_scores") return { gssRows: mapping.gssRows, gssWaveRows: mapping.gssWaveRows };
+  if (reportType === "gss_scores") return { gssRows: normalizeGssRows(mapping.gssRows), gssWaveRows: normalizeGssRows(mapping.gssWaveRows) };
   if (reportType === "marriott_responses") return { positiveReviews: mapping.positiveReviews, negativeReviews: mapping.negativeReviews };
   if (reportType === "ar_aging") return { summary: mapping.summary };
   if (reportType === "credit_limit") return { entries: mapping.entries, summary: mapping.summary };
@@ -506,8 +528,9 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
   }
   if (report.reportType === "gss_scores") {
     const merge = (existing: Row[], incoming: Row[]) => {
-      const labels = new Set(incoming.map((row) => row.label));
-      return [...existing.filter((row) => !labels.has(row.label)), ...incoming];
+      const filteredIncoming = normalizeGssRows(incoming);
+      const labels = new Set(filteredIncoming.map((row) => row.label));
+      return normalizeGssRows([...existing.filter((row) => !labels.has(row.label)), ...filteredIncoming]);
     };
     next.gssRows = merge(next.gssRows || [], mapping.gssRows || []);
     next.gssWaveRows = merge(next.gssWaveRows || [], mapping.gssWaveRows || []);
@@ -1073,8 +1096,8 @@ export default function OpsReportPage() {
   const [staffing, setStaffing] = useState({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
   const [cases, setCases] = useState<Row[]>(emptyRows(5, ["no", "guest", "incidentType", "resolution", "comment"]));
   const [gmOverviewRows, setGmOverviewRows] = useState<Row[]>(emptyRows(6, ["no", "bullet"]));
-  const [gssRows, setGssRows] = useState<Row[]>(["ITR", "Elite Appreciation", "Cleanliness", "Staff Service", "Maintenance", "Food & Beverage", "Internet"].map((label) => ({ label, hotel: "", brand: "", variance: "", priorWeek: "", weekVariance: "", sply: "", comments: "" })));
-  const [gssWaveRows, setGssWaveRows] = useState<Row[]>(["ITR", "Elite Appreciation", "Cleanliness", "Staff Service", "Maintenance", "Food & Beverage", "Internet"].map((label) => ({ label, hotel: "", brand: "", variance: "", sply: "", comments: "" })));
+  const [gssRows, setGssRows] = useState<Row[]>(defaultGssRows(true));
+  const [gssWaveRows, setGssWaveRows] = useState<Row[]>(defaultGssRows());
   const [reputationRows, setReputationRows] = useState<Row[]>(["GOOGLE", "BOOKING.COM", "EXPEDIA", "TRIPADVISOR", "YELP"].map((label) => ({ label, reviews: "", score: "", outOf: "", goal: "", variance: "", strategy: "" })));
   const [positiveReviews, setPositiveReviews] = useState<Row[]>(emptyRows(5, ["source", "score", "comment"]));
   const [negativeReviews, setNegativeReviews] = useState<Row[]>(emptyRows(5, ["source", "score", "comment"]));
@@ -1786,8 +1809,8 @@ export default function OpsReportPage() {
     setStaffing({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
     setCases(emptyRows(5, ["no", "guest", "incidentType", "resolution", "comment"]));
     setGmOverviewRows(emptyRows(6, ["no", "bullet"]));
-    setGssRows(["ITR", "Elite Appreciation", "Cleanliness", "Staff Service", "Maintenance", "Food & Beverage", "Internet"].map((label) => ({ label, hotel: "", brand: "", variance: "", priorWeek: "", weekVariance: "", sply: "", comments: "" })));
-    setGssWaveRows(["ITR", "Elite Appreciation", "Cleanliness", "Staff Service", "Maintenance", "Food & Beverage", "Internet"].map((label) => ({ label, hotel: "", brand: "", variance: "", priorWeek: "", weekVariance: "", sply: "", comments: "" })));
+    setGssRows(defaultGssRows(true));
+    setGssWaveRows(defaultGssRows());
     setReputationRows(["GOOGLE", "BOOKING.COM", "EXPEDIA", "TRIPADVISOR", "YELP"].map((label) => ({ label, reviews: "", score: "", outOf: "", goal: "", variance: "", strategy: "" })));
     setPositiveReviews(emptyRows(5, ["source", "score", "comment"]));
     setNegativeReviews(emptyRows(5, ["source", "score", "comment"]));
@@ -1819,8 +1842,8 @@ export default function OpsReportPage() {
     if (payload.cases) setCases(payload.cases);
     if (Array.isArray(payload.gmOverviewRows)) setGmOverviewRows(payload.gmOverviewRows);
     else if (typeof payload.gmOverview === "string") setGmOverviewRows(payload.gmOverview.split(/\n+/).filter(Boolean).slice(0, 6).map((bullet: string, index: number) => ({ no: String(index + 1), bullet: bullet.replace(/^[-*•\s]+/, "") })));
-    if (payload.gssRows) setGssRows(payload.gssRows);
-    if (payload.gssWaveRows) setGssWaveRows(payload.gssWaveRows);
+    if (payload.gssRows) setGssRows(normalizeGssRows(payload.gssRows));
+    if (payload.gssWaveRows) setGssWaveRows(normalizeGssRows(payload.gssWaveRows));
     if (payload.reputationRows) setReputationRows(payload.reputationRows);
     if (payload.positiveReviews) setPositiveReviews(payload.positiveReviews);
     if (payload.negativeReviews) setNegativeReviews(payload.negativeReviews);

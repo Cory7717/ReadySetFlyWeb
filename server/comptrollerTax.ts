@@ -20,6 +20,18 @@ type SheetRows = { name: string; rows: string[][] };
 type RowRecord = Record<string, string>;
 type ParsedSheet = { sheetName: string; rows: RowRecord[]; headers: string[]; warnings: string[] };
 type UploadMap = Record<string, Express.Multer.File | undefined>;
+type ComptrollerReviewIssue = {
+  id: string;
+  severity: "review" | "warning" | "info";
+  category: string;
+  title: string;
+  summary: string;
+  amountImpact?: number;
+  reportKey: "taxPostings" | "taxExemptions" | "accountingInterface";
+  rowIndexes: number[];
+  rowCount: number;
+  suggestedAction: string;
+};
 
 const POSTING_REQUIRED = [
   "ITEM",
@@ -325,6 +337,152 @@ function validateExemptions(groups: ReturnType<typeof exemptionGroups>) {
   return warnings;
 }
 
+function buildReviewIssues({
+  postingRows,
+  exemptionRows,
+  posted,
+  expected,
+  tolerance,
+}: {
+  postingRows: RowRecord[];
+  exemptionRows: RowRecord[];
+  posted: { cityTax: number; stateTax: number; tourismPidFee: number };
+  expected: { cityTax: number; stateTax: number; tourismPidFee: number };
+  tolerance: number;
+}) {
+  const issues: ComptrollerReviewIssue[] = [];
+  const cityVariance = money(posted.cityTax - expected.cityTax);
+  const stateVariance = money(posted.stateTax - expected.stateTax);
+  const tpidVariance = money(posted.tourismPidFee - expected.tourismPidFee);
+  const cityRows = postingRows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => {
+      const item = String(get(row, "ITEM")).toUpperCase();
+      return item.includes("CITY TAX") ||
+        numberValue(get(row, "FEE CITY TAX 11.22% EX")) !== 0 ||
+        numberValue(get(row, "CITY TAX 11.22% EX")) < 0;
+    })
+    .map(({ index }) => index);
+  const stateRows = postingRows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => {
+      const item = String(get(row, "ITEM")).toUpperCase();
+      return item.includes("STATE OCCUPANCY TAX") ||
+        numberValue(get(row, "FEE STATE TAX 6.12% EX")) !== 0 ||
+        numberValue(get(row, "STATE OCCUPANCY TAX 6.12% EX")) < 0;
+    })
+    .map(({ index }) => index);
+  const tpidRows = postingRows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => {
+      const item = String(get(row, "ITEM")).toUpperCase();
+      return item.includes("TOURISM PID") || numberValue(get(row, "AUSTIN TOURISM PID FEE 2% EX")) < 0;
+    })
+    .map(({ index }) => index);
+  const missingReasonRows = exemptionRows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => !String(get(row, "TAX EXEMPT REASON")).trim() && TAX_COLUMNS.some((column) => numberValue(get(row, column)) !== 0))
+    .map(({ index }) => index);
+  const stateOnlyRows = exemptionRows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => {
+      const hasReason = String(get(row, "TAX EXEMPT REASON")).trim();
+      return !hasReason &&
+        numberValue(get(row, "STATE OCCUPANCY TAX 6.12% EX")) !== 0 &&
+        numberValue(get(row, "CITY TAX 11.22% EX")) === 0 &&
+        numberValue(get(row, "AUSTIN TOURISM PID FEE 2% EX")) === 0;
+    })
+    .map(({ index }) => index);
+  const negativeTaxRows = postingRows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => TAX_COLUMNS.some((column) => numberValue(get(row, column)) < 0))
+    .map(({ index }) => index);
+
+  if (Math.abs(tpidVariance) > tolerance) {
+    issues.push({
+      id: "tpid-variance",
+      severity: "warning",
+      category: "Tax variance",
+      title: "Austin TPID fee variance",
+      summary: `Posted ${money(posted.tourismPidFee)} differs from expected ${money(expected.tourismPidFee)} by ${money(tpidVariance)}.`,
+      amountImpact: tpidVariance,
+      reportKey: "taxPostings",
+      rowIndexes: tpidRows,
+      rowCount: tpidRows.length,
+      suggestedAction: "Review TPID fee adjustment and negative TPID rows.",
+    });
+  }
+  if (Math.abs(cityVariance) > tolerance) {
+    issues.push({
+      id: "city-hot-variance",
+      severity: "review",
+      category: "Tax variance",
+      title: "Austin City HOT variance",
+      summary: `Posted ${money(posted.cityTax)} differs from expected ${money(expected.cityTax)} by ${money(cityVariance)}.`,
+      amountImpact: cityVariance,
+      reportKey: "taxPostings",
+      rowIndexes: cityRows,
+      rowCount: cityRows.length,
+      suggestedAction: "Review city tax adjustment, fee-city-tax, and negative city tax rows.",
+    });
+  }
+  if (Math.abs(stateVariance) > tolerance) {
+    issues.push({
+      id: "state-hot-variance",
+      severity: "review",
+      category: "Tax variance",
+      title: "State HOT variance",
+      summary: `Posted ${money(posted.stateTax)} differs from expected ${money(expected.stateTax)} by ${money(stateVariance)}.`,
+      amountImpact: stateVariance,
+      reportKey: "taxPostings",
+      rowIndexes: stateRows,
+      rowCount: stateRows.length,
+      suggestedAction: "Review state tax adjustment, fee-state-tax, and negative state tax rows.",
+    });
+  }
+  if (missingReasonRows.length) {
+    issues.push({
+      id: "exemptions-missing-reason",
+      severity: "review",
+      category: "Exemption setup",
+      title: "Exemptions missing reason",
+      summary: `${missingReasonRows.length} exemption rows remove tax but have no exemption reason.`,
+      reportKey: "taxExemptions",
+      rowIndexes: missingReasonRows,
+      rowCount: missingReasonRows.length,
+      suggestedAction: "Verify the exemption type/certificate in STAY or accounting support.",
+    });
+  }
+  if (stateOnlyRows.length) {
+    issues.push({
+      id: "state-only-exemptions-missing-reason",
+      severity: "warning",
+      category: "Exemption setup",
+      title: "Possible state-only exemptions",
+      summary: `${stateOnlyRows.length} rows remove state tax only but have no exemption reason.`,
+      reportKey: "taxExemptions",
+      rowIndexes: stateOnlyRows,
+      rowCount: stateOnlyRows.length,
+      suggestedAction: "Confirm these are valid state-only exemptions and not missing local exemption setup.",
+    });
+  }
+  if (negativeTaxRows.length) {
+    issues.push({
+      id: "negative-tax-postings",
+      severity: "info",
+      category: "Posting adjustments",
+      title: "Negative tax posting rows",
+      summary: `${negativeTaxRows.length} tax posting rows reduce one or more tax columns.`,
+      reportKey: "taxPostings",
+      rowIndexes: negativeTaxRows,
+      rowCount: negativeTaxRows.length,
+      suggestedAction: "Review if the variance is unexpected. Negative rows often represent transfers, reversals, credits, or corrections.",
+    });
+  }
+
+  return issues;
+}
+
 function parseAccountingFile(file?: Express.Multer.File) {
   if (!file) return { sheetName: "", rows: [] as RowRecord[], warnings: ["Accounting Interface report was not uploaded."] };
   const sheets = parseWorkbook(file);
@@ -424,6 +582,13 @@ function buildComptrollerPayload(parsed: {
   warnings.push(...validateExemptions(groups));
   const accountingResult = accountingSummary(accounting.rows);
   if (!accountingResult.balanced && (accountingResult.debitTotal || accountingResult.creditTotal)) warnings.push("Accounting Interface debits and credits do not balance.");
+  const reviewIssues = buildReviewIssues({
+    postingRows: postingSheet.rows,
+    exemptionRows: exemptionSheet.rows,
+    posted,
+    expected,
+    tolerance,
+  });
 
   const detailTable = [
     {
@@ -531,6 +696,7 @@ function buildComptrollerPayload(parsed: {
     accounting: accountingResult,
     detailTable,
     warnings,
+    reviewIssues,
     explanations: explainTaxPostingRows(postingSheet.rows),
     drilldown: {
       taxPostings: postingSheet.rows,

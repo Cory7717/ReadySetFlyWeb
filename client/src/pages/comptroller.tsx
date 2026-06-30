@@ -43,7 +43,22 @@ type ReportEditorState = {
   rows: Array<Record<string, string>>;
   search: string;
   page: number;
+  issueTitle?: string;
+  issueRowIndexes?: number[];
 } | null;
+
+type ReviewIssue = {
+  id: string;
+  severity: "review" | "warning" | "info";
+  category: string;
+  title: string;
+  summary: string;
+  amountImpact?: number;
+  reportKey: ReportKey;
+  rowIndexes: number[];
+  rowCount: number;
+  suggestedAction: string;
+};
 
 const REPORT_LABELS: Record<ReportKey, string> = {
   taxPostings: "Tax Postings Dynamic",
@@ -64,6 +79,12 @@ function pct(value: unknown) {
 function displayCellValue(value: unknown) {
   const text = String(value ?? "");
   return text === "[object Object]" ? "" : text;
+}
+
+function issueTone(issue: ReviewIssue) {
+  if (issue.severity === "warning") return "border-red-300 bg-red-50 text-red-950";
+  if (issue.severity === "info") return "border-blue-200 bg-blue-50 text-blue-950";
+  return "border-amber-300 bg-amber-50 text-amber-950";
 }
 
 function currentMonth() {
@@ -154,10 +175,11 @@ function ReportEditorModal({
   if (!editor) return null;
   const columns = reportColumns(editor.rows);
   const query = editor.search.trim().toLowerCase();
+  const issueIndexSet = editor.issueRowIndexes?.length ? new Set(editor.issueRowIndexes) : null;
   const pageSize = 100;
   const visibleRows = editor.rows
     .map((row, index) => ({ row, index }))
-    .filter(({ row }) => !query || Object.values(row).join(" ").toLowerCase().includes(query));
+    .filter(({ row, index }) => (!issueIndexSet || issueIndexSet.has(index)) && (!query || Object.values(row).join(" ").toLowerCase().includes(query)));
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const safePage = Math.min(Math.max(editor.page, 1), totalPages);
   const pageRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -170,7 +192,9 @@ function ReportEditorModal({
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">Editable STAY Report</div>
               <h2 className="text-2xl font-semibold">{editor.title}</h2>
-              <p className="text-sm text-[#5f5247]">Edit source rows, then save to recalculate the tax payment totals from this report.</p>
+              <p className="text-sm text-[#5f5247]">
+                {editor.issueTitle ? `Filtered to suspected rows for: ${editor.issueTitle}.` : "Edit source rows, then save to recalculate the tax payment totals from this report."}
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button className={C.green} disabled={saving} onClick={onSave}>
@@ -189,6 +213,7 @@ function ReportEditorModal({
             <div>
               Showing {pageRows.length ? (safePage - 1) * pageSize + 1 : 0}-{Math.min(safePage * pageSize, visibleRows.length)} of {visibleRows.length} matching rows.
               <span className="ml-2">Full report rows retained: {editor.rows.length}.</span>
+              {issueIndexSet && <span className="ml-2 font-semibold text-[#8a5b0a]">Issue filter active.</span>}
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" className={C.outline} disabled={safePage <= 1} onClick={() => onPageChange(safePage - 1)}>
@@ -327,15 +352,24 @@ export default function ComptrollerPage() {
   const posted = payload.posted || {};
   const expected = payload.expected || {};
   const warnings: string[] = Array.isArray(payload.warnings) ? payload.warnings : [];
+  const reviewIssues: ReviewIssue[] = Array.isArray(payload.reviewIssues) ? payload.reviewIssues : [];
   const detailTable: any[] = Array.isArray(payload.detailTable) ? payload.detailTable : [];
   const exemptionGroups: any[] = Array.isArray(payload.exemptionGroups) ? payload.exemptionGroups : [];
   const accounting = payload.accounting || {};
   const uploaded = Array.isArray(report?.uploadedReports) ? report?.uploadedReports : [];
   const explanations: any[] = Array.isArray(payload.explanations) ? payload.explanations : [];
   const canProcess = Boolean(files.taxPostings && files.taxExemptions && files.accountingInterface && reportMonth);
-  const openReportEditor = (key: ReportKey) => {
+  const openReportEditor = (key: ReportKey, issue?: ReviewIssue) => {
     const rows = Array.isArray(payload?.drilldown?.[key]) ? payload.drilldown[key] : [];
-    setEditor({ key, title: REPORT_LABELS[key], rows: rows.map((row: Record<string, string>) => ({ ...row })), search: "", page: 1 });
+    setEditor({
+      key,
+      title: REPORT_LABELS[key],
+      rows: rows.map((row: Record<string, string>) => ({ ...row })),
+      search: "",
+      page: 1,
+      issueTitle: issue?.title,
+      issueRowIndexes: issue?.rowIndexes,
+    });
   };
 
   const metricCards = useMemo(() => [
@@ -474,7 +508,7 @@ export default function ComptrollerPage() {
               </CardContent>
             </Card>
 
-            {warnings.length > 0 && (
+            {(reviewIssues.length > 0 || warnings.length > 0) && (
               <div className="rounded-xl border border-amber-400 bg-[#fff7df] p-6 text-[#3f2a05] shadow-[0_12px_28px_rgba(72,52,31,0.10)]">
                 <div className="flex items-center gap-2 text-lg font-semibold text-[#3f2a05]">
                   <AlertTriangle className="h-5 w-5 text-amber-700" />
@@ -483,9 +517,35 @@ export default function ComptrollerPage() {
                 <p className="mt-2 text-sm font-medium text-[#5c420e]">
                   These do not override STAY posted payable totals. They mark items that should be reviewed before payment.
                 </p>
-                <ul className="mt-5 list-disc space-y-2 pl-5 text-sm font-semibold leading-6 text-[#4c3308]">
-                  {warnings.map((warning) => <li key={warning}>{warning}</li>)}
-                </ul>
+                {reviewIssues.length > 0 ? (
+                  <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                    {reviewIssues.map((issue) => (
+                      <div key={issue.id} className={`rounded-lg border p-4 ${issueTone(issue)}`}>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.14em] opacity-80">{issue.category}</div>
+                            <div className="mt-1 text-base font-semibold">{issue.title}</div>
+                          </div>
+                          <Badge variant="outline" className="border-current bg-white/70 text-current">{issue.rowCount} rows</Badge>
+                        </div>
+                        <p className="mt-2 text-sm font-medium">{issue.summary}</p>
+                        <p className="mt-1 text-xs opacity-80">{issue.suggestedAction}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" className={C.outline} onClick={() => openReportEditor(issue.reportKey, issue)}>
+                            Review rows
+                          </Button>
+                          <Button size="sm" variant="outline" className={C.outline} disabled title="AI explanation can be added after row targeting is validated.">
+                            Explain with AI
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <ul className="mt-5 list-disc space-y-2 pl-5 text-sm font-semibold leading-6 text-[#4c3308]">
+                    {warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                  </ul>
+                )}
               </div>
             )}
 

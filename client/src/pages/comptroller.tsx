@@ -42,6 +42,7 @@ type ReportEditorState = {
   title: string;
   rows: Array<Record<string, string>>;
   search: string;
+  page: number;
 } | null;
 
 const REPORT_LABELS: Record<ReportKey, string> = {
@@ -133,6 +134,7 @@ function ReportEditorModal({
   saving,
   onClose,
   onSearch,
+  onPageChange,
   onCellChange,
   onSave,
 }: {
@@ -140,15 +142,20 @@ function ReportEditorModal({
   saving: boolean;
   onClose: () => void;
   onSearch: (value: string) => void;
+  onPageChange: (page: number) => void;
   onCellChange: (rowIndex: number, column: string, value: string) => void;
   onSave: () => void;
 }) {
   if (!editor) return null;
   const columns = reportColumns(editor.rows);
   const query = editor.search.trim().toLowerCase();
+  const pageSize = 100;
   const visibleRows = editor.rows
     .map((row, index) => ({ row, index }))
     .filter(({ row }) => !query || Object.values(row).join(" ").toLowerCase().includes(query));
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / pageSize));
+  const safePage = Math.min(Math.max(editor.page, 1), totalPages);
+  const pageRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   return (
     <div className="fixed inset-0 z-[1000] bg-[#f3efe7] text-[#201814]">
@@ -173,6 +180,21 @@ function ReportEditorModal({
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#76695d]" />
             <Input className={`${C.field} pl-9`} value={editor.search} onChange={(event) => onSearch(event.target.value)} placeholder="Search report rows" />
           </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-[#5f5247]">
+            <div>
+              Showing {pageRows.length ? (safePage - 1) * pageSize + 1 : 0}-{Math.min(safePage * pageSize, visibleRows.length)} of {visibleRows.length} matching rows.
+              <span className="ml-2">Full report rows retained: {editor.rows.length}.</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className={C.outline} disabled={safePage <= 1} onClick={() => onPageChange(safePage - 1)}>
+                Previous
+              </Button>
+              <span>Page {safePage} of {totalPages}</span>
+              <Button variant="outline" size="sm" className={C.outline} disabled={safePage >= totalPages} onClick={() => onPageChange(safePage + 1)}>
+                Next
+              </Button>
+            </div>
+          </div>
         </header>
         <div className="flex-1 overflow-auto p-4">
           <table className="min-w-full border-collapse text-xs">
@@ -185,7 +207,7 @@ function ReportEditorModal({
               </tr>
             </thead>
             <tbody>
-              {visibleRows.map(({ row, index }) => (
+              {pageRows.map(({ row, index }) => (
                 <tr key={index} className={index % 2 ? "bg-white" : "bg-[#fffaf2]"}>
                   <td className="border border-[#eadfce] px-2 py-1 text-[#5f5247]">{index + 1}</td>
                   {columns.map((column) => (
@@ -308,7 +330,7 @@ export default function ComptrollerPage() {
   const canProcess = Boolean(files.taxPostings && files.taxExemptions && files.accountingInterface && reportMonth);
   const openReportEditor = (key: ReportKey) => {
     const rows = Array.isArray(payload?.drilldown?.[key]) ? payload.drilldown[key] : [];
-    setEditor({ key, title: REPORT_LABELS[key], rows: rows.map((row: Record<string, string>) => ({ ...row })), search: "" });
+    setEditor({ key, title: REPORT_LABELS[key], rows: rows.map((row: Record<string, string>) => ({ ...row })), search: "", page: 1 });
   };
 
   const metricCards = useMemo(() => [
@@ -595,7 +617,8 @@ export default function ComptrollerPage() {
         editor={editor}
         saving={saveReportEdits.isPending}
         onClose={() => setEditor(null)}
-        onSearch={(search) => setEditor((current) => current ? { ...current, search } : current)}
+        onSearch={(search) => setEditor((current) => current ? { ...current, search, page: 1 } : current)}
+        onPageChange={(page) => setEditor((current) => current ? { ...current, page } : current)}
         onCellChange={(rowIndex, column, value) => setEditor((current) => {
           if (!current) return current;
           const rows = current.rows.map((row, index) => index === rowIndex ? { ...row, [column]: value } : row);

@@ -822,6 +822,21 @@ export const courtyardOpsMonthlySummaries = pgTable("courtyard_ops_monthly_summa
   index("idx_courtyard_ops_monthly_summary_updated").on(table.updatedAt),
 ]);
 
+export const courtyardComptrollerReports = pgTable("courtyard_comptroller_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: text("property_id").notNull().default("courtyard-austin-lakeline"),
+  reportMonth: text("report_month").notNull(),
+  payloadJson: jsonb("payload_json").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  uploadedReportsJson: jsonb("uploaded_reports_json").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
+  settingsJson: jsonb("settings_json").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  updatedBy: varchar("updated_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_courtyard_comptroller_report_period").on(table.propertyId, table.reportMonth),
+  index("idx_courtyard_comptroller_report_updated").on(table.updatedAt),
+]);
+
 export const courtyardHotels = pgTable("courtyard_hotels", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),

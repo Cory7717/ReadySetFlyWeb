@@ -57,6 +57,7 @@ import { registerOpsReportRoutes } from "./routes/opsReport";
 import { registerDosReportingRoutes } from "./routes/dosReporting";
 import { registerIncidentReportRoutes } from "./routes/incidentReport";
 import { registerCourtyardBudgetRoutes } from "./routes/courtyardBudget";
+import { registerComptrollerRoutes } from "./routes/comptroller";
 import { registerVehicleListingRoutes } from "./routes/vehicleListings";
 import {
   flightPlanFilingProvider,
@@ -4424,6 +4425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerDosReportingRoutes(app);
   registerIncidentReportRoutes(app);
   registerCourtyardBudgetRoutes(app);
+  registerComptrollerRoutes(app);
   registerVehicleListingRoutes(app);
   app.use("/api/fuel-prices", fuelPricesRouter);
   app.use("/api/ai-tools", aiToolsRouter);

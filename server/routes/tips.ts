@@ -54,7 +54,7 @@ type TipsUserSession = {
   disabledAt: Date | string | null;
 };
 
-const COURTYARD_TOOL_KEYS = ["schedule", "tips", "opsreport", "dosreporting", "incidentreport", "bankdeposit", "budget"] as const;
+const COURTYARD_TOOL_KEYS = ["schedule", "tips", "opsreport", "dosreporting", "incidentreport", "bankdeposit", "budget", "comptroller"] as const;
 type CourtyardToolKey = typeof COURTYARD_TOOL_KEYS[number];
 
 function normalizeEmail(email: string) {

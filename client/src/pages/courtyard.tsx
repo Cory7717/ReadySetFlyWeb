@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Banknote, CalendarClock, CalendarDays, ClipboardPlus, Coffee, DollarSign, DoorOpen, FileSpreadsheet, KeyRound, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
+import { Banknote, Calculator, CalendarClock, CalendarDays, ClipboardPlus, Coffee, DollarSign, DoorOpen, FileSpreadsheet, KeyRound, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -40,9 +40,9 @@ type CourtyardUser = {
   canAccessOpsReport?: boolean;
 };
 
-type ToolKey = "schedule" | "tips" | "opsreport" | "dosreporting" | "incidentreport" | "bankdeposit" | "budget";
+type ToolKey = "schedule" | "tips" | "opsreport" | "dosreporting" | "incidentreport" | "bankdeposit" | "budget" | "comptroller";
 type ToolAccessResponse = { users: CourtyardUser[]; tools: ToolKey[] };
-const DEFAULT_TOOL_KEYS: ToolKey[] = ["schedule", "tips", "opsreport", "dosreporting", "incidentreport", "bankdeposit", "budget"];
+const DEFAULT_TOOL_KEYS: ToolKey[] = ["schedule", "tips", "opsreport", "dosreporting", "incidentreport", "bankdeposit", "budget", "comptroller"];
 
 const DEPARTMENTS = ["Managers", "Above Property", "Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
 const SCHEDULE_ROLES = ["Above Property", "GM", "DOS", "MOD", "Executive Housekeeper", "Exec HK", "FD AM", "FD PM", "Night Audit", "Bistro AM", "Bistro PM", "Breakfast", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
@@ -62,7 +62,7 @@ function toolEnabled(user: CourtyardUser, tool: ToolKey) {
   if (typeof explicit === "boolean") return explicit;
   if (tool === "schedule") return user.canAccessSchedule !== false;
   if (tool === "tips") return user.canAccessTips ?? userHasTipsAccess(user);
-  if (tool === "opsreport" || tool === "dosreporting" || tool === "budget") return user.canAccessOpsReport ?? user.isAdmin;
+  if (tool === "opsreport" || tool === "dosreporting" || tool === "budget" || tool === "comptroller") return user.canAccessOpsReport ?? user.isAdmin;
   if (tool === "incidentreport" || tool === "bankdeposit") return true;
   return false;
 }
@@ -266,6 +266,7 @@ function CourtyardToolAccessAdmin() {
     incidentreport: "Incident Report",
     bankdeposit: "Bank Deposit",
     budget: "Budget",
+    comptroller: "Comptroller",
   };
   const tools = accessUsers.data?.tools?.length ? accessUsers.data.tools : DEFAULT_TOOL_KEYS;
 
@@ -426,6 +427,15 @@ export default function CourtyardPortalPage() {
       action: "Open ops report",
       tone: C.outline,
       disabled: !toolEnabled(user, "opsreport"),
+    },
+    {
+      href: "/comptroller",
+      icon: Calculator,
+      title: "Comptroller",
+      description: "Calculate monthly hotel tax payable from STAY reports and review Texas, Austin, TPID, and exemption compliance checks.",
+      action: "Open Comptroller",
+      tone: C.outline,
+      disabled: !toolEnabled(user, "comptroller"),
     },
     {
       href: "/dosreporting",

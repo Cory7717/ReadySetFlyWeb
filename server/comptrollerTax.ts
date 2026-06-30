@@ -295,6 +295,21 @@ function explainTaxPostingRows(rows: RowRecord[]) {
 
 function validateExemptions(groups: ReturnType<typeof exemptionGroups>) {
   const warnings: string[] = [];
+  const blankReasonWithTax = groups.filter((group) => {
+    const reason = String(group.taxExemptReason || "").trim();
+    return !reason && (group.tourismPidExempt || group.cityTaxExempt || group.stateTaxExempt);
+  });
+  const stateOnlyBlankReason = blankReasonWithTax.filter((group) => group.stateTaxExempt && !group.cityTaxExempt && !group.tourismPidExempt);
+
+  if (blankReasonWithTax.length) {
+    const examples = blankReasonWithTax.slice(0, 5).map((group) => `${group.name || group.category || group.taxExemptId} (${group.taxExemptId || "no ID"})`).join(", ");
+    warnings.push(`${blankReasonWithTax.length} exemption rows remove tax but have no exemption reason. Verify the exemption type/certificate before relying on the exempt treatment. Examples: ${examples}.`);
+  }
+  if (stateOnlyBlankReason.length) {
+    const examples = stateOnlyBlankReason.slice(0, 5).map((group) => `${group.name || group.category || group.taxExemptId} (${group.taxExemptId || "no ID"})`).join(", ");
+    warnings.push(`${stateOnlyBlankReason.length} exemption rows appear to remove state tax only, with no local/city exemption and no exemption reason. Verify these are valid state-only exemptions. Examples: ${examples}.`);
+  }
+
   for (const group of groups) {
     const reason = String(group.taxExemptReason || "").toLowerCase();
     if (!group.taxExemptId && !reason.includes("permanent")) {
@@ -367,9 +382,18 @@ function buildComptrollerPayload(parsed: {
     meetingRoomTax: sum(postingSheet.rows, "MEETING ROOM TAX 6% EX"),
     salesTax: sum(postingSheet.rows, "SALES TAX 8.25% EX"),
   };
-  const postedAllTaxColumnsTotal = money(Object.values(posted).reduce((total, value) => total + value, 0));
+  const postedAllTaxColumnsTotal = money(
+    posted.tourismPidFee +
+    posted.cityRoomTax +
+    posted.cityFeeTax +
+    posted.stateRoomTax +
+    posted.stateFeeTax +
+    posted.meetingRoomTax +
+    posted.salesTax,
+  );
   const finalStateHOT = money(posted.stateTax + (settings.includeMeetingRoomTaxInStateHOT ? posted.meetingRoomTax : 0));
-  const finalTotalPayable = money(posted.tourismPidFee + posted.cityTax + finalStateHOT + posted.salesTax);
+  const hotelOccupancyAndTpidDue = money(posted.tourismPidFee + posted.cityTax + finalStateHOT);
+  const finalTotalPayable = money(hotelOccupancyAndTpidDue + posted.salesTax);
 
   const taxableRoomRevenue = roomRevenueBase(postingSheet.rows);
   const inferredTaxableRoomNightSales = posted.tourismPidFee ? money(posted.tourismPidFee / settings.tourismPIDRate) : taxableRoomRevenue;
@@ -494,8 +518,10 @@ function buildComptrollerPayload(parsed: {
       stateHotBeforeMeetingRoom: posted.stateTax,
       meetingRoomTax: posted.meetingRoomTax,
       stateHotDue: finalStateHOT,
+      hotelOccupancyAndTpidDue,
       salesTaxDue: posted.salesTax,
       totalTaxPaymentDue: finalTotalPayable,
+      grandPostedTaxAndFeeTotal: finalTotalPayable,
     },
     posted,
     postedAllTaxColumnsTotal,

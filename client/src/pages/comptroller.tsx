@@ -61,6 +61,11 @@ function pct(value: unknown) {
   return `${(Number.isFinite(n) ? n * 100 : 0).toFixed(2)}%`;
 }
 
+function displayCellValue(value: unknown) {
+  const text = String(value ?? "");
+  return text === "[object Object]" ? "" : text;
+}
+
 function currentMonth() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -214,7 +219,7 @@ function ReportEditorModal({
                     <td key={column} className="border border-[#eadfce] p-0">
                       <input
                         className="h-9 w-full bg-transparent px-2 text-[#201814] outline-none focus:bg-[#fff3d4] focus:ring-1 focus:ring-[#b98435]"
-                        value={row[column] ?? ""}
+                        value={displayCellValue(row[column])}
                         onChange={(event) => onCellChange(index, column, event.target.value)}
                       />
                     </td>
@@ -341,7 +346,8 @@ export default function ComptrollerPage() {
     { label: "State HOT Due", value: money(summary.stateHotDue), note: "State HOT plus meeting-room tax display" },
     { label: "Meeting Room Tax", value: money(summary.meetingRoomTax), note: "Displayed separately for review" },
     { label: "Sales Tax Due", value: money(summary.salesTaxDue), note: "Kept separate from occupancy tax" },
-    { label: "Total Tax Payment Due", value: money(summary.totalTaxPaymentDue), note: "Posted STAY payable source of truth" },
+    { label: "Hotel / TPID Payable", value: money(summary.hotelOccupancyAndTpidDue ?? (Number(summary.totalTaxPaymentDue || 0) - Number(summary.salesTaxDue || 0))), note: "Occupancy tax, TPID, and meeting-room tax subtotal" },
+    { label: "Grand Posted Tax / Fee Total", value: money(summary.grandPostedTaxAndFeeTotal ?? summary.totalTaxPaymentDue), note: "Includes separated sales tax for reconciliation" },
   ], [payload.settings?.tourismPIDRate, summary]);
 
   if (access.isLoading) return <div className={`${C.page} p-8`}>Loading Comptroller...</div>;

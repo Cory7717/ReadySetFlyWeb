@@ -3194,7 +3194,7 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-12 h-auto">
+        <TabsList className="flex h-auto w-full flex-wrap items-center justify-start gap-1 p-1">
           {canAccess("analytics") && (
             <TabsTrigger value="analytics" data-testid="tab-analytics" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
               <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />

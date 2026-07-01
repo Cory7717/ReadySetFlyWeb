@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-07-01T12:32:21.092Z",
+  "seed": 20260701,
+  "count": 50,
+  "summary": {
+    "totalScenarios": 75,
+    "passed": 75,
+    "failed": 0,
+    "blockers": 0,
+    "majorIssues": 0,
+    "minorIssues": 0,
+    "providerCallsAttempted": 35,
+    "providerCallsBlocked": 40,
+    "seanFeedbackCoverage": 15
+  },
+  "remainingRisks": [
+    "Live provider lifecycle calls remain manual/lab-gated.",
+    "Visual UI items require browser screenshot evidence.",
+    "Realtime provider push notification behavior requires an integration or browser harness."
+  ],
+  "failures": []
+}

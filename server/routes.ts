@@ -46,6 +46,7 @@ import {
   listFlightServiceCertificationReports,
   resolveFlightServiceCertificationDownload,
 } from "./services/flightServiceCertificationReports";
+import { getFlightServiceRuntimeMode, hasFlightServiceTestAcknowledgement } from "./services/flightServiceRuntimeMode";
 import { resolveTfmsProviderKey, type TfmsOverlay, type TfmsStatus } from "./services/tfms/provider";
 import { createStubTfmsProvider } from "./services/tfms/providers/stub";
 import { createSoftAuthRateLimiter } from "./middleware/rateLimit";
@@ -131,6 +132,7 @@ if (!process.env.PAYPAL_CLIENT_ID || !process.env.PAYPAL_CLIENT_SECRET) {
 const isProd = process.env.NODE_ENV === "production";
 
 const bannerImpressionCache = new Map<string, number>();
+
 
 // Clean up old entries every hour
 setInterval(() => {
@@ -21560,11 +21562,31 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const filingLifecycleActionSchema = z.object({
     action: z.enum(flightPlanFilingActions),
     closeLocation: z.string().trim().optional().nullable(),
+    testAcknowledgement: z.object({
+      accepted: z.literal(true),
+      environment: z.string().trim().optional().nullable(),
+      acknowledgedAt: z.string().trim(),
+      action: z.string().trim().optional().nullable(),
+    }).optional().nullable(),
+  });
+
+  app.get("/api/flight-service/environment", (_req, res) => {
+    const mode = getFlightServiceRuntimeMode();
+    res.json({
+      ...mode,
+      testBannerTitle: mode.acknowledgementRequired ? "Flight Service Test Environment" : null,
+      testBannerMessage: mode.acknowledgementRequired
+        ? "This feature is operating in a non-operational Flight Service validation environment. Flight plans created here are not transmitted to the operational air traffic system and are not available to Air Traffic Control."
+        : null,
+    });
   });
 
   app.get("/api/admin/leidos-flight-service/status", isAuthenticated, isSuperAdmin, async (_req, res) => {
     try {
-      res.json(getLeidosFlightServiceDiagnostics());
+      res.json({
+        ...getLeidosFlightServiceDiagnostics(),
+        runtimeMode: getFlightServiceRuntimeMode(),
+      });
     } catch (error) {
       console.error("Failed to build Leidos Flight Service diagnostics:", error);
       res.status(500).json({ error: "Failed to build Leidos Flight Service diagnostics" });
@@ -22277,11 +22299,13 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const publicFilingEnabled = /^(true|1|yes)$/i.test(String(
-        process.env.FLIGHT_FILING_OPERATIONAL_ENABLED ||
-        process.env.FLIGHT_SERVICE_PUBLIC_FILING_ENABLED ||
-        "",
-      ));
+      const parsed = filingLifecycleActionSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.format() });
+      }
+      const action = parsed.data.action as FlightPlanFilingAction;
+      const closeLocation = parsed.data.closeLocation || null;
+      const runtimeMode = getFlightServiceRuntimeMode();
       const testerEmails = new Set(
         String(process.env.FLIGHT_SERVICE_TESTER_EMAILS || "")
           .split(",")
@@ -22290,23 +22314,47 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       );
       const userEmail = String((user as any).email || "").trim().toLowerCase();
       const canUseProviderFiling =
-        publicFilingEnabled ||
+        runtimeMode.operationalFilingEnabled ||
         Boolean((user as any).isSuperAdmin || (user as any).isAdmin) ||
         (userEmail && testerEmails.has(userEmail));
       if (!canUseProviderFiling) {
+        console.warn(JSON.stringify({
+          event: "flight_service_test_mode_action_blocked",
+          flight_service_environment: runtimeMode.environment,
+          flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
+          testAcknowledgementRequired: runtimeMode.acknowledgementRequired,
+          action,
+          planId: plan.id,
+          userId,
+          userEmail: userEmail || null,
+          blockedBecausePublicOperationalDisabled: true,
+        }));
         return res.status(403).json({
-          error: "Flight filing is currently in final validation and is not yet available for operational use.",
+          error: "Flight filing is currently in validation mode and is not available for operational use.",
           code: "FLIGHT_SERVICE_VALIDATION_ONLY",
         });
       }
-
-      const parsed = filingLifecycleActionSchema.safeParse(req.body ?? {});
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.format() });
+      const acknowledgementAccepted = !runtimeMode.acknowledgementRequired ||
+        hasFlightServiceTestAcknowledgement(req.body, runtimeMode.environment);
+      console.info(JSON.stringify({
+        event: "flight_service_environment",
+        flight_service_environment: runtimeMode.environment,
+        flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
+        testAcknowledgementRequired: runtimeMode.acknowledgementRequired,
+        testAcknowledgementAccepted: acknowledgementAccepted,
+        action,
+        planId: plan.id,
+        userId,
+        userEmail: userEmail || null,
+        blockedBecausePublicOperationalDisabled: false,
+      }));
+      if (!acknowledgementAccepted) {
+        return res.status(428).json({
+          error: "Flight Service validation mode acknowledgement is required before this test action.",
+          code: "FLIGHT_SERVICE_TEST_ACKNOWLEDGEMENT_REQUIRED",
+          flightServiceEnvironment: runtimeMode.environment,
+        });
       }
-
-      const action = parsed.data.action as FlightPlanFilingAction;
-      const closeLocation = parsed.data.closeLocation || null;
       const flightRules = (plan.filingFlightRules || "VFR").toUpperCase();
       if (action === "file") {
         const entitlements = getEntitlementsForUser(user);
@@ -22548,6 +22596,60 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       if (plan.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const runtimeMode = getFlightServiceRuntimeMode();
+      const testerEmails = new Set(
+        String(process.env.FLIGHT_SERVICE_TESTER_EMAILS || "")
+          .split(",")
+          .map((email) => email.trim().toLowerCase())
+          .filter(Boolean),
+      );
+      const userEmail = String((user as any).email || "").trim().toLowerCase();
+      const canUseProviderSync =
+        runtimeMode.operationalFilingEnabled ||
+        Boolean((user as any).isSuperAdmin || (user as any).isAdmin) ||
+        (userEmail && testerEmails.has(userEmail));
+      if (!canUseProviderSync) {
+        console.warn(JSON.stringify({
+          event: "flight_service_test_mode_action_blocked",
+          flight_service_environment: runtimeMode.environment,
+          flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
+          testAcknowledgementRequired: runtimeMode.acknowledgementRequired,
+          action: "sync",
+          planId: plan.id,
+          userId,
+          userEmail: userEmail || null,
+          blockedBecausePublicOperationalDisabled: true,
+        }));
+        return res.status(403).json({
+          error: "Flight filing is currently in validation mode and is not available for operational use.",
+          code: "FLIGHT_SERVICE_VALIDATION_ONLY",
+        });
+      }
+      const acknowledgementAccepted = !runtimeMode.acknowledgementRequired ||
+        hasFlightServiceTestAcknowledgement(req.body, runtimeMode.environment);
+      console.info(JSON.stringify({
+        event: "flight_service_environment",
+        flight_service_environment: runtimeMode.environment,
+        flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
+        testAcknowledgementRequired: runtimeMode.acknowledgementRequired,
+        testAcknowledgementAccepted: acknowledgementAccepted,
+        action: "sync",
+        planId: plan.id,
+        userId,
+        userEmail: userEmail || null,
+        blockedBecausePublicOperationalDisabled: false,
+      }));
+      if (!acknowledgementAccepted) {
+        return res.status(428).json({
+          error: "Flight Service validation mode acknowledgement is required before this test action.",
+          code: "FLIGHT_SERVICE_TEST_ACKNOWLEDGEMENT_REQUIRED",
+          flightServiceEnvironment: runtimeMode.environment,
+        });
       }
 
       const syncResult = await syncLeidosPlanMetadata(plan as any);

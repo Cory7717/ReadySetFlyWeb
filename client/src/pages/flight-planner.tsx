@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -100,6 +100,25 @@ import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
 const CesiumGlobe = lazy(() => import("@/components/flight-planner/CesiumGlobe"));
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+const FLIGHT_SERVICE_TEST_ACK_KEY = "rsf.flightServiceTestAcknowledgement.v1";
+const FLIGHT_SERVICE_TEST_ACK_TTL_MS = 24 * 60 * 60 * 1000;
+type FlightServiceEnvironmentMode = "LAB" | "TEST" | "VALIDATION" | "PRODUCTION";
+type FlightServiceEnvironmentConfig = {
+  environment: FlightServiceEnvironmentMode;
+  operationalFilingEnabled: boolean;
+  providerTestModeEnabled: boolean;
+  acknowledgementRequired: boolean;
+  isOperational: boolean;
+  testBannerTitle?: string | null;
+  testBannerMessage?: string | null;
+};
+type FilingActionName = "file" | "amend" | "activate" | "cancel" | "close";
+type TestAcknowledgementRecord = {
+  accepted: true;
+  environment: FlightServiceEnvironmentMode;
+  acknowledgedAt: string;
+  action?: string | null;
+};
 type ZzzzActualLocationMode = "identifier" | "latlong";
 const inferZzzzActualLocationMode = (value?: string | null): ZzzzActualLocationMode =>
   /^\s*\d/.test(String(value || "")) ? "latlong" : "identifier";
@@ -1765,6 +1784,10 @@ export default function FlightPlanner() {
     planId: string | null;
     action: "file" | "amend";
   } | null>(null);
+  const pendingTestAcknowledgementRef = useRef<(() => void) | null>(null);
+  const [testAcknowledgementOpen, setTestAcknowledgementOpen] = useState(false);
+  const [testAcknowledgementChecked, setTestAcknowledgementChecked] = useState(false);
+  const [testAcknowledgementAction, setTestAcknowledgementAction] = useState<string>("provider action");
   const [draftPlanId, setDraftPlanId] = useState<string | null>(null);
   const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<FlightPlan | null>(null);
   const [overdueClosePlan, setOverdueClosePlan] = useState<FlightPlan | null>(null);
@@ -2486,6 +2509,22 @@ export default function FlightPlanner() {
       controller.abort();
     };
   }, [form.destination]);
+
+  const { data: flightServiceEnvironment } = useQuery<FlightServiceEnvironmentConfig>({
+    queryKey: ["/api/flight-service/environment"],
+    staleTime: 60_000,
+  });
+
+  const effectiveFlightServiceEnvironment: FlightServiceEnvironmentConfig = flightServiceEnvironment || {
+    environment: "LAB",
+    operationalFilingEnabled: false,
+    providerTestModeEnabled: true,
+    acknowledgementRequired: true,
+    isOperational: false,
+    testBannerTitle: "Flight Service Test Environment",
+    testBannerMessage: "This feature is operating in a non-operational Flight Service validation environment. Flight plans created here are not transmitted to the operational air traffic system and are not available to Air Traffic Control.",
+  };
+  const isFlightServiceTestMode = effectiveFlightServiceEnvironment.acknowledgementRequired;
 
   const { data: savedPlansRaw = [], isLoading: plansLoading } = useQuery<FlightPlan[]>({
     queryKey: ["/api/flight-plans"],
@@ -5971,6 +6010,65 @@ export default function FlightPlanner() {
   const currentSavedPlanCanCancel = canCancelPlan(currentSavedPlan);
   const currentProviderLifecycleMessage = getProviderLifecycleAvailabilityMessage(currentSavedPlan);
   const hasCurrentSavedPlan = Boolean(currentSavedPlan?.id);
+  const filingActionLabels = useMemo(() => ({
+    file: isFlightServiceTestMode ? "Submit Test Flight Plan" : "File Flight Plan",
+    amend: isFlightServiceTestMode ? "Amend Test Flight Plan" : "Amend",
+    activate: isFlightServiceTestMode ? "Test Activate" : "Activate",
+    cancel: isFlightServiceTestMode ? "Test Cancel" : "Cancel",
+    close: isFlightServiceTestMode ? "Test Close" : "Close",
+    sync: isFlightServiceTestMode ? "Refresh test provider sync" : "Refresh provider sync",
+  }), [isFlightServiceTestMode]);
+  const getStoredTestAcknowledgement = useCallback((): TestAcknowledgementRecord | null => {
+    if (typeof window === "undefined") return null;
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(FLIGHT_SERVICE_TEST_ACK_KEY) || "null");
+      if (!parsed || parsed.accepted !== true) return null;
+      if (parsed.environment !== effectiveFlightServiceEnvironment.environment) return null;
+      const acknowledgedAt = Date.parse(String(parsed.acknowledgedAt || ""));
+      if (!Number.isFinite(acknowledgedAt) || Date.now() - acknowledgedAt > FLIGHT_SERVICE_TEST_ACK_TTL_MS) return null;
+      return parsed as TestAcknowledgementRecord;
+    } catch {
+      return null;
+    }
+  }, [effectiveFlightServiceEnvironment.environment]);
+  const buildTestAcknowledgementPayload = useCallback((action?: string | null): TestAcknowledgementRecord | null => {
+    if (!isFlightServiceTestMode) return null;
+    const stored = getStoredTestAcknowledgement();
+    if (!stored) return null;
+    return { ...stored, action: action || stored.action || null };
+  }, [getStoredTestAcknowledgement, isFlightServiceTestMode]);
+  const persistTestAcknowledgement = useCallback((action?: string | null) => {
+    const record: TestAcknowledgementRecord = {
+      accepted: true,
+      environment: effectiveFlightServiceEnvironment.environment,
+      acknowledgedAt: new Date().toISOString(),
+      action: action || null,
+    };
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(FLIGHT_SERVICE_TEST_ACK_KEY, JSON.stringify(record));
+    }
+    return record;
+  }, [effectiveFlightServiceEnvironment.environment]);
+  const requireFlightServiceTestAcknowledgement = useCallback((actionLabel: string, callback: () => void) => {
+    if (!isFlightServiceTestMode || getStoredTestAcknowledgement()) {
+      callback();
+      return;
+    }
+    pendingTestAcknowledgementRef.current = callback;
+    setTestAcknowledgementAction(actionLabel);
+    setTestAcknowledgementChecked(false);
+    setTestAcknowledgementOpen(true);
+  }, [getStoredTestAcknowledgement, isFlightServiceTestMode]);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const previousTitle = document.title;
+    if (isFlightServiceTestMode) {
+      document.title = "[TEST] Flight Planner | Ready Set Fly";
+    }
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [isFlightServiceTestMode]);
   const draftAmendAvailabilityMessage = useMemo(
     () =>
       getDraftAmendAvailabilityMessage({
@@ -5993,9 +6091,11 @@ export default function FlightPlanner() {
   const currentDraftCanAmend = !draftAmendAvailabilityMessage;
 
   const filingActionMutation = useMutation({
-    mutationFn: async ({ planId, action, closeLocation }: { planId: string; action: "file" | "amend" | "activate" | "cancel" | "close"; closeLocation?: string | null }) => {
+    mutationFn: async ({ planId, action, closeLocation }: { planId: string; action: FilingActionName; closeLocation?: string | null }) => {
       const body: Record<string, unknown> = { action };
       if (closeLocation) body.closeLocation = closeLocation;
+      const acknowledgement = buildTestAcknowledgementPayload(action);
+      if (acknowledgement) body.testAcknowledgement = acknowledgement;
       const res = await apiRequest("POST", `/api/flight-plans/${planId}/filing-action`, body);
       return res.json();
     },
@@ -6017,24 +6117,26 @@ export default function FlightPlanner() {
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
       const live = Boolean(result?.live);
+      const testMode = Boolean(isFlightServiceTestMode);
       const actionTitles: Record<string, string> = {
-        file: live ? "Flight plan filed" : "Filing staged",
-        amend: live ? "Amendment submitted" : "Amendment staged",
-        activate: live ? "Flight plan activated" : "Activation staged",
-        cancel: live ? "Flight plan cancelled" : "Cancellation staged",
-        close: live ? "Flight plan closed" : "Closure staged",
+        file: testMode ? "Test flight plan submitted" : live ? "Flight plan filed" : "Filing staged",
+        amend: testMode ? "Test amendment submitted" : live ? "Amendment submitted" : "Amendment staged",
+        activate: testMode ? "Test activation submitted" : live ? "Flight plan activated" : "Activation staged",
+        cancel: testMode ? "Test cancellation submitted" : live ? "Flight plan cancelled" : "Cancellation staged",
+        close: testMode ? "Test closure submitted" : live ? "Flight plan closed" : "Closure staged",
       };
+      const testModeMessage = "Test flight plan submitted to the Flight Service validation environment. This flight plan is not available to the operational air traffic system.";
       const updatedPlan = result?.plan as FlightPlan | undefined;
       setFilingActionFeedback({
         tone: live ? "success" : "warning",
         title: actionTitles[variables.action] ?? (live ? "Request accepted" : "Request staged"),
-        message: result?.message || (live ? "The filing provider accepted the request." : "The request is staged and has not been accepted live by the filing provider."),
+        message: testMode ? testModeMessage : result?.message || (live ? "The filing provider accepted the request." : "The request is staged and has not been accepted live by the filing provider."),
         providerPlanId: result?.providerPlanId || updatedPlan?.filingProviderPlanId || null,
         beaconCode: getPlanBeaconCode(updatedPlan) || null,
       });
       toast({
         title: actionTitles[variables.action] ?? (live ? "Request submitted" : "Request staged"),
-        description: result?.message || (live ? "The provider accepted your request." : "The request was staged and will be sent when provider is ready."),
+        description: testMode ? testModeMessage : result?.message || (live ? "The provider accepted your request." : "The request was staged and will be sent when provider is ready."),
       });
     },
     onError: (error: any) => {
@@ -6074,7 +6176,8 @@ export default function FlightPlanner() {
 
   const filingSyncMutation = useMutation({
     mutationFn: async (planId: string) => {
-      const res = await apiRequest("POST", `/api/flight-plans/${planId}/filing-sync`);
+      const acknowledgement = buildTestAcknowledgementPayload("sync");
+      const res = await apiRequest("POST", `/api/flight-plans/${planId}/filing-sync`, acknowledgement ? { testAcknowledgement: acknowledgement } : {});
       return res.json();
     },
     onSuccess: (result: any) => {
@@ -6157,6 +6260,39 @@ export default function FlightPlanner() {
       });
     },
   });
+
+  const submitFilingAction = useCallback((params: { planId: string; action: FilingActionName; closeLocation?: string | null }) => {
+    const label = params.action === "file"
+      ? "submit a test flight plan"
+      : params.action === "amend"
+        ? "amend a test flight plan"
+        : params.action === "activate"
+          ? "test activate a flight plan"
+          : params.action === "cancel"
+            ? "test cancel a flight plan"
+            : "test close a flight plan";
+    requireFlightServiceTestAcknowledgement(label, () => filingActionMutation.mutate(params));
+  }, [filingActionMutation, requireFlightServiceTestAcknowledgement]);
+
+  const submitProviderSync = useCallback((planId: string) => {
+    requireFlightServiceTestAcknowledgement("refresh provider sync in the validation environment", () => {
+      filingSyncMutation.mutate(planId);
+    });
+  }, [filingSyncMutation, requireFlightServiceTestAcknowledgement]);
+
+  const requestSaveCurrentPlanWithFilingAction = useCallback((action: "file" | "amend", planId: string | null = null) => {
+    const label = action === "file" ? "submit a test flight plan" : "amend a test flight plan";
+    requireFlightServiceTestAcknowledgement(label, () => {
+      if (action === "file") {
+        saveCurrentPlan({ filingAction: "file" });
+        return;
+      }
+      if (planId) {
+        setPendingFilingActionAfterSave({ planId, action: "amend" });
+        updatePlanMutation.mutate(planId);
+      }
+    });
+  }, [requireFlightServiceTestAcknowledgement, updatePlanMutation]);
 
   const insertComfortStopMutation = useMutation({
     mutationFn: async ({
@@ -6508,9 +6644,11 @@ export default function FlightPlanner() {
     <>
     <PageShell
       kicker="Plan"
-      title="Flight Planner"
+      title={isFlightServiceTestMode ? "Flight Planner (Test Environment)" : "Flight Planner"}
       description={
-        "Create, review, and manage flight plans from one place."
+        isFlightServiceTestMode
+          ? "Create and validate test flight plans. This is not operational filing."
+          : "Create, review, and manage flight plans from one place."
       }
       actions={
         pressDemo.enabled ? undefined : (
@@ -6568,13 +6706,38 @@ export default function FlightPlanner() {
         />
       )}
       <div className="rounded-[1rem] border border-[#5d6f85]/25 bg-[#111822]/90 px-4 py-3 text-sm text-[#DCE6F3]">
-        <span className="font-semibold text-[#F5F8FC]">Current step:</span>{" "}
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          {isFlightServiceTestMode && (
+            <Badge className="border border-amber-300/50 bg-amber-400/20 text-amber-100 hover:bg-amber-400/20">
+              {effectiveFlightServiceEnvironment.environment === "VALIDATION" ? "VALIDATION MODE" : "TEST ENVIRONMENT"}
+            </Badge>
+          )}
+          <span className="font-semibold text-[#F5F8FC]">Current step:</span>
+        </div>
         {activeTab === "route" && "Route setup and aircraft planning"}
         {activeTab === "weather" && "Weather, hazards, and airport context"}
         {activeTab === "navlog" && "Navigation log and leg review"}
         {activeTab === "analysis" && "Route analysis and terrain review"}
         {activeTab === "file" && "Save, preview, and filing actions"}
       </div>
+      {isFlightServiceTestMode && (
+        <Alert className="border-amber-300/70 bg-[linear-gradient(180deg,rgba(71,50,10,0.98),rgba(29,21,6,0.98))] text-amber-50 shadow-[0_18px_42px_-28px_rgba(0,0,0,0.9)]">
+          <AlertDescription className="space-y-2 text-sm leading-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="border border-amber-100/50 bg-amber-300 text-black hover:bg-amber-300">
+                FLIGHT SERVICE TEST ENVIRONMENT
+              </Badge>
+              <span className="font-semibold text-amber-50">{effectiveFlightServiceEnvironment.environment}</span>
+            </div>
+            <div>
+              This feature is currently operating in a non-operational Flight Service validation environment. Flight plans created here are <span className="font-semibold">NOT</span> transmitted to the operational air traffic system and are <span className="font-semibold">NOT</span> available to Air Traffic Control.
+            </div>
+            <div className="font-semibold">
+              Do not use this feature for actual flight operations. Continue using approved operational filing methods until production approval is granted.
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
       {!pressDemo.enabled && (
       <Card className={plannerPanelClass}>
         <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -9361,11 +9524,11 @@ export default function FlightPlanner() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => saveCurrentPlan({ filingAction: "file" })}
+                    onClick={() => requestSaveCurrentPlanWithFilingAction("file")}
                     disabled={filingActionMutation.isPending || updatePlanMutation.isPending || createPlanMutation.isPending || filingSyncMutation.isPending}
                     title={getFileAvailabilityMessage(currentSavedPlan)}
                   >
-                    File
+                    {filingActionLabels.file}
                   </Button>
                 )}
                 {!isTerminalFilingPlan(currentSavedPlan) && hasLiveProviderPlan(currentSavedPlan) && (
@@ -9382,21 +9545,20 @@ export default function FlightPlanner() {
                           return;
                         }
                         setActiveTab("file");
-                        setPendingFilingActionAfterSave({ planId: currentSavedPlan!.id, action: "amend" });
-                        updatePlanMutation.mutate(currentSavedPlan!.id);
+                        requestSaveCurrentPlanWithFilingAction("amend", currentSavedPlan!.id);
                       }}
                       disabled={filingActionMutation.isPending || updatePlanMutation.isPending || filingSyncMutation.isPending}
                       title={draftAmendAvailabilityMessage || "Save the current values, then submit an amendment to the filed provider record."}
                     >
-                      {currentDraftCanAmend ? "Amend" : "Review amend requirements"}
+                      {currentDraftCanAmend ? filingActionLabels.amend : "Review amend requirements"}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => filingSyncMutation.mutate(currentSavedPlan!.id)}
+                      onClick={() => submitProviderSync(currentSavedPlan!.id)}
                       disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
                     >
-                      {filingSyncMutation.isPending ? "Refreshing sync..." : "Refresh provider sync"}
+                      {filingSyncMutation.isPending ? "Refreshing sync..." : filingActionLabels.sync}
                     </Button>
                   </>
                 )}
@@ -9415,10 +9577,10 @@ export default function FlightPlanner() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "activate" })}
+                      onClick={() => submitFilingAction({ planId: currentSavedPlan!.id, action: "activate" })}
                       disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !currentSavedPlanCanActivate}
                     >
-                      Activate
+                      {filingActionLabels.activate}
                     </Button>
                     <Button
                       size="sm"
@@ -9428,12 +9590,12 @@ export default function FlightPlanner() {
                           setOverdueClosePlan(currentSavedPlan);
                           setOverdueCloseLocation("");
                         } else {
-                          filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "close" });
+                          submitFilingAction({ planId: currentSavedPlan!.id, action: "close" });
                         }
                       }}
                       disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !currentSavedPlanCanClose}
                     >
-                      Close
+                      {filingActionLabels.close}
                     </Button>
                   </>
                 )}
@@ -9441,10 +9603,10 @@ export default function FlightPlanner() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "cancel" })}
+                    onClick={() => submitFilingAction({ planId: currentSavedPlan!.id, action: "cancel" })}
                     disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !currentSavedPlanCanCancel}
                   >
-                    Cancel
+                    {filingActionLabels.cancel}
                   </Button>
                 )}
                 <Button
@@ -9821,15 +9983,15 @@ export default function FlightPlanner() {
                         const isCurrentEditingPlan =
                           editingPlanRef.current?.id === plan.id || draftPlanIdRef.current === plan.id;
                         if (isCurrentEditingPlan) {
-                          saveCurrentPlan({ filingAction: "file" });
+                          requestSaveCurrentPlanWithFilingAction("file");
                           return;
                         }
-                        filingActionMutation.mutate({ planId: plan.id, action: "file" });
+                        submitFilingAction({ planId: plan.id, action: "file" });
                       }}
                       disabled={filingActionMutation.isPending || updatePlanMutation.isPending || createPlanMutation.isPending || filingSyncMutation.isPending}
                       title={getFileAvailabilityMessage(plan)}
                     >
-                      File
+                      {filingActionLabels.file}
                     </Button>
                   )}
                   {!isTerminalFilingPlan(plan) && hasLiveProviderPlan(plan) && (
@@ -9852,8 +10014,7 @@ export default function FlightPlanner() {
 
                           if (isCurrentEditingPlan && canSubmitLiveAmend) {
                             setActiveTab("file");
-                            setPendingFilingActionAfterSave({ planId: plan.id, action: "amend" });
-                            updatePlanMutation.mutate(plan.id);
+                            requestSaveCurrentPlanWithFilingAction("amend", plan.id);
                             return;
                           }
 
@@ -9876,15 +10037,15 @@ export default function FlightPlanner() {
                           plannedDepartureAt: form.plannedDepartureAt || null,
                           trueAirspeedKtas: Math.round(planningCruise) || null,
                           plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
-                        }) ? "Review amend requirements" : "Amend"}
+                        }) ? "Review amend requirements" : filingActionLabels.amend}
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => filingSyncMutation.mutate(plan.id)}
+                        onClick={() => submitProviderSync(plan.id)}
                         disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
                       >
-                        {filingSyncMutation.isPending ? "Refreshing sync..." : "Refresh provider sync"}
+                        {filingSyncMutation.isPending ? "Refreshing sync..." : filingActionLabels.sync}
                       </Button>
                     </>
                   )}
@@ -9925,10 +10086,10 @@ export default function FlightPlanner() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "activate" })}
+                        onClick={() => submitFilingAction({ planId: plan.id, action: "activate" })}
                         disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !canActivatePlan(plan)}
                       >
-                        Activate
+                        {filingActionLabels.activate}
                       </Button>
                       <Button
                         size="sm"
@@ -9938,12 +10099,12 @@ export default function FlightPlanner() {
                             setOverdueClosePlan(plan);
                             setOverdueCloseLocation("");
                           } else {
-                            filingActionMutation.mutate({ planId: plan.id, action: "close" });
+                            submitFilingAction({ planId: plan.id, action: "close" });
                           }
                         }}
                         disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !canClosePlan(plan)}
                       >
-                        Close
+                        {filingActionLabels.close}
                       </Button>
                     </>
                   )}
@@ -9951,10 +10112,10 @@ export default function FlightPlanner() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "cancel" })}
+                      onClick={() => submitFilingAction({ planId: plan.id, action: "cancel" })}
                       disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !canCancelPlan(plan)}
                     >
-                      Cancel
+                      {filingActionLabels.cancel}
                     </Button>
                   )}
                   <Button
@@ -11111,6 +11272,73 @@ export default function FlightPlanner() {
         </div>
       )}
     </PageShell>
+    <Dialog
+      open={testAcknowledgementOpen}
+      onOpenChange={(open) => {
+        setTestAcknowledgementOpen(open);
+        if (!open) {
+          pendingTestAcknowledgementRef.current = null;
+          setTestAcknowledgementChecked(false);
+        }
+      }}
+    >
+      <DialogContent className="border-amber-300/60 bg-[#11161d] text-[#F5F8FC] sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Flight Service Test Environment</DialogTitle>
+          <DialogDescription className="text-[#C8D4E1]">
+            You are about to {testAcknowledgementAction} in a non-operational Flight Service validation environment.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 text-sm leading-6 text-[#E8EDF4]">
+          <div className="rounded-lg border border-amber-300/50 bg-amber-400/10 p-3">
+            <div className="mb-2 font-semibold text-amber-100">Important</div>
+            <ul className="list-disc space-y-1 pl-5 text-amber-50">
+              <li>This is not the operational Flight Service system.</li>
+              <li>Flight plans submitted here are not available to Air Traffic Control.</li>
+              <li>Do not rely on this system for actual flight operations.</li>
+              <li>Continue to use approved operational filing methods for live flights.</li>
+            </ul>
+          </div>
+          <label className="flex items-start gap-3 rounded-lg border border-[#5d6f85]/25 bg-[#141b24] p-3">
+            <Checkbox
+              checked={testAcknowledgementChecked}
+              onCheckedChange={(checked) => setTestAcknowledgementChecked(checked === true)}
+              className="mt-1"
+            />
+            <span>
+              I understand this is a testing environment and no operational flight plan will be filed.
+            </span>
+          </label>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setTestAcknowledgementOpen(false);
+              pendingTestAcknowledgementRef.current = null;
+              setTestAcknowledgementChecked(false);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            disabled={!testAcknowledgementChecked}
+            onClick={() => {
+              persistTestAcknowledgement(testAcknowledgementAction);
+              const callback = pendingTestAcknowledgementRef.current;
+              pendingTestAcknowledgementRef.current = null;
+              setTestAcknowledgementOpen(false);
+              setTestAcknowledgementChecked(false);
+              callback?.();
+            }}
+          >
+            Continue Testing
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     <AlertDialog
       open={Boolean(deleteConfirmPlan)}
       onOpenChange={(open) => {
@@ -11170,12 +11398,12 @@ export default function FlightPlanner() {
             disabled={!overdueCloseLocation.trim() || filingActionMutation.isPending}
             onClick={() => {
               if (!overdueClosePlan || !overdueCloseLocation.trim()) return;
-              filingActionMutation.mutate({ planId: overdueClosePlan.id, action: "close", closeLocation: overdueCloseLocation.trim() });
+              submitFilingAction({ planId: overdueClosePlan.id, action: "close", closeLocation: overdueCloseLocation.trim() });
               setOverdueClosePlan(null);
               setOverdueCloseLocation("");
             }}
           >
-            {filingActionMutation.isPending ? "Closing..." : "Close flight plan"}
+            {filingActionMutation.isPending ? "Closing..." : isFlightServiceTestMode ? "Test Close Flight Plan" : "Close flight plan"}
           </Button>
         </div>
       </DialogContent>

@@ -18,6 +18,7 @@ import { normalizeIcaoEquipmentCodes, validateFlightServiceAircraftEquipmentCode
 import { getIcaoOtherInfoEquipmentWarnings, hasOnlyFlightServiceSurveillanceCodes, hasOnlyKnownIcaoSurveillanceCodes } from "@shared/icao-filing";
 import { normalizeZzzzActualLocation } from "@shared/zzzz-location";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
+import { getFlightServiceRuntimeMode } from "../flightServiceRuntimeMode";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 
@@ -26,7 +27,7 @@ const PRODUCTION_REST_BASE_URL = "https://www.lmfsweb.afss.com/Website/rest/";
 const DEFAULT_USER_AGENT = "ReadySetFly Flight Service Interface";
 const DEFAULT_LEIDOS_REQUEST_TIMEOUT_MS = 25000;
 
-type LeidosEnvironment = "lab" | "production";
+type LeidosEnvironment = "lab" | "test" | "validation" | "production";
 
 export type FilingServiceResult = {
   live: boolean;
@@ -206,9 +207,7 @@ const normalizePath = (value?: string | null) => {
 const boolFromEnv = (value?: string | null) => ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
 
 const getLeidosFlightServiceConfig = (): LeidosFlightServiceConfig => {
-  const environment = String(process.env.LEIDOS_FLIGHT_SERVICE_ENV || "lab").trim().toLowerCase() === "production"
-    ? "production"
-    : "lab";
+  const environment = getFlightServiceRuntimeMode().environment.toLowerCase() as LeidosEnvironment;
 
   const baseUrl = String(process.env.LEIDOS_FLIGHT_SERVICE_REST_BASE_URL || "").trim() || (
     environment === "production" ? PRODUCTION_REST_BASE_URL : LAB_REST_BASE_URL

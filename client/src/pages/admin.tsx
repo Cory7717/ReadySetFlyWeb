@@ -393,7 +393,7 @@ type WeeklyEmailAudiencePreview = {
 type LeidosFlightServiceDiagnostics = {
   provider: string;
   enabled: boolean;
-  environment: "lab" | "production";
+  environment: "lab" | "test" | "validation" | "production";
   baseUrl: string;
   accountEmail: string | null;
   usernameConfigured: boolean;
@@ -401,6 +401,13 @@ type LeidosFlightServiceDiagnostics = {
   webhookUsernameConfigured: boolean;
   webhookPasswordConfigured: boolean;
   actionPaths: Record<"file" | "amend" | "activate" | "cancel" | "close", string | null>;
+  runtimeMode?: {
+    environment: "LAB" | "TEST" | "VALIDATION" | "PRODUCTION";
+    operationalFilingEnabled: boolean;
+    providerTestModeEnabled: boolean;
+    acknowledgementRequired: boolean;
+    isOperational: boolean;
+  };
 };
 
 type MembershipPartnerOfferSummary = {
@@ -4391,11 +4398,23 @@ export default function AdminDashboard() {
                       </div>
                       <div className="rounded-md border bg-background p-3">
                         <div className="text-xs uppercase tracking-wide text-muted-foreground">Environment</div>
-                        <div className="mt-2 font-medium capitalize">{leidosDiagnostics.environment}</div>
+                        <div className="mt-2 font-medium uppercase">{leidosDiagnostics.runtimeMode?.environment || leidosDiagnostics.environment}</div>
                       </div>
                       <div className="rounded-md border bg-background p-3">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Account Email</div>
-                        <div className="mt-2 text-sm font-medium">{leidosDiagnostics.accountEmail || "-"}</div>
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Operational Filing</div>
+                        <div className="mt-2">
+                          <Badge variant={leidosDiagnostics.runtimeMode?.operationalFilingEnabled ? "default" : "destructive"}>
+                            {leidosDiagnostics.runtimeMode?.operationalFilingEnabled ? "Enabled" : "Disabled"}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="rounded-md border bg-background p-3">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Test Mode</div>
+                        <div className="mt-2">
+                          <Badge variant={leidosDiagnostics.runtimeMode?.providerTestModeEnabled ? "secondary" : "default"}>
+                            {leidosDiagnostics.runtimeMode?.providerTestModeEnabled ? "On" : "Off"}
+                          </Badge>
+                        </div>
                       </div>
                       <div className="rounded-md border bg-background p-3">
                         <div className="text-xs uppercase tracking-wide text-muted-foreground">Webhook URL</div>

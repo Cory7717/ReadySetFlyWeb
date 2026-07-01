@@ -21312,9 +21312,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     const previousRouteText = normalizeNotificationValue(previousRoute.providerRoute);
     const nextRouteText = normalizeNotificationValue(nextRoute.providerRoute);
     if (nextRouteText && previousRouteText && nextRouteText !== previousRouteText) {
-      addLine(`Flight Service changed route: ${previousRouteText} -> ${nextRouteText}`);
+      addLine(`The filing provider changed route: ${previousRouteText} -> ${nextRouteText}`);
     } else if (nextRouteText && Boolean(nextRoute.changedByProvider)) {
-      addLine(`Flight Service returned a modified route: ${formatArrow(nextRoute.normalizedTransmittedRoute, nextRouteText)}`);
+      addLine(`The filing provider returned a modified route: ${formatArrow(nextRoute.normalizedTransmittedRoute, nextRouteText)}`);
     }
 
     const previousArtcc = normalizeNotificationValue(previous.artccState);
@@ -21413,7 +21413,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
 
     if (lines.length === 0) {
-      addUniqueNotificationLine(lines, `Flight Service pushed an update for ${planLabel}. RSF refreshed the provider record, but the push did not identify a specific changed field.`);
+      addUniqueNotificationLine(lines, `The filing provider pushed an update for ${planLabel}. RSF refreshed the provider record, but the push did not identify a specific changed field.`);
     }
 
     return sanitizeNotificationMessage(lines.slice(0, 4).join(" "));
@@ -21424,7 +21424,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     const localStatus = String(plan.filingStatus || "draft").toLowerCase();
     if (!forceNotice && (!providerStatus || localStatus === providerStatus)) return snapshot;
 
-    const notice = forceNotice || `External provider change detected: Leidos now reports ${providerStatus}, while RSF had ${localStatus || "draft"}.`;
+    const notice = forceNotice || `External provider change detected: the filing provider now reports ${providerStatus}, while RSF had ${localStatus || "draft"}.`;
     const notices = Array.from(new Set([
       notice,
       ...(Array.isArray(snapshot.notices) ? snapshot.notices.map(String) : []),
@@ -21477,7 +21477,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       plan,
       mergedSnapshotBase,
       options.forceExternalNotice
-        ? "External provider change detected: Leidos rejected the requested action because the flight plan is no longer in the expected provider-side state."
+        ? "External provider change detected: the filing provider rejected the requested action because the flight plan is no longer in the expected provider-side state."
         : null,
     );
     const externalMessage = buildExternalProviderChangeMessage(plan, nextProviderSnapshot);
@@ -21711,7 +21711,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           ? isAlert
             ? `Flight Alert${alertType ? `: ${alertType}` : ""}`
             : `Flight Plan Change${changeType ? `: ${changeType}` : ""}`
-          : "Flight Service push received";
+          : "Provider push received";
         const previousProviderSnapshot = getProviderSnapshotRecord((matchedPlan as Record<string, unknown>).filingProviderSnapshot);
         const pushContext = {
           changeType,
@@ -21746,7 +21746,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           pushFields: pushContext,
           fallback: hasExplicitProviderChange
             ? extractedMessage
-            : "Flight Service pushed an update for this flight plan. RSF refreshed provider sync; no route, status, ARTCC, or notice changes were reported in the push payload.",
+            : "The filing provider pushed an update for this flight plan. RSF refreshed provider sync; no route, status, ARTCC, or notice changes were reported in the push payload.",
         });
         const pushReceivedAt = String(payload.notificationTimestamp || payload.timestamp || new Date().toISOString());
         const providerMessage: FilingProviderMessage = {
@@ -21832,7 +21832,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               action: "flight_service",
               stagedAt: new Date().toISOString(),
               live: true,
-              message: "Flight Service pushed provider changes for this flight plan.",
+              message: "The filing provider pushed provider changes for this flight plan.",
               providerPlanId: flightIdentifier,
               providerVersionStamp: providerHistoryVersion || null,
               changeSummary: {
@@ -21861,7 +21861,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               severity: syncedNotificationChanges.length > 0 ? "warning" : isAlert ? "warning" : "info",
               title: syncedNotificationChanges.length > 0 ? "Provider changes detected" : notificationTitle,
               details: syncedNotificationChanges.length > 0
-                ? `Flight Service changed this plan: ${syncedNotificationChanges.join(" ")}`
+                ? `The filing provider changed this plan: ${syncedNotificationChanges.join(" ")}`
                 : syncedNotificationMessage,
               source: "webhook",
               provider: "FAA Flight Service",
@@ -22046,7 +22046,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         "Flight filing is in final validation. Use this packet only for approved testing until production approval is complete.",
         normalizedPacket.flightRules === "IFR"
           ? "After filing, obtain your IFR clearance from ATC using the published airport procedure."
-          : "Activate and close the flight plan through Flight Service when appropriate.",
+          : "Activate and close the flight plan through the filing provider when appropriate.",
       ];
 
       const providerConfigured =
@@ -22116,7 +22116,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         console.error("Failed to search Leidos route:", error);
       }
       res.json({
-        provider: "Leidos Flight Service",
+        provider: "Flight Service provider",
         environment: getLeidosFlightServiceDiagnostics().environment,
         departure: typeof req.query.departure === "string" ? req.query.departure.trim().toUpperCase() : "",
         destination: typeof req.query.destination === "string" ? req.query.destination.trim().toUpperCase() : "",
@@ -22126,7 +22126,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         faaPreferredRoutes: [],
         warnings: [],
         available: false,
-        message: message || "Leidos route search is unavailable right now.",
+        message: message || "Provider route search is unavailable right now.",
       });
     }
   });
@@ -22218,7 +22218,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const publicFilingEnabled = /^(true|1|yes)$/i.test(String(process.env.FLIGHT_SERVICE_PUBLIC_FILING_ENABLED || ""));
+      const publicFilingEnabled = /^(true|1|yes)$/i.test(String(
+        process.env.FLIGHT_FILING_OPERATIONAL_ENABLED ||
+        process.env.FLIGHT_SERVICE_PUBLIC_FILING_ENABLED ||
+        "",
+      ));
       const testerEmails = new Set(
         String(process.env.FLIGHT_SERVICE_TESTER_EMAILS || "")
           .split(",")
@@ -22264,7 +22268,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const actionProviderSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
       if (action === "amend" && actionProviderSnapshot.providerPendingReview === true) {
         return res.status(409).json({
-          error: "Flight Service has updated this flight plan. Review and accept or reconcile those changes before submitting another amendment.",
+          error: "The filing provider has updated this flight plan. Review and accept or reconcile those changes before submitting another amendment.",
           requiresProviderReview: true,
           providerSnapshot: actionProviderSnapshot,
           plan,
@@ -22276,7 +22280,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const lifecycle = getProviderLifecycleStatus(providerSnapshot);
         if (!lifecycle || lifecycle === "unknown" || availability.requiresSync === true) {
           return res.status(409).json({
-            error: "RSF needs a fresh Leidos provider sync before this action because the current provider state is unknown.",
+            error: "RSF needs a fresh provider sync before this action because the current provider state is unknown.",
             requiresProviderSync: true,
             plan,
           });
@@ -22525,7 +22529,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             severity: changedFields.length > 0 || nextSnapshot.externalChangeDetected ? "warning" : "info",
             title: changedFields.length > 0 ? "Provider changes detected" : "Provider sync update",
             details: changedFields.length > 0
-              ? `Flight Service changed this plan: ${changedFields.join(" ")}`
+              ? `The filing provider changed this plan: ${changedFields.join(" ")}`
               : syncNotificationMessage,
             source: "sync",
             provider: "FAA Flight Service",
@@ -22615,7 +22619,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         timestamp: now.toISOString(),
         severity: "success",
         title: "Provider changes accepted",
-        details: "Pilot reviewed and accepted the current Flight Service provider version in RSF. Amendments can be submitted again from this provider state.",
+        details: "Pilot reviewed and accepted the current provider version in RSF. Amendments can be submitted again from this provider state.",
         source: "rsf",
         action: null,
         provider: "Leidos Flight Service",
@@ -22632,7 +22636,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       res.json({
         ok: true,
-        message: "Provider changes accepted. You can submit an amendment from the current Flight Service version.",
+        message: "Provider changes accepted. You can submit an amendment from the current provider version.",
         plan: updated,
       });
     } catch (error: any) {

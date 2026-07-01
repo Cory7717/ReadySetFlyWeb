@@ -320,17 +320,98 @@ const FIELD_VERIFICATION_KEYS = [
   "altitudeTypeF",
 ];
 
+const normalizeVerificationValue = (value: unknown) =>
+  String(value || "").trim().replace(/\s+/g, " ");
+
+const normalizeVerificationComparable = (value: unknown) =>
+  normalizeVerificationValue(value).toUpperCase();
+
 const findProviderFieldValue = (source: unknown, key: string) => {
   const exact = findNestedString(source, [key]);
   if (exact) return exact;
   const aliases: Record<string, string[]> = {
     aircraftIdentifier: ["aircraftId", "aircraft_identifier", "acid"],
     altDestination1: ["alternate", "alternateDestination", "altDestination"],
-    departureInstant: ["departureTime", "departureDateTime", "departure"],
+    departureInstant: ["departureTime", "departureDateTime", "departureInstantUtc", "departureUtc"],
     suppRemarksExtended: ["supplementalRemarks", "suppRemarks", "supplemental"],
-    aircraftHomeBase: ["homeBase", "home_base"],
+    pilotPhone: ["phone", "phoneNumber", "telephone", "pilotTelephone", "pilotPhone", "contactPhone", "contactTelephone"],
+    aircraftHomeBase: ["homeBase", "home_base", "base", "aircraftBase"],
   };
   return aliases[key] ? findNestedString(source, aliases[key]) : null;
+};
+
+const redactVerificationValue = (field: string, value: unknown) => {
+  if (value === null || value === undefined) return null;
+  const text = normalizeVerificationValue(value);
+  if (!text) return null;
+  if (/phone/i.test(field)) return text.replace(/\d(?=\d{4})/g, "x");
+  return text;
+};
+
+export const compareRetrievedProviderPlanFields = ({
+  submittedFields,
+  retrievedProviderPlan,
+}: {
+  submittedFields: Record<string, unknown> | null;
+  retrievedProviderPlan: Record<string, unknown> | null;
+}) => {
+  const matches: Array<{ field: string; submitted: string; retrieved: string }> = [];
+  const mismatches: Array<{ field: string; submitted: string; retrieved: string | null; issue: string }> = [];
+
+  for (const key of FIELD_VERIFICATION_KEYS) {
+    const submitted = submittedFields?.[key];
+    const submittedText = normalizeVerificationValue(submitted);
+    if (!submittedText) continue;
+
+    const retrieved = findProviderFieldValue(retrievedProviderPlan, key);
+    const retrievedText = normalizeVerificationValue(retrieved);
+    if (!retrievedText) {
+      mismatches.push({
+        field: key,
+        submitted: submittedText,
+        retrieved: null,
+        issue: "missing_from_retrieve",
+      });
+      continue;
+    }
+
+    if (normalizeVerificationComparable(submittedText) === normalizeVerificationComparable(retrievedText)) {
+      matches.push({ field: key, submitted: submittedText, retrieved: retrievedText });
+      continue;
+    }
+
+    mismatches.push({
+      field: key,
+      submitted: submittedText,
+      retrieved: retrievedText,
+      issue: "value_mismatch",
+    });
+  }
+
+  const submittedSupplemental = normalizeVerificationValue(submittedFields?.suppRemarksExtended);
+  const retrievedOtherInfo = normalizeVerificationValue(findProviderFieldValue(retrievedProviderPlan, "otherInfo"));
+  const retrievedSupplemental = normalizeVerificationValue(findProviderFieldValue(retrievedProviderPlan, "suppRemarksExtended"));
+  if (
+    submittedSupplemental &&
+    !retrievedSupplemental &&
+    normalizeVerificationComparable(retrievedOtherInfo).includes(normalizeVerificationComparable(submittedSupplemental))
+  ) {
+    mismatches.push({
+      field: "suppRemarksExtended",
+      submitted: submittedSupplemental,
+      retrieved: retrievedOtherInfo || null,
+      issue: "supplemental_returned_in_otherInfo",
+    });
+  }
+
+  const missingFromRetrieve = mismatches.filter((entry) => entry.issue === "missing_from_retrieve");
+  return {
+    totalComparedFields: matches.length + mismatches.length,
+    matchedFields: matches,
+    mismatchedFields: mismatches,
+    missingFromRetrieve,
+    staleLocalValues: mismatches.filter((entry) => entry.issue === "value_mismatch"),
+  };
 };
 
 export const verifyLeidosRetrievedPlanAgainstStoredPayload = async (plan: FlightPlan) => {
@@ -341,16 +422,25 @@ export const verifyLeidosRetrievedPlanAgainstStoredPayload = async (plan: Flight
   const retrievedProviderPlan = providerPlanId
     ? await retrieveLeidosPlanMetadataByProviderPlanId(providerPlanId, config)
     : null;
-  const mismatches = FIELD_VERIFICATION_KEYS.flatMap((key) => {
-    const submitted = submittedFields?.[key];
-    if (submitted === undefined || submitted === null || String(submitted).trim() === "") return [];
-    const retrieved = findProviderFieldValue(retrievedProviderPlan, key);
-    if (!retrieved) return [];
-    const normalize = (value: unknown) => String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
-    return normalize(submitted) === normalize(retrieved)
-      ? []
-      : [{ field: key, submitted: String(submitted), retrieved }];
-  });
+  const comparison = compareRetrievedProviderPlanFields({ submittedFields, retrievedProviderPlan });
+  const submittedPilotPhone = submittedFields?.pilotPhone ?? null;
+  const retrievedPilotPhone = findProviderFieldValue(retrievedProviderPlan, "pilotPhone");
+  const submittedAircraftHomeBase = submittedFields?.aircraftHomeBase ?? null;
+  const retrievedAircraftHomeBase = findProviderFieldValue(retrievedProviderPlan, "aircraftHomeBase");
+  const phoneHomeBaseVerification = {
+    submittedPilotPhone: redactVerificationValue("pilotPhone", submittedPilotPhone),
+    retrievedPilotPhone: redactVerificationValue("pilotPhone", retrievedPilotPhone),
+    pilotPhoneMatched: Boolean(
+      normalizeVerificationComparable(submittedPilotPhone) &&
+      normalizeVerificationComparable(submittedPilotPhone) === normalizeVerificationComparable(retrievedPilotPhone),
+    ),
+    submittedAircraftHomeBase: redactVerificationValue("aircraftHomeBase", submittedAircraftHomeBase),
+    retrievedAircraftHomeBase: redactVerificationValue("aircraftHomeBase", retrievedAircraftHomeBase),
+    aircraftHomeBaseMatched: Boolean(
+      normalizeVerificationComparable(submittedAircraftHomeBase) &&
+      normalizeVerificationComparable(submittedAircraftHomeBase) === normalizeVerificationComparable(retrievedAircraftHomeBase),
+    ),
+  };
 
   console.info(JSON.stringify({
     event: "flight_service_retrieve_verification",
@@ -358,8 +448,16 @@ export const verifyLeidosRetrievedPlanAgainstStoredPayload = async (plan: Flight
     providerPlanId,
     versionStamp: extractVersionStamp(plan),
     retrieved: Boolean(retrievedProviderPlan),
-    mismatchCount: mismatches.length,
-    mismatches,
+    totalComparedFields: comparison.totalComparedFields,
+    matchedFieldCount: comparison.matchedFields.length,
+    mismatchCount: comparison.mismatchedFields.length,
+    missingFromRetrieveCount: comparison.missingFromRetrieve.length,
+    phoneHomeBaseVerification,
+    mismatches: comparison.mismatchedFields.map((entry) => ({
+      ...entry,
+      submitted: redactVerificationValue(entry.field, entry.submitted),
+      retrieved: redactVerificationValue(entry.field, entry.retrieved),
+    })),
   }));
 
   return {
@@ -369,7 +467,8 @@ export const verifyLeidosRetrievedPlanAgainstStoredPayload = async (plan: Flight
     submittedPayload,
     retrievedProviderPlan,
     persistedProviderSnapshot: getRecord((plan as Record<string, unknown>).filingProviderSnapshot),
-    mismatches,
+    phoneHomeBaseVerification,
+    ...comparison,
   };
 };
 
@@ -2101,7 +2200,7 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     ? plan.filingProviderSnapshot as Record<string, unknown>
     : null;
   if (action !== "file" && providerSnapshot?.providerPendingReview === true) {
-    errors.push("Flight Service has updated this flight plan. Review and accept or reconcile those changes before submitting another provider action.");
+    errors.push("The filing provider has updated this flight plan. Review and accept or reconcile those changes before submitting another provider action.");
   }
 
   if (action === "amend") {

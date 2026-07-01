@@ -6,7 +6,7 @@ import { formatFlightPlanDepartureTime } from "../../shared/flight-plan-time";
 import { extractFilingProviderPlanId } from "../../shared/flight-plan-filing";
 import { ICAO_OTHER_INFO_GUIDANCE, ICAO_OTHER_INFO_PREFIX_OPTIONS, ICAO_OTHER_INFO_VALUE_OPTIONS, buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
 import { formatDecimalCoordinatesForLeidos, normalizeZzzzActualLocation } from "../../shared/zzzz-location";
-import { buildLeidosActionPayload, buildOtherInfoWithAircraftType, buildOtherInfoWithRemarks, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
+import { buildLeidosActionPayload, buildOtherInfoWithAircraftType, buildOtherInfoWithRemarks, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, compareRetrievedProviderPlanFields, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
 
 function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
   return {
@@ -704,7 +704,7 @@ test("provider push review blocks filing actions until acknowledged", () => {
   for (const action of ["amend", "activate", "cancel", "close"] as const) {
     const result = validateFlightPlanForAction(pendingReview, action);
     assert.equal(result.ready, false);
-    assert.ok(result.errors.some((error) => /Flight Service has updated/i.test(error)));
+    assert.ok(result.errors.some((error) => /filing provider has updated/i.test(error)));
   }
 
   const accepted = filingPlan({
@@ -732,4 +732,57 @@ test("overdue VFR close requires an actual close location", () => {
     filingCloseLocation: "KEDC ramp",
   }, "close");
   assert.equal(withLocation.ready, true);
+});
+
+test("Retrieve verification flags submitted fields missing from provider retrieve", () => {
+  const comparison = compareRetrievedProviderPlanFields({
+    submittedFields: {
+      pilotPhone: "15124121762",
+      aircraftHomeBase: "KEDC",
+      otherInfo: "PBN/A1 RMK/FIELD 18 TEST",
+      suppRemarksExtended: "SUPPLEMENTAL TEST",
+      aircraftEquipment: "SC",
+      surveillanceEquipment: "S",
+      route: "DCT",
+      fuelOnBoard: "PT5H",
+      departureInstant: "2026-06-29T15:00:00.000Z",
+      departure: "KEDC",
+      destination: "KDAL",
+      altDestination1: "KACT",
+    },
+    retrievedProviderPlan: {
+      aircraftEquipment: "SC",
+      surveillanceEquipment: "S",
+      route: "DCT",
+      departure: "KEDC",
+      destination: "KDAL",
+      altDestination1: "KACT",
+    },
+  });
+
+  assert.ok(comparison.mismatchedFields.some((entry) => entry.field === "pilotPhone" && entry.issue === "missing_from_retrieve"));
+  assert.ok(comparison.mismatchedFields.some((entry) => entry.field === "aircraftHomeBase" && entry.issue === "missing_from_retrieve"));
+  assert.ok(comparison.mismatchedFields.some((entry) => entry.field === "otherInfo" && entry.issue === "missing_from_retrieve"));
+  assert.ok(comparison.mismatchedFields.some((entry) => entry.field === "suppRemarksExtended" && entry.issue === "missing_from_retrieve"));
+  assert.ok(comparison.mismatchedFields.some((entry) => entry.field === "fuelOnBoard" && entry.issue === "missing_from_retrieve"));
+  assert.ok(comparison.mismatchedFields.some((entry) => entry.field === "departureInstant" && entry.issue === "missing_from_retrieve"));
+  assert.equal(comparison.matchedFields.some((entry) => entry.field === "aircraftEquipment"), true);
+  assert.equal(comparison.missingFromRetrieve.length, 6);
+});
+
+test("Retrieve verification flags supplemental remarks returned inside Field 18", () => {
+  const comparison = compareRetrievedProviderPlanFields({
+    submittedFields: {
+      otherInfo: "PBN/A1 RMK/FIELD 18 TEST",
+      suppRemarksExtended: "SUPPLEMENTAL TEST",
+    },
+    retrievedProviderPlan: {
+      otherInfo: "PBN/A1 RMK/FIELD 18 TEST SUPPLEMENTAL TEST",
+    },
+  });
+
+  assert.ok(comparison.mismatchedFields.some((entry) =>
+    entry.field === "suppRemarksExtended" &&
+    entry.issue === "supplemental_returned_in_otherInfo"
+  ));
 });

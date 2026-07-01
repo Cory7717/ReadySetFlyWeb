@@ -641,7 +641,7 @@ const getProviderLifecycleAvailabilityMessage = (plan: FlightPlan | null | undef
 
 const formatFilingProviderDisplayName = (provider?: string | null) => {
   const normalized = String(provider || "").trim().toLowerCase();
-  if (!normalized || normalized === "leidos_flight_service") return "FAA Flight Service";
+  if (!normalized || normalized === "leidos_flight_service") return "Filing provider";
   return normalized
     .split(/[_\s-]+/)
     .filter(Boolean)
@@ -651,8 +651,8 @@ const formatFilingProviderDisplayName = (provider?: string | null) => {
 
 const formatFilingHistoryMessage = (value: unknown) =>
   String(value || "")
-    .replace(/Leidos Flight Service/g, "FAA Flight Service")
-    .replace(/Leidos/g, "Flight Service")
+    .replace(/Leidos Flight Service/g, "filing provider")
+    .replace(/Leidos/g, "filing provider")
     .replace(/\[object Object\]/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -674,7 +674,7 @@ const getFilingHistoryChangeSections = (entry: any) => {
   return [
     { title: "Changes submitted", lines: asLines(summary.pilotChanges) },
     { title: "RSF processing", lines: asLines(summary.rsfProcessingChanges) },
-    { title: "Flight Service", lines: asLines(summary.providerChanges) },
+    { title: "Filing provider", lines: asLines(summary.providerChanges) },
   ].filter((section) => section.lines.length > 0);
 };
 
@@ -5947,7 +5947,7 @@ export default function FlightPlanner() {
         title: result.readyToFile ? "Filing preview ready" : "Filing preview generated",
         description: result.readyToFile
           ? "RSF validated the packet. Flight filing is in final validation and is not available for operational use yet."
-          : "Review the filing errors and warnings before continuing to Flight Service.",
+          : "Review the filing errors and warnings before continuing to the filing provider.",
       });
     },
     onError: (error: any) => {
@@ -6003,7 +6003,7 @@ export default function FlightPlanner() {
       setFilingActionFeedback({
         tone: "pending",
         title: `${variables.action.charAt(0).toUpperCase()}${variables.action.slice(1)} request in progress`,
-        message: "RSF is sending the action to the filing provider Flight Service.",
+        message: "RSF is sending the action to the filing provider.",
       });
     },
     onSuccess: (result: any, variables) => {
@@ -6137,7 +6137,7 @@ export default function FlightPlanner() {
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       toast({
         title: "Provider changes accepted",
-        description: result?.message || "You can submit an amendment from the current Flight Service version.",
+        description: result?.message || "You can submit an amendment from the current provider version.",
       });
     },
     onError: (error: any) => {
@@ -6699,7 +6699,7 @@ export default function FlightPlanner() {
         <AlertDescription className="space-y-1 text-sm">
           <div className="font-semibold text-[#F5F8FC]">Flight Planner testing notice</div>
           <div>
-            Flight filing is currently in final validation and is not yet available for operational use.
+            Flight filing is currently in final validation and is not approved for operational use. Do not rely on this tool to file live flight plans.
           </div>
           <div className="text-[#8fa6c0]">
             Approved testers may validate filing workflows in the provider test environment. Public users should use official filing channels until approval is complete.
@@ -7479,7 +7479,7 @@ export default function FlightPlanner() {
                     <div>
                       <div className="text-sm font-semibold">Route Assist</div>
                       <div className="text-xs text-muted-foreground">
-                        Optional IFR routing help from Flight Service. Use it as a starting point, but review and edit the filed route yourself before filing.
+                        Optional IFR routing help from the filing provider. Use it as a starting point, but review and edit the filed route yourself before filing.
                       </div>
                     </div>
                     {leidosRouteQuery.data?.environment && (
@@ -8654,7 +8654,7 @@ export default function FlightPlanner() {
               <AlertDescription className="space-y-1">
                 <div className="font-semibold">IFR conditions detected along this VFR route.</div>
                 <div>
-                  Select a different VFR route or file an IFR flight plan before sending this to Flight Service.
+                  Select a different VFR route or file an IFR flight plan before sending this to the filing provider.
                 </div>
                 {vfrRouteIfrWarningStations && (
                   <div className="text-xs text-red-100/85">
@@ -8751,7 +8751,7 @@ export default function FlightPlanner() {
                     </SelectContent>
                   </Select>
                   <div className="text-xs text-muted-foreground">
-                    Aircraft ID remains the callsign/tail number. Use ZZZZ here only when the aircraft type is not supported by Flight Service.
+                    Aircraft ID remains the callsign/tail number. Use ZZZZ here only when the aircraft type is not supported by the filing provider.
                   </div>
                 </div>
                 {filingDraft.aircraftType === "ZZZZ" && (
@@ -8905,7 +8905,7 @@ export default function FlightPlanner() {
                   {selectedSurveillanceCodes.some((code) => !FLIGHT_SERVICE_DIRECT_SURVEILLANCE_CODES.has(code)) && (
                     <Alert className="border-amber-300 bg-amber-900/20 text-amber-100">
                       <AlertDescription>
-                        Flight Service filing currently accepts N, A, C, or S here. Put ADS-B or ADS-C details in Other ICAO Information using SUR/ if needed.
+                        Filing provider validation currently accepts N, A, C, or S here. Put ADS-B or ADS-C details in Other ICAO Information using SUR/ if needed.
                       </AlertDescription>
                     </Alert>
                   )}
@@ -9037,7 +9037,7 @@ export default function FlightPlanner() {
                     <div className="space-y-1">
                       <div className="font-semibold text-[#F5E6B8]">ZZZZ Departure Details</div>
                       <div className="text-xs leading-5 text-[#D9C28A]">
-                        The planning reference is only for route, weather, terrain, ETE, and timezone calculations. Flight Service receives the actual departure location below for filing and search-and-rescue purposes.
+                        The planning reference is only for route, weather, terrain, ETE, and timezone calculations. The filing provider receives the actual departure location below for filing and search-and-rescue purposes.
                       </div>
                     </div>
                     <div className="grid gap-3">
@@ -9057,7 +9057,7 @@ export default function FlightPlanner() {
                           onChange={(e) => setFilingDraft((current) => ({ ...current, departureName: e.target.value }))}
                           placeholder="Private Strip, Smith Ranch, Grass Airstrip, Helipad"
                         />
-                        <div className="text-xs text-[#A9BBCD]">Concise human-readable description appended to DEP/ for Flight Service.</div>
+                        <div className="text-xs text-[#A9BBCD]">Concise human-readable description appended to DEP/ for the filing provider.</div>
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Departure Location <span className="text-amber-400 text-xs">(required)</span></Label>
@@ -9102,7 +9102,7 @@ export default function FlightPlanner() {
                     <div className="space-y-1">
                       <div className="font-semibold text-[#F5E6B8]">ZZZZ Destination Details</div>
                       <div className="text-xs leading-5 text-[#D9C28A]">
-                        The planning reference is only for route, weather, terrain, ETE, and timezone calculations. Flight Service receives the actual destination location below.
+                        The planning reference is only for route, weather, terrain, ETE, and timezone calculations. The filing provider receives the actual destination location below.
                       </div>
                     </div>
                     <div className="grid gap-3">
@@ -9122,7 +9122,7 @@ export default function FlightPlanner() {
                           onChange={(e) => setFilingDraft((current) => ({ ...current, destinationName: e.target.value }))}
                           placeholder="Private Strip, Smith Ranch, Grass Airstrip, Helipad"
                         />
-                        <div className="text-xs text-[#A9BBCD]">Concise human-readable description appended to DEST/ for Flight Service.</div>
+                        <div className="text-xs text-[#A9BBCD]">Concise human-readable description appended to DEST/ for the filing provider.</div>
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Destination Location <span className="text-amber-400 text-xs">(required)</span></Label>
@@ -9167,7 +9167,7 @@ export default function FlightPlanner() {
                     <div className="space-y-1">
                       <div className="font-semibold text-[#F5E6B8]">ZZZZ Alternate Details</div>
                       <div className="text-xs leading-5 text-[#D9C28A]">
-                        The planning reference is only for route, weather, terrain, ETE, and timezone calculations. Flight Service receives the actual alternate location below.
+                        The planning reference is only for route, weather, terrain, ETE, and timezone calculations. The filing provider receives the actual alternate location below.
                       </div>
                     </div>
                     <div className="grid gap-3">
@@ -9187,7 +9187,7 @@ export default function FlightPlanner() {
                           onChange={(e) => setFilingDraft((current) => ({ ...current, alternateName: e.target.value }))}
                           placeholder="Private Strip, Smith Ranch, Grass Airstrip, Helipad"
                         />
-                        <div className="text-xs text-[#A9BBCD]">Concise human-readable description appended to ALTN/ for Flight Service.</div>
+                        <div className="text-xs text-[#A9BBCD]">Concise human-readable description appended to ALTN/ for the filing provider.</div>
                       </div>
                       <div className="space-y-2 rounded-md border border-[#D9A441]/20 bg-black/15 p-3">
                         <Label>Actual Alternate Location <span className="text-amber-400 text-xs">(required)</span></Label>
@@ -10880,14 +10880,14 @@ export default function FlightPlanner() {
           <DialogHeader>
             <DialogTitle>Provider Updates</DialogTitle>
             <DialogDescription>
-              Flight Service provider events are shown in reverse chronological order. Use Refresh provider sync after a filing action if you need the latest effective route or ARTCC state.
+              Filing provider events are shown in reverse chronological order. Use Refresh provider sync after a filing action if you need the latest effective route or ARTCC state.
             </DialogDescription>
           </DialogHeader>
           {providerUpdatesPlan && hasPendingProviderReview(providerUpdatesPlan) && (
             <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100">
               <div className="font-semibold">Provider changes need review</div>
               <div className="mt-1 text-amber-100/85">
-                Flight Service has updated this plan. Accept the current provider version before submitting another amendment.
+                The filing provider has updated this plan. Accept the current provider version before submitting another amendment.
               </div>
               <Button
                 className="mt-3"

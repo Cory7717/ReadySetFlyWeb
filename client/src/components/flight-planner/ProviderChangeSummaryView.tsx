@@ -10,7 +10,7 @@ export function ProviderChangeSummaryView({ summary }: { summary: ProviderChange
 
   return (
     <div className="mt-3 space-y-3">
-      <div className="text-sm font-semibold">Flight Service updated your flight plan.</div>
+      <div className="text-sm font-semibold">The filing provider updated your flight plan.</div>
       {sections.map((section) => (
         <div key={section.label} className="space-y-1">
           <div className="text-xs font-semibold uppercase tracking-[0.14em] opacity-80">{section.label}</div>

@@ -226,7 +226,7 @@ export function FilingProviderUpdatesList({ plan }: { plan: FlightPlan }) {
               <ProviderChangeSummaryView summary={summary} />
             ) : (
               <div className="mt-2 text-sm break-words">
-                {sanitizeNotificationMessage(message.details) || "Flight Service pushed an update for this flight plan."}
+                {sanitizeNotificationMessage(message.details) || "The filing provider pushed an update for this flight plan."}
               </div>
             );
           })()}

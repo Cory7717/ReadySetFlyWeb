@@ -300,6 +300,79 @@ export const getLeidosFlightServicePlanDebug = (plan: FlightPlan) => {
   };
 };
 
+const FIELD_VERIFICATION_KEYS = [
+  "aircraftIdentifier",
+  "aircraftType",
+  "aircraftEquipment",
+  "surveillanceEquipment",
+  "departure",
+  "destination",
+  "altDestination1",
+  "departureInstant",
+  "route",
+  "otherInfo",
+  "suppRemarksExtended",
+  "pilotPhone",
+  "aircraftHomeBase",
+  "fuelOnBoard",
+  "speedKnots",
+  "altitudeTypeA",
+  "altitudeTypeF",
+];
+
+const findProviderFieldValue = (source: unknown, key: string) => {
+  const exact = findNestedString(source, [key]);
+  if (exact) return exact;
+  const aliases: Record<string, string[]> = {
+    aircraftIdentifier: ["aircraftId", "aircraft_identifier", "acid"],
+    altDestination1: ["alternate", "alternateDestination", "altDestination"],
+    departureInstant: ["departureTime", "departureDateTime", "departure"],
+    suppRemarksExtended: ["supplementalRemarks", "suppRemarks", "supplemental"],
+    aircraftHomeBase: ["homeBase", "home_base"],
+  };
+  return aliases[key] ? findNestedString(source, aliases[key]) : null;
+};
+
+export const verifyLeidosRetrievedPlanAgainstStoredPayload = async (plan: FlightPlan) => {
+  const config = getLeidosFlightServiceConfig();
+  const providerPlanId = String(plan.filingProviderPlanId || "").trim();
+  const submittedPayload = getRecord((plan as Record<string, unknown>).filingPayload);
+  const submittedFields = getRecord(submittedPayload?.transmittedFields);
+  const retrievedProviderPlan = providerPlanId
+    ? await retrieveLeidosPlanMetadataByProviderPlanId(providerPlanId, config)
+    : null;
+  const mismatches = FIELD_VERIFICATION_KEYS.flatMap((key) => {
+    const submitted = submittedFields?.[key];
+    if (submitted === undefined || submitted === null || String(submitted).trim() === "") return [];
+    const retrieved = findProviderFieldValue(retrievedProviderPlan, key);
+    if (!retrieved) return [];
+    const normalize = (value: unknown) => String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
+    return normalize(submitted) === normalize(retrieved)
+      ? []
+      : [{ field: key, submitted: String(submitted), retrieved }];
+  });
+
+  console.info(JSON.stringify({
+    event: "flight_service_retrieve_verification",
+    planId: plan.id,
+    providerPlanId,
+    versionStamp: extractVersionStamp(plan),
+    retrieved: Boolean(retrievedProviderPlan),
+    mismatchCount: mismatches.length,
+    mismatches,
+  }));
+
+  return {
+    planId: plan.id,
+    providerPlanId,
+    versionStamp: extractVersionStamp(plan),
+    submittedPayload,
+    retrievedProviderPlan,
+    persistedProviderSnapshot: getRecord((plan as Record<string, unknown>).filingProviderSnapshot),
+    mismatches,
+  };
+};
+
 const getProviderUrl = () => getLeidosFlightServiceConfig().baseUrl;
 
 const getLiveNextStatus = (action: FlightPlanFilingAction): FlightPlanFilingStatus => {
@@ -320,17 +393,17 @@ const getLiveNextStatus = (action: FlightPlanFilingAction): FlightPlanFilingStat
 const getLifecycleMessage = (action: FlightPlanFilingAction) => {
   switch (action) {
     case "file":
-      return "RSF submitted the flight plan to Leidos Flight Service.";
+      return "RSF submitted the flight plan to the filing provider.";
     case "amend":
-      return "RSF submitted the amended flight plan to Leidos Flight Service.";
+      return "RSF submitted the amended flight plan to the filing provider.";
     case "activate":
-      return "RSF submitted the VFR activation request to Leidos Flight Service.";
+      return "RSF submitted the VFR activation request to the filing provider.";
     case "cancel":
-      return "RSF submitted the cancellation request to Leidos Flight Service.";
+      return "RSF submitted the cancellation request to the filing provider.";
     case "close":
-      return "RSF submitted the VFR close request to Leidos Flight Service.";
+      return "RSF submitted the VFR close request to the filing provider.";
     default:
-      return "RSF submitted the request to Leidos Flight Service.";
+      return "RSF submitted the request to the filing provider.";
   }
 };
 
@@ -1926,19 +1999,19 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     errors.push("Actual aircraft type is required when Aircraft Type is ZZZZ.");
   }
   if ((action === "file" || action === "amend") && !plan.filingTrueAirspeedKtas) {
-    errors.push("Cruise speed is required before sending this filing action to Leidos.");
+    errors.push("Cruise speed is required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && !plan.filingPlannedAltitudeFt) {
-    errors.push("Planned altitude is required before sending this filing action to Leidos.");
+    errors.push("Planned altitude is required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && !plan.filingEstimatedEnrouteMinutes) {
-    errors.push("Estimated enroute time is required before sending this filing action to Leidos.");
+    errors.push("Estimated enroute time is required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && !plan.filingEnduranceMinutes) {
-    errors.push("Endurance is required before sending this filing action to Leidos.");
+    errors.push("Endurance is required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && !plan.filingEquipment) {
-    errors.push("Aircraft equipment is required before sending this filing action to Leidos.");
+    errors.push("Aircraft equipment is required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && plan.filingEquipment) {
     const equipmentValidation = validateFlightServiceAircraftEquipmentCodes(
@@ -1956,28 +2029,29 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
       duplicateEquipmentCodes: equipmentValidation.duplicateEquipmentCodes,
       validationResult: equipmentValidation.validationResult,
       blockedBeforeLeidos: equipmentValidation.blockedBeforeLeidos,
+      blockedBeforeProvider: equipmentValidation.blockedBeforeLeidos,
     }));
     if (equipmentValidation.validationResult === "invalid") {
       errors.push("Aircraft equipment contains an invalid ICAO code. Please update the aircraft equipment before filing.");
     }
   }
   if ((action === "file" || action === "amend") && !plan.filingPilotPhone) {
-    errors.push("Pilot phone number is required before sending this filing action to Leidos.");
+    errors.push("Pilot phone number is required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && !plan.filingPilotName) {
-    errors.push("Pilot in command name is required before sending this filing action to Leidos.");
+    errors.push("Pilot in command name is required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && !plan.filingSoulsOnBoard) {
-    errors.push("Souls on board is required before sending this filing action to Leidos.");
+    errors.push("Souls on board is required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && !getLeidosWakeTurbulence(plan)) {
     errors.push("Wake turbulence category is required. Enter it or select an aircraft profile with a known maximum gross weight.");
   }
   if ((action === "file" || action === "amend") && !plan.filingTypeOfFlight) {
-    errors.push("Type of flight is required before sending this filing action to Leidos.");
+    errors.push("Type of flight is required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && !plan.filingSurveillanceEquipment) {
-    errors.push("Surveillance equipment is required before sending this filing action to Leidos.");
+    errors.push("Surveillance equipment is required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && plan.filingSurveillanceEquipment && !hasOnlyKnownIcaoSurveillanceCodes(plan.filingSurveillanceEquipment)) {
     errors.push("Surveillance equipment must use approved ICAO surveillance codes.");
@@ -1986,7 +2060,7 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     errors.push("Flight Service currently accepts N, A, C, or S in the Surveillance Equipment field. Put ADS-B or ADS-C details in Other ICAO Information using SUR/ if needed.");
   }
   if ((action === "file" || action === "amend") && !plan.filingAircraftHomeBase) {
-    errors.push("Aircraft home base is required before sending this filing action to Leidos.");
+    errors.push("Aircraft home base is required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && !plan.filingRemarks && !plan.notes) {
     errors.push("Filing Remarks / ATC Remarks are required before sending this filing action to the filing provider.");
@@ -2042,7 +2116,7 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   }
 
   if (action === "cancel" && lifecycleStatus !== "filed") {
-    errors.push("Only a filed flight plan in the PROPOSED state can be cancelled through Leidos.");
+    errors.push("Only a filed flight plan in the PROPOSED state can be cancelled through the filing provider.");
   }
 
   if (action === "activate" && lifecycleStatus !== "filed") {

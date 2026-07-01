@@ -435,6 +435,23 @@ const canCancelPlan = (plan: FlightPlan | null | undefined) =>
     hasLiveProviderPlan(plan),
   );
 
+const canFilePlan = (plan: FlightPlan | null | undefined) => {
+  if (!plan) return true;
+  if (hasPendingProviderReview(plan)) return false;
+  const status = normalizedClientFilingStatus(plan) || "draft";
+  return !hasLiveProviderPlan(plan) && !["filed", "activated", "cancelled", "closed"].includes(status);
+};
+
+const getFileAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
+  if (!plan) return "Save the current values first, then RSF will submit the saved packet.";
+  if (hasPendingProviderReview(plan)) return "Review and accept provider changes before filing another provider action.";
+  if (!canFilePlan(plan)) return "This plan already has a provider lifecycle state. Use Amend, Activate, Cancel, Close, or Provider Sync as applicable.";
+  return "RSF saves the visible planner values first, then files that saved packet.";
+};
+
+const isTerminalFilingPlan = (plan: FlightPlan | null | undefined) =>
+  ["cancelled", "closed"].includes(normalizedClientFilingStatus(plan));
+
 const getPlanBeaconCode = (plan: FlightPlan | null | undefined) => {
   const direct = String((plan as any)?.filingAssignedBeaconCode || "").trim();
   if (direct) return direct;
@@ -1745,8 +1762,8 @@ export default function FlightPlanner() {
   const vfrRouteIfrWarningToastKeyRef = useRef("");
   const [returnToFileAfterSave, setReturnToFileAfterSave] = useState(false);
   const [pendingFilingActionAfterSave, setPendingFilingActionAfterSave] = useState<{
-    planId: string;
-    action: "amend";
+    planId: string | null;
+    action: "file" | "amend";
   } | null>(null);
   const [draftPlanId, setDraftPlanId] = useState<string | null>(null);
   const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<FlightPlan | null>(null);
@@ -5517,12 +5534,19 @@ export default function FlightPlanner() {
     return true;
   };
 
-  const saveCurrentPlan = async (options?: { returnToFile?: boolean }) => {
+  const saveCurrentPlan = async (options?: { returnToFile?: boolean; filingAction?: "file" | "amend" }) => {
     if (!isAuthenticated) return;
     if (!(await validateZzzzPlanningReferences())) return;
 
     if (options?.returnToFile) {
       setReturnToFileAfterSave(true);
+    }
+    if (options?.filingAction) {
+      setPendingFilingActionAfterSave({
+        planId: editingPlanRef.current?.id || draftPlanIdRef.current || null,
+        action: options.filingAction,
+      });
+      setActiveTab("file");
     }
 
     const currentEditingPlan = editingPlanRef.current;
@@ -5672,6 +5696,19 @@ export default function FlightPlanner() {
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       setDraftPlanId(savedPlan.id);
       setEditingPlan(savedPlan);
+      if (pendingFilingActionAfterSave) {
+        setActiveTab("file");
+        setReturnToFileAfterSave(false);
+        toast({
+          title: "Flight plan saved",
+          description: pendingFilingActionAfterSave.action === "file"
+            ? "Submitting the current saved plan to the filing provider."
+            : "Submitting the amended plan to the filing provider.",
+        });
+        filingActionMutation.mutate({ planId: savedPlan.id, action: pendingFilingActionAfterSave.action });
+        setPendingFilingActionAfterSave(null);
+        return;
+      }
       setPendingFilingActionAfterSave(null);
       if (returnToFileAfterSave) {
         setActiveTab("file");
@@ -5787,7 +5824,9 @@ export default function FlightPlanner() {
         setReturnToFileAfterSave(false);
         toast({
           title: "Flight plan updated",
-          description: "Submitting the amended plan to the filing provider.",
+          description: pendingFilingActionAfterSave.action === "file"
+            ? "Submitting the current saved plan to the filing provider."
+            : "Submitting the amended plan to the filing provider.",
         });
         filingActionMutation.mutate({ planId: updatedPlan.id, action: pendingFilingActionAfterSave.action });
         setPendingFilingActionAfterSave(null);
@@ -5907,9 +5946,7 @@ export default function FlightPlanner() {
       toast({
         title: result.readyToFile ? "Filing preview ready" : "Filing preview generated",
         description: result.readyToFile
-          ? (result.liveAvailable
-            ? "RSF validated the packet and the live filing path is available."
-            : "RSF validated the packet and kept the handoff staged until live filing paths are fully configured.")
+          ? "RSF validated the packet. Flight filing is in final validation and is not available for operational use yet."
           : "Review the filing errors and warnings before continuing to Flight Service.",
       });
     },
@@ -6662,10 +6699,10 @@ export default function FlightPlanner() {
         <AlertDescription className="space-y-1 text-sm">
           <div className="font-semibold text-[#F5F8FC]">Flight Planner testing notice</div>
           <div>
-            RSF flight planning and filing workflow is still undergoing testing. Treat the planner as a beta feature and do not rely on RSF for operational live filing yet.
+            Flight filing is currently in final validation and is not yet available for operational use.
           </div>
           <div className="text-[#8fa6c0]">
-            Live filing remains limited to controlled testing while validation is in progress.
+            Approved testers may validate filing workflows in the provider test environment. Public users should use official filing channels until approval is complete.
           </div>
         </AlertDescription>
       </Alert>
@@ -9320,41 +9357,49 @@ export default function FlightPlanner() {
                 <Badge variant="outline">{currentSavedPlanStatus}</Badge>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "file" })}
-                  disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
-                >
-                  File
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (!currentDraftCanAmend) {
-                      toast({
-                        title: "Live amend unavailable",
-                        description: draftAmendAvailabilityMessage || getAmendAvailabilityMessage(currentSavedPlan),
-                      });
-                      return;
-                    }
-                    setActiveTab("file");
-                    setPendingFilingActionAfterSave({ planId: currentSavedPlan!.id, action: "amend" });
-                    updatePlanMutation.mutate(currentSavedPlan!.id);
-                  }}
-                  disabled={filingActionMutation.isPending || updatePlanMutation.isPending || filingSyncMutation.isPending}
-                >
-                  {currentDraftCanAmend ? "Amend" : "Amend unavailable"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => filingSyncMutation.mutate(currentSavedPlan!.id)}
-                  disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
-                >
-                  {filingSyncMutation.isPending ? "Refreshing sync..." : "Refresh provider sync"}
-                </Button>
+                {canFilePlan(currentSavedPlan) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => saveCurrentPlan({ filingAction: "file" })}
+                    disabled={filingActionMutation.isPending || updatePlanMutation.isPending || createPlanMutation.isPending || filingSyncMutation.isPending}
+                    title={getFileAvailabilityMessage(currentSavedPlan)}
+                  >
+                    File
+                  </Button>
+                )}
+                {!isTerminalFilingPlan(currentSavedPlan) && hasLiveProviderPlan(currentSavedPlan) && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (!currentDraftCanAmend) {
+                          toast({
+                            title: "Review amend requirements",
+                            description: draftAmendAvailabilityMessage || getAmendAvailabilityMessage(currentSavedPlan),
+                          });
+                          return;
+                        }
+                        setActiveTab("file");
+                        setPendingFilingActionAfterSave({ planId: currentSavedPlan!.id, action: "amend" });
+                        updatePlanMutation.mutate(currentSavedPlan!.id);
+                      }}
+                      disabled={filingActionMutation.isPending || updatePlanMutation.isPending || filingSyncMutation.isPending}
+                      title={draftAmendAvailabilityMessage || "Save the current values, then submit an amendment to the filed provider record."}
+                    >
+                      {currentDraftCanAmend ? "Amend" : "Review amend requirements"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => filingSyncMutation.mutate(currentSavedPlan!.id)}
+                      disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
+                    >
+                      {filingSyncMutation.isPending ? "Refreshing sync..." : "Refresh provider sync"}
+                    </Button>
+                  </>
+                )}
                 {hasPendingProviderReview(currentSavedPlan) && (
                   <Button
                     size="sm"
@@ -9365,7 +9410,7 @@ export default function FlightPlanner() {
                     {acceptProviderReviewMutation.isPending ? "Accepting..." : "Accept provider changes"}
                   </Button>
                 )}
-                {currentSavedPlanFlightRules === "VFR" && (
+                {!isTerminalFilingPlan(currentSavedPlan) && currentSavedPlanFlightRules === "VFR" && (
                   <>
                     <Button
                       size="sm"
@@ -9392,14 +9437,16 @@ export default function FlightPlanner() {
                     </Button>
                   </>
                 )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "cancel" })}
-                  disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !currentSavedPlanCanCancel}
-                >
-                  Cancel
-                </Button>
+                {!isTerminalFilingPlan(currentSavedPlan) && hasLiveProviderPlan(currentSavedPlan) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "cancel" })}
+                    disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !currentSavedPlanCanCancel}
+                  >
+                    Cancel
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
@@ -9766,66 +9813,81 @@ export default function FlightPlanner() {
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "file" })}
-                    disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
-                  >
-                    File
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      const isCurrentEditingPlan =
-                        editingPlanRef.current?.id === plan.id || draftPlanIdRef.current === plan.id;
-                      const draftMessage = getDraftAmendAvailabilityMessage({
-                        plan,
-                        flightRules: filingDraft.flightRules,
-                        route: leidosFiledRoute || null,
-                        plannedDepartureAt: form.plannedDepartureAt || null,
-                        trueAirspeedKtas: Math.round(planningCruise) || null,
-                        plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
-                      });
-                      const canSubmitLiveAmend = !draftMessage;
+                  {canFilePlan(plan) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const isCurrentEditingPlan =
+                          editingPlanRef.current?.id === plan.id || draftPlanIdRef.current === plan.id;
+                        if (isCurrentEditingPlan) {
+                          saveCurrentPlan({ filingAction: "file" });
+                          return;
+                        }
+                        filingActionMutation.mutate({ planId: plan.id, action: "file" });
+                      }}
+                      disabled={filingActionMutation.isPending || updatePlanMutation.isPending || createPlanMutation.isPending || filingSyncMutation.isPending}
+                      title={getFileAvailabilityMessage(plan)}
+                    >
+                      File
+                    </Button>
+                  )}
+                  {!isTerminalFilingPlan(plan) && hasLiveProviderPlan(plan) && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const isCurrentEditingPlan =
+                            editingPlanRef.current?.id === plan.id || draftPlanIdRef.current === plan.id;
+                          const draftMessage = getDraftAmendAvailabilityMessage({
+                            plan,
+                            flightRules: filingDraft.flightRules,
+                            route: leidosFiledRoute || null,
+                            plannedDepartureAt: form.plannedDepartureAt || null,
+                            trueAirspeedKtas: Math.round(planningCruise) || null,
+                            plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
+                          });
+                          const canSubmitLiveAmend = !draftMessage;
 
-                      if (isCurrentEditingPlan && canSubmitLiveAmend) {
-                        setActiveTab("file");
-                        setPendingFilingActionAfterSave({ planId: plan.id, action: "amend" });
-                        updatePlanMutation.mutate(plan.id);
-                        return;
-                      }
+                          if (isCurrentEditingPlan && canSubmitLiveAmend) {
+                            setActiveTab("file");
+                            setPendingFilingActionAfterSave({ planId: plan.id, action: "amend" });
+                            updatePlanMutation.mutate(plan.id);
+                            return;
+                          }
 
-                      if (isCurrentEditingPlan && draftMessage) {
-                        toast({
-                          title: "Live amend unavailable",
-                          description: draftMessage,
-                        });
-                        return;
-                      }
+                          if (isCurrentEditingPlan && draftMessage) {
+                            toast({
+                              title: "Review amend requirements",
+                              description: draftMessage,
+                            });
+                            return;
+                          }
 
-                      beginAmendWorkflow(plan);
-                    }}
-                    disabled={filingActionMutation.isPending || updatePlanMutation.isPending || filingSyncMutation.isPending}
-                  >
-                    {getDraftAmendAvailabilityMessage({
-                      plan,
-                      flightRules: filingDraft.flightRules,
-                      route: leidosFiledRoute || null,
-                      plannedDepartureAt: form.plannedDepartureAt || null,
-                      trueAirspeedKtas: Math.round(planningCruise) || null,
-                      plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
-                    }) ? "Review amend requirements" : "Amend"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => filingSyncMutation.mutate(plan.id)}
-                    disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
-                  >
-                    {filingSyncMutation.isPending ? "Refreshing sync..." : "Refresh provider sync"}
-                  </Button>
+                          beginAmendWorkflow(plan);
+                        }}
+                        disabled={filingActionMutation.isPending || updatePlanMutation.isPending || filingSyncMutation.isPending}
+                      >
+                        {getDraftAmendAvailabilityMessage({
+                          plan,
+                          flightRules: filingDraft.flightRules,
+                          route: leidosFiledRoute || null,
+                          plannedDepartureAt: form.plannedDepartureAt || null,
+                          trueAirspeedKtas: Math.round(planningCruise) || null,
+                          plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
+                        }) ? "Review amend requirements" : "Amend"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => filingSyncMutation.mutate(plan.id)}
+                        disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
+                      >
+                        {filingSyncMutation.isPending ? "Refreshing sync..." : "Refresh provider sync"}
+                      </Button>
+                    </>
+                  )}
                   {hasPendingProviderReview(plan) && (
                     <Button
                       size="sm"
@@ -9858,7 +9920,7 @@ export default function FlightPlanner() {
                     ) : null}
                     Provider updates
                   </Button>
-                  {(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
+                  {!isTerminalFilingPlan(plan) && (plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
                     <>
                       <Button
                         size="sm"
@@ -9885,14 +9947,16 @@ export default function FlightPlanner() {
                       </Button>
                     </>
                   )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "cancel" })}
-                    disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !canCancelPlan(plan)}
-                  >
-                    Cancel
-                  </Button>
+                  {!isTerminalFilingPlan(plan) && hasLiveProviderPlan(plan) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "cancel" })}
+                      disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !canCancelPlan(plan)}
+                    >
+                      Cancel
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"
@@ -10707,8 +10771,8 @@ export default function FlightPlanner() {
                     </div>
                   </div>
                   <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">Live filing</div>
-                    <div className="font-semibold">{filingPreview.live ? "Available" : "Staged only"}</div>
+                    <div className="text-xs text-muted-foreground">Filing mode</div>
+                    <div className="font-semibold">Final validation only</div>
                   </div>
                 </div>
                 {filingPreview.errors.length > 0 && (

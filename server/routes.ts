@@ -63,6 +63,7 @@ import {
   flightPlanFilingProvider,
   getLeidosFlightServiceDiagnostics,
   getLeidosFlightServicePlanDebug,
+  verifyLeidosRetrievedPlanAgainstStoredPayload,
   buildOtherInfoWithAircraftType,
   buildZzzzOtherInfoForLeidos,
   normalizeActualAircraftTypeForIcao,
@@ -21571,7 +21572,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(404).json({ error: "Flight plan not found" });
       }
 
-      res.json(getLeidosFlightServicePlanDebug(plan as any));
+      const debug = getLeidosFlightServicePlanDebug(plan as any);
+      const retrievalVerification = plan.filingProviderPlanId
+        ? await verifyLeidosRetrievedPlanAgainstStoredPayload(plan as any)
+        : null;
+      res.json({
+        ...debug,
+        retrievalVerification,
+      });
     } catch (error) {
       console.error("Failed to build Leidos Flight Service plan debug:", error);
       res.status(500).json({ error: "Failed to build Leidos Flight Service plan debug" });
@@ -22035,27 +22043,29 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const nextSteps = [
         "Review aircraft ID, route, and departure time for filing accuracy.",
-        "Copy the staged packet or continue to Flight Service to complete the official filing.",
+        "Flight filing is in final validation. Use this packet only for approved testing until production approval is complete.",
         normalizedPacket.flightRules === "IFR"
           ? "After filing, obtain your IFR clearance from ATC using the published airport procedure."
           : "Activate and close the flight plan through Flight Service when appropriate.",
       ];
 
-      const liveAvailable =
+      const providerConfigured =
         providerDiagnostics.enabled &&
         providerDiagnostics.usernameConfigured &&
         providerDiagnostics.passwordConfigured &&
         Boolean(providerDiagnostics.actionPaths.file);
+      const liveAvailable = false;
 
       res.json({
         live: liveAvailable,
-        provider: "Leidos Flight Service",
+        provider: "Flight Service provider",
         routeType: normalizedPacket.flightRules,
         readyToFile: errors.length === 0,
         providerUrl: providerDiagnostics.baseUrl,
         liveAvailable,
         diagnostics: {
           environment: providerDiagnostics.environment,
+          providerConfigured,
           actionPathsConfigured: Object.entries(providerDiagnostics.actionPaths).reduce((acc, [key, value]) => ({
             ...acc,
             [key]: Boolean(value),
@@ -22208,6 +22218,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      const publicFilingEnabled = /^(true|1|yes)$/i.test(String(process.env.FLIGHT_SERVICE_PUBLIC_FILING_ENABLED || ""));
+      const testerEmails = new Set(
+        String(process.env.FLIGHT_SERVICE_TESTER_EMAILS || "")
+          .split(",")
+          .map((email) => email.trim().toLowerCase())
+          .filter(Boolean),
+      );
+      const userEmail = String((user as any).email || "").trim().toLowerCase();
+      const canUseProviderFiling =
+        publicFilingEnabled ||
+        Boolean((user as any).isSuperAdmin || (user as any).isAdmin) ||
+        (userEmail && testerEmails.has(userEmail));
+      if (!canUseProviderFiling) {
+        return res.status(403).json({
+          error: "Flight filing is currently in final validation and is not yet available for operational use.",
+          code: "FLIGHT_SERVICE_VALIDATION_ONLY",
+        });
+      }
 
       const parsed = filingLifecycleActionSchema.safeParse(req.body ?? {});
       if (!parsed.success) {
@@ -22256,7 +22284,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const available = action === "cancel" ? availability.cancel : action === "close" ? availability.close : availability.activate;
         if (available === false) {
           return res.status(409).json({
-            error: `Leidos currently reports this flight plan as ${lifecycle}. ${action.toUpperCase()} is not available for that provider state.`,
+            error: `The filing provider currently reports this flight plan as ${lifecycle}. ${action.toUpperCase()} is not available for that provider state.`,
             providerLifecycleStatus: lifecycle,
             plan,
           });
@@ -22379,7 +22407,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const dest = plan.destination ? ` → ${plan.destination})` : (dep ? ")" : "");
         const legs = dep && dest ? `${dep}${dest}` : "";
         const actionMessages: Record<string, string> = {
-          file: `Your flight plan${legs} has been filed with Leidos Flight Service. Track updates and provider changes from this notification center.`,
+          file: `Your flight plan${legs} has been accepted by the filing provider. Track updates and provider changes from this notification center.`,
           amend: `Your amendment for "${planLabel}"${legs} was accepted by the provider. Check Provider Updates for the effective route.`,
           cancel: `Your flight plan${legs} has been cancelled with the provider.`,
           activate: `Your VFR flight plan${legs} is now activated. Safe flight!`,
@@ -22423,10 +22451,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               timestamp: new Date().toISOString(),
               severity: "warning",
               title: "External provider change detected",
-              details: "Leidos rejected the action because the provider-side flight plan state changed. RSF refreshed the provider record; review the current status before taking another action.",
+              details: "The filing provider rejected the action because the provider-side flight plan state changed. RSF refreshed the provider record; review the current status before taking another action.",
               source: "provider",
               action: null,
-              provider: "Leidos Flight Service",
+              provider: "FAA Flight Service",
               providerPlanId: planForErrorSync.filingProviderPlanId || null,
             }],
           });
@@ -22436,7 +22464,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       res.status(isTimeout ? 504 : isProviderStateRejected ? 409 : (isProviderValidationError || isProviderRejected) ? 400 : 500).json({
         error: isProviderStateRejected
-          ? "Leidos says this flight plan is no longer in the provider state required for that action. RSF refreshed the provider record; review the current status and available actions."
+          ? "The filing provider says this flight plan is no longer in the provider state required for that action. RSF refreshed the provider record; review the current status and available actions."
           : message,
         providerMessage: message,
         plan: syncedPlan,
@@ -22485,7 +22513,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           nextSnapshot,
           providerMessages: syncResult.providerMessages,
           fallback: nextSnapshot.externalChangeDetected
-            ? String(nextSnapshot.externalChangeNotice || "Leidos returned a provider state that differs from RSF's prior local state.")
+            ? String(nextSnapshot.externalChangeNotice || "The filing provider returned a state that differs from RSF's prior local state.")
             : routeChangedByProvider
             ? `Your filed route for "${planLabel}" was adjusted by the provider. Effective route: ${providerRoute || "see Provider Updates for details"}.`
             : `Provider sync completed for "${planLabel}". Your plan is current with the provider record.`,
@@ -22761,7 +22789,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       );
       if (hasProviderRecord) {
         return res.status(409).json({
-          error: "Filed or provider-synced flight plans cannot be deleted. Close or cancel through Leidos instead.",
+          error: "Filed or provider-synced flight plans cannot be deleted. Close or cancel through the filing provider instead.",
         });
       }
       const success = await storage.deleteFlightPlan(req.params.id);

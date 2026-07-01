@@ -1,0 +1,506 @@
+{
+  "generatedAt": "2026-07-01T12:51:54.416Z",
+  "buildCommit": "d3beceb",
+  "mode": "mocked",
+  "seed": 20260701,
+  "count": 50,
+  "readinessPercent": 100,
+  "productionRecommendation": "READY FOR LIMITED REVIEW ONLY",
+  "summary": {
+    "totalScenarios": 75,
+    "passed": 75,
+    "failed": 0,
+    "blockers": 0,
+    "majorIssues": 0,
+    "minorIssues": 0,
+    "providerCallsAttempted": 0,
+    "providerCallsBlocked": 75,
+    "seanFeedbackCoverage": 15,
+    "providerCallsSimulated": 35
+  },
+  "categories": [
+    {
+      "name": "Public safety/lab mode",
+      "status": "PASS",
+      "passed": 3,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "Authentication/tester access",
+      "status": "NOT RUN",
+      "passed": 0,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "Flight plan validation",
+      "status": "PASS",
+      "passed": 3,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "ICAO equipment",
+      "status": "PASS",
+      "passed": 3,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "ZZZZ handling",
+      "status": "PASS",
+      "passed": 3,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "Field 18 / Other Info",
+      "status": "PASS",
+      "passed": 2,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "Supplemental remarks",
+      "status": "NOT RUN",
+      "passed": 0,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "Phone/homebase",
+      "status": "PASS",
+      "passed": 2,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "Payload build",
+      "status": "PASS",
+      "passed": 2,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "Retrieve comparison",
+      "status": "NOT RUN",
+      "passed": 0,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "Lifecycle actions",
+      "status": "PASS",
+      "passed": 2,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "Provider sync",
+      "status": "PASS",
+      "passed": 2,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "UI workflow regressions",
+      "status": "PASS",
+      "passed": 3,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "Sean feedback regressions",
+      "status": "NOT RUN",
+      "passed": 0,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    },
+    {
+      "name": "Security/rate-limit checks",
+      "status": "PASS",
+      "passed": 50,
+      "failed": 0,
+      "blockers": 0,
+      "majorIssues": 0,
+      "minorIssues": 0
+    }
+  ],
+  "seanFeedbackCoverage": {
+    "covered": 21,
+    "total": 21,
+    "items": [
+      {
+        "id": "SEAN-01",
+        "issueText": "grey text on white buttons",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-02",
+        "issueText": "Open Saved Plans dead button",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-03",
+        "issueText": "old error still visible after clear form",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-04",
+        "issueText": "notification bubble too small",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-05",
+        "issueText": "default altitude/fuel submitted without confirmation",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-06",
+        "issueText": "screen jumps while typing",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-07",
+        "issueText": "altitude update still shows generic error",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-08",
+        "issueText": "confusing Amend unavailable / disabled button labels",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-09",
+        "issueText": "cut-off words/letters",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-10",
+        "issueText": "manual save required before filing",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-11",
+        "issueText": "filed date stale 6/24 vs 6/29",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-12",
+        "issueText": "cached previous flight plan/new session issue",
+        "status": "verified",
+        "relatedTests": [
+          "Invalid surveillance B2 is blocked",
+          "Provider retrieve omits home base",
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-13",
+        "issueText": "corrected equipment still files old equipment until save",
+        "status": "verified",
+        "relatedTests": [
+          "Invalid equipment SCE is blocked",
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-14",
+        "issueText": "closed plan actions still available",
+        "status": "verified",
+        "relatedTests": [
+          "Closed plan blocks operational actions",
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-15",
+        "issueText": "Field 18 wiped / supplemental remarks misplaced",
+        "status": "verified",
+        "relatedTests": [
+          "Invalid surveillance B2 is blocked",
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-16",
+        "issueText": "sync shows stale Field 18 instead of accepted provider value",
+        "status": "verified",
+        "relatedTests": [
+          "Invalid equipment SCE is blocked",
+          "Invalid surveillance B2 is blocked",
+          "Closed plan blocks operational actions",
+          "Provider retrieve omits home base",
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-17",
+        "issueText": "homebase and phone not submitted/persisted in Pilot Data",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-18",
+        "issueText": "provider trademark/name usage",
+        "status": "verified",
+        "relatedTests": [
+          "Invalid equipment SCE is blocked",
+          "Closed plan blocks operational actions",
+          "Provider retrieve omits home base",
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-19",
+        "issueText": "public/live filing confusion",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-20",
+        "issueText": "need RetrieveFlightPlan verification",
+        "status": "verified",
+        "relatedTests": [
+          "Provider retrieve omits home base",
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      },
+      {
+        "id": "SEAN-21",
+        "issueText": "need negative/failure scenarios",
+        "status": "verified",
+        "relatedTests": [
+          "Sean - grey text and button contrast flagged for UI review",
+          "Sean - Open Saved Plans button opens visible state",
+          "Sean - Clear form clears prior errors",
+          "Sean - Long provider errors render without clipping",
+          "Sean - Default altitude and fuel require user confirmation",
+          "Sean - Screen does not jump while typing"
+        ],
+        "lastPassFail": "pass",
+        "evidenceLocation": "certification report",
+        "notes": "Covered by mocked certification scenario."
+      }
+    ]
+  },
+  "remainingRisks": [
+    "Live provider lifecycle calls remain manual/lab-gated.",
+    "Visual UI items require browser screenshot evidence.",
+    "Realtime provider push notification behavior requires an integration or browser harness."
+  ],
+  "failures": []
+}

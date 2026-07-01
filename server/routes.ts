@@ -40,6 +40,12 @@ import { maybeSyncLogbookProSubscription } from "./paypal-subscription-sync";
 import { buildMarketplaceListingFeeBreakdown } from "./marketplace-fees";
 import { resolveTfmsAccess } from "./lib/tier";
 import { buildCorsOptions } from "./corsOptions";
+import {
+  getFlightServiceCertificationReport,
+  getLatestFlightServiceCertificationReport,
+  listFlightServiceCertificationReports,
+  resolveFlightServiceCertificationDownload,
+} from "./services/flightServiceCertificationReports";
 import { resolveTfmsProviderKey, type TfmsOverlay, type TfmsStatus } from "./services/tfms/provider";
 import { createStubTfmsProvider } from "./services/tfms/providers/stub";
 import { createSoftAuthRateLimiter } from "./middleware/rateLimit";
@@ -21583,6 +21589,59 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to build Leidos Flight Service plan debug:", error);
       res.status(500).json({ error: "Failed to build Leidos Flight Service plan debug" });
+    }
+  });
+
+  app.get("/api/admin/certification/latest", isAuthenticated, isSuperAdmin, async (_req, res) => {
+    try {
+      const latest = getLatestFlightServiceCertificationReport();
+      if (!latest) {
+        return res.json({
+          exists: false,
+          message: "No certification report has been generated yet. Run npm run certification:flight-service:report from the backend environment.",
+        });
+      }
+      res.json({ exists: true, ...latest });
+    } catch (error) {
+      console.error("Failed to read latest Flight Service certification report:", error);
+      res.status(500).json({ error: "Failed to read Flight Service certification report" });
+    }
+  });
+
+  app.get("/api/admin/certification/reports", isAuthenticated, isSuperAdmin, async (_req, res) => {
+    try {
+      res.json({ reports: listFlightServiceCertificationReports() });
+    } catch (error) {
+      console.error("Failed to list Flight Service certification reports:", error);
+      res.status(500).json({ error: "Failed to list Flight Service certification reports" });
+    }
+  });
+
+  app.get("/api/admin/certification/reports/:id", isAuthenticated, isSuperAdmin, async (req, res) => {
+    try {
+      const report = getFlightServiceCertificationReport(String(req.params.id || ""));
+      if (!report) {
+        return res.status(404).json({ error: "Certification report not found" });
+      }
+      res.json(report);
+    } catch (error) {
+      console.error("Failed to read Flight Service certification report:", error);
+      res.status(500).json({ error: "Failed to read Flight Service certification report" });
+    }
+  });
+
+  app.get("/api/admin/certification/reports/:id/download/:format", isAuthenticated, isSuperAdmin, async (req, res) => {
+    try {
+      const download = resolveFlightServiceCertificationDownload(String(req.params.id || ""), String(req.params.format || ""));
+      if (!download) {
+        return res.status(404).json({ error: "Certification report file not found" });
+      }
+      res.setHeader("Content-Type", download.contentType);
+      res.setHeader("Content-Disposition", `${download.contentType.startsWith("text/html") ? "inline" : "attachment"}; filename="${download.fileName}"`);
+      fs.createReadStream(download.path).pipe(res);
+    } catch (error) {
+      console.error("Failed to download Flight Service certification report:", error);
+      res.status(500).json({ error: "Failed to download Flight Service certification report" });
     }
   });
 

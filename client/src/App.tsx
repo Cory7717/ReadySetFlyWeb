@@ -293,6 +293,7 @@ function Router() {
           <Route path="/owner-payout-setup" component={OwnerPayoutSetup} />
           <Route path="/owner-withdrawals" component={OwnerWithdrawals} />
           <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/certification" component={AdminDashboard} />
           <Route path="/admin/invite" component={AdminInviteAccept} />
           <Route path="/verify-identity" component={VerifyIdentity} />
           <Route path="/settings" component={Settings} />
@@ -347,6 +348,7 @@ function Router() {
           <Route path="/owner-payout-setup" component={RequireAuth} />
           <Route path="/owner-withdrawals" component={RequireAuth} />
           <Route path="/admin" component={RequireAuth} />
+          <Route path="/admin/certification" component={RequireAuth} />
           <Route path="/admin/invite" component={RequireAuth} />
           <Route path="/verify-identity" component={RequireAuth} />
           <Route path="/settings" component={RequireAuth} />

@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useState, useMemo, Fragment, useRef } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -154,6 +155,117 @@ type CrmSalesEmailPreview = {
   subject: string;
   html: string;
   text: string;
+};
+
+type CertificationMismatch = {
+  field: string;
+  visibleValue?: unknown;
+  savedValue?: unknown;
+  submittedValue?: unknown;
+  retrievedValue?: unknown;
+  displayedValue?: unknown;
+  issue: string;
+  severity: "blocker" | "major" | "minor";
+};
+
+type CertificationReportSummary = {
+  id: string;
+  generatedAt?: string | null;
+  buildCommit?: string | null;
+  mode?: string | null;
+  readinessPercent: number;
+  productionRecommendation: string;
+  totalScenarios: number;
+  passed: number;
+  failed: number;
+  blockers: number;
+  majorIssues: number;
+  minorIssues: number;
+  providerCallsAttempted: number;
+  providerCallsBlocked: number;
+  providerCallsSimulated?: number;
+  seanFeedbackCoverage?: { covered?: number; total?: number; items?: any[] };
+  downloads?: { json?: string; markdown?: string; html?: string };
+};
+
+type CertificationReportDetail = {
+  id: string;
+  generatedAt?: string;
+  buildCommit?: string;
+  mode?: string;
+  seed?: number;
+  count?: number;
+  readinessPercent: number;
+  productionRecommendation: string;
+  summary: {
+    totalScenarios: number;
+    passed: number;
+    failed: number;
+    blockers: number;
+    majorIssues: number;
+    minorIssues: number;
+    providerCallsAttempted: number;
+    providerCallsBlocked: number;
+    providerCallsSimulated?: number;
+    seanFeedbackCoverage?: number;
+  };
+  categories?: Array<{
+    name: string;
+    status: "PASS" | "FAIL" | "NOT RUN";
+    passed: number;
+    failed: number;
+    blockers: number;
+    majorIssues: number;
+    minorIssues: number;
+  }>;
+  seanFeedbackCoverage?: {
+    covered?: number;
+    total?: number;
+    items?: Array<{
+      id: string;
+      issueText: string;
+      status: string;
+      relatedTests: string[];
+      lastPassFail: string;
+      evidenceLocation: string;
+      notes: string;
+    }>;
+  };
+  failures?: Array<{
+    name: string;
+    description: string;
+    reproductionSteps: string[];
+    mismatches: CertificationMismatch[];
+    validationErrors: string[];
+    providerCallAttempted: boolean;
+    providerCallBlocked: boolean;
+  }>;
+  remainingRisks?: string[];
+  downloads?: { json?: string; markdown?: string; html?: string };
+};
+
+type CertificationLatestResponse = {
+  exists: boolean;
+  message?: string;
+  summary?: CertificationReportSummary;
+  report?: CertificationReportDetail;
+};
+
+const safeCertificationValue = (value: unknown) => {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "[unavailable]";
+  }
+};
+
+const certificationBadgeVariant = (status?: string) => {
+  if (!status) return "outline" as const;
+  if (/ready|pass|verified/i.test(status) && !/not ready/i.test(status)) return "default" as const;
+  if (/not ready|fail|open|blocker/i.test(status)) return "destructive" as const;
+  return "secondary" as const;
 };
 
 const CRM_CAMPAIGN_AUDIENCE_TYPES = [
@@ -441,6 +553,7 @@ const getBannerReactivationSchedule = (banner: BannerAd) => {
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const [location] = useLocation();
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
   const normalizedAdminEmail = (user?.email ?? "").trim().toLowerCase();
   const canSeeFinance = FINANCE_EMAILS.includes(normalizedAdminEmail);
@@ -451,7 +564,7 @@ export default function AdminDashboard() {
     (adminRole ? ADMIN_ROLE_PERMISSIONS[adminRole]?.includes(permission) : false) ||
     adminPermissions.includes(permission);
 
-  const [activeTab, setActiveTab] = useState("analytics");
+  const [activeTab, setActiveTab] = useState(location === "/admin/certification" ? "certification" : "analytics");
   const [featureUsageRange, setFeatureUsageRange] = useState("7");
   const [featureEngagementOpen, setFeatureEngagementOpen] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState<VerificationSubmission | null>(null);
@@ -476,6 +589,7 @@ export default function AdminDashboard() {
       canAccess("banners") && "banners",
       canSeeFinance && "finance",
       canSeeFinance && "personal-finance",
+      isSuperAdmin && "certification",
       isSuperAdmin && "admins",
     ].filter(Boolean) as string[];
 
@@ -483,6 +597,12 @@ export default function AdminDashboard() {
       setActiveTab(allowed[0]);
     }
   }, [adminRole, adminPermissions, canSeeFinance, isSuperAdmin, activeTab]);
+
+  useEffect(() => {
+    if (location === "/admin/certification" && isSuperAdmin) {
+      setActiveTab("certification");
+    }
+  }, [location, isSuperAdmin]);
   
   // CRM state
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
@@ -944,6 +1064,16 @@ export default function AdminDashboard() {
   const { data: promoCodes = [], isLoading: promoCodesLoading } = useQuery<PromoCode[]>({
     queryKey: ["/api/admin/promo-codes"],
     enabled: activeTab === "promo-codes",
+  });
+
+  const { data: certificationLatest, isLoading: certificationLatestLoading } = useQuery<CertificationLatestResponse>({
+    queryKey: ["/api/admin/certification/latest"],
+    enabled: activeTab === "certification" && isSuperAdmin,
+  });
+
+  const { data: certificationReportsData, isLoading: certificationReportsLoading } = useQuery<{ reports: CertificationReportSummary[] }>({
+    queryKey: ["/api/admin/certification/reports"],
+    enabled: activeTab === "certification" && isSuperAdmin,
   });
 
   // Stale listings query
@@ -3162,6 +3292,12 @@ export default function AdminDashboard() {
             <TabsTrigger value="personal-finance" data-testid="tab-personal-finance" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
               <Wallet className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
               <span>Personal Finance</span>
+            </TabsTrigger>
+          )}
+          {isSuperAdmin && (
+            <TabsTrigger value="certification" data-testid="tab-certification" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <Shield className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>Flight Service Certification</span>
             </TabsTrigger>
           )}
           {isSuperAdmin && (
@@ -6362,6 +6498,279 @@ export default function AdminDashboard() {
         {canSeeFinance && (
           <TabsContent value="personal-finance" className="space-y-6">
             <PersonalFinance isActive={activeTab === "personal-finance"} />
+          </TabsContent>
+        )}
+
+        {isSuperAdmin && (
+          <TabsContent value="certification" className="space-y-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold">Flight Service Certification</h2>
+                <p className="text-sm text-muted-foreground">
+                  Mocked production-readiness results for Flight Service filing. Provider/lab tests cannot be launched from this page.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  queryClient.invalidateQueries({ queryKey: ["/api/admin/certification/latest"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/admin/certification/reports"] });
+                }}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh reports
+              </Button>
+            </div>
+
+            {certificationLatestLoading ? (
+              <Card>
+                <CardContent className="py-10 text-sm text-muted-foreground">Loading certification reports...</CardContent>
+              </Card>
+            ) : !certificationLatest?.exists ? (
+              <Card className="border-dashed">
+                <CardHeader>
+                  <CardTitle>No certification report has been generated yet.</CardTitle>
+                  <CardDescription>
+                    Run <code className="rounded bg-muted px-1 py-0.5">npm run certification:flight-service:report</code> from the backend environment.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            ) : (
+              <>
+                {(() => {
+                  const report = certificationLatest.report;
+                  const summary = certificationLatest.summary;
+                  if (!report || !summary) return null;
+                  const downloads = report.downloads || summary.downloads || {};
+                  return (
+                    <div className="space-y-6">
+                      <Card>
+                        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <CardTitle className="flex flex-wrap items-center gap-2">
+                              Latest Certification Run
+                              <Badge variant={certificationBadgeVariant(report.productionRecommendation)}>
+                                {report.productionRecommendation}
+                              </Badge>
+                            </CardTitle>
+                            <CardDescription>
+                              Generated {report.generatedAt ? new Date(report.generatedAt).toLocaleString() : "-"} | Commit {report.buildCommit || "unknown"} | Mode {report.mode || "mocked"} | Seed {report.seed ?? "-"}
+                            </CardDescription>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {downloads.html && (
+                              <Button asChild variant="outline" size="sm">
+                                <a href={apiUrl(downloads.html)} target="_blank" rel="noreferrer">View HTML</a>
+                              </Button>
+                            )}
+                            {downloads.markdown && (
+                              <Button asChild variant="outline" size="sm">
+                                <a href={apiUrl(downloads.markdown)}>Download MD</a>
+                              </Button>
+                            )}
+                            {downloads.json && (
+                              <Button asChild variant="outline" size="sm">
+                                <a href={apiUrl(downloads.json)}>Download JSON</a>
+                              </Button>
+                            )}
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-5">
+                          <div className="grid gap-4 md:grid-cols-4">
+                            <div className="rounded-lg border p-4">
+                              <div className="text-xs text-muted-foreground">Readiness</div>
+                              <div className="text-3xl font-bold">{report.readinessPercent}%</div>
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                Production ready only when blockers and failures are zero.
+                              </div>
+                            </div>
+                            <div className="rounded-lg border p-4">
+                              <div className="text-xs text-muted-foreground">Scenarios</div>
+                              <div className="text-3xl font-bold">{report.summary.totalScenarios}</div>
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {report.summary.passed} passed / {report.summary.failed} failed
+                              </div>
+                            </div>
+                            <div className="rounded-lg border p-4">
+                              <div className="text-xs text-muted-foreground">Issues</div>
+                              <div className="text-3xl font-bold">{report.summary.blockers}</div>
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {report.summary.majorIssues} major / {report.summary.minorIssues} minor
+                              </div>
+                            </div>
+                            <div className="rounded-lg border p-4">
+                              <div className="text-xs text-muted-foreground">Provider Calls</div>
+                              <div className="text-3xl font-bold">{report.summary.providerCallsAttempted}</div>
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {report.summary.providerCallsBlocked} blocked/mocked | {report.summary.providerCallsSimulated || 0} simulated
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                            <div className="font-semibold">Safety guard</div>
+                            <p className="mt-1 text-muted-foreground">
+                              This page reads generated reports only. It does not run provider/lab certification. Provider mode requires backend env confirmation.
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {(report.categories || []).map((category) => (
+                          <Card key={category.name}>
+                            <CardHeader className="space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <CardTitle className="text-base">{category.name}</CardTitle>
+                                <Badge variant={certificationBadgeVariant(category.status)}>{category.status}</Badge>
+                              </div>
+                              <CardDescription>
+                                {category.passed} passed / {category.failed} failed
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex flex-wrap gap-2 text-xs">
+                              <Badge variant={category.blockers ? "destructive" : "outline"}>{category.blockers} blockers</Badge>
+                              <Badge variant={category.majorIssues ? "destructive" : "outline"}>{category.majorIssues} major</Badge>
+                              <Badge variant={category.minorIssues ? "secondary" : "outline"}>{category.minorIssues} minor</Badge>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Failed Scenarios</CardTitle>
+                          <CardDescription>Mismatch diffs are redacted by the backend before display.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          {!report.failures?.length ? (
+                            <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+                              No failed mocked certification scenarios in the latest report.
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {report.failures.map((failure) => (
+                                <div key={failure.name} className="rounded-lg border p-4">
+                                  <div className="font-semibold">{failure.name}</div>
+                                  <div className="mt-1 text-sm text-muted-foreground">{failure.description}</div>
+                                  <div className="mt-3 grid gap-2">
+                                    {failure.mismatches.map((mismatch, index) => (
+                                      <div key={`${failure.name}-${mismatch.field}-${index}`} className="rounded-md bg-muted p-3 text-xs">
+                                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                                          <Badge variant={mismatch.severity === "blocker" ? "destructive" : "secondary"}>{mismatch.severity}</Badge>
+                                          <span className="font-semibold">{mismatch.field}</span>
+                                          <span>{mismatch.issue}</span>
+                                        </div>
+                                        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                                          <div><span className="text-muted-foreground">Visible</span><div className="break-words font-mono">{safeCertificationValue(mismatch.visibleValue)}</div></div>
+                                          <div><span className="text-muted-foreground">Saved</span><div className="break-words font-mono">{safeCertificationValue(mismatch.savedValue)}</div></div>
+                                          <div><span className="text-muted-foreground">Submitted</span><div className="break-words font-mono">{safeCertificationValue(mismatch.submittedValue)}</div></div>
+                                          <div><span className="text-muted-foreground">Retrieved</span><div className="break-words font-mono">{safeCertificationValue(mismatch.retrievedValue)}</div></div>
+                                          <div><span className="text-muted-foreground">Displayed</span><div className="break-words font-mono">{safeCertificationValue(mismatch.displayedValue)}</div></div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {failure.reproductionSteps?.length > 0 && (
+                                    <div className="mt-3 text-xs text-muted-foreground">
+                                      Steps: {failure.reproductionSteps.join(" | ")}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Provider Review Feedback Coverage</CardTitle>
+                          <CardDescription>
+                            {report.seanFeedbackCoverage?.covered ?? 0} of {report.seanFeedbackCoverage?.total ?? 0} review items have automated or report evidence.
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="overflow-x-auto rounded-md border">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/50">
+                                <tr>
+                                  <th className="p-3 text-left">Issue</th>
+                                  <th className="p-3 text-left">Status</th>
+                                  <th className="p-3 text-left">Last result</th>
+                                  <th className="p-3 text-left">Evidence</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(report.seanFeedbackCoverage?.items || []).map((item) => (
+                                  <tr key={item.id} className="border-t">
+                                    <td className="p-3">{item.issueText}</td>
+                                    <td className="p-3"><Badge variant={certificationBadgeVariant(item.status)}>{item.status}</Badge></td>
+                                    <td className="p-3">{item.lastPassFail}</td>
+                                    <td className="p-3 text-muted-foreground">{item.evidenceLocation}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Report History</CardTitle>
+                          <CardDescription>Recent generated certification reports from the backend report directory.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          {certificationReportsLoading ? (
+                            <div className="text-sm text-muted-foreground">Loading report history...</div>
+                          ) : !certificationReportsData?.reports?.length ? (
+                            <div className="text-sm text-muted-foreground">No report history yet.</div>
+                          ) : (
+                            <div className="overflow-x-auto rounded-md border">
+                              <table className="w-full text-sm">
+                                <thead className="bg-muted/50">
+                                  <tr>
+                                    <th className="p-3 text-left">Run</th>
+                                    <th className="p-3 text-left">Readiness</th>
+                                    <th className="p-3 text-left">Recommendation</th>
+                                    <th className="p-3 text-left">Tests</th>
+                                    <th className="p-3 text-left">Issues</th>
+                                    <th className="p-3 text-left">Downloads</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {certificationReportsData.reports.map((item) => (
+                                    <tr key={item.id} className="border-t">
+                                      <td className="p-3">
+                                        <div className="font-medium">{item.generatedAt ? new Date(item.generatedAt).toLocaleString() : item.id}</div>
+                                        <div className="text-xs text-muted-foreground">{item.buildCommit || "unknown"} | {item.mode || "mocked"}</div>
+                                      </td>
+                                      <td className="p-3 font-semibold">{item.readinessPercent}%</td>
+                                      <td className="p-3"><Badge variant={certificationBadgeVariant(item.productionRecommendation)}>{item.productionRecommendation}</Badge></td>
+                                      <td className="p-3">{item.passed}/{item.totalScenarios}</td>
+                                      <td className="p-3">{item.blockers} blockers, {item.majorIssues} major, {item.minorIssues} minor</td>
+                                      <td className="p-3">
+                                        <div className="flex flex-wrap gap-2">
+                                          {item.downloads?.html && <a className="text-primary hover:underline" href={apiUrl(item.downloads.html)} target="_blank" rel="noreferrer">HTML</a>}
+                                          {item.downloads?.markdown && <a className="text-primary hover:underline" href={apiUrl(item.downloads.markdown)}>MD</a>}
+                                          {item.downloads?.json && <a className="text-primary hover:underline" href={apiUrl(item.downloads.json)}>JSON</a>}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
           </TabsContent>
         )}
 

@@ -313,6 +313,65 @@ type StressLatestResponse = {
   report?: StressRunDetail;
 };
 
+type LeidosLabRunSummary = {
+  id: string;
+  runId: string;
+  suiteType: "leidos_lab";
+  providerMode: "leidos_lab";
+  mode: string;
+  status: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMs: number;
+  totalScenarios: number;
+  passed: number;
+  failed: number;
+  warnings: number;
+  providerNormalized: number;
+  needsLeidosClarification: number;
+  providerPlanIds: string[];
+  versionStamps: string[];
+  scenarioCategoryCoverage: string[];
+  environmentSafety?: {
+    environment?: string;
+    productionFilingDisabled?: boolean;
+    providerCalls?: string;
+    labEndpointConfirmed?: boolean;
+    acknowledgementCurrent?: boolean;
+  } | null;
+  failureCount: number;
+  downloads?: { json?: string; csv?: string; html?: string };
+};
+
+type LeidosLabRunDetail = LeidosLabRunSummary & {
+  scenarios?: Array<{
+    scenarioId: string;
+    name: string;
+    category: string;
+    status: string;
+    providerPlanId?: string | null;
+    versionStamp?: string | null;
+    replayCommand?: string;
+    diff?: Array<{ field: string; classification: string; issue: string; expected?: unknown; actual?: unknown }>;
+  }>;
+  failures?: Array<{
+    scenarioId: string;
+    scenarioName: string;
+    category: string;
+    classification: string;
+    replayCommand: string;
+    diff: Array<{ field: string; classification: string; issue: string; expected?: unknown; actual?: unknown }>;
+  }>;
+  replayCommands?: string[];
+};
+
+type LeidosLabLatestResponse = {
+  exists: boolean;
+  message?: string;
+  summary?: LeidosLabRunSummary;
+  report?: LeidosLabRunDetail;
+};
+
 const safeCertificationValue = (value: unknown) => {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
@@ -1152,6 +1211,16 @@ export default function AdminDashboard() {
 
   const { data: stressRunsData, isLoading: stressRunsLoading } = useQuery<{ runs: StressRunSummary[] }>({
     queryKey: ["/api/admin/flight-service-certification/runs"],
+    enabled: activeTab === "certification" && isSuperAdmin,
+  });
+
+  const { data: leidosLabLatest, isLoading: leidosLabLatestLoading } = useQuery<LeidosLabLatestResponse>({
+    queryKey: ["/api/admin/flight-service-certification/leidos-lab/runs/latest"],
+    enabled: activeTab === "certification" && isSuperAdmin,
+  });
+
+  const { data: leidosLabRunsData, isLoading: leidosLabRunsLoading } = useQuery<{ runs: LeidosLabRunSummary[] }>({
+    queryKey: ["/api/admin/flight-service-certification/leidos-lab/runs"],
     enabled: activeTab === "certification" && isSuperAdmin,
   });
 
@@ -6598,7 +6667,7 @@ export default function AdminDashboard() {
               <div>
                 <h2 className="text-xl font-semibold">Flight Service Certification</h2>
                 <p className="text-sm text-muted-foreground">
-                  Mocked production-readiness results for Flight Service filing. Provider/lab tests cannot be launched from this page.
+                  Unit tests, mocked stress tests, and real Leidos LAB verification results. Provider/lab tests cannot be launched from this page.
                 </p>
               </div>
               <Button
@@ -6609,12 +6678,196 @@ export default function AdminDashboard() {
                   queryClient.invalidateQueries({ queryKey: ["/api/admin/certification/reports"] });
                   queryClient.invalidateQueries({ queryKey: ["/api/admin/flight-service-certification/runs/latest"] });
                   queryClient.invalidateQueries({ queryKey: ["/api/admin/flight-service-certification/runs"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/admin/flight-service-certification/leidos-lab/runs/latest"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/admin/flight-service-certification/leidos-lab/runs"] });
                 }}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Refresh reports
               </Button>
             </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Unit Tests</CardTitle>
+                  <CardDescription>Local validation and payload coverage.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Badge variant="default">Run via npm</Badge>
+                  <div className="mt-2 text-xs text-muted-foreground">npm run test:flight-service</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Stress Tests</CardTitle>
+                  <CardDescription>Mocked deterministic and randomized scenarios.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Badge variant={stressLatest?.report?.status === "passed" ? "default" : stressLatest?.exists ? "destructive" : "secondary"}>
+                    {stressLatest?.exists ? stressLatest.report?.status : "No run"}
+                  </Badge>
+                  <div className="mt-2 text-xs text-muted-foreground">Provider Calls: Mocked</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Leidos LAB Verification</CardTitle>
+                  <CardDescription>Real LAB provider workflow evidence.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Badge variant={leidosLabLatest?.report?.status === "passed" ? "default" : leidosLabLatest?.exists ? "destructive" : "secondary"}>
+                    {leidosLabLatest?.exists ? leidosLabLatest.report?.status : "No LAB run"}
+                  </Badge>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Provider Calls: {leidosLabLatest?.report?.environmentSafety?.providerCalls || "Real LAB when enabled"}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <CardTitle className="flex flex-wrap items-center gap-2">
+                    Leidos LAB Verification
+                    {leidosLabLatest?.exists && leidosLabLatest.report ? (
+                      <Badge variant={leidosLabLatest.report.status === "passed" ? "default" : "destructive"}>
+                        {leidosLabLatest.report.status}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">No LAB run</Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    Real Leidos LAB-only certification. Run from backend: <code className="rounded bg-muted px-1 py-0.5">npm run certification:leidos -- --mode=smoke</code>
+                  </CardDescription>
+                </div>
+                {leidosLabLatest?.exists && leidosLabLatest.report?.downloads && (
+                  <div className="flex flex-wrap gap-2">
+                    {leidosLabLatest.report.downloads.html && <Button asChild variant="outline" size="sm"><a href={apiUrl(leidosLabLatest.report.downloads.html)} target="_blank" rel="noreferrer">View HTML</a></Button>}
+                    {leidosLabLatest.report.downloads.json && <Button asChild variant="outline" size="sm"><a href={apiUrl(leidosLabLatest.report.downloads.json)}>Export JSON</a></Button>}
+                    {leidosLabLatest.report.downloads.csv && <Button asChild variant="outline" size="sm"><a href={apiUrl(leidosLabLatest.report.downloads.csv)}>Export CSV</a></Button>}
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {leidosLabLatestLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading Leidos LAB certification results...</div>
+                ) : !leidosLabLatest?.exists ? (
+                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                    No Leidos LAB run has ever completed. The command fails closed unless LAB env flags are present:
+                    <div className="mt-2 font-mono text-xs">
+                      FLIGHT_SERVICE_PROVIDER=leidos LEIDOS_ENV=lab LEIDOS_LAB_CERTIFICATION_ENABLED=true FLIGHT_SERVICE_OPERATIONAL_FILING_ENABLED=false
+                    </div>
+                  </div>
+                ) : leidosLabLatest.report ? (
+                  <>
+                    {(() => {
+                      const report = leidosLabLatest.report;
+                      const completedAt = report.completedAt || null;
+                      const ageHours = completedAt ? (Date.now() - new Date(completedAt).getTime()) / 36e5 : null;
+                      const warnings = [
+                        report.failed > 0 ? `${report.failed} Leidos LAB scenario(s) failed.` : null,
+                        ageHours !== null && ageHours > 24 ? "Latest Leidos LAB run is older than 24 hours." : null,
+                        report.environmentSafety?.providerCalls !== "Real LAB" ? "Latest LAB run did not use real Leidos LAB calls." : null,
+                        report.environmentSafety?.productionFilingDisabled === false ? "Production filing appears enabled. Stop and verify environment." : null,
+                        report.needsLeidosClarification > 0 ? `${report.needsLeidosClarification} item(s) need Leidos clarification.` : null,
+                      ].filter(Boolean);
+                      return (
+                        <>
+                          {warnings.length > 0 && (
+                            <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                              <div className="font-semibold">Leidos LAB Warnings</div>
+                              <ul className="mt-2 list-disc space-y-1 pl-5">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+                            </div>
+                          )}
+                          <div className="grid gap-4 md:grid-cols-5">
+                            <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">Mode</div><div className="text-2xl font-bold capitalize">{report.mode}</div></div>
+                            <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">LAB Scenarios</div><div className="text-2xl font-bold">{report.totalScenarios}</div><div className="text-xs text-muted-foreground">{report.passed} passed / {report.failed} failed</div></div>
+                            <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">Clarifications</div><div className="text-2xl font-bold">{report.needsLeidosClarification}</div></div>
+                            <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">Provider Normalized</div><div className="text-2xl font-bold">{report.providerNormalized}</div></div>
+                            <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">Last LAB Run</div><div className="text-sm font-semibold">{completedAt ? new Date(completedAt).toLocaleString() : "-"}</div></div>
+                          </div>
+                          <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                            <div className="font-semibold">LAB safety</div>
+                            <div className="mt-2 grid gap-2 md:grid-cols-4">
+                              <div>Environment: <span className="font-mono">{report.environmentSafety?.environment || "-"}</span></div>
+                              <div>Production disabled: <span className="font-mono">{String(report.environmentSafety?.productionFilingDisabled ?? false)}</span></div>
+                              <div>Endpoint LAB: <span className="font-mono">{String(report.environmentSafety?.labEndpointConfirmed ?? false)}</span></div>
+                              <div>Ack current: <span className="font-mono">{String(report.environmentSafety?.acknowledgementCurrent ?? false)}</span></div>
+                            </div>
+                          </div>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="rounded-lg border p-4">
+                              <div className="font-semibold">Provider Plan IDs</div>
+                              <div className="mt-2 flex flex-wrap gap-2">{(report.providerPlanIds || []).length ? report.providerPlanIds.map((id) => <Badge key={id} variant="outline">{id}</Badge>) : <span className="text-sm text-muted-foreground">None captured</span>}</div>
+                            </div>
+                            <div className="rounded-lg border p-4">
+                              <div className="font-semibold">Version Stamps</div>
+                              <div className="mt-2 flex flex-wrap gap-2">{(report.versionStamps || []).length ? report.versionStamps.map((id) => <Badge key={id} variant="outline">{id}</Badge>) : <span className="text-sm text-muted-foreground">None captured</span>}</div>
+                            </div>
+                          </div>
+                          <div>
+                            <h3 className="mb-2 text-sm font-semibold">LAB Scenario Details</h3>
+                            <div className="space-y-3">
+                              {(report.scenarios || []).map((scenario) => (
+                                <details key={scenario.scenarioId} className="rounded-lg border p-4">
+                                  <summary className="cursor-pointer font-semibold">{scenario.category}: {scenario.name} <Badge className="ml-2" variant={scenario.status === "passed" ? "default" : "destructive"}>{scenario.status}</Badge></summary>
+                                  <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
+                                    <div>Provider Plan: <span className="font-mono">{scenario.providerPlanId || "-"}</span></div>
+                                    <div>Version: <span className="font-mono">{scenario.versionStamp || "-"}</span></div>
+                                  </div>
+                                  {(scenario.diff || []).length > 0 && (
+                                    <div className="mt-3 space-y-2">
+                                      {(scenario.diff || []).map((diff, index) => (
+                                        <div key={`${scenario.scenarioId}-${index}`} className="rounded-md bg-muted p-3 text-xs">
+                                          <div className="font-semibold">{diff.classification}: {diff.field}</div>
+                                          <div>{diff.issue}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </details>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Leidos LAB Run History</CardTitle>
+                <CardDescription>Historical real-LAB reports from <code className="rounded bg-muted px-1 py-0.5">tests/flight-service/leidos-lab/reports/history</code>.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {leidosLabRunsLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading Leidos LAB history...</div>
+                ) : !leidosLabRunsData?.runs?.length ? (
+                  <div className="text-sm text-muted-foreground">No Leidos LAB run history yet.</div>
+                ) : (
+                  <div className="overflow-x-auto rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50"><tr><th className="p-3 text-left">Run</th><th className="p-3 text-left">Status</th><th className="p-3 text-left">Mode</th><th className="p-3 text-left">Results</th><th className="p-3 text-left">Exports</th></tr></thead>
+                      <tbody>{leidosLabRunsData.runs.map((run) => (
+                        <tr key={run.runId} className="border-t">
+                          <td className="p-3"><div className="font-medium">{run.completedAt ? new Date(run.completedAt).toLocaleString() : run.runId}</div><div className="text-xs text-muted-foreground">{run.runId}</div></td>
+                          <td className="p-3"><Badge variant={run.status === "passed" ? "default" : "destructive"}>{run.status}</Badge></td>
+                          <td className="p-3 capitalize">{run.mode}</td>
+                          <td className="p-3">{run.passed}/{run.totalScenarios} passed, {run.failed} failed, {run.needsLeidosClarification} clarification</td>
+                          <td className="p-3"><div className="flex flex-wrap gap-2">{run.downloads?.html && <a className="text-primary hover:underline" href={apiUrl(run.downloads.html)} target="_blank" rel="noreferrer">HTML</a>}{run.downloads?.json && <a className="text-primary hover:underline" href={apiUrl(run.downloads.json)}>JSON</a>}{run.downloads?.csv && <a className="text-primary hover:underline" href={apiUrl(run.downloads.csv)}>CSV</a>}</div></td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             <Card>
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

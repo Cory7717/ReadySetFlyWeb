@@ -54,6 +54,13 @@ import {
   listFlightServiceStressRuns,
   resolveFlightServiceStressExport,
 } from "./services/flightServiceStressReports";
+import {
+  getLeidosLabCertificationRun,
+  getLeidosLabCertificationRunFailures,
+  getLatestLeidosLabCertificationRun,
+  listLeidosLabCertificationRuns,
+  resolveLeidosLabCertificationExport,
+} from "./services/flightServiceLeidosLabReports";
 import { resolveTfmsProviderKey, type TfmsOverlay, type TfmsStatus } from "./services/tfms/provider";
 import { createStubTfmsProvider } from "./services/tfms/providers/stub";
 import { createSoftAuthRateLimiter } from "./middleware/rateLimit";
@@ -21731,6 +21738,66 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to export Flight Service stress certification run:", error);
       res.status(500).json({ error: "Failed to export Flight Service stress certification run" });
+    }
+  });
+
+  app.get("/api/admin/flight-service-certification/leidos-lab/runs", isAuthenticated, isSuperAdmin, async (_req, res) => {
+    try {
+      res.json({ runs: listLeidosLabCertificationRuns() });
+    } catch (error) {
+      console.error("Failed to list Leidos LAB certification runs:", error);
+      res.status(500).json({ error: "Failed to list Leidos LAB certification runs" });
+    }
+  });
+
+  app.get("/api/admin/flight-service-certification/leidos-lab/runs/latest", isAuthenticated, isSuperAdmin, async (_req, res) => {
+    try {
+      const latest = getLatestLeidosLabCertificationRun();
+      if (!latest) {
+        return res.json({
+          exists: false,
+          message: "No Leidos LAB certification run has completed yet. Run npm run certification:leidos -- --mode=smoke from the backend environment after setting the LAB safety env flags.",
+        });
+      }
+      res.json({ exists: true, ...latest });
+    } catch (error) {
+      console.error("Failed to read latest Leidos LAB certification run:", error);
+      res.status(500).json({ error: "Failed to read latest Leidos LAB certification run" });
+    }
+  });
+
+  app.get("/api/admin/flight-service-certification/leidos-lab/runs/:id", isAuthenticated, isSuperAdmin, async (req, res) => {
+    try {
+      const report = getLeidosLabCertificationRun(String(req.params.id || ""));
+      if (!report) return res.status(404).json({ error: "Leidos LAB certification run not found" });
+      res.json(report);
+    } catch (error) {
+      console.error("Failed to read Leidos LAB certification run:", error);
+      res.status(500).json({ error: "Failed to read Leidos LAB certification run" });
+    }
+  });
+
+  app.get("/api/admin/flight-service-certification/leidos-lab/runs/:id/failures", isAuthenticated, isSuperAdmin, async (req, res) => {
+    try {
+      const failures = getLeidosLabCertificationRunFailures(String(req.params.id || ""));
+      if (!failures) return res.status(404).json({ error: "Leidos LAB certification run not found" });
+      res.json({ failures });
+    } catch (error) {
+      console.error("Failed to read Leidos LAB certification failures:", error);
+      res.status(500).json({ error: "Failed to read Leidos LAB certification failures" });
+    }
+  });
+
+  app.get("/api/admin/flight-service-certification/leidos-lab/runs/:id/export.:format", isAuthenticated, isSuperAdmin, async (req, res) => {
+    try {
+      const exportFile = resolveLeidosLabCertificationExport(String(req.params.id || ""), String(req.params.format || ""));
+      if (!exportFile) return res.status(404).json({ error: "Leidos LAB certification export not found" });
+      res.setHeader("Content-Type", exportFile.contentType);
+      res.setHeader("Content-Disposition", `${exportFile.contentType.startsWith("text/html") ? "inline" : "attachment"}; filename="${exportFile.fileName}"`);
+      res.send(exportFile.body);
+    } catch (error) {
+      console.error("Failed to export Leidos LAB certification run:", error);
+      res.status(500).json({ error: "Failed to export Leidos LAB certification run" });
     }
   });
 

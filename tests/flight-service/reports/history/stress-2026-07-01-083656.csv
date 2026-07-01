@@ -1,0 +1,17 @@
+runId,mode,status,total,passed,failed,warnings,durationMs
+stress-2026-07-01-083656,standard,passed,74,74,0,0,1499
+
+category,total,passed,failed
+Time Zones,10,10,0
+ZZZZ,9,9,0
+Equipment,10,10,0
+PBN,10,10,0
+Field 18,7,7,0
+Supplemental Remarks,1,1,0
+Lifecycle,9,9,0
+Retrieve Compare,9,9,0
+Provider Notifications,1,1,0
+Validation,7,7,0
+Environment Safety,1,1,0
+
+failure,category,seed,replayCommand

@@ -1,0 +1,109 @@
+{
+  "runId": "stress-2026-07-01-083656",
+  "buildCommit": "557e3e2",
+  "status": "passed",
+  "startTime": "2026-07-01T13:36:54.704Z",
+  "endTime": "2026-07-01T13:36:56.203Z",
+  "durationMs": 1499,
+  "mode": "standard",
+  "seed": 20260701,
+  "replaySeed": null,
+  "totalScenarios": 74,
+  "passed": 74,
+  "failed": 0,
+  "warnings": 0,
+  "skipped": 0,
+  "categoriesTested": [
+    "Time Zones",
+    "ZZZZ",
+    "Equipment",
+    "PBN",
+    "Field 18",
+    "Supplemental Remarks",
+    "Lifecycle",
+    "Retrieve Compare",
+    "Provider Notifications",
+    "Validation",
+    "Environment Safety"
+  ],
+  "coverageSummary": [
+    {
+      "category": "Time Zones",
+      "total": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    {
+      "category": "ZZZZ",
+      "total": 9,
+      "passed": 9,
+      "failed": 0
+    },
+    {
+      "category": "Equipment",
+      "total": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    {
+      "category": "PBN",
+      "total": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    {
+      "category": "Field 18",
+      "total": 7,
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "category": "Supplemental Remarks",
+      "total": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "category": "Lifecycle",
+      "total": 9,
+      "passed": 9,
+      "failed": 0
+    },
+    {
+      "category": "Retrieve Compare",
+      "total": 9,
+      "passed": 9,
+      "failed": 0
+    },
+    {
+      "category": "Provider Notifications",
+      "total": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "category": "Validation",
+      "total": 7,
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "category": "Environment Safety",
+      "total": 1,
+      "passed": 1,
+      "failed": 0
+    }
+  ],
+  "failures": [],
+  "replayCommands": [],
+  "environmentSafetyStatus": {
+    "environment": "LAB",
+    "operationalFilingEnabled": false,
+    "providerTestModeEnabled": true,
+    "acknowledgementRequired": true,
+    "isOperational": false,
+    "liveProviderCallsAttempted": 0,
+    "liveProviderCallsBlocked": 52,
+    "defaultBehavior": "LAB/mock only"
+  }
+}

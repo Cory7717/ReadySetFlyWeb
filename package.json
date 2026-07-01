@@ -28,6 +28,8 @@
     "certification:flight-service:report": "tsx tests/flight-service/certification-report.ts --write",
     "certification:flight-service:seed": "tsx tests/flight-service/certification-report.ts --write --seed=20260701 --count=250",
     "certification:flight-service:provider": "tsx tests/flight-service/provider-mode.ts",
+    "certification:stress": "tsx tests/flight-service/stress/stress-runner.ts",
+    "test:flight-service:stress": "tsx tests/flight-service/stress/stress-runner.ts --mode=standard",
     "receiver:bridge": "node scripts/receiver-bridge.mjs",
     "receiver:bridge:windows": "powershell -ExecutionPolicy Bypass -File scripts/receiver-bridge-launch.ps1",
     "receiver:bridge:package": "powershell -ExecutionPolicy Bypass -File scripts/package-receiver-bridge.ps1",

@@ -251,6 +251,68 @@ type CertificationLatestResponse = {
   report?: CertificationReportDetail;
 };
 
+type StressCoverageSummary = {
+  category: string;
+  total: number;
+  passed: number;
+  failed: number;
+};
+
+type StressFailure = {
+  testName: string;
+  category: string;
+  seed: number;
+  replayCommand: string;
+  timestamp: string;
+  diff: Array<{ field: string; expected: unknown; actual: unknown; issue: string }>;
+  requestPayload?: unknown;
+  providerPayload?: unknown;
+  retrieveResponse?: unknown;
+  lifecycleBefore?: unknown;
+  lifecycleAfter?: unknown;
+  relatedLogs?: string[];
+};
+
+type StressRunSummary = {
+  id: string;
+  runId: string;
+  mode: string;
+  status: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMs: number;
+  totalScenarios: number;
+  passed: number;
+  failed: number;
+  warnings: number;
+  skipped: number;
+  coverageSummary: StressCoverageSummary[];
+  failureCount: number;
+  environmentSafetyStatus?: {
+    environment?: string;
+    operationalFilingEnabled?: boolean;
+    acknowledgementRequired?: boolean;
+    liveProviderCallsAttempted?: number;
+    liveProviderCallsBlocked?: number;
+  } | null;
+  downloads?: { json?: string; csv?: string; html?: string };
+};
+
+type StressRunDetail = StressRunSummary & {
+  startTime?: string;
+  endTime?: string;
+  failures: StressFailure[];
+  replayCommands?: string[];
+  categoriesTested?: string[];
+};
+
+type StressLatestResponse = {
+  exists: boolean;
+  message?: string;
+  summary?: StressRunSummary;
+  report?: StressRunDetail;
+};
+
 const safeCertificationValue = (value: unknown) => {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
@@ -1080,6 +1142,16 @@ export default function AdminDashboard() {
 
   const { data: certificationReportsData, isLoading: certificationReportsLoading } = useQuery<{ reports: CertificationReportSummary[] }>({
     queryKey: ["/api/admin/certification/reports"],
+    enabled: activeTab === "certification" && isSuperAdmin,
+  });
+
+  const { data: stressLatest, isLoading: stressLatestLoading } = useQuery<StressLatestResponse>({
+    queryKey: ["/api/admin/flight-service-certification/runs/latest"],
+    enabled: activeTab === "certification" && isSuperAdmin,
+  });
+
+  const { data: stressRunsData, isLoading: stressRunsLoading } = useQuery<{ runs: StressRunSummary[] }>({
+    queryKey: ["/api/admin/flight-service-certification/runs"],
     enabled: activeTab === "certification" && isSuperAdmin,
   });
 
@@ -6535,12 +6607,205 @@ export default function AdminDashboard() {
                 onClick={() => {
                   queryClient.invalidateQueries({ queryKey: ["/api/admin/certification/latest"] });
                   queryClient.invalidateQueries({ queryKey: ["/api/admin/certification/reports"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/admin/flight-service-certification/runs/latest"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/admin/flight-service-certification/runs"] });
                 }}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Refresh reports
               </Button>
             </div>
+
+            <Card>
+              <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <CardTitle className="flex flex-wrap items-center gap-2">
+                    Stress Certification Harness
+                    {stressLatest?.exists && stressLatest.report ? (
+                      <Badge variant={stressLatest.report.status === "passed" ? "default" : "destructive"}>
+                        {stressLatest.report.status}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">No run</Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    Randomized and deterministic mocked Flight Service scenarios. Run from backend: <code className="rounded bg-muted px-1 py-0.5">npm run certification:stress -- --mode=standard</code>
+                  </CardDescription>
+                </div>
+                {stressLatest?.exists && stressLatest.report?.downloads && (
+                  <div className="flex flex-wrap gap-2">
+                    {stressLatest.report.downloads.html && (
+                      <Button asChild variant="outline" size="sm">
+                        <a href={apiUrl(stressLatest.report.downloads.html)} target="_blank" rel="noreferrer">View HTML</a>
+                      </Button>
+                    )}
+                    {stressLatest.report.downloads.json && (
+                      <Button asChild variant="outline" size="sm">
+                        <a href={apiUrl(stressLatest.report.downloads.json)}>Export JSON</a>
+                      </Button>
+                    )}
+                    {stressLatest.report.downloads.csv && (
+                      <Button asChild variant="outline" size="sm">
+                        <a href={apiUrl(stressLatest.report.downloads.csv)}>Export CSV</a>
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {stressLatestLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading stress certification run...</div>
+                ) : !stressLatest?.exists ? (
+                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                    No stress certification run has completed yet. Run <code className="rounded bg-muted px-1 py-0.5">npm run certification:stress -- --mode=standard</code>.
+                  </div>
+                ) : stressLatest.report ? (
+                  <>
+                    {(() => {
+                      const report = stressLatest.report;
+                      const completedAt = report.completedAt || report.endTime || null;
+                      const ageHours = completedAt ? (Date.now() - new Date(completedAt).getTime()) / 36e5 : null;
+                      const warnings = [
+                        report.failed > 0 ? `${report.failed} scenario(s) failed in the latest stress run.` : null,
+                        ageHours !== null && ageHours > 24 ? "Latest stress run is older than 24 hours." : null,
+                        report.environmentSafetyStatus?.operationalFilingEnabled ? "Production filing flags are enabled. Confirm this is intentional before testing." : null,
+                        report.environmentSafetyStatus?.liveProviderCallsAttempted ? "Live provider calls were attempted. Review immediately." : null,
+                      ].filter(Boolean);
+                      return (
+                        <>
+                          {warnings.length > 0 && (
+                            <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                              <div className="font-semibold">Stress Harness Warnings</div>
+                              <ul className="mt-2 list-disc space-y-1 pl-5">
+                                {warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          <div className="grid gap-4 md:grid-cols-5">
+                            <div className="rounded-lg border p-4">
+                              <div className="text-xs text-muted-foreground">Mode</div>
+                              <div className="text-2xl font-bold capitalize">{report.mode}</div>
+                            </div>
+                            <div className="rounded-lg border p-4">
+                              <div className="text-xs text-muted-foreground">Scenarios</div>
+                              <div className="text-2xl font-bold">{report.totalScenarios}</div>
+                              <div className="text-xs text-muted-foreground">{report.passed} passed / {report.failed} failed</div>
+                            </div>
+                            <div className="rounded-lg border p-4">
+                              <div className="text-xs text-muted-foreground">Warnings</div>
+                              <div className="text-2xl font-bold">{report.warnings}</div>
+                            </div>
+                            <div className="rounded-lg border p-4">
+                              <div className="text-xs text-muted-foreground">Duration</div>
+                              <div className="text-2xl font-bold">{Math.round((report.durationMs || 0) / 1000)}s</div>
+                            </div>
+                            <div className="rounded-lg border p-4">
+                              <div className="text-xs text-muted-foreground">Last Run</div>
+                              <div className="text-sm font-semibold">{completedAt ? new Date(completedAt).toLocaleString() : "-"}</div>
+                            </div>
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                            {(report.coverageSummary || []).map((item) => (
+                              <div key={item.category} className="rounded-lg border p-3">
+                                <div className="font-semibold">{item.category}</div>
+                                <div className="mt-1 text-sm text-muted-foreground">{item.passed}/{item.total} passed</div>
+                                {item.failed > 0 && <Badge variant="destructive" className="mt-2">{item.failed} failed</Badge>}
+                              </div>
+                            ))}
+                          </div>
+                          <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                            <div className="font-semibold">Environment safety</div>
+                            <div className="mt-2 grid gap-2 md:grid-cols-4">
+                              <div>Environment: <span className="font-mono">{report.environmentSafetyStatus?.environment || "-"}</span></div>
+                              <div>Operational: <span className="font-mono">{String(report.environmentSafetyStatus?.operationalFilingEnabled ?? false)}</span></div>
+                              <div>Acknowledgement required: <span className="font-mono">{String(report.environmentSafetyStatus?.acknowledgementRequired ?? true)}</span></div>
+                              <div>Live calls attempted: <span className="font-mono">{report.environmentSafetyStatus?.liveProviderCallsAttempted ?? 0}</span></div>
+                            </div>
+                          </div>
+                          <div>
+                            <h3 className="mb-2 text-sm font-semibold">Failures by Category</h3>
+                            {!report.failures?.length ? (
+                              <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-900">No stress harness failures in the latest run.</div>
+                            ) : (
+                              <div className="space-y-3">
+                                {report.failures.map((failure) => (
+                                  <details key={`${failure.testName}-${failure.seed}`} className="rounded-lg border p-4">
+                                    <summary className="cursor-pointer font-semibold">
+                                      {failure.category}: {failure.testName}
+                                    </summary>
+                                    <div className="mt-3 space-y-3 text-sm">
+                                      <div className="font-mono text-xs">{failure.replayCommand}</div>
+                                      {(failure.diff || []).map((diff, index) => (
+                                        <div key={`${failure.testName}-${index}`} className="rounded-md bg-muted p-3">
+                                          <div className="font-semibold">{diff.field}: {diff.issue}</div>
+                                          <div className="mt-2 grid gap-2 md:grid-cols-2">
+                                            <div><span className="text-muted-foreground">Expected</span><div className="break-words font-mono text-xs">{safeCertificationValue(diff.expected)}</div></div>
+                                            <div><span className="text-muted-foreground">Actual</span><div className="break-words font-mono text-xs">{safeCertificationValue(diff.actual)}</div></div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </details>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Stress Run History</CardTitle>
+                <CardDescription>Historical stress reports from <code className="rounded bg-muted px-1 py-0.5">tests/flight-service/reports/history</code>.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {stressRunsLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading stress run history...</div>
+                ) : !stressRunsData?.runs?.length ? (
+                  <div className="text-sm text-muted-foreground">No stress run history yet.</div>
+                ) : (
+                  <div className="overflow-x-auto rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="p-3 text-left">Run</th>
+                          <th className="p-3 text-left">Status</th>
+                          <th className="p-3 text-left">Mode</th>
+                          <th className="p-3 text-left">Results</th>
+                          <th className="p-3 text-left">Exports</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stressRunsData.runs.map((run) => (
+                          <tr key={run.runId} className="border-t">
+                            <td className="p-3">
+                              <div className="font-medium">{run.completedAt ? new Date(run.completedAt).toLocaleString() : run.runId}</div>
+                              <div className="text-xs text-muted-foreground">{run.runId}</div>
+                            </td>
+                            <td className="p-3"><Badge variant={run.status === "passed" ? "default" : "destructive"}>{run.status}</Badge></td>
+                            <td className="p-3 capitalize">{run.mode}</td>
+                            <td className="p-3">{run.passed}/{run.totalScenarios} passed, {run.failed} failed, {run.warnings} warnings</td>
+                            <td className="p-3">
+                              <div className="flex flex-wrap gap-2">
+                                {run.downloads?.html && <a className="text-primary hover:underline" href={apiUrl(run.downloads.html)} target="_blank" rel="noreferrer">HTML</a>}
+                                {run.downloads?.json && <a className="text-primary hover:underline" href={apiUrl(run.downloads.json)}>JSON</a>}
+                                {run.downloads?.csv && <a className="text-primary hover:underline" href={apiUrl(run.downloads.csv)}>CSV</a>}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {certificationLatestLoading ? (
               <Card>

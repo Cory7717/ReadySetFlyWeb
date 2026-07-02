@@ -1,0 +1,111 @@
+{
+  "runId": "leidos-live-lab-2026-07-02T13-01-04-668Z",
+  "dryRun": true,
+  "endpoint": "https://ffspelabs.leidos.com/Website2/rest/",
+  "limit": 3,
+  "delayMinutes": 3,
+  "totalCases": 3,
+  "passed": 3,
+  "failed": 0,
+  "results": [
+    {
+      "testName": "Normal VFR ICAO file",
+      "seed": 1,
+      "actions": [
+        {
+          "action": "file",
+          "payloadSummary": {
+            "aircraftIdentifier": "N123TX",
+            "aircraftType": "C172",
+            "flightRules": "VFR",
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "altDestination1": "KACT",
+            "route": "DCT",
+            "otherInfo": "PBN/A1 DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-02T13-01-04-668Z SEED 1",
+            "departureInstant": "2026-07-15T15:00:00.000Z"
+          },
+          "responseStatus": "dry_run",
+          "providerPlanId": null,
+          "versionStamp": null,
+          "warnings": [
+            "Selected ICAO information requires additional aircraft equipment codes.",
+            "Route must contain at least one recognized airport, fix, navaid, airway, or procedure token.",
+            "RSF added DCT segments so the transmitted route is ATC-safe."
+          ],
+          "errors": [],
+          "elapsedMs": 110
+        }
+      ],
+      "pass": true,
+      "warnings": [],
+      "errors": []
+    },
+    {
+      "testName": "Normal IFR ICAO file",
+      "seed": 2,
+      "actions": [
+        {
+          "action": "file",
+          "payloadSummary": {
+            "aircraftIdentifier": "N123TX",
+            "aircraftType": "C172",
+            "flightRules": "IFR",
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "altDestination1": "KACT",
+            "route": "DCT KDWH DCT",
+            "otherInfo": "PBN/A1 DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-02T13-01-04-668Z SEED 2",
+            "departureInstant": "2026-07-15T15:00:00.000Z"
+          },
+          "responseStatus": "dry_run",
+          "providerPlanId": null,
+          "versionStamp": null,
+          "warnings": [
+            "Selected ICAO information requires additional aircraft equipment codes.",
+            "RSF added DCT segments so the transmitted route is ATC-safe."
+          ],
+          "errors": [],
+          "elapsedMs": 18
+        }
+      ],
+      "pass": true,
+      "warnings": [],
+      "errors": []
+    },
+    {
+      "testName": "ZZZZ destination lat/long description",
+      "seed": 3,
+      "actions": [
+        {
+          "action": "file",
+          "payloadSummary": {
+            "aircraftIdentifier": "N123TX",
+            "aircraftType": "C172",
+            "flightRules": "VFR",
+            "departure": "KEDC",
+            "destination": "ZZZZ",
+            "altDestination1": "KACT",
+            "route": "DCT",
+            "otherInfo": "PBN/A1 DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-02T13-01-04-668Z SEED 3 DEST/3839N09045W PRIVATE STRIP",
+            "departureInstant": "2026-07-15T15:00:00.000Z"
+          },
+          "responseStatus": "dry_run",
+          "providerPlanId": null,
+          "versionStamp": null,
+          "warnings": [
+            "Selected ICAO information requires additional aircraft equipment codes.",
+            "Route must contain at least one recognized airport, fix, navaid, airway, or procedure token.",
+            "RSF added DCT segments so the transmitted route is ATC-safe."
+          ],
+          "errors": [],
+          "elapsedMs": 9
+        }
+      ],
+      "pass": true,
+      "warnings": [],
+      "errors": []
+    }
+  ],
+  "createdAt": "2026-07-02T13:01:04.811Z"
+}

@@ -9,6 +9,12 @@ import { getUncachableResendClient } from './resendClient';
 import { sendFounderWelcomeEmail } from './email-templates';
 import { maybeSyncLogbookProSubscription } from './paypal-subscription-sync';
 import { getEntitlementsForUser, resolveMembershipFromStoreSignals } from './membership';
+import {
+  buildFrontendUrl,
+  emailDomainOnly,
+  logAuthRedirectDiagnostic,
+  redactSensitiveUrlForAuthLog,
+} from './authRedirectUrls';
 
 const router = Router();
 
@@ -229,7 +235,11 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
       // Send verification email
       try {
         const { client, fromEmail } = await getUncachableResendClient();
-        const verificationUrl = `${req.protocol}://${req.get('host')}/verify-email?token=${verificationToken}`;
+        const verificationUrl = buildFrontendUrl(`/verify-email?token=${encodeURIComponent(verificationToken)}`, req);
+        logAuthRedirectDiagnostic('auth_verification_url_generated', req, {
+          generatedVerificationUrl: redactSensitiveUrlForAuthLog(verificationUrl),
+          userEmailDomain: emailDomainOnly(email),
+        });
         
         await client.emails.send({
           from: fromEmail,
@@ -630,8 +640,27 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
   router.get('/verify-email', async (req: Request, res: Response): Promise<void> => {
     try {
       const { token } = req.query;
+      const shouldRedirectToFrontend =
+        !req.get('origin') &&
+        String(req.get('accept') || '').toLowerCase().includes('text/html');
+
+      const redirectToFrontend = (status: 'success' | 'error', message: string) => {
+        const redirectTarget = buildFrontendUrl(
+          `/verify-email?verified=${encodeURIComponent(status)}&message=${encodeURIComponent(message)}`,
+          req,
+        );
+        logAuthRedirectDiagnostic('auth_verify_email_redirect', req, {
+          redirectTarget: redactSensitiveUrlForAuthLog(redirectTarget),
+          verificationStatus: status,
+        });
+        res.redirect(302, redirectTarget);
+      };
       
       if (!token || typeof token !== 'string') {
+        if (shouldRedirectToFrontend) {
+          redirectToFrontend('error', 'Verification token is required');
+          return;
+        }
         res.status(400).json({ error: 'Verification token is required' });
         return;
       }
@@ -640,12 +669,20 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
       const user = await storage.getUserByVerificationToken(token);
       
       if (!user) {
+        if (shouldRedirectToFrontend) {
+          redirectToFrontend('error', 'Invalid verification token');
+          return;
+        }
         res.status(404).json({ error: 'Invalid verification token' });
         return;
       }
 
       // Check if token has expired
       if (user.emailVerificationExpires && new Date() > user.emailVerificationExpires) {
+        if (shouldRedirectToFrontend) {
+          redirectToFrontend('error', 'Verification token has expired');
+          return;
+        }
         res.status(400).json({ error: 'Verification token has expired' });
         return;
       }
@@ -656,6 +693,15 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         emailVerificationToken: null,
         emailVerificationExpires: null,
       });
+
+      logAuthRedirectDiagnostic('auth_email_verified', req, {
+        userEmailDomain: emailDomainOnly(user.email),
+      });
+
+      if (shouldRedirectToFrontend) {
+        redirectToFrontend('success', 'Email verified successfully!');
+        return;
+      }
 
       res.status(200).json({ message: 'Email verified successfully!' });
     } catch (error) {

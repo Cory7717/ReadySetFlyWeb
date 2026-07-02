@@ -10,6 +10,12 @@ import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 import { verifyAccessToken } from "./jwt";
+import {
+  getApiBaseUrl as resolveApiBaseUrl,
+  getFrontendBaseUrl,
+  logAuthRedirectDiagnostic,
+  redactSensitiveUrlForAuthLog,
+} from "./authRedirectUrls";
 
 // Flags / env
 const AUTH_DISABLED = String(process.env.AUTH_DISABLED ?? "").toLowerCase() === "true";
@@ -21,19 +27,7 @@ const HAS_GOOGLE =
 
 // Helpful base URL for callback construction
 function getApiBaseUrl(): string {
-  // Prefer explicit config
-  if (process.env.API_BASE_URL) {
-    return normalizeReadySetFlyApiUrl(process.env.API_BASE_URL);
-  }
-
-  // Render often exposes an external URL env var depending on setup
-  if (process.env.RENDER_EXTERNAL_URL) {
-    return normalizeReadySetFlyApiUrl(process.env.RENDER_EXTERNAL_URL);
-  }
-
-  // Fallback local
-  const port = process.env.PORT || "5000";
-  return `http://localhost:${port}`;
+  return resolveApiBaseUrl();
 }
 
 function normalizeReadySetFlyApiUrl(value: string): string {
@@ -409,7 +403,7 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     // Callback (web)
     app.get(
       "/api/auth/google/callback",
-      passport.authenticate("google", { failureRedirect: "/" }),
+      passport.authenticate("google", { failureRedirect: new URL("/login?auth=failed", getFrontendBaseUrl()).toString() }),
       (req: any, res: any) => {
         const userId = req.user?.claims?.sub;
         if (userId) req.session.userId = userId;
@@ -435,8 +429,12 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
             console.warn("[AUTH][google callback] failed to record analytics:", error);
           });
 
-          const frontend = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
-          return res.redirect(new URL(returnTo, frontend).toString());
+          const frontend = getFrontendBaseUrl(req);
+          const redirectTarget = new URL(returnTo, frontend).toString();
+          logAuthRedirectDiagnostic("auth_google_callback_redirect", req, {
+            redirectTarget: redactSensitiveUrlForAuthLog(redirectTarget),
+          });
+          return res.redirect(redirectTarget);
         });
       }
     );

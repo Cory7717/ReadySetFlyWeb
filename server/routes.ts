@@ -40,6 +40,7 @@ import { maybeSyncLogbookProSubscription } from "./paypal-subscription-sync";
 import { buildMarketplaceListingFeeBreakdown } from "./marketplace-fees";
 import { resolveTfmsAccess } from "./lib/tier";
 import { buildCorsOptions } from "./corsOptions";
+import { getFrontendBaseUrl } from "./authRedirectUrls";
 import {
   getFlightServiceCertificationReport,
   getLatestFlightServiceCertificationReport,
@@ -947,28 +948,7 @@ function getPublicBaseUrl() {
 }
 
 function getPublicFrontendBaseUrl() {
-  const candidates = [
-    process.env.FRONTEND_BASE_URL,
-    process.env.APP_BASE_URL,
-    process.env.WEB_BASE_URL,
-    process.env.RENDER_EXTERNAL_URL,
-    process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(",")[0]}` : null,
-    "https://readysetfly.us",
-  ].filter(Boolean) as string[];
-
-  for (const candidate of candidates) {
-    try {
-      const normalized = candidate.startsWith("http") ? candidate : `https://${candidate}`;
-      const parsed = new URL(normalized);
-      const host = parsed.hostname.toLowerCase();
-      if (host === "localhost" || host === "127.0.0.1") continue;
-      return parsed.origin;
-    } catch {
-      continue;
-    }
-  }
-
-  return "https://readysetfly.us";
+  return getFrontendBaseUrl();
 }
 
 const marketingSecret = process.env.JWT_SECRET || process.env.SESSION_SECRET || "default-jwt-secret-change-in-production";
@@ -4920,7 +4900,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Web logout endpoint (used by header link)
   app.get("/api/logout", (req, res) => {
     try {
-      const frontendBase = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+      const frontendBase = getFrontendBaseUrl(req);
       const requestedRedirect = typeof req.query.redirect === "string" ? req.query.redirect : "";
       let safeRedirect = frontendBase;
       if (requestedRedirect) {

@@ -3,6 +3,7 @@ import { useLocation, Link } from 'wouter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { apiFetch } from '@/lib/api';
 
 export default function VerifyEmail() {
   const [, navigate] = useLocation();
@@ -12,6 +13,19 @@ export default function VerifyEmail() {
   useEffect(() => {
     const verifyEmail = async () => {
       const params = new URLSearchParams(window.location.search);
+      const redirectedStatus = params.get('verified');
+      const redirectedMessage = params.get('message');
+      if (redirectedStatus === 'success') {
+        setStatus('success');
+        setMessage(redirectedMessage || 'Email verified successfully!');
+        return;
+      }
+      if (redirectedStatus === 'error') {
+        setStatus('error');
+        setMessage(redirectedMessage || 'Verification failed');
+        return;
+      }
+
       const token = params.get('token');
 
       if (!token) {
@@ -21,7 +35,7 @@ export default function VerifyEmail() {
       }
 
       try {
-        const response = await fetch(`/api/auth/verify-email?token=${token}`);
+        const response = await apiFetch(`/api/auth/verify-email?token=${encodeURIComponent(token)}`);
         const data = await response.json();
 
         if (response.ok) {

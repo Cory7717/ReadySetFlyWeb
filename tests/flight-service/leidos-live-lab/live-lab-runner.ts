@@ -1,7 +1,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { and, eq } from "drizzle-orm";
 import type { FlightPlan, FlightPlanFilingAction } from "../../../shared/schema";
+import { flightPlans } from "../../../shared/schema";
+import { db } from "../../../server/db";
 import { storage } from "../../../server/storage";
 import {
   buildLeidosActionPayload,
@@ -34,6 +37,11 @@ const arg = (name: string, fallback = "") => {
 
 const hasFlag = (name: string) => process.argv.includes(`--${name}`);
 const boolEnv = (value?: string | null) => /^(true|1|yes|on)$/i.test(String(value || "").trim());
+const numberArg = (name: string, fallback: string) => {
+  const raw = arg(name, fallback);
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : Number(fallback);
+};
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const stamp = () => new Date().toISOString().replace(/[:.]/g, "-");
 
@@ -242,6 +250,224 @@ const simulateDryRunProviderState = (plan: FlightPlan, action: FlightPlanFilingA
   } as FlightPlan;
 };
 
+const getVersionStamp = (plan: FlightPlan): string | null => {
+  const raw = plan.filingRaw && typeof plan.filingRaw === "object" ? plan.filingRaw as Record<string, any> : {};
+  const snapshot = plan.filingProviderSnapshot && typeof plan.filingProviderSnapshot === "object"
+    ? plan.filingProviderSnapshot as Record<string, any>
+    : {};
+  return String(raw.versionStamp || snapshot.versionStamp || "").trim() || null;
+};
+
+const pbnFromOtherInfo = (value: unknown) => {
+  const match = String(value || "").match(/(?:^|\s)PBN\/([^\s]+)/i);
+  return match ? `PBN/${match[1].toUpperCase()}` : null;
+};
+
+const normalizeCompareValue = (value: unknown) => String(value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+
+const providerValue = (snapshot: unknown, keys: string[]) => {
+  const source = snapshot && typeof snapshot === "object" ? snapshot as Record<string, any> : {};
+  for (const key of keys) {
+    const value = source[key];
+    if (value !== undefined && value !== null && String(value).trim()) return value;
+  }
+  return null;
+};
+
+const compareGeneratedSentReturned = (
+  generatedPayload: Record<string, any> | null,
+  sentPayload: Record<string, any> | null,
+  plan: FlightPlan,
+) => {
+  const snapshot = plan.filingProviderSnapshot && typeof plan.filingProviderSnapshot === "object"
+    ? plan.filingProviderSnapshot as Record<string, any>
+    : {};
+  const raw = plan.filingRaw && typeof plan.filingRaw === "object" ? plan.filingRaw as Record<string, any> : {};
+  const returned = {
+    departure: providerValue(snapshot, ["departure", "departureAirport"]) || plan.departure,
+    destination: providerValue(snapshot, ["destination", "destinationAirport"]) || plan.destination,
+    alternate: providerValue(snapshot, ["alternate", "altDestination1"]) || plan.alternate,
+    route: snapshot.route?.providerRoute || snapshot.route?.effectiveRoute || providerValue(snapshot, ["route"]) || plan.route,
+    aircraftIdentifier: providerValue(snapshot, ["aircraftIdentifier", "aircraftId"]) || plan.tailNumber,
+    flightRules: providerValue(snapshot, ["flightRules"]) || plan.filingFlightRules,
+    equipment: providerValue(snapshot, ["aircraftEquipment"]) || plan.filingEquipment,
+    pbn: pbnFromOtherInfo(providerValue(snapshot, ["otherInfo"]) || sentPayload?.otherInfo || generatedPayload?.otherInfo),
+    otherInfo: providerValue(snapshot, ["otherInfo"]) || sentPayload?.otherInfo || generatedPayload?.otherInfo,
+    pilotPhone: providerValue(snapshot, ["pilotPhone"]) || plan.filingPilotPhone,
+    homeBase: providerValue(snapshot, ["aircraftHomeBase"]) || plan.filingAircraftHomeBase,
+    departureZulu: providerValue(snapshot, ["departureInstant"]) || sentPayload?.departureInstant || generatedPayload?.departureInstant,
+    providerPlanId: plan.filingProviderPlanId || raw.providerPlanId || null,
+    versionStamp: getVersionStamp(plan),
+  };
+
+  const fields = [
+    ["departure", generatedPayload?.departure, sentPayload?.departure, returned.departure],
+    ["destination", generatedPayload?.destination, sentPayload?.destination, returned.destination],
+    ["alternate", generatedPayload?.altDestination1, sentPayload?.altDestination1, returned.alternate],
+    ["route", generatedPayload?.route, sentPayload?.route, returned.route],
+    ["aircraftIdentifier", generatedPayload?.aircraftIdentifier, sentPayload?.aircraftIdentifier, returned.aircraftIdentifier],
+    ["flightRules", generatedPayload?.flightRules, sentPayload?.flightRules, returned.flightRules],
+    ["equipment", generatedPayload?.aircraftEquipment, sentPayload?.aircraftEquipment, returned.equipment],
+    ["PBN", pbnFromOtherInfo(generatedPayload?.otherInfo), pbnFromOtherInfo(sentPayload?.otherInfo), returned.pbn],
+    ["Other Info / RMK", generatedPayload?.otherInfo, sentPayload?.otherInfo, returned.otherInfo],
+    ["pilotPhone", generatedPayload?.pilotPhone, sentPayload?.pilotPhone, returned.pilotPhone],
+    ["homeBase", generatedPayload?.aircraftHomeBase, sentPayload?.aircraftHomeBase, returned.homeBase],
+    ["departureTimeZulu", generatedPayload?.departureInstant, sentPayload?.departureInstant, returned.departureZulu],
+    ["providerPlanId", null, null, returned.providerPlanId],
+    ["versionStamp", null, null, returned.versionStamp],
+  ];
+
+  const differences = fields.flatMap(([field, generated, sent, returnedValue]) => {
+    const issues: Array<Record<string, unknown>> = [];
+    if (generated !== undefined && sent !== undefined && normalizeCompareValue(generated) !== normalizeCompareValue(sent)) {
+      issues.push({ field, type: "generated_vs_sent", generated, sent });
+    }
+    if (field !== "providerPlanId" && field !== "versionStamp" && sent !== undefined && returnedValue !== undefined && returnedValue !== null && normalizeCompareValue(sent) !== normalizeCompareValue(returnedValue)) {
+      issues.push({ field, type: "sent_vs_returned", sent, returned: returnedValue });
+    }
+    if ((field === "providerPlanId" || field === "versionStamp") && !returnedValue) {
+      issues.push({ field, type: "missing_returned_value" });
+    }
+    return issues;
+  });
+
+  return {
+    generated: generatedPayload,
+    sent: sentPayload,
+    returned,
+    differences,
+    pass: differences.length === 0,
+  };
+};
+
+const buildCertificationMetadata = (runId: string, testCase: LiveLabCase) => ({
+  source: "leidos-certification",
+  isCertificationTest: true,
+  certificationRunId: runId,
+  certificationCaseId: `case-${String(testCase.seed).padStart(2, "0")}`,
+  certificationCaseName: testCase.name,
+  certificationSeed: testCase.seed,
+});
+
+const persistCertificationPlan = async (plan: FlightPlan, runId: string, testCase: LiveLabCase, dryRun: boolean) => {
+  const metadata = buildCertificationMetadata(runId, testCase);
+  const planWithMetadata = {
+    ...plan,
+    id: `${runId}-case-${String(testCase.seed).padStart(2, "0")}`,
+    title: `[CERT] ${plan.title}`,
+    ...metadata,
+    certificationAudit: {
+      certificationRunId: runId,
+      certificationCaseId: metadata.certificationCaseId,
+      certificationCaseName: testCase.name,
+      seed: testCase.seed,
+      dryRun,
+      actions: [],
+      cleanup: [],
+      createdAt: new Date().toISOString(),
+    },
+  } as any;
+  if (dryRun) return planWithMetadata as FlightPlan;
+  return await storage.createFlightPlan(planWithMetadata) as FlightPlan;
+};
+
+const updateCertificationPlan = async (plan: FlightPlan, updates: Partial<FlightPlan>, dryRun: boolean): Promise<FlightPlan> => {
+  const next = { ...plan, ...updates } as FlightPlan;
+  if (dryRun) return next;
+  const updated = await storage.updateFlightPlan(plan.id, updates as any);
+  return (updated || next) as FlightPlan;
+};
+
+const appendCertificationAudit = async (plan: FlightPlan, entryType: "action" | "cleanup", entry: Record<string, unknown>, dryRun: boolean) => {
+  const audit = plan.certificationAudit && typeof plan.certificationAudit === "object"
+    ? plan.certificationAudit as Record<string, any>
+    : {};
+  const key = entryType === "action" ? "actions" : "cleanup";
+  const nextAudit = {
+    ...audit,
+    [key]: [...(Array.isArray(audit[key]) ? audit[key] : []), entry],
+    updatedAt: new Date().toISOString(),
+  };
+  return updateCertificationPlan(plan, { certificationAudit: nextAudit } as any, dryRun);
+};
+
+const loadCertificationPlansForRun = async (runId: string): Promise<FlightPlan[]> => {
+  return await db
+    .select()
+    .from(flightPlans)
+    .where(and(eq(flightPlans.certificationRunId, runId), eq(flightPlans.isCertificationTest, true)));
+};
+
+const isCleanupBlockingError = (error: unknown) => {
+  const message = String((error as any)?.message || error || "").toLowerCase();
+  return /auth|authorized|rate.?limit|too many|server|environment|production|not lab|html instead|redirected/.test(message);
+};
+
+const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boolean) => {
+  const cleanupResults: any[] = [];
+  for (const plan of plans) {
+    const started = Date.now();
+    const status = String(plan.filingStatus || "").toLowerCase();
+    const providerPlanId = String(plan.filingProviderPlanId || "").trim();
+    const versionStamp = getVersionStamp(plan);
+    let cleanupAction: FlightPlanFilingAction | "verify" | "none" = "none";
+    if (["cancelled", "closed"].includes(status)) cleanupAction = "verify";
+    else if (status === "activated") cleanupAction = "close";
+    else if (["filed", "staged", "proposed", "amended"].includes(status)) cleanupAction = "cancel";
+
+    const base = {
+      planId: plan.id,
+      certificationRunId: plan.certificationRunId,
+      certificationCaseId: plan.certificationCaseId,
+      providerPlanId: providerPlanId || null,
+      versionStamp,
+      priorStatus: plan.filingStatus,
+      action: cleanupAction,
+    };
+
+    if (cleanupAction === "none" || cleanupAction === "verify") {
+      cleanupResults.push({ ...base, responseStatus: cleanupAction === "verify" ? "already_terminal" : "not_required", pass: true, elapsedMs: Date.now() - started });
+      continue;
+    }
+
+    if (!providerPlanId || !versionStamp) {
+      const result = { ...base, responseStatus: "blocked_missing_provider_reference", pass: false, errors: ["Cleanup requires providerPlanId and versionStamp from the same certification case."], elapsedMs: Date.now() - started };
+      cleanupResults.push(result);
+      await appendCertificationAudit(plan, "cleanup", result, dryRun);
+      continue;
+    }
+
+    if (dryRun) {
+      const result = { ...base, responseStatus: "dry_run", pass: true, elapsedMs: Date.now() - started };
+      cleanupResults.push(result);
+      continue;
+    }
+
+    try {
+      const response = await flightPlanFilingProvider.stageAction(plan, cleanupAction);
+      const updated = await updateCertificationPlan(plan, {
+        filingStatus: response.nextStatus,
+        filingIsLive: response.live,
+        filingRaw: response.raw,
+        filingProviderSnapshot: response.providerSnapshot || plan.filingProviderSnapshot,
+        filingProviderMessages: response.providerMessages || plan.filingProviderMessages,
+        filingPayload: response.payloadSnapshot?.transmittedFields || plan.filingPayload,
+        cancelledAt: cleanupAction === "cancel" ? new Date() : plan.cancelledAt,
+        closedAt: cleanupAction === "close" ? new Date() : plan.closedAt,
+      } as any, dryRun);
+      const result = { ...base, responseStatus: response.live ? "accepted" : "staged", pass: response.live, warnings: response.warnings || [], errors: response.live ? [] : [response.message], elapsedMs: Date.now() - started };
+      cleanupResults.push(result);
+      await appendCertificationAudit(updated, "cleanup", result, dryRun);
+    } catch (error) {
+      const result = { ...base, responseStatus: "error", pass: false, errors: [String((error as any)?.message || error)], elapsedMs: Date.now() - started };
+      cleanupResults.push(result);
+      await appendCertificationAudit(plan, "cleanup", result, dryRun);
+      if (isCleanupBlockingError(error)) break;
+    }
+  }
+  return cleanupResults;
+};
+
 const countdown = async (minutes: number, nextName: string) => {
   const seconds = Math.max(0, Math.round(minutes * 60));
   for (let remaining = seconds; remaining > 0; remaining -= 30) {
@@ -252,9 +478,11 @@ const countdown = async (minutes: number, nextName: string) => {
 
 const run = async () => {
   const dryRun = hasFlag("dry-run") || !hasFlag("confirm-leidos-lab");
-  const limit = Math.min(MAX_CASES, Math.max(1, Number(arg("limit", "15")) || 15));
-  const delayMinutes = Math.max(0, Number(arg("delay-minutes", process.env.LEIDOS_LAB_DELAY_MINUTES || "3")) || 3);
+  const limit = Math.min(MAX_CASES, Math.max(1, numberArg("limit", "15") || 15));
+  const delayMinutes = Math.max(0, numberArg("delay-minutes", process.env.LEIDOS_LAB_DELAY_MINUTES || "3"));
   const replay = arg("replay", "");
+  const skipCleanup = hasFlag("skip-cleanup");
+  const cleanupOnlyRunId = arg("cleanup-only", "");
   const runId = `leidos-live-lab-${stamp()}`;
 
   const diagnostics = assertLabEndpoint();
@@ -263,6 +491,37 @@ const run = async () => {
   }
   if (!dryRun && boolEnv(process.env.FLIGHT_SERVICE_OPERATIONAL_FILING_ENABLED || process.env.FLIGHT_FILING_OPERATIONAL_ENABLED)) {
     throw new Error("Refusing to run: production/operational filing flag is enabled.");
+  }
+
+  if (cleanupOnlyRunId) {
+    const context = dryRun && !process.env.LEIDOS_TEST_USER_EMAIL
+      ? dryRunContext()
+      : await loadDedicatedTestContext();
+    const plans = dryRun ? [] : await loadCertificationPlansForRun(cleanupOnlyRunId);
+    const cleanupResults = dryRun
+      ? [{ certificationRunId: cleanupOnlyRunId, responseStatus: "dry_run", plannedAction: "Would load certification plans for this run and cancel/close only non-terminal test plans." }]
+      : await cleanupCertificationPlans(plans.filter((plan) => plan.userId === context.user.id), dryRun);
+    const output = {
+      certificationRunId: cleanupOnlyRunId,
+      dryRun,
+      mode: "cleanup-only",
+      endpoint: diagnostics.baseUrl,
+      testAccountEmail: context.user.email || process.env.LEIDOS_TEST_USER_EMAIL,
+      cleanupResults,
+      finalSummary: {
+        cleanupTotal: cleanupResults.length,
+        cleanupPassed: cleanupResults.filter((item) => item.pass !== false).length,
+        cleanupFailed: cleanupResults.filter((item) => item.pass === false).length,
+      },
+      createdAt: new Date().toISOString(),
+    };
+    const dir = join("certification-results", "leidos-live-lab");
+    mkdirSync(dir, { recursive: true });
+    const filePath = join(dir, `${cleanupOnlyRunId}-cleanup-${stamp()}.json`);
+    writeFileSync(filePath, JSON.stringify(output, null, 2));
+    console.log(`Saved cleanup results: ${filePath}`);
+    if (output.finalSummary.cleanupFailed > 0 && !dryRun) process.exitCode = 1;
+    return;
   }
 
   const context = dryRun && !process.env.LEIDOS_TEST_USER_EMAIL
@@ -275,19 +534,27 @@ const run = async () => {
 
   console.log(`Leidos live LAB certification ${dryRun ? "DRY RUN" : "CONFIRMED"}`);
   console.log(`Endpoint: ${diagnostics.baseUrl}`);
-  console.log(`Test user: ${process.env.LEIDOS_TEST_USER_EMAIL}`);
+  console.log(`Test user: ${context.user.email || process.env.LEIDOS_TEST_USER_EMAIL}`);
   console.log(`Cases: ${cases.length}/${MAX_CASES}`);
   console.log(`Delay: ${delayMinutes} minute(s)`);
+  console.log(`Cleanup: ${skipCleanup ? "SKIPPED by flag" : "enabled"}`);
 
   const results: any[] = [];
+  const createdPlans: FlightPlan[] = [];
+  let stoppedEarly = false;
   for (const [index, testCase] of cases.entries()) {
     if (!dryRun && index > 0) await countdown(delayMinutes, testCase.name);
-    let plan = testCase.buildPlan();
+    let plan = await persistCertificationPlan(testCase.buildPlan(), runId, testCase, dryRun);
+    createdPlans.push(plan);
     console.log(`[${index + 1}/${cases.length}] ${testCase.name} seed=${testCase.seed}`);
     const caseResult = {
+      certificationRunId: runId,
+      certificationCaseId: `case-${String(testCase.seed).padStart(2, "0")}`,
+      planId: plan.id,
       testName: testCase.name,
       seed: testCase.seed,
       actions: [] as any[],
+      comparisons: [] as any[],
       pass: true,
       skipped: Boolean(testCase.skipReason),
       warnings: [] as string[],
@@ -296,41 +563,45 @@ const run = async () => {
     if (testCase.skipReason) {
       caseResult.warnings.push(testCase.skipReason);
       caseResult.actions.push({ action: "skip", payloadSummary: null, responseStatus: "skipped", providerPlanId: null, versionStamp: null, warnings: [testCase.skipReason], errors: [], elapsedMs: 0 });
+      plan = await appendCertificationAudit(plan, "action", caseResult.actions[0], dryRun);
       results.push(caseResult);
       continue;
     }
     for (const action of testCase.actions) {
       const started = Date.now();
       const validation = validateFlightPlanForAction(plan, action);
-      const payloadSummary = summarizePayload(plan, action);
+      const generatedPayload = summarizePayload(plan, action) as Record<string, any> | null;
       if (!validation.ready) {
         caseResult.pass = false;
         caseResult.errors.push(`Validation failed before ${action}: ${validation.errors.join(" | ")}`);
-        caseResult.actions.push({ action, payloadSummary, responseStatus: "validation_failed", warnings: validation.warnings, errors: validation.errors, elapsedMs: Date.now() - started });
+        const actionResult = { action, generatedPayload, payloadSentToLeidos: null, leidosResponse: null, responseStatus: "validation_failed", warnings: validation.warnings, errors: validation.errors, elapsedMs: Date.now() - started };
+        caseResult.actions.push(actionResult);
+        plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
         break;
       }
       if (dryRun) {
-        caseResult.actions.push({ action, payloadSummary, responseStatus: "dry_run", providerPlanId: null, versionStamp: null, warnings: validation.warnings, errors: [], elapsedMs: Date.now() - started });
-        plan = simulateDryRunProviderState(plan, action, testCase.seed);
+        const simulated = simulateDryRunProviderState(plan, action, testCase.seed);
+        const comparison = compareGeneratedSentReturned(generatedPayload, generatedPayload, simulated);
+        const actionResult = { action, generatedPayload, payloadSentToLeidos: generatedPayload, leidosResponse: { dryRun: true }, responseStatus: "dry_run", providerPlanId: null, versionStamp: null, warnings: validation.warnings, errors: [], comparison, elapsedMs: Date.now() - started };
+        caseResult.actions.push(actionResult);
+        caseResult.comparisons.push(comparison);
+        plan = await appendCertificationAudit(simulated, "action", actionResult, dryRun);
         continue;
       }
-      const response = await flightPlanFilingProvider.stageAction(plan, action);
-      const versionStamp = String(response.raw?.versionStamp || response.providerSnapshot?.versionStamp || "");
-      caseResult.actions.push({
-        action,
-        payloadSummary,
-        responseStatus: response.live ? "accepted" : "staged",
-        providerPlanId: response.providerPlanId || null,
-        versionStamp,
-        warnings: response.warnings || [],
-        errors: response.live ? [] : [response.message],
-        elapsedMs: Date.now() - started,
-      });
-      if (!response.live) {
+      let response: Awaited<ReturnType<typeof flightPlanFilingProvider.stageAction>>;
+      try {
+        response = await flightPlanFilingProvider.stageAction(plan, action);
+      } catch (error) {
         caseResult.pass = false;
-        caseResult.errors.push(response.message);
+        const message = String((error as any)?.message || error);
+        caseResult.errors.push(message);
+        const actionResult = { action, generatedPayload, payloadSentToLeidos: null, leidosResponse: null, responseStatus: "error", warnings: validation.warnings, errors: [message], elapsedMs: Date.now() - started };
+        caseResult.actions.push(actionResult);
+        plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
+        if (isCleanupBlockingError(error)) stoppedEarly = true;
         break;
       }
+      const versionStamp = String(response.raw?.versionStamp || response.providerSnapshot?.versionStamp || "");
       plan = {
         ...plan,
         filingProviderPlanId: response.providerPlanId || plan.filingProviderPlanId,
@@ -339,26 +610,101 @@ const run = async () => {
         filingRaw: response.raw,
         filingPayload: response.payloadSnapshot?.transmittedFields || plan.filingPayload,
         filingProviderSnapshot: response.providerSnapshot || plan.filingProviderSnapshot,
+        filingProviderMessages: response.providerMessages || plan.filingProviderMessages,
       } as FlightPlan;
+      plan = await updateCertificationPlan(plan, {
+        filingProviderPlanId: plan.filingProviderPlanId,
+        filingStatus: plan.filingStatus,
+        filingIsLive: plan.filingIsLive,
+        filingRaw: plan.filingRaw,
+        filingPayload: plan.filingPayload,
+        filingProviderSnapshot: plan.filingProviderSnapshot,
+        filingProviderMessages: plan.filingProviderMessages,
+        filedAt: action === "file" ? new Date() : plan.filedAt,
+        activatedAt: action === "activate" ? new Date() : plan.activatedAt,
+        cancelledAt: action === "cancel" ? new Date() : plan.cancelledAt,
+        closedAt: action === "close" ? new Date() : plan.closedAt,
+      } as any, dryRun);
+      const sentPayload = response.raw?.requestPayload || response.payloadSnapshot?.transmittedFields || null;
+      const comparison = compareGeneratedSentReturned(generatedPayload, sentPayload, plan);
+      const actionResult = {
+        action,
+        generatedPayload,
+        payloadSentToLeidos: sentPayload,
+        leidosResponse: response.raw?.response || response.raw || null,
+        responseStatus: response.live ? "accepted" : "staged",
+        providerPlanId: response.providerPlanId || null,
+        versionStamp,
+        warnings: response.warnings || [],
+        errors: response.live ? [] : [response.message],
+        comparison,
+        elapsedMs: Date.now() - started,
+      };
+      caseResult.actions.push(actionResult);
+      caseResult.comparisons.push(comparison);
+      plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
+      if (!response.live) {
+        caseResult.pass = false;
+        caseResult.errors.push(response.message);
+        break;
+      }
+      if (!comparison.pass) {
+        caseResult.warnings.push(`Unexpected comparison differences after ${action}: ${comparison.differences.length}`);
+      }
     }
     results.push(caseResult);
-    if (!caseResult.pass && !dryRun) {
+    const createdIndex = createdPlans.findIndex((item) => item.id === plan.id);
+    if (createdIndex >= 0) createdPlans[createdIndex] = plan;
+    if ((!caseResult.pass || stoppedEarly) && !dryRun) {
       console.error(`Stopping after failure in ${testCase.name}: ${caseResult.errors.join(" | ")}`);
       break;
     }
   }
 
+  let cleanupResults: any[] = [];
+  if (skipCleanup) {
+    cleanupResults = createdPlans.map((plan) => ({
+      planId: plan.id,
+      certificationRunId: runId,
+      certificationCaseId: plan.certificationCaseId,
+      providerPlanId: plan.filingProviderPlanId || null,
+      versionStamp: getVersionStamp(plan),
+      priorStatus: plan.filingStatus,
+      responseStatus: "skipped_by_flag",
+      pass: true,
+    }));
+  } else {
+    cleanupResults = await cleanupCertificationPlans(createdPlans, dryRun);
+  }
+
+  const openAfterCleanup = cleanupResults.filter((item) =>
+    item.pass === false ||
+    (item.responseStatus !== "already_terminal" && item.responseStatus !== "not_required" && item.responseStatus !== "dry_run" && item.responseStatus !== "accepted")
+  );
+
   const output = {
-    runId,
+    certificationRunId: runId,
     dryRun,
+    environment: diagnostics.environment,
     endpoint: diagnostics.baseUrl,
-    testUserEmail: process.env.LEIDOS_TEST_USER_EMAIL,
+    testAccountEmail: context.user.email || process.env.LEIDOS_TEST_USER_EMAIL,
     limit,
     delayMinutes,
+    skipCleanup,
     totalCases: results.length,
     passed: results.filter((item) => item.pass).length,
     failed: results.filter((item) => !item.pass).length,
     results,
+    cleanupResults,
+    finalSummary: {
+      testCount: results.length,
+      passed: results.filter((item) => item.pass).length,
+      failed: results.filter((item) => !item.pass).length,
+      cleanupTotal: cleanupResults.length,
+      cleanupPassed: cleanupResults.filter((item) => item.pass !== false).length,
+      cleanupFailed: cleanupResults.filter((item) => item.pass === false).length,
+      openPlanWarnings: openAfterCleanup,
+    },
     createdAt: new Date().toISOString(),
   };
   const dir = join("certification-results", "leidos-live-lab");
@@ -366,7 +712,7 @@ const run = async () => {
   const filePath = join(dir, `${runId}.json`);
   writeFileSync(filePath, JSON.stringify(output, null, 2));
   console.log(`Saved results: ${filePath}`);
-  if (output.failed > 0 && !dryRun) process.exitCode = 1;
+  if ((output.failed > 0 || output.finalSummary.cleanupFailed > 0) && !dryRun) process.exitCode = 1;
 };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

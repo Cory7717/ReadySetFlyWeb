@@ -22934,7 +22934,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      const showCertificationTests = String(req.query.showCertificationTests || "").toLowerCase() === "true";
       let plans = await storage.getFlightPlansByUser(userId);
+      if (!showCertificationTests) {
+        plans = plans.filter((plan) => !(plan as any).isCertificationTest);
+      }
       res.json(plans);
     } catch (error: any) {
       const pgCode = error?.code || error?.cause?.code || "";

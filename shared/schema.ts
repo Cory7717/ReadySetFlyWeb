@@ -3025,12 +3025,20 @@ export const flightPlans = pgTable("flight_plans", {
   filingRaw: jsonb("filing_raw"),
   filingActionHistory: jsonb("filing_action_history").$type<Array<Record<string, unknown>>>().default(sql`'[]'::jsonb`),
   plannerState: jsonb("planner_state").$type<Record<string, unknown> | null>(),
+  source: text("source"),
+  isCertificationTest: boolean("is_certification_test").notNull().default(false),
+  certificationRunId: text("certification_run_id"),
+  certificationCaseId: text("certification_case_id"),
+  certificationCaseName: text("certification_case_name"),
+  certificationSeed: integer("certification_seed"),
+  certificationAudit: jsonb("certification_audit").$type<Record<string, unknown> | null>(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("idx_flight_plans_user").on(table.userId),
   index("idx_flight_plans_departure").on(table.plannedDepartureAt),
+  index("idx_flight_plans_certification_run").on(table.certificationRunId),
 ]);
 
 export const aircraftTypes = pgTable("aircraft_types", {
@@ -3468,6 +3476,13 @@ export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
   filingAssignedBeaconCode: true,
   filingRaw: true,
   filingActionHistory: true,
+  source: true,
+  isCertificationTest: true,
+  certificationRunId: true,
+  certificationCaseId: true,
+  certificationCaseName: true,
+  certificationSeed: true,
+  certificationAudit: true,
   createdAt: true,
   updatedAt: true,
 }).extend({

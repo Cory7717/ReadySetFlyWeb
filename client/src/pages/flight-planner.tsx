@@ -2526,8 +2526,9 @@ export default function FlightPlanner() {
   };
   const isFlightServiceTestMode = effectiveFlightServiceEnvironment.acknowledgementRequired;
 
+  const [showCertificationTestPlans, setShowCertificationTestPlans] = useState(false);
   const { data: savedPlansRaw = [], isLoading: plansLoading } = useQuery<FlightPlan[]>({
-    queryKey: ["/api/flight-plans"],
+    queryKey: [showCertificationTestPlans ? "/api/flight-plans?showCertificationTests=true" : "/api/flight-plans"],
     enabled: isAuthenticated,
     refetchInterval: isAuthenticated && activeTab === "file" ? 15_000 : false,
     refetchOnWindowFocus: true,
@@ -9805,21 +9806,31 @@ export default function FlightPlanner() {
           )}
           {plansLoading ? (
             <div className="text-sm text-muted-foreground">Loading flight plans...</div>
-          ) : savedPlans.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No flight plans saved yet.</div>
           ) : (
             <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={handleClearForm}>
-                  Clear form
-                </Button>
-                {editingPlan && (
-                  <Button type="button" variant="outline" onClick={handleClearForm}>
-                    Leave saved plan
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" onClick={handleClearForm}>
+                    Clear form
                   </Button>
-                )}
+                  {editingPlan && (
+                    <Button type="button" variant="outline" onClick={handleClearForm}>
+                      Leave saved plan
+                    </Button>
+                  )}
+                </div>
+                <label className="flex items-center gap-2 rounded-md border border-border/50 px-3 py-2 text-xs text-muted-foreground">
+                  <Checkbox
+                    checked={showCertificationTestPlans}
+                    onCheckedChange={(checked) => setShowCertificationTestPlans(Boolean(checked))}
+                  />
+                  Show certification test plans
+                </label>
               </div>
-              {(() => {
+              {savedPlans.length === 0 && (
+                <div className="text-sm text-muted-foreground">No flight plans saved yet.</div>
+              )}
+              {savedPlans.length > 0 && (() => {
                 const { currentPlans, pastPlans } = groupSavedFlightPlans(savedPlansView);
                 const renderPlanCards = (plans: FlightPlan[]) => plans.map((plan) => {
                     const expanded = expandedPlanIds[plan.id] ?? false;

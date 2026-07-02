@@ -15,6 +15,7 @@ import {
 } from "@shared/flight-plan-filing-workflow";
 import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
 import { normalizeIcaoEquipmentCodes, validateFlightServiceAircraftEquipmentCodes } from "@shared/icao-equipment-codes";
+import { validateIcaoEquipmentReadiness } from "@shared/icao-readiness";
 import { getIcaoOtherInfoEquipmentWarnings, hasOnlyFlightServiceSurveillanceCodes, hasOnlyKnownIcaoSurveillanceCodes } from "@shared/icao-filing";
 import { normalizeZzzzActualLocation } from "@shared/zzzz-location";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
@@ -2167,8 +2168,30 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     errors.push("VFR flight plans cannot be filed at or above FL180. Use IFR or choose a lower altitude.");
   }
 
+  if (action === "file" || action === "amend") {
+    const icaoReadiness = validateIcaoEquipmentReadiness({
+      aircraftEquipment: plan.filingEquipment,
+      surveillanceEquipment: plan.filingSurveillanceEquipment,
+      otherInfo: plan.filingOtherInfo,
+      flightRules: rules,
+      aircraftProfileEquipment: getPlannerStateString(plan, "aircraftProfileEquipment"),
+      aircraftProfileSurveillanceEquipment: getPlannerStateString(plan, "aircraftProfileSurveillanceEquipment"),
+    });
+    for (const issue of icaoReadiness.issues) {
+      const message = issue.suggestion ? `${issue.message} ${issue.suggestion}` : issue.message;
+      if (issue.severity === "critical") {
+        if (!errors.includes(message)) errors.push(message);
+      } else if (!warnings.includes(message)) {
+        warnings.push(message);
+      }
+    }
+  }
+
   if ((action === "file" || action === "amend" || action === "activate") && !plan.plannedDepartureAt) {
     errors.push("Planned departure time is required before staging this action.");
+  }
+  if ((action === "file" || action === "amend") && plan.plannedDepartureAt && plan.plannedDepartureAt.getTime() < Date.now() - 60_000) {
+    errors.push("Planned departure time is in the past. Update the departure date and time before filing.");
   }
   if ((action === "file" || action === "amend") && !getSelectedDepartureLocalDateTime(plan)) {
     errors.push("Departure date and time are required before filing.");
@@ -2247,7 +2270,8 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if (action === "file" || action === "amend") {
     const otherInfoWarnings = getIcaoOtherInfoEquipmentWarnings(plan.filingOtherInfo, plan.filingEquipment);
     if (otherInfoWarnings.missingPbn) {
-      errors.push("Aircraft equipment code R means PBN approved, so Other ICAO Information must include PBN/ capability data.");
+      const message = "Aircraft equipment code R means PBN approved, so Other ICAO Information must include PBN/ capability data.";
+      if (!errors.some((error) => /equipment.*R.*PBN|PBN approved/i.test(error))) errors.push(message);
     }
     if (otherInfoWarnings.missingR || otherInfoWarnings.missingZ) {
       warnings.push("Selected ICAO information requires additional aircraft equipment codes.");

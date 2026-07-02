@@ -78,6 +78,7 @@ import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
 import { formatFlightPlanDepartureTime, formatZulu } from "@shared/flight-plan-time";
 import { analyzeRouteWeatherTokens, buildRouteWeatherIcaoList } from "@shared/route-weather-tokens";
 import { ICAO_EQUIPMENT_CODES, parseIcaoEquipmentCodes, normalizeIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
+import { validateIcaoEquipmentReadiness } from "@shared/icao-readiness";
 import { isValidZzzzActualLocation } from "@shared/zzzz-location";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
@@ -6011,6 +6012,83 @@ export default function FlightPlanner() {
   const currentSavedPlanCanCancel = canCancelPlan(currentSavedPlan);
   const currentProviderLifecycleMessage = getProviderLifecycleAvailabilityMessage(currentSavedPlan);
   const hasCurrentSavedPlan = Boolean(currentSavedPlan?.id);
+  const filingReadiness = useMemo(() => {
+    const now = Date.now();
+    const departureAtIso = form.plannedDepartureAt ? toUtcIso(form.plannedDepartureAt, departureTimeZone) : null;
+    const departureAt = departureAtIso ? new Date(departureAtIso) : null;
+    const icaoReadiness = validateIcaoEquipmentReadiness({
+      aircraftEquipment: filingDraft.equipment,
+      surveillanceEquipment: filingDraft.surveillanceEquipment,
+      otherInfo: filingDraft.otherInfo,
+      flightRules: filingDraft.flightRules,
+      aircraftProfileEquipment: selectedProfile?.filingEquipmentDefault || null,
+      aircraftProfileSurveillanceEquipment: selectedProfile?.filingSurveillanceEquipmentDefault || null,
+    });
+    const zzzzChecks = [
+      effectiveDepartureCode === "ZZZZ"
+        ? Boolean(actualDepartureLocation && isValidZzzzActualLocation(actualDepartureLocation) && zzzzDepartureDescription && planningReferenceDepartureAirport)
+        : true,
+      effectiveDestinationCode === "ZZZZ"
+        ? Boolean(actualDestinationLocation && isValidZzzzActualLocation(actualDestinationLocation) && zzzzDestinationDescription && planningReferenceDestinationAirport)
+        : true,
+      effectiveAlternateCode === "ZZZZ"
+        ? Boolean(actualAlternateLocation && isValidZzzzActualLocation(actualAlternateLocation) && zzzzAlternateDescription && planningReferenceAlternateAirport)
+        : true,
+    ];
+    const providerStateValid = !currentSavedPlan || !hasPendingProviderReview(currentSavedPlan);
+    const items = [
+      { id: "pilot-contact", label: "Pilot contact complete", ok: Boolean(filingDraft.pilotName.trim() && (filingDraft.pilotPhone.trim() || String((user as any)?.phone || "").trim())) },
+      { id: "phone", label: "Phone number present", ok: Boolean(filingDraft.pilotPhone.trim() || String((user as any)?.phone || "").trim()) },
+      { id: "home-base", label: "Home base present", ok: Boolean(filingDraft.aircraftHomeBase.trim() || String((user as any)?.homeBase || "").trim()) },
+      { id: "profile", label: "Aircraft profile complete", ok: Boolean(selectedProfile && selectedProfile.filingEquipmentDefault && selectedProfile.filingSurveillanceEquipmentDefault && selectedProfile.filingWakeTurbulenceDefault) },
+      { id: "aircraft-id", label: "Aircraft ID valid", ok: /^[A-Z0-9]{2,7}$/.test((filingDraft.aircraftId.trim() || form.tailNumber.trim()).toUpperCase()) },
+      { id: "departure", label: "Departure valid", ok: Boolean(effectiveDepartureCode) },
+      { id: "destination", label: "Destination valid", ok: Boolean(effectiveDestinationCode) },
+      { id: "zzzz", label: "ZZZZ details valid if used", ok: zzzzChecks.every(Boolean) },
+      { id: "route", label: "Route valid", ok: filingDraft.flightRules === "VFR" || Boolean(leidosFiledRoute && leidosFiledRoute.trim()) },
+      { id: "departure-time", label: "Departure time valid", ok: Boolean(departureAt && Number.isFinite(departureAt.getTime()) && departureAt.getTime() >= now - 60_000) },
+      { id: "zulu", label: "Local/Zulu conversion valid", ok: Boolean(form.plannedDepartureAt && departureTimeZone && departureAt && Number.isFinite(departureAt.getTime())) },
+      { id: "equipment", label: "Equipment valid", ok: !icaoReadiness.issues.some((issue) => issue.severity === "critical" && issue.field === "equipment") },
+      { id: "surveillance", label: "Surveillance valid", ok: Boolean(filingDraft.surveillanceEquipment.trim()) && !icaoReadiness.issues.some((issue) => issue.severity === "critical" && issue.field === "surveillance") },
+      { id: "pbn", label: "PBN valid", ok: !icaoReadiness.issues.some((issue) => issue.severity === "critical" && issue.field === "pbn") },
+      { id: "other-info", label: "Other Info / RMK valid", ok: Boolean(filingDraft.remarks.trim() || form.notes.trim()) && !icaoReadiness.issues.some((issue) => issue.severity === "critical" && issue.field === "otherInfo") },
+      { id: "provider-state", label: "Provider/versionStamp state valid for amend/cancel/activate/close", ok: providerStateValid },
+    ];
+    const blockingIssues = [
+      ...items.filter((item) => !item.ok).map((item) => `${item.label} needs attention.`),
+      ...icaoReadiness.issues.filter((issue) => issue.severity === "critical").map((issue) => issue.suggestion ? `${issue.message} ${issue.suggestion}` : issue.message),
+    ];
+    return {
+      ready: blockingIssues.length === 0,
+      items,
+      icaoIssues: icaoReadiness.issues,
+      blockingIssues: Array.from(new Set(blockingIssues)),
+      warnings: icaoReadiness.issues.filter((issue) => issue.severity === "warning"),
+    };
+  }, [
+    actualAlternateLocation,
+    actualDepartureLocation,
+    actualDestinationLocation,
+    currentSavedPlan,
+    departureTimeZone,
+    effectiveAlternateCode,
+    effectiveDepartureCode,
+    effectiveDestinationCode,
+    filingDraft,
+    form.notes,
+    form.plannedDepartureAt,
+    form.tailNumber,
+    leidosFiledRoute,
+    planningReferenceAlternateAirport,
+    planningReferenceDepartureAirport,
+    planningReferenceDestinationAirport,
+    selectedProfile,
+    user,
+    zzzzAlternateDescription,
+    zzzzDepartureDescription,
+    zzzzDestinationDescription,
+  ]);
+  const hasBlockingFilingReadinessIssue = filingReadiness.blockingIssues.length > 0;
   const filingActionLabels = useMemo(() => ({
     file: isFlightServiceTestMode ? "Submit Test Flight Plan" : "File Flight Plan",
     amend: isFlightServiceTestMode ? "Amend Test Flight Plan" : "Amend",
@@ -6263,6 +6341,14 @@ export default function FlightPlanner() {
   });
 
   const submitFilingAction = useCallback((params: { planId: string; action: FilingActionName; closeLocation?: string | null }) => {
+    if ((params.action === "file" || params.action === "amend") && hasBlockingFilingReadinessIssue) {
+      toast({
+        title: "Resolve readiness issues",
+        description: filingReadiness.blockingIssues[0] || "Issues must be resolved before filing.",
+        variant: "destructive",
+      });
+      return;
+    }
     const label = params.action === "file"
       ? "submit a test flight plan"
       : params.action === "amend"
@@ -6273,7 +6359,7 @@ export default function FlightPlanner() {
             ? "test cancel a flight plan"
             : "test close a flight plan";
     requireFlightServiceTestAcknowledgement(label, () => filingActionMutation.mutate(params));
-  }, [filingActionMutation, requireFlightServiceTestAcknowledgement]);
+  }, [filingActionMutation, filingReadiness.blockingIssues, hasBlockingFilingReadinessIssue, requireFlightServiceTestAcknowledgement, toast]);
 
   const submitProviderSync = useCallback((planId: string) => {
     requireFlightServiceTestAcknowledgement("refresh provider sync in the validation environment", () => {
@@ -6282,6 +6368,14 @@ export default function FlightPlanner() {
   }, [filingSyncMutation, requireFlightServiceTestAcknowledgement]);
 
   const requestSaveCurrentPlanWithFilingAction = useCallback((action: "file" | "amend", planId: string | null = null) => {
+    if (hasBlockingFilingReadinessIssue) {
+      toast({
+        title: "Resolve readiness issues",
+        description: filingReadiness.blockingIssues[0] || "Issues must be resolved before filing.",
+        variant: "destructive",
+      });
+      return;
+    }
     const label = action === "file" ? "submit a test flight plan" : "amend a test flight plan";
     requireFlightServiceTestAcknowledgement(label, () => {
       if (action === "file") {
@@ -6293,7 +6387,7 @@ export default function FlightPlanner() {
         updatePlanMutation.mutate(planId);
       }
     });
-  }, [requireFlightServiceTestAcknowledgement, updatePlanMutation]);
+  }, [filingReadiness.blockingIssues, hasBlockingFilingReadinessIssue, requireFlightServiceTestAcknowledgement, toast, updatePlanMutation]);
 
   const insertComfortStopMutation = useMutation({
     mutationFn: async ({
@@ -9446,6 +9540,61 @@ export default function FlightPlanner() {
               Filing guidance: save the plan, then use the filing actions below on the saved plan you are editing. RSF validates the packet before sending it to the filing provider.
             </AlertDescription>
           </Alert>
+          <div className={cn(
+            "rounded-lg border p-4",
+            filingReadiness.ready ? "border-emerald-400/35 bg-emerald-500/10" : "border-amber-400/40 bg-amber-500/10"
+          )}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold text-[#F5F8FC]">Flight Plan Readiness Check</div>
+                <div className={cn("mt-1 text-sm", filingReadiness.ready ? "text-emerald-200" : "text-amber-100")}>
+                  {filingReadiness.ready ? "Ready to File." : "Issues must be resolved before filing."}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild type="button" size="sm" variant="outline">
+                  <Link href="/my-aircraft">Review Aircraft Profile</Link>
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => setActiveTab("file")}>
+                  Edit Equipment
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => setActiveTab("file")}>
+                  Edit PBN
+                </Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setActiveTab("file")}>
+                  Return to Filing
+                </Button>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {filingReadiness.items.map((item) => (
+                <div key={item.id} className="flex items-center gap-2 rounded-md border border-white/10 bg-black/15 px-3 py-2 text-xs">
+                  <span className={item.ok ? "text-emerald-300" : "text-amber-300"}>{item.ok ? "OK" : "Needs review"}</span>
+                  <span className="text-[#DCE6F2]">{item.label}</span>
+                </div>
+              ))}
+            </div>
+            {filingReadiness.blockingIssues.length > 0 && (
+              <div className="mt-4 rounded-md border border-amber-300/35 bg-black/20 p-3 text-sm text-amber-100">
+                <div className="font-semibold">Resolve before File or Amend</div>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {filingReadiness.blockingIssues.map((issue) => (
+                    <li key={issue}>{issue}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {filingReadiness.warnings.length > 0 && (
+              <div className="mt-3 rounded-md border border-blue-300/25 bg-blue-500/10 p-3 text-sm text-blue-100">
+                <div className="font-semibold">Review suggestions</div>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {filingReadiness.warnings.map((issue) => (
+                    <li key={issue.id}>{issue.suggestion ? `${issue.message} ${issue.suggestion}` : issue.message}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
           {terrainOperationalNotes.length > 0 && (
             <Alert
               className={cn(
@@ -9526,8 +9675,8 @@ export default function FlightPlanner() {
                     size="sm"
                     variant="outline"
                     onClick={() => requestSaveCurrentPlanWithFilingAction("file")}
-                    disabled={filingActionMutation.isPending || updatePlanMutation.isPending || createPlanMutation.isPending || filingSyncMutation.isPending}
-                    title={getFileAvailabilityMessage(currentSavedPlan)}
+                    disabled={filingActionMutation.isPending || updatePlanMutation.isPending || createPlanMutation.isPending || filingSyncMutation.isPending || hasBlockingFilingReadinessIssue}
+                    title={hasBlockingFilingReadinessIssue ? "Resolve readiness check issues before filing." : getFileAvailabilityMessage(currentSavedPlan)}
                   >
                     {filingActionLabels.file}
                   </Button>
@@ -9538,6 +9687,13 @@ export default function FlightPlanner() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
+                        if (hasBlockingFilingReadinessIssue) {
+                          toast({
+                            title: "Resolve readiness issues",
+                            description: filingReadiness.blockingIssues[0] || "Issues must be resolved before filing.",
+                          });
+                          return;
+                        }
                         if (!currentDraftCanAmend) {
                           toast({
                             title: "Review amend requirements",
@@ -9548,8 +9704,8 @@ export default function FlightPlanner() {
                         setActiveTab("file");
                         requestSaveCurrentPlanWithFilingAction("amend", currentSavedPlan!.id);
                       }}
-                      disabled={filingActionMutation.isPending || updatePlanMutation.isPending || filingSyncMutation.isPending}
-                      title={draftAmendAvailabilityMessage || "Save the current values, then submit an amendment to the filed provider record."}
+                      disabled={filingActionMutation.isPending || updatePlanMutation.isPending || filingSyncMutation.isPending || hasBlockingFilingReadinessIssue}
+                      title={hasBlockingFilingReadinessIssue ? "Resolve readiness check issues before amending." : draftAmendAvailabilityMessage || "Save the current values, then submit an amendment to the filed provider record."}
                     >
                       {currentDraftCanAmend ? filingActionLabels.amend : "Review amend requirements"}
                     </Button>

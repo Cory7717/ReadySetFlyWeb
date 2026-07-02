@@ -166,18 +166,18 @@ export const seanRegressionScenarios: FlightServiceScenario[] = [
     seanFeedbackId: "SF-09",
   },
   {
-    name: "Sean - Changed date from 6/24 to 6/29 files 6/29",
+    name: "Sean - Changed date is used immediately",
     description: "Changed visible date is used immediately.",
     savedPlan: {
-      plannedDepartureAt: new Date("2026-06-24T15:00:00.000Z"),
-      plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-06-24T10:00" },
+      plannedDepartureAt: new Date("2026-07-15T15:00:00.000Z"),
+      plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00" },
     },
     visibleForm: {
-      plannedDepartureAt: new Date("2026-06-29T15:00:00.000Z"),
-      plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-06-29T10:00" },
+      plannedDepartureAt: new Date("2026-07-16T15:00:00.000Z"),
+      plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-16T10:00" },
     },
     userActions: ["edit", "file"],
-    expectedPayload: { departureInstant: "2026-06-29T15:00:00.000Z" },
+    expectedPayload: { departureInstant: "2026-07-16T15:00:00.000Z" },
     providerCallShouldBeBlocked: false,
     expectedValidationResult: "valid",
     seanFeedbackId: "SF-09",
@@ -196,7 +196,7 @@ export const seanRegressionScenarios: FlightServiceScenario[] = [
     name: "Sean - Corrected equipment files corrected value immediately",
     description: "Visible corrected equipment overrides stale saved equipment.",
     savedPlan: { filingEquipment: "SCE" },
-    visibleForm: { filingEquipment: "SC" },
+    visibleForm: { filingEquipment: "SC", filingOtherInfo: "RMK/CORRECTED EQUIPMENT TEST" },
     userActions: ["staleSavedState", "edit", "file"],
     expectedPayload: { aircraftEquipment: "SC" },
     providerCallShouldBeBlocked: false,
@@ -363,6 +363,9 @@ export const generateRandomScenarios = ({ seed = 20260701, count = 50 }: Scenari
     const route = pick(rng, ROUTES);
     const equipment = pick(rng, EQUIPMENT);
     const surveillance = pick(rng, SURVEILLANCE);
+    const otherInfo = equipment.includes("R")
+      ? (rng() < 0.5 ? "PBN/A1" : "PBN/A1 RMK/RANDOM FIELD 18")
+      : (rng() < 0.5 ? "RMK/RANDOM FIELD 18" : "");
     const missingAltitude = rng() < 0.12;
     const missingFuel = rng() < 0.12;
     const providerRetrieveMode = pick(rng, RETRIEVE_MODES);
@@ -387,7 +390,7 @@ export const generateRandomScenarios = ({ seed = 20260701, count = 50 }: Scenari
         filingSurveillanceEquipment: surveillance,
         filingPlannedAltitudeFt: missingAltitude ? null : 5500,
         filingEnduranceMinutes: missingFuel ? null : 240,
-        filingOtherInfo: rng() < 0.5 ? "PBN/A1" : "PBN/A1 RMK/RANDOM FIELD 18",
+        filingOtherInfo: otherInfo,
         filingRemarks: rng() < 0.5 ? "CERTIFICATION TEST" : "SUPPLEMENTAL TEST",
         plannerState: {
           departureTimeZone: "America/Chicago",

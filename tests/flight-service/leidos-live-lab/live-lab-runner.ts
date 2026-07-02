@@ -13,9 +13,9 @@ import {
   validateFlightPlanForAction,
 } from "../../../server/services/flight-plan-filing/provider";
 
-type CaseAction = FlightPlanFilingAction;
+export type CaseAction = FlightPlanFilingAction;
 
-type LiveLabCase = {
+export type LiveLabCase = {
   seed: number;
   name: string;
   actions: CaseAction[];
@@ -23,7 +23,7 @@ type LiveLabCase = {
   skipReason?: string;
 };
 
-const MAX_CASES = 15;
+export const MAX_CASES = 15;
 const CERT_REMARK = "RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT";
 
 const arg = (name: string, fallback = "") => {
@@ -36,18 +36,18 @@ const arg = (name: string, fallback = "") => {
 };
 
 const hasFlag = (name: string) => process.argv.includes(`--${name}`);
-const boolEnv = (value?: string | null) => /^(true|1|yes|on)$/i.test(String(value || "").trim());
+export const boolEnv = (value?: string | null) => /^(true|1|yes|on)$/i.test(String(value || "").trim());
 const numberArg = (name: string, fallback: string) => {
   const raw = arg(name, fallback);
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : Number(fallback);
 };
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const stamp = () => new Date().toISOString().replace(/[:.]/g, "-");
 
 const normalizePhone = (value?: string | null) => String(value || "").replace(/\D/g, "");
 
-const assertLabEndpoint = () => {
+export const assertLabEndpoint = () => {
   const diagnostics = getLeidosFlightServiceDiagnostics();
   const endpoint = String(diagnostics.baseUrl || "").toLowerCase();
   const productionLike = endpoint.includes("lmfsweb.afss.com") || endpoint.includes("production") || endpoint.includes("prod");
@@ -58,7 +58,7 @@ const assertLabEndpoint = () => {
   return diagnostics;
 };
 
-const loadDedicatedTestContext = async () => {
+export const loadDedicatedTestContext = async () => {
   const email = String(process.env.LEIDOS_TEST_USER_EMAIL || "").trim().toLowerCase();
   if (!email) throw new Error("LEIDOS_TEST_USER_EMAIL is required.");
   const user = await storage.getUserByEmail(email);
@@ -95,7 +95,7 @@ const loadDedicatedTestContext = async () => {
   return { user, profile: profile!, aircraftType, phone, homeBase, pilotName: name };
 };
 
-const dryRunContext = () => ({
+export const dryRunContext = () => ({
   user: { id: "dry-run-user", email: "dry-run@example.test", isAdmin: false, isSuperAdmin: false } as any,
   profile: {
     id: "dry-run-aircraft",
@@ -103,7 +103,7 @@ const dryRunContext = () => ({
     name: "C172",
     tailNumber: "N123TX",
     typeId: null,
-    filingEquipmentDefault: "S",
+    filingEquipmentDefault: "SR",
     filingSurveillanceEquipmentDefault: "C",
     filingWakeTurbulenceDefault: "LIGHT",
     filingAircraftColorDefault: "WHITE BLUE",
@@ -119,6 +119,10 @@ const dryRunContext = () => ({
 
 const createBasePlanFactory = (context: Awaited<ReturnType<typeof loadDedicatedTestContext>>, runId: string) => (seed: number, name: string, overrides: Partial<FlightPlan> = {}): FlightPlan => {
   const profile = context.profile;
+  const filingEquipment = String(profile.filingEquipmentDefault || "S").trim().toUpperCase();
+  const baseOtherInfo = filingEquipment.includes("R")
+    ? `PBN/A1 RMK/${CERT_REMARK} ${runId} SEED ${seed}`
+    : `RMK/${CERT_REMARK} ${runId} SEED ${seed}`;
   return {
     id: `live-lab-${seed}`,
     userId: context.user.id,
@@ -134,7 +138,7 @@ const createBasePlanFactory = (context: Awaited<ReturnType<typeof loadDedicatedT
     fuelOnBoard: "40",
     fuelRequired: "15",
     filingFlightRules: "VFR",
-    filingEquipment: String(profile.filingEquipmentDefault || "S").trim().toUpperCase(),
+    filingEquipment,
     filingSoulsOnBoard: String(profile.filingSoulsOnBoardDefault || "2").trim(),
     filingAircraftColor: String(profile.filingAircraftColorDefault || "WHITE BLUE").trim(),
     filingPilotName: String(profile.filingPilotNameDefault || context.pilotName).trim(),
@@ -144,7 +148,7 @@ const createBasePlanFactory = (context: Awaited<ReturnType<typeof loadDedicatedT
     filingWakeTurbulence: String(profile.filingWakeTurbulenceDefault || "LIGHT").trim().toUpperCase(),
     filingTypeOfFlight: String(profile.filingTypeOfFlightDefault || "G").trim().toUpperCase(),
     filingSurveillanceEquipment: String(profile.filingSurveillanceEquipmentDefault || "N").trim().toUpperCase(),
-    filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} ${runId} SEED ${seed}`,
+    filingOtherInfo: baseOtherInfo,
     filingTrueAirspeedKtas: 110,
     filingPlannedAltitudeFt: 5500,
     filingEstimatedEnrouteMinutes: 60,
@@ -173,7 +177,7 @@ const createBasePlanFactory = (context: Awaited<ReturnType<typeof loadDedicatedT
   } as FlightPlan;
 };
 
-const buildCases = (context: Awaited<ReturnType<typeof loadDedicatedTestContext>>, runId: string): LiveLabCase[] => {
+export const buildCases = (context: Awaited<ReturnType<typeof loadDedicatedTestContext>>, runId: string): LiveLabCase[] => {
   const plan = createBasePlanFactory(context, runId);
   return [
     { seed: 1, name: "Normal VFR ICAO file", actions: ["file"], buildPlan: () => plan(1, "Normal VFR") },
@@ -194,7 +198,7 @@ const buildCases = (context: Awaited<ReturnType<typeof loadDedicatedTestContext>
   ];
 };
 
-const summarizePayload = (plan: FlightPlan, action: FlightPlanFilingAction) => {
+export const summarizePayload = (plan: FlightPlan, action: FlightPlanFilingAction) => {
   if (action !== "file" && action !== "amend") return null;
   const payload = Object.fromEntries(buildLeidosActionPayload(plan, action, { otherInfo: null } as any).params.entries());
   return {
@@ -210,7 +214,7 @@ const summarizePayload = (plan: FlightPlan, action: FlightPlanFilingAction) => {
   };
 };
 
-const simulateDryRunProviderState = (plan: FlightPlan, action: FlightPlanFilingAction, seed: number): FlightPlan => {
+export const simulateDryRunProviderState = (plan: FlightPlan, action: FlightPlanFilingAction, seed: number): FlightPlan => {
   const providerPlanId = plan.filingProviderPlanId || `dry-provider-${seed}`;
   const versionStamp = `20260702${String(seed).padStart(6, "0")}`;
   const nextStatus =
@@ -250,7 +254,7 @@ const simulateDryRunProviderState = (plan: FlightPlan, action: FlightPlanFilingA
   } as FlightPlan;
 };
 
-const getVersionStamp = (plan: FlightPlan): string | null => {
+export const getVersionStamp = (plan: FlightPlan): string | null => {
   const raw = plan.filingRaw && typeof plan.filingRaw === "object" ? plan.filingRaw as Record<string, any> : {};
   const snapshot = plan.filingProviderSnapshot && typeof plan.filingProviderSnapshot === "object"
     ? plan.filingProviderSnapshot as Record<string, any>
@@ -274,7 +278,7 @@ const providerValue = (snapshot: unknown, keys: string[]) => {
   return null;
 };
 
-const compareGeneratedSentReturned = (
+export const compareGeneratedSentReturned = (
   generatedPayload: Record<string, any> | null,
   sentPayload: Record<string, any> | null,
   plan: FlightPlan,
@@ -349,7 +353,7 @@ const buildCertificationMetadata = (runId: string, testCase: LiveLabCase) => ({
   certificationSeed: testCase.seed,
 });
 
-const persistCertificationPlan = async (plan: FlightPlan, runId: string, testCase: LiveLabCase, dryRun: boolean) => {
+export const persistCertificationPlan = async (plan: FlightPlan, runId: string, testCase: LiveLabCase, dryRun: boolean) => {
   const metadata = buildCertificationMetadata(runId, testCase);
   const planWithMetadata = {
     ...plan,
@@ -371,14 +375,14 @@ const persistCertificationPlan = async (plan: FlightPlan, runId: string, testCas
   return await storage.createFlightPlan(planWithMetadata) as FlightPlan;
 };
 
-const updateCertificationPlan = async (plan: FlightPlan, updates: Partial<FlightPlan>, dryRun: boolean): Promise<FlightPlan> => {
+export const updateCertificationPlan = async (plan: FlightPlan, updates: Partial<FlightPlan>, dryRun: boolean): Promise<FlightPlan> => {
   const next = { ...plan, ...updates } as FlightPlan;
   if (dryRun) return next;
   const updated = await storage.updateFlightPlan(plan.id, updates as any);
   return (updated || next) as FlightPlan;
 };
 
-const appendCertificationAudit = async (plan: FlightPlan, entryType: "action" | "cleanup", entry: Record<string, unknown>, dryRun: boolean) => {
+export const appendCertificationAudit = async (plan: FlightPlan, entryType: "action" | "cleanup", entry: Record<string, unknown>, dryRun: boolean) => {
   const audit = plan.certificationAudit && typeof plan.certificationAudit === "object"
     ? plan.certificationAudit as Record<string, any>
     : {};
@@ -391,19 +395,19 @@ const appendCertificationAudit = async (plan: FlightPlan, entryType: "action" | 
   return updateCertificationPlan(plan, { certificationAudit: nextAudit } as any, dryRun);
 };
 
-const loadCertificationPlansForRun = async (runId: string): Promise<FlightPlan[]> => {
+export const loadCertificationPlansForRun = async (runId: string): Promise<FlightPlan[]> => {
   return await db
     .select()
     .from(flightPlans)
     .where(and(eq(flightPlans.certificationRunId, runId), eq(flightPlans.isCertificationTest, true)));
 };
 
-const isCleanupBlockingError = (error: unknown) => {
+export const isCleanupBlockingError = (error: unknown) => {
   const message = String((error as any)?.message || error || "").toLowerCase();
   return /auth|authorized|rate.?limit|too many|server|environment|production|not lab|html instead|redirected/.test(message);
 };
 
-const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boolean) => {
+export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boolean) => {
   const cleanupResults: any[] = [];
   for (const plan of plans) {
     const started = Date.now();

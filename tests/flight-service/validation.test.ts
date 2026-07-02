@@ -13,6 +13,94 @@ test("invalid equipment SCE is blocked before provider call", () => {
   assert.ok(result.errors.some((error) => /invalid ICAO code/i.test(error)));
 });
 
+test("R equipment without PBN is blocked before provider call", () => {
+  const result = validateFlightPlanForAction(filingPlan({
+    filingEquipment: "SR",
+    filingOtherInfo: "RMK/R CODE WITHOUT PBN",
+  }), "file");
+  assert.equal(result.ready, false);
+  assert.ok(result.errors.some((error) => /PBN/i.test(error)));
+});
+
+test("PBN without R equipment is blocked before provider call", () => {
+  const result = validateFlightPlanForAction(filingPlan({
+    filingEquipment: "S",
+    filingOtherInfo: "PBN/A1 RMK/PBN WITHOUT R",
+  }), "file");
+  assert.equal(result.ready, false);
+  assert.ok(result.errors.some((error) => /PBN.*Aircraft Equipment|Aircraft Equipment.*R/i.test(error)));
+});
+
+test("sensor-specific PBN without matching equipment is blocked before provider call", () => {
+  const result = validateFlightPlanForAction(filingPlan({
+    filingEquipment: "SR",
+    filingOtherInfo: "PBN/B2 RMK/GNSS MISSING",
+  }), "file");
+  assert.equal(result.ready, false);
+  assert.ok(result.errors.some((error) => /PBN\/B2.*GNSS/i.test(error)));
+});
+
+test("invalid ADS-B surveillance combination is blocked before provider call", () => {
+  const result = validateFlightPlanForAction(filingPlan({
+    filingSurveillanceEquipment: "B2",
+  }), "file");
+  assert.equal(result.ready, false);
+  assert.ok(result.errors.some((error) => /ADS-B|Surveillance Equipment/i.test(error)));
+});
+
+test("missing phone is blocked before provider call", () => {
+  const result = validateFlightPlanForAction(filingPlan({
+    filingPilotPhone: "",
+  }), "file");
+  assert.equal(result.ready, false);
+  assert.ok(result.errors.some((error) => /phone/i.test(error)));
+});
+
+test("missing home base is blocked before provider call", () => {
+  const result = validateFlightPlanForAction(filingPlan({
+    filingAircraftHomeBase: "",
+  }), "file");
+  assert.equal(result.ready, false);
+  assert.ok(result.errors.some((error) => /home base/i.test(error)));
+});
+
+test("invalid ZZZZ coordinate is blocked before provider call", () => {
+  const result = validateFlightPlanForAction(filingPlan({
+    departure: "ZZZZ",
+    filingDepartureName: "Private Strip",
+    plannerState: {
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-07-15T10:00",
+      planningReferenceDepartureAirport: "KEDC",
+      actualDepartureLocation: "BADCOORD",
+    },
+  }), "file");
+  assert.equal(result.ready, false);
+  assert.ok(result.errors.some((error) => /ZZZZ|actual departure/i.test(error)));
+});
+
+test("departure time in the past is blocked before provider call", () => {
+  const result = validateFlightPlanForAction(filingPlan({
+    plannedDepartureAt: new Date("2026-01-01T15:00:00.000Z"),
+    plannerState: {
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-01-01T09:00",
+    },
+  }), "file");
+  assert.equal(result.ready, false);
+  assert.ok(result.errors.some((error) => /past/i.test(error)));
+});
+
+test("missing IFR required equipment is blocked before provider call", () => {
+  const result = validateFlightPlanForAction(filingPlan({
+    filingFlightRules: "IFR",
+    filingEquipment: "N",
+    filingOtherInfo: "RMK/IFR NO EQUIPMENT",
+  }), "file");
+  assert.equal(result.ready, false);
+  assert.ok(result.errors.some((error) => /IFR.*equipment|COM\/NAV/i.test(error)));
+});
+
 test("missing altitude is blocked before provider call", () => {
   const result = validateFlightPlanForAction(filingPlan({
     filingPlannedAltitudeFt: null,

@@ -1,6 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import readline from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
 import { and, eq } from "drizzle-orm";
 import type { FlightPlan, FlightPlanFilingAction } from "../../../shared/schema";
 import { flightPlans } from "../../../shared/schema";
@@ -20,10 +22,14 @@ export type LiveLabCase = {
   name: string;
   actions: CaseAction[];
   buildPlan: () => FlightPlan;
+  expectedBlockedBeforeLeidos?: boolean;
+  expectedFinalState?: string;
+  recommendedFix?: string;
   skipReason?: string;
 };
 
 export const MAX_CASES = 15;
+const EXPECTED_TEST_ACCOUNT_EMAIL = "generalmanager.atx@gmail.com";
 const CERT_REMARK = "RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT";
 
 const arg = (name: string, fallback = "") => {
@@ -46,6 +52,12 @@ export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve
 const stamp = () => new Date().toISOString().replace(/[:.]/g, "-");
 
 const normalizePhone = (value?: string | null) => String(value || "").replace(/\D/g, "");
+const normalizeEmail = (value?: string | null) => String(value || "").trim().toLowerCase();
+const isAccountDisabled = (user: any) => {
+  if (user?.isActive === false || user?.active === false || user?.disabled === true) return true;
+  const status = String(user?.status || user?.accountStatus || "").trim().toLowerCase();
+  return ["disabled", "suspended", "deleted", "inactive", "banned"].includes(status);
+};
 
 export const assertLabEndpoint = () => {
   const diagnostics = getLeidosFlightServiceDiagnostics();
@@ -59,12 +71,24 @@ export const assertLabEndpoint = () => {
 };
 
 export const loadDedicatedTestContext = async () => {
-  const email = String(process.env.LEIDOS_TEST_USER_EMAIL || "").trim().toLowerCase();
-  if (!email) throw new Error("LEIDOS_TEST_USER_EMAIL is required.");
+  const email = normalizeEmail(process.env.LEIDOS_TEST_USER_EMAIL);
+  if (!email) throw new Error("✗ LEIDOS_TEST_USER_EMAIL is required.");
+  if (email !== EXPECTED_TEST_ACCOUNT_EMAIL) {
+    throw new Error(`✗ LEIDOS_TEST_USER_EMAIL must be ${EXPECTED_TEST_ACCOUNT_EMAIL}; configured value is ${email}.`);
+  }
+  console.log("=========================================");
+  console.log("Leidos Certification Session");
+  console.log("");
+  console.log("Configured Test Account:");
+  console.log(email);
+  console.log("=========================================");
+  console.log("");
   const user = await storage.getUserByEmail(email);
-  if (!user) throw new Error(`No RSF user found for LEIDOS_TEST_USER_EMAIL=${email}.`);
-  if ((user as any).isSuperAdmin) throw new Error("Refusing to run: LEIDOS_TEST_USER_EMAIL belongs to a Super Admin.");
-  if ((user as any).isAdmin) throw new Error("Refusing to run: LEIDOS_TEST_USER_EMAIL belongs to an Admin. Use a normal test user account.");
+  if (!user) throw new Error("✗ Test account not found");
+  if (normalizeEmail((user as any).email) !== email) throw new Error("✗ Configured email does not match loaded user");
+  if (isAccountDisabled(user)) throw new Error("✗ User account is disabled or inactive");
+  if ((user as any).isSuperAdmin) throw new Error("✗ User is Super Admin");
+  if ((user as any).isAdmin) throw new Error("✗ User is Admin. Use a normal test user account.");
   const phone = normalizePhone((user as any).phone);
   const homeBase = String((user as any).homeBase || "").trim().toUpperCase();
   const name = `${String((user as any).firstName || "").trim()} ${String((user as any).lastName || "").trim()}`.trim();
@@ -74,7 +98,7 @@ export const loadDedicatedTestContext = async () => {
   if (!/^[A-Z0-9]{3,4}$/.test(homeBase)) missing.push("home base");
   const profiles = await storage.getAircraftProfilesByUser(user.id);
   const profile = profiles.find((item) => String(item.tailNumber || "").trim()) || profiles[0];
-  if (!profile) missing.push("default aircraft profile");
+  if (!profile) missing.push("default aircraft");
   let aircraftType = "";
   if (profile?.typeId) {
     const type = await storage.getAircraftTypeById(profile.typeId);
@@ -90,34 +114,61 @@ export const loadDedicatedTestContext = async () => {
   if (!String(profile?.filingAircraftColorDefault || "").trim()) aircraftMissing.push("aircraft color default");
   if (aircraftMissing.length) missing.push(`aircraft profile missing ${aircraftMissing.join(", ")}`);
   if (missing.length) {
-    throw new Error(`Dedicated Leidos test account is incomplete. Fix: ${missing.join("; ")}.`);
+    const reason = missing.includes("phone number")
+      ? "✗ Phone number missing"
+      : missing.includes("home base")
+        ? "✗ Home base missing"
+        : missing.includes("default aircraft")
+          ? "✗ Default aircraft missing"
+          : missing.some((item) => item.includes("aircraft profile"))
+            ? "✗ Aircraft profile is incomplete"
+            : missing.includes("user first/last name")
+              ? "✗ Pilot profile missing"
+              : "✗ Dedicated Leidos test account is incomplete";
+    throw new Error(`${reason}: ${missing.join("; ")}`);
   }
-  return { user, profile: profile!, aircraftType, phone, homeBase, pilotName: name };
+  const context = { user, profile: profile!, aircraftType, phone, homeBase, pilotName: name };
+  printTestAccountVerification(context);
+  return context;
 };
 
-export const dryRunContext = () => ({
-  user: { id: "dry-run-user", email: "dry-run@example.test", isAdmin: false, isSuperAdmin: false } as any,
-  profile: {
-    id: "dry-run-aircraft",
-    userId: "dry-run-user",
-    name: "C172",
-    tailNumber: "N123TX",
-    typeId: null,
-    filingEquipmentDefault: "SR",
-    filingSurveillanceEquipmentDefault: "C",
-    filingWakeTurbulenceDefault: "LIGHT",
-    filingAircraftColorDefault: "WHITE BLUE",
-    filingSoulsOnBoardDefault: "2",
-    filingPilotNameDefault: "RSF Cert Pilot",
-    filingTypeOfFlightDefault: "G",
-  } as any,
-  aircraftType: "C172",
-  phone: "5125550100",
-  homeBase: "KEDC",
-  pilotName: "RSF Cert Pilot",
-});
+export type DedicatedTestContext = Awaited<ReturnType<typeof loadDedicatedTestContext>>;
 
-const createBasePlanFactory = (context: Awaited<ReturnType<typeof loadDedicatedTestContext>>, runId: string) => (seed: number, name: string, overrides: Partial<FlightPlan> = {}): FlightPlan => {
+export const printTestAccountVerification = (context: {
+  user: any;
+  profile: any;
+  aircraftType: string;
+  phone: string;
+  homeBase: string;
+  pilotName: string;
+}) => {
+  const subscription = String(context.user.subscriptionStatus || context.user.subscriptionPlan || context.user.subscriptionTier || "unknown");
+  console.log("✓ User Found");
+  console.log(`User ID: ${context.user.id}`);
+  console.log(`User Name: ${context.pilotName}`);
+  console.log(`Email: ${context.user.email}`);
+  console.log(`Pilot Profile ID: ${context.user.profileId || context.user.pilotProfileId || context.user.id}`);
+  console.log(`Aircraft ID: ${context.profile.id}`);
+  console.log(`Aircraft: ${context.aircraftType || context.profile.name || "-"}`);
+  console.log(`Tail Number: ${context.profile.tailNumber || "-"}`);
+  console.log(`Home Base: ${context.homeBase}`);
+  console.log(`Phone Number: ${context.phone}`);
+  console.log(`Subscription: ${subscription}`);
+  console.log(`Admin Status: superAdmin=${Boolean(context.user.isSuperAdmin)} admin=${Boolean(context.user.isAdmin)}`);
+  console.log("");
+  console.log("✓ Email exactly matches LEIDOS_TEST_USER_EMAIL");
+  console.log("✓ User exists");
+  console.log("✓ User is active");
+  console.log("✓ User is NOT Super Admin");
+  console.log("✓ Pilot profile exists");
+  console.log("✓ Default aircraft exists");
+  console.log("✓ Phone number exists");
+  console.log("✓ Home base exists");
+  console.log("✓ Aircraft profile is complete");
+  console.log("");
+};
+
+const createBasePlanFactory = (context: DedicatedTestContext, runId: string) => (seed: number, name: string, overrides: Partial<FlightPlan> = {}): FlightPlan => {
   const profile = context.profile;
   const filingEquipment = String(profile.filingEquipmentDefault || "S").trim().toUpperCase();
   const baseOtherInfo = filingEquipment.includes("R")
@@ -177,7 +228,7 @@ const createBasePlanFactory = (context: Awaited<ReturnType<typeof loadDedicatedT
   } as FlightPlan;
 };
 
-export const buildCases = (context: Awaited<ReturnType<typeof loadDedicatedTestContext>>, runId: string): LiveLabCase[] => {
+export const buildCases = (context: DedicatedTestContext, runId: string): LiveLabCase[] => {
   const plan = createBasePlanFactory(context, runId);
   return [
     { seed: 1, name: "Normal VFR ICAO file", actions: ["file"], buildPlan: () => plan(1, "Normal VFR") },
@@ -185,16 +236,16 @@ export const buildCases = (context: Awaited<ReturnType<typeof loadDedicatedTestC
     { seed: 3, name: "ZZZZ destination lat/long description", actions: ["file"], buildPlan: () => plan(3, "ZZZZ Destination", { destination: "ZZZZ", filingDestinationName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceDestinationAirport: "KSDL", actualDestinationLocationMode: "latlong", actualDestinationLocation: "3839N09045W" } }) },
     { seed: 4, name: "ZZZZ departure lat/long description", actions: ["file"], buildPlan: () => plan(4, "ZZZZ Departure", { departure: "ZZZZ", filingDepartureName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceDepartureAirport: "KDWH", actualDepartureLocationMode: "latlong", actualDepartureLocation: "3839N09045W" } }) },
     { seed: 5, name: "ZZZZ alternate destination", actions: ["file"], buildPlan: () => plan(5, "ZZZZ Alternate", { alternate: "ZZZZ", filingAlternateName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceAlternateAirport: "KACT", actualAlternateLocationMode: "identifier", actualAlternateLocation: "85TX" } }) },
-    { seed: 6, name: "Aircraft ID ZZZZ unsupported safety check", actions: [], skipReason: "RSF does not currently support aircraft identifier ZZZZ certification. Flight Service clarified aircraft type ZZZZ is the supported workflow.", buildPlan: () => plan(6, "Aircraft ID ZZZZ", { tailNumber: "ZZZZ" }) },
-    { seed: 7, name: "Other Info RMK retained", actions: ["file"], buildPlan: () => plan(7, "RMK Retained", { filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} RMK RETAINED ${runId}` }) },
-    { seed: 8, name: "PBN R equipment validation", actions: ["file"], buildPlan: () => plan(8, "PBN R", { filingEquipment: "R", filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} PBN R ${runId}` }) },
-    { seed: 9, name: "Timezone boundary local to Zulu", actions: ["file"], buildPlan: () => plan(9, "TZ Boundary", { plannedDepartureAt: new Date("2026-03-09T04:30:00.000Z"), plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-03-08T23:30" } }) },
-    { seed: 10, name: "Phoenix Arizona no-DST", actions: ["file"], buildPlan: () => plan(10, "Phoenix No DST", { departure: "KPHX", destination: "KLAS", plannedDepartureAt: new Date("2026-07-15T16:00:00.000Z"), plannerState: { departureTimeZone: "America/Phoenix", userDisplayDepartureTimeLocal: "2026-07-15T09:00" } }) },
-    { seed: 11, name: "VFR file then activate", actions: ["file", "activate"], buildPlan: () => plan(11, "VFR Activate") },
-    { seed: 12, name: "VFR file activate close", actions: ["file", "activate", "close"], buildPlan: () => plan(12, "VFR Close", { filingCloseLocation: "KDAL" } as any) },
-    { seed: 13, name: "IFR file then amend", actions: ["file", "amend"], buildPlan: () => plan(13, "IFR Amend", { filingFlightRules: "IFR", route: "DCT KDWH DCT", filingPlannedAltitudeFt: 7000 }) },
-    { seed: 14, name: "File then cancel", actions: ["file", "cancel"], buildPlan: () => plan(14, "Cancel") },
-    { seed: 15, name: "Provider update versionStamp preservation", actions: ["file", "amend"], buildPlan: () => plan(15, "Version Stamp", { route: "DCT KDWH DCT" }) },
+    { seed: 6, name: "Other Info RMK retained", actions: ["file"], buildPlan: () => plan(6, "RMK Retained", { filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} RMK RETAINED ${runId}` }) },
+    { seed: 7, name: "VFR file activate close", actions: ["file", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(7, "VFR Close", { filingCloseLocation: "KDAL" } as any) },
+    { seed: 8, name: "IFR file then amend", actions: ["file", "amend"], expectedFinalState: "filed", buildPlan: () => plan(8, "IFR Amend", { filingFlightRules: "IFR", route: "DCT KDWH DCT", filingPlannedAltitudeFt: 7000 }) },
+    { seed: 9, name: "File then cancel", actions: ["file", "cancel"], expectedFinalState: "cancelled", buildPlan: () => plan(9, "Cancel") },
+    { seed: 10, name: "Negative - Equipment R with no PBN", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add the correct PBN/ capabilities or remove R if not PBN approved.", buildPlan: () => plan(10, "R Without PBN", { filingEquipment: "SR", filingOtherInfo: `RMK/${CERT_REMARK} R WITHOUT PBN ${runId}` }) },
+    { seed: 11, name: "Negative - PBN without Equipment R", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add R only if approved, otherwise remove PBN/.", buildPlan: () => plan(11, "PBN Without R", { filingEquipment: "S", filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} PBN WITHOUT R ${runId}` }) },
+    { seed: 12, name: "Negative - Invalid surveillance B2", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Use supported compact surveillance values and put ADS-B detail in SUR/ if needed.", buildPlan: () => plan(12, "Invalid Surveillance", { filingSurveillanceEquipment: "B2" }) },
+    { seed: 13, name: "Negative - Duplicate equipment codes", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Remove duplicate ICAO equipment codes.", buildPlan: () => plan(13, "Duplicate Equipment", { filingEquipment: "SRR", filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} DUPLICATE EQUIPMENT ${runId}` }) },
+    { seed: 14, name: "Negative - Missing phone and home base", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Complete pilot phone and aircraft home base before filing.", buildPlan: () => plan(14, "Missing Contact", { filingPilotPhone: "", filingAircraftHomeBase: "" }) },
+    { seed: 15, name: "Negative - Invalid ZZZZ coordinates and past departure", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Correct ZZZZ actual location and move departure time into the future.", buildPlan: () => plan(15, "Invalid ZZZZ", { departure: "ZZZZ", filingDepartureName: "PRIVATE STRIP", plannedDepartureAt: new Date("2026-01-01T15:00:00.000Z"), plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-01-01T09:00", planningReferenceDepartureAirport: "KDWH", actualDepartureLocationMode: "latlong", actualDepartureLocation: "BADCOORD" } }) },
   ];
 };
 
@@ -202,13 +253,20 @@ export const summarizePayload = (plan: FlightPlan, action: FlightPlanFilingActio
   if (action !== "file" && action !== "amend") return null;
   const payload = Object.fromEntries(buildLeidosActionPayload(plan, action, { otherInfo: null } as any).params.entries());
   return {
+    aircraft: `${payload.aircraftIdentifier || plan.tailNumber || "-"} / ${payload.aircraftType || plan.aircraftType || "-"}`,
     aircraftIdentifier: payload.aircraftIdentifier,
     aircraftType: payload.aircraftType,
+    equipment: payload.aircraftEquipment,
+    surveillance: payload.surveillanceEquipment,
+    pbn: pbnFromOtherInfo(payload.otherInfo),
     flightRules: payload.flightRules,
     departure: payload.departure,
     destination: payload.destination,
     altDestination1: payload.altDestination1,
     route: payload.route,
+    remarks: payload.remarks,
+    phone: payload.pilotPhone,
+    homeBase: payload.aircraftHomeBase,
     otherInfo: payload.otherInfo,
     departureInstant: payload.departureInstant,
   };
@@ -352,6 +410,96 @@ const buildCertificationMetadata = (runId: string, testCase: LiveLabCase) => ({
   certificationCaseName: testCase.name,
   certificationSeed: testCase.seed,
 });
+
+const formatPayloadReview = (payload: Record<string, any> | null, plan: FlightPlan) => ({
+  Aircraft: payload?.aircraft || `${plan.tailNumber || "-"} / ${plan.aircraftType || "-"}`,
+  Equipment: payload?.equipment || plan.filingEquipment || "-",
+  Surveillance: payload?.surveillance || plan.filingSurveillanceEquipment || "-",
+  PBN: payload?.pbn || pbnFromOtherInfo(plan.filingOtherInfo) || "-",
+  Departure: payload?.departure || plan.departure || "-",
+  Destination: payload?.destination || plan.destination || "-",
+  Alternate: payload?.altDestination1 || plan.alternate || "-",
+  "Flight Rules": payload?.flightRules || plan.filingFlightRules || "-",
+  "Other Info": payload?.otherInfo || plan.filingOtherInfo || "-",
+  Remarks: payload?.remarks ? "[present]" : (plan.filingRemarks ? "[present]" : "-"),
+  Phone: payload?.phone || plan.filingPilotPhone || "-",
+  "Home Base": payload?.homeBase || plan.filingAircraftHomeBase || "-",
+  "Zulu Time": payload?.departureInstant || "-",
+});
+
+const printPayloadReview = (payload: Record<string, any> | null, plan: FlightPlan) => {
+  const review = formatPayloadReview(payload, plan);
+  console.log("Payload Review");
+  console.log("--------------");
+  for (const [label, value] of Object.entries(review)) {
+    console.log(`${label}: ${value}`);
+  }
+  console.log("");
+};
+
+const finalStateForCase = (testCase: LiveLabCase) => {
+  if (testCase.expectedFinalState) return testCase.expectedFinalState;
+  if (testCase.actions.includes("close")) return "closed";
+  if (testCase.actions.includes("cancel")) return "cancelled";
+  if (testCase.actions.includes("activate")) return "activated, then cleanup close";
+  if (testCase.actions.includes("file")) return "filed, then cleanup cancel";
+  return "no provider state";
+};
+
+const printCleanupPreview = (cases: LiveLabCase[]) => {
+  console.log("");
+  console.log("Cleanup Preview");
+  console.log("---------------");
+  for (const testCase of cases) {
+    const cleanupAction = testCase.expectedBlockedBeforeLeidos
+      ? "NO PROVIDER CLEANUP - blocked before Leidos"
+      : testCase.actions.includes("close") || testCase.actions.includes("cancel")
+        ? "VERIFY TERMINAL STATE"
+        : testCase.actions.includes("activate")
+          ? "CLOSE"
+          : testCase.actions.includes("file")
+            ? "CANCEL"
+            : "NONE";
+    console.log(`Case ${testCase.seed}: ${testCase.actions.join(" -> ").toUpperCase() || "SKIP"} -> ${cleanupAction}`);
+    console.log(`Final expected state: ${finalStateForCase(testCase)}`);
+  }
+  console.log("");
+};
+
+const promptLiveConfirmation = async (context: DedicatedTestContext, diagnostics: ReturnType<typeof assertLabEndpoint>, limit: number, delayMinutes: number) => {
+  const rl = readline.createInterface({ input, output });
+  try {
+    console.log("=========================================");
+    console.log("");
+    console.log("You are about to submit certification cases using:");
+    console.log("");
+    console.log(context.user.email);
+    console.log("");
+    console.log(`Leidos Environment: ${String(diagnostics.environment || "LAB").toUpperCase()}`);
+    console.log("");
+    console.log(`Maximum Cases: ${limit}`);
+    console.log("");
+    console.log(`Delay: ${delayMinutes} minutes`);
+    console.log("");
+    console.log("=========================================");
+    console.log("");
+    const typed = (await rl.question("Type CONFIRM to begin: ")).trim();
+    if (typed !== "CONFIRM") throw new Error("Live Leidos LAB certification aborted by operator.");
+    const yn = (await rl.question(`You are about to submit certification cases using ${context.user.email}. Continue? [Y/N] `)).trim().toLowerCase();
+    if (yn !== "y") throw new Error("Live Leidos LAB certification aborted by operator.");
+  } finally {
+    rl.close();
+  }
+};
+
+const printValidationResult = (testCase: LiveLabCase, validation: ReturnType<typeof validateFlightPlanForAction>) => {
+  const blocked = !validation.ready;
+  console.log(`validationResult: ${validation.ready ? "valid" : "invalid"}`);
+  console.log(`blockedBeforeLeidos: ${blocked}`);
+  console.log(`blockedReason: ${validation.errors.join(" | ") || "-"}`);
+  console.log(`recommendedFix: ${testCase.recommendedFix || validation.warnings.join(" | ") || "-"}`);
+  console.log("");
+};
 
 export const persistCertificationPlan = async (plan: FlightPlan, runId: string, testCase: LiveLabCase, dryRun: boolean) => {
   const metadata = buildCertificationMetadata(runId, testCase);
@@ -498,9 +646,7 @@ const run = async () => {
   }
 
   if (cleanupOnlyRunId) {
-    const context = dryRun && !process.env.LEIDOS_TEST_USER_EMAIL
-      ? dryRunContext()
-      : await loadDedicatedTestContext();
+    const context = await loadDedicatedTestContext();
     const plans = dryRun ? [] : await loadCertificationPlansForRun(cleanupOnlyRunId);
     const cleanupResults = dryRun
       ? [{ certificationRunId: cleanupOnlyRunId, responseStatus: "dry_run", plannedAction: "Would load certification plans for this run and cancel/close only non-terminal test plans." }]
@@ -528,20 +674,20 @@ const run = async () => {
     return;
   }
 
-  const context = dryRun && !process.env.LEIDOS_TEST_USER_EMAIL
-    ? dryRunContext()
-    : await loadDedicatedTestContext();
+  const context = await loadDedicatedTestContext();
   const cases = buildCases(context, runId)
     .filter((item) => !replay || String(item.seed) === replay)
     .slice(0, replay ? 1 : limit);
   if (cases.length === 0) throw new Error(`No live LAB test case matched replay=${replay}.`);
 
+  if (!dryRun) await promptLiveConfirmation(context, diagnostics, cases.length, delayMinutes);
   console.log(`Leidos live LAB certification ${dryRun ? "DRY RUN" : "CONFIRMED"}`);
   console.log(`Endpoint: ${diagnostics.baseUrl}`);
   console.log(`Test user: ${context.user.email || process.env.LEIDOS_TEST_USER_EMAIL}`);
   console.log(`Cases: ${cases.length}/${MAX_CASES}`);
   console.log(`Delay: ${delayMinutes} minute(s)`);
   console.log(`Cleanup: ${skipCleanup ? "SKIPPED by flag" : "enabled"}`);
+  printCleanupPreview(cases);
 
   const results: any[] = [];
   const createdPlans: FlightPlan[] = [];
@@ -575,10 +721,47 @@ const run = async () => {
       const started = Date.now();
       const validation = validateFlightPlanForAction(plan, action);
       const generatedPayload = summarizePayload(plan, action) as Record<string, any> | null;
+      printPayloadReview(generatedPayload, plan);
+      printValidationResult(testCase, validation);
       if (!validation.ready) {
+        const expectedBlock = Boolean(testCase.expectedBlockedBeforeLeidos);
+        caseResult.pass = expectedBlock;
+        if (!expectedBlock) caseResult.errors.push(`Validation failed before ${action}: ${validation.errors.join(" | ")}`);
+        const actionResult = {
+          action,
+          generatedPayload,
+          payloadSentToLeidos: null,
+          leidosResponse: null,
+          validationResult: "invalid",
+          blockedBeforeLeidos: true,
+          blockedReason: validation.errors.join(" | "),
+          recommendedFix: testCase.recommendedFix || validation.warnings.join(" | ") || null,
+          responseStatus: expectedBlock ? "blocked_before_leidos_expected" : "validation_failed",
+          warnings: validation.warnings,
+          errors: validation.errors,
+          elapsedMs: Date.now() - started,
+        };
+        caseResult.actions.push(actionResult);
+        plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
+        break;
+      }
+      if (testCase.expectedBlockedBeforeLeidos) {
         caseResult.pass = false;
-        caseResult.errors.push(`Validation failed before ${action}: ${validation.errors.join(" | ")}`);
-        const actionResult = { action, generatedPayload, payloadSentToLeidos: null, leidosResponse: null, responseStatus: "validation_failed", warnings: validation.warnings, errors: validation.errors, elapsedMs: Date.now() - started };
+        caseResult.errors.push(`Expected local validation to block ${action}, but validation passed. Provider call was not sent.`);
+        const actionResult = {
+          action,
+          generatedPayload,
+          payloadSentToLeidos: null,
+          leidosResponse: null,
+          validationResult: "valid",
+          blockedBeforeLeidos: false,
+          blockedReason: null,
+          recommendedFix: testCase.recommendedFix || null,
+          responseStatus: "expected_block_missing",
+          warnings: validation.warnings,
+          errors: caseResult.errors,
+          elapsedMs: Date.now() - started,
+        };
         caseResult.actions.push(actionResult);
         plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
         break;
@@ -586,7 +769,7 @@ const run = async () => {
       if (dryRun) {
         const simulated = simulateDryRunProviderState(plan, action, testCase.seed);
         const comparison = compareGeneratedSentReturned(generatedPayload, generatedPayload, simulated);
-        const actionResult = { action, generatedPayload, payloadSentToLeidos: generatedPayload, leidosResponse: { dryRun: true }, responseStatus: "dry_run", providerPlanId: null, versionStamp: null, warnings: validation.warnings, errors: [], comparison, elapsedMs: Date.now() - started };
+        const actionResult = { action, generatedPayload, payloadSentToLeidos: generatedPayload, leidosResponse: { dryRun: true }, validationResult: "valid", blockedBeforeLeidos: false, blockedReason: null, recommendedFix: null, responseStatus: "dry_run", providerPlanId: null, versionStamp: null, warnings: validation.warnings, errors: [], comparison, elapsedMs: Date.now() - started };
         caseResult.actions.push(actionResult);
         caseResult.comparisons.push(comparison);
         plan = await appendCertificationAudit(simulated, "action", actionResult, dryRun);
@@ -636,6 +819,10 @@ const run = async () => {
         generatedPayload,
         payloadSentToLeidos: sentPayload,
         leidosResponse: response.raw?.response || response.raw || null,
+        validationResult: "valid",
+        blockedBeforeLeidos: false,
+        blockedReason: null,
+        recommendedFix: null,
         responseStatus: response.live ? "accepted" : "staged",
         providerPlanId: response.providerPlanId || null,
         versionStamp,
@@ -698,6 +885,9 @@ const run = async () => {
     totalCases: results.length,
     passed: results.filter((item) => item.pass).length,
     failed: results.filter((item) => !item.pass).length,
+    positiveTestsPassed: results.filter((item) => !cases.find((testCase) => testCase.seed === item.seed)?.expectedBlockedBeforeLeidos && item.pass).length,
+    negativeTestsPassed: results.filter((item) => cases.find((testCase) => testCase.seed === item.seed)?.expectedBlockedBeforeLeidos && item.pass).length,
+    casesBlockedBeforeSubmission: results.flatMap((item) => item.actions || []).filter((action) => action.blockedBeforeLeidos).length,
     results,
     cleanupResults,
     finalSummary: {
@@ -716,6 +906,21 @@ const run = async () => {
   const filePath = join(dir, `${runId}.json`);
   writeFileSync(filePath, JSON.stringify(output, null, 2));
   console.log(`Saved results: ${filePath}`);
+  console.log("");
+  console.log("Certification Summary");
+  console.log("---------------------");
+  console.log(`Operator: ${context.user.email}`);
+  console.log("Environment: Leidos LAB");
+  console.log(`Positive Tests Passed: ${output.positiveTestsPassed}`);
+  console.log(`Negative Tests Passed: ${output.negativeTestsPassed}`);
+  console.log(`Cases Blocked Before Submission: ${output.casesBlockedBeforeSubmission}`);
+  console.log(`Expected Filed: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "file" && !action.blockedBeforeLeidos)).length}`);
+  console.log(`Expected Amend: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "amend")).length}`);
+  console.log(`Expected Activate: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "activate")).length}`);
+  console.log(`Expected Close: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "close")).length}`);
+  console.log(`Expected Cancel: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "cancel")).length}`);
+  console.log(`Expected Cleanup: ${cleanupResults.length}`);
+  console.log(`Report Location: ${filePath}`);
   if ((output.failed > 0 || output.finalSummary.cleanupFailed > 0) && !dryRun) process.exitCode = 1;
 };
 

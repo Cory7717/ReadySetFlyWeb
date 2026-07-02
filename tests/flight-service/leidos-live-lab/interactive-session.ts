@@ -10,7 +10,6 @@ import {
   boolEnv,
   buildCases,
   compareGeneratedSentReturned,
-  dryRunContext,
   getVersionStamp,
   isCleanupBlockingError,
   loadCertificationPlansForRun,
@@ -103,7 +102,7 @@ const printBanner = (context: Awaited<ReturnType<typeof loadDedicatedTestContext
   console.log("READY SET FLY");
   console.log("Leidos Flight Service Certification Session");
   console.log(`Environment: ${String(diagnostics.environment || "LAB").toUpperCase()}`);
-  console.log(`Operator: ${context.user.email || process.env.LEIDOS_TEST_USER_EMAIL || "dry-run@example.test"}`);
+  console.log(`Operator: ${context.user.email || process.env.LEIDOS_TEST_USER_EMAIL || "-"}`);
   console.log(`Cases: ${cases.length}`);
   console.log(`Delay Between Cases: ${delayMinutes} minutes`);
   console.log("=========================================================");
@@ -301,7 +300,7 @@ const runSession = async () => {
   const cliDryRun = hasFlag("dry-run") || !hasFlag("confirm-leidos-lab");
   const delayMinutes = Math.max(0, numberArg("delay-minutes", process.env.LEIDOS_LAB_DELAY_MINUTES || "3"));
   const limit = Math.min(MAX_CASES, Math.max(1, numberArg("limit", "15") || 15));
-  const context = cliDryRun && !process.env.LEIDOS_TEST_USER_EMAIL ? dryRunContext() : await loadDedicatedTestContext();
+  const context = await loadDedicatedTestContext();
   const initialRunId = `leidos-session-${stamp()}`;
   let dryRun = cliDryRun;
   let replaySeed = arg("replay", "");

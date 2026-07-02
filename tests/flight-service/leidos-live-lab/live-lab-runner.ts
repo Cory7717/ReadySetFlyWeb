@@ -97,7 +97,7 @@ export const loadDedicatedTestContext = async () => {
   if (phone.length < 10) missing.push("phone number");
   if (!/^[A-Z0-9]{3,4}$/.test(homeBase)) missing.push("home base");
   const profiles = await storage.getAircraftProfilesByUser(user.id);
-  const profile = profiles.find((item) => String(item.tailNumber || "").trim()) || profiles[0];
+  const profile = profiles.find((item) => Boolean((item as any).isDefault));
   if (!profile) missing.push("default aircraft");
   let aircraftType = "";
   if (profile?.typeId) {

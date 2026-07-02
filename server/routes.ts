@@ -41,6 +41,7 @@ import { buildMarketplaceListingFeeBreakdown } from "./marketplace-fees";
 import { resolveTfmsAccess } from "./lib/tier";
 import { buildCorsOptions } from "./corsOptions";
 import { getFrontendBaseUrl } from "./authRedirectUrls";
+import { validateIcaoEquipmentReadiness } from "@shared/icao-readiness";
 import {
   getFlightServiceCertificationReport,
   getLatestFlightServiceCertificationReport,
@@ -2156,10 +2157,11 @@ function buildEffectiveValues(profile: any | null, baseType: any | null) {
   const baseWeight = toNumber(baseType?.maxGrossWeightLb);
   const overrideCruise = toNumber(profile?.cruiseKtasOverride);
   const overrideBurn = toNumber(profile?.fuelBurnOverrideGph);
+  const defaultBurn = toNumber(profile?.fuelBurnDefaultGph);
   const overrideFuel = toNumber(profile?.usableFuelOverrideGal);
   const overrideWeight = toNumber(profile?.maxGrossWeightOverrideLb);
   const cruise = overrideCruise ?? baseCruise;
-  const burn = overrideBurn ?? baseBurn;
+  const burn = overrideBurn ?? defaultBurn ?? baseBurn;
   const fuel = overrideFuel ?? baseFuel;
   const estimatedStillAirRangeNm =
     cruise && burn && fuel && burn > 0
@@ -2174,6 +2176,39 @@ function buildEffectiveValues(profile: any | null, baseType: any | null) {
     usable_fuel_gal_effective: fuel,
     max_gross_weight_lb_effective: overrideWeight ?? baseWeight,
     estimated_still_air_range_nm_effective: estimatedStillAirRangeNm,
+  };
+}
+
+function resolveAircraftProfileIcaoType(profile: any | null, baseType: any | null) {
+  return String(profile?.customIcaoType || baseType?.icaoType || profile?.name || "").trim().toUpperCase();
+}
+
+function validateAircraftProfileDefaultReadiness(profile: any, baseType: any | null) {
+  const errors: string[] = [];
+  const tailNumber = String(profile?.tailNumber || "").trim().toUpperCase();
+  const aircraftType = resolveAircraftProfileIcaoType(profile, baseType);
+  if (!tailNumber) errors.push("Tail number is required before an aircraft can be the default.");
+  if (!aircraftType) errors.push("ICAO aircraft type is required before an aircraft can be the default.");
+  if (!String(profile?.filingEquipmentDefault || "").trim()) errors.push("Aircraft equipment codes are required before an aircraft can be the default.");
+  if (!String(profile?.filingSurveillanceEquipmentDefault || "").trim()) errors.push("Surveillance codes are required before an aircraft can be the default.");
+  if (!String(profile?.filingWakeTurbulenceDefault || "").trim()) errors.push("Wake category is required before an aircraft can be the default.");
+  if (!String(profile?.filingAircraftColorDefault || "").trim()) errors.push("Aircraft color is required before an aircraft can be the default.");
+  const readiness = validateIcaoEquipmentReadiness({
+    aircraftEquipment: profile?.filingEquipmentDefault,
+    surveillanceEquipment: profile?.filingSurveillanceEquipmentDefault,
+    otherInfo: profile?.filingOtherInfoDefault,
+    flightRules: profile?.filingFlightRulesDefault || "VFR",
+    aircraftProfileEquipment: profile?.filingEquipmentDefault,
+    aircraftProfileSurveillanceEquipment: profile?.filingSurveillanceEquipmentDefault,
+  });
+  for (const issue of readiness.issues) {
+    const message = issue.suggestion ? `${issue.message} ${issue.suggestion}` : issue.message;
+    if (issue.severity === "critical") errors.push(message);
+  }
+  return {
+    complete: errors.length === 0,
+    errors: Array.from(new Set(errors)),
+    warnings: readiness.issues.filter((issue) => issue.severity === "warning").map((issue) => issue.suggestion ? `${issue.message} ${issue.suggestion}` : issue.message),
   };
 }
 
@@ -8400,11 +8435,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const typeIds = profiles.map((profile) => profile.typeId).filter(Boolean) as string[];
       const types = await storage.getAircraftTypesByIds(typeIds);
       const typeMap = new Map(types.map((type) => [type.id, type]));
-      const response = profiles.map((profile) => ({
-        ...profile,
-        type: profile.typeId ? typeMap.get(profile.typeId) || null : null,
-        ...buildEffectiveValues(profile, profile.typeId ? typeMap.get(profile.typeId) : null),
-      }));
+      const response = profiles.map((profile) => {
+        const baseType = profile.typeId ? typeMap.get(profile.typeId) || null : null;
+        return {
+          ...profile,
+          type: baseType,
+          defaultReadiness: validateAircraftProfileDefaultReadiness(profile, baseType),
+          ...buildEffectiveValues(profile, baseType),
+        };
+      });
       res.json(response);
     } catch (error) {
       console.error("Failed to fetch aircraft profiles:", error);
@@ -8422,9 +8461,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
       }
-      const created = await storage.createAircraftProfile({ ...result.data, userId } as any);
+      const baseTypeForValidation = result.data.typeId ? await storage.getAircraftTypeById(result.data.typeId) : null;
+      if (result.data.isDefault) {
+        const readiness = validateAircraftProfileDefaultReadiness(result.data, baseTypeForValidation);
+        if (!readiness.complete) return res.status(400).json({ error: "Default aircraft profile is incomplete.", details: readiness.errors });
+      }
+      const existingProfiles = await storage.getAircraftProfilesByUser(userId);
+      const autoDefaultReadiness = validateAircraftProfileDefaultReadiness(result.data, baseTypeForValidation);
+      const created = await storage.createAircraftProfile({
+        ...result.data,
+        userId,
+        isDefault: Boolean(result.data.isDefault) || (existingProfiles.length === 0 && autoDefaultReadiness.complete),
+      } as any);
       const baseType = created.typeId ? await storage.getAircraftTypeById(created.typeId) : null;
-      res.status(201).json({ ...created, type: baseType, ...buildEffectiveValues(created, baseType) });
+      res.status(201).json({ ...created, type: baseType, defaultReadiness: validateAircraftProfileDefaultReadiness(created, baseType), ...buildEffectiveValues(created, baseType) });
     } catch (error) {
       console.error("Failed to create aircraft profile:", error);
       res.status(500).json({ error: "Failed to create aircraft profile" });
@@ -8448,12 +8498,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
       }
+      const merged = { ...existing, ...result.data };
+      const baseTypeForValidation = merged.typeId ? await storage.getAircraftTypeById(merged.typeId) : null;
+      if (result.data.isDefault) {
+        const readiness = validateAircraftProfileDefaultReadiness(merged, baseTypeForValidation);
+        if (!readiness.complete) return res.status(400).json({ error: "Default aircraft profile is incomplete.", details: readiness.errors });
+      }
       const updated = await storage.updateAircraftProfile(req.params.id, result.data as any);
       if (!updated) {
         return res.status(404).json({ error: "Aircraft profile not found" });
       }
       const baseType = updated.typeId ? await storage.getAircraftTypeById(updated.typeId) : null;
-      res.json({ ...updated, type: baseType, ...buildEffectiveValues(updated, baseType) });
+      res.json({ ...updated, type: baseType, defaultReadiness: validateAircraftProfileDefaultReadiness(updated, baseType), ...buildEffectiveValues(updated, baseType) });
     } catch (error) {
       console.error("Failed to update aircraft profile:", error);
       res.status(500).json({ error: "Failed to update aircraft profile" });
@@ -8478,6 +8534,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to delete aircraft profile:", error);
       res.status(500).json({ error: "Failed to delete aircraft profile" });
+    }
+  });
+
+  app.post("/api/aircraft/profiles/:id/default", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const existing = await storage.getAircraftProfileById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Aircraft profile not found" });
+      }
+      if (existing.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const baseType = existing.typeId ? await storage.getAircraftTypeById(existing.typeId) : null;
+      const readiness = validateAircraftProfileDefaultReadiness(existing, baseType);
+      if (!readiness.complete) {
+        return res.status(400).json({ error: "Default aircraft profile is incomplete.", details: readiness.errors });
+      }
+      const updated = await storage.setDefaultAircraftProfile(userId, existing.id);
+      if (!updated) {
+        return res.status(404).json({ error: "Aircraft profile not found" });
+      }
+      const updatedType = updated.typeId ? await storage.getAircraftTypeById(updated.typeId) : null;
+      res.json({ ...updated, type: updatedType, defaultReadiness: validateAircraftProfileDefaultReadiness(updated, updatedType), ...buildEffectiveValues(updated, updatedType) });
+    } catch (error) {
+      console.error("Failed to set default aircraft profile:", error);
+      res.status(500).json({ error: "Failed to set default aircraft profile" });
     }
   });
 

@@ -868,6 +868,7 @@ type AircraftProfile = {
   name: string;
   tailNumber?: string | null;
   typeId?: string | null;
+  isDefault?: boolean | null;
   cruise_ktas_effective?: number | null;
   fuel_burn_gph_effective?: number | null;
   usable_fuel_gal_effective?: number | null;
@@ -882,6 +883,10 @@ type AircraftProfile = {
   filingTypeOfFlightDefault?: string | null;
   filingSurveillanceEquipmentDefault?: string | null;
   filingOtherInfoDefault?: string | null;
+  filingFlightRulesDefault?: string | null;
+  filingCruisingSpeedDefault?: string | null;
+  filingAltitudePreferenceDefault?: string | null;
+  filingEnduranceMinutesDefault?: number | null;
 };
 
 type AircraftType = {
@@ -2661,6 +2666,7 @@ export default function FlightPlanner() {
   const selectedProfile = selectedProfileId === "none"
     ? null
     : savedProfiles.find((p) => p.id === selectedProfileId) || null;
+  const defaultAircraftProfile = savedProfiles.find((profile) => profile.isDefault) || null;
   const selectedType = aircraftTypes.find((t) => t.id === selectedTypeId) || FALLBACK_TYPE;
   const selectedTypeNeedsVerification =
     selectedTypeId !== CUSTOM_TYPE_ID &&
@@ -2687,6 +2693,7 @@ export default function FlightPlanner() {
     if (!selectedProfile) return;
     setFilingDraft((current) => ({
       ...current,
+      flightRules: selectedProfile.filingFlightRulesDefault?.trim() || current.flightRules,
       aircraftId: selectedProfile.tailNumber?.trim() || current.aircraftId,
       equipment: selectedProfile.filingEquipmentDefault?.trim() || current.equipment,
       soulsOnBoard: selectedProfile.filingSoulsOnBoardDefault?.trim() || current.soulsOnBoard,
@@ -2697,8 +2704,25 @@ export default function FlightPlanner() {
       typeOfFlight: selectedProfile.filingTypeOfFlightDefault?.trim() || current.typeOfFlight,
       surveillanceEquipment: selectedProfile.filingSurveillanceEquipmentDefault?.trim() || current.surveillanceEquipment,
       otherInfo: selectedProfile.filingOtherInfoDefault?.trim() || current.otherInfo,
+      manualEnduranceMinutes: selectedProfile.filingEnduranceMinutesDefault ? String(selectedProfile.filingEnduranceMinutesDefault) : current.manualEnduranceMinutes,
     }));
+    if (selectedProfile.filingAltitudePreferenceDefault) {
+      setPlannedAltitude(selectedProfile.filingAltitudePreferenceDefault);
+    }
   };
+
+  useEffect(() => {
+    if (!defaultAircraftProfile) return;
+    if (selectedProfileId !== "none") return;
+    if (editingPlan || draftPlanId) return;
+    setSelectedProfileId(defaultAircraftProfile.id);
+    setSelectedTypeId(defaultAircraftProfile.typeId || CUSTOM_TYPE_ID);
+  }, [defaultAircraftProfile, draftPlanId, editingPlan, selectedProfileId]);
+
+  useEffect(() => {
+    if (!selectedProfile) return;
+    applyAircraftFilingDefaults();
+  }, [selectedProfileId]);
 
   const manualCruise = customProfile.cruiseKtasOverride ? Number(customProfile.cruiseKtasOverride) : null;
   const manualBurn = customProfile.fuelBurnOverrideGph ? Number(customProfile.fuelBurnOverrideGph) : null;
@@ -7208,7 +7232,7 @@ export default function FlightPlanner() {
                       <SelectItem value="none">None</SelectItem>
                       {savedProfiles.map((profile) => (
                         <SelectItem key={profile.id} value={profile.id}>
-                          {profile.name}
+                          {profile.isDefault ? "Default - " : ""}{profile.tailNumber || profile.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

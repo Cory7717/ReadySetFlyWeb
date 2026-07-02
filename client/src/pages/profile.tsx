@@ -51,6 +51,18 @@ const profileUpdateSchema = z.object({
 
 type ProfileUpdateForm = z.infer<typeof profileUpdateSchema>;
 
+type AircraftProfileSummary = {
+  id: string;
+  name: string;
+  tailNumber?: string | null;
+  isDefault?: boolean | null;
+  filingEquipmentDefault?: string | null;
+  filingSurveillanceEquipmentDefault?: string | null;
+  filingOtherInfoDefault?: string | null;
+  defaultReadiness?: { complete: boolean; errors: string[]; warnings: string[] } | null;
+  type?: { make?: string | null; model?: string | null; icaoType?: string | null } | null;
+};
+
 const certifications = [
   { name: "PPL", date: "Jun 2015", verified: true },
   { name: "IR", date: "Mar 2016", verified: true },
@@ -83,6 +95,11 @@ export default function Profile() {
   // Fetch renter's rentals
   const { data: renterRentals = [] } = useQuery<Rental[]>({
     queryKey: ["/api/rentals/renter", authUser?.id],
+    enabled: !!authUser?.id,
+  });
+
+  const { data: aircraftProfiles = [] } = useQuery<AircraftProfileSummary[]>({
+    queryKey: ["/api/aircraft/profiles"],
     enabled: !!authUser?.id,
   });
 
@@ -609,6 +626,52 @@ export default function Profile() {
                 </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-8">
+          <CardHeader>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>Aircraft Profiles</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  These aircraft populate Flight Planner and Flight Service filing defaults.
+                </p>
+              </div>
+              <Button asChild>
+                <Link href="/my-aircraft">+ Add Aircraft</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {aircraftProfiles.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                No aircraft profile has been created.
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {aircraftProfiles.map((profile) => (
+                  <div key={profile.id} className="rounded-lg border p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="font-semibold">{profile.tailNumber || profile.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {profile.type ? `${profile.type.make || ""} ${profile.type.model || ""}`.trim() : profile.name}
+                          {profile.type?.icaoType ? ` (${profile.type.icaoType})` : ""}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {profile.isDefault ? <Badge>Default Aircraft</Badge> : null}
+                        {profile.defaultReadiness?.complete ? <Badge variant="outline">Filing Ready</Badge> : <Badge variant="secondary">Needs ICAO Details</Badge>}
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-muted-foreground">
+                      Equipment {profile.filingEquipmentDefault || "-"} | Surveillance {profile.filingSurveillanceEquipmentDefault || "-"} | Other Info {profile.filingOtherInfoDefault || "-"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

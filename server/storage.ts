@@ -812,6 +812,7 @@ export interface IStorage {
   getAircraftProfileById(id: string): Promise<AircraftProfile | undefined>;
   createAircraftProfile(profile: InsertAircraftProfile & { userId: string }): Promise<AircraftProfile>;
   updateAircraftProfile(id: string, updates: Partial<AircraftProfile>): Promise<AircraftProfile | undefined>;
+  setDefaultAircraftProfile(userId: string, profileId: string): Promise<AircraftProfile | undefined>;
   deleteAircraftProfile(id: string): Promise<boolean>;
 
   // Approach Plates
@@ -4870,20 +4871,49 @@ export class DatabaseStorage implements IStorage {
   async createAircraftProfile(profile: InsertAircraftProfile & { userId: string }): Promise<AircraftProfile> {
     const payload = {
       ...profile,
+      fuelBurnDefaultGph: toDecimalString((profile as any).fuelBurnDefaultGph),
       cruiseKtasOverride: toDecimalString(profile.cruiseKtasOverride),
       fuelBurnOverrideGph: toDecimalString(profile.fuelBurnOverrideGph),
       usableFuelOverrideGal: toDecimalString(profile.usableFuelOverrideGal),
       maxGrossWeightOverrideLb: toDecimalString(profile.maxGrossWeightOverrideLb),
     };
+    if ((payload as any).isDefault) {
+      await db.update(aircraftProfiles).set({ isDefault: false, updatedAt: new Date() }).where(eq(aircraftProfiles.userId, profile.userId));
+    }
     const [created] = await db.insert(aircraftProfiles).values(payload).returning();
     return created;
   }
 
   async updateAircraftProfile(id: string, updates: Partial<AircraftProfile>): Promise<AircraftProfile | undefined> {
+    const existing = await this.getAircraftProfileById(id);
+    if (!existing) return undefined;
+    if ((updates as any).isDefault) {
+      await db.update(aircraftProfiles).set({ isDefault: false, updatedAt: new Date() }).where(eq(aircraftProfiles.userId, existing.userId));
+    }
+    const payload = {
+      ...updates,
+      fuelBurnDefaultGph: toDecimalString((updates as any).fuelBurnDefaultGph),
+      cruiseKtasOverride: toDecimalString((updates as any).cruiseKtasOverride),
+      fuelBurnOverrideGph: toDecimalString((updates as any).fuelBurnOverrideGph),
+      usableFuelOverrideGal: toDecimalString((updates as any).usableFuelOverrideGal),
+      maxGrossWeightOverrideLb: toDecimalString((updates as any).maxGrossWeightOverrideLb),
+    } as Partial<AircraftProfile>;
     const [updated] = await db
       .update(aircraftProfiles)
-      .set({ ...updates, updatedAt: new Date() })
+      .set({ ...payload, updatedAt: new Date() })
       .where(eq(aircraftProfiles.id, id))
+      .returning();
+    return updated;
+  }
+
+  async setDefaultAircraftProfile(userId: string, profileId: string): Promise<AircraftProfile | undefined> {
+    const existing = await this.getAircraftProfileById(profileId);
+    if (!existing || existing.userId !== userId) return undefined;
+    await db.update(aircraftProfiles).set({ isDefault: false, updatedAt: new Date() }).where(eq(aircraftProfiles.userId, userId));
+    const [updated] = await db
+      .update(aircraftProfiles)
+      .set({ isDefault: true, updatedAt: new Date() })
+      .where(eq(aircraftProfiles.id, profileId))
       .returning();
     return updated;
   }

@@ -31,7 +31,9 @@ type AircraftType = {
   make: string;
   model: string;
   icaoType?: string | null;
+  category?: string | null;
   engineType?: string | null;
+  defaultAltitudeFt?: number | null;
   cruise_ktas_effective?: number | null;
   fuel_burn_gph_effective?: number | null;
   usable_fuel_gal_effective?: number | null;
@@ -142,9 +144,45 @@ export default function MyAircraft() {
     return types.filter((type) => `${type.make} ${type.model} ${type.icaoType || ""}`.toLowerCase().includes(query));
   }, [aircraftSearch, types]);
   const selectedLibraryType = useMemo(
-    () => typeOptions.find((type) => type.id === form.typeId) || null,
-    [form.typeId, typeOptions],
+    () => types.find((type) => type.id === form.typeId) || null,
+    [form.typeId, types],
   );
+  const inferWakeCategory = useCallback((type: AircraftType | null) => {
+    const maxGross = Number(type?.max_gross_weight_lb_effective || 0);
+    if (maxGross && maxGross <= 15500) return "LIGHT";
+    if (maxGross && maxGross > 15500 && maxGross < 300000) return "MEDIUM";
+    if (maxGross >= 300000) return "HEAVY";
+    return "LIGHT";
+  }, []);
+  const inferEngineCount = useCallback((type: AircraftType | null) => {
+    const text = `${type?.category || ""} ${type?.engineType || ""} ${type?.make || ""} ${type?.model || ""}`.toLowerCase();
+    if (/\b(twin|multi|multi-engine|multiengine)\b/.test(text)) return "2";
+    if (/\b(single|piston|turboprop|jet)\b/.test(text)) return "1";
+    return "";
+  }, []);
+  const applyAircraftLibraryType = useCallback((typeId: string) => {
+    const selected = types.find((type) => type.id === typeId) || null;
+    setForm((current) => {
+      if (!selected) return { ...current, typeId };
+      return {
+        ...current,
+        typeId,
+        name: current.name.trim() ? current.name : `${selected.make} ${selected.model}`.trim(),
+        customManufacturer: selected.make || current.customManufacturer,
+        customModel: selected.model || current.customModel,
+        customIcaoType: selected.icaoType || current.customIcaoType,
+        engineTypeOverride: selected.engineType || current.engineTypeOverride,
+        engineCountOverride: inferEngineCount(selected) || current.engineCountOverride,
+        cruiseKtasOverride: selected.cruise_ktas_effective ? String(selected.cruise_ktas_effective) : current.cruiseKtasOverride,
+        fuelBurnDefaultGph: selected.fuel_burn_gph_effective ? String(selected.fuel_burn_gph_effective) : current.fuelBurnDefaultGph,
+        fuelBurnOverrideGph: selected.fuel_burn_gph_effective ? String(selected.fuel_burn_gph_effective) : current.fuelBurnOverrideGph,
+        usableFuelOverrideGal: selected.usable_fuel_gal_effective ? String(selected.usable_fuel_gal_effective) : current.usableFuelOverrideGal,
+        maxGrossWeightOverrideLb: selected.max_gross_weight_lb_effective ? String(selected.max_gross_weight_lb_effective) : current.maxGrossWeightOverrideLb,
+        filingWakeTurbulenceDefault: inferWakeCategory(selected),
+        filingAltitudePreferenceDefault: selected.defaultAltitudeFt ? String(selected.defaultAltitudeFt) : current.filingAltitudePreferenceDefault,
+      };
+    });
+  }, [inferEngineCount, inferWakeCategory, types]);
   const selectedSurveillanceCodes = useMemo(
     () => parseIcaoSurveillanceCodes(form.filingSurveillanceEquipmentDefault),
     [form.filingSurveillanceEquipmentDefault],
@@ -295,7 +333,7 @@ export default function MyAircraft() {
             <div className="space-y-2 md:col-span-2">
               <Label>Search Aircraft Library</Label>
               <Input value={aircraftSearch} onChange={(e) => setAircraftSearch(e.target.value)} placeholder="Search Cessna 172S, SR22, PA-28..." />
-              <Select value={form.typeId} onValueChange={(value) => setForm({ ...form, typeId: value })}>
+              <Select value={form.typeId} onValueChange={applyAircraftLibraryType}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select an aircraft type" />
                 </SelectTrigger>
@@ -307,6 +345,21 @@ export default function MyAircraft() {
                   ))}
                 </SelectContent>
               </Select>
+              {selectedLibraryType && (
+                <div className="rounded-md border bg-background p-3 text-xs text-muted-foreground">
+                  <div className="font-semibold text-foreground">Library specs applied</div>
+                  <div className="mt-1 grid gap-1 sm:grid-cols-2">
+                    <span>Manufacturer: {selectedLibraryType.make}</span>
+                    <span>Model: {selectedLibraryType.model}</span>
+                    <span>ICAO Type: {selectedLibraryType.icaoType || "-"}</span>
+                    <span>Engine: {selectedLibraryType.engineType || "-"}</span>
+                    <span>Cruise: {selectedLibraryType.cruise_ktas_effective || "-"} KTAS</span>
+                    <span>Fuel burn: {selectedLibraryType.fuel_burn_gph_effective || "-"} GPH</span>
+                    <span>Usable fuel: {selectedLibraryType.usable_fuel_gal_effective || "-"} gal</span>
+                    <span>Max gross: {selectedLibraryType.max_gross_weight_lb_effective || "-"} lb</span>
+                  </div>
+                </div>
+              )}
               {selectedLibraryType && selectedLibraryType.isVerified === false && (
                 <Alert className="border-amber-200 bg-amber-50 text-amber-900">
                   <AlertDescription>

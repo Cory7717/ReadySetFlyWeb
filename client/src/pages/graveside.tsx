@@ -50,7 +50,7 @@ const episodes: Episode[] = [
   },
   {
     number: 2,
-    title: "What Happened to Margaret Finch",
+    title: "What the River Holds",
     type: "A",
     era: "1890s Northeast",
     label: "First full transport",

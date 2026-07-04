@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { filingPlan, payloadFields } from "./test-utils";
+import { validateLeidosOtherInfoForTransmission } from "../../server/services/flight-plan-filing/provider";
 
 test("ZZZZ alternate with FAA code generates only ALTN/85TX", () => {
   const fields = payloadFields(filingPlan({
@@ -21,6 +22,7 @@ test("ZZZZ alternate with FAA code generates only ALTN/85TX", () => {
   assert.match(String(fields.otherInfo), /\bALTN\/85TX\b/);
   assert.equal(String(fields.otherInfo).match(/\bALTN\//g)?.length, 1);
   assert.doesNotMatch(String(fields.otherInfo), /RUTHERFORD/i);
+  assert.equal(validateLeidosOtherInfoForTransmission(String(fields.otherInfo)).valid, true);
 });
 
 test("ZZZZ departure with FAA code generates only DEP/85TX", () => {
@@ -40,6 +42,7 @@ test("ZZZZ departure with FAA code generates only DEP/85TX", () => {
   assert.match(String(fields.otherInfo), /\bDEP\/85TX\b/);
   assert.equal(String(fields.otherInfo).match(/\bDEP\//g)?.length, 1);
   assert.doesNotMatch(String(fields.otherInfo), /RUTHERFORD/i);
+  assert.equal(validateLeidosOtherInfoForTransmission(String(fields.otherInfo)).valid, true);
 });
 
 test("ZZZZ destination with FAA code generates only DEST/85TX", () => {
@@ -59,4 +62,5 @@ test("ZZZZ destination with FAA code generates only DEST/85TX", () => {
   assert.match(String(fields.otherInfo), /\bDEST\/85TX\b/);
   assert.equal(String(fields.otherInfo).match(/\bDEST\//g)?.length, 1);
   assert.doesNotMatch(String(fields.otherInfo), /RUTHERFORD/i);
+  assert.equal(validateLeidosOtherInfoForTransmission(String(fields.otherInfo)).valid, true);
 });

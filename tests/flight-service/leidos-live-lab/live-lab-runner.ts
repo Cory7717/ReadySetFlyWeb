@@ -14,6 +14,7 @@ import {
   buildLeidosActionPayload,
   flightPlanFilingProvider,
   getLeidosFlightServiceDiagnostics,
+  validateLeidosOtherInfoForTransmission,
   validateFlightPlanForAction,
 } from "../../../server/services/flight-plan-filing/provider";
 
@@ -35,6 +36,7 @@ export type LiveLabCase = {
 export const MAX_CASES = 15;
 const EXPECTED_TEST_ACCOUNT_EMAIL = "generalmanager.atx@gmail.com";
 const CERT_REMARK = "RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT";
+const providerSafeRmk = (seed: number, suffix = "") => `RMK/RSF LAB TEST SEED ${seed}${suffix ? ` ${suffix}` : ""}`;
 
 const arg = (name: string, fallback = "") => {
   const flag = `--${name}`;
@@ -194,8 +196,8 @@ const createBasePlanFactory = (context: DedicatedTestContext, runId: string) => 
   const profile = context.profile;
   const filingEquipment = String(profile.filingEquipmentDefault || "S").trim().toUpperCase();
   const baseOtherInfo = filingEquipment.includes("R")
-    ? `PBN/A1 RMK/${CERT_REMARK} ${runId} SEED ${seed}`
-    : `RMK/${CERT_REMARK} ${runId} SEED ${seed}`;
+    ? `PBN/A1 ${providerSafeRmk(seed)}`
+    : providerSafeRmk(seed);
   return {
     id: `live-lab-${seed}`,
     userId: context.user.id,
@@ -217,7 +219,7 @@ const createBasePlanFactory = (context: DedicatedTestContext, runId: string) => 
     filingPilotName: String(profile.filingPilotNameDefault || context.pilotName).trim(),
     filingPilotPhone: context.phone,
     filingAircraftHomeBase: context.homeBase,
-    filingRemarks: `${CERT_REMARK} ${runId} SEED ${seed}`,
+    filingRemarks: `RSF LAB TEST SEED ${seed}`,
     filingWakeTurbulence: String(profile.filingWakeTurbulenceDefault || "LIGHT").trim().toUpperCase(),
     filingTypeOfFlight: String(profile.filingTypeOfFlightDefault || "G").trim().toUpperCase(),
     filingSurveillanceEquipment: String(profile.filingSurveillanceEquipmentDefault || "N").trim().toUpperCase(),
@@ -243,7 +245,7 @@ const createBasePlanFactory = (context: DedicatedTestContext, runId: string) => 
     filingRaw: null,
     filingActionHistory: [],
     plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00" },
-    notes: null,
+    notes: `${CERT_REMARK} ${runId} SEED ${seed}`,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -258,16 +260,16 @@ export const buildCases = (context: DedicatedTestContext, runId: string): LiveLa
     { seed: 3, name: "ZZZZ destination lat/long description", testType: "Positive", actions: ["file"], buildPlan: () => plan(3, "ZZZZ Destination", { destination: "ZZZZ", filingDestinationName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceDestinationAirport: "KSDL", actualDestinationLocationMode: "latlong", actualDestinationLocation: "3839N09045W" } }) },
     { seed: 4, name: "ZZZZ departure lat/long description", testType: "Positive", actions: ["file"], buildPlan: () => plan(4, "ZZZZ Departure", { departure: "ZZZZ", filingDepartureName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceDepartureAirport: "KDWH", actualDepartureLocationMode: "latlong", actualDepartureLocation: "3839N09045W" } }) },
     { seed: 5, name: "ZZZZ alternate destination", testType: "Positive", actions: ["file"], buildPlan: () => plan(5, "ZZZZ Alternate", { alternate: "ZZZZ", filingAlternateName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceAlternateAirport: "KACT", actualAlternateLocationMode: "identifier", actualAlternateLocation: "85TX" } }) },
-    { seed: 6, name: "Other Info RMK retained", testType: "Positive", actions: ["file"], buildPlan: () => plan(6, "RMK Retained", { filingOtherInfo: `DOF/260715 RMK/${CERT_REMARK} RMK RETAINED ${runId}` }) },
+    { seed: 6, name: "Other Info RMK retained", testType: "Positive", actions: ["file"], buildPlan: () => plan(6, "RMK Retained", { filingOtherInfo: `DOF/260715 ${providerSafeRmk(6, "RMK")}` }) },
     { seed: 7, name: "VFR file activate close", testType: "Lifecycle", actions: ["file", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(7, "VFR Close", { filingCloseLocation: "KDAL" } as any) },
     { seed: 8, name: "IFR file then amend", testType: "Lifecycle", actions: ["file", "amend"], expectedFinalState: "filed", buildPlan: () => plan(8, "IFR Amend", { filingFlightRules: "IFR", route: "DCT KDWH DCT", filingPlannedAltitudeFt: 7000 }) },
     { seed: 9, name: "Provider round-trip integrity lifecycle", testType: "Round Trip", actions: ["file", "amend", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(9, "Round Trip", { route: "DCT KDWH DCT", filingCloseLocation: "KDAL" } as any) },
-    { seed: 10, name: "Negative - Equipment R with no PBN", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add the correct PBN/ capabilities or remove R if not PBN approved.", buildPlan: () => plan(10, "R Without PBN", { filingEquipment: "SR", filingOtherInfo: `RMK/${CERT_REMARK} R WITHOUT PBN ${runId}` }) },
-    { seed: 11, name: "Negative - PBN present without Equipment R", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add R only if approved, otherwise remove PBN/.", buildPlan: () => plan(11, "PBN Without R", { filingEquipment: "S", filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} PBN WITHOUT R ${runId}` }) },
+    { seed: 10, name: "Negative - Equipment R with no PBN", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add the correct PBN/ capabilities or remove R if not PBN approved.", buildPlan: () => plan(10, "R Without PBN", { filingEquipment: "SR", filingOtherInfo: providerSafeRmk(10, "NO PBN") }) },
+    { seed: 11, name: "Negative - PBN present without Equipment R", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add R only if approved, otherwise remove PBN/.", buildPlan: () => plan(11, "PBN Without R", { filingEquipment: "S", filingOtherInfo: `PBN/A1 ${providerSafeRmk(11, "NO R")}` }) },
     { seed: 12, name: "Negative - Invalid surveillance B2", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Use supported compact surveillance values and put ADS-B detail in SUR/ if needed.", buildPlan: () => plan(12, "Invalid Surveillance", { filingSurveillanceEquipment: "B2" }) },
-    { seed: 13, name: "Negative - Duplicate equipment codes", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Remove duplicate ICAO equipment codes.", buildPlan: () => plan(13, "Duplicate Equipment", { filingEquipment: "SRR", filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} DUPLICATE EQUIPMENT ${runId}` }) },
+    { seed: 13, name: "Negative - Duplicate equipment codes", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Remove duplicate ICAO equipment codes.", buildPlan: () => plan(13, "Duplicate Equipment", { filingEquipment: "SRR", filingOtherInfo: `PBN/A1 ${providerSafeRmk(13, "DUP EQ")}` }) },
     { seed: 14, name: "Negative - Missing phone and home base", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Complete pilot phone and aircraft home base before filing.", buildPlan: () => plan(14, "Missing Contact", { filingPilotPhone: "", filingAircraftHomeBase: "" }) },
-    { seed: 15, name: "Negative - Invalid ZZZZ coordinates and past departure", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Correct ZZZZ actual location and move departure time into the future.", buildPlan: () => plan(15, "Invalid ZZZZ", { departure: "ZZZZ", filingDepartureName: "PRIVATE STRIP", plannedDepartureAt: new Date("2026-01-01T15:00:00.000Z"), plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-01-01T09:00", planningReferenceDepartureAirport: "KDWH", actualDepartureLocationMode: "latlong", actualDepartureLocation: "BADCOORD" } }) },
+    { seed: 15, name: "Negative - Invalid Other Info", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Use short ICAO subfields with letters, numbers, spaces, and slash separators only.", buildPlan: () => plan(15, "Invalid Other Info", { filingOtherInfo: `DOF/260715 RMK/${CERT_REMARK} LEIDOS-LIVE-LAB-${runId} SEED 15` }) },
   ];
 };
 
@@ -1101,8 +1103,18 @@ const run = async () => {
     }
     for (const action of testCase.actions) {
       const started = Date.now();
-      const validation = validateFlightPlanForAction(plan, action);
+      let validation = validateFlightPlanForAction(plan, action);
       const generatedPayload = summarizePayload(plan, action) as Record<string, any> | null;
+      if ((action === "file" || action === "amend") && generatedPayload?.otherInfo) {
+        const otherInfoValidation = validateLeidosOtherInfoForTransmission(generatedPayload.otherInfo);
+        if (!otherInfoValidation.valid) {
+          validation = {
+            ready: false,
+            errors: [...validation.errors, ...otherInfoValidation.errors],
+            warnings: validation.warnings,
+          };
+        }
+      }
       const routeReview = buildRouteReview(plan, generatedPayload, validation);
       printPayloadReview(generatedPayload, plan);
       if (generatedPayload?.route || plan.route) {

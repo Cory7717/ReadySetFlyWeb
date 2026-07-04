@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateFlightPlanForAction } from "../../server/services/flight-plan-filing/provider";
+import { validateFlightPlanForAction, validateLeidosOtherInfoForTransmission } from "../../server/services/flight-plan-filing/provider";
 import { getFlightServiceRuntimeMode, hasFlightServiceTestAcknowledgement } from "../../server/services/flightServiceRuntimeMode";
 import { filingPlan, resetPlannerState } from "./test-utils";
 
@@ -130,6 +130,17 @@ test("clear form clears validation and provider error state", () => {
   const reset = resetPlannerState();
   assert.equal(reset.filingActionFeedback, null);
   assert.equal(reset.showFilingPayload, false);
+});
+
+test("provider-safe OtherInfo RMK is accepted locally", () => {
+  const result = validateLeidosOtherInfoForTransmission("DOF/260715 RMK/RSF LAB TEST SEED 1");
+  assert.equal(result.valid, true);
+});
+
+test("long or punctuated OtherInfo is blocked before Leidos", () => {
+  const result = validateLeidosOtherInfoForTransmission("DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB SEED 1");
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.some((error) => /uppercase letters|too long|RMK/i.test(error)));
 });
 
 test("Flight Service environment defaults to LAB with acknowledgement required", () => {

@@ -16,7 +16,7 @@ import {
 import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
 import { normalizeIcaoEquipmentCodes, validateFlightServiceAircraftEquipmentCodes } from "@shared/icao-equipment-codes";
 import { validateIcaoEquipmentReadiness } from "@shared/icao-readiness";
-import { getIcaoOtherInfoEquipmentWarnings, hasOnlyFlightServiceSurveillanceCodes, hasOnlyKnownIcaoSurveillanceCodes } from "@shared/icao-filing";
+import { ICAO_OTHER_INFO_PREFIXES, getIcaoOtherInfoEquipmentWarnings, hasOnlyFlightServiceSurveillanceCodes, hasOnlyKnownIcaoSurveillanceCodes } from "@shared/icao-filing";
 import { normalizeZzzzActualLocation } from "@shared/zzzz-location";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
 import { getFlightServiceRuntimeMode } from "../flightServiceRuntimeMode";
@@ -981,6 +981,53 @@ export const normalizeLeidosOtherInfoForTransmission = (otherInfo: string | null
     .replace(/\s+/g, " ")
     .trim();
   return normalized || null;
+};
+
+const LEIDOS_OTHER_INFO_MAX_LENGTH = 180;
+const LEIDOS_OTHER_INFO_RMK_MAX_LENGTH = 50;
+const LEIDOS_OTHER_INFO_ALLOWED_PATTERN = /^[A-Z0-9/ ]+$/;
+const LEIDOS_OTHER_INFO_PREFIX_SET = new Set(ICAO_OTHER_INFO_PREFIXES.map((prefix) => prefix.toUpperCase()));
+
+export const validateLeidosOtherInfoForTransmission = (otherInfo: string | null | undefined) => {
+  const raw = String(otherInfo || "").trim().toUpperCase().replace(/\s+/g, " ");
+  const normalized = normalizeLeidosOtherInfoForTransmission(String(otherInfo || ""));
+  const errors: string[] = [];
+  if (!normalized) return { valid: true, normalized: null as string | null, errors };
+  if (raw && !LEIDOS_OTHER_INFO_ALLOWED_PATTERN.test(raw)) {
+    errors.push("Other ICAO Information can only contain uppercase letters, numbers, spaces, and slash separators.");
+  }
+  if (normalized.length > LEIDOS_OTHER_INFO_MAX_LENGTH) {
+    errors.push(`Other ICAO Information is too long for Flight Service. Keep it under ${LEIDOS_OTHER_INFO_MAX_LENGTH} characters.`);
+  }
+  if (!LEIDOS_OTHER_INFO_ALLOWED_PATTERN.test(normalized)) {
+    errors.push("Other ICAO Information can only contain uppercase letters, numbers, spaces, and slash separators.");
+  }
+  const prefixPattern = ICAO_OTHER_INFO_PREFIXES.map((prefix) => prefix.replace("/", "\\/")).join("|");
+  const matches = Array.from(normalized.matchAll(new RegExp(`(?:^|\\s)(${prefixPattern})`, "g")));
+  if (matches.length === 0) {
+    errors.push("Other ICAO Information must use ICAO subfields such as DOF/, PBN/, RMK/, DEP/, DEST/, or ALTN/.");
+  }
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index];
+    const prefix = String(match[1] || "").toUpperCase();
+    const start = (match.index || 0) + match[0].length;
+    const end = index + 1 < matches.length ? matches[index + 1].index || normalized.length : normalized.length;
+    const value = normalized.slice(start, end).trim();
+    if (!LEIDOS_OTHER_INFO_PREFIX_SET.has(prefix)) {
+      errors.push(`Other ICAO Information contains unsupported subfield ${prefix}`);
+    }
+    if (!value) {
+      errors.push(`Other ICAO Information subfield ${prefix} is missing a value.`);
+    }
+    if (prefix === "RMK/" && value.length > LEIDOS_OTHER_INFO_RMK_MAX_LENGTH) {
+      errors.push(`RMK/ in Other ICAO Information is too long for Flight Service. Keep RMK under ${LEIDOS_OTHER_INFO_RMK_MAX_LENGTH} characters.`);
+    }
+  }
+  const stripped = normalized.replace(new RegExp(`(?:^|\\s)(?:${prefixPattern})`, "g"), " ").replace(/[A-Z0-9 ]+/g, " ").trim();
+  if (stripped) {
+    errors.push("Other ICAO Information contains text outside recognized ICAO subfields.");
+  }
+  return { valid: errors.length === 0, normalized, errors: Array.from(new Set(errors)) };
 };
 
 const normalizeLeidosRemarksText = (value?: string | null) => {
@@ -2158,6 +2205,12 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if ((action === "file" || action === "amend") && plan.filingSurveillanceEquipment && !hasOnlyFlightServiceSurveillanceCodes(plan.filingSurveillanceEquipment)) {
     errors.push("Flight Service currently accepts N, A, C, or S in the Surveillance Equipment field. Put ADS-B or ADS-C details in Other ICAO Information using SUR/ if needed.");
   }
+  if ((action === "file" || action === "amend") && plan.filingOtherInfo) {
+    const otherInfoValidation = validateLeidosOtherInfoForTransmission(plan.filingOtherInfo);
+    if (!otherInfoValidation.valid) {
+      errors.push(...otherInfoValidation.errors);
+    }
+  }
   if ((action === "file" || action === "amend") && !plan.filingAircraftHomeBase) {
     errors.push("Aircraft home base is required before sending this filing action to the filing provider.");
   }
@@ -2387,6 +2440,22 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
     const requestBody = payloadContext.params;
     const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
     const requestPayloadRecord = Object.fromEntries(requestBody.entries());
+    if (action === "file" || action === "amend") {
+      const otherInfoValidation = validateLeidosOtherInfoForTransmission(requestPayloadRecord.otherInfo);
+      console.info(JSON.stringify({
+        event: "leidos_other_info_validation",
+        action,
+        planId: plan.id,
+        otherInfoLength: String(requestPayloadRecord.otherInfo || "").length,
+        normalizedLength: String(otherInfoValidation.normalized || "").length,
+        validationResult: otherInfoValidation.valid ? "valid" : "invalid",
+        blockedBeforeLeidos: !otherInfoValidation.valid,
+        errors: otherInfoValidation.errors,
+      }));
+      if (!otherInfoValidation.valid) {
+        throw new Error(`Other ICAO Information is not valid for Flight Service: ${otherInfoValidation.errors.join(" ")}`);
+      }
+    }
     if (payloadContext.payloadSnapshot) {
       console.info(JSON.stringify({
         event: "leidos_payload_built",

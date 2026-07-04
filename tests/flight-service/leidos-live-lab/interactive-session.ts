@@ -24,6 +24,7 @@ import {
 } from "./live-lab-runner";
 import {
   flightPlanFilingProvider,
+  validateLeidosOtherInfoForTransmission,
   validateFlightPlanForAction,
 } from "../../../server/services/flight-plan-filing/provider";
 
@@ -191,8 +192,18 @@ const ensureLiveSafety = (dryRun: boolean, diagnostics: ReturnType<typeof assert
 
 const executeAction = async (plan: FlightPlan, action: FlightPlanFilingAction, testCase: LiveLabCase, dryRun: boolean) => {
   const started = Date.now();
-  const validation = validateFlightPlanForAction(plan, action);
+  let validation = validateFlightPlanForAction(plan, action);
   const generatedPayload = summarizePayload(plan, action) as Record<string, any> | null;
+  if ((action === "file" || action === "amend") && generatedPayload?.otherInfo) {
+    const otherInfoValidation = validateLeidosOtherInfoForTransmission(generatedPayload.otherInfo);
+    if (!otherInfoValidation.valid) {
+      validation = {
+        ready: false,
+        errors: [...validation.errors, ...otherInfoValidation.errors],
+        warnings: validation.warnings,
+      };
+    }
+  }
   if (!validation.ready) {
     const actionResult = { action, generatedPayload, payloadSentToLeidos: null, leidosResponse: null, responseStatus: "validation_failed", warnings: validation.warnings, errors: validation.errors, elapsedMs: Date.now() - started };
     const updated = await appendCertificationAudit(plan, "action", actionResult, dryRun);

@@ -52,6 +52,26 @@ const arg = (name: string, fallback = "") => {
   return prefixed ? prefixed.slice(flag.length + 1) : fallback;
 };
 const hasFlag = (name: string) => process.argv.includes(`--${name}`);
+const KNOWN_FLAGS = new Set([
+  "dry-run",
+  "confirm-leidos-lab",
+  "limit",
+  "delay-minutes",
+  "replay",
+]);
+const validateCliArgs = () => {
+  const unknown = process.argv
+    .slice(2)
+    .filter((value) => value.startsWith("--"))
+    .map((value) => value.replace(/^--/, "").split("=")[0])
+    .filter((name) => !KNOWN_FLAGS.has(name));
+  if (unknown.length) {
+    const suggestions = unknown.includes("comfirm-leidos-lab")
+      ? " Did you mean --confirm-leidos-lab?"
+      : "";
+    throw new Error(`Unknown option(s): ${unknown.map((name) => `--${name}`).join(", ")}.${suggestions}`);
+  }
+};
 const numberArg = (name: string, fallback: string) => {
   const parsed = Number(arg(name, fallback));
   return Number.isFinite(parsed) ? parsed : Number(fallback);
@@ -307,6 +327,7 @@ const saveReport = (report: Record<string, unknown>) => {
 };
 
 const runSession = async () => {
+  validateCliArgs();
   const diagnostics = assertLabEndpoint();
   const cliDryRun = hasFlag("dry-run") || !hasFlag("confirm-leidos-lab");
   const delayMinutes = Math.max(0, numberArg("delay-minutes", process.env.LEIDOS_LAB_DELAY_MINUTES || "3"));

@@ -48,6 +48,29 @@ const arg = (name: string, fallback = "") => {
 };
 
 const hasFlag = (name: string) => process.argv.includes(`--${name}`);
+const KNOWN_FLAGS = new Set([
+  "dry-run",
+  "confirm-leidos-lab",
+  "limit",
+  "delay-minutes",
+  "skip-cleanup",
+  "cleanup-only",
+  "replay",
+]);
+
+const validateCliArgs = () => {
+  const unknown = process.argv
+    .slice(2)
+    .filter((value) => value.startsWith("--"))
+    .map((value) => value.replace(/^--/, "").split("=")[0])
+    .filter((name) => !KNOWN_FLAGS.has(name));
+  if (unknown.length) {
+    const suggestions = unknown.includes("comfirm-leidos-lab")
+      ? " Did you mean --confirm-leidos-lab?"
+      : "";
+    throw new Error(`Unknown option(s): ${unknown.map((name) => `--${name}`).join(", ")}.${suggestions}`);
+  }
+};
 export const boolEnv = (value?: string | null) => /^(true|1|yes|on)$/i.test(String(value || "").trim());
 const numberArg = (name: string, fallback: string) => {
   const raw = arg(name, fallback);
@@ -825,6 +848,8 @@ export const buildCertificationHtml = (report: any) => {
   <section><h2>Provider Round Trip</h2><pre>${escapeHtml(JSON.stringify(report.providerRoundTrip || {}, null, 2))}</pre></section>
   <section><h2>Field Comparisons</h2><table><thead><tr><th>Test</th><th>Field</th><th>Result</th><th>Values</th></tr></thead><tbody>${fieldRows || "<tr><td colspan=\"4\">No field comparison differences.</td></tr>"}</tbody></table></section>
   <section><h2>Cleanup Summary</h2><pre>${escapeHtml(JSON.stringify(report.cleanupSummary || {}, null, 2))}</pre></section>
+  <section><h2>Execution Timing</h2><pre>${escapeHtml(JSON.stringify(report.executionTiming || {}, null, 2))}</pre></section>
+  <section><h2>Database Persistence</h2><pre>${escapeHtml(JSON.stringify(report.databasePersistence || {}, null, 2))}</pre></section>
   <section><h2>Certification Version</h2><pre>${escapeHtml(JSON.stringify(report.certificationVersion || {}, null, 2))}</pre></section>
   <section><h2>Final Result</h2>${badge(report.finalSummary?.finalResult)}</section>
 </body>
@@ -864,6 +889,10 @@ export const writeCertificationPdf = async (report: any, filePath: string) => {
   draw(JSON.stringify(report.validationSummary || {}, null, 2));
   draw("Cleanup", { bold: true, size: 13 });
   draw(JSON.stringify(report.cleanupSummary || {}, null, 2));
+  draw("Execution Timing", { bold: true, size: 13 });
+  draw(JSON.stringify(report.executionTiming || {}, null, 2));
+  draw("Database Persistence", { bold: true, size: 13 });
+  draw(JSON.stringify(report.databasePersistence || {}, null, 2));
   draw("Round Trip", { bold: true, size: 13 });
   draw(JSON.stringify(report.providerRoundTrip || {}, null, 2));
   draw("Final Certification Status", { bold: true, size: 13 });
@@ -1010,6 +1039,7 @@ const countdown = async (minutes: number, nextName: string) => {
 };
 
 const run = async () => {
+  validateCliArgs();
   const dryRun = hasFlag("dry-run") || !hasFlag("confirm-leidos-lab");
   const limit = Math.min(MAX_CASES, Math.max(1, numberArg("limit", "15") || 15));
   const delayMinutes = Math.max(0, numberArg("delay-minutes", process.env.LEIDOS_LAB_DELAY_MINUTES || "3"));
@@ -1063,11 +1093,18 @@ const run = async () => {
   if (cases.length === 0) throw new Error(`No live LAB test case matched replay=${replay}.`);
 
   if (!dryRun) await promptLiveConfirmation(context, diagnostics, cases.length, delayMinutes);
-  console.log(`Leidos live LAB certification ${dryRun ? "DRY RUN" : "CONFIRMED"}`);
+  const runModeLabel = dryRun
+    ? "DRY RUN"
+    : diagnostics.enabled
+      ? "LIVE LAB SUBMISSION RUN"
+      : "LIVE LAB VALIDATION RUN - PROVIDER SUBMISSION DISABLED";
+  console.log(`Leidos live LAB certification ${runModeLabel}`);
   console.log(`Endpoint: ${diagnostics.baseUrl}`);
   console.log(`Test user: ${context.user.email || process.env.LEIDOS_TEST_USER_EMAIL}`);
   console.log(`Cases: ${cases.length}/${MAX_CASES}`);
-  console.log(`Delay: ${delayMinutes} minute(s)`);
+  console.log(`Delay requested: ${delayMinutes} minute(s)`);
+  console.log("Delay policy: applied before each certification case after the first during confirmed non-dry runs.");
+  console.log(`RSF DB history persistence: ${dryRun ? "disabled for dry-run" : "enabled; certification plans are saved under the configured test user"}`);
   console.log(`Cleanup: ${skipCleanup ? "SKIPPED by flag" : "enabled"}`);
   printCleanupPreview(cases);
 
@@ -1075,10 +1112,31 @@ const run = async () => {
   const createdPlans: FlightPlan[] = [];
   let stoppedEarly = false;
   let providerSubmissionDisabled = false;
+  const delayApplications: Array<Record<string, unknown>> = [];
+  const dbPersistenceRecords: Array<Record<string, unknown>> = [];
   for (const [index, testCase] of cases.entries()) {
-    if (!dryRun && index > 0) await countdown(delayMinutes, testCase.name);
+    if (!dryRun && index > 0) {
+      const startedDelayAt = new Date();
+      await countdown(delayMinutes, testCase.name);
+      delayApplications.push({
+        beforeCaseSeed: testCase.seed,
+        beforeCaseName: testCase.name,
+        requestedDelayMinutes: delayMinutes,
+        startedAt: startedDelayAt.toISOString(),
+        completedAt: new Date().toISOString(),
+        applied: true,
+      });
+    }
     let plan = await persistCertificationPlan(testCase.buildPlan(), runId, testCase, dryRun);
     createdPlans.push(plan);
+    dbPersistenceRecords.push({
+      certificationCaseId: `case-${String(testCase.seed).padStart(2, "0")}`,
+      testName: testCase.name,
+      persisted: !dryRun,
+      localFlightPlanId: plan.id,
+      userId: plan.userId,
+      providerPlanId: plan.filingProviderPlanId || null,
+    });
     console.log(`[${index + 1}/${cases.length}] ${testCase.name} seed=${testCase.seed} type=${testCase.testType}`);
     const caseResult = {
       certificationRunId: runId,
@@ -1311,6 +1369,12 @@ const run = async () => {
     results.push(caseResult);
     const createdIndex = createdPlans.findIndex((item) => item.id === plan.id);
     if (createdIndex >= 0) createdPlans[createdIndex] = plan;
+    const persistenceRecord = dbPersistenceRecords.find((item) => item.localFlightPlanId === plan.id);
+    if (persistenceRecord) {
+      persistenceRecord.providerPlanId = plan.filingProviderPlanId || null;
+      persistenceRecord.finalStatus = plan.filingStatus || null;
+      persistenceRecord.filingIsLive = Boolean(plan.filingIsLive);
+    }
     if ((!caseResult.pass || stoppedEarly) && !dryRun) {
       console.error(`Stopping after failure in ${testCase.name}: ${caseResult.errors.join(" | ")}`);
       break;
@@ -1355,6 +1419,7 @@ const run = async () => {
   const output = {
     certificationRunId: runId,
     dryRun,
+    runModeLabel,
     environment: diagnostics.environment,
     endpoint: diagnostics.baseUrl,
     environmentDetails: {
@@ -1398,6 +1463,19 @@ const run = async () => {
     certificationVersion,
     readinessAssessment,
     providerSubmissionDisabled,
+    executionTiming: {
+      requestedDelayMinutes: delayMinutes,
+      delayPolicy: "Applied before each certification case after the first during confirmed non-dry runs.",
+      delayActuallyAppliedCount: delayApplications.length,
+      delayActuallyApplied: delayApplications,
+    },
+    databasePersistence: {
+      recordsCreated: !dryRun,
+      persistMode: dryRun ? "dry_run_no_database_history" : "saved_to_flight_plan_history",
+      testUserId: context.user.id,
+      testUserEmail: context.user.email || process.env.LEIDOS_TEST_USER_EMAIL,
+      mappings: dbPersistenceRecords,
+    },
     providerSubmissionEnablement: {
       requiredEnvVar: PROVIDER_SUBMISSION_ENV_VAR,
       requiredValue: "true",
@@ -1478,6 +1556,15 @@ const run = async () => {
   console.log(`  Flight Service Module Version: ${certificationVersion.flightServiceModuleVersion}`);
   console.log("Final Result");
   console.log(`  ${readinessAssessment.overallStatus}`);
+  console.log("Execution Timing");
+  console.log(`  Delay Setting Requested: ${delayMinutes} minute(s)`);
+  console.log(`  Delay Actually Applied: ${delayApplications.length} time(s)`);
+  console.log("Database Persistence");
+  console.log(`  RSF DB Records Created: ${dryRun ? "No" : "Yes"}`);
+  console.log(`  Test User ID: ${context.user.id}`);
+  for (const record of dbPersistenceRecords) {
+    console.log(`  ${record.certificationCaseId}: localFlightPlanId=${record.localFlightPlanId} userId=${record.userId} providerPlanId=${record.providerPlanId || "-"}`);
+  }
   if (providerSubmissionDisabled) {
     console.log("");
     console.log(PROVIDER_SUBMISSION_DISABLED_MESSAGE);

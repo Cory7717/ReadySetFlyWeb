@@ -25,6 +25,7 @@ import {
   type IcaoOtherInfoEntry,
   type IcaoOtherInfoPrefix,
 } from "@shared/icao-filing";
+import { ICAO_EQUIPMENT_CODES, normalizeIcaoEquipmentCodes, parseIcaoEquipmentCodes } from "@shared/icao-equipment-codes";
 
 type AircraftType = {
   id: string;
@@ -204,6 +205,13 @@ export default function MyAircraft() {
     () => parseIcaoSurveillanceCodes(form.filingSurveillanceEquipmentDefault),
     [form.filingSurveillanceEquipmentDefault],
   );
+  const selectedEquipmentCodes = useMemo(
+    () => parseIcaoEquipmentCodes(form.filingEquipmentDefault),
+    [form.filingEquipmentDefault],
+  );
+  const setEquipmentCodes = useCallback((codes: string[]) => {
+    setForm((current) => ({ ...current, filingEquipmentDefault: normalizeIcaoEquipmentCodes(codes.join("")) || "" }));
+  }, []);
   const setSurveillanceCodes = useCallback((codes: string[]) => {
     setForm((current) => ({ ...current, filingSurveillanceEquipmentDefault: normalizeIcaoSurveillanceCodes(codes) }));
   }, []);
@@ -487,8 +495,35 @@ export default function MyAircraft() {
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Equipment Code</Label>
-                <Input value={form.filingEquipmentDefault} onChange={(e) => setForm({ ...form, filingEquipmentDefault: e.target.value.toUpperCase() })} placeholder="S/C" />
+                <Label>Aircraft Equipment</Label>
+                <Select
+                  value=""
+                  onValueChange={(code) => {
+                    if (!code || selectedEquipmentCodes.includes(code)) return;
+                    setEquipmentCodes(code === "N" ? ["N"] : [...selectedEquipmentCodes.filter((entry) => entry !== "N"), code]);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Add equipment code" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ICAO_EQUIPMENT_CODES.map((entry) => (
+                      <SelectItem key={entry.code} value={entry.code}>
+                        {entry.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex flex-wrap gap-1 text-xs">
+                  {selectedEquipmentCodes.length > 0 ? selectedEquipmentCodes.map((code) => (
+                    <span key={code} className="rounded border bg-background px-2 py-1">
+                      {code}
+                      <button type="button" className="ml-2 text-muted-foreground" onClick={() => setEquipmentCodes(selectedEquipmentCodes.filter((entry) => entry !== code))}>
+                        Remove
+                      </button>
+                    </span>
+                  )) : <span className="text-muted-foreground">Select one or more ICAO equipment codes.</span>}
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Default Flight Rules</Label>
@@ -518,11 +553,36 @@ export default function MyAircraft() {
               </div>
               <div className="space-y-2">
                 <Label>Wake Turbulence</Label>
-                <Input value={form.filingWakeTurbulenceDefault} onChange={(e) => setForm({ ...form, filingWakeTurbulenceDefault: e.target.value.toUpperCase() })} placeholder="MEDIUM" />
+                <Select
+                  value={form.filingWakeTurbulenceDefault || "none"}
+                  onValueChange={(value) => setForm({ ...form, filingWakeTurbulenceDefault: value === "none" ? "" : value })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select category</SelectItem>
+                    <SelectItem value="LIGHT">Light (L)</SelectItem>
+                    <SelectItem value="MEDIUM">Medium (M)</SelectItem>
+                    <SelectItem value="HEAVY">Heavy (H)</SelectItem>
+                    <SelectItem value="SUPER">Super (J)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Type Of Flight</Label>
-                <Input value={form.filingTypeOfFlightDefault} onChange={(e) => setForm({ ...form, filingTypeOfFlightDefault: e.target.value.toUpperCase() })} placeholder="G" />
+                <Select
+                  value={form.filingTypeOfFlightDefault || "none"}
+                  onValueChange={(value) => setForm({ ...form, filingTypeOfFlightDefault: value === "none" ? "" : value })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select flight type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select flight type</SelectItem>
+                    <SelectItem value="G">General aviation (G)</SelectItem>
+                    <SelectItem value="S">Scheduled air service (S)</SelectItem>
+                    <SelectItem value="N">Non-scheduled air transport (N)</SelectItem>
+                    <SelectItem value="M">Military (M)</SelectItem>
+                    <SelectItem value="X">Other (X)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Fuel Endurance Minutes</Label>

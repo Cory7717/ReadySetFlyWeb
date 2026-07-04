@@ -280,7 +280,7 @@ const promptedCleanup = async (plans: FlightPlan[], dryRun: boolean) => {
       results.push({ planId: plan.id, action, responseStatus: "cleanup_skipped_by_operator", pass: false });
       continue;
     }
-    const result = await executeAction(plan, action, { seed: Number(plan.certificationSeed || 0), name: String(plan.certificationCaseName || "cleanup"), actions: [action], buildPlan: () => plan }, dryRun);
+    const result = await executeAction(plan, action, { seed: Number(plan.certificationSeed || 0), name: String(plan.certificationCaseName || "cleanup"), testType: "Cleanup", actions: [action], buildPlan: () => plan }, dryRun);
     results.push({ planId: result.plan.id, action, responseStatus: result.actionResult.responseStatus, providerPlanId: result.plan.filingProviderPlanId || null, versionStamp: getVersionStamp(result.plan), pass: result.pass, errors: result.actionResult.errors || [], elapsedMs: result.actionResult.elapsedMs });
   }
   return results;

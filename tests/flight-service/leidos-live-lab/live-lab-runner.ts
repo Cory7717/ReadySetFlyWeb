@@ -16,10 +16,12 @@ import {
 } from "../../../server/services/flight-plan-filing/provider";
 
 export type CaseAction = FlightPlanFilingAction;
+export type LiveLabTestType = "Positive" | "Negative" | "Lifecycle" | "Cleanup" | "Round Trip";
 
 export type LiveLabCase = {
   seed: number;
   name: string;
+  testType: LiveLabTestType;
   actions: CaseAction[];
   buildPlan: () => FlightPlan;
   expectedBlockedBeforeLeidos?: boolean;
@@ -231,21 +233,21 @@ const createBasePlanFactory = (context: DedicatedTestContext, runId: string) => 
 export const buildCases = (context: DedicatedTestContext, runId: string): LiveLabCase[] => {
   const plan = createBasePlanFactory(context, runId);
   return [
-    { seed: 1, name: "Normal VFR ICAO file", actions: ["file"], buildPlan: () => plan(1, "Normal VFR") },
-    { seed: 2, name: "Normal IFR ICAO file", actions: ["file"], buildPlan: () => plan(2, "Normal IFR", { filingFlightRules: "IFR", route: "DCT KDWH DCT", filingPlannedAltitudeFt: 7000 }) },
-    { seed: 3, name: "ZZZZ destination lat/long description", actions: ["file"], buildPlan: () => plan(3, "ZZZZ Destination", { destination: "ZZZZ", filingDestinationName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceDestinationAirport: "KSDL", actualDestinationLocationMode: "latlong", actualDestinationLocation: "3839N09045W" } }) },
-    { seed: 4, name: "ZZZZ departure lat/long description", actions: ["file"], buildPlan: () => plan(4, "ZZZZ Departure", { departure: "ZZZZ", filingDepartureName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceDepartureAirport: "KDWH", actualDepartureLocationMode: "latlong", actualDepartureLocation: "3839N09045W" } }) },
-    { seed: 5, name: "ZZZZ alternate destination", actions: ["file"], buildPlan: () => plan(5, "ZZZZ Alternate", { alternate: "ZZZZ", filingAlternateName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceAlternateAirport: "KACT", actualAlternateLocationMode: "identifier", actualAlternateLocation: "85TX" } }) },
-    { seed: 6, name: "Other Info RMK retained", actions: ["file"], buildPlan: () => plan(6, "RMK Retained", { filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} RMK RETAINED ${runId}` }) },
-    { seed: 7, name: "VFR file activate close", actions: ["file", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(7, "VFR Close", { filingCloseLocation: "KDAL" } as any) },
-    { seed: 8, name: "IFR file then amend", actions: ["file", "amend"], expectedFinalState: "filed", buildPlan: () => plan(8, "IFR Amend", { filingFlightRules: "IFR", route: "DCT KDWH DCT", filingPlannedAltitudeFt: 7000 }) },
-    { seed: 9, name: "File then cancel", actions: ["file", "cancel"], expectedFinalState: "cancelled", buildPlan: () => plan(9, "Cancel") },
-    { seed: 10, name: "Negative - Equipment R with no PBN", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add the correct PBN/ capabilities or remove R if not PBN approved.", buildPlan: () => plan(10, "R Without PBN", { filingEquipment: "SR", filingOtherInfo: `RMK/${CERT_REMARK} R WITHOUT PBN ${runId}` }) },
-    { seed: 11, name: "Negative - PBN without Equipment R", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add R only if approved, otherwise remove PBN/.", buildPlan: () => plan(11, "PBN Without R", { filingEquipment: "S", filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} PBN WITHOUT R ${runId}` }) },
-    { seed: 12, name: "Negative - Invalid surveillance B2", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Use supported compact surveillance values and put ADS-B detail in SUR/ if needed.", buildPlan: () => plan(12, "Invalid Surveillance", { filingSurveillanceEquipment: "B2" }) },
-    { seed: 13, name: "Negative - Duplicate equipment codes", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Remove duplicate ICAO equipment codes.", buildPlan: () => plan(13, "Duplicate Equipment", { filingEquipment: "SRR", filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} DUPLICATE EQUIPMENT ${runId}` }) },
-    { seed: 14, name: "Negative - Missing phone and home base", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Complete pilot phone and aircraft home base before filing.", buildPlan: () => plan(14, "Missing Contact", { filingPilotPhone: "", filingAircraftHomeBase: "" }) },
-    { seed: 15, name: "Negative - Invalid ZZZZ coordinates and past departure", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Correct ZZZZ actual location and move departure time into the future.", buildPlan: () => plan(15, "Invalid ZZZZ", { departure: "ZZZZ", filingDepartureName: "PRIVATE STRIP", plannedDepartureAt: new Date("2026-01-01T15:00:00.000Z"), plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-01-01T09:00", planningReferenceDepartureAirport: "KDWH", actualDepartureLocationMode: "latlong", actualDepartureLocation: "BADCOORD" } }) },
+    { seed: 1, name: "Normal VFR ICAO file", testType: "Positive", actions: ["file"], buildPlan: () => plan(1, "Normal VFR") },
+    { seed: 2, name: "Normal IFR ICAO file", testType: "Positive", actions: ["file"], buildPlan: () => plan(2, "Normal IFR", { filingFlightRules: "IFR", route: "DCT KDWH DCT", filingPlannedAltitudeFt: 7000 }) },
+    { seed: 3, name: "ZZZZ destination lat/long description", testType: "Positive", actions: ["file"], buildPlan: () => plan(3, "ZZZZ Destination", { destination: "ZZZZ", filingDestinationName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceDestinationAirport: "KSDL", actualDestinationLocationMode: "latlong", actualDestinationLocation: "3839N09045W" } }) },
+    { seed: 4, name: "ZZZZ departure lat/long description", testType: "Positive", actions: ["file"], buildPlan: () => plan(4, "ZZZZ Departure", { departure: "ZZZZ", filingDepartureName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceDepartureAirport: "KDWH", actualDepartureLocationMode: "latlong", actualDepartureLocation: "3839N09045W" } }) },
+    { seed: 5, name: "ZZZZ alternate destination", testType: "Positive", actions: ["file"], buildPlan: () => plan(5, "ZZZZ Alternate", { alternate: "ZZZZ", filingAlternateName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceAlternateAirport: "KACT", actualAlternateLocationMode: "identifier", actualAlternateLocation: "85TX" } }) },
+    { seed: 6, name: "Other Info RMK retained", testType: "Positive", actions: ["file"], buildPlan: () => plan(6, "RMK Retained", { filingOtherInfo: `DOF/260715 RMK/${CERT_REMARK} RMK RETAINED ${runId}` }) },
+    { seed: 7, name: "VFR file activate close", testType: "Lifecycle", actions: ["file", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(7, "VFR Close", { filingCloseLocation: "KDAL" } as any) },
+    { seed: 8, name: "IFR file then amend", testType: "Lifecycle", actions: ["file", "amend"], expectedFinalState: "filed", buildPlan: () => plan(8, "IFR Amend", { filingFlightRules: "IFR", route: "DCT KDWH DCT", filingPlannedAltitudeFt: 7000 }) },
+    { seed: 9, name: "Provider round-trip integrity lifecycle", testType: "Round Trip", actions: ["file", "amend", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(9, "Round Trip", { route: "DCT KDWH DCT", filingCloseLocation: "KDAL" } as any) },
+    { seed: 10, name: "Negative - Equipment R with no PBN", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add the correct PBN/ capabilities or remove R if not PBN approved.", buildPlan: () => plan(10, "R Without PBN", { filingEquipment: "SR", filingOtherInfo: `RMK/${CERT_REMARK} R WITHOUT PBN ${runId}` }) },
+    { seed: 11, name: "Negative - PBN present without Equipment R", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add R only if approved, otherwise remove PBN/.", buildPlan: () => plan(11, "PBN Without R", { filingEquipment: "S", filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} PBN WITHOUT R ${runId}` }) },
+    { seed: 12, name: "Negative - Invalid surveillance B2", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Use supported compact surveillance values and put ADS-B detail in SUR/ if needed.", buildPlan: () => plan(12, "Invalid Surveillance", { filingSurveillanceEquipment: "B2" }) },
+    { seed: 13, name: "Negative - Duplicate equipment codes", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Remove duplicate ICAO equipment codes.", buildPlan: () => plan(13, "Duplicate Equipment", { filingEquipment: "SRR", filingOtherInfo: `PBN/A1 RMK/${CERT_REMARK} DUPLICATE EQUIPMENT ${runId}` }) },
+    { seed: 14, name: "Negative - Missing phone and home base", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Complete pilot phone and aircraft home base before filing.", buildPlan: () => plan(14, "Missing Contact", { filingPilotPhone: "", filingAircraftHomeBase: "" }) },
+    { seed: 15, name: "Negative - Invalid ZZZZ coordinates and past departure", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Correct ZZZZ actual location and move departure time into the future.", buildPlan: () => plan(15, "Invalid ZZZZ", { departure: "ZZZZ", filingDepartureName: "PRIVATE STRIP", plannedDepartureAt: new Date("2026-01-01T15:00:00.000Z"), plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-01-01T09:00", planningReferenceDepartureAirport: "KDWH", actualDepartureLocationMode: "latlong", actualDepartureLocation: "BADCOORD" } }) },
   ];
 };
 
@@ -274,7 +276,8 @@ export const summarizePayload = (plan: FlightPlan, action: FlightPlanFilingActio
 
 export const simulateDryRunProviderState = (plan: FlightPlan, action: FlightPlanFilingAction, seed: number): FlightPlan => {
   const providerPlanId = plan.filingProviderPlanId || `dry-provider-${seed}`;
-  const versionStamp = `20260702${String(seed).padStart(6, "0")}`;
+  const actionOrder = { file: 1, amend: 2, activate: 3, cancel: 4, close: 5 } as Record<string, number>;
+  const versionStamp = `20260702${String(seed).padStart(4, "0")}${String(actionOrder[action] || 0).padStart(2, "0")}`;
   const nextStatus =
     action === "file" || action === "amend" ? "filed" :
     action === "activate" ? "activated" :
@@ -351,8 +354,10 @@ export const compareGeneratedSentReturned = (
     alternate: providerValue(snapshot, ["alternate", "altDestination1"]) || plan.alternate,
     route: snapshot.route?.providerRoute || snapshot.route?.effectiveRoute || providerValue(snapshot, ["route"]) || plan.route,
     aircraftIdentifier: providerValue(snapshot, ["aircraftIdentifier", "aircraftId"]) || plan.tailNumber,
+    aircraftType: providerValue(snapshot, ["aircraftType"]) || plan.aircraftType,
     flightRules: providerValue(snapshot, ["flightRules"]) || plan.filingFlightRules,
     equipment: providerValue(snapshot, ["aircraftEquipment"]) || plan.filingEquipment,
+    surveillance: providerValue(snapshot, ["surveillanceEquipment"]) || plan.filingSurveillanceEquipment,
     pbn: pbnFromOtherInfo(providerValue(snapshot, ["otherInfo"]) || sentPayload?.otherInfo || generatedPayload?.otherInfo),
     otherInfo: providerValue(snapshot, ["otherInfo"]) || sentPayload?.otherInfo || generatedPayload?.otherInfo,
     pilotPhone: providerValue(snapshot, ["pilotPhone"]) || plan.filingPilotPhone,
@@ -368,8 +373,10 @@ export const compareGeneratedSentReturned = (
     ["alternate", generatedPayload?.altDestination1, sentPayload?.altDestination1, returned.alternate],
     ["route", generatedPayload?.route, sentPayload?.route, returned.route],
     ["aircraftIdentifier", generatedPayload?.aircraftIdentifier, sentPayload?.aircraftIdentifier, returned.aircraftIdentifier],
+    ["aircraftType", generatedPayload?.aircraftType, sentPayload?.aircraftType, returned.aircraftType],
     ["flightRules", generatedPayload?.flightRules, sentPayload?.flightRules, returned.flightRules],
     ["equipment", generatedPayload?.aircraftEquipment, sentPayload?.aircraftEquipment, returned.equipment],
+    ["surveillance", generatedPayload?.surveillanceEquipment, sentPayload?.surveillanceEquipment, returned.surveillance],
     ["PBN", pbnFromOtherInfo(generatedPayload?.otherInfo), pbnFromOtherInfo(sentPayload?.otherInfo), returned.pbn],
     ["Other Info / RMK", generatedPayload?.otherInfo, sentPayload?.otherInfo, returned.otherInfo],
     ["pilotPhone", generatedPayload?.pilotPhone, sentPayload?.pilotPhone, returned.pilotPhone],
@@ -437,6 +444,12 @@ const printPayloadReview = (payload: Record<string, any> | null, plan: FlightPla
   console.log("");
 };
 
+const buildRouteReview = (plan: FlightPlan, payload: Record<string, any> | null, validation: ReturnType<typeof validateFlightPlanForAction>) => ({
+  originalRoute: plan.route || "-",
+  normalizedRoute: payload?.route || plan.route || "-",
+  status: validation.ready ? "PASS" : "REVIEW",
+});
+
 const finalStateForCase = (testCase: LiveLabCase) => {
   if (testCase.expectedFinalState) return testCase.expectedFinalState;
   if (testCase.actions.includes("close")) return "closed";
@@ -460,7 +473,7 @@ const printCleanupPreview = (cases: LiveLabCase[]) => {
           : testCase.actions.includes("file")
             ? "CANCEL"
             : "NONE";
-    console.log(`Case ${testCase.seed}: ${testCase.actions.join(" -> ").toUpperCase() || "SKIP"} -> ${cleanupAction}`);
+    console.log(`Case ${testCase.seed} [${testCase.testType}]: ${testCase.actions.join(" -> ").toUpperCase() || "SKIP"} -> ${cleanupAction}`);
     console.log(`Final expected state: ${finalStateForCase(testCase)}`);
   }
   console.log("");
@@ -494,11 +507,71 @@ const promptLiveConfirmation = async (context: DedicatedTestContext, diagnostics
 
 const printValidationResult = (testCase: LiveLabCase, validation: ReturnType<typeof validateFlightPlanForAction>) => {
   const blocked = !validation.ready;
+  console.log(`Validation Status: ${validation.ready ? "PASS" : "BLOCKED"}`);
   console.log(`validationResult: ${validation.ready ? "valid" : "invalid"}`);
   console.log(`blockedBeforeLeidos: ${blocked}`);
-  console.log(`blockedReason: ${validation.errors.join(" | ") || "-"}`);
-  console.log(`recommendedFix: ${testCase.recommendedFix || validation.warnings.join(" | ") || "-"}`);
+  if (blocked) {
+    console.log(`Reason: ${validation.errors.join(" | ") || "-"}`);
+    console.log(`Recommended Resolution: ${testCase.recommendedFix || validation.warnings.join(" | ") || "-"}`);
+  }
   console.log("");
+};
+
+const isNonNegativeCase = (testCase?: LiveLabCase) => testCase ? !testCase.expectedBlockedBeforeLeidos : false;
+
+const buildRoundTripSummary = (results: any[]) => {
+  const roundTripResults = results.filter((item) => item.testType === "Round Trip");
+  return {
+    total: roundTripResults.length,
+    passed: roundTripResults.filter((item) => item.pass).length,
+    failed: roundTripResults.filter((item) => !item.pass).length,
+    cases: roundTripResults.map((item) => ({
+      certificationCaseId: item.certificationCaseId,
+      testName: item.testName,
+      pass: item.pass,
+      providerPlanIds: Array.from(new Set((item.actions || []).map((action: any) => action.providerPlanId).filter(Boolean))),
+      versionStamps: (item.actions || []).map((action: any) => action.versionStamp).filter(Boolean),
+      versionStampUpdated: new Set((item.actions || []).map((action: any) => action.versionStamp).filter(Boolean)).size > 1,
+      comparisonFailures: (item.comparisons || []).filter((comparison: any) => comparison && comparison.pass === false),
+    })),
+  };
+};
+
+const buildCleanupVerification = (cleanupResults: any[], results: any[]) => {
+  const openFailures = cleanupResults.filter((item) => item.pass === false);
+  const blockedCases = results.filter((item) => (item.actions || []).some((action: any) => action.blockedBeforeLeidos));
+  return {
+    status: openFailures.length === 0 ? "PASS" : "FAIL",
+    noActiveCertificationFlightRemains: openFailures.length === 0,
+    terminalOrBlockedCount: cleanupResults.filter((item) => item.pass !== false).length + blockedCases.length,
+    blockedBeforeSubmissionCount: blockedCases.length,
+    failures: openFailures,
+  };
+};
+
+const buildValidationSummary = (results: any[], cases: LiveLabCase[]) => {
+  const caseBySeed = new Map(cases.map((testCase) => [testCase.seed, testCase]));
+  const executed = results.length;
+  const passed = results.filter((item) => item.pass).length;
+  const failed = results.filter((item) => !item.pass).length;
+  const skipped = results.filter((item) => item.skipped).length;
+  const blocked = results.flatMap((item) => item.actions || []).filter((action) => action.blockedBeforeLeidos).length;
+  return {
+    executed,
+    passed,
+    blocked,
+    failed,
+    skipped,
+    positiveTestsPassed: results.filter((item) => isNonNegativeCase(caseBySeed.get(item.seed)) && item.pass).length,
+    negativeTestsPassed: results.filter((item) => caseBySeed.get(item.seed)?.expectedBlockedBeforeLeidos && item.pass).length,
+    byType: ["Positive", "Negative", "Lifecycle", "Cleanup", "Round Trip"].map((testType) => ({
+      testType,
+      total: results.filter((item) => item.testType === testType).length,
+      passed: results.filter((item) => item.testType === testType && item.pass).length,
+      failed: results.filter((item) => item.testType === testType && !item.pass).length,
+      blocked: results.filter((item) => item.testType === testType).flatMap((item) => item.actions || []).filter((action) => action.blockedBeforeLeidos).length,
+    })),
+  };
 };
 
 export const persistCertificationPlan = async (plan: FlightPlan, runId: string, testCase: LiveLabCase, dryRun: boolean) => {
@@ -512,6 +585,7 @@ export const persistCertificationPlan = async (plan: FlightPlan, runId: string, 
       certificationRunId: runId,
       certificationCaseId: metadata.certificationCaseId,
       certificationCaseName: testCase.name,
+      testType: testCase.testType,
       seed: testCase.seed,
       dryRun,
       actions: [],
@@ -696,12 +770,13 @@ const run = async () => {
     if (!dryRun && index > 0) await countdown(delayMinutes, testCase.name);
     let plan = await persistCertificationPlan(testCase.buildPlan(), runId, testCase, dryRun);
     createdPlans.push(plan);
-    console.log(`[${index + 1}/${cases.length}] ${testCase.name} seed=${testCase.seed}`);
+    console.log(`[${index + 1}/${cases.length}] ${testCase.name} seed=${testCase.seed} type=${testCase.testType}`);
     const caseResult = {
       certificationRunId: runId,
       certificationCaseId: `case-${String(testCase.seed).padStart(2, "0")}`,
       planId: plan.id,
       testName: testCase.name,
+      testType: testCase.testType,
       seed: testCase.seed,
       actions: [] as any[],
       comparisons: [] as any[],
@@ -721,7 +796,16 @@ const run = async () => {
       const started = Date.now();
       const validation = validateFlightPlanForAction(plan, action);
       const generatedPayload = summarizePayload(plan, action) as Record<string, any> | null;
+      const routeReview = buildRouteReview(plan, generatedPayload, validation);
       printPayloadReview(generatedPayload, plan);
+      if (generatedPayload?.route || plan.route) {
+        console.log("Route Review");
+        console.log("------------");
+        console.log(`Original Route: ${routeReview.originalRoute}`);
+        console.log(`Normalized Route: ${routeReview.normalizedRoute}`);
+        console.log(`Status: ${routeReview.status}`);
+        console.log("");
+      }
       printValidationResult(testCase, validation);
       if (!validation.ready) {
         const expectedBlock = Boolean(testCase.expectedBlockedBeforeLeidos);
@@ -732,9 +816,12 @@ const run = async () => {
           generatedPayload,
           payloadSentToLeidos: null,
           leidosResponse: null,
+          testType: testCase.testType,
+          validationStatus: "BLOCKED",
           validationResult: "invalid",
           blockedBeforeLeidos: true,
           blockedReason: validation.errors.join(" | "),
+          routeReview,
           recommendedFix: testCase.recommendedFix || validation.warnings.join(" | ") || null,
           responseStatus: expectedBlock ? "blocked_before_leidos_expected" : "validation_failed",
           warnings: validation.warnings,
@@ -753,10 +840,13 @@ const run = async () => {
           generatedPayload,
           payloadSentToLeidos: null,
           leidosResponse: null,
+          testType: testCase.testType,
+          validationStatus: "PASS",
           validationResult: "valid",
           blockedBeforeLeidos: false,
           blockedReason: null,
-          recommendedFix: testCase.recommendedFix || null,
+          routeReview,
+          recommendedFix: null,
           responseStatus: "expected_block_missing",
           warnings: validation.warnings,
           errors: caseResult.errors,
@@ -769,7 +859,7 @@ const run = async () => {
       if (dryRun) {
         const simulated = simulateDryRunProviderState(plan, action, testCase.seed);
         const comparison = compareGeneratedSentReturned(generatedPayload, generatedPayload, simulated);
-        const actionResult = { action, generatedPayload, payloadSentToLeidos: generatedPayload, leidosResponse: { dryRun: true }, validationResult: "valid", blockedBeforeLeidos: false, blockedReason: null, recommendedFix: null, responseStatus: "dry_run", providerPlanId: null, versionStamp: null, warnings: validation.warnings, errors: [], comparison, elapsedMs: Date.now() - started };
+        const actionResult = { action, generatedPayload, payloadSentToLeidos: generatedPayload, leidosResponse: { dryRun: true }, testType: testCase.testType, validationStatus: "PASS", validationResult: "valid", blockedBeforeLeidos: false, blockedReason: null, routeReview, recommendedFix: null, responseStatus: "dry_run", providerPlanId: simulated.filingProviderPlanId || null, versionStamp: getVersionStamp(simulated), warnings: validation.warnings, errors: [], comparison, elapsedMs: Date.now() - started };
         caseResult.actions.push(actionResult);
         caseResult.comparisons.push(comparison);
         plan = await appendCertificationAudit(simulated, "action", actionResult, dryRun);
@@ -782,7 +872,7 @@ const run = async () => {
         caseResult.pass = false;
         const message = String((error as any)?.message || error);
         caseResult.errors.push(message);
-        const actionResult = { action, generatedPayload, payloadSentToLeidos: null, leidosResponse: null, responseStatus: "error", warnings: validation.warnings, errors: [message], elapsedMs: Date.now() - started };
+        const actionResult = { action, generatedPayload, payloadSentToLeidos: null, leidosResponse: null, testType: testCase.testType, validationStatus: "PASS", validationResult: "valid", blockedBeforeLeidos: false, blockedReason: null, routeReview, responseStatus: "error", warnings: validation.warnings, errors: [message], elapsedMs: Date.now() - started };
         caseResult.actions.push(actionResult);
         plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
         if (isCleanupBlockingError(error)) stoppedEarly = true;
@@ -819,9 +909,12 @@ const run = async () => {
         generatedPayload,
         payloadSentToLeidos: sentPayload,
         leidosResponse: response.raw?.response || response.raw || null,
+        testType: testCase.testType,
+        validationStatus: "PASS",
         validationResult: "valid",
         blockedBeforeLeidos: false,
         blockedReason: null,
+        routeReview,
         recommendedFix: null,
         responseStatus: response.live ? "accepted" : "staged",
         providerPlanId: response.providerPlanId || null,
@@ -841,6 +934,25 @@ const run = async () => {
       }
       if (!comparison.pass) {
         caseResult.warnings.push(`Unexpected comparison differences after ${action}: ${comparison.differences.length}`);
+      }
+    }
+    if (testCase.testType === "Round Trip") {
+      const providerPlanIds = (caseResult.actions || []).map((action: any) => action.providerPlanId).filter(Boolean);
+      const versionStamps = (caseResult.actions || []).map((action: any) => action.versionStamp).filter(Boolean);
+      const uniqueProviderPlanIds = new Set(providerPlanIds);
+      const uniqueVersionStamps = new Set(versionStamps);
+      const comparisonFailures = (caseResult.comparisons || []).filter((comparison: any) => comparison && comparison.pass === false);
+      if (uniqueProviderPlanIds.size !== 1 || providerPlanIds.length === 0) {
+        caseResult.pass = false;
+        caseResult.errors.push("Round trip providerPlanId was not preserved across lifecycle actions.");
+      }
+      if (versionStamps.length > 1 && uniqueVersionStamps.size < 2) {
+        caseResult.pass = false;
+        caseResult.errors.push("Round trip versionStamp did not update across lifecycle actions.");
+      }
+      if (comparisonFailures.length) {
+        caseResult.pass = false;
+        caseResult.errors.push(`Round trip comparison found ${comparisonFailures.length} field mismatch set(s).`);
       }
     }
     results.push(caseResult);
@@ -872,32 +984,66 @@ const run = async () => {
     item.pass === false ||
     (item.responseStatus !== "already_terminal" && item.responseStatus !== "not_required" && item.responseStatus !== "dry_run" && item.responseStatus !== "accepted")
   );
+  const validationSummary = buildValidationSummary(results, cases);
+  const cleanupVerification = buildCleanupVerification(cleanupResults, results);
+  const providerRoundTrip = buildRoundTripSummary(results);
 
   const output = {
     certificationRunId: runId,
     dryRun,
     environment: diagnostics.environment,
     endpoint: diagnostics.baseUrl,
+    environmentDetails: {
+      name: diagnostics.environment,
+      endpoint: diagnostics.baseUrl,
+      dryRun,
+      delayMinutes,
+      limit,
+    },
+    operator: {
+      email: context.user.email || process.env.LEIDOS_TEST_USER_EMAIL,
+      userId: context.user.id,
+      pilotName: context.pilotName,
+    },
+    aircraft: {
+      aircraftId: context.profile.id,
+      tailNumber: context.profile.tailNumber,
+      aircraftType: context.aircraftType,
+      homeBase: context.homeBase,
+      phonePresent: Boolean(context.phone),
+    },
     testAccountEmail: context.user.email || process.env.LEIDOS_TEST_USER_EMAIL,
     limit,
     delayMinutes,
     skipCleanup,
     totalCases: results.length,
-    passed: results.filter((item) => item.pass).length,
-    failed: results.filter((item) => !item.pass).length,
-    positiveTestsPassed: results.filter((item) => !cases.find((testCase) => testCase.seed === item.seed)?.expectedBlockedBeforeLeidos && item.pass).length,
-    negativeTestsPassed: results.filter((item) => cases.find((testCase) => testCase.seed === item.seed)?.expectedBlockedBeforeLeidos && item.pass).length,
-    casesBlockedBeforeSubmission: results.flatMap((item) => item.actions || []).filter((action) => action.blockedBeforeLeidos).length,
+    passed: validationSummary.passed,
+    failed: validationSummary.failed,
+    positiveTestsPassed: validationSummary.positiveTestsPassed,
+    negativeTestsPassed: validationSummary.negativeTestsPassed,
+    casesBlockedBeforeSubmission: validationSummary.blocked,
+    positiveTests: results.filter((item) => item.testType === "Positive"),
+    negativeTests: results.filter((item) => item.testType === "Negative"),
+    lifecycleTests: results.filter((item) => item.testType === "Lifecycle"),
+    providerRoundTrip,
     results,
     cleanupResults,
+    cleanupVerification,
+    validationSummary,
     finalSummary: {
+      executed: validationSummary.executed,
+      passed: validationSummary.passed,
+      blocked: validationSummary.blocked,
+      failed: validationSummary.failed,
+      skipped: validationSummary.skipped,
       testCount: results.length,
-      passed: results.filter((item) => item.pass).length,
-      failed: results.filter((item) => !item.pass).length,
       cleanupTotal: cleanupResults.length,
       cleanupPassed: cleanupResults.filter((item) => item.pass !== false).length,
       cleanupFailed: cleanupResults.filter((item) => item.pass === false).length,
+      cleanupVerification: cleanupVerification.status,
+      providerRoundTrip: providerRoundTrip.failed === 0 ? "PASS" : "FAIL",
       openPlanWarnings: openAfterCleanup,
+      finalResult: validationSummary.failed === 0 && cleanupVerification.status === "PASS" ? "PASS" : "FAIL",
     },
     createdAt: new Date().toISOString(),
   };
@@ -909,17 +1055,39 @@ const run = async () => {
   console.log("");
   console.log("Certification Summary");
   console.log("---------------------");
-  console.log(`Operator: ${context.user.email}`);
-  console.log("Environment: Leidos LAB");
-  console.log(`Positive Tests Passed: ${output.positiveTestsPassed}`);
-  console.log(`Negative Tests Passed: ${output.negativeTestsPassed}`);
-  console.log(`Cases Blocked Before Submission: ${output.casesBlockedBeforeSubmission}`);
+  console.log("Environment");
+  console.log(`  Name: Leidos LAB`);
+  console.log(`  Endpoint: ${diagnostics.baseUrl}`);
+  console.log("Operator");
+  console.log(`  Email: ${context.user.email}`);
+  console.log("Aircraft");
+  console.log(`  Tail Number: ${context.profile.tailNumber}`);
+  console.log(`  Aircraft Type: ${context.aircraftType}`);
+  console.log("Validation Summary");
+  console.log(`  Executed: ${validationSummary.executed}`);
+  console.log(`  Passed: ${validationSummary.passed}`);
+  console.log(`  Blocked: ${validationSummary.blocked}`);
+  console.log(`  Failed: ${validationSummary.failed}`);
+  console.log(`  Skipped: ${validationSummary.skipped}`);
+  console.log("Positive Tests");
+  console.log(`  Passed: ${output.positiveTestsPassed}`);
+  console.log("Negative Tests");
+  console.log(`  Passed: ${output.negativeTestsPassed}`);
+  console.log(`  Blocked Before Submission: ${output.casesBlockedBeforeSubmission}`);
+  console.log("Lifecycle Tests");
   console.log(`Expected Filed: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "file" && !action.blockedBeforeLeidos)).length}`);
   console.log(`Expected Amend: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "amend")).length}`);
   console.log(`Expected Activate: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "activate")).length}`);
   console.log(`Expected Close: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "close")).length}`);
   console.log(`Expected Cancel: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "cancel")).length}`);
-  console.log(`Expected Cleanup: ${cleanupResults.length}`);
+  console.log("Provider Round Trip");
+  console.log(`  Status: ${providerRoundTrip.failed === 0 ? "PASS" : "FAIL"}`);
+  console.log(`  Cases: ${providerRoundTrip.total}`);
+  console.log("Cleanup");
+  console.log(`  Expected Cleanup: ${cleanupResults.length}`);
+  console.log(`  Cleanup Verification: ${cleanupVerification.status}`);
+  console.log("Final Result");
+  console.log(`  ${output.finalSummary.finalResult}`);
   console.log(`Report Location: ${filePath}`);
   if ((output.failed > 0 || output.finalSummary.cleanupFailed > 0) && !dryRun) process.exitCode = 1;
 };

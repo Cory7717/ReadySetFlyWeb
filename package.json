@@ -34,6 +34,7 @@
     "certification:lab": "tsx tests/flight-service/leidos-lab/lab-runner.ts",
     "test:flight-service:leidos": "tsx tests/flight-service/leidos-lab/lab-runner.ts --mode=smoke",
     "certification:leidos-live-lab": "tsx tests/flight-service/leidos-live-lab/live-lab-runner.ts",
+    "certification:leidos-post-run-audit": "tsx tests/flight-service/leidos-live-lab/post-run-audit.ts",
     "certification:leidos-session": "tsx tests/flight-service/leidos-live-lab/interactive-session.ts",
     "receiver:bridge": "node scripts/receiver-bridge.mjs",
     "receiver:bridge:windows": "powershell -ExecutionPolicy Bypass -File scripts/receiver-bridge-launch.ps1",

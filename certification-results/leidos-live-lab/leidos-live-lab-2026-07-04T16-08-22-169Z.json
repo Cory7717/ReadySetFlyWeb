@@ -1,0 +1,1900 @@
+{
+  "certificationRunId": "leidos-live-lab-2026-07-04T16-08-22-169Z",
+  "dryRun": false,
+  "environment": "lab",
+  "endpoint": "https://ffspelabs.leidos.com/Website2/rest/",
+  "environmentDetails": {
+    "name": "lab",
+    "endpoint": "https://ffspelabs.leidos.com/Website2/rest/",
+    "dryRun": false,
+    "delayMinutes": 3,
+    "limit": 5
+  },
+  "operator": {
+    "email": "generalmanager.atx@gmail.com",
+    "userId": "28f8868d-d645-43a9-b0a6-e03f4f24424d",
+    "pilotName": "Flight Service Test"
+  },
+  "aircraft": {
+    "aircraftId": "d09073b1-96c4-4c31-a322-d2cb9adbdc43",
+    "tailNumber": "N7717CA",
+    "aircraftType": "C421",
+    "homeBase": "KEDC",
+    "phonePresent": true
+  },
+  "testAccountEmail": "generalmanager.atx@gmail.com",
+  "limit": 5,
+  "delayMinutes": 3,
+  "skipCleanup": false,
+  "totalCases": 1,
+  "passed": 0,
+  "failed": 1,
+  "positiveTestsPassed": 0,
+  "negativeTestsPassed": 0,
+  "casesBlockedBeforeSubmission": 0,
+  "positiveTests": [
+    {
+      "certificationRunId": "leidos-live-lab-2026-07-04T16-08-22-169Z",
+      "certificationCaseId": "case-01",
+      "planId": "leidos-live-lab-2026-07-04T16-08-22-169Z-case-01",
+      "testName": "Normal VFR ICAO file",
+      "testType": "Positive",
+      "seed": 1,
+      "actions": [
+        {
+          "action": "file",
+          "generatedPayload": {
+            "aircraft": "N7717CA / C421",
+            "aircraftIdentifier": "N7717CA",
+            "aircraftType": "C421",
+            "equipment": "SC",
+            "surveillance": "N",
+            "pbn": null,
+            "flightRules": "VFR",
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "altDestination1": "KACT",
+            "route": "DCT",
+            "remarks": "RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+            "phone": "5124121762",
+            "homeBase": "KEDC",
+            "otherInfo": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+            "departureInstant": "2026-07-15T15:00:00.000Z"
+          },
+          "providerPayload": null,
+          "storedPayload": {
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "alternate": "KACT",
+            "route": "DCT",
+            "aircraftIdentifier": "N7717CA",
+            "aircraftType": "C421",
+            "flightRules": "VFR",
+            "equipment": "SC",
+            "surveillance": "N",
+            "pbn": null,
+            "otherInfo": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+            "rmk": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+            "pilotPhone": "5124121762",
+            "homeBase": "KEDC",
+            "departureTimeLocal": "2026-07-15T10:00",
+            "departureTimeUtc": "2026-07-15T15:00:00.000Z",
+            "providerStatus": "staged",
+            "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+            "versionStamp": null
+          },
+          "payloadSentToLeidos": null,
+          "leidosResponse": {
+            "action": "file",
+            "planId": "leidos-live-lab-2026-07-04T16-08-22-169Z-case-01",
+            "filingFlightRules": "VFR",
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "route": "DCT",
+            "alternate": "KACT",
+            "validation": {
+              "ready": true,
+              "errors": [],
+              "warnings": [
+                "Route must contain at least one recognized airport, fix, navaid, airway, or procedure token.",
+                "RSF added DCT segments so the transmitted route is ATC-safe."
+              ]
+            },
+            "stagedReason": "Live provider submission remains disabled until RSF enables Leidos in environment configuration."
+          },
+          "testType": "Positive",
+          "validationStatus": "PASS",
+          "validationResult": "valid",
+          "blockedBeforeLeidos": false,
+          "blockedReason": null,
+          "routeReview": {
+            "originalRoute": "DCT",
+            "normalizedRoute": "DCT",
+            "status": "PASS"
+          },
+          "recommendedFix": null,
+          "responseStatus": "staged",
+          "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+          "versionStamp": "",
+          "warnings": [
+            "Route must contain at least one recognized airport, fix, navaid, airway, or procedure token.",
+            "RSF added DCT segments so the transmitted route is ATC-safe."
+          ],
+          "errors": [
+            "RSF staged the FILE request. Live provider submission remains disabled until RSF enables Leidos in environment configuration."
+          ],
+          "comparison": {
+            "generated": {
+              "aircraft": "N7717CA / C421",
+              "aircraftIdentifier": "N7717CA",
+              "aircraftType": "C421",
+              "equipment": "SC",
+              "surveillance": "N",
+              "pbn": null,
+              "flightRules": "VFR",
+              "departure": "KEDC",
+              "destination": "KDAL",
+              "altDestination1": "KACT",
+              "route": "DCT",
+              "remarks": "RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "phone": "5124121762",
+              "homeBase": "KEDC",
+              "otherInfo": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "departureInstant": "2026-07-15T15:00:00.000Z"
+            },
+            "sent": null,
+            "returned": {
+              "departure": "KEDC",
+              "destination": "KDAL",
+              "alternate": "KACT",
+              "route": "DCT",
+              "aircraftIdentifier": "N7717CA",
+              "aircraftType": "C421",
+              "flightRules": "VFR",
+              "equipment": "SC",
+              "surveillance": "N",
+              "pbn": null,
+              "otherInfo": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "pilotPhone": "5124121762",
+              "homeBase": "KEDC",
+              "departureZulu": "2026-07-15T15:00:00.000Z",
+              "providerStatus": "staged",
+              "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+              "versionStamp": null
+            },
+            "stored": {
+              "departure": "KEDC",
+              "destination": "KDAL",
+              "alternate": "KACT",
+              "route": "DCT",
+              "aircraftIdentifier": "N7717CA",
+              "aircraftType": "C421",
+              "flightRules": "VFR",
+              "equipment": "SC",
+              "surveillance": "N",
+              "pbn": null,
+              "otherInfo": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "rmk": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "pilotPhone": "5124121762",
+              "homeBase": "KEDC",
+              "departureTimeLocal": "2026-07-15T10:00",
+              "departureTimeUtc": "2026-07-15T15:00:00.000Z",
+              "providerStatus": "staged",
+              "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+              "versionStamp": null
+            },
+            "fieldComparisons": [
+              {
+                "field": "departure",
+                "generated": "KEDC",
+                "providerResponse": "KEDC",
+                "stored": "KEDC",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "destination",
+                "generated": "KDAL",
+                "providerResponse": "KDAL",
+                "stored": "KDAL",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "alternate",
+                "generated": "KACT",
+                "providerResponse": "KACT",
+                "stored": "KACT",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "route",
+                "generated": "DCT",
+                "providerResponse": "DCT",
+                "stored": "DCT",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "aircraftIdentifier",
+                "generated": "N7717CA",
+                "providerResponse": "N7717CA",
+                "stored": "N7717CA",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "aircraftType",
+                "generated": "C421",
+                "providerResponse": "C421",
+                "stored": "C421",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "flightRules",
+                "generated": "VFR",
+                "providerResponse": "VFR",
+                "stored": "VFR",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "equipment",
+                "providerResponse": "SC",
+                "stored": "SC",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "surveillance",
+                "providerResponse": "N",
+                "stored": "N",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "PBN",
+                "generated": null,
+                "providerPayload": null,
+                "providerResponse": null,
+                "stored": null,
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "Other Info / RMK",
+                "generated": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                "providerResponse": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+                "comparisonResult": "DIFFERENCE",
+                "differences": [
+                  {
+                    "field": "Other Info / RMK",
+                    "type": "returned_vs_stored",
+                    "returned": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                    "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1"
+                  }
+                ]
+              },
+              {
+                "field": "RMK",
+                "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                "providerPayload": null,
+                "providerResponse": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+                "comparisonResult": "DIFFERENCE",
+                "differences": [
+                  {
+                    "field": "RMK",
+                    "type": "generated_vs_sent",
+                    "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                    "sent": null
+                  },
+                  {
+                    "field": "RMK",
+                    "type": "sent_vs_returned",
+                    "sent": null,
+                    "returned": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1"
+                  }
+                ]
+              },
+              {
+                "field": "pilotPhone",
+                "providerResponse": "5124121762",
+                "stored": "5124121762",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "homeBase",
+                "providerResponse": "KEDC",
+                "stored": "KEDC",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "departureTimeLocal",
+                "generated": "2026-07-15T10:00",
+                "providerPayload": "2026-07-15T10:00",
+                "providerResponse": "2026-07-15T10:00",
+                "stored": "2026-07-15T10:00",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "departureTimeZulu",
+                "generated": "2026-07-15T15:00:00.000Z",
+                "providerResponse": "2026-07-15T15:00:00.000Z",
+                "stored": "2026-07-15T15:00:00.000Z",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "providerStatus",
+                "generated": null,
+                "providerPayload": null,
+                "providerResponse": "staged",
+                "stored": "staged",
+                "comparisonResult": "DIFFERENCE",
+                "differences": [
+                  {
+                    "field": "providerStatus",
+                    "type": "sent_vs_returned",
+                    "sent": null,
+                    "returned": "staged"
+                  }
+                ]
+              },
+              {
+                "field": "providerPlanId",
+                "generated": null,
+                "providerPayload": null,
+                "providerResponse": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+                "stored": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "versionStamp",
+                "generated": null,
+                "providerPayload": null,
+                "providerResponse": null,
+                "stored": null,
+                "comparisonResult": "DIFFERENCE",
+                "differences": [
+                  {
+                    "field": "versionStamp",
+                    "type": "missing_returned_value"
+                  }
+                ]
+              }
+            ],
+            "differences": [
+              {
+                "field": "Other Info / RMK",
+                "type": "returned_vs_stored",
+                "returned": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1"
+              },
+              {
+                "field": "RMK",
+                "type": "generated_vs_sent",
+                "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                "sent": null
+              },
+              {
+                "field": "RMK",
+                "type": "sent_vs_returned",
+                "sent": null,
+                "returned": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1"
+              },
+              {
+                "field": "providerStatus",
+                "type": "sent_vs_returned",
+                "sent": null,
+                "returned": "staged"
+              },
+              {
+                "field": "versionStamp",
+                "type": "missing_returned_value"
+              }
+            ],
+            "pass": false
+          },
+          "comparisonResult": "DIFFERENCE",
+          "fieldComparisons": [
+            {
+              "field": "departure",
+              "generated": "KEDC",
+              "providerResponse": "KEDC",
+              "stored": "KEDC",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "destination",
+              "generated": "KDAL",
+              "providerResponse": "KDAL",
+              "stored": "KDAL",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "alternate",
+              "generated": "KACT",
+              "providerResponse": "KACT",
+              "stored": "KACT",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "route",
+              "generated": "DCT",
+              "providerResponse": "DCT",
+              "stored": "DCT",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "aircraftIdentifier",
+              "generated": "N7717CA",
+              "providerResponse": "N7717CA",
+              "stored": "N7717CA",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "aircraftType",
+              "generated": "C421",
+              "providerResponse": "C421",
+              "stored": "C421",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "flightRules",
+              "generated": "VFR",
+              "providerResponse": "VFR",
+              "stored": "VFR",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "equipment",
+              "providerResponse": "SC",
+              "stored": "SC",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "surveillance",
+              "providerResponse": "N",
+              "stored": "N",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "PBN",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": null,
+              "stored": null,
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "Other Info / RMK",
+              "generated": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "providerResponse": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "Other Info / RMK",
+                  "type": "returned_vs_stored",
+                  "returned": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                  "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1"
+                }
+              ]
+            },
+            {
+              "field": "RMK",
+              "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "providerPayload": null,
+              "providerResponse": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "RMK",
+                  "type": "generated_vs_sent",
+                  "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                  "sent": null
+                },
+                {
+                  "field": "RMK",
+                  "type": "sent_vs_returned",
+                  "sent": null,
+                  "returned": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1"
+                }
+              ]
+            },
+            {
+              "field": "pilotPhone",
+              "providerResponse": "5124121762",
+              "stored": "5124121762",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "homeBase",
+              "providerResponse": "KEDC",
+              "stored": "KEDC",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "departureTimeLocal",
+              "generated": "2026-07-15T10:00",
+              "providerPayload": "2026-07-15T10:00",
+              "providerResponse": "2026-07-15T10:00",
+              "stored": "2026-07-15T10:00",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "departureTimeZulu",
+              "generated": "2026-07-15T15:00:00.000Z",
+              "providerResponse": "2026-07-15T15:00:00.000Z",
+              "stored": "2026-07-15T15:00:00.000Z",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "providerStatus",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": "staged",
+              "stored": "staged",
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "providerStatus",
+                  "type": "sent_vs_returned",
+                  "sent": null,
+                  "returned": "staged"
+                }
+              ]
+            },
+            {
+              "field": "providerPlanId",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+              "stored": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "versionStamp",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": null,
+              "stored": null,
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "versionStamp",
+                  "type": "missing_returned_value"
+                }
+              ]
+            }
+          ],
+          "providerLifecycle": "staged",
+          "elapsedMs": 119
+        }
+      ],
+      "comparisons": [
+        {
+          "generated": {
+            "aircraft": "N7717CA / C421",
+            "aircraftIdentifier": "N7717CA",
+            "aircraftType": "C421",
+            "equipment": "SC",
+            "surveillance": "N",
+            "pbn": null,
+            "flightRules": "VFR",
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "altDestination1": "KACT",
+            "route": "DCT",
+            "remarks": "RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+            "phone": "5124121762",
+            "homeBase": "KEDC",
+            "otherInfo": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+            "departureInstant": "2026-07-15T15:00:00.000Z"
+          },
+          "sent": null,
+          "returned": {
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "alternate": "KACT",
+            "route": "DCT",
+            "aircraftIdentifier": "N7717CA",
+            "aircraftType": "C421",
+            "flightRules": "VFR",
+            "equipment": "SC",
+            "surveillance": "N",
+            "pbn": null,
+            "otherInfo": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+            "pilotPhone": "5124121762",
+            "homeBase": "KEDC",
+            "departureZulu": "2026-07-15T15:00:00.000Z",
+            "providerStatus": "staged",
+            "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+            "versionStamp": null
+          },
+          "stored": {
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "alternate": "KACT",
+            "route": "DCT",
+            "aircraftIdentifier": "N7717CA",
+            "aircraftType": "C421",
+            "flightRules": "VFR",
+            "equipment": "SC",
+            "surveillance": "N",
+            "pbn": null,
+            "otherInfo": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+            "rmk": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+            "pilotPhone": "5124121762",
+            "homeBase": "KEDC",
+            "departureTimeLocal": "2026-07-15T10:00",
+            "departureTimeUtc": "2026-07-15T15:00:00.000Z",
+            "providerStatus": "staged",
+            "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+            "versionStamp": null
+          },
+          "fieldComparisons": [
+            {
+              "field": "departure",
+              "generated": "KEDC",
+              "providerResponse": "KEDC",
+              "stored": "KEDC",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "destination",
+              "generated": "KDAL",
+              "providerResponse": "KDAL",
+              "stored": "KDAL",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "alternate",
+              "generated": "KACT",
+              "providerResponse": "KACT",
+              "stored": "KACT",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "route",
+              "generated": "DCT",
+              "providerResponse": "DCT",
+              "stored": "DCT",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "aircraftIdentifier",
+              "generated": "N7717CA",
+              "providerResponse": "N7717CA",
+              "stored": "N7717CA",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "aircraftType",
+              "generated": "C421",
+              "providerResponse": "C421",
+              "stored": "C421",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "flightRules",
+              "generated": "VFR",
+              "providerResponse": "VFR",
+              "stored": "VFR",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "equipment",
+              "providerResponse": "SC",
+              "stored": "SC",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "surveillance",
+              "providerResponse": "N",
+              "stored": "N",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "PBN",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": null,
+              "stored": null,
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "Other Info / RMK",
+              "generated": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "providerResponse": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "Other Info / RMK",
+                  "type": "returned_vs_stored",
+                  "returned": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                  "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1"
+                }
+              ]
+            },
+            {
+              "field": "RMK",
+              "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "providerPayload": null,
+              "providerResponse": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "RMK",
+                  "type": "generated_vs_sent",
+                  "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                  "sent": null
+                },
+                {
+                  "field": "RMK",
+                  "type": "sent_vs_returned",
+                  "sent": null,
+                  "returned": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1"
+                }
+              ]
+            },
+            {
+              "field": "pilotPhone",
+              "providerResponse": "5124121762",
+              "stored": "5124121762",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "homeBase",
+              "providerResponse": "KEDC",
+              "stored": "KEDC",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "departureTimeLocal",
+              "generated": "2026-07-15T10:00",
+              "providerPayload": "2026-07-15T10:00",
+              "providerResponse": "2026-07-15T10:00",
+              "stored": "2026-07-15T10:00",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "departureTimeZulu",
+              "generated": "2026-07-15T15:00:00.000Z",
+              "providerResponse": "2026-07-15T15:00:00.000Z",
+              "stored": "2026-07-15T15:00:00.000Z",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "providerStatus",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": "staged",
+              "stored": "staged",
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "providerStatus",
+                  "type": "sent_vs_returned",
+                  "sent": null,
+                  "returned": "staged"
+                }
+              ]
+            },
+            {
+              "field": "providerPlanId",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+              "stored": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "versionStamp",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": null,
+              "stored": null,
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "versionStamp",
+                  "type": "missing_returned_value"
+                }
+              ]
+            }
+          ],
+          "differences": [
+            {
+              "field": "Other Info / RMK",
+              "type": "returned_vs_stored",
+              "returned": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1"
+            },
+            {
+              "field": "RMK",
+              "type": "generated_vs_sent",
+              "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "sent": null
+            },
+            {
+              "field": "RMK",
+              "type": "sent_vs_returned",
+              "sent": null,
+              "returned": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1"
+            },
+            {
+              "field": "providerStatus",
+              "type": "sent_vs_returned",
+              "sent": null,
+              "returned": "staged"
+            },
+            {
+              "field": "versionStamp",
+              "type": "missing_returned_value"
+            }
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "skipped": false,
+      "warnings": [],
+      "errors": [
+        "RSF staged the FILE request. Live provider submission remains disabled until RSF enables Leidos in environment configuration."
+      ]
+    }
+  ],
+  "negativeTests": [],
+  "lifecycleTests": [],
+  "providerRoundTrip": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "cases": []
+  },
+  "results": [
+    {
+      "certificationRunId": "leidos-live-lab-2026-07-04T16-08-22-169Z",
+      "certificationCaseId": "case-01",
+      "planId": "leidos-live-lab-2026-07-04T16-08-22-169Z-case-01",
+      "testName": "Normal VFR ICAO file",
+      "testType": "Positive",
+      "seed": 1,
+      "actions": [
+        {
+          "action": "file",
+          "generatedPayload": {
+            "aircraft": "N7717CA / C421",
+            "aircraftIdentifier": "N7717CA",
+            "aircraftType": "C421",
+            "equipment": "SC",
+            "surveillance": "N",
+            "pbn": null,
+            "flightRules": "VFR",
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "altDestination1": "KACT",
+            "route": "DCT",
+            "remarks": "RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+            "phone": "5124121762",
+            "homeBase": "KEDC",
+            "otherInfo": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+            "departureInstant": "2026-07-15T15:00:00.000Z"
+          },
+          "providerPayload": null,
+          "storedPayload": {
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "alternate": "KACT",
+            "route": "DCT",
+            "aircraftIdentifier": "N7717CA",
+            "aircraftType": "C421",
+            "flightRules": "VFR",
+            "equipment": "SC",
+            "surveillance": "N",
+            "pbn": null,
+            "otherInfo": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+            "rmk": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+            "pilotPhone": "5124121762",
+            "homeBase": "KEDC",
+            "departureTimeLocal": "2026-07-15T10:00",
+            "departureTimeUtc": "2026-07-15T15:00:00.000Z",
+            "providerStatus": "staged",
+            "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+            "versionStamp": null
+          },
+          "payloadSentToLeidos": null,
+          "leidosResponse": {
+            "action": "file",
+            "planId": "leidos-live-lab-2026-07-04T16-08-22-169Z-case-01",
+            "filingFlightRules": "VFR",
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "route": "DCT",
+            "alternate": "KACT",
+            "validation": {
+              "ready": true,
+              "errors": [],
+              "warnings": [
+                "Route must contain at least one recognized airport, fix, navaid, airway, or procedure token.",
+                "RSF added DCT segments so the transmitted route is ATC-safe."
+              ]
+            },
+            "stagedReason": "Live provider submission remains disabled until RSF enables Leidos in environment configuration."
+          },
+          "testType": "Positive",
+          "validationStatus": "PASS",
+          "validationResult": "valid",
+          "blockedBeforeLeidos": false,
+          "blockedReason": null,
+          "routeReview": {
+            "originalRoute": "DCT",
+            "normalizedRoute": "DCT",
+            "status": "PASS"
+          },
+          "recommendedFix": null,
+          "responseStatus": "staged",
+          "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+          "versionStamp": "",
+          "warnings": [
+            "Route must contain at least one recognized airport, fix, navaid, airway, or procedure token.",
+            "RSF added DCT segments so the transmitted route is ATC-safe."
+          ],
+          "errors": [
+            "RSF staged the FILE request. Live provider submission remains disabled until RSF enables Leidos in environment configuration."
+          ],
+          "comparison": {
+            "generated": {
+              "aircraft": "N7717CA / C421",
+              "aircraftIdentifier": "N7717CA",
+              "aircraftType": "C421",
+              "equipment": "SC",
+              "surveillance": "N",
+              "pbn": null,
+              "flightRules": "VFR",
+              "departure": "KEDC",
+              "destination": "KDAL",
+              "altDestination1": "KACT",
+              "route": "DCT",
+              "remarks": "RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "phone": "5124121762",
+              "homeBase": "KEDC",
+              "otherInfo": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "departureInstant": "2026-07-15T15:00:00.000Z"
+            },
+            "sent": null,
+            "returned": {
+              "departure": "KEDC",
+              "destination": "KDAL",
+              "alternate": "KACT",
+              "route": "DCT",
+              "aircraftIdentifier": "N7717CA",
+              "aircraftType": "C421",
+              "flightRules": "VFR",
+              "equipment": "SC",
+              "surveillance": "N",
+              "pbn": null,
+              "otherInfo": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "pilotPhone": "5124121762",
+              "homeBase": "KEDC",
+              "departureZulu": "2026-07-15T15:00:00.000Z",
+              "providerStatus": "staged",
+              "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+              "versionStamp": null
+            },
+            "stored": {
+              "departure": "KEDC",
+              "destination": "KDAL",
+              "alternate": "KACT",
+              "route": "DCT",
+              "aircraftIdentifier": "N7717CA",
+              "aircraftType": "C421",
+              "flightRules": "VFR",
+              "equipment": "SC",
+              "surveillance": "N",
+              "pbn": null,
+              "otherInfo": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "rmk": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "pilotPhone": "5124121762",
+              "homeBase": "KEDC",
+              "departureTimeLocal": "2026-07-15T10:00",
+              "departureTimeUtc": "2026-07-15T15:00:00.000Z",
+              "providerStatus": "staged",
+              "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+              "versionStamp": null
+            },
+            "fieldComparisons": [
+              {
+                "field": "departure",
+                "generated": "KEDC",
+                "providerResponse": "KEDC",
+                "stored": "KEDC",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "destination",
+                "generated": "KDAL",
+                "providerResponse": "KDAL",
+                "stored": "KDAL",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "alternate",
+                "generated": "KACT",
+                "providerResponse": "KACT",
+                "stored": "KACT",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "route",
+                "generated": "DCT",
+                "providerResponse": "DCT",
+                "stored": "DCT",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "aircraftIdentifier",
+                "generated": "N7717CA",
+                "providerResponse": "N7717CA",
+                "stored": "N7717CA",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "aircraftType",
+                "generated": "C421",
+                "providerResponse": "C421",
+                "stored": "C421",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "flightRules",
+                "generated": "VFR",
+                "providerResponse": "VFR",
+                "stored": "VFR",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "equipment",
+                "providerResponse": "SC",
+                "stored": "SC",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "surveillance",
+                "providerResponse": "N",
+                "stored": "N",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "PBN",
+                "generated": null,
+                "providerPayload": null,
+                "providerResponse": null,
+                "stored": null,
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "Other Info / RMK",
+                "generated": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                "providerResponse": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+                "comparisonResult": "DIFFERENCE",
+                "differences": [
+                  {
+                    "field": "Other Info / RMK",
+                    "type": "returned_vs_stored",
+                    "returned": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                    "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1"
+                  }
+                ]
+              },
+              {
+                "field": "RMK",
+                "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                "providerPayload": null,
+                "providerResponse": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+                "comparisonResult": "DIFFERENCE",
+                "differences": [
+                  {
+                    "field": "RMK",
+                    "type": "generated_vs_sent",
+                    "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                    "sent": null
+                  },
+                  {
+                    "field": "RMK",
+                    "type": "sent_vs_returned",
+                    "sent": null,
+                    "returned": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1"
+                  }
+                ]
+              },
+              {
+                "field": "pilotPhone",
+                "providerResponse": "5124121762",
+                "stored": "5124121762",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "homeBase",
+                "providerResponse": "KEDC",
+                "stored": "KEDC",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "departureTimeLocal",
+                "generated": "2026-07-15T10:00",
+                "providerPayload": "2026-07-15T10:00",
+                "providerResponse": "2026-07-15T10:00",
+                "stored": "2026-07-15T10:00",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "departureTimeZulu",
+                "generated": "2026-07-15T15:00:00.000Z",
+                "providerResponse": "2026-07-15T15:00:00.000Z",
+                "stored": "2026-07-15T15:00:00.000Z",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "providerStatus",
+                "generated": null,
+                "providerPayload": null,
+                "providerResponse": "staged",
+                "stored": "staged",
+                "comparisonResult": "DIFFERENCE",
+                "differences": [
+                  {
+                    "field": "providerStatus",
+                    "type": "sent_vs_returned",
+                    "sent": null,
+                    "returned": "staged"
+                  }
+                ]
+              },
+              {
+                "field": "providerPlanId",
+                "generated": null,
+                "providerPayload": null,
+                "providerResponse": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+                "stored": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+                "comparisonResult": "MATCH",
+                "differences": []
+              },
+              {
+                "field": "versionStamp",
+                "generated": null,
+                "providerPayload": null,
+                "providerResponse": null,
+                "stored": null,
+                "comparisonResult": "DIFFERENCE",
+                "differences": [
+                  {
+                    "field": "versionStamp",
+                    "type": "missing_returned_value"
+                  }
+                ]
+              }
+            ],
+            "differences": [
+              {
+                "field": "Other Info / RMK",
+                "type": "returned_vs_stored",
+                "returned": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1"
+              },
+              {
+                "field": "RMK",
+                "type": "generated_vs_sent",
+                "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                "sent": null
+              },
+              {
+                "field": "RMK",
+                "type": "sent_vs_returned",
+                "sent": null,
+                "returned": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1"
+              },
+              {
+                "field": "providerStatus",
+                "type": "sent_vs_returned",
+                "sent": null,
+                "returned": "staged"
+              },
+              {
+                "field": "versionStamp",
+                "type": "missing_returned_value"
+              }
+            ],
+            "pass": false
+          },
+          "comparisonResult": "DIFFERENCE",
+          "fieldComparisons": [
+            {
+              "field": "departure",
+              "generated": "KEDC",
+              "providerResponse": "KEDC",
+              "stored": "KEDC",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "destination",
+              "generated": "KDAL",
+              "providerResponse": "KDAL",
+              "stored": "KDAL",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "alternate",
+              "generated": "KACT",
+              "providerResponse": "KACT",
+              "stored": "KACT",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "route",
+              "generated": "DCT",
+              "providerResponse": "DCT",
+              "stored": "DCT",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "aircraftIdentifier",
+              "generated": "N7717CA",
+              "providerResponse": "N7717CA",
+              "stored": "N7717CA",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "aircraftType",
+              "generated": "C421",
+              "providerResponse": "C421",
+              "stored": "C421",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "flightRules",
+              "generated": "VFR",
+              "providerResponse": "VFR",
+              "stored": "VFR",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "equipment",
+              "providerResponse": "SC",
+              "stored": "SC",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "surveillance",
+              "providerResponse": "N",
+              "stored": "N",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "PBN",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": null,
+              "stored": null,
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "Other Info / RMK",
+              "generated": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "providerResponse": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "Other Info / RMK",
+                  "type": "returned_vs_stored",
+                  "returned": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                  "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1"
+                }
+              ]
+            },
+            {
+              "field": "RMK",
+              "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "providerPayload": null,
+              "providerResponse": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "RMK",
+                  "type": "generated_vs_sent",
+                  "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                  "sent": null
+                },
+                {
+                  "field": "RMK",
+                  "type": "sent_vs_returned",
+                  "sent": null,
+                  "returned": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1"
+                }
+              ]
+            },
+            {
+              "field": "pilotPhone",
+              "providerResponse": "5124121762",
+              "stored": "5124121762",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "homeBase",
+              "providerResponse": "KEDC",
+              "stored": "KEDC",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "departureTimeLocal",
+              "generated": "2026-07-15T10:00",
+              "providerPayload": "2026-07-15T10:00",
+              "providerResponse": "2026-07-15T10:00",
+              "stored": "2026-07-15T10:00",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "departureTimeZulu",
+              "generated": "2026-07-15T15:00:00.000Z",
+              "providerResponse": "2026-07-15T15:00:00.000Z",
+              "stored": "2026-07-15T15:00:00.000Z",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "providerStatus",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": "staged",
+              "stored": "staged",
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "providerStatus",
+                  "type": "sent_vs_returned",
+                  "sent": null,
+                  "returned": "staged"
+                }
+              ]
+            },
+            {
+              "field": "providerPlanId",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+              "stored": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "versionStamp",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": null,
+              "stored": null,
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "versionStamp",
+                  "type": "missing_returned_value"
+                }
+              ]
+            }
+          ],
+          "providerLifecycle": "staged",
+          "elapsedMs": 119
+        }
+      ],
+      "comparisons": [
+        {
+          "generated": {
+            "aircraft": "N7717CA / C421",
+            "aircraftIdentifier": "N7717CA",
+            "aircraftType": "C421",
+            "equipment": "SC",
+            "surveillance": "N",
+            "pbn": null,
+            "flightRules": "VFR",
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "altDestination1": "KACT",
+            "route": "DCT",
+            "remarks": "RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+            "phone": "5124121762",
+            "homeBase": "KEDC",
+            "otherInfo": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+            "departureInstant": "2026-07-15T15:00:00.000Z"
+          },
+          "sent": null,
+          "returned": {
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "alternate": "KACT",
+            "route": "DCT",
+            "aircraftIdentifier": "N7717CA",
+            "aircraftType": "C421",
+            "flightRules": "VFR",
+            "equipment": "SC",
+            "surveillance": "N",
+            "pbn": null,
+            "otherInfo": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+            "pilotPhone": "5124121762",
+            "homeBase": "KEDC",
+            "departureZulu": "2026-07-15T15:00:00.000Z",
+            "providerStatus": "staged",
+            "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+            "versionStamp": null
+          },
+          "stored": {
+            "departure": "KEDC",
+            "destination": "KDAL",
+            "alternate": "KACT",
+            "route": "DCT",
+            "aircraftIdentifier": "N7717CA",
+            "aircraftType": "C421",
+            "flightRules": "VFR",
+            "equipment": "SC",
+            "surveillance": "N",
+            "pbn": null,
+            "otherInfo": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+            "rmk": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+            "pilotPhone": "5124121762",
+            "homeBase": "KEDC",
+            "departureTimeLocal": "2026-07-15T10:00",
+            "departureTimeUtc": "2026-07-15T15:00:00.000Z",
+            "providerStatus": "staged",
+            "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+            "versionStamp": null
+          },
+          "fieldComparisons": [
+            {
+              "field": "departure",
+              "generated": "KEDC",
+              "providerResponse": "KEDC",
+              "stored": "KEDC",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "destination",
+              "generated": "KDAL",
+              "providerResponse": "KDAL",
+              "stored": "KDAL",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "alternate",
+              "generated": "KACT",
+              "providerResponse": "KACT",
+              "stored": "KACT",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "route",
+              "generated": "DCT",
+              "providerResponse": "DCT",
+              "stored": "DCT",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "aircraftIdentifier",
+              "generated": "N7717CA",
+              "providerResponse": "N7717CA",
+              "stored": "N7717CA",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "aircraftType",
+              "generated": "C421",
+              "providerResponse": "C421",
+              "stored": "C421",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "flightRules",
+              "generated": "VFR",
+              "providerResponse": "VFR",
+              "stored": "VFR",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "equipment",
+              "providerResponse": "SC",
+              "stored": "SC",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "surveillance",
+              "providerResponse": "N",
+              "stored": "N",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "PBN",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": null,
+              "stored": null,
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "Other Info / RMK",
+              "generated": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "providerResponse": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "Other Info / RMK",
+                  "type": "returned_vs_stored",
+                  "returned": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                  "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1"
+                }
+              ]
+            },
+            {
+              "field": "RMK",
+              "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "providerPayload": null,
+              "providerResponse": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1",
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "RMK",
+                  "type": "generated_vs_sent",
+                  "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+                  "sent": null
+                },
+                {
+                  "field": "RMK",
+                  "type": "sent_vs_returned",
+                  "sent": null,
+                  "returned": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1"
+                }
+              ]
+            },
+            {
+              "field": "pilotPhone",
+              "providerResponse": "5124121762",
+              "stored": "5124121762",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "homeBase",
+              "providerResponse": "KEDC",
+              "stored": "KEDC",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "departureTimeLocal",
+              "generated": "2026-07-15T10:00",
+              "providerPayload": "2026-07-15T10:00",
+              "providerResponse": "2026-07-15T10:00",
+              "stored": "2026-07-15T10:00",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "departureTimeZulu",
+              "generated": "2026-07-15T15:00:00.000Z",
+              "providerResponse": "2026-07-15T15:00:00.000Z",
+              "stored": "2026-07-15T15:00:00.000Z",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "providerStatus",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": "staged",
+              "stored": "staged",
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "providerStatus",
+                  "type": "sent_vs_returned",
+                  "sent": null,
+                  "returned": "staged"
+                }
+              ]
+            },
+            {
+              "field": "providerPlanId",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+              "stored": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+              "comparisonResult": "MATCH",
+              "differences": []
+            },
+            {
+              "field": "versionStamp",
+              "generated": null,
+              "providerPayload": null,
+              "providerResponse": null,
+              "stored": null,
+              "comparisonResult": "DIFFERENCE",
+              "differences": [
+                {
+                  "field": "versionStamp",
+                  "type": "missing_returned_value"
+                }
+              ]
+            }
+          ],
+          "differences": [
+            {
+              "field": "Other Info / RMK",
+              "type": "returned_vs_stored",
+              "returned": "DOF/260715 RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "stored": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT leidos-live-lab-2026-07-04T16-08-22-169Z SEED 1"
+            },
+            {
+              "field": "RMK",
+              "type": "generated_vs_sent",
+              "generated": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1",
+              "sent": null
+            },
+            {
+              "field": "RMK",
+              "type": "sent_vs_returned",
+              "sent": null,
+              "returned": "RMK/RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT LEIDOS-LIVE-LAB-2026-07-04T16-08-22-169Z SEED 1"
+            },
+            {
+              "field": "providerStatus",
+              "type": "sent_vs_returned",
+              "sent": null,
+              "returned": "staged"
+            },
+            {
+              "field": "versionStamp",
+              "type": "missing_returned_value"
+            }
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "skipped": false,
+      "warnings": [],
+      "errors": [
+        "RSF staged the FILE request. Live provider submission remains disabled until RSF enables Leidos in environment configuration."
+      ]
+    }
+  ],
+  "cleanupResults": [
+    {
+      "planId": "leidos-live-lab-2026-07-04T16-08-22-169Z-case-01",
+      "certificationRunId": "leidos-live-lab-2026-07-04T16-08-22-169Z",
+      "certificationCaseId": "case-01",
+      "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+      "versionStamp": null,
+      "priorStatus": "staged",
+      "action": "cancel",
+      "responseStatus": "blocked_missing_provider_reference",
+      "pass": false,
+      "errors": [
+        "Cleanup requires providerPlanId and versionStamp from the same certification case."
+      ],
+      "elapsedMs": 1
+    }
+  ],
+  "cleanupSummary": {
+    "providerPlansCreated": 1,
+    "providerPlansBlockedBeforeSubmission": 0,
+    "cancelled": 0,
+    "closed": 0,
+    "alreadyTerminal": 0,
+    "cleanupNotRequired": 0,
+    "cleanupErrors": 1
+  },
+  "cleanupVerification": {
+    "status": "FAIL",
+    "noActiveCertificationFlightRemains": false,
+    "terminalOrBlockedCount": 0,
+    "blockedBeforeSubmissionCount": 0,
+    "failures": [
+      {
+        "planId": "leidos-live-lab-2026-07-04T16-08-22-169Z-case-01",
+        "certificationRunId": "leidos-live-lab-2026-07-04T16-08-22-169Z",
+        "certificationCaseId": "case-01",
+        "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+        "versionStamp": null,
+        "priorStatus": "staged",
+        "action": "cancel",
+        "responseStatus": "blocked_missing_provider_reference",
+        "pass": false,
+        "errors": [
+          "Cleanup requires providerPlanId and versionStamp from the same certification case."
+        ],
+        "elapsedMs": 1
+      }
+    ]
+  },
+  "validationSummary": {
+    "executed": 1,
+    "passed": 0,
+    "blocked": 0,
+    "failed": 1,
+    "skipped": 0,
+    "positiveTestsPassed": 0,
+    "negativeTestsPassed": 0,
+    "byType": [
+      {
+        "testType": "Positive",
+        "total": 1,
+        "passed": 0,
+        "failed": 1,
+        "blocked": 0
+      },
+      {
+        "testType": "Negative",
+        "total": 0,
+        "passed": 0,
+        "failed": 0,
+        "blocked": 0
+      },
+      {
+        "testType": "Lifecycle",
+        "total": 0,
+        "passed": 0,
+        "failed": 0,
+        "blocked": 0
+      },
+      {
+        "testType": "Cleanup",
+        "total": 0,
+        "passed": 0,
+        "failed": 0,
+        "blocked": 0
+      },
+      {
+        "testType": "Round Trip",
+        "total": 0,
+        "passed": 0,
+        "failed": 0,
+        "blocked": 0
+      }
+    ]
+  },
+  "certificationVersion": {
+    "rsfBuildVersion": "1.0.0",
+    "gitCommitHash": "3cc1982",
+    "certificationSuiteVersion": "2026.07.04-post-run-audit",
+    "flightServiceModuleVersion": "flight-service-filing-v1",
+    "environment": "lab",
+    "database": "postgresql://ep-weathered-leaf-ahqeessy-pooler.c-3.us-east-1.aws.neon.tech/neondb",
+    "generatedTimestamp": "2026-07-04T16:08:31.731Z",
+    "operator": "generalmanager.atx@gmail.com"
+  },
+  "readinessAssessment": {
+    "title": "LEIDOS CERTIFICATION READINESS",
+    "environment": "LAB",
+    "positiveTests": "0/1",
+    "negativeValidation": "0/0",
+    "lifecycle": "PASS",
+    "cleanup": "FAIL",
+    "providerRoundTrip": "PASS",
+    "criticalFailures": 2,
+    "warnings": 0,
+    "overallStatus": "NOT READY FOR LEIDOS LAB EXECUTION"
+  },
+  "finalSummary": {
+    "executed": 1,
+    "passed": 0,
+    "blocked": 0,
+    "failed": 1,
+    "skipped": 0,
+    "testCount": 1,
+    "cleanupTotal": 1,
+    "cleanupPassed": 0,
+    "cleanupFailed": 1,
+    "cleanupVerification": "FAIL",
+    "providerRoundTrip": "PASS",
+    "openPlanWarnings": [
+      {
+        "planId": "leidos-live-lab-2026-07-04T16-08-22-169Z-case-01",
+        "certificationRunId": "leidos-live-lab-2026-07-04T16-08-22-169Z",
+        "certificationCaseId": "case-01",
+        "providerPlanId": "rsf-leidos-live-lab-2026-07-04T16-08-22-169Z-case-01-file",
+        "versionStamp": null,
+        "priorStatus": "staged",
+        "action": "cancel",
+        "responseStatus": "blocked_missing_provider_reference",
+        "pass": false,
+        "errors": [
+          "Cleanup requires providerPlanId and versionStamp from the same certification case."
+        ],
+        "elapsedMs": 1
+      }
+    ],
+    "finalResult": "NOT READY FOR LEIDOS LAB EXECUTION"
+  },
+  "createdAt": "2026-07-04T16:08:31.732Z"
+}

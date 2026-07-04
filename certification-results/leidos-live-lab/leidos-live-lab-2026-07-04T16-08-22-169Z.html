@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>RSF Leidos Certification Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #172033; margin: 32px; line-height: 1.45; }
+    h1, h2 { color: #0b1220; }
+    section { margin: 24px 0; page-break-inside: avoid; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #d8dee9; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #eef2f7; }
+    pre { white-space: pre-wrap; margin: 0; font-size: 11px; }
+    .badge { border-radius: 999px; padding: 3px 8px; font-size: 12px; font-weight: 700; }
+    .pass { background: #dcfce7; color: #166534; }
+    .fail { background: #fee2e2; color: #991b1b; }
+    .blocked { background: #fef3c7; color: #92400e; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; }
+  </style>
+</head>
+<body>
+  <h1>RSF Leidos Certification Report</h1>
+  <section>
+    <h2>LEIDOS CERTIFICATION READINESS</h2>
+    <div class="grid">
+      <div><strong>Environment:</strong> LAB</div>
+      <div><strong>Overall Status:</strong> <span class="badge pass">NOT READY FOR LEIDOS LAB EXECUTION</span></div>
+      <div><strong>Positive Tests:</strong> 0/1</div>
+      <div><strong>Negative Validation:</strong> 0/0</div>
+      <div><strong>Lifecycle:</strong> <span class="badge pass">PASS</span></div>
+      <div><strong>Cleanup:</strong> <span class="badge fail">FAIL</span></div>
+      <div><strong>Provider Round Trip:</strong> <span class="badge pass">PASS</span></div>
+      <div><strong>Critical Failures:</strong> 2</div>
+    </div>
+  </section>
+  <section><h2>Environment</h2><pre>{
+  &quot;name&quot;: &quot;lab&quot;,
+  &quot;endpoint&quot;: &quot;https://ffspelabs.leidos.com/Website2/rest/&quot;,
+  &quot;dryRun&quot;: false,
+  &quot;delayMinutes&quot;: 3,
+  &quot;limit&quot;: 5
+}</pre></section>
+  <section><h2>Operator</h2><pre>{
+  &quot;email&quot;: &quot;generalmanager.atx@gmail.com&quot;,
+  &quot;userId&quot;: &quot;28f8868d-d645-43a9-b0a6-e03f4f24424d&quot;,
+  &quot;pilotName&quot;: &quot;Flight Service Test&quot;
+}</pre></section>
+  <section><h2>Aircraft</h2><pre>{
+  &quot;aircraftId&quot;: &quot;d09073b1-96c4-4c31-a322-d2cb9adbdc43&quot;,
+  &quot;tailNumber&quot;: &quot;N7717CA&quot;,
+  &quot;aircraftType&quot;: &quot;C421&quot;,
+  &quot;homeBase&quot;: &quot;KEDC&quot;,
+  &quot;phonePresent&quot;: true
+}</pre></section>
+  <section><h2>Validation Summary</h2><pre>{
+  &quot;executed&quot;: 1,
+  &quot;passed&quot;: 0,
+  &quot;blocked&quot;: 0,
+  &quot;failed&quot;: 1,
+  &quot;skipped&quot;: 0,
+  &quot;positiveTestsPassed&quot;: 0,
+  &quot;negativeTestsPassed&quot;: 0,
+  &quot;byType&quot;: [
+    {
+      &quot;testType&quot;: &quot;Positive&quot;,
+      &quot;total&quot;: 1,
+      &quot;passed&quot;: 0,
+      &quot;failed&quot;: 1,
+      &quot;blocked&quot;: 0
+    },
+    {
+      &quot;testType&quot;: &quot;Negative&quot;,
+      &quot;total&quot;: 0,
+      &quot;passed&quot;: 0,
+      &quot;failed&quot;: 0,
+      &quot;blocked&quot;: 0
+    },
+    {
+      &quot;testType&quot;: &quot;Lifecycle&quot;,
+      &quot;total&quot;: 0,
+      &quot;passed&quot;: 0,
+      &quot;failed&quot;: 0,
+      &quot;blocked&quot;: 0
+    },
+    {
+      &quot;testType&quot;: &quot;Cleanup&quot;,
+      &quot;total&quot;: 0,
+      &quot;passed&quot;: 0,
+      &quot;failed&quot;: 0,
+      &quot;blocked&quot;: 0
+    },
+    {
+      &quot;testType&quot;: &quot;Round Trip&quot;,
+      &quot;total&quot;: 0,
+      &quot;passed&quot;: 0,
+      &quot;failed&quot;: 0,
+      &quot;blocked&quot;: 0
+    }
+  ]
+}</pre></section>
+  <section><h2>Positive Tests</h2><table><thead><tr><th>Test</th><th>Type</th><th>Status</th><th>Errors</th></tr></thead><tbody>
+    <tr>
+      <td>Normal VFR ICAO file</td>
+      <td>Positive</td>
+      <td><span class="badge fail">FAIL</span></td>
+      <td>RSF staged the FILE request. Live provider submission remains disabled until RSF enables Leidos in environment configuration.</td>
+    </tr>
+  </tbody></table></section>
+  <section><h2>Negative Tests</h2><table><thead><tr><th>Test</th><th>Type</th><th>Status</th><th>Errors</th></tr></thead><tbody></tbody></table></section>
+  <section><h2>Lifecycle Tests</h2><table><thead><tr><th>Test</th><th>Type</th><th>Status</th><th>Errors</th></tr></thead><tbody></tbody></table></section>
+  <section><h2>Provider Round Trip</h2><pre>{
+  &quot;total&quot;: 0,
+  &quot;passed&quot;: 0,
+  &quot;failed&quot;: 0,
+  &quot;cases&quot;: []
+}</pre></section>
+  <section><h2>Field Comparisons</h2><table><thead><tr><th>Test</th><th>Field</th><th>Result</th><th>Values</th></tr></thead><tbody><tr><td colspan="4">No field comparison differences.</td></tr></tbody></table></section>
+  <section><h2>Cleanup Summary</h2><pre>{
+  &quot;providerPlansCreated&quot;: 1,
+  &quot;providerPlansBlockedBeforeSubmission&quot;: 0,
+  &quot;cancelled&quot;: 0,
+  &quot;closed&quot;: 0,
+  &quot;alreadyTerminal&quot;: 0,
+  &quot;cleanupNotRequired&quot;: 0,
+  &quot;cleanupErrors&quot;: 1
+}</pre></section>
+  <section><h2>Certification Version</h2><pre>{
+  &quot;rsfBuildVersion&quot;: &quot;1.0.0&quot;,
+  &quot;gitCommitHash&quot;: &quot;3cc1982&quot;,
+  &quot;certificationSuiteVersion&quot;: &quot;2026.07.04-post-run-audit&quot;,
+  &quot;flightServiceModuleVersion&quot;: &quot;flight-service-filing-v1&quot;,
+  &quot;environment&quot;: &quot;lab&quot;,
+  &quot;database&quot;: &quot;postgresql://ep-weathered-leaf-ahqeessy-pooler.c-3.us-east-1.aws.neon.tech/neondb&quot;,
+  &quot;generatedTimestamp&quot;: &quot;2026-07-04T16:08:31.731Z&quot;,
+  &quot;operator&quot;: &quot;generalmanager.atx@gmail.com&quot;
+}</pre></section>
+  <section><h2>Final Result</h2><span class="badge pass">NOT READY FOR LEIDOS LAB EXECUTION</span></section>
+</body>
+</html>

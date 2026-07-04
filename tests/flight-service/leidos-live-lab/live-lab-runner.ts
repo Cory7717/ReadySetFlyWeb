@@ -59,6 +59,10 @@ const FLIGHT_SERVICE_MODULE_VERSION = "flight-service-filing-v1";
 
 const normalizePhone = (value?: string | null) => String(value || "").replace(/\D/g, "");
 const normalizeEmail = (value?: string | null) => String(value || "").trim().toLowerCase();
+const PROVIDER_SUBMISSION_ENV_VAR = "LEIDOS_FLIGHT_SERVICE_ENABLE_LIVE";
+const PROVIDER_SUBMISSION_DISABLED_MESSAGE = "Provider submission disabled by configuration";
+const isProviderSubmissionDisabledMessage = (value: unknown) =>
+  /live provider submission remains disabled|enables leidos in environment configuration/i.test(String(value || ""));
 const isAccountDisabled = (user: any) => {
   if (user?.isActive === false || user?.active === false || user?.disabled === true) return true;
   const status = String(user?.status || user?.accountStatus || "").trim().toLowerCase();
@@ -74,6 +78,18 @@ export const assertLabEndpoint = () => {
     throw new Error(`Refusing to run: configured Leidos endpoint is not LAB. baseUrl=${diagnostics.baseUrl}`);
   }
   return diagnostics;
+};
+
+const printProviderSubmissionConfiguration = (diagnostics: ReturnType<typeof assertLabEndpoint>) => {
+  console.log("Leidos LAB Provider Submission Configuration");
+  console.log("-------------------------------------------");
+  console.log(`Required env var for actual LAB submission: ${PROVIDER_SUBMISSION_ENV_VAR}=true`);
+  console.log("This enables Leidos provider HTTP calls only after the runner verifies the endpoint is LAB.");
+  console.log("Do not enable production filing here. Production operational filing is separately gated by FLIGHT_SERVICE_ENVIRONMENT=PRODUCTION and FLIGHT_FILING_OPERATIONAL_ENABLED=true.");
+  console.log(`Current provider submission enabled: ${diagnostics.enabled}`);
+  console.log(`Current Flight Service environment: ${diagnostics.environment}`);
+  console.log(`Current Leidos base URL: ${diagnostics.baseUrl}`);
+  console.log("");
 };
 
 export const loadDedicatedTestContext = async () => {
@@ -628,12 +644,14 @@ export const buildCleanupVerification = (cleanupResults: any[], results: any[]) 
 export const buildCleanupSummary = (cleanupResults: any[], results: any[]) => {
   const actions = results.flatMap((item) => item.actions || []);
   return {
-    providerPlansCreated: results.filter((item) => (item.actions || []).some((action: any) => action.action === "file" && !action.blockedBeforeLeidos)).length,
+    providerPlansStaged: actions.filter((action: any) => action.responseStatus === "provider_submission_disabled_by_configuration" || action.responseStatus === "staged").length,
+    providerPlansSubmitted: actions.filter((action: any) => action.action === "file" && ["accepted", "dry_run"].includes(String(action.responseStatus))).length,
+    providerPlansCreated: actions.filter((action: any) => action.action === "file" && action.providerPlanId && ["accepted", "dry_run"].includes(String(action.responseStatus))).length,
     providerPlansBlockedBeforeSubmission: actions.filter((action: any) => action.blockedBeforeLeidos).length,
     cancelled: cleanupResults.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
     closed: cleanupResults.filter((item) => item.action === "close" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
     alreadyTerminal: cleanupResults.filter((item) => item.responseStatus === "already_terminal").length,
-    cleanupNotRequired: cleanupResults.filter((item) => item.responseStatus === "not_required").length,
+    cleanupNotRequired: cleanupResults.filter((item) => ["not_required", "staged_only_not_submitted"].includes(String(item.responseStatus))).length,
     cleanupErrors: cleanupResults.filter((item) => item.pass === false).length,
   };
 };
@@ -925,7 +943,8 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
     let cleanupAction: FlightPlanFilingAction | "verify" | "none" = "none";
     if (["cancelled", "closed"].includes(status)) cleanupAction = "verify";
     else if (status === "activated") cleanupAction = "close";
-    else if (["filed", "staged", "proposed", "amended"].includes(status)) cleanupAction = "cancel";
+    else if (["filed", "proposed", "amended"].includes(status)) cleanupAction = "cancel";
+    else if (status === "staged") cleanupAction = providerPlanId && versionStamp ? "cancel" : "none";
 
     const base = {
       planId: plan.id,
@@ -938,7 +957,7 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
     };
 
     if (cleanupAction === "none" || cleanupAction === "verify") {
-      cleanupResults.push({ ...base, responseStatus: cleanupAction === "verify" ? "already_terminal" : "not_required", pass: true, elapsedMs: Date.now() - started });
+      cleanupResults.push({ ...base, responseStatus: cleanupAction === "verify" ? "already_terminal" : (status === "staged" ? "staged_only_not_submitted" : "not_required"), pass: true, elapsedMs: Date.now() - started });
       continue;
     }
 
@@ -998,6 +1017,7 @@ const run = async () => {
   const runId = `leidos-live-lab-${stamp()}`;
 
   const diagnostics = assertLabEndpoint();
+  printProviderSubmissionConfiguration(diagnostics);
   if (!dryRun && !boolEnv(process.env.LEIDOS_LAB_TEST_ENABLED)) {
     throw new Error("Refusing to run: LEIDOS_LAB_TEST_ENABLED=true is required for live LAB certification.");
   }
@@ -1052,6 +1072,7 @@ const run = async () => {
   const results: any[] = [];
   const createdPlans: FlightPlan[] = [];
   let stoppedEarly = false;
+  let providerSubmissionDisabled = false;
   for (const [index, testCase] of cases.entries()) {
     if (!dryRun && index > 0) await countdown(delayMinutes, testCase.name);
     let plan = await persistCertificationPlan(testCase.buildPlan(), runId, testCase, dryRun);
@@ -1202,6 +1223,7 @@ const run = async () => {
       } as any, dryRun);
       const sentPayload = response.raw?.requestPayload || response.payloadSnapshot?.transmittedFields || null;
       const comparison = compareGeneratedSentReturned(generatedPayload, sentPayload, plan);
+      const providerSubmissionDisabledForAction = !response.live && isProviderSubmissionDisabledMessage(response.message);
       const actionResult = {
         action,
         generatedPayload,
@@ -1216,11 +1238,19 @@ const run = async () => {
         blockedReason: null,
         routeReview,
         recommendedFix: null,
-        responseStatus: response.live ? "accepted" : "staged",
+        responseStatus: response.live ? "accepted" : providerSubmissionDisabledForAction ? "provider_submission_disabled_by_configuration" : "staged",
         providerPlanId: response.providerPlanId || null,
         versionStamp,
         warnings: response.warnings || [],
-        errors: response.live ? [] : [response.message],
+        errors: response.live ? [] : providerSubmissionDisabledForAction ? [] : [response.message],
+        instructions: providerSubmissionDisabledForAction
+          ? [
+              `${PROVIDER_SUBMISSION_DISABLED_MESSAGE}.`,
+              `Set ${PROVIDER_SUBMISSION_ENV_VAR}=true to allow actual Leidos LAB submission.`,
+              "Keep FLIGHT_SERVICE_ENVIRONMENT=LAB or LEIDOS_FLIGHT_SERVICE_ENV=LAB and confirm the base URL remains the Leidos LAB endpoint.",
+              "Do not enable FLIGHT_FILING_OPERATIONAL_ENABLED for LAB certification.",
+            ]
+          : [],
         comparison,
         comparisonResult: comparison.pass ? "MATCH" : "DIFFERENCE",
         fieldComparisons: comparison.fieldComparisons,
@@ -1231,8 +1261,16 @@ const run = async () => {
       caseResult.comparisons.push(comparison);
       plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
       if (!response.live) {
-        caseResult.pass = false;
-        caseResult.errors.push(response.message);
+        if (providerSubmissionDisabledForAction) {
+          providerSubmissionDisabled = true;
+          stoppedEarly = true;
+          caseResult.warnings.push(PROVIDER_SUBMISSION_DISABLED_MESSAGE);
+          console.warn(PROVIDER_SUBMISSION_DISABLED_MESSAGE);
+          console.warn(`Set ${PROVIDER_SUBMISSION_ENV_VAR}=true to submit to Leidos LAB after confirming the endpoint is LAB.`);
+        } else {
+          caseResult.pass = false;
+          caseResult.errors.push(response.message);
+        }
         break;
       }
       if (!comparison.pass) {
@@ -1285,14 +1323,22 @@ const run = async () => {
 
   const openAfterCleanup = cleanupResults.filter((item) =>
     item.pass === false ||
-    (item.responseStatus !== "already_terminal" && item.responseStatus !== "not_required" && item.responseStatus !== "dry_run" && item.responseStatus !== "accepted")
+    (item.responseStatus !== "already_terminal" && item.responseStatus !== "not_required" && item.responseStatus !== "staged_only_not_submitted" && item.responseStatus !== "dry_run" && item.responseStatus !== "accepted")
   );
   const validationSummary = buildValidationSummary(results, cases);
   const cleanupVerification = buildCleanupVerification(cleanupResults, results);
   const cleanupSummary = buildCleanupSummary(cleanupResults, results);
   const providerRoundTrip = buildRoundTripSummary(results);
   const certificationVersion = buildCertificationVersion(diagnostics, context);
-  const readinessAssessment = buildReadinessAssessment(validationSummary, cleanupSummary, cleanupVerification, providerRoundTrip);
+  const baseReadinessAssessment = buildReadinessAssessment(validationSummary, cleanupSummary, cleanupVerification, providerRoundTrip);
+  const readinessAssessment = providerSubmissionDisabled
+    ? {
+        ...baseReadinessAssessment,
+        overallStatus: "PROVIDER SUBMISSION DISABLED BY CONFIGURATION",
+        providerSubmission: "DISABLED",
+        requiredEnvironmentVariable: `${PROVIDER_SUBMISSION_ENV_VAR}=true`,
+      }
+    : baseReadinessAssessment;
 
   const output = {
     certificationRunId: runId,
@@ -1339,6 +1385,14 @@ const run = async () => {
     validationSummary,
     certificationVersion,
     readinessAssessment,
+    providerSubmissionDisabled,
+    providerSubmissionEnablement: {
+      requiredEnvVar: PROVIDER_SUBMISSION_ENV_VAR,
+      requiredValue: "true",
+      currentEnabled: diagnostics.enabled,
+      labOnlyGuard: "Runner refuses to run unless Leidos endpoint is LAB.",
+      productionOperationalFlag: "FLIGHT_FILING_OPERATIONAL_ENABLED is production-only and must remain disabled for LAB certification.",
+    },
     finalSummary: {
       executed: validationSummary.executed,
       passed: validationSummary.passed,
@@ -1395,6 +1449,8 @@ const run = async () => {
   console.log(`  Status: ${providerRoundTrip.failed === 0 ? "PASS" : "FAIL"}`);
   console.log(`  Cases: ${providerRoundTrip.total}`);
   console.log("Cleanup Summary");
+  console.log(`  Provider Plans Staged: ${cleanupSummary.providerPlansStaged}`);
+  console.log(`  Provider Plans Submitted: ${cleanupSummary.providerPlansSubmitted}`);
   console.log(`  Provider Plans Created: ${cleanupSummary.providerPlansCreated}`);
   console.log(`  Provider Plans Blocked Before Submission: ${cleanupSummary.providerPlansBlockedBeforeSubmission}`);
   console.log(`  Cancelled: ${cleanupSummary.cancelled}`);
@@ -1410,8 +1466,14 @@ const run = async () => {
   console.log(`  Flight Service Module Version: ${certificationVersion.flightServiceModuleVersion}`);
   console.log("Final Result");
   console.log(`  ${readinessAssessment.overallStatus}`);
+  if (providerSubmissionDisabled) {
+    console.log("");
+    console.log(PROVIDER_SUBMISSION_DISABLED_MESSAGE);
+    console.log(`To submit to Leidos LAB, set ${PROVIDER_SUBMISSION_ENV_VAR}=true and keep FLIGHT_SERVICE_ENVIRONMENT=LAB.`);
+    console.log("Do not set FLIGHT_FILING_OPERATIONAL_ENABLED for LAB certification.");
+  }
   console.log(`Report Location: ${artifacts.jsonPath}`);
-  if ((output.failed > 0 || output.finalSummary.cleanupFailed > 0) && !dryRun) process.exitCode = 1;
+  if ((output.failed > 0 || output.finalSummary.cleanupFailed > 0 || providerSubmissionDisabled) && !dryRun) process.exitCode = 1;
 };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

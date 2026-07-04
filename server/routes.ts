@@ -2155,13 +2155,15 @@ function buildEffectiveValues(profile: any | null, baseType: any | null) {
   const performanceBurn = toNumber(baseType?.fuelBurnPerformanceGph);
   const baseFuel = toNumber(baseType?.usableFuelGal);
   const baseWeight = toNumber(baseType?.maxGrossWeightLb);
+  const profileCruise = toNumber(profile?.cruiseKtas);
+  const profileBurn = toNumber(profile?.fuelBurnGph);
   const overrideCruise = toNumber(profile?.cruiseKtasOverride);
   const overrideBurn = toNumber(profile?.fuelBurnOverrideGph);
   const defaultBurn = toNumber(profile?.fuelBurnDefaultGph);
   const overrideFuel = toNumber(profile?.usableFuelOverrideGal);
   const overrideWeight = toNumber(profile?.maxGrossWeightOverrideLb);
-  const cruise = overrideCruise ?? baseCruise;
-  const burn = overrideBurn ?? defaultBurn ?? baseBurn;
+  const cruise = overrideCruise ?? profileCruise ?? baseCruise;
+  const burn = overrideBurn ?? defaultBurn ?? profileBurn ?? baseBurn;
   const fuel = overrideFuel ?? baseFuel;
   const estimatedStillAirRangeNm =
     cruise && burn && fuel && burn > 0
@@ -2180,7 +2182,61 @@ function buildEffectiveValues(profile: any | null, baseType: any | null) {
 }
 
 function resolveAircraftProfileIcaoType(profile: any | null, baseType: any | null) {
-  return String(profile?.customIcaoType || baseType?.icaoType || profile?.name || "").trim().toUpperCase();
+  return String(profile?.aircraftType || profile?.customIcaoType || baseType?.icaoType || profile?.name || "").trim().toUpperCase();
+}
+
+function normalizeAircraftProfilePayloadForSave(profile: any, baseType: any | null) {
+  const cruiseKtas = toNumber(profile?.cruiseKtas)
+    ?? toNumber(profile?.cruiseKtasOverride)
+    ?? toNumber(baseType?.cruiseKtas)
+    ?? toNumber(profile?.cruise_ktas)
+    ?? toNumber(profile?.cruiseSpeed)
+    ?? toNumber(profile?.cruiseKt)
+    ?? toNumber(profile?.typicalCruiseSpeed);
+  const fuelBurnGph = toNumber(profile?.fuelBurnGph)
+    ?? toNumber(profile?.fuelBurnOverrideGph)
+    ?? toNumber(profile?.fuelBurnDefaultGph)
+    ?? toNumber(baseType?.fuelBurnGph);
+  const usableFuelGal = toNumber(profile?.usableFuelOverrideGal) ?? toNumber(baseType?.usableFuelGal);
+  const maxRangeNm = toNumber(profile?.maxRangeNm)
+    ?? (cruiseKtas && fuelBurnGph && usableFuelGal && fuelBurnGph > 0 ? Number(((usableFuelGal / fuelBurnGph) * cruiseKtas).toFixed(1)) : null);
+  return {
+    ...profile,
+    aircraftType: resolveAircraftProfileIcaoType(profile, baseType) || null,
+    cruiseKtas,
+    cruiseKtasOverride: toNumber(profile?.cruiseKtasOverride) ?? cruiseKtas,
+    fuelBurnGph,
+    fuelBurnDefaultGph: toNumber(profile?.fuelBurnDefaultGph) ?? fuelBurnGph,
+    fuelBurnOverrideGph: toNumber(profile?.fuelBurnOverrideGph) ?? fuelBurnGph,
+    maxRangeNm,
+    wakeCategory: String(profile?.wakeCategory || profile?.filingWakeTurbulenceDefault || "").trim().toUpperCase() || null,
+    equipmentCodes: String(profile?.equipmentCodes || profile?.filingEquipmentDefault || "").trim().toUpperCase() || null,
+    surveillanceCodes: String(profile?.surveillanceCodes || profile?.filingSurveillanceEquipmentDefault || "").trim().toUpperCase() || null,
+  };
+}
+
+function validateAircraftProfileRequiredValues(profile: any) {
+  const missing: string[] = [];
+  if (!toNumber(profile?.cruiseKtas)) missing.push("cruise_ktas");
+  if (!toNumber(profile?.fuelBurnGph)) missing.push("fuel_burn_gph");
+  if (!String(profile?.tailNumber || "").trim()) missing.push("tail_number");
+  if (!String(profile?.aircraftType || "").trim()) missing.push("aircraft_type");
+  if (!String(profile?.wakeCategory || profile?.filingWakeTurbulenceDefault || "").trim()) missing.push("wake_category");
+  if (!String(profile?.equipmentCodes || profile?.filingEquipmentDefault || "").trim()) missing.push("equipment_codes");
+  if (!String(profile?.surveillanceCodes || profile?.filingSurveillanceEquipmentDefault || "").trim()) missing.push("surveillance_codes");
+  return missing;
+}
+
+function logAircraftProfilePayloadAudit(event: string, payload: any, missing: string[]) {
+  console.log(JSON.stringify({
+    event,
+    payloadKeys: Object.keys(payload || {}).sort(),
+    missingRequiredFields: missing,
+    hasTypeId: Boolean(payload?.typeId),
+    hasTailNumber: Boolean(payload?.tailNumber),
+    hasCruiseKtas: Boolean(toNumber(payload?.cruiseKtas)),
+    hasFuelBurnGph: Boolean(toNumber(payload?.fuelBurnGph)),
+  }));
 }
 
 function validateAircraftProfileDefaultReadiness(profile: any, baseType: any | null) {
@@ -8462,16 +8518,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: result.error.format() });
       }
       const baseTypeForValidation = result.data.typeId ? await storage.getAircraftTypeById(result.data.typeId) : null;
-      if (result.data.isDefault) {
-        const readiness = validateAircraftProfileDefaultReadiness(result.data, baseTypeForValidation);
+      const normalizedProfile = normalizeAircraftProfilePayloadForSave(result.data, baseTypeForValidation);
+      const missingRequiredFields = validateAircraftProfileRequiredValues(normalizedProfile);
+      logAircraftProfilePayloadAudit("aircraft_profile_create_payload_validated", normalizedProfile, missingRequiredFields);
+      if (missingRequiredFields.includes("cruise_ktas")) {
+        return res.status(400).json({ error: "Cruise speed is required before saving this aircraft profile." });
+      }
+      if (missingRequiredFields.length) {
+        return res.status(400).json({ error: "Aircraft profile is missing required filing details.", details: missingRequiredFields });
+      }
+      if (normalizedProfile.isDefault) {
+        const readiness = validateAircraftProfileDefaultReadiness(normalizedProfile, baseTypeForValidation);
         if (!readiness.complete) return res.status(400).json({ error: "Default aircraft profile is incomplete.", details: readiness.errors });
       }
       const existingProfiles = await storage.getAircraftProfilesByUser(userId);
-      const autoDefaultReadiness = validateAircraftProfileDefaultReadiness(result.data, baseTypeForValidation);
+      const autoDefaultReadiness = validateAircraftProfileDefaultReadiness(normalizedProfile, baseTypeForValidation);
       const created = await storage.createAircraftProfile({
-        ...result.data,
+        ...normalizedProfile,
         userId,
-        isDefault: Boolean(result.data.isDefault) || (existingProfiles.length === 0 && autoDefaultReadiness.complete),
+        isDefault: Boolean(normalizedProfile.isDefault) || (existingProfiles.length === 0 && autoDefaultReadiness.complete),
       } as any);
       const baseType = created.typeId ? await storage.getAircraftTypeById(created.typeId) : null;
       res.status(201).json({ ...created, type: baseType, defaultReadiness: validateAircraftProfileDefaultReadiness(created, baseType), ...buildEffectiveValues(created, baseType) });
@@ -8500,11 +8565,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const merged = { ...existing, ...result.data };
       const baseTypeForValidation = merged.typeId ? await storage.getAircraftTypeById(merged.typeId) : null;
+      const normalizedProfile = normalizeAircraftProfilePayloadForSave(merged, baseTypeForValidation);
+      const missingRequiredFields = validateAircraftProfileRequiredValues(normalizedProfile);
+      logAircraftProfilePayloadAudit("aircraft_profile_update_payload_validated", normalizedProfile, missingRequiredFields);
+      if (missingRequiredFields.includes("cruise_ktas")) {
+        return res.status(400).json({ error: "Cruise speed is required before saving this aircraft profile." });
+      }
+      if (missingRequiredFields.length) {
+        return res.status(400).json({ error: "Aircraft profile is missing required filing details.", details: missingRequiredFields });
+      }
       if (result.data.isDefault) {
-        const readiness = validateAircraftProfileDefaultReadiness(merged, baseTypeForValidation);
+        const readiness = validateAircraftProfileDefaultReadiness(normalizedProfile, baseTypeForValidation);
         if (!readiness.complete) return res.status(400).json({ error: "Default aircraft profile is incomplete.", details: readiness.errors });
       }
-      const updated = await storage.updateAircraftProfile(req.params.id, result.data as any);
+      const updatePayload = {
+        ...result.data,
+        aircraftType: normalizedProfile.aircraftType,
+        cruiseKtas: normalizedProfile.cruiseKtas,
+        cruiseKtasOverride: normalizedProfile.cruiseKtasOverride,
+        fuelBurnGph: normalizedProfile.fuelBurnGph,
+        fuelBurnDefaultGph: normalizedProfile.fuelBurnDefaultGph,
+        fuelBurnOverrideGph: normalizedProfile.fuelBurnOverrideGph,
+        maxRangeNm: normalizedProfile.maxRangeNm,
+        wakeCategory: normalizedProfile.wakeCategory,
+        equipmentCodes: normalizedProfile.equipmentCodes,
+        surveillanceCodes: normalizedProfile.surveillanceCodes,
+      };
+      const updated = await storage.updateAircraftProfile(req.params.id, updatePayload as any);
       if (!updated) {
         return res.status(404).json({ error: "Aircraft profile not found" });
       }

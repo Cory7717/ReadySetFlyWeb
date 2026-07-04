@@ -57,6 +57,14 @@ type AircraftProfile = {
   engineTypeOverride?: string | null;
   engineCountOverride?: number | null;
   fuelBurnDefaultGph?: number | null;
+  aircraftType?: string | null;
+  cruiseKtas?: number | null;
+  fuelBurnGph?: number | null;
+  maxRangeNm?: number | null;
+  serviceCeilingFt?: number | null;
+  wakeCategory?: string | null;
+  equipmentCodes?: string | null;
+  surveillanceCodes?: string | null;
   notes?: string | null;
   cruiseKtasOverride?: number | null;
   fuelBurnOverrideGph?: number | null;
@@ -98,6 +106,7 @@ const emptyForm = {
   engineTypeOverride: "",
   engineCountOverride: "",
   fuelBurnDefaultGph: "",
+  serviceCeilingFt: "",
   notes: "",
   cruiseKtasOverride: "",
   fuelBurnOverrideGph: "",
@@ -129,6 +138,14 @@ export default function MyAircraft() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAircraftDialogOpen, setIsAircraftDialogOpen] = useState(false);
   const [aircraftSearch, setAircraftSearch] = useState("");
+  const numberOrNull = useCallback((value: string | number | null | undefined) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, []);
+  const calculateRangeNm = useCallback((cruiseKtas: number | null, fuelBurnGph: number | null, usableFuelGal: number | null) => {
+    if (!cruiseKtas || !fuelBurnGph || !usableFuelGal || fuelBurnGph <= 0) return null;
+    return Number(((usableFuelGal / fuelBurnGph) * cruiseKtas).toFixed(1));
+  }, []);
 
   const { data: types = [] } = useQuery<AircraftType[]>({
     queryKey: ["/api/aircraft/types"],
@@ -213,6 +230,27 @@ export default function MyAircraft() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const cruiseKtas = numberOrNull(form.cruiseKtasOverride);
+      const fuelBurnGph = numberOrNull(form.fuelBurnOverrideGph) ?? numberOrNull(form.fuelBurnDefaultGph);
+      const usableFuelGal = numberOrNull(form.usableFuelOverrideGal);
+      const aircraftType = (form.customIcaoType || selectedLibraryType?.icaoType || form.name).trim().toUpperCase();
+      const wakeCategory = form.filingWakeTurbulenceDefault.trim().toUpperCase();
+      const equipmentCodes = form.filingEquipmentDefault.trim().toUpperCase();
+      const surveillanceCodes = form.filingSurveillanceEquipmentDefault.trim().toUpperCase();
+      const missingRequired: string[] = [];
+      if (!form.tailNumber.trim()) missingRequired.push("Tail number");
+      if (!aircraftType) missingRequired.push("Aircraft type");
+      if (!cruiseKtas) missingRequired.push("Cruise speed");
+      if (!fuelBurnGph) missingRequired.push("Fuel burn");
+      if (!wakeCategory) missingRequired.push("Wake category");
+      if (!equipmentCodes) missingRequired.push("Equipment codes");
+      if (!surveillanceCodes) missingRequired.push("Surveillance codes");
+      if (missingRequired.includes("Cruise speed")) {
+        throw new Error("Cruise speed is required before saving this aircraft profile.");
+      }
+      if (missingRequired.length) {
+        throw new Error(`Complete required aircraft details before saving: ${missingRequired.join(", ")}.`);
+      }
       const payload = {
         name: form.name.trim(),
         tailNumber: form.tailNumber || null,
@@ -223,6 +261,14 @@ export default function MyAircraft() {
         customIcaoType: form.customIcaoType.trim().toUpperCase() || null,
         engineTypeOverride: form.engineTypeOverride.trim() || null,
         engineCountOverride: form.engineCountOverride ? Number(form.engineCountOverride) : null,
+        aircraftType,
+        cruiseKtas,
+        fuelBurnGph,
+        maxRangeNm: calculateRangeNm(cruiseKtas, fuelBurnGph, usableFuelGal),
+        serviceCeilingFt: form.serviceCeilingFt ? Number(form.serviceCeilingFt) : null,
+        wakeCategory,
+        equipmentCodes,
+        surveillanceCodes,
         fuelBurnDefaultGph: form.fuelBurnDefaultGph ? Number(form.fuelBurnDefaultGph) : null,
         notes: form.notes.trim() || null,
         cruiseKtasOverride: form.cruiseKtasOverride ? Number(form.cruiseKtasOverride) : null,
@@ -425,6 +471,10 @@ export default function MyAircraft() {
             <div className="space-y-2">
               <Label>Max Gross Weight LB (override)</Label>
               <Input value={form.maxGrossWeightOverrideLb} onChange={(e) => setForm({ ...form, maxGrossWeightOverrideLb: e.target.value })} type="number" />
+            </div>
+            <div className="space-y-2">
+              <Label>Service Ceiling FT</Label>
+              <Input value={form.serviceCeilingFt} onChange={(e) => setForm({ ...form, serviceCeilingFt: e.target.value })} type="number" />
             </div>
           </div>
 
@@ -692,6 +742,7 @@ export default function MyAircraft() {
                           engineTypeOverride: profile.engineTypeOverride || "",
                           engineCountOverride: profile.engineCountOverride ? String(profile.engineCountOverride) : "",
                           fuelBurnDefaultGph: profile.fuelBurnDefaultGph ? String(profile.fuelBurnDefaultGph) : "",
+                          serviceCeilingFt: profile.serviceCeilingFt ? String(profile.serviceCeilingFt) : "",
                           notes: profile.notes || "",
                           cruiseKtasOverride: profile.cruiseKtasOverride ? String(profile.cruiseKtasOverride) : "",
                           fuelBurnOverrideGph: profile.fuelBurnOverrideGph ? String(profile.fuelBurnOverrideGph) : "",

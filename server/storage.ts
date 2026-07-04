@@ -4871,6 +4871,9 @@ export class DatabaseStorage implements IStorage {
   async createAircraftProfile(profile: InsertAircraftProfile & { userId: string }): Promise<AircraftProfile> {
     const payload = {
       ...profile,
+      cruiseKtas: toDecimalString((profile as any).cruiseKtas ?? (profile as any).cruiseKtasOverride),
+      fuelBurnGph: toDecimalString((profile as any).fuelBurnGph ?? (profile as any).fuelBurnOverrideGph ?? (profile as any).fuelBurnDefaultGph),
+      maxRangeNm: toDecimalString((profile as any).maxRangeNm),
       fuelBurnDefaultGph: toDecimalString((profile as any).fuelBurnDefaultGph),
       cruiseKtasOverride: toDecimalString(profile.cruiseKtasOverride),
       fuelBurnOverrideGph: toDecimalString(profile.fuelBurnOverrideGph),
@@ -4892,6 +4895,9 @@ export class DatabaseStorage implements IStorage {
     }
     const payload = {
       ...updates,
+      cruiseKtas: toDecimalString((updates as any).cruiseKtas ?? (updates as any).cruiseKtasOverride),
+      fuelBurnGph: toDecimalString((updates as any).fuelBurnGph ?? (updates as any).fuelBurnOverrideGph ?? (updates as any).fuelBurnDefaultGph),
+      maxRangeNm: toDecimalString((updates as any).maxRangeNm),
       fuelBurnDefaultGph: toDecimalString((updates as any).fuelBurnDefaultGph),
       cruiseKtasOverride: toDecimalString((updates as any).cruiseKtasOverride),
       fuelBurnOverrideGph: toDecimalString((updates as any).fuelBurnOverrideGph),

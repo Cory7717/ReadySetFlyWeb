@@ -41,7 +41,6 @@ import { buildMarketplaceListingFeeBreakdown } from "./marketplace-fees";
 import { resolveTfmsAccess } from "./lib/tier";
 import { buildCorsOptions } from "./corsOptions";
 import { getFrontendBaseUrl } from "./authRedirectUrls";
-import { validateIcaoEquipmentReadiness } from "@shared/icao-readiness";
 import {
   getFlightServiceCertificationReport,
   getLatestFlightServiceCertificationReport,
@@ -2200,6 +2199,12 @@ function normalizeAircraftProfilePayloadForSave(profile: any, baseType: any | nu
   const usableFuelGal = toNumber(profile?.usableFuelOverrideGal) ?? toNumber(baseType?.usableFuelGal);
   const maxRangeNm = toNumber(profile?.maxRangeNm)
     ?? (cruiseKtas && fuelBurnGph && usableFuelGal && fuelBurnGph > 0 ? Number(((usableFuelGal / fuelBurnGph) * cruiseKtas).toFixed(1)) : null);
+  const maxGrossWeight = toNumber(profile?.maxGrossWeightOverrideLb) ?? toNumber(baseType?.maxGrossWeightLb);
+  const inferredWakeCategory = maxGrossWeight && maxGrossWeight >= 300000
+    ? "HEAVY"
+    : maxGrossWeight && maxGrossWeight > 15500
+      ? "MEDIUM"
+      : "LIGHT";
   return {
     ...profile,
     aircraftType: resolveAircraftProfileIcaoType(profile, baseType) || null,
@@ -2209,7 +2214,7 @@ function normalizeAircraftProfilePayloadForSave(profile: any, baseType: any | nu
     fuelBurnDefaultGph: toNumber(profile?.fuelBurnDefaultGph) ?? fuelBurnGph,
     fuelBurnOverrideGph: toNumber(profile?.fuelBurnOverrideGph) ?? fuelBurnGph,
     maxRangeNm,
-    wakeCategory: String(profile?.wakeCategory || profile?.filingWakeTurbulenceDefault || "").trim().toUpperCase() || null,
+    wakeCategory: String(profile?.wakeCategory || profile?.filingWakeTurbulenceDefault || inferredWakeCategory).trim().toUpperCase() || null,
     equipmentCodes: String(profile?.equipmentCodes || profile?.filingEquipmentDefault || "").trim().toUpperCase() || null,
     surveillanceCodes: String(profile?.surveillanceCodes || profile?.filingSurveillanceEquipmentDefault || "").trim().toUpperCase() || null,
   };
@@ -2218,12 +2223,8 @@ function normalizeAircraftProfilePayloadForSave(profile: any, baseType: any | nu
 function validateAircraftProfileRequiredValues(profile: any) {
   const missing: string[] = [];
   if (!toNumber(profile?.cruiseKtas)) missing.push("cruise_ktas");
-  if (!toNumber(profile?.fuelBurnGph)) missing.push("fuel_burn_gph");
   if (!String(profile?.tailNumber || "").trim()) missing.push("tail_number");
   if (!String(profile?.aircraftType || "").trim()) missing.push("aircraft_type");
-  if (!String(profile?.wakeCategory || profile?.filingWakeTurbulenceDefault || "").trim()) missing.push("wake_category");
-  if (!String(profile?.equipmentCodes || profile?.filingEquipmentDefault || "").trim()) missing.push("equipment_codes");
-  if (!String(profile?.surveillanceCodes || profile?.filingSurveillanceEquipmentDefault || "").trim()) missing.push("surveillance_codes");
   return missing;
 }
 
@@ -2241,30 +2242,19 @@ function logAircraftProfilePayloadAudit(event: string, payload: any, missing: st
 
 function validateAircraftProfileDefaultReadiness(profile: any, baseType: any | null) {
   const errors: string[] = [];
+  const warnings: string[] = [];
   const tailNumber = String(profile?.tailNumber || "").trim().toUpperCase();
   const aircraftType = resolveAircraftProfileIcaoType(profile, baseType);
+  const cruiseKtas = toNumber(profile?.cruiseKtas) ?? toNumber(profile?.cruiseKtasOverride) ?? toNumber(baseType?.cruiseKtas);
   if (!tailNumber) errors.push("Tail number is required before an aircraft can be the default.");
   if (!aircraftType) errors.push("ICAO aircraft type is required before an aircraft can be the default.");
-  if (!String(profile?.filingEquipmentDefault || "").trim()) errors.push("Aircraft equipment codes are required before an aircraft can be the default.");
-  if (!String(profile?.filingSurveillanceEquipmentDefault || "").trim()) errors.push("Surveillance codes are required before an aircraft can be the default.");
-  if (!String(profile?.filingWakeTurbulenceDefault || "").trim()) errors.push("Wake category is required before an aircraft can be the default.");
-  if (!String(profile?.filingAircraftColorDefault || "").trim()) errors.push("Aircraft color is required before an aircraft can be the default.");
-  const readiness = validateIcaoEquipmentReadiness({
-    aircraftEquipment: profile?.filingEquipmentDefault,
-    surveillanceEquipment: profile?.filingSurveillanceEquipmentDefault,
-    otherInfo: profile?.filingOtherInfoDefault,
-    flightRules: profile?.filingFlightRulesDefault || "VFR",
-    aircraftProfileEquipment: profile?.filingEquipmentDefault,
-    aircraftProfileSurveillanceEquipment: profile?.filingSurveillanceEquipmentDefault,
-  });
-  for (const issue of readiness.issues) {
-    const message = issue.suggestion ? `${issue.message} ${issue.suggestion}` : issue.message;
-    if (issue.severity === "critical") errors.push(message);
-  }
+  if (!cruiseKtas) errors.push("Cruise speed is required before an aircraft can be the default.");
+  if (!String(profile?.filingEquipmentDefault || "").trim()) warnings.push("Flight Service filing will require aircraft equipment before submission.");
+  if (!String(profile?.filingSurveillanceEquipmentDefault || "").trim()) warnings.push("Flight Service filing will require surveillance equipment before submission.");
   return {
     complete: errors.length === 0,
     errors: Array.from(new Set(errors)),
-    warnings: readiness.issues.filter((issue) => issue.severity === "warning").map((issue) => issue.suggestion ? `${issue.message} ${issue.suggestion}` : issue.message),
+    warnings: Array.from(new Set(warnings)),
   };
 }
 
@@ -8525,7 +8515,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Cruise speed is required before saving this aircraft profile." });
       }
       if (missingRequiredFields.length) {
-        return res.status(400).json({ error: "Aircraft profile is missing required filing details.", details: missingRequiredFields });
+        return res.status(400).json({ error: "Aircraft profile is missing required basic details.", details: missingRequiredFields });
       }
       if (normalizedProfile.isDefault) {
         const readiness = validateAircraftProfileDefaultReadiness(normalizedProfile, baseTypeForValidation);
@@ -8572,7 +8562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Cruise speed is required before saving this aircraft profile." });
       }
       if (missingRequiredFields.length) {
-        return res.status(400).json({ error: "Aircraft profile is missing required filing details.", details: missingRequiredFields });
+        return res.status(400).json({ error: "Aircraft profile is missing required basic details.", details: missingRequiredFields });
       }
       if (result.data.isDefault) {
         const readiness = validateAircraftProfileDefaultReadiness(normalizedProfile, baseTypeForValidation);

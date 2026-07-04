@@ -139,6 +139,7 @@ export default function MyAircraft() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAircraftDialogOpen, setIsAircraftDialogOpen] = useState(false);
   const [aircraftSearch, setAircraftSearch] = useState("");
+  const [advancedFilingOpen, setAdvancedFilingOpen] = useState(false);
   const numberOrNull = useCallback((value: string | number | null | undefined) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -233,6 +234,7 @@ export default function MyAircraft() {
     setForm(emptyForm);
     setEditingId(null);
     setAircraftSearch("");
+    setAdvancedFilingOpen(false);
     setIsAircraftDialogOpen(false);
   };
 
@@ -245,19 +247,19 @@ export default function MyAircraft() {
       const wakeCategory = form.filingWakeTurbulenceDefault.trim().toUpperCase();
       const equipmentCodes = form.filingEquipmentDefault.trim().toUpperCase();
       const surveillanceCodes = form.filingSurveillanceEquipmentDefault.trim().toUpperCase();
+      const make = (selectedLibraryType?.make || form.customManufacturer).trim();
+      const model = (selectedLibraryType?.model || form.customModel).trim();
       const missingRequired: string[] = [];
       if (!form.tailNumber.trim()) missingRequired.push("Tail number");
+      if (!make) missingRequired.push("Make");
+      if (!model) missingRequired.push("Model");
       if (!aircraftType) missingRequired.push("Aircraft type");
       if (!cruiseKtas) missingRequired.push("Cruise speed");
-      if (!fuelBurnGph) missingRequired.push("Fuel burn");
-      if (!wakeCategory) missingRequired.push("Wake category");
-      if (!equipmentCodes) missingRequired.push("Equipment codes");
-      if (!surveillanceCodes) missingRequired.push("Surveillance codes");
       if (missingRequired.includes("Cruise speed")) {
         throw new Error("Cruise speed is required before saving this aircraft profile.");
       }
       if (missingRequired.length) {
-        throw new Error(`Complete required aircraft details before saving: ${missingRequired.join(", ")}.`);
+        throw new Error(`Complete required basic aircraft details before saving: ${missingRequired.join(", ")}.`);
       }
       const payload = {
         name: form.name.trim(),
@@ -274,9 +276,9 @@ export default function MyAircraft() {
         fuelBurnGph,
         maxRangeNm: calculateRangeNm(cruiseKtas, fuelBurnGph, usableFuelGal),
         serviceCeilingFt: form.serviceCeilingFt ? Number(form.serviceCeilingFt) : null,
-        wakeCategory,
-        equipmentCodes,
-        surveillanceCodes,
+        wakeCategory: wakeCategory || null,
+        equipmentCodes: equipmentCodes || null,
+        surveillanceCodes: surveillanceCodes || null,
         fuelBurnDefaultGph: form.fuelBurnDefaultGph ? Number(form.fuelBurnDefaultGph) : null,
         notes: form.notes.trim() || null,
         cruiseKtasOverride: form.cruiseKtasOverride ? Number(form.cruiseKtasOverride) : null,
@@ -487,13 +489,19 @@ export default function MyAircraft() {
           </div>
 
           <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
-            <div>
-              <div className="font-semibold">ICAO Filing Defaults</div>
-              <div className="text-sm text-muted-foreground">
-                Save the filing details that usually travel with this aircraft so the flight planner can prefill them automatically.
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold">Advanced Filing Defaults</div>
+                <div className="text-sm text-muted-foreground">
+                  Optional now. The Flight Planner readiness check will require missing Flight Service filing details before submission.
+                </div>
               </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => setAdvancedFilingOpen((open) => !open)}>
+                {advancedFilingOpen ? "Hide Advanced" : "Show Advanced"}
+              </Button>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            {advancedFilingOpen ? (
+              <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Aircraft Equipment</Label>
                 <Select
@@ -731,7 +739,8 @@ export default function MyAircraft() {
                   <div className="break-words font-mono text-muted-foreground">{form.filingOtherInfoDefault.trim() || "-"}</div>
                 </div>
               </div>
-            </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="flex gap-2">
@@ -768,7 +777,7 @@ export default function MyAircraft() {
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="font-semibold">{profile.tailNumber || profile.name}</div>
                         {profile.isDefault ? <Badge>Default Aircraft</Badge> : null}
-                        {profile.defaultReadiness?.complete ? <Badge variant="outline">Filing Ready</Badge> : <Badge variant="secondary">Needs ICAO Details</Badge>}
+                        {profile.defaultReadiness?.complete ? <Badge variant="outline">Default Ready</Badge> : <Badge variant="secondary">Needs Basic Details</Badge>}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {profile.name} | {profile.type?.make || profile.customManufacturer || "-"} {profile.type?.model || profile.customModel || ""} | Cruise: {profile.cruise_ktas_effective || "-"} KTAS | Burn: {profile.fuel_burn_gph_effective || profile.fuelBurnDefaultGph || "-"} gph
@@ -780,7 +789,7 @@ export default function MyAircraft() {
                         size="sm"
                         variant="outline"
                         disabled={setDefaultMutation.isPending || !profile.defaultReadiness?.complete}
-                        title={profile.defaultReadiness?.complete ? "Use this aircraft by default in Flight Planner" : profile.defaultReadiness?.errors?.[0] || "Complete ICAO defaults before making this aircraft default."}
+                        title={profile.defaultReadiness?.complete ? "Use this aircraft by default in Flight Planner" : profile.defaultReadiness?.errors?.[0] || "Complete basic aircraft details before making this aircraft default."}
                         onClick={() => setDefaultMutation.mutate(profile.id)}
                       >
                         Make Default
@@ -826,6 +835,15 @@ export default function MyAircraft() {
                           filingAltitudePreferenceDefault: profile.filingAltitudePreferenceDefault || "",
                           filingEnduranceMinutesDefault: profile.filingEnduranceMinutesDefault ? String(profile.filingEnduranceMinutesDefault) : "",
                         });
+                        setAdvancedFilingOpen(Boolean(
+                          profile.filingEquipmentDefault
+                            || profile.filingSurveillanceEquipmentDefault
+                            || profile.filingOtherInfoDefault
+                            || profile.filingEmergencyEquipmentDefault
+                            || profile.filingEltDefault
+                            || profile.filingRemarksDefault
+                            || profile.filingAltitudePreferenceDefault
+                        ));
                         setIsAircraftDialogOpen(true);
                       }}
                     >

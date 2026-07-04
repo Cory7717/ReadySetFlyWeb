@@ -662,7 +662,7 @@ export default function Profile() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {profile.isDefault ? <Badge>Default Aircraft</Badge> : null}
-                        {profile.defaultReadiness?.complete ? <Badge variant="outline">Filing Ready</Badge> : <Badge variant="secondary">Needs ICAO Details</Badge>}
+                        {profile.defaultReadiness?.complete ? <Badge variant="outline">Default Ready</Badge> : <Badge variant="secondary">Needs Basic Details</Badge>}
                       </div>
                     </div>
                     <div className="mt-3 text-xs text-muted-foreground">

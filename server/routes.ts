@@ -21719,6 +21719,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const filingLifecycleActionSchema = z.object({
     action: z.enum(flightPlanFilingActions),
     closeLocation: z.string().trim().optional().nullable(),
+    requestSource: z.enum(["user", "background", "certification-runner"]).optional().default("user"),
     testAcknowledgement: z.object({
       accepted: z.literal(true),
       environment: z.string().trim().optional().nullable(),
@@ -21726,6 +21727,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       action: z.string().trim().optional().nullable(),
     }).optional().nullable(),
   });
+
+  const getFlightPlanProviderRequestSource = (body: unknown) => {
+    const record = body && typeof body === "object" && !Array.isArray(body)
+      ? body as Record<string, unknown>
+      : {};
+    const raw = String(record.requestSource || record.syncRequestSource || "user").trim();
+    return ["user", "background", "certification-runner"].includes(raw)
+      ? raw as "user" | "background" | "certification-runner"
+      : "user";
+  };
 
   app.get("/api/flight-service/environment", (_req, res) => {
     const mode = getFlightServiceRuntimeMode();
@@ -22582,6 +22593,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       const action = parsed.data.action as FlightPlanFilingAction;
       const closeLocation = parsed.data.closeLocation || null;
+      const requestSource = parsed.data.requestSource || "user";
       const runtimeMode = getFlightServiceRuntimeMode();
       const testerEmails = new Set(
         String(process.env.FLIGHT_SERVICE_TESTER_EMAILS || "")
@@ -22594,6 +22606,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         runtimeMode.operationalFilingEnabled ||
         Boolean((user as any).isSuperAdmin || (user as any).isAdmin) ||
         (userEmail && testerEmails.has(userEmail));
+      const certificationPlan = Boolean((plan as any).isCertificationTest || String((plan as any).source || "") === "leidos-certification");
       if (!canUseProviderFiling) {
         console.warn(JSON.stringify({
           event: "flight_service_test_mode_action_blocked",
@@ -22601,6 +22614,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
           testAcknowledgementRequired: runtimeMode.acknowledgementRequired,
           action,
+          requestSource,
+          certificationPlan,
           planId: plan.id,
           userId,
           userEmail: userEmail || null,
@@ -22620,6 +22635,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         testAcknowledgementRequired: runtimeMode.acknowledgementRequired,
         testAcknowledgementAccepted: acknowledgementAccepted,
         action,
+        requestSource,
+        certificationPlan,
         planId: plan.id,
         userId,
         userEmail: userEmail || null,
@@ -22879,6 +22896,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(401).json({ error: "Unauthorized" });
       }
       const runtimeMode = getFlightServiceRuntimeMode();
+      const requestSource = getFlightPlanProviderRequestSource(req.body);
       const testerEmails = new Set(
         String(process.env.FLIGHT_SERVICE_TESTER_EMAILS || "")
           .split(",")
@@ -22886,10 +22904,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           .filter(Boolean),
       );
       const userEmail = String((user as any).email || "").trim().toLowerCase();
+      const certificationPlan = Boolean((plan as any).isCertificationTest || String((plan as any).source || "") === "leidos-certification");
       const canUseProviderSync =
         runtimeMode.operationalFilingEnabled ||
         Boolean((user as any).isSuperAdmin || (user as any).isAdmin) ||
-        (userEmail && testerEmails.has(userEmail));
+        (userEmail && testerEmails.has(userEmail)) ||
+        certificationPlan;
+      if (!runtimeMode.operationalFilingEnabled && requestSource === "background" && certificationPlan) {
+        return res.status(200).json({
+          message: "LAB certification test plan background sync is disabled until the user explicitly acknowledges LAB test mode.",
+          code: "CERTIFICATION_BACKGROUND_SYNC_DISABLED",
+          syncSkipped: true,
+          plan,
+        });
+      }
       if (!canUseProviderSync) {
         console.warn(JSON.stringify({
           event: "flight_service_test_mode_action_blocked",
@@ -22897,6 +22925,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
           testAcknowledgementRequired: runtimeMode.acknowledgementRequired,
           action: "sync",
+          requestSource,
+          certificationPlan,
           planId: plan.id,
           userId,
           userEmail: userEmail || null,
@@ -22916,6 +22946,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         testAcknowledgementRequired: runtimeMode.acknowledgementRequired,
         testAcknowledgementAccepted: acknowledgementAccepted,
         action: "sync",
+        requestSource,
+        certificationPlan,
         planId: plan.id,
         userId,
         userEmail: userEmail || null,

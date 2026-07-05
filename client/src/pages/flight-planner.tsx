@@ -120,6 +120,7 @@ type TestAcknowledgementRecord = {
   acknowledgedAt: string;
   action?: string | null;
 };
+type FilingSyncRequestSource = "user" | "background" | "certification-runner";
 type ZzzzActualLocationMode = "identifier" | "latlong";
 const inferZzzzActualLocationMode = (value?: string | null): ZzzzActualLocationMode =>
   /^\s*\d/.test(String(value || "")) ? "latlong" : "identifier";
@@ -379,6 +380,9 @@ const logZzzzPlannerStateEvent = (event: string, details: Record<string, unknown
 
 const hasLiveProviderPlan = (plan: FlightPlan | null | undefined) =>
   Boolean(plan?.filingIsLive && plan?.filingProviderPlanId);
+
+const isCertificationFlightPlan = (plan: FlightPlan | null | undefined) =>
+  Boolean((plan as any)?.isCertificationTest || String((plan as any)?.source || "") === "leidos-certification");
 
 const getProviderSnapshot = (plan: FlightPlan | null | undefined) => {
   const snapshot = (plan as any)?.filingProviderSnapshot;
@@ -2608,16 +2612,37 @@ export default function FlightPlanner() {
 
   useEffect(() => {
     if (!isAuthenticated || activeTab !== "file") return;
+    let storedTestAcknowledgement: TestAcknowledgementRecord | null = null;
+    if (isFlightServiceTestMode && typeof window !== "undefined") {
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem(FLIGHT_SERVICE_TEST_ACK_KEY) || "null");
+        const acknowledgedAt = Date.parse(String(parsed?.acknowledgedAt || ""));
+        if (
+          parsed?.accepted === true &&
+          parsed?.environment === effectiveFlightServiceEnvironment.environment &&
+          Number.isFinite(acknowledgedAt) &&
+          Date.now() - acknowledgedAt <= FLIGHT_SERVICE_TEST_ACK_TTL_MS
+        ) {
+          storedTestAcknowledgement = { ...parsed, action: "background-sync" } as TestAcknowledgementRecord;
+        }
+      } catch {
+        storedTestAcknowledgement = null;
+      }
+    }
     const visibleProviderPlans = savedPlansView.filter((plan) =>
       plan.filingProviderPlanId &&
-      !["cancelled", "closed"].includes(normalizedClientFilingStatus(plan))
+      !["cancelled", "closed"].includes(normalizedClientFilingStatus(plan)) &&
+      !isCertificationFlightPlan(plan) &&
+      (!isFlightServiceTestMode || Boolean(storedTestAcknowledgement))
     );
     if (visibleProviderPlans.length === 0) return;
     let cancelled = false;
     const poll = async () => {
       for (const plan of visibleProviderPlans.slice(0, 5)) {
         try {
-          const res = await apiRequest("POST", `/api/flight-plans/${plan.id}/filing-sync`);
+          const body: Record<string, unknown> = { requestSource: "background" };
+          if (storedTestAcknowledgement) body.testAcknowledgement = storedTestAcknowledgement;
+          const res = await apiRequest("POST", `/api/flight-plans/${plan.id}/filing-sync`, body);
           const result = await res.json();
           if (cancelled || !result?.plan) continue;
           const previousProviderState = buildProviderUpdateSignature(plan);
@@ -2638,7 +2663,7 @@ export default function FlightPlanner() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeTab, isAuthenticated, mergePlanIntoList, queryClient, savedPlansView, toast]);
+  }, [activeTab, effectiveFlightServiceEnvironment.environment, isAuthenticated, isFlightServiceTestMode, mergePlanIntoList, queryClient, savedPlansView, toast]);
 
   useEffect(() => {
     if (editingPlan || !draftPlanId || savedPlans.length === 0) return;
@@ -6278,9 +6303,11 @@ export default function FlightPlanner() {
   });
 
   const filingSyncMutation = useMutation({
-    mutationFn: async (planId: string) => {
+    mutationFn: async ({ planId, requestSource = "user" }: { planId: string; requestSource?: FilingSyncRequestSource }) => {
       const acknowledgement = buildTestAcknowledgementPayload("sync");
-      const res = await apiRequest("POST", `/api/flight-plans/${planId}/filing-sync`, acknowledgement ? { testAcknowledgement: acknowledgement } : {});
+      const body: Record<string, unknown> = { requestSource };
+      if (acknowledgement) body.testAcknowledgement = acknowledgement;
+      const res = await apiRequest("POST", `/api/flight-plans/${planId}/filing-sync`, body);
       return res.json();
     },
     onSuccess: (result: any) => {
@@ -6387,7 +6414,7 @@ export default function FlightPlanner() {
 
   const submitProviderSync = useCallback((planId: string) => {
     requireFlightServiceTestAcknowledgement("refresh provider sync in the validation environment", () => {
-      filingSyncMutation.mutate(planId);
+      filingSyncMutation.mutate({ planId, requestSource: "user" });
     });
   }, [filingSyncMutation, requireFlightServiceTestAcknowledgement]);
 
@@ -10025,6 +10052,7 @@ export default function FlightPlanner() {
                     const providerLifecycleMessage = getProviderLifecycleAvailabilityMessage(plan);
                     const deletable = canDeleteLocalDraftPlan(plan);
                     const statusChip = getSavedPlanStatusChip(plan);
+                    const certificationPlan = isCertificationFlightPlan(plan);
                     const plannerState = plan.plannerState && typeof plan.plannerState === "object" && !Array.isArray(plan.plannerState)
                       ? plan.plannerState as Record<string, any>
                       : {};
@@ -10049,6 +10077,11 @@ export default function FlightPlanner() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {certificationPlan && (
+                      <Badge variant="secondary" className="border-amber-400/40 bg-amber-500/15 text-amber-100">
+                        LAB TEST PLAN
+                      </Badge>
+                    )}
                     <Badge
                       variant={statusChip.tone === "past" ? "secondary" : statusChip.tone === "review" ? "default" : "outline"}
                       className={cn(statusChip.tone === "past" && "opacity-75")}
@@ -10098,6 +10131,11 @@ export default function FlightPlanner() {
                 {providerLifecycleMessage && (
                   <div className="rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
                     {providerLifecycleMessage}
+                  </div>
+                )}
+                {certificationPlan && (
+                  <div className="rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                    LAB certification test plan. Background provider sync is disabled for this saved plan while operational filing is off. Use Refresh test provider sync and acknowledge LAB mode if you need a manual sync.
                   </div>
                 )}
                 {expanded && (

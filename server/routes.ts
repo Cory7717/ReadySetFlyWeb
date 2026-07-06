@@ -21361,6 +21361,13 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const getProviderLifecycleStatus = (snapshot: Record<string, unknown>) =>
     String(snapshot.providerLifecycleStatus || "").toLowerCase();
 
+  const getStoredProviderVersionStamp = (plan: any) => {
+    const raw = asRecord((plan as Record<string, unknown>).filingRaw);
+    const snapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+    const rawResponse = asRecord(raw.response);
+    return String(raw.versionStamp || snapshot.versionStamp || rawResponse.versionStamp || "").trim() || null;
+  };
+
   const getPlanStatusFromProviderLifecycle = (snapshot: Record<string, unknown>) => {
     const lifecycle = getProviderLifecycleStatus(snapshot);
     if (lifecycle === "cancelled") return "cancelled";
@@ -22602,11 +22609,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           .filter(Boolean),
       );
       const userEmail = String((user as any).email || "").trim().toLowerCase();
+      const certificationPlan = Boolean((plan as any).isCertificationTest || String((plan as any).source || "") === "leidos-certification");
       const canUseProviderFiling =
         runtimeMode.operationalFilingEnabled ||
         Boolean((user as any).isSuperAdmin || (user as any).isAdmin) ||
-        (userEmail && testerEmails.has(userEmail));
-      const certificationPlan = Boolean((plan as any).isCertificationTest || String((plan as any).source || "") === "leidos-certification");
+        (userEmail && testerEmails.has(userEmail)) ||
+        (certificationPlan && ["cancel", "close"].includes(action));
       if (!canUseProviderFiling) {
         console.warn(JSON.stringify({
           event: "flight_service_test_mode_action_blocked",
@@ -22643,10 +22651,127 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         blockedBecausePublicOperationalDisabled: false,
       }));
       if (!acknowledgementAccepted) {
+        if (certificationPlan && ["cancel", "close"].includes(action)) {
+          console.warn(JSON.stringify({
+            event: "flight_service_certification_cleanup_blocked",
+            flight_service_environment: runtimeMode.environment,
+            flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
+            testAcknowledgementRequired: runtimeMode.acknowledgementRequired,
+            testAcknowledgementAccepted: false,
+            action,
+            requestSource,
+            certificationPlan,
+            planId: plan.id,
+            userId,
+            userEmail: userEmail || null,
+            blockedReason: "missing_lab_acknowledgement",
+          }));
+        }
         return res.status(428).json({
           error: "Flight Service validation mode acknowledgement is required before this test action.",
           code: "FLIGHT_SERVICE_TEST_ACKNOWLEDGEMENT_REQUIRED",
           flightServiceEnvironment: runtimeMode.environment,
+        });
+      }
+      const actionProviderSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+      const providerLifecycle = getProviderLifecycleStatus(actionProviderSnapshot);
+      const providerAlreadyTerminal = ["cancelled", "canceled", "closed"].includes(providerLifecycle);
+      const providerVersionStamp = getStoredProviderVersionStamp(plan);
+      if (certificationPlan && ["cancel", "close"].includes(action) && providerAlreadyTerminal) {
+        const now = new Date();
+        const nextStatus = action === "close" || providerLifecycle === "closed" ? "closed" : "cancelled";
+        const cleanupReason = "already-terminal provider state";
+        console.info(JSON.stringify({
+          event: "flight_service_certification_cleanup_local_terminal",
+          flight_service_environment: runtimeMode.environment,
+          flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
+          action,
+          requestSource,
+          certificationPlan,
+          planId: plan.id,
+          userId,
+          userEmail: userEmail || null,
+          providerLifecycleStatus: providerLifecycle || null,
+          providerVersionStamp: providerVersionStamp || null,
+          cleanupReason: "already_terminal_provider_state",
+        }));
+        const cleanupMessage: FilingProviderMessage = {
+          id: buildFilingEventId("rsf", plan.id, "certification_cleanup", cleanupReason, now.toISOString()),
+          timestamp: now.toISOString(),
+          severity: "info",
+          title: "Certification test plan cleaned up locally",
+          details: `RSF marked this LAB certification test plan ${nextStatus} locally because cleanup found ${cleanupReason}.`,
+          source: "rsf",
+          action,
+          provider: "FAA Flight Service LAB",
+          providerPlanId: plan.filingProviderPlanId || null,
+        };
+        const historyEntry = {
+          id: buildFilingEventId("rsf-history", plan.id, "certification_cleanup", cleanupReason, now.toISOString()),
+          action,
+          stagedAt: now.toISOString(),
+          live: false,
+          message: cleanupMessage.details,
+          warnings: [],
+          providerPlanId: plan.filingProviderPlanId || null,
+          providerVersionStamp: providerVersionStamp || null,
+          cleanupReason,
+          localOnly: true,
+        };
+        const updated = await storage.updateFlightPlan(plan.id, {
+          filingStatus: nextStatus,
+          filingPendingAction: null,
+          filingProviderSnapshot: {
+            ...actionProviderSnapshot,
+            providerLifecycleStatus: providerLifecycle || nextStatus,
+            certificationCleanupLocalOnly: true,
+            certificationCleanupReason: cleanupReason,
+            certificationCleanupAt: now.toISOString(),
+          } as any,
+          filingProviderMessages: appendPlanProviderMessages(
+            (plan as Record<string, unknown>).filingProviderMessages,
+            [cleanupMessage],
+          ) as any,
+          filingActionHistory: [
+            ...(Array.isArray(plan.filingActionHistory) ? plan.filingActionHistory : []),
+            historyEntry,
+          ] as any,
+          ...(nextStatus === "closed" ? { closedAt: now } : { cancelledAt: now }),
+        } as any);
+        return res.json({
+          live: false,
+          provider: "Leidos Flight Service",
+          action,
+          accepted: true,
+          message: cleanupMessage.details,
+          nextStatus,
+          warnings: [],
+          providerPlanId: plan.filingProviderPlanId || null,
+          cleanupReason,
+          localOnly: true,
+          plan: updated,
+        });
+      }
+      if (certificationPlan && ["cancel", "close"].includes(action) && !providerVersionStamp) {
+        console.warn(JSON.stringify({
+          event: "flight_service_certification_cleanup_blocked",
+          flight_service_environment: runtimeMode.environment,
+          flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
+          action,
+          requestSource,
+          certificationPlan,
+          planId: plan.id,
+          userId,
+          userEmail: userEmail || null,
+          providerLifecycleStatus: providerLifecycle || null,
+          providerVersionStamp: null,
+          blockedReason: "missing_provider_version_stamp",
+        }));
+        return res.status(409).json({
+          error: "Certification test plan cleanup needs the current provider versionStamp unless the provider record is already terminal.",
+          code: "CERTIFICATION_CLEANUP_MISSING_VERSION_STAMP",
+          providerLifecycleStatus: providerLifecycle || null,
+          plan,
         });
       }
       const flightRules = (plan.filingFlightRules || "VFR").toUpperCase();
@@ -22666,7 +22791,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           });
         }
       }
-      const actionProviderSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
       if (action === "amend" && actionProviderSnapshot.providerPendingReview === true) {
         return res.status(409).json({
           error: "The filing provider has updated this flight plan. Review and accept or reconcile those changes before submitting another amendment.",
@@ -22911,6 +23035,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         (userEmail && testerEmails.has(userEmail)) ||
         certificationPlan;
       if (!runtimeMode.operationalFilingEnabled && requestSource === "background" && certificationPlan) {
+        console.info(JSON.stringify({
+          event: "flight_service_certification_background_sync_skipped",
+          flight_service_environment: runtimeMode.environment,
+          flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
+          testAcknowledgementRequired: runtimeMode.acknowledgementRequired,
+          action: "sync",
+          requestSource,
+          certificationPlan,
+          planId: plan.id,
+          userId,
+          userEmail: userEmail || null,
+          skippedReason: "certification_background_sync_disabled",
+        }));
         return res.status(200).json({
           message: "LAB certification test plan background sync is disabled until the user explicitly acknowledges LAB test mode.",
           code: "CERTIFICATION_BACKGROUND_SYNC_DISABLED",

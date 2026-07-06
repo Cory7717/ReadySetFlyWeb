@@ -476,6 +476,9 @@ const getFileAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
 const isTerminalFilingPlan = (plan: FlightPlan | null | undefined) =>
   ["cancelled", "closed"].includes(normalizedClientFilingStatus(plan));
 
+const getCertificationCleanupAction = (plan: FlightPlan | null | undefined): FilingActionName =>
+  normalizedClientFilingStatus(plan) === "activated" ? "close" : "cancel";
+
 const getPlanBeaconCode = (plan: FlightPlan | null | undefined) => {
   const direct = String((plan as any)?.filingAssignedBeaconCode || "").trim();
   if (direct) return direct;
@@ -9817,6 +9820,20 @@ export default function FlightPlanner() {
                     {filingActionLabels.cancel}
                   </Button>
                 )}
+                {isCertificationFlightPlan(currentSavedPlan) && !isTerminalFilingPlan(currentSavedPlan) && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => submitFilingAction({
+                      planId: currentSavedPlan!.id,
+                      action: getCertificationCleanupAction(currentSavedPlan),
+                    })}
+                    disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
+                    title="Requires LAB acknowledgement. If Leidos is already terminal, RSF will close the local certification plan without another provider call."
+                  >
+                    Cleanup test plan
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
@@ -10345,6 +10362,20 @@ export default function FlightPlanner() {
                       disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !canCancelPlan(plan)}
                     >
                       {filingActionLabels.cancel}
+                    </Button>
+                  )}
+                  {certificationPlan && !isTerminalFilingPlan(plan) && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => submitFilingAction({
+                        planId: plan.id,
+                        action: getCertificationCleanupAction(plan),
+                      })}
+                      disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
+                      title="Requires LAB acknowledgement. If Leidos is already terminal, RSF will close the local certification plan without another provider call."
+                    >
+                      Cleanup test plan
                     </Button>
                   )}
                   <Button

@@ -2567,6 +2567,8 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       buildProviderPlanId(plan, action);
     let versionStamp = extractFilingVersionStamp(parsedResponse);
     let metadataResponse: Record<string, unknown> | null = null;
+    const terminalAction = action === "cancel" || action === "close";
+    const versionStampExpected = !terminalAction;
 
     if (!versionStamp && providerPlanId && (action === "file" || action === "amend" || action === "activate")) {
       const retrieval = await retrieveLeidosPlanMetadataWithVersionStamp(providerPlanId, config);
@@ -2574,14 +2576,31 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       versionStamp = retrieval.versionStamp || extractFilingVersionStamp(metadataResponse);
     }
 
-    if (!versionStamp) {
+    if (!versionStamp && terminalAction) {
+      console.info(JSON.stringify({
+        event: "leidos_terminal_action_no_version_stamp_returned",
+        action,
+        planId: plan.id,
+        providerPlanId,
+        returnStatus: providerReturnStatus,
+        responseMessages,
+        terminalAction: true,
+        versionStampExpected: false,
+        responseKeys: summarizeObjectKeys(parsedResponse),
+        responseProviderPlanIdCandidates: collectProviderPlanIdCandidatePaths(parsedResponse),
+        responseVersionCandidates: collectVersionCandidatePaths(parsedResponse),
+      }));
+    } else if (!versionStamp) {
       console.info(JSON.stringify({
         event: "leidos_live_action_missing_version_stamp",
         action,
+        planId: plan.id,
         providerPlanId,
         retrievePath: config.retrievePath,
         responseMessages,
         returnStatus: providerReturnStatus,
+        terminalAction,
+        versionStampExpected,
         responseKeys: summarizeObjectKeys(parsedResponse),
         metadataKeys: summarizeObjectKeys(metadataResponse),
         responseProviderPlanIdCandidates: collectProviderPlanIdCandidatePaths(parsedResponse),

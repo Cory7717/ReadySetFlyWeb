@@ -14,6 +14,7 @@ import {
   buildLeidosActionPayload,
   flightPlanFilingProvider,
   getLeidosFlightServiceDiagnostics,
+  syncLeidosPlanMetadata,
   validateLeidosOtherInfoForTransmission,
   validateFlightPlanForAction,
 } from "../../../server/services/flight-plan-filing/provider";
@@ -117,6 +118,19 @@ const getDepartureTimeZone = (plan: FlightPlan) =>
 
 const lifecycleUsesActivationWindow = (testCase: LiveLabCase) =>
   testCase.actions.includes("activate") || testCase.actions.includes("close");
+
+const isTerminalAction = (action: CaseAction) => action === "cancel" || action === "close";
+
+const expectedTerminalStatusForAction = (action: CaseAction) =>
+  action === "close" ? "closed" : action === "cancel" ? "cancelled" : null;
+
+const isTerminalProviderStatus = (value: unknown, action: CaseAction) => {
+  const status = String(value || "").trim().toLowerCase();
+  if (!status) return null;
+  if (action === "close") return status === "closed" || status === "close";
+  if (action === "cancel") return status === "cancelled" || status === "canceled" || status === "cancel";
+  return false;
+};
 
 const applyLifecycleDynamicDepartureTime = (plan: FlightPlan, testCase: LiveLabCase) => {
   if (!lifecycleUsesActivationWindow(testCase)) {
@@ -529,7 +543,53 @@ const rmkFromOtherInfo = (value: unknown) => {
   return match ? `RMK/${match[1].trim()}` : null;
 };
 
-const normalizeCompareValue = (value: unknown) => String(value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+const normalizeWhitespaceUpper = (value: unknown) => {
+  const normalized = String(value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+  return normalized || "";
+};
+
+const normalizeRouteCompareValue = (value: unknown) =>
+  normalizeWhitespaceUpper(value).replace(/\s+/g, "");
+
+const normalizeOtherInfoCompareValue = (value: unknown) =>
+  normalizeWhitespaceUpper(value)
+    .replace(/(?:^|\s)DOF\/\d{6}(?=\s|$)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const normalizeTimeCompareValue = (value: unknown) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    parsed.setUTCSeconds(0, 0);
+    return parsed.toISOString();
+  }
+  const compactZulu = raw.match(/^(\d{2})(\d{2})Z$/i);
+  if (compactZulu) return `${compactZulu[1]}:${compactZulu[2]}Z`;
+  return normalizeWhitespaceUpper(raw).replace(/:00(?:\.000)?Z$/i, "Z");
+};
+
+const normalizeCompareValue = (field: unknown, value: unknown) => {
+  const name = String(field);
+  if (value === undefined || value === null) return "";
+  if (name === "route") return normalizeRouteCompareValue(value);
+  if (name === "Other Info / RMK" || name === "RMK" || name === "PBN") return normalizeOtherInfoCompareValue(value);
+  if (name === "departureTimeZulu" || name === "departureTimeLocal") return normalizeTimeCompareValue(value);
+  return normalizeWhitespaceUpper(value);
+};
+
+const meaningfulIntegrityFields = new Set([
+  "departure",
+  "destination",
+  "route",
+  "aircraftIdentifier",
+  "aircraftType",
+  "flightRules",
+  "departureTimeZulu",
+  "Other Info / RMK",
+  "RMK",
+]);
 
 const providerValue = (snapshot: unknown, keys: string[]) => {
   const source = snapshot && typeof snapshot === "object" ? snapshot as Record<string, any> : {};
@@ -544,7 +604,9 @@ export const compareGeneratedSentReturned = (
   generatedPayload: Record<string, any> | null,
   sentPayload: Record<string, any> | null,
   plan: FlightPlan,
+  options: { action?: CaseAction; terminalAction?: boolean } = {},
 ) => {
+  const terminalAction = Boolean(options.terminalAction || (options.action && isTerminalAction(options.action)));
   const snapshot = plan.filingProviderSnapshot && typeof plan.filingProviderSnapshot === "object"
     ? plan.filingProviderSnapshot as Record<string, any>
     : {};
@@ -635,22 +697,44 @@ export const compareGeneratedSentReturned = (
   };
 
   const differences = fields.flatMap(([field, generated, sent, returnedValue]) => {
+    const fieldName = String(field);
     const issues: Array<Record<string, unknown>> = [];
-    if (generated !== undefined && sent !== undefined && normalizeCompareValue(generated) !== normalizeCompareValue(sent)) {
-      issues.push({ field, type: "generated_vs_sent", generated, sent });
+    const fieldIsMeaningful = meaningfulIntegrityFields.has(fieldName);
+    const issueSeverity = fieldIsMeaningful ? "failure" : "warning";
+    if (generated !== undefined && sent !== undefined && normalizeCompareValue(field, generated) !== normalizeCompareValue(field, sent)) {
+      issues.push({ field, type: "generated_vs_sent", severity: issueSeverity, classification: "payload_generation_changed_before_send", generated, sent });
     }
-    if (field !== "providerPlanId" && field !== "versionStamp" && sent !== undefined && returnedValue !== undefined && returnedValue !== null && normalizeCompareValue(sent) !== normalizeCompareValue(returnedValue)) {
-      issues.push({ field, type: "sent_vs_returned", sent, returned: returnedValue });
+    if (field !== "providerPlanId" && field !== "versionStamp" && sent !== undefined && returnedValue !== undefined && returnedValue !== null && normalizeCompareValue(field, sent) !== normalizeCompareValue(field, returnedValue)) {
+      issues.push({ field, type: "sent_vs_returned", severity: issueSeverity, classification: fieldIsMeaningful ? "meaningful_provider_integrity_mismatch" : "provider_format_or_echo_difference", sent, returned: returnedValue });
     }
     const storedValue = storedByField[String(field)];
-    if (!["providerStatus", "providerPlanId", "versionStamp"].includes(String(field)) && storedValue !== undefined && returnedValue !== undefined && returnedValue !== null && normalizeCompareValue(returnedValue) !== normalizeCompareValue(storedValue)) {
-      issues.push({ field, type: "returned_vs_stored", returned: returnedValue, stored: storedValue });
+    if (!["providerStatus", "providerPlanId", "versionStamp"].includes(String(field)) && storedValue !== undefined && returnedValue !== undefined && returnedValue !== null && normalizeCompareValue(field, returnedValue) !== normalizeCompareValue(field, storedValue)) {
+      issues.push({ field, type: "returned_vs_stored", severity: issueSeverity, classification: fieldIsMeaningful ? "meaningful_provider_integrity_mismatch" : "provider_format_or_echo_difference", returned: returnedValue, stored: storedValue });
     }
     if ((field === "providerPlanId" || field === "versionStamp") && !returnedValue) {
-      issues.push({ field, type: "missing_returned_value" });
+      issues.push({
+        field,
+        type: "missing_returned_value",
+        severity: terminalAction && field === "versionStamp" ? "info" : "warning",
+        classification: terminalAction && field === "versionStamp" ? "versionStamp_optional_missing_after_terminal_action" : "provider_reference_missing",
+      });
+    }
+    if (terminalAction && !returnedValue && field !== "providerPlanId" && field !== "versionStamp") {
+      issues.push({ field, type: "provider_did_not_echo_terminal_field", severity: "info", classification: "not_comparable_after_terminal_state" });
     }
     return issues;
   });
+  if ((snapshot.route as any)?.changedByProvider) {
+    differences.push({
+      field: "route",
+      type: "provider_route_changed_flag",
+      severity: "failure",
+      classification: "provider_reported_route_changed_by_provider",
+      localRoute: (snapshot.route as any)?.localEnteredRoute || stored.route,
+      transmittedRoute: (snapshot.route as any)?.normalizedTransmittedRoute || sentPayload?.route || generatedPayload?.route,
+      providerRoute: (snapshot.route as any)?.providerRoute || null,
+    });
+  }
   const fieldComparisons = fields.map(([field, generated, sent, returnedValue]) => {
     const storedValue = storedByField[String(field)];
     const fieldDifferences = differences.filter((issue) => issue.field === field);
@@ -661,9 +745,19 @@ export const compareGeneratedSentReturned = (
       providerResponse: returnedValue,
       stored: storedValue,
       comparisonResult: fieldDifferences.length === 0 ? "MATCH" : "DIFFERENCE",
+      severity: fieldDifferences.some((issue: any) => issue.severity === "failure")
+        ? "failure"
+        : fieldDifferences.some((issue: any) => issue.severity === "warning")
+          ? "warning"
+          : fieldDifferences.some((issue: any) => issue.severity === "info")
+            ? "info"
+            : "none",
       differences: fieldDifferences,
     };
   });
+  const failureDifferences = differences.filter((issue: any) => issue.severity === "failure");
+  const warningDifferences = differences.filter((issue: any) => issue.severity === "warning");
+  const infoDifferences = differences.filter((issue: any) => issue.severity === "info");
 
   return {
     generated: generatedPayload,
@@ -672,7 +766,13 @@ export const compareGeneratedSentReturned = (
     stored,
     fieldComparisons,
     differences,
-    pass: differences.length === 0,
+    failureDifferences,
+    warningDifferences,
+    infoDifferences,
+    failureCount: failureDifferences.length,
+    warningCount: warningDifferences.length,
+    infoCount: infoDifferences.length,
+    pass: failureDifferences.length === 0,
   };
 };
 
@@ -784,6 +884,32 @@ const printValidationResult = (testCase: LiveLabCase, validation: ReturnType<typ
   console.log("");
 };
 
+const compactJson = (value: unknown) => {
+  const rendered = JSON.stringify(value);
+  if (rendered === undefined) return "-";
+  return rendered.length > 180 ? `${rendered.slice(0, 177)}...` : rendered;
+};
+
+const printRoundTripComparisonDetails = (summary: ReturnType<typeof buildRoundTripComparisonSummary>) => {
+  console.log("Round Trip Comparison");
+  console.log(`  Provider Action Success: ${summary.providerActionSuccessCount}`);
+  console.log(`  Terminal State Success: ${summary.terminalStateSuccessCount}`);
+  console.log(`  Failures: ${summary.failureCount}`);
+  console.log(`  Warnings: ${summary.warningCount}`);
+  console.log(`  Info: ${summary.infoCount}`);
+  const printEntry = (label: string, entries: any[]) => {
+    if (!entries.length) return;
+    console.log(`  ${label}:`);
+    for (const entry of entries) {
+      const difference = entry.difference || {};
+      console.log(`    ${entry.certificationCaseId} ${String(entry.action || "").toUpperCase()} field=${difference.field || "-"} type=${difference.type || "-"} severity=${difference.severity || "-"} classification=${difference.classification || "-"}`);
+      console.log(`      generated=${compactJson(difference.generated)} sent=${compactJson(difference.sent)} returned=${compactJson(difference.returned)} stored=${compactJson(difference.stored)}`);
+    }
+  };
+  printEntry("Failure Details", summary.failures);
+  printEntry("Warning Details", summary.warnings);
+};
+
 const isNonNegativeCase = (testCase?: LiveLabCase) => testCase ? !testCase.expectedBlockedBeforeLeidos : false;
 
 export const buildRoundTripSummary = (results: any[]) => {
@@ -800,8 +926,42 @@ export const buildRoundTripSummary = (results: any[]) => {
       versionStamps: (item.actions || []).map((action: any) => action.versionStamp).filter(Boolean),
       versionStampUpdated: new Set((item.actions || []).map((action: any) => action.versionStamp).filter(Boolean)).size > 1,
       fieldComparisons: (item.comparisons || []).flatMap((comparison: any) => comparison?.fieldComparisons || []),
-      comparisonFailures: (item.comparisons || []).filter((comparison: any) => comparison && comparison.pass === false),
+      comparisonFailures: (item.comparisons || []).flatMap((comparison: any) => comparison?.failureDifferences || []),
+      comparisonWarnings: (item.comparisons || []).flatMap((comparison: any) => comparison?.warningDifferences || []),
+      comparisonInfo: (item.comparisons || []).flatMap((comparison: any) => comparison?.infoDifferences || []),
     })),
+  };
+};
+
+export const buildRoundTripComparisonSummary = (results: any[]) => {
+  const entries = results
+    .filter((item) => item.testType === "Round Trip")
+    .flatMap((item) => (item.actions || []).map((action: any, index: number) => ({
+      certificationCaseId: item.certificationCaseId,
+      seed: item.seed,
+      testName: item.testName,
+      action: action.action,
+      actionIndex: index + 1,
+      providerActionAccepted: action.providerActionAccepted ?? ["accepted", "dry_run"].includes(String(action.responseStatus)),
+      terminalAction: Boolean(action.terminalAction),
+      terminalVerificationStatus: action.terminalVerification?.status || null,
+      providerPlanId: action.providerPlanId || null,
+      failureDifferences: action.comparison?.failureDifferences || [],
+      warningDifferences: action.comparison?.warningDifferences || [],
+      infoDifferences: action.comparison?.infoDifferences || [],
+    })));
+  const failures = entries.flatMap((entry) => entry.failureDifferences.map((difference: any) => ({ ...entry, difference })));
+  const warnings = entries.flatMap((entry) => entry.warningDifferences.map((difference: any) => ({ ...entry, difference })));
+  const informational = entries.flatMap((entry) => entry.infoDifferences.map((difference: any) => ({ ...entry, difference })));
+  return {
+    providerActionSuccessCount: entries.filter((entry) => entry.providerActionAccepted).length,
+    terminalStateSuccessCount: entries.filter((entry) => entry.terminalAction && entry.terminalVerificationStatus === "PASS").length,
+    failureCount: failures.length,
+    warningCount: warnings.length,
+    infoCount: informational.length,
+    failures,
+    warnings,
+    informational,
   };
 };
 
@@ -830,6 +990,136 @@ export const buildCleanupSummary = (cleanupResults: any[], results: any[]) => {
     cleanupNotRequired: cleanupResults.filter((item) => ["not_required", "staged_only_not_submitted"].includes(String(item.responseStatus))).length,
     cleanupErrors: cleanupResults.filter((item) => item.pass === false).length,
   };
+};
+
+export const buildTerminalVerificationSummary = (results: any[]) => {
+  const terminalActions = results
+    .flatMap((item) => (item.actions || []).map((action: any) => ({
+      certificationCaseId: item.certificationCaseId,
+      seed: item.seed,
+      testName: item.testName,
+      action,
+    })))
+    .filter((item) => item.action?.terminalAction);
+  const verifications = terminalActions
+    .map((item) => item.action.terminalVerification)
+    .filter(Boolean);
+  return {
+    totalTerminalActions: terminalActions.length,
+    providerAccepted: terminalActions.filter((item) => item.action.providerActionAccepted).length,
+    providerRejected: terminalActions.filter((item) => item.action.providerActionRejected).length,
+    versionStampRequiredAndMissing: terminalActions.filter((item) => item.action.versionStampMissingClassification === "required_missing").length,
+    versionStampOptionalMissingAfterTerminal: terminalActions.filter((item) => item.action.versionStampMissingClassification === "optional_missing_after_terminal_action").length,
+    passed: verifications.filter((item) => item.status === "PASS").length,
+    review: verifications.filter((item) => item.status === "REVIEW").length,
+    failed: verifications.filter((item) => item.status === "FAIL").length,
+    cases: terminalActions.map((item) => ({
+      certificationCaseId: item.certificationCaseId,
+      seed: item.seed,
+      testName: item.testName,
+      action: item.action.action,
+      providerPlanId: item.action.providerPlanId,
+      responseStatus: item.action.responseStatus,
+      providerActionAccepted: item.action.providerActionAccepted,
+      providerActionRejected: item.action.providerActionRejected,
+      versionStampRequired: item.action.versionStampRequired,
+      versionStampMissingClassification: item.action.versionStampMissingClassification,
+      terminalVerification: item.action.terminalVerification || null,
+    })),
+  };
+};
+
+const verifyTerminalActionState = async (
+  plan: FlightPlan,
+  action: CaseAction,
+  response: Awaited<ReturnType<typeof flightPlanFilingProvider.stageAction>>,
+  dryRun: boolean,
+) => {
+  const expectedStatus = expectedTerminalStatusForAction(action);
+  const localStatus = String(plan.filingStatus || "").trim().toLowerCase();
+  const localTerminalStateConfirmed = Boolean(expectedStatus && localStatus === expectedStatus);
+  const providerPlanId = String(plan.filingProviderPlanId || response.providerPlanId || "").trim();
+  const rawResponse = response.raw?.response && typeof response.raw.response === "object"
+    ? response.raw.response as Record<string, any>
+    : {};
+  const returnStatus = typeof rawResponse.returnStatus === "boolean" ? rawResponse.returnStatus : null;
+  const responseMessages = Array.isArray(response.providerMessages)
+    ? response.providerMessages.map((message: any) => message?.message || message?.text || message?.summary).filter(Boolean)
+    : [];
+
+  let providerRetrieveStatus: "not_attempted" | "success" | "error" = dryRun || !providerPlanId ? "not_attempted" : "success";
+  let providerLifecycleStatus: string | null = null;
+  let providerStatus: string | null = null;
+  let providerVersionStamp: string | null = null;
+  let providerRetrieveMessage: string | null = null;
+  let providerRetrieveError: string | null = null;
+
+  if (!dryRun && providerPlanId) {
+    try {
+      const sync = await syncLeidosPlanMetadata(plan);
+      providerVersionStamp = sync.versionStamp || null;
+      providerLifecycleStatus = String((sync.providerSnapshot as any)?.providerLifecycleStatus || "").trim() || null;
+      providerStatus = String((sync.providerSnapshot as any)?.providerStatus || "").trim() || null;
+      providerRetrieveMessage = sync.message || null;
+    } catch (error) {
+      providerRetrieveStatus = "error";
+      providerRetrieveError = String((error as any)?.message || error);
+    }
+  }
+
+  const providerTerminalLifecycle = isTerminalProviderStatus(providerLifecycleStatus, action);
+  const providerTerminalStatus = isTerminalProviderStatus(providerStatus, action);
+  const providerTerminalStateConfirmed =
+    providerTerminalLifecycle === true ||
+    providerTerminalStatus === true ||
+    (providerRetrieveStatus === "success" && !providerLifecycleStatus && !providerStatus && returnStatus !== false);
+  const status = !localTerminalStateConfirmed
+    ? "FAIL"
+    : providerRetrieveStatus === "error" || providerTerminalLifecycle === false || providerTerminalStatus === false
+      ? "REVIEW"
+      : "PASS";
+
+  const verification = {
+    action,
+    expectedLocalStatus: expectedStatus,
+    localStatus,
+    localTerminalStateConfirmed,
+    providerPlanId: providerPlanId || null,
+    providerRetrieveStatus,
+    providerLifecycleStatus,
+    providerStatus,
+    providerTerminalStateConfirmed,
+    providerVersionStamp,
+    providerVersionStampExpected: false,
+    providerVersionStampMissingSeverity: providerVersionStamp ? "none" : "info",
+    returnStatus,
+    responseMessages,
+    providerRetrieveMessage,
+    providerRetrieveError,
+    cleanupCancellationAttempted: false,
+    cleanupActionExpected: localTerminalStateConfirmed ? "verify" : "review",
+    status,
+  };
+
+  console.info(JSON.stringify({
+    event: "leidos_terminal_action_verification",
+    action,
+    providerPlanId: providerPlanId || null,
+    returnStatus,
+    responseMessages,
+    terminalAction: true,
+    versionStampExpected: false,
+    providerVersionStampMissingSeverity: verification.providerVersionStampMissingSeverity,
+    localStatus,
+    expectedLocalStatus: expectedStatus,
+    providerLifecycleStatus,
+    providerStatus,
+    providerRetrieveStatus,
+    cleanupCancellationAttempted: false,
+    status,
+  }));
+
+  return verification;
 };
 
 const safeExec = (command: string) => {
@@ -1007,7 +1297,9 @@ export const buildCertificationHtml = (report: any) => {
   <section><h2>Negative Tests</h2><table><thead><tr><th>Test</th><th>Type</th><th>Status</th><th>Errors</th></tr></thead><tbody>${rows(report.negativeTests || [])}</tbody></table></section>
   <section><h2>Lifecycle Tests</h2><table><thead><tr><th>Test</th><th>Type</th><th>Status</th><th>Errors</th></tr></thead><tbody>${rows([...(report.lifecycleTests || []), ...(report.results || []).filter((item: any) => item.testType === "Round Trip")])}</tbody></table></section>
   <section><h2>Provider Round Trip</h2><pre>${escapeHtml(JSON.stringify(report.providerRoundTrip || {}, null, 2))}</pre></section>
+  <section><h2>Round Trip Comparison</h2><pre>${escapeHtml(JSON.stringify(report.roundTripComparison || {}, null, 2))}</pre></section>
   <section><h2>Field Comparisons</h2><table><thead><tr><th>Test</th><th>Field</th><th>Result</th><th>Values</th></tr></thead><tbody>${fieldRows || "<tr><td colspan=\"4\">No field comparison differences.</td></tr>"}</tbody></table></section>
+  <section><h2>Terminal Verification</h2><pre>${escapeHtml(JSON.stringify(report.terminalVerification || {}, null, 2))}</pre></section>
   <section><h2>Cleanup Summary</h2><pre>${escapeHtml(JSON.stringify(report.cleanupSummary || {}, null, 2))}</pre></section>
   <section><h2>Execution Timing</h2><pre>${escapeHtml(JSON.stringify(report.executionTiming || {}, null, 2))}</pre></section>
   <section><h2>Database Persistence</h2><pre>${escapeHtml(JSON.stringify(report.databasePersistence || {}, null, 2))}</pre></section>
@@ -1054,12 +1346,16 @@ export const writeCertificationPdf = async (report: any, filePath: string) => {
   draw(JSON.stringify(report.validationSummary || {}, null, 2));
   draw("Cleanup", { bold: true, size: 13 });
   draw(JSON.stringify(report.cleanupSummary || {}, null, 2));
+  draw("Terminal Verification", { bold: true, size: 13 });
+  draw(JSON.stringify(report.terminalVerification || {}, null, 2));
   draw("Execution Timing", { bold: true, size: 13 });
   draw(JSON.stringify(report.executionTiming || {}, null, 2));
   draw("Database Persistence", { bold: true, size: 13 });
   draw(JSON.stringify(report.databasePersistence || {}, null, 2));
   draw("Round Trip", { bold: true, size: 13 });
   draw(JSON.stringify(report.providerRoundTrip || {}, null, 2));
+  draw("Round Trip Comparison", { bold: true, size: 13 });
+  draw(JSON.stringify(report.roundTripComparison || {}, null, 2));
   draw("Final Certification Status", { bold: true, size: 13 });
   draw(String(report.readinessAssessment?.overallStatus || report.finalSummary?.finalResult || "UNKNOWN"), { bold: true, size: 12 });
   writeFileSync(filePath, Buffer.from(await pdf.save()));
@@ -1153,7 +1449,13 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
     };
 
     if (cleanupAction === "none" || cleanupAction === "verify") {
-      cleanupResults.push({ ...base, responseStatus: cleanupAction === "verify" ? "already_terminal" : (status === "staged" ? "staged_only_not_submitted" : "not_required"), pass: true, elapsedMs: Date.now() - started });
+      cleanupResults.push({
+        ...base,
+        responseStatus: cleanupAction === "verify" ? "already_terminal" : (status === "staged" ? "staged_only_not_submitted" : "not_required"),
+        pass: true,
+        cleanupCancellationAttempted: false,
+        elapsedMs: Date.now() - started,
+      });
       continue;
     }
 
@@ -1461,7 +1763,7 @@ const run = async () => {
       }
       if (dryRun) {
         const simulated = simulateDryRunProviderState(plan, action, testCase.seed);
-        const comparison = compareGeneratedSentReturned(generatedPayload, generatedPayload, simulated);
+        const comparison = compareGeneratedSentReturned(generatedPayload, generatedPayload, simulated, { action, terminalAction: isTerminalAction(action) });
         const actionResult = { action, generatedPayload, providerPayload: generatedPayload, storedPayload: comparison.stored, payloadSentToLeidos: generatedPayload, leidosResponse: { dryRun: true }, testType: testCase.testType, validationStatus: "PASS", validationResult: "valid", blockedBeforeLeidos: false, blockedReason: null, routeReview, recommendedFix: null, responseStatus: "dry_run", providerPlanId: simulated.filingProviderPlanId || null, versionStamp: getVersionStamp(simulated), warnings: validation.warnings, errors: [], comparison, comparisonResult: comparison.pass ? "MATCH" : "DIFFERENCE", fieldComparisons: comparison.fieldComparisons, providerLifecycle: (simulated.filingProviderSnapshot as any)?.providerLifecycleStatus || simulated.filingStatus, elapsedMs: Date.now() - started };
         caseResult.actions.push(actionResult);
         caseResult.comparisons.push(comparison);
@@ -1519,8 +1821,21 @@ const run = async () => {
         closedAt: action === "close" ? new Date() : plan.closedAt,
       } as any, dryRun);
       const sentPayload = response.raw?.requestPayload || response.payloadSnapshot?.transmittedFields || null;
-      const comparison = compareGeneratedSentReturned(generatedPayload, sentPayload, plan);
+      const terminalAction = isTerminalAction(action);
+      const comparison = compareGeneratedSentReturned(generatedPayload, sentPayload, plan, { action, terminalAction });
       const providerSubmissionDisabledForAction = !response.live && isProviderSubmissionDisabledMessage(response.message);
+      const rawProviderResponse = response.raw?.response && typeof response.raw.response === "object"
+        ? response.raw.response as Record<string, any>
+        : {};
+      const providerReturnStatus = typeof rawProviderResponse.returnStatus === "boolean" ? rawProviderResponse.returnStatus : null;
+      const terminalVerification = response.live && terminalAction
+        ? await verifyTerminalActionState(plan, action, response, dryRun)
+        : null;
+      const versionStampMissingClassification = versionStamp
+        ? "present"
+        : terminalAction
+          ? "optional_missing_after_terminal_action"
+          : "required_missing";
       const actionResult = {
         action,
         generatedPayload,
@@ -1536,8 +1851,16 @@ const run = async () => {
         routeReview,
         recommendedFix: null,
         responseStatus: response.live ? "accepted" : providerSubmissionDisabledForAction ? "provider_submission_disabled_by_configuration" : "staged",
+        providerActionAccepted: response.live,
+        providerActionRejected: !response.live && !providerSubmissionDisabledForAction,
+        providerReturnStatus,
         providerPlanId: response.providerPlanId || null,
         versionStamp,
+        versionStampRequired: !terminalAction,
+        versionStampExpectedAfterAction: !terminalAction,
+        versionStampMissingClassification,
+        terminalAction,
+        terminalVerification,
         warnings: response.warnings || [],
         errors: response.live ? [] : providerSubmissionDisabledForAction ? [] : [response.message],
         instructions: providerSubmissionDisabledForAction
@@ -1557,6 +1880,12 @@ const run = async () => {
       caseResult.actions.push(actionResult);
       caseResult.comparisons.push(comparison);
       plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
+      if (terminalVerification?.status === "FAIL") {
+        caseResult.pass = false;
+        caseResult.errors.push(`Terminal verification failed after ${action.toUpperCase()}: local status is ${terminalVerification.localStatus || "-"}, expected ${terminalVerification.expectedLocalStatus || "-"}.`);
+      } else if (terminalVerification?.status === "REVIEW") {
+        caseResult.warnings.push(`Terminal verification needs review after ${action.toUpperCase()}: provider retrieval/status was inconclusive, but local terminal state was recorded.`);
+      }
       if (!response.live) {
         if (providerSubmissionDisabledForAction) {
           providerSubmissionDisabled = true;
@@ -1571,7 +1900,9 @@ const run = async () => {
         break;
       }
       if (!comparison.pass) {
-        caseResult.warnings.push(`Unexpected comparison differences after ${action}: ${comparison.differences.length}`);
+        caseResult.warnings.push(`Round-trip comparison failures after ${action}: ${comparison.failureCount}; warnings: ${comparison.warningCount}; info: ${comparison.infoCount}`);
+      } else if (comparison.warningCount || comparison.infoCount) {
+        caseResult.warnings.push(`Round-trip comparison non-failing differences after ${action}: warnings ${comparison.warningCount}; info ${comparison.infoCount}`);
       }
     }
     if (testCase.testType === "Round Trip") {
@@ -1579,7 +1910,7 @@ const run = async () => {
       const versionStamps = (caseResult.actions || []).map((action: any) => action.versionStamp).filter(Boolean);
       const uniqueProviderPlanIds = new Set(providerPlanIds);
       const uniqueVersionStamps = new Set(versionStamps);
-      const comparisonFailures = (caseResult.comparisons || []).filter((comparison: any) => comparison && comparison.pass === false);
+      const comparisonFailures = (caseResult.comparisons || []).flatMap((comparison: any) => comparison?.failureDifferences || []);
       if (uniqueProviderPlanIds.size !== 1 || providerPlanIds.length === 0) {
         caseResult.pass = false;
         caseResult.errors.push("Round trip providerPlanId was not preserved across lifecycle actions.");
@@ -1590,7 +1921,7 @@ const run = async () => {
       }
       if (comparisonFailures.length) {
         caseResult.pass = false;
-        caseResult.errors.push(`Round trip comparison found ${comparisonFailures.length} field mismatch set(s).`);
+        caseResult.errors.push(`Round trip comparison found ${comparisonFailures.length} meaningful integrity mismatch(es).`);
       }
     }
     results.push(caseResult);
@@ -1632,6 +1963,8 @@ const run = async () => {
   const cleanupVerification = buildCleanupVerification(cleanupResults, results);
   const cleanupSummary = buildCleanupSummary(cleanupResults, results);
   const providerRoundTrip = buildRoundTripSummary(results);
+  const roundTripComparison = buildRoundTripComparisonSummary(results);
+  const terminalVerification = buildTerminalVerificationSummary(results);
   const certificationVersion = buildCertificationVersion(diagnostics, context);
   const baseReadinessAssessment = buildReadinessAssessment(validationSummary, cleanupSummary, cleanupVerification, providerRoundTrip);
   const readinessAssessment = providerSubmissionDisabled
@@ -1713,10 +2046,12 @@ const run = async () => {
     negativeTests: results.filter((item) => item.testType === "Negative"),
     lifecycleTests: results.filter((item) => item.testType === "Lifecycle"),
     providerRoundTrip,
+    roundTripComparison,
     results,
     cleanupResults,
     cleanupSummary,
     cleanupVerification,
+    terminalVerification,
     validationSummary,
     certificationVersion,
     readinessAssessment,
@@ -1754,6 +2089,9 @@ const run = async () => {
       cleanupPassed: cleanupResults.filter((item) => item.pass !== false).length,
       cleanupFailed: cleanupResults.filter((item) => item.pass === false).length,
       cleanupVerification: cleanupVerification.status,
+      terminalVerification: terminalVerification.failed === 0 ? (terminalVerification.review > 0 ? "REVIEW" : "PASS") : "FAIL",
+      roundTripComparisonFailures: roundTripComparison.failureCount,
+      roundTripComparisonWarnings: roundTripComparison.warningCount,
       providerRoundTrip: providerRoundTrip.failed === 0 ? "PASS" : "FAIL",
       openPlanWarnings: openAfterCleanup,
       finalResult: readinessAssessment.overallStatus,
@@ -1810,6 +2148,15 @@ const run = async () => {
   console.log("Provider Round Trip");
   console.log(`  Status: ${providerRoundTrip.failed === 0 ? "PASS" : "FAIL"}`);
   console.log(`  Cases: ${providerRoundTrip.total}`);
+  printRoundTripComparisonDetails(roundTripComparison);
+  console.log("Terminal Verification");
+  console.log(`  Provider Accepted: ${terminalVerification.providerAccepted}`);
+  console.log(`  Provider Rejected: ${terminalVerification.providerRejected}`);
+  console.log(`  VersionStamp Required And Missing: ${terminalVerification.versionStampRequiredAndMissing}`);
+  console.log(`  VersionStamp Optional Missing After Terminal: ${terminalVerification.versionStampOptionalMissingAfterTerminal}`);
+  console.log(`  Passed: ${terminalVerification.passed}`);
+  console.log(`  Review: ${terminalVerification.review}`);
+  console.log(`  Failed: ${terminalVerification.failed}`);
   console.log("Cleanup Summary");
   console.log(`  Provider Plans Staged: ${cleanupSummary.providerPlansStaged}`);
   console.log(`  Provider Plans Submitted: ${cleanupSummary.providerPlansSubmitted}`);

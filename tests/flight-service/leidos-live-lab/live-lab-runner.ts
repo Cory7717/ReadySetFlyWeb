@@ -611,11 +611,16 @@ export const compareGeneratedSentReturned = (
     ? plan.filingProviderSnapshot as Record<string, any>
     : {};
   const raw = plan.filingRaw && typeof plan.filingRaw === "object" ? plan.filingRaw as Record<string, any> : {};
+  const routeSnapshot = snapshot.route && typeof snapshot.route === "object" ? snapshot.route as Record<string, any> : {};
+  const providerRoute = String(routeSnapshot.providerRoute || providerValue(snapshot, ["route"]) || "").trim() || null;
+  const localEnteredRoute = String(routeSnapshot.localEnteredRoute || plan.route || "").trim() || null;
+  const normalizedTransmittedRoute = String(routeSnapshot.normalizedTransmittedRoute || sentPayload?.route || generatedPayload?.route || plan.route || "").trim() || null;
+  const routeChangedByProvider = Boolean(routeSnapshot.changedByProvider);
   const returned = {
     departure: providerValue(snapshot, ["departure", "departureAirport"]) || plan.departure,
     destination: providerValue(snapshot, ["destination", "destinationAirport"]) || plan.destination,
     alternate: providerValue(snapshot, ["alternate", "altDestination1"]) || plan.alternate,
-    route: snapshot.route?.providerRoute || snapshot.route?.effectiveRoute || providerValue(snapshot, ["route"]) || plan.route,
+    route: providerRoute,
     aircraftIdentifier: providerValue(snapshot, ["aircraftIdentifier", "aircraftId"]) || plan.tailNumber,
     aircraftType: providerValue(snapshot, ["aircraftType"]) || plan.aircraftType,
     flightRules: providerValue(snapshot, ["flightRules"]) || plan.filingFlightRules,
@@ -698,6 +703,7 @@ export const compareGeneratedSentReturned = (
 
   const differences = fields.flatMap(([field, generated, sent, returnedValue]) => {
     const fieldName = String(field);
+    if (fieldName === "route") return [];
     const issues: Array<Record<string, unknown>> = [];
     const fieldIsMeaningful = meaningfulIntegrityFields.has(fieldName);
     const issueSeverity = fieldIsMeaningful ? "failure" : "warning";
@@ -724,17 +730,87 @@ export const compareGeneratedSentReturned = (
     }
     return issues;
   });
-  if ((snapshot.route as any)?.changedByProvider) {
-    differences.push({
+  const normalizedRouteComparison = {
+    localEnteredRoute,
+    normalizedTransmittedRoute,
+    providerRoute,
+    storedRoute: stored.route || null,
+    routeChangedByProvider,
+    normalizedLocalEnteredRoute: normalizeRouteCompareValue(localEnteredRoute),
+    normalizedTransmittedRouteForComparison: normalizeRouteCompareValue(normalizedTransmittedRoute),
+    normalizedProviderRoute: normalizeRouteCompareValue(providerRoute),
+    normalizedStoredRoute: normalizeRouteCompareValue(stored.route),
+  };
+  const localMatchesTransmitted =
+    !normalizedRouteComparison.normalizedLocalEnteredRoute ||
+    !normalizedRouteComparison.normalizedTransmittedRouteForComparison ||
+    normalizedRouteComparison.normalizedLocalEnteredRoute === normalizedRouteComparison.normalizedTransmittedRouteForComparison;
+  const storedMatchesTransmitted =
+    !normalizedRouteComparison.normalizedStoredRoute ||
+    !normalizedRouteComparison.normalizedTransmittedRouteForComparison ||
+    normalizedRouteComparison.normalizedStoredRoute === normalizedRouteComparison.normalizedTransmittedRouteForComparison;
+  let routeComparisonResult = "PASS";
+  let routeIssue: Record<string, unknown> | null = null;
+  if (routeChangedByProvider) {
+    routeComparisonResult = "provider_changed_route";
+    routeIssue = {
       field: "route",
       type: "provider_route_changed_flag",
       severity: "failure",
-      classification: "provider_reported_route_changed_by_provider",
-      localRoute: (snapshot.route as any)?.localEnteredRoute || stored.route,
-      transmittedRoute: (snapshot.route as any)?.normalizedTransmittedRoute || sentPayload?.route || generatedPayload?.route,
-      providerRoute: (snapshot.route as any)?.providerRoute || null,
-    });
+      classification: "provider_changed_route",
+      ...normalizedRouteComparison,
+    };
+  } else if (!providerRoute && localMatchesTransmitted && storedMatchesTransmitted) {
+    routeComparisonResult = "provider_did_not_echo_route";
+    routeIssue = {
+      field: "route",
+      type: "provider_route_missing_echo",
+      severity: "info",
+      classification: "provider_did_not_echo_route",
+      ...normalizedRouteComparison,
+    };
+  } else if (!providerRoute) {
+    routeComparisonResult = "provider_changed_route";
+    routeIssue = {
+      field: "route",
+      type: "local_transmitted_route_mismatch_without_provider_echo",
+      severity: "failure",
+      classification: "provider_changed_route",
+      ...normalizedRouteComparison,
+    };
+  } else if (providerRoute) {
+    const providerMatchesTransmitted = normalizedRouteComparison.normalizedProviderRoute === normalizedRouteComparison.normalizedTransmittedRouteForComparison;
+    const providerMatchesStored = normalizedRouteComparison.normalizedProviderRoute === normalizedRouteComparison.normalizedStoredRoute;
+    if (!providerMatchesTransmitted || !providerMatchesStored) {
+      routeComparisonResult = "provider_changed_route";
+      routeIssue = {
+        field: "route",
+        type: "provider_route_material_difference",
+        severity: "failure",
+        classification: "provider_changed_route",
+        ...normalizedRouteComparison,
+      };
+    } else if (providerRoute !== normalizedTransmittedRoute || providerRoute !== stored.route) {
+      routeComparisonResult = "provider_normalized_route";
+      routeIssue = {
+        field: "route",
+        type: "provider_route_normalized_format",
+        severity: "info",
+        classification: "provider_normalized_route",
+        ...normalizedRouteComparison,
+      };
+    }
   }
+  if (routeIssue) differences.push(routeIssue);
+  console.info(JSON.stringify({
+    event: "leidos_round_trip_route_comparison",
+    action: options.action || null,
+    localEnteredRoute,
+    normalizedTransmittedRoute,
+    providerRoute,
+    routeChangedByProvider,
+    comparisonResult: routeComparisonResult,
+  }));
   const fieldComparisons = fields.map(([field, generated, sent, returnedValue]) => {
     const storedValue = storedByField[String(field)];
     const fieldDifferences = differences.filter((issue) => issue.field === field);
@@ -745,6 +821,9 @@ export const compareGeneratedSentReturned = (
       providerResponse: returnedValue,
       stored: storedValue,
       comparisonResult: fieldDifferences.length === 0 ? "MATCH" : "DIFFERENCE",
+      classification: field === "route"
+        ? routeComparisonResult
+        : fieldDifferences[0]?.classification || (fieldDifferences.length === 0 ? "PASS" : "DIFFERENCE"),
       severity: fieldDifferences.some((issue: any) => issue.severity === "failure")
         ? "failure"
         : fieldDifferences.some((issue: any) => issue.severity === "warning")
@@ -764,6 +843,10 @@ export const compareGeneratedSentReturned = (
     sent: sentPayload,
     returned,
     stored,
+    routeComparison: {
+      ...normalizedRouteComparison,
+      comparisonResult: routeComparisonResult,
+    },
     fieldComparisons,
     differences,
     failureDifferences,

@@ -591,6 +591,64 @@ const meaningfulIntegrityFields = new Set([
   "RMK",
 ]);
 
+const routeValueKeys = [
+  "providerRoute",
+  "route",
+  "routeText",
+  "routeString",
+  "expectedRoute",
+  "expected_route",
+  "currentRoute",
+  "effectiveRoute",
+  "normalizedTransmittedRoute",
+];
+
+const extractRouteString = (value: unknown, depth = 0, visited = new Set<unknown>()): string | null => {
+  if (value === null || value === undefined || depth > 5) return null;
+  if (typeof value === "string") return value.trim() || null;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value !== "object" || visited.has(value)) return null;
+  visited.add(value);
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const route = extractRouteString(item, depth + 1, visited);
+      if (route) return route;
+    }
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of routeValueKeys) {
+    if (Object.prototype.hasOwnProperty.call(record, key)) {
+      const route = extractRouteString(record[key], depth + 1, visited);
+      if (route) return route;
+    }
+  }
+
+  for (const [key, child] of Object.entries(record)) {
+    if (/route/i.test(key)) {
+      const route = extractRouteString(child, depth + 1, visited);
+      if (route) return route;
+    }
+  }
+  return null;
+};
+
+const summarizeRouteObject = (value: unknown) => {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  return {
+    keys: Object.keys(record).slice(0, 30),
+    route: extractRouteString(record.route),
+    routeText: extractRouteString(record.routeText),
+    routeString: extractRouteString(record.routeString),
+    expectedRoute: extractRouteString(record.expectedRoute),
+    currentRoute: extractRouteString(record.currentRoute),
+    providerRoute: extractRouteString(record.providerRoute),
+  };
+};
+
 const providerValue = (snapshot: unknown, keys: string[]) => {
   const source = snapshot && typeof snapshot === "object" ? snapshot as Record<string, any> : {};
   for (const key of keys) {
@@ -612,9 +670,18 @@ export const compareGeneratedSentReturned = (
     : {};
   const raw = plan.filingRaw && typeof plan.filingRaw === "object" ? plan.filingRaw as Record<string, any> : {};
   const routeSnapshot = snapshot.route && typeof snapshot.route === "object" ? snapshot.route as Record<string, any> : {};
-  const providerRoute = String(routeSnapshot.providerRoute || providerValue(snapshot, ["route"]) || "").trim() || null;
-  const localEnteredRoute = String(routeSnapshot.localEnteredRoute || plan.route || "").trim() || null;
-  const normalizedTransmittedRoute = String(routeSnapshot.normalizedTransmittedRoute || sentPayload?.route || generatedPayload?.route || plan.route || "").trim() || null;
+  const providerRoute =
+    extractRouteString(routeSnapshot.providerRoute) ||
+    extractRouteString((snapshot as any).route) ||
+    extractRouteString(providerValue(snapshot, ["route"])) ||
+    null;
+  const localEnteredRoute = extractRouteString(routeSnapshot.localEnteredRoute) || String(plan.route || "").trim() || null;
+  const normalizedTransmittedRoute =
+    extractRouteString(routeSnapshot.normalizedTransmittedRoute) ||
+    extractRouteString(sentPayload?.route) ||
+    extractRouteString(generatedPayload?.route) ||
+    String(plan.route || "").trim() ||
+    null;
   const routeChangedByProvider = Boolean(routeSnapshot.changedByProvider);
   const returned = {
     departure: providerValue(snapshot, ["departure", "departureAirport"]) || plan.departure,
@@ -808,6 +875,8 @@ export const compareGeneratedSentReturned = (
     localEnteredRoute,
     normalizedTransmittedRoute,
     providerRoute,
+    providerRouteObject: summarizeRouteObject(routeSnapshot.providerRoute),
+    providerRouteSnapshotObject: summarizeRouteObject((snapshot as any).route),
     routeChangedByProvider,
     comparisonResult: routeComparisonResult,
   }));

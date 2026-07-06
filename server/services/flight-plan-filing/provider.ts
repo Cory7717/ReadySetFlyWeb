@@ -908,6 +908,70 @@ const findNestedString = (input: unknown, candidateKeys: string[], maxDepth = 8)
   return null;
 };
 
+const routeValueKeys = [
+  "providerRoute",
+  "route",
+  "expectedRoute",
+  "expected_route",
+  "currentRoute",
+  "routeString",
+  "routeText",
+  "effectiveRoute",
+];
+
+const extractNestedRouteString = (input: unknown, maxDepth = 8): string | null => {
+  const record = getRecord(input);
+  if (!record) return typeof input === "string" ? toDisplayString(input) : null;
+  const normalizedCandidates = new Set(routeValueKeys.map((key) => key.toLowerCase().replace(/[^a-z0-9]/g, "")));
+  const queue: Array<{ value: unknown; depth: number; keyPath: string }> = [{ value: record, depth: 0, keyPath: "$" }];
+  const visited = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+    const { value, depth, keyPath } = current;
+    if (!value || visited.has(value) || depth > maxDepth) continue;
+
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value instanceof Date) {
+      const route = toDisplayString(value);
+      if (route) return route;
+      continue;
+    }
+    if (typeof value !== "object") continue;
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => queue.push({ value: item, depth: depth + 1, keyPath: `${keyPath}[${index}]` }));
+      continue;
+    }
+
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (normalizedCandidates.has(normalizedKey)) {
+        if (child && typeof child === "object" && !Array.isArray(child)) {
+          console.info(JSON.stringify({
+            event: "leidos_provider_route_object_detected",
+            keyPath: `${keyPath}.${key}`,
+            keys: Object.keys(child as Record<string, unknown>).slice(0, 30),
+            route: extractNestedRouteString((child as Record<string, unknown>).route, 2),
+            routeText: extractNestedRouteString((child as Record<string, unknown>).routeText, 2),
+            routeString: extractNestedRouteString((child as Record<string, unknown>).routeString, 2),
+            expectedRoute: extractNestedRouteString((child as Record<string, unknown>).expectedRoute, 2),
+            currentRoute: extractNestedRouteString((child as Record<string, unknown>).currentRoute, 2),
+          }));
+        }
+        const route = extractNestedRouteString(child, maxDepth - depth - 1);
+        if (route) return route;
+      }
+      if (child && typeof child === "object") {
+        queue.push({ value: child, depth: depth + 1, keyPath: `${keyPath}.${key}` });
+      }
+    }
+  }
+
+  return null;
+};
+
 const findNestedStringArray = (input: unknown, candidateKeys: string[], maxDepth = 8) => {
   const values = new Set<string>();
   const record = getRecord(input);
@@ -1242,14 +1306,7 @@ const buildProviderSnapshot = ({
   syncedAt: string;
 }): FilingProviderSnapshot => {
   const source = metadataResponse || response || {};
-  const providerRoute = findNestedString(source, [
-    "route",
-    "expectedRoute",
-    "expected_route",
-    "currentRoute",
-    "routeString",
-    "routeText",
-  ]);
+  const providerRoute = extractNestedRouteString(source);
   const providerStatus = findNestedString(source, [
     "state",
     "status",

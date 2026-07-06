@@ -22677,10 +22677,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const providerLifecycle = getProviderLifecycleStatus(actionProviderSnapshot);
       const providerAlreadyTerminal = ["cancelled", "canceled", "closed"].includes(providerLifecycle);
       const providerVersionStamp = getStoredProviderVersionStamp(plan);
-      if (certificationPlan && ["cancel", "close"].includes(action) && providerAlreadyTerminal) {
+      if (certificationPlan && ["cancel", "close"].includes(action) && (providerAlreadyTerminal || !providerVersionStamp)) {
         const now = new Date();
         const nextStatus = action === "close" || providerLifecycle === "closed" ? "closed" : "cancelled";
-        const cleanupReason = "already-terminal provider state";
+        const cleanupReason = providerAlreadyTerminal
+          ? "already-terminal provider state"
+          : "missing provider versionStamp";
         console.info(JSON.stringify({
           event: "flight_service_certification_cleanup_local_terminal",
           flight_service_environment: runtimeMode.environment,
@@ -22693,7 +22695,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           userEmail: userEmail || null,
           providerLifecycleStatus: providerLifecycle || null,
           providerVersionStamp: providerVersionStamp || null,
-          cleanupReason: "already_terminal_provider_state",
+          cleanupReason: providerAlreadyTerminal ? "already_terminal_provider_state" : "missing_provider_version_stamp",
         }));
         const cleanupMessage: FilingProviderMessage = {
           id: buildFilingEventId("rsf", plan.id, "certification_cleanup", cleanupReason, now.toISOString()),
@@ -22750,28 +22752,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           cleanupReason,
           localOnly: true,
           plan: updated,
-        });
-      }
-      if (certificationPlan && ["cancel", "close"].includes(action) && !providerVersionStamp) {
-        console.warn(JSON.stringify({
-          event: "flight_service_certification_cleanup_blocked",
-          flight_service_environment: runtimeMode.environment,
-          flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
-          action,
-          requestSource,
-          certificationPlan,
-          planId: plan.id,
-          userId,
-          userEmail: userEmail || null,
-          providerLifecycleStatus: providerLifecycle || null,
-          providerVersionStamp: null,
-          blockedReason: "missing_provider_version_stamp",
-        }));
-        return res.status(409).json({
-          error: "Certification test plan cleanup needs the current provider versionStamp unless the provider record is already terminal.",
-          code: "CERTIFICATION_CLEANUP_MISSING_VERSION_STAMP",
-          providerLifecycleStatus: providerLifecycle || null,
-          plan,
         });
       }
       const flightRules = (plan.filingFlightRules || "VFR").toUpperCase();

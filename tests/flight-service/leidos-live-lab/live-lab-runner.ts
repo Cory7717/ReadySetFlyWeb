@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline/promises";
@@ -53,6 +53,9 @@ const KNOWN_FLAGS = new Set([
   "confirm-leidos-lab",
   "limit",
   "delay-minutes",
+  "start-case",
+  "end-case",
+  "only-cases",
   "skip-cleanup",
   "cleanup-only",
   "replay",
@@ -81,6 +84,98 @@ export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve
 const stamp = () => new Date().toISOString().replace(/[:.]/g, "-");
 const CERTIFICATION_SUITE_VERSION = "2026.07.04-post-run-audit";
 const FLIGHT_SERVICE_MODULE_VERSION = "flight-service-filing-v1";
+const LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES = 15;
+const ACTIVATION_WINDOW_MINUTES = 30;
+
+const pad2 = (value: string | number) => String(value).padStart(2, "0");
+
+const formatLocalDateTimeForZone = (date: Date, timeZone: string) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value || "";
+  return `${part("year")}-${pad2(part("month"))}-${pad2(part("day"))}T${pad2(part("hour"))}:${pad2(part("minute"))}`;
+};
+
+const formatProviderZulu = (date: Date) =>
+  `${pad2(date.getUTCHours())}${pad2(date.getUTCMinutes())}Z`;
+
+const getPlannerStateRecord = (plan: FlightPlan) =>
+  plan.plannerState && typeof plan.plannerState === "object" && !Array.isArray(plan.plannerState)
+    ? plan.plannerState as Record<string, any>
+    : {};
+
+const getDepartureTimeZone = (plan: FlightPlan) =>
+  String(getPlannerStateRecord(plan).departureTimeZone || "America/Chicago").trim() || "America/Chicago";
+
+const lifecycleUsesActivationWindow = (testCase: LiveLabCase) =>
+  testCase.actions.includes("activate") || testCase.actions.includes("close");
+
+const applyLifecycleDynamicDepartureTime = (plan: FlightPlan, testCase: LiveLabCase) => {
+  if (!lifecycleUsesActivationWindow(testCase)) {
+    return {
+      plan,
+      metadata: {
+        lifecycleDynamicTimeEnabled: false,
+        lifecycleDepartureTimeStrategy: "fixed deterministic departure time",
+        activationWindowCheckPassed: null,
+      },
+    };
+  }
+
+  const originalInstant = plan.plannedDepartureAt ? new Date(plan.plannedDepartureAt) : null;
+  const departureTimeZone = getDepartureTimeZone(plan);
+  const dynamicInstant = new Date(Date.now() + LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES * 60_000);
+  const dynamicLocal = formatLocalDateTimeForZone(dynamicInstant, departureTimeZone);
+  const originalLocal = originalInstant ? formatLocalDateTimeForZone(originalInstant, departureTimeZone) : null;
+  const plannerState = getPlannerStateRecord(plan);
+  const nextPlan = {
+    ...plan,
+    plannedDepartureAt: dynamicInstant,
+    plannedArrivalAt: new Date(dynamicInstant.getTime() + 60 * 60_000),
+    plannerState: {
+      ...plannerState,
+      departureTimeZone,
+      userDisplayDepartureTimeLocal: dynamicLocal,
+      lifecycleDynamicTimeEnabled: true,
+      lifecycleDepartureTimeStrategy: `current time + ${LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES} minutes`,
+      lifecycleOriginalDepartureTimeLocal: originalLocal,
+    },
+  } as FlightPlan;
+  const metadata = {
+    lifecycleDynamicTimeEnabled: true,
+    lifecycleDepartureTimeStrategy: `current time + ${LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES} minutes`,
+    originalPlannedLocalTime: originalLocal,
+    dynamicLifecycleLocalTime: dynamicLocal,
+    departureTimeZone,
+    departureInstantUtc: dynamicInstant.toISOString(),
+    expectedProviderZulu: formatProviderZulu(dynamicInstant),
+    activationWindowCheckPassed: Math.abs(dynamicInstant.getTime() - Date.now()) <= ACTIVATION_WINDOW_MINUTES * 60_000,
+  };
+  console.info(JSON.stringify({
+    event: "leidos_live_lab_lifecycle_time_override",
+    caseSeed: testCase.seed,
+    caseName: testCase.name,
+    ...metadata,
+  }));
+  return { plan: nextPlan, metadata };
+};
+
+const isActivationWindowError = (message: string) =>
+  /ActivateInvalidActivationTime|activation time was not within 30 minutes|activation window/i.test(message);
+
+const checkActivationWindow = (plan: FlightPlan) => {
+  const departure = plan.plannedDepartureAt ? new Date(plan.plannedDepartureAt) : null;
+  if (!departure || Number.isNaN(departure.getTime())) return false;
+  return Math.abs(departure.getTime() - Date.now()) <= ACTIVATION_WINDOW_MINUTES * 60_000;
+};
 
 const normalizePhone = (value?: string | null) => String(value || "").replace(/\D/g, "");
 const normalizeEmail = (value?: string | null) => String(value || "").trim().toLowerCase();
@@ -294,6 +389,62 @@ export const buildCases = (context: DedicatedTestContext, runId: string): LiveLa
     { seed: 14, name: "Negative - Missing phone and home base", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Complete pilot phone and aircraft home base before filing.", buildPlan: () => plan(14, "Missing Contact", { filingPilotPhone: "", filingAircraftHomeBase: "" }) },
     { seed: 15, name: "Negative - Invalid Other Info", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Use short ICAO subfields with letters, numbers, spaces, and slash separators only.", buildPlan: () => plan(15, "Invalid Other Info", { filingOtherInfo: `DOF/260715 RMK/${CERT_REMARK} LEIDOS-LIVE-LAB-${runId} SEED 15` }) },
   ];
+};
+
+const parseOnlyCaseSeeds = (value: string) =>
+  new Set(
+    value
+      .split(",")
+      .map((item) => Number(item.trim()))
+      .filter((item) => Number.isInteger(item) && item > 0),
+  );
+
+const selectRequestedCases = (allCases: LiveLabCase[], limit: number, replay: string) => {
+  if (replay) {
+    const replaySeed = Number(replay);
+    const cases = allCases.filter((item) => item.seed === replaySeed).slice(0, 1);
+    return {
+      cases,
+      skippedBySelection: allCases.filter((item) => item.seed !== replaySeed),
+      request: { mode: "replay", replay: replaySeed },
+    };
+  }
+
+  const onlyCasesRaw = arg("only-cases", "");
+  const startCase = Math.max(1, Math.floor(numberArg("start-case", "1") || 1));
+  const endCase = Math.min(MAX_CASES, Math.floor(numberArg("end-case", String(MAX_CASES)) || MAX_CASES));
+  const onlySeeds = onlyCasesRaw ? parseOnlyCaseSeeds(onlyCasesRaw) : null;
+  const selected = allCases.filter((item) => {
+    if (onlySeeds) return onlySeeds.has(item.seed);
+    return item.seed >= startCase && item.seed <= endCase;
+  });
+  const limited = selected.slice(0, limit);
+  const limitedSeeds = new Set(limited.map((item) => item.seed));
+  return {
+    cases: limited,
+    skippedBySelection: allCases.filter((item) => !limitedSeeds.has(item.seed)),
+    request: onlySeeds
+      ? { mode: "only-cases", onlyCases: Array.from(onlySeeds).sort((a, b) => a - b), limit }
+      : { mode: "range", startCase, endCase, limit },
+  };
+};
+
+const loadPreviouslyPassedCaseSeeds = () => {
+  const dir = join("certification-results", "leidos-live-lab");
+  const passed = new Set<number>();
+  try {
+    for (const fileName of readdirSync(dir)) {
+      if (!/\.json$/i.test(fileName) || /cleanup/i.test(fileName)) continue;
+      const report = JSON.parse(readFileSync(join(dir, fileName), "utf8"));
+      for (const result of Array.isArray(report.results) ? report.results : []) {
+        const seed = Number(result.seed);
+        if (Number.isInteger(seed) && result.pass === true) passed.add(seed);
+      }
+    }
+  } catch {
+    return passed;
+  }
+  return passed;
 };
 
 export const summarizePayload = (plan: FlightPlan, action: FlightPlanFilingAction) => {
@@ -716,12 +867,20 @@ export const buildValidationSummary = (results: any[], cases: LiveLabCase[]) => 
   const failed = results.filter((item) => !item.pass).length;
   const skipped = results.filter((item) => item.skipped).length;
   const blocked = results.flatMap((item) => item.actions || []).filter((action) => action.blockedBeforeLeidos).length;
+  const testDesignFailures = results.reduce((sum, item) => sum + (Array.isArray(item.testDesignFailures) ? item.testDesignFailures.length : 0), 0);
+  const payloadValidationFailures = results.flatMap((item) => item.actions || []).filter((action: any) =>
+    action.validationStatus === "BLOCKED" &&
+    action.responseStatus !== "test_setup_activation_window_failed" &&
+    action.blockedReason !== "activation_window_test_setup_failure"
+  ).length;
   return {
     executed,
     passed,
     blocked,
     failed,
     skipped,
+    testDesignFailures,
+    payloadValidationFailures,
     positiveTestsPassed: results.filter((item) => {
       const testCase = caseBySeed.get(item.seed);
       return (testCase ? isNonNegativeCase(testCase) : item.testType !== "Negative") && item.pass;
@@ -841,6 +1000,8 @@ export const buildCertificationHtml = (report: any) => {
   <section><h2>Environment</h2><pre>${escapeHtml(JSON.stringify(report.environmentDetails || {}, null, 2))}</pre></section>
   <section><h2>Operator</h2><pre>${escapeHtml(JSON.stringify(report.operator || {}, null, 2))}</pre></section>
   <section><h2>Aircraft</h2><pre>${escapeHtml(JSON.stringify(report.aircraft || {}, null, 2))}</pre></section>
+  <section><h2>Case Selection</h2><pre>${escapeHtml(JSON.stringify(report.suiteSelection || {}, null, 2))}</pre></section>
+  <section><h2>Lifecycle Timing</h2><pre>${escapeHtml(JSON.stringify(report.lifecycleTiming || {}, null, 2))}</pre></section>
   <section><h2>Validation Summary</h2><pre>${escapeHtml(JSON.stringify(report.validationSummary || {}, null, 2))}</pre></section>
   <section><h2>Positive Tests</h2><table><thead><tr><th>Test</th><th>Type</th><th>Status</th><th>Errors</th></tr></thead><tbody>${rows(report.positiveTests || [])}</tbody></table></section>
   <section><h2>Negative Tests</h2><table><thead><tr><th>Test</th><th>Type</th><th>Status</th><th>Errors</th></tr></thead><tbody>${rows(report.negativeTests || [])}</tbody></table></section>
@@ -885,6 +1046,10 @@ export const writeCertificationPdf = async (report: any, filePath: string) => {
   draw(JSON.stringify(report.operator || {}, null, 2));
   draw("Aircraft", { bold: true, size: 13 });
   draw(JSON.stringify(report.aircraft || {}, null, 2));
+  draw("Case Selection", { bold: true, size: 13 });
+  draw(JSON.stringify(report.suiteSelection || {}, null, 2));
+  draw("Lifecycle Timing", { bold: true, size: 13 });
+  draw(JSON.stringify(report.lifecycleTiming || {}, null, 2));
   draw("Test Results", { bold: true, size: 13 });
   draw(JSON.stringify(report.validationSummary || {}, null, 2));
   draw("Cleanup", { bold: true, size: 13 });
@@ -1087,10 +1252,14 @@ const run = async () => {
   }
 
   const context = await loadDedicatedTestContext();
-  const cases = buildCases(context, runId)
-    .filter((item) => !replay || String(item.seed) === replay)
-    .slice(0, replay ? 1 : limit);
+  const allCases = buildCases(context, runId);
+  const caseSelection = selectRequestedCases(allCases, replay ? 1 : limit, replay);
+  const cases = caseSelection.cases;
   if (cases.length === 0) throw new Error(`No live LAB test case matched replay=${replay}.`);
+  const previouslyPassedSeeds = loadPreviouslyPassedCaseSeeds();
+  const previouslyPassedRequestedSeeds = cases
+    .filter((testCase) => previouslyPassedSeeds.has(testCase.seed))
+    .map((testCase) => testCase.seed);
 
   if (!dryRun) await promptLiveConfirmation(context, diagnostics, cases.length, delayMinutes);
   const runModeLabel = dryRun
@@ -1102,6 +1271,8 @@ const run = async () => {
   console.log(`Endpoint: ${diagnostics.baseUrl}`);
   console.log(`Test user: ${context.user.email || process.env.LEIDOS_TEST_USER_EMAIL}`);
   console.log(`Cases: ${cases.length}/${MAX_CASES}`);
+  console.log(`Case selection: ${JSON.stringify(caseSelection.request)}`);
+  console.log(`Skipped by selection: ${caseSelection.skippedBySelection.map((item) => item.seed).join(", ") || "-"}`);
   console.log(`Delay requested: ${delayMinutes} minute(s)`);
   console.log("Delay policy: applied before each certification case after the first during confirmed non-dry runs.");
   console.log(`RSF DB history persistence: ${dryRun ? "disabled for dry-run" : "enabled; certification plans are saved under the configured test user"}`);
@@ -1127,7 +1298,8 @@ const run = async () => {
         applied: true,
       });
     }
-    let plan = await persistCertificationPlan(testCase.buildPlan(), runId, testCase, dryRun);
+    const lifecycleTiming = applyLifecycleDynamicDepartureTime(testCase.buildPlan(), testCase);
+    let plan = await persistCertificationPlan(lifecycleTiming.plan, runId, testCase, dryRun);
     createdPlans.push(plan);
     dbPersistenceRecords.push({
       certificationCaseId: `case-${String(testCase.seed).padStart(2, "0")}`,
@@ -1151,6 +1323,8 @@ const run = async () => {
       skipped: Boolean(testCase.skipReason),
       warnings: [] as string[],
       errors: [] as string[],
+      lifecycleTiming: lifecycleTiming.metadata,
+      testDesignFailures: [] as string[],
     };
     if (testCase.skipReason) {
       caseResult.warnings.push(testCase.skipReason);
@@ -1184,6 +1358,46 @@ const run = async () => {
         console.log("");
       }
       printValidationResult(testCase, validation);
+      if (action === "activate") {
+        const activationWindowCheckPassed = checkActivationWindow(plan);
+        caseResult.lifecycleTiming = {
+          ...(caseResult.lifecycleTiming || {}),
+          activationWindowCheckPassed,
+          activationWindowCheckedAt: new Date().toISOString(),
+        };
+        if (!activationWindowCheckPassed) {
+          caseResult.pass = false;
+          const setupMessage = `Test setup failure: ACTIVATE planned departure ${plan.plannedDepartureAt ? new Date(plan.plannedDepartureAt).toISOString() : "-"} is outside the ${ACTIVATION_WINDOW_MINUTES}-minute Leidos LAB activation window.`;
+          caseResult.errors.push(setupMessage);
+          caseResult.testDesignFailures.push(setupMessage);
+          const actionResult = {
+            action,
+            generatedPayload,
+            providerPayload: null,
+            storedPayload: null,
+            payloadSentToLeidos: null,
+            leidosResponse: null,
+            testType: testCase.testType,
+            validationStatus: "PASS",
+            validationResult: "valid",
+            blockedBeforeLeidos: true,
+            blockedReason: "activation_window_test_setup_failure",
+            routeReview,
+            recommendedFix: "Use a lifecycle departure time within the Leidos LAB activation window.",
+            comparison: null,
+            comparisonResult: "TEST_SETUP_FAILURE",
+            fieldComparisons: [],
+            providerLifecycle: plan.filingStatus || null,
+            responseStatus: "test_setup_activation_window_failed",
+            warnings: validation.warnings,
+            errors: [setupMessage],
+            elapsedMs: Date.now() - started,
+          };
+          caseResult.actions.push(actionResult);
+          plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
+          break;
+        }
+      }
       if (!validation.ready) {
         const expectedBlock = Boolean(testCase.expectedBlockedBeforeLeidos);
         caseResult.pass = expectedBlock;
@@ -1260,8 +1474,21 @@ const run = async () => {
       } catch (error) {
         caseResult.pass = false;
         const message = String((error as any)?.message || error);
-        caseResult.errors.push(message);
-        const actionResult = { action, generatedPayload, providerPayload: null, storedPayload: null, payloadSentToLeidos: null, leidosResponse: null, testType: testCase.testType, validationStatus: "PASS", validationResult: "valid", blockedBeforeLeidos: false, blockedReason: null, routeReview, comparison: null, comparisonResult: "ERROR", fieldComparisons: [], providerLifecycle: null, responseStatus: "error", warnings: validation.warnings, errors: [message], elapsedMs: Date.now() - started };
+        const activationWindowSetupFailure = action === "activate" && isActivationWindowError(message);
+        const classifiedMessage = activationWindowSetupFailure
+          ? `Test setup failure: Leidos rejected ACTIVATE because the activation time was outside the ${ACTIVATION_WINDOW_MINUTES}-minute window. ${message}`
+          : message;
+        caseResult.errors.push(classifiedMessage);
+        if (activationWindowSetupFailure) {
+          caseResult.testDesignFailures.push(classifiedMessage);
+          caseResult.lifecycleTiming = {
+            ...(caseResult.lifecycleTiming || {}),
+            activationWindowCheckPassed: false,
+            activationWindowProviderRejected: true,
+            activationWindowCheckedAt: new Date().toISOString(),
+          };
+        }
+        const actionResult = { action, generatedPayload, providerPayload: null, storedPayload: null, payloadSentToLeidos: null, leidosResponse: null, testType: testCase.testType, validationStatus: "PASS", validationResult: "valid", blockedBeforeLeidos: false, blockedReason: activationWindowSetupFailure ? "activation_window_test_setup_failure" : null, routeReview, comparison: null, comparisonResult: activationWindowSetupFailure ? "TEST_SETUP_FAILURE" : "ERROR", fieldComparisons: [], providerLifecycle: null, responseStatus: activationWindowSetupFailure ? "test_setup_activation_window_failed" : "error", warnings: validation.warnings, errors: [classifiedMessage], elapsedMs: Date.now() - started };
         caseResult.actions.push(actionResult);
         plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
         if (isCleanupBlockingError(error)) stoppedEarly = true;
@@ -1415,6 +1642,21 @@ const run = async () => {
         requiredEnvironmentVariable: `${PROVIDER_SUBMISSION_ENV_VAR}=true`,
       }
     : baseReadinessAssessment;
+  const executedCaseSeeds = results.map((item) => item.seed);
+  const requestedCaseSeeds = cases.map((item) => item.seed);
+  const skippedBySelectionSeeds = caseSelection.skippedBySelection.map((item) => item.seed);
+  const lifecycleTimingResults = results
+    .filter((item) => item.lifecycleTiming?.lifecycleDynamicTimeEnabled)
+    .map((item) => ({
+      seed: item.seed,
+      certificationCaseId: item.certificationCaseId,
+      testName: item.testName,
+      ...item.lifecycleTiming,
+    }));
+  const activationWindowChecks = lifecycleTimingResults.filter((item: any) => item.activationWindowCheckPassed !== null && item.activationWindowCheckPassed !== undefined);
+  const activationWindowCheckPassed = activationWindowChecks.length === 0
+    ? true
+    : activationWindowChecks.every((item: any) => item.activationWindowCheckPassed === true);
 
   const output = {
     certificationRunId: runId,
@@ -1445,6 +1687,22 @@ const run = async () => {
     limit,
     delayMinutes,
     skipCleanup,
+    suiteSelection: {
+      totalCasesInSuite: allCases.length,
+      casesRequested: requestedCaseSeeds,
+      casesExecuted: executedCaseSeeds,
+      casesSkippedBecauseOfRangeSelection: skippedBySelectionSeeds,
+      casesPassedInCurrentRun: results.filter((item) => item.pass).map((item) => item.seed),
+      casesPreviouslyPassedIfKnown: Array.from(previouslyPassedSeeds).sort((a, b) => a - b),
+      requestedCasesPreviouslyPassedIfKnown: previouslyPassedRequestedSeeds,
+      request: caseSelection.request,
+    },
+    lifecycleTiming: {
+      lifecycleDynamicTimeEnabled: lifecycleTimingResults.length > 0,
+      lifecycleDepartureTimeStrategy: `current time + ${LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES} minutes`,
+      activationWindowCheckPassed,
+      cases: lifecycleTimingResults,
+    },
     totalCases: results.length,
     passed: validationSummary.passed,
     failed: validationSummary.failed,
@@ -1489,6 +1747,8 @@ const run = async () => {
       blocked: validationSummary.blocked,
       failed: validationSummary.failed,
       skipped: validationSummary.skipped,
+      payloadValidationFailures: validationSummary.payloadValidationFailures,
+      testDesignFailures: validationSummary.testDesignFailures,
       testCount: results.length,
       cleanupTotal: cleanupResults.length,
       cleanupPassed: cleanupResults.filter((item) => item.pass !== false).length,
@@ -1518,12 +1778,24 @@ const run = async () => {
   console.log("Aircraft");
   console.log(`  Tail Number: ${context.profile.tailNumber}`);
   console.log(`  Aircraft Type: ${context.aircraftType}`);
+  console.log("Case Selection");
+  console.log(`  Total Cases In Suite: ${output.suiteSelection.totalCasesInSuite}`);
+  console.log(`  Requested: ${output.suiteSelection.casesRequested.join(", ") || "-"}`);
+  console.log(`  Executed: ${output.suiteSelection.casesExecuted.join(", ") || "-"}`);
+  console.log(`  Skipped By Selection: ${output.suiteSelection.casesSkippedBecauseOfRangeSelection.join(", ") || "-"}`);
+  console.log(`  Previously Passed If Known: ${output.suiteSelection.requestedCasesPreviouslyPassedIfKnown.join(", ") || "-"}`);
+  console.log("Lifecycle Timing");
+  console.log(`  Dynamic Time Enabled: ${output.lifecycleTiming.lifecycleDynamicTimeEnabled}`);
+  console.log(`  Strategy: ${output.lifecycleTiming.lifecycleDepartureTimeStrategy}`);
+  console.log(`  Activation Window Check Passed: ${output.lifecycleTiming.activationWindowCheckPassed}`);
   console.log("Validation Summary");
   console.log(`  Executed: ${validationSummary.executed}`);
   console.log(`  Passed: ${validationSummary.passed}`);
   console.log(`  Blocked: ${validationSummary.blocked}`);
   console.log(`  Failed: ${validationSummary.failed}`);
   console.log(`  Skipped: ${validationSummary.skipped}`);
+  console.log(`  Payload Validation Failures: ${validationSummary.payloadValidationFailures}`);
+  console.log(`  Test Design Failures: ${validationSummary.testDesignFailures}`);
   console.log("Positive Tests");
   console.log(`  Passed: ${output.positiveTestsPassed}`);
   console.log("Negative Tests");

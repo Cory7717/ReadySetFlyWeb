@@ -360,6 +360,17 @@ function canonicalOpsLaborLabel(value: unknown) {
   return "Other";
 }
 
+export function isExcludedActualOpsLaborLabel(value: unknown) {
+  const label = canonicalOpsLaborLabel(value);
+  return label === "GM" || label === "DOS";
+}
+
+function isExcludedActualOpsLaborEmployee(employee: any) {
+  if (!employee) return false;
+  const roles = Array.isArray(employee?.rolesJson) ? employee.rolesJson.join(" ") : "";
+  return isExcludedActualOpsLaborLabel([employee?.department, employee?.position, roles].filter(Boolean).join(" "));
+}
+
 function isFrontDeskSupervisorText(value: unknown) {
   const text = String(value || "").toLowerCase();
   return (text.includes("front desk") || text.includes("front office") || /\bfd\b/.test(text))
@@ -504,6 +515,7 @@ function parseEmployeeLaborTotals(text: string, employees: any[], departments: R
     const hours = numberFromText(match[3] || "");
     if (!name || !Number.isFinite(hours) || hours <= 0) continue;
     const employee = findLaborEmployeeMatch(name, employees);
+    if (isExcludedActualOpsLaborEmployee(employee) || (!employee && isExcludedActualOpsLaborLabel(name))) continue;
     const department = employee ? opsDepartmentForEmployee(employee) : "OTHER";
     addDepartmentHours(departments, department, hours);
     employeeHours.push({
@@ -518,7 +530,7 @@ function parseEmployeeLaborTotals(text: string, employees: any[], departments: R
   return { employeeHours, unmatchedEmployees };
 }
 
-function parseLaborSummaryText(text: string, employees: any[] = []) {
+export function parseLaborSummaryText(text: string, employees: any[] = []) {
   const departments: Record<string, number> = emptyLaborDepartments();
   const seenBlocks = new Set<string>();
   let blockHoursFound = false;
@@ -536,6 +548,7 @@ function parseLaborSummaryText(text: string, employees: any[] = []) {
     seenBlocks.add(key);
     const hours = numberFromText(totalMatch[1]);
     if (!Number.isFinite(hours) || hours <= 0) continue;
+    if (isExcludedActualOpsLaborLabel(`${departmentLabel} ${positionLabel}`)) continue;
 
     blockHoursFound = true;
     addDepartmentHours(departments, opsDepartmentFromText(`${departmentLabel} ${positionLabel}`), hours);

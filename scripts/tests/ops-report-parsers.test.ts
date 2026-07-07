@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { excelDateToIso, parseOpsReportFile } from "../../server/opsReportParsers";
-import { addLaborWageEstimate, emptyLaborWageEstimates, finalizeLaborWageEstimates, opsLaborBreakdownLabelForSchedule, opsLaborBucketForSchedule } from "../../server/routes/opsReport";
+import { addLaborWageEstimate, emptyLaborWageEstimates, finalizeLaborWageEstimates, parseLaborSummaryText, opsLaborBreakdownLabelForSchedule, opsLaborBucketForSchedule } from "../../server/routes/opsReport";
 
 const context = { weekStart: "2026-05-30", weekEnd: "2026-06-05", reportMonth: "2026-06" };
 
@@ -72,6 +72,24 @@ test("OpsReport wage estimates produce hourly-only and with-salary blended rates
   assert.equal(finalized.OTHER.blendedHourlyRate, 30);
   assert.equal(finalized.OTHER.blendedRateIncludingSalary, 30.59);
   assert.equal(finalized["FRONT DESK / NIGHT AUDIT HOURS"].blendedHourlyRate, 22);
+});
+
+test("OpsReport actual labor excludes GM and DOS but keeps front desk supervisor in Other", () => {
+  const parsed = parseLaborSummaryText([
+    "Department(Management) ~ Position(General Manager) Totals",
+    "Total Earnings 40.00",
+    "Department(Sales) ~ Position(Director of Sales) Totals",
+    "Total Earnings 32.00",
+    "Department(Front Desk) ~ Position(Front Desk Supervisor) Totals",
+    "Total Earnings 38.00",
+    "Department(Front Desk) ~ Position(Front Desk Agent) Totals",
+    "Total Earnings 80.00",
+    "Grand Totals",
+  ].join("\n"));
+
+  assert.equal(parsed.departments.OTHER, 38);
+  assert.equal(parsed.departments["FRONT DESK / NIGHT AUDIT HOURS"], 80);
+  assert.equal(Object.values(parsed.departments).reduce((sum, hours) => sum + hours, 0), 118);
 });
 
 test("OTB reports are classified by selected and next report month", async () => {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileSpreadsheet, FileText, LockKeyhole, LogOut, Trash2, Upload } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, LockKeyhole, LogOut, Plus, Trash2, Upload } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -927,13 +927,30 @@ function EditableTable({
   rows,
   onChange,
   getCellPreview,
+  allowRowActions = false,
+  addRowLabel = "Add row",
 }: {
   columns: Array<{ key: string; label: string; wide?: boolean; readOnly?: boolean }>;
   rows: Row[];
   onChange: (rows: Row[]) => void;
   getCellPreview?: (row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean }) => { label: string; text: string } | null;
+  allowRowActions?: boolean;
+  addRowLabel?: string;
 }) {
   const [preview, setPreview] = useState<{ label: string; text: string; x: number; y: number } | null>(null);
+  const editableColumns = columns.filter((column) => !column.readOnly);
+  const renumberRows = (nextRows: Row[]) =>
+    columns.some((column) => column.key === "no")
+      ? nextRows.map((row, index) => ({ ...row, no: String(index + 1) }))
+      : nextRows;
+  const addRow = () => {
+    const nextRow = editableColumns.reduce<Row>((row, column) => ({ ...row, [column.key]: column.key === "no" ? String(rows.length + 1) : "" }), {});
+    onChange(renumberRows([...rows, nextRow]));
+  };
+  const removeRow = (rowIndex: number) => {
+    const nextRows = rows.filter((_, index) => index !== rowIndex);
+    onChange(renumberRows(nextRows.length ? nextRows : [editableColumns.reduce<Row>((row, column) => ({ ...row, [column.key]: column.key === "no" ? "1" : "" }), {})]));
+  };
   const showPreview = (event: MouseEvent<HTMLInputElement> | FocusEvent<HTMLInputElement>, row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean }) => {
     const customPreview = getCellPreview?.(row, column);
     const text = customPreview?.text || String(row[column.key] || "").trim();
@@ -951,6 +968,7 @@ function EditableTable({
             {columns.map((column) => (
               <th key={column.key} className={`border border-[#c9d2d8] px-2 py-2 text-left ${column.wide ? "min-w-[260px]" : "min-w-[110px]"}`}>{column.label}</th>
             ))}
+            {allowRowActions && <th className="w-12 border border-[#c9d2d8] px-2 py-2 text-left">Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -982,10 +1000,34 @@ function EditableTable({
                   />
                 </td>
               ))}
+              {allowRowActions && (
+                <td className="border border-[#e0d3c1] p-1 align-top">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className={`h-9 w-9 ${C.outline}`}
+                    onClick={() => removeRow(rowIndex)}
+                    disabled={rows.length === 1 && !columns.some((column) => String(row[column.key] || "").trim())}
+                    title="Remove row"
+                    aria-label="Remove row"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
       </table>
+      {allowRowActions && (
+        <div className="mt-3 flex justify-end">
+          <Button type="button" className={C.green} onClick={addRow}>
+            <Plus className="mr-2 h-4 w-4" />
+            {addRowLabel}
+          </Button>
+        </div>
+      )}
       {preview && (
         <div
           className="pointer-events-none fixed z-[100] max-w-[440px] rounded-lg border border-[#cdbda8] bg-[#201814] px-3 py-2 text-xs font-medium leading-relaxed text-white shadow-2xl"
@@ -2581,7 +2623,13 @@ export default function OpsReportPage() {
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "reason", label: "Reason", wide: true }, { key: "respondDate", label: "Respond Date" }, { key: "amount", label: "Total Amount" }, { key: "comment", label: "Comment", wide: true }]} rows={chargebacks} onChange={setChargebacks} />
             </Section>
             <Section title="Major Weekly Maintenance Tasks">
-              <EditableTable columns={[{ key: "no", label: "S No" }, { key: "rooms", label: "P.M. Rooms" }, { key: "area", label: "Area" }, { key: "hours", label: "Time Consumed Hrs" }, { key: "comment", label: "Comment", wide: true }]} rows={maintenance} onChange={setMaintenance} />
+              <EditableTable
+                columns={[{ key: "no", label: "S No" }, { key: "rooms", label: "P.M. Rooms" }, { key: "area", label: "Area" }, { key: "hours", label: "Time Consumed Hrs" }, { key: "comment", label: "Comment", wide: true }]}
+                rows={maintenance}
+                onChange={setMaintenance}
+                allowRowActions
+                addRowLabel="Add maintenance row"
+              />
             </Section>
             <Section title="Weekly Out of Order Rooms">
               <SectionReportUpload

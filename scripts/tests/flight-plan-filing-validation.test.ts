@@ -6,7 +6,7 @@ import { formatFlightPlanDepartureTime } from "../../shared/flight-plan-time";
 import { extractFilingProviderPlanId } from "../../shared/flight-plan-filing";
 import { ICAO_OTHER_INFO_GUIDANCE, ICAO_OTHER_INFO_PREFIX_OPTIONS, ICAO_OTHER_INFO_VALUE_OPTIONS, buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
 import { formatDecimalCoordinatesForLeidos, normalizeZzzzActualLocation } from "../../shared/zzzz-location";
-import { buildLeidosActionPayload, buildOtherInfoWithAircraftType, buildOtherInfoWithRemarks, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, compareRetrievedProviderPlanFields, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
+import { buildLeidosActionPayload, buildOtherInfoWithAircraftType, buildOtherInfoWithRemarks, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, compareRetrievedProviderPlanFields, findLikelyDuplicateFlightPlan, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, redactLeidosPayloadForLog, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
 
 const futureChicagoDate = new Intl.DateTimeFormat("en-CA", {
   timeZone: "America/Chicago",
@@ -99,6 +99,91 @@ test("provider departure instant uses departure airport timezone, not browser ti
       },
     })), expectedUtc);
   }
+});
+
+test("Leidos payload logs redact pilot phone while retaining population metadata", () => {
+  const phone = "15124121762";
+  const payload = buildLeidosActionPayload(
+    filingPlan({ filingPilotPhone: phone }),
+    "file",
+    { otherInfo: null } as any,
+  ).payloadSnapshot!.transmittedFields;
+  const loggedPayload = redactLeidosPayloadForLog(payload);
+  const logEntry = {
+    event: "leidos_payload_built",
+    pilotPhonePopulated: Boolean(payload.pilotPhone),
+    payload: loggedPayload,
+  };
+
+  assert.equal(logEntry.pilotPhonePopulated, true);
+  assert.equal(loggedPayload.pilotPhone, "[redacted]");
+  assert.equal(JSON.stringify(logEntry).includes(phone), false);
+});
+
+test("local FILE duplicate detection blocks an exact provider-filed signature", () => {
+  const proposed = filingPlan({ id: "proposed" });
+  const existing = filingPlan({
+    id: "existing",
+    filingProviderPlanId: "provider-existing",
+    filingIsLive: true,
+    filingStatus: "filed",
+  });
+
+  assert.equal(findLikelyDuplicateFlightPlan(proposed, [existing])?.id, "existing");
+});
+
+test("local FILE duplicate detection allows meaningful signature changes", () => {
+  const proposed = filingPlan({ id: "proposed" });
+  const baseExisting = {
+    id: "existing",
+    filingProviderPlanId: "provider-existing",
+    filingIsLive: true,
+    filingStatus: "filed",
+  } satisfies Partial<FlightPlan>;
+  const nonDuplicates = [
+    filingPlan({ ...baseExisting, tailNumber: "N456RS" }),
+    filingPlan({ ...baseExisting, filingFlightRules: "IFR" }),
+    filingPlan({ ...baseExisting, departure: "KAUS" }),
+    filingPlan({ ...baseExisting, destination: "KACT" }),
+    filingPlan({
+      ...baseExisting,
+      plannedDepartureAt: new Date(testDepartureAt.getTime() + 10 * 60_000),
+      plannerState: {
+        departureTimeZone: "America/Chicago",
+        userDisplayDepartureTimeLocal: `${futureChicagoDate}T10:10`,
+      },
+    }),
+    filingPlan({ ...baseExisting, route: "DCT ACT DCT" }),
+    filingPlan({ ...baseExisting, filingPlannedAltitudeFt: 6500 }),
+  ];
+
+  for (const existing of nonDuplicates) {
+    assert.equal(findLikelyDuplicateFlightPlan(proposed, [existing]), null);
+  }
+});
+
+test("local FILE duplicate detection ignores stale terminal provider plans", () => {
+  const proposed = filingPlan({ id: "proposed" });
+  const existing = filingPlan({
+    id: "existing",
+    filingProviderPlanId: "provider-existing",
+    filingIsLive: true,
+    filingStatus: "closed",
+    closedAt: new Date("2026-07-01T12:00:00.000Z"),
+    updatedAt: new Date("2026-07-01T12:00:00.000Z"),
+  });
+
+  assert.equal(
+    findLikelyDuplicateFlightPlan(proposed, [existing], new Date("2026-07-09T12:00:00.000Z")),
+    null,
+  );
+});
+
+test("duplicate aircraft equipment validation names the duplicated code", () => {
+  const validation = validateFlightPlanForAction(filingPlan({ filingEquipment: "SRR" }), "file");
+  assert.ok(validation.errors.includes(
+    "Aircraft equipment code R was entered more than once. Remove duplicate ICAO equipment codes before filing.",
+  ));
 });
 
 test("airport timezone resolver covers required filing timezones", () => {

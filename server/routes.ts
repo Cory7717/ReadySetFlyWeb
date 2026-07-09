@@ -91,6 +91,7 @@ import {
   normalizeActualAircraftTypeForIcao,
   searchLeidosRoute,
   syncLeidosPlanMetadata,
+  findLikelyDuplicateFlightPlan,
   validateFlightPlanForAction,
   verifyLeidosWebhookAuthorization,
 } from "./services/flight-plan-filing/provider";
@@ -22758,6 +22759,42 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (action === "file") {
         const entitlements = getEntitlementsForUser(user);
         const plans = await storage.getFlightPlansByUser(userId);
+        const duplicateOverrideAllowed =
+          runtimeMode.environment === "LAB" &&
+          (Boolean((user as any).isSuperAdmin || (user as any).isAdmin) ||
+            (certificationPlan && requestSource === "certification-runner"));
+        const duplicatePlan = findLikelyDuplicateFlightPlan(plan, plans);
+        if (duplicatePlan && !duplicateOverrideAllowed) {
+          console.warn(JSON.stringify({
+            event: "flight_plan_duplicate_blocked",
+            action,
+            planId: plan.id,
+            duplicatePlanId: duplicatePlan.id,
+            flightServiceEnvironment: runtimeMode.environment,
+            blockedBeforeLeidos: true,
+          }));
+          return res.status(409).json({
+            error: "This looks like a duplicate of an existing flight plan already filed through RSF. Duplicate flight plans may be rejected by Flight Service/ATC. Review the existing plan, amend it, or change the new plan details before filing.",
+            code: "LIKELY_DUPLICATE_FLIGHT_PLAN",
+            duplicatePlanId: duplicatePlan.id,
+            actions: [
+              { id: "view-existing", label: "View existing plan", planId: duplicatePlan.id },
+              { id: "amend-existing", label: "Amend existing plan", planId: duplicatePlan.id },
+              { id: "change-new", label: "Change new plan", planId: plan.id },
+            ],
+          });
+        }
+        if (duplicatePlan && duplicateOverrideAllowed) {
+          console.info(JSON.stringify({
+            event: "flight_plan_duplicate_override",
+            action,
+            planId: plan.id,
+            duplicatePlanId: duplicatePlan.id,
+            flightServiceEnvironment: runtimeMode.environment,
+            certificationPlan,
+            requestSource,
+          }));
+        }
         const activePlanAccess = canCreateAnotherActiveFlightPlan({
           isPremium: Boolean(entitlements.canUseUnlimitedActiveFlightPlans),
           existingPlans: plans,

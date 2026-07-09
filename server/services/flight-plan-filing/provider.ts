@@ -858,6 +858,43 @@ export const getProviderDepartureInstantForPlan = (plan: FlightPlan) => {
   return formatDepartureInstant(plan.plannedDepartureAt);
 };
 
+const normalizeDuplicateFlightValue = (value: unknown) =>
+  String(value || "").trim().toUpperCase().replace(/\s+/g, " ");
+
+export const buildLocalDuplicateFlightSignature = (plan: FlightPlan) => ({
+  aircraftIdentifier: normalizeDuplicateFlightValue(plan.tailNumber),
+  flightRules: normalizeDuplicateFlightValue(plan.filingFlightRules || "VFR"),
+  departure: normalizeDuplicateFlightValue(plan.departure),
+  destination: normalizeDuplicateFlightValue(plan.destination),
+  departureInstant: getProviderDepartureInstantForPlan(plan) || "",
+  route: normalizeDuplicateFlightValue(normalizeRouteForProvider(plan.route || "DCT").normalizedRoute || "DCT"),
+  altitude: Number(plan.filingPlannedAltitudeFt || 0),
+});
+
+export const findLikelyDuplicateFlightPlan = (
+  proposedPlan: FlightPlan,
+  existingPlans: FlightPlan[],
+  now = new Date(),
+) => {
+  const proposedSignature = buildLocalDuplicateFlightSignature(proposedPlan);
+  const recentTerminalCutoff = now.getTime() - 24 * 60 * 60 * 1000;
+
+  return existingPlans.find((existingPlan) => {
+    if (existingPlan.id === proposedPlan.id) return false;
+    if (!existingPlan.filingProviderPlanId && !existingPlan.filingIsLive) return false;
+
+    const status = normalizeDuplicateFlightValue(existingPlan.filingStatus).toLowerCase();
+    const isTerminal = ["cancelled", "canceled", "closed", "completed", "expired"].includes(status);
+    const terminalAt = existingPlan.closedAt || existingPlan.cancelledAt || existingPlan.updatedAt;
+    if (isTerminal && (!terminalAt || new Date(terminalAt).getTime() < recentTerminalCutoff)) return false;
+
+    const existingSignature = buildLocalDuplicateFlightSignature(existingPlan);
+    return Object.entries(proposedSignature).every(
+      ([key, value]) => existingSignature[key as keyof typeof existingSignature] === value,
+    );
+  }) || null;
+};
+
 const getPlannerStateString = (plan: FlightPlan, key: string) => {
   const plannerState = getPlannerStateRecord(plan);
   const value = plannerState?.[key];
@@ -1020,10 +1057,10 @@ const findNestedStringArray = (input: unknown, candidateKeys: string[], maxDepth
   return Array.from(values);
 };
 
-const redactPayloadForLog = (payload: Record<string, string>) =>
+export const redactLeidosPayloadForLog = (payload: Record<string, string>) =>
   Object.fromEntries(
     Object.entries(payload).map(([key, value]) => {
-      if (["pilotData", "pilotInCommandExtended"].includes(key)) return [key, "[redacted]"];
+      if (["pilotData", "pilotInCommandExtended", "pilotPhone"].includes(key)) return [key, "[redacted]"];
       if (["remarks", "suppRemarksExtended"].includes(key) && value) return [key, "[redacted]"];
       return [key, value];
     }),
@@ -2235,7 +2272,17 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
       blockedBeforeProvider: equipmentValidation.blockedBeforeLeidos,
     }));
     if (equipmentValidation.validationResult === "invalid") {
-      errors.push("Aircraft equipment contains an invalid ICAO code. Please update the aircraft equipment before filing.");
+      if (equipmentValidation.duplicateEquipmentCodes.length > 0) {
+        for (const code of equipmentValidation.duplicateEquipmentCodes) {
+          errors.push(`Aircraft equipment code ${code} was entered more than once. Remove duplicate ICAO equipment codes before filing.`);
+        }
+      }
+      const nonDuplicateInvalidCodes = equipmentValidation.invalidEquipmentCodes.filter(
+        (code) => !equipmentValidation.duplicateEquipmentCodes.includes(code),
+      );
+      if (nonDuplicateInvalidCodes.length > 0 || equipmentValidation.duplicateEquipmentCodes.length === 0) {
+        errors.push("Aircraft equipment contains an invalid ICAO code. Please update the aircraft equipment before filing.");
+      }
     }
   }
   if ((action === "file" || action === "amend") && !plan.filingPilotPhone) {
@@ -2535,7 +2582,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         otherInfoPopulated: Boolean(requestPayloadRecord.otherInfo),
         pilotPhonePopulated: Boolean(requestPayloadRecord.pilotPhone),
         aircraftHomeBasePopulated: Boolean(requestPayloadRecord.aircraftHomeBase),
-        payload: redactPayloadForLog(payloadContext.payloadSnapshot.transmittedFields),
+        payload: redactLeidosPayloadForLog(payloadContext.payloadSnapshot.transmittedFields),
       }));
     }
     console.info(JSON.stringify({

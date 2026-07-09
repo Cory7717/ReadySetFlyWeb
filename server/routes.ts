@@ -62,6 +62,13 @@ import {
   listLeidosLabCertificationRuns,
   resolveLeidosLabCertificationExport,
 } from "./services/flightServiceLeidosLabReports";
+import {
+  buildFlightServiceOpsDetail,
+  buildFlightServiceOpsSearchResult,
+  buildFlightServiceSarReport,
+  classifyFlightServiceOperationalState,
+  logFlightServiceOpsAuditEvent,
+} from "./services/flightServiceOpsConsole";
 import { resolveTfmsProviderKey, type TfmsOverlay, type TfmsStatus } from "./services/tfms/provider";
 import { createStubTfmsProvider } from "./services/tfms/providers/stub";
 import { createSoftAuthRateLimiter } from "./middleware/rateLimit";
@@ -21767,6 +21774,206 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to build Leidos Flight Service diagnostics:", error);
       res.status(500).json({ error: "Failed to build Leidos Flight Service diagnostics" });
+    }
+  });
+
+  const flightServiceOpsSearchSchema = z.object({
+    field: z.enum(["all", "tail", "providerPlanId", "planId", "pilotName", "pilotPhone", "pilotEmail", "departure", "destination"]).optional().default("all"),
+    q: z.string().trim().max(120).optional().default(""),
+    flightDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    status: z.string().trim().max(40).optional(),
+    state: z.enum(["all", "open", "active", "closed", "cancelled", "overdue-like"]).optional().default("all"),
+    limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  });
+
+  const escapeOpsHtml = (value: unknown) => String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+  const renderSarReportHtml = (report: ReturnType<typeof buildFlightServiceSarReport>) => {
+    const detail = report.plan;
+    const field = (label: string, value: unknown) => `<div class="field"><span>${escapeOpsHtml(label)}</span><strong>${escapeOpsHtml(value || "Not available")}</strong></div>`;
+    const timeline = detail.timeline.map((event) => (
+      `<li><time>${escapeOpsHtml(event.timestamp || "Not available")}</time><strong>${escapeOpsHtml(event.label)}</strong><p>${escapeOpsHtml(event.type)}</p></li>`
+    )).join("");
+    const messages = detail.providerCommunication.messages.map((message) => (
+      `<li><strong>${escapeOpsHtml(message.action || "Provider")}</strong> ${escapeOpsHtml(message.message || message.result || "No message")}</li>`
+    )).join("");
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>RSF SAR Support Report ${escapeOpsHtml(detail.planId)}</title>
+  <style>
+    body{font-family:Inter,Arial,sans-serif;margin:0;background:#f8fafc;color:#111827}
+    main{max-width:980px;margin:0 auto;padding:32px}
+    h1,h2{margin:0 0 12px}
+    section{background:#fff;border:1px solid #d1d5db;border-radius:8px;margin:16px 0;padding:18px}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .field{border-bottom:1px solid #e5e7eb;padding:8px 0}
+    .field span{display:block;color:#64748b;font-size:12px;text-transform:uppercase}
+    .field strong{font-size:14px;word-break:break-word}
+    li{margin:8px 0}
+    time{display:block;color:#64748b;font-size:12px}
+    @media print{body{background:#fff}main{padding:0}section{break-inside:avoid}}
+  </style>
+</head>
+<body>
+<main>
+  <h1>RSF SAR Support Report</h1>
+  <p>Generated ${escapeOpsHtml(report.generatedAt)}. ${escapeOpsHtml(report.note)}</p>
+  <section><h2>Status</h2><div class="grid">
+    ${field("RSF plan ID", detail.planId)}
+    ${field("Provider plan ID", detail.status.providerPlanId)}
+    ${field("RSF status", detail.status.currentRsfStatus)}
+    ${field("Provider status", detail.status.currentProviderStatus)}
+    ${field("Version stamp", detail.status.versionStamp)}
+    ${field("Last sync", detail.status.lastSyncTime)}
+  </div></section>
+  <section><h2>Flight</h2><div class="grid">
+    ${field("Tail number", detail.summary.tailNumber)}
+    ${field("Aircraft type", detail.summary.aircraftType)}
+    ${field("Aircraft color", detail.summary.aircraftColor)}
+    ${field("Persons on board", detail.summary.personsOnBoard)}
+    ${field("Fuel endurance minutes", detail.summary.fuelEnduranceMinutes)}
+    ${field("Home base", detail.summary.aircraftHomeBase)}
+    ${field("Departure", detail.summary.departure)}
+    ${field("Destination", detail.summary.destination)}
+    ${field("Alternate", detail.summary.alternate)}
+    ${field("Route", detail.summary.route)}
+    ${field("ETD Zulu", detail.summary.etdZulu)}
+    ${field("Other Info", detail.summary.otherInfo)}
+  </div></section>
+  <section><h2>Pilot Contact</h2><div class="grid">
+    ${field("Pilot", detail.pilot.name)}
+    ${field("Phone", detail.pilot.phone)}
+    ${field("Email", detail.pilot.email)}
+    ${field("Secondary contact", detail.pilot.secondaryEmergencyContact)}
+  </div></section>
+  <section><h2>Timeline</h2><ul>${timeline || "<li>Not available</li>"}</ul></section>
+  <section><h2>Provider Messages</h2><ul>${messages || "<li>Not available</li>"}</ul></section>
+</main>
+</body>
+</html>`;
+  };
+
+  app.get("/api/admin/flight-service-ops/search", isAuthenticated, isSuperAdmin, async (req: any, res) => {
+    try {
+      const parsed = flightServiceOpsSearchSchema.parse(req.query);
+      const q = parsed.q.trim();
+      const like = `%${q}%`;
+      const conditions: any[] = [eq(flightPlans.filingProvider, "leidos_flight_service")];
+
+      if (q) {
+        const fieldConditions: any[] = [];
+        if (parsed.field === "all" || parsed.field === "tail") fieldConditions.push(ilike(flightPlans.tailNumber, like));
+        if (parsed.field === "all" || parsed.field === "providerPlanId") fieldConditions.push(ilike(flightPlans.filingProviderPlanId, like));
+        if (parsed.field === "all" || parsed.field === "planId") fieldConditions.push(ilike(flightPlans.id, like));
+        if (parsed.field === "all" || parsed.field === "pilotName") fieldConditions.push(ilike(flightPlans.filingPilotName, like));
+        if (parsed.field === "all" || parsed.field === "pilotPhone") fieldConditions.push(ilike(flightPlans.filingPilotPhone, like));
+        if (parsed.field === "all" || parsed.field === "pilotEmail") fieldConditions.push(ilike(users.email, like));
+        if (parsed.field === "all" || parsed.field === "departure") fieldConditions.push(ilike(flightPlans.departure, like));
+        if (parsed.field === "all" || parsed.field === "destination") fieldConditions.push(ilike(flightPlans.destination, like));
+        if (fieldConditions.length > 0) conditions.push(or(...fieldConditions));
+      }
+
+      if (parsed.status) conditions.push(eq(flightPlans.filingStatus, parsed.status));
+      if (parsed.flightDate) {
+        const start = new Date(`${parsed.flightDate}T00:00:00.000Z`);
+        const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+        conditions.push(gte(flightPlans.plannedDepartureAt, start));
+        conditions.push(lt(flightPlans.plannedDepartureAt, end));
+      }
+
+      const rows = await db
+        .select({ plan: flightPlans, owner: users })
+        .from(flightPlans)
+        .leftJoin(users, eq(flightPlans.userId, users.id))
+        .where(and(...conditions))
+        .orderBy(desc(flightPlans.plannedDepartureAt), desc(flightPlans.createdAt))
+        .limit(parsed.limit);
+
+      const filteredRows = parsed.state === "all"
+        ? rows
+        : rows.filter(({ plan }) => {
+          const state = classifyFlightServiceOperationalState(plan as any);
+          if (parsed.state === "active") return String(plan.filingStatus || "").toLowerCase() === "activated";
+          if (parsed.state === "closed") return state === "closed";
+          if (parsed.state === "cancelled") return state === "cancelled";
+          return state === parsed.state;
+        });
+      const results = filteredRows.map(({ plan, owner }) => buildFlightServiceOpsSearchResult(plan as any, owner as any));
+
+      logFlightServiceOpsAuditEvent("flight_service_ops_search", {
+        adminUserId: req.user?.id || null,
+        searchType: parsed.field,
+        resultCount: results.length,
+      });
+
+      res.json({
+        results,
+        totalReturned: results.length,
+        retentionNotice: "TODO: Confirm Flight Service operational support retention period with business/legal before changing retained data.",
+      });
+    } catch (error) {
+      console.error("Failed to search Flight Service operations records:", error);
+      res.status(500).json({ error: "Failed to search Flight Service operations records" });
+    }
+  });
+
+  app.get("/api/admin/flight-service-ops/plans/:planId", isAuthenticated, isSuperAdmin, async (req: any, res) => {
+    try {
+      const planId = String(req.params.planId || "").trim();
+      const rows = await db
+        .select({ plan: flightPlans, owner: users })
+        .from(flightPlans)
+        .leftJoin(users, eq(flightPlans.userId, users.id))
+        .where(eq(flightPlans.id, planId))
+        .limit(1);
+      const row = rows[0];
+      if (!row) return res.status(404).json({ error: "Flight Service record not found" });
+
+      logFlightServiceOpsAuditEvent("flight_service_ops_view", {
+        adminUserId: req.user?.id || null,
+        selectedPlanId: planId,
+      });
+
+      res.json(buildFlightServiceOpsDetail(row.plan as any, row.owner as any));
+    } catch (error) {
+      console.error("Failed to build Flight Service operations detail:", error);
+      res.status(500).json({ error: "Failed to build Flight Service operations detail" });
+    }
+  });
+
+  app.get("/api/admin/flight-service-ops/plans/:planId/sar-report", isAuthenticated, isSuperAdmin, async (req: any, res) => {
+    try {
+      const planId = String(req.params.planId || "").trim();
+      const rows = await db
+        .select({ plan: flightPlans, owner: users })
+        .from(flightPlans)
+        .leftJoin(users, eq(flightPlans.userId, users.id))
+        .where(eq(flightPlans.id, planId))
+        .limit(1);
+      const row = rows[0];
+      if (!row) return res.status(404).json({ error: "Flight Service record not found" });
+
+      logFlightServiceOpsAuditEvent("flight_service_ops_sar_report", {
+        adminUserId: req.user?.id || null,
+        selectedPlanId: planId,
+      });
+
+      const report = buildFlightServiceSarReport(row.plan as any, row.owner as any);
+      if (String(req.query.format || "").toLowerCase() === "html") {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        return res.send(renderSarReportHtml(report));
+      }
+      res.json(report);
+    } catch (error) {
+      console.error("Failed to build Flight Service SAR report:", error);
+      res.status(500).json({ error: "Failed to build Flight Service SAR report" });
     }
   });
 

@@ -33,6 +33,7 @@ import MarketplaceListingCheckout from "@/pages/marketplace-listing-checkout";
 import RentalPayment from "@/pages/rental-payment";
 import AdminDashboard from "@/pages/admin";
 import AdminInviteAccept from "@/pages/admin-invite";
+import FlightServiceOpsPage from "@/pages/flight-service-ops";
 import VerifyIdentity from "@/pages/verify-identity";
 import OwnerPayoutSetup from "@/pages/owner-payout-setup";
 import OwnerWithdrawals from "@/pages/owner-withdrawals";
@@ -294,6 +295,7 @@ function Router() {
           <Route path="/owner-withdrawals" component={OwnerWithdrawals} />
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/admin/certification" component={AdminDashboard} />
+          <Route path="/super-admin/flight-service-ops" component={FlightServiceOpsPage} />
           <Route path="/admin/invite" component={AdminInviteAccept} />
           <Route path="/verify-identity" component={VerifyIdentity} />
           <Route path="/settings" component={Settings} />
@@ -349,6 +351,7 @@ function Router() {
           <Route path="/owner-withdrawals" component={RequireAuth} />
           <Route path="/admin" component={RequireAuth} />
           <Route path="/admin/certification" component={RequireAuth} />
+          <Route path="/super-admin/flight-service-ops" component={RequireAuth} />
           <Route path="/admin/invite" component={RequireAuth} />
           <Route path="/verify-identity" component={RequireAuth} />
           <Route path="/settings" component={RequireAuth} />

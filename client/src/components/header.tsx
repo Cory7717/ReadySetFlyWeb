@@ -315,6 +315,9 @@ export function Header() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild><Link href="/admin">Admin Dashboard</Link></DropdownMenuItem>
                       <DropdownMenuItem asChild><Link href="/admin/aircraft-library">Aircraft Library</Link></DropdownMenuItem>
+                      {user?.isSuperAdmin && (
+                        <DropdownMenuItem asChild><Link href="/super-admin/flight-service-ops">Flight Service Ops</Link></DropdownMenuItem>
+                      )}
                     </>
                   )}
                   <DropdownMenuSeparator />

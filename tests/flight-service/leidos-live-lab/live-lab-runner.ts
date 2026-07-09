@@ -38,6 +38,16 @@ export const MAX_CASES = 15;
 const EXPECTED_TEST_ACCOUNT_EMAIL = "generalmanager.atx@gmail.com";
 const CERT_REMARK = "RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT";
 const providerSafeRmk = (seed: number, suffix = "") => `RMK/RSF LAB TEST SEED ${seed}${suffix ? ` ${suffix}` : ""}`;
+const DETERMINISTIC_DEPARTURE_BASE_UTC = Date.parse("2026-07-15T15:00:00.000Z");
+
+const getDeterministicCaseDeparture = (seed: number) => {
+  const instant = new Date(DETERMINISTIC_DEPARTURE_BASE_UTC + (seed - 1) * 10 * 60_000);
+  return {
+    instant,
+    arrival: new Date(instant.getTime() + 60 * 60_000),
+    local: `2026-07-15T${String(10 + Math.floor((seed - 1) / 6)).padStart(2, "0")}:${String(((seed - 1) % 6) * 10).padStart(2, "0")}`,
+  };
+};
 
 const arg = (name: string, fallback = "") => {
   const flag = `--${name}`;
@@ -320,6 +330,7 @@ export const printTestAccountVerification = (context: {
 
 const createBasePlanFactory = (context: DedicatedTestContext, runId: string) => (seed: number, name: string, overrides: Partial<FlightPlan> = {}): FlightPlan => {
   const profile = context.profile;
+  const departure = getDeterministicCaseDeparture(seed);
   const filingEquipment = String(profile.filingEquipmentDefault || "S").trim().toUpperCase();
   const baseOtherInfo = filingEquipment.includes("R")
     ? `PBN/A1 ${providerSafeRmk(seed)}`
@@ -332,8 +343,8 @@ const createBasePlanFactory = (context: DedicatedTestContext, runId: string) => 
     destination: "KDAL",
     alternate: "KACT",
     route: "DCT",
-    plannedDepartureAt: new Date("2026-07-15T15:00:00.000Z"),
-    plannedArrivalAt: new Date("2026-07-15T16:00:00.000Z"),
+    plannedDepartureAt: departure.instant,
+    plannedArrivalAt: departure.arrival,
     aircraftType: context.aircraftType,
     tailNumber: String(profile.tailNumber || "").trim().toUpperCase(),
     fuelOnBoard: "40",
@@ -370,7 +381,7 @@ const createBasePlanFactory = (context: DedicatedTestContext, runId: string) => 
     filingAssignedBeaconCode: null,
     filingRaw: null,
     filingActionHistory: [],
-    plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00" },
+    plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: departure.local },
     notes: `${CERT_REMARK} ${runId} SEED ${seed}`,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -383,11 +394,11 @@ export const buildCases = (context: DedicatedTestContext, runId: string): LiveLa
   return [
     { seed: 1, name: "Normal VFR ICAO file", testType: "Positive", actions: ["file"], buildPlan: () => plan(1, "Normal VFR") },
     { seed: 2, name: "Normal IFR ICAO file", testType: "Positive", actions: ["file"], buildPlan: () => plan(2, "Normal IFR", { filingFlightRules: "IFR", route: "DCT KDWH DCT", filingPlannedAltitudeFt: 7000 }) },
-    { seed: 3, name: "ZZZZ destination lat/long description", testType: "Positive", actions: ["file"], buildPlan: () => plan(3, "ZZZZ Destination", { destination: "ZZZZ", filingDestinationName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceDestinationAirport: "KSDL", actualDestinationLocationMode: "latlong", actualDestinationLocation: "3839N09045W" } }) },
-    { seed: 4, name: "ZZZZ departure lat/long description", testType: "Positive", actions: ["file"], buildPlan: () => plan(4, "ZZZZ Departure", { departure: "ZZZZ", filingDepartureName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceDepartureAirport: "KDWH", actualDepartureLocationMode: "latlong", actualDepartureLocation: "3839N09045W" } }) },
-    { seed: 5, name: "ZZZZ alternate destination", testType: "Positive", actions: ["file"], buildPlan: () => plan(5, "ZZZZ Alternate", { alternate: "ZZZZ", filingAlternateName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00", planningReferenceAlternateAirport: "KACT", actualAlternateLocationMode: "identifier", actualAlternateLocation: "85TX" } }) },
+    { seed: 3, name: "ZZZZ destination lat/long description", testType: "Positive", actions: ["file"], buildPlan: () => plan(3, "ZZZZ Destination", { destination: "ZZZZ", filingDestinationName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: getDeterministicCaseDeparture(3).local, planningReferenceDestinationAirport: "KSDL", actualDestinationLocationMode: "latlong", actualDestinationLocation: "3839N09045W" } }) },
+    { seed: 4, name: "ZZZZ departure lat/long description", testType: "Positive", actions: ["file"], buildPlan: () => plan(4, "ZZZZ Departure", { departure: "ZZZZ", filingDepartureName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: getDeterministicCaseDeparture(4).local, planningReferenceDepartureAirport: "KDWH", actualDepartureLocationMode: "latlong", actualDepartureLocation: "3839N09045W" } }) },
+    { seed: 5, name: "ZZZZ alternate destination", testType: "Positive", actions: ["file"], buildPlan: () => plan(5, "ZZZZ Alternate", { alternate: "ZZZZ", filingAlternateName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: getDeterministicCaseDeparture(5).local, planningReferenceAlternateAirport: "KACT", actualAlternateLocationMode: "identifier", actualAlternateLocation: "85TX" } }) },
     { seed: 6, name: "Other Info RMK retained", testType: "Positive", actions: ["file"], buildPlan: () => plan(6, "RMK Retained", { filingOtherInfo: `DOF/260715 ${providerSafeRmk(6, "RMK")}` }) },
-    { seed: 7, name: "VFR file activate close", testType: "Lifecycle", actions: ["file", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(7, "VFR Close", { filingCloseLocation: "KDAL" } as any) },
+    { seed: 7, name: "VFR file activate close", testType: "Lifecycle", actions: ["file", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(7, "VFR Close", { destination: "KACT", alternate: "KDAL", filingCloseLocation: "KACT" } as any) },
     { seed: 8, name: "IFR file then amend", testType: "Lifecycle", actions: ["file", "amend"], expectedFinalState: "filed", buildPlan: () => plan(8, "IFR Amend", { filingFlightRules: "IFR", route: "DCT KDWH DCT", filingPlannedAltitudeFt: 7000 }) },
     { seed: 9, name: "Provider round-trip integrity lifecycle", testType: "Round Trip", actions: ["file", "amend", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(9, "Round Trip", { route: "DCT KDWH DCT", filingCloseLocation: "KDAL" } as any) },
     { seed: 10, name: "Negative - Equipment R with no PBN", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add the correct PBN/ capabilities or remove R if not PBN approved.", buildPlan: () => plan(10, "R Without PBN", { filingEquipment: "SR", filingOtherInfo: providerSafeRmk(10, "NO PBN") }) },
@@ -397,6 +408,54 @@ export const buildCases = (context: DedicatedTestContext, runId: string): LiveLa
     { seed: 14, name: "Negative - Missing phone and home base", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Complete pilot phone and aircraft home base before filing.", buildPlan: () => plan(14, "Missing Contact", { filingPilotPhone: "", filingAircraftHomeBase: "" }) },
     { seed: 15, name: "Negative - Invalid Other Info", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Use short ICAO subfields with letters, numbers, spaces, and slash separators only.", buildPlan: () => plan(15, "Invalid Other Info", { filingOtherInfo: `DOF/260715 RMK/${CERT_REMARK} LEIDOS-LIVE-LAB-${runId} SEED 15` }) },
   ];
+};
+
+export const buildLiveLabDuplicateRiskSignature = (plan: FlightPlan) => {
+  const plannerState = plan.plannerState && typeof plan.plannerState === "object" && !Array.isArray(plan.plannerState)
+    ? plan.plannerState as Record<string, unknown>
+    : {};
+  const selectedDeparture = String(
+    plannerState.userDisplayDepartureTimeLocal ||
+    plan.plannedDepartureAt?.toISOString?.() ||
+    plan.plannedDepartureAt ||
+    "",
+  ).trim().slice(0, 16);
+  const normalize = (value: unknown) => String(value || "").trim().toUpperCase().replace(/\s+/g, " ");
+
+  return JSON.stringify([
+    normalize(plan.tailNumber),
+    normalize(plan.filingFlightRules),
+    normalize(plan.departure),
+    normalize(plan.destination),
+    selectedDeparture,
+    normalize(plan.route || "DCT"),
+    Number(plan.filingPlannedAltitudeFt || 0),
+  ]);
+};
+
+export const assertNoLiveLabDuplicateRisk = (
+  candidates: Array<{ testCase: LiveLabCase; plan: FlightPlan }>,
+) => {
+  const submitted = candidates.filter(({ testCase }) =>
+    testCase.actions.includes("file") && !testCase.expectedBlockedBeforeLeidos
+  );
+  const seen = new Map<string, number>();
+
+  for (const { testCase, plan } of submitted) {
+    const signature = buildLiveLabDuplicateRiskSignature(plan);
+    const previousSeed = seen.get(signature);
+    if (previousSeed !== undefined) {
+      throw new Error(
+        `Leidos duplicate-risk preflight failed: cases ${previousSeed} and ${testCase.seed} have the same pre-FILE signature.`,
+      );
+    }
+    seen.set(signature, testCase.seed);
+  }
+
+  return {
+    checkedCaseSeeds: submitted.map(({ testCase }) => testCase.seed),
+    uniqueSignatureCount: seen.size,
+  };
 };
 
 const parseOnlyCaseSeeds = (value: string) =>
@@ -1750,6 +1809,9 @@ const run = async () => {
   const caseSelection = selectRequestedCases(allCases, replay ? 1 : limit, replay);
   const cases = caseSelection.cases;
   if (cases.length === 0) throw new Error(`No live LAB test case matched replay=${replay}.`);
+  const duplicateRiskPreflight = assertNoLiveLabDuplicateRisk(
+    cases.map((testCase) => ({ testCase, plan: testCase.buildPlan() })),
+  );
   const previouslyPassedSeeds = loadPreviouslyPassedCaseSeeds();
   const previouslyPassedRequestedSeeds = cases
     .filter((testCase) => previouslyPassedSeeds.has(testCase.seed))
@@ -1767,6 +1829,7 @@ const run = async () => {
   console.log(`Cases: ${cases.length}/${MAX_CASES}`);
   console.log(`Case selection: ${JSON.stringify(caseSelection.request)}`);
   console.log(`Skipped by selection: ${caseSelection.skippedBySelection.map((item) => item.seed).join(", ") || "-"}`);
+  console.log(`Duplicate-risk preflight: PASS (${duplicateRiskPreflight.uniqueSignatureCount} unique provider-submitted FILE signatures)`);
   console.log(`Delay requested: ${delayMinutes} minute(s)`);
   console.log("Delay policy: applied before each certification case after the first during confirmed non-dry runs.");
   console.log(`RSF DB history persistence: ${dryRun ? "disabled for dry-run" : "enabled; certification plans are saved under the configured test user"}`);
@@ -2221,6 +2284,10 @@ const run = async () => {
       casesPreviouslyPassedIfKnown: Array.from(previouslyPassedSeeds).sort((a, b) => a - b),
       requestedCasesPreviouslyPassedIfKnown: previouslyPassedRequestedSeeds,
       request: caseSelection.request,
+    },
+    duplicateRiskPreflight: {
+      status: "PASS",
+      ...duplicateRiskPreflight,
     },
     lifecycleTiming: {
       lifecycleDynamicTimeEnabled: lifecycleTimingResults.length > 0,

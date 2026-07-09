@@ -998,6 +998,37 @@ const formatFrequencyTypeLabel = (value?: string | null) => {
   return labels[key] || (value ? String(value).replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase()) : "Other");
 };
 
+const communicationCategoryLabel = (category?: string | null) => {
+  switch (String(category || "").trim()) {
+    case "weather": return "Weather / ATIS";
+    case "tower": return "Tower";
+    case "ground": return "Ground";
+    case "clearance": return "Clearance";
+    case "ctaf": return "CTAF / UNICOM";
+    case "approach_departure": return "Approach / Departure";
+    case "flight_service": return "Flight Service";
+    default: return "Other Communications";
+  }
+};
+
+const communicationCategoryPriority = (category?: string | null) => {
+  switch (String(category || "").trim()) {
+    case "ctaf": return 0;
+    case "ground": return 1;
+    case "tower": return 2;
+    case "clearance": return 3;
+    case "weather": return 4;
+    case "approach_departure": return 5;
+    case "flight_service": return 6;
+    default: return 9;
+  }
+};
+
+const formatCommunicationFrequency = (item: AirportFrequency) => {
+  if (item.frequency) return item.frequency;
+  return item.frequencyMhz ? item.frequencyMhz.toFixed(3) : "-";
+};
+
 const frequencyTypePriority = (value?: string | null) => {
   const key = String(value || "").trim().toLowerCase();
   const priorities: Record<string, number> = {
@@ -1218,11 +1249,21 @@ type AirportFrequency = {
   type?: string | null;
   description?: string | null;
   frequencyMhz?: number | null;
+  frequency?: string | null;
+  category?: string | null;
+  source?: string | null;
 };
 
 type AirportFrequencyResponse = {
   icao: string;
+  communications?: AirportFrequency[];
   frequencies: AirportFrequency[];
+  communicationsUnavailable?: boolean;
+};
+
+const extractAirportCommunications = (airport?: any): AirportFrequency[] | null => {
+  const communications = airport?.communications || airport?.frequencies;
+  return Array.isArray(communications) ? communications : null;
 };
 
 type TerrainProfilePlannerResponse = {
@@ -3030,33 +3071,6 @@ export default function FlightPlanner() {
     })),
   });
 
-  const airportFrequencyQueries = useQueries({
-    queries: routeIcaos.map((icao) => ({
-      queryKey: ["/api/airports", icao, "frequencies"],
-      queryFn: async () => {
-        const searchRes = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(icao)}`), {
-          credentials: "include",
-        });
-        if (!searchRes.ok) throw new Error("Failed to search airport frequencies");
-        const matches = (await searchRes.json()) as any[];
-        const candidates = new Set(buildPlannerIcaoCandidates(icao));
-        const exactMatch = matches.find((match) => {
-          const matchIcao = String(match?.icao || "").trim().toUpperCase();
-          return candidates.has(matchIcao);
-        });
-        if (!exactMatch) {
-          return { icao, frequencies: [] } as AirportFrequencyResponse;
-        }
-        const detailIcao = String(exactMatch.icao || icao).trim().toUpperCase();
-        const res = await fetch(apiUrl(`/api/airports/${detailIcao}/frequencies`), { credentials: "include" });
-        if (!res.ok) throw new Error("Failed to fetch airport frequencies");
-        return res.json() as Promise<AirportFrequencyResponse>;
-      },
-      enabled: routeIcaos.length > 0,
-      staleTime: 1000 * 60 * 60,
-    })),
-  });
-
   const airportMap = useMemo(() => {
     const map = new Map<string, any>();
     airportQueries.forEach((query, index) => {
@@ -3068,16 +3082,56 @@ export default function FlightPlanner() {
     return map;
   }, [airportQueries, routeIcaos]);
 
+  const airportFrequencyQueries = useQueries({
+    queries: routeIcaos.map((icao, index) => {
+      const airportQuery = airportQueries[index];
+      const airport = airportMap.get(icao);
+      const detailHasCommunications = Boolean(extractAirportCommunications(airport));
+      return {
+        queryKey: ["/api/airports", icao, "frequencies"],
+        queryFn: async () => {
+          const res = await fetch(apiUrl(`/api/airports/${encodeURIComponent(icao)}/frequencies`), { credentials: "include" });
+          if (!res.ok) throw new Error("Failed to fetch airport frequencies");
+          return res.json() as Promise<AirportFrequencyResponse>;
+        },
+        enabled: Boolean(icao && !detailHasCommunications && !airportQuery?.isPending && !airportQuery?.isFetching),
+        staleTime: 1000 * 60 * 60,
+      };
+    }),
+  });
+
   const airportFrequencyMap = useMemo(() => {
     const map = new Map<string, AirportFrequency[]>();
+    airportMap.forEach((airport, icao) => {
+      const communications = extractAirportCommunications(airport);
+      if (communications) {
+        map.set(icao, communications);
+      }
+    });
     airportFrequencyQueries.forEach((query, index) => {
       const icao = routeIcaos[index];
-      if (icao && query.data?.frequencies) {
-        map.set(icao, query.data.frequencies);
+      if (icao && !map.has(icao) && (query.data?.communications || query.data?.frequencies)) {
+        map.set(icao, query.data.communications || query.data.frequencies || []);
       }
     });
     return map;
-  }, [airportFrequencyQueries, routeIcaos]);
+  }, [airportMap, airportFrequencyQueries, routeIcaos]);
+
+  const airportCommunicationsUnavailableMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    airportMap.forEach((airport, icao) => {
+      if (typeof airport?.communicationsUnavailable === "boolean") {
+        map.set(icao, airport.communicationsUnavailable);
+      }
+    });
+    airportFrequencyQueries.forEach((query, index) => {
+      const icao = routeIcaos[index];
+      if (icao && !map.has(icao)) {
+        map.set(icao, Boolean(query.error || query.data?.communicationsUnavailable));
+      }
+    });
+    return map;
+  }, [airportMap, airportFrequencyQueries, routeIcaos]);
 
   const orderedIntermediates = useMemo(() => {
     const combined = routeIntermediates.filter((icao) => ICAO_REGEX.test(icao));
@@ -3383,17 +3437,31 @@ export default function FlightPlanner() {
         const frequencies = (airportFrequencyMap.get(icao) || [])
           .slice()
           .sort((a, b) => {
+            const byCategory = communicationCategoryPriority(a.category) - communicationCategoryPriority(b.category);
+            if (byCategory !== 0) return byCategory;
             const byPriority = frequencyTypePriority(a.type) - frequencyTypePriority(b.type);
             if (byPriority !== 0) return byPriority;
             return formatFrequencyTypeLabel(a.type).localeCompare(formatFrequencyTypeLabel(b.type));
           });
+        const frequencyGroups = frequencies.reduce<Array<{ label: string; items: AirportFrequency[] }>>((groups, frequency) => {
+          const label = communicationCategoryLabel(frequency.category);
+          const existing = groups.find((group) => group.label === label);
+          if (existing) {
+            existing.items.push(frequency);
+          } else {
+            groups.push({ label, items: [frequency] });
+          }
+          return groups;
+        }, []);
         return {
           icao,
           airport,
           frequencies,
+          frequencyGroups,
+          communicationsUnavailable: airportCommunicationsUnavailableMap.get(icao) || false,
         };
       });
-  }, [routeSequenceOrdered, airportMap, airportFrequencyMap]);
+  }, [routeSequenceOrdered, airportMap, airportFrequencyMap, airportCommunicationsUnavailableMap]);
 
   const getAirportHoverLabel = useCallback((icao: string) => {
     const airport = airportMap.get(icao);
@@ -8318,19 +8386,19 @@ export default function FlightPlanner() {
 
       <Card className={plannerPanelClass}>
         <CardHeader>
-          <CardTitle className={plannerCardTitleClass}>ATC &amp; Airport Frequencies</CardTitle>
+          <CardTitle className={plannerCardTitleClass}>Airport Communications Briefing</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>
-            Route airport frequencies from the airport reference feed. Verify against current charts, ATIS, and official airport publications before use.
+            Grouped airport communications from the airport reference feed and RSF supplemental FAA Chart Supplement fallbacks. Verify against current charts, ATIS, and official airport publications before use.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {routeAirportFrequencyCards.length === 0 ? (
             <div className="text-sm text-muted-foreground">
-              Enter a valid route to load airport frequencies for departure, stops, and destination.
+              Enter a valid route to load communications for departure, stops, and destination.
             </div>
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
-              {routeAirportFrequencyCards.map(({ icao, airport, frequencies }) => (
+              {routeAirportFrequencyCards.map(({ icao, airport, frequencies, frequencyGroups, communicationsUnavailable }) => (
                 <div key={`freq-${icao}`} className={cn("space-y-3 p-4", plannerSubpanelClass)}>
                   <div>
                     {renderAirportIcaoTooltip(
@@ -8341,22 +8409,36 @@ export default function FlightPlanner() {
                       {airport?.name || "Airport"}{airport?.timezone ? ` • ${airport.timezone}` : ""}
                     </div>
                   </div>
-                  {frequencies.length === 0 ? (
+                  {communicationsUnavailable || frequencies.length === 0 ? (
                     <div className="text-sm text-muted-foreground">
-                      No frequencies returned for this airport from the current reference source.
+                      Communications data unavailable. RSF attempted the airport communications lookup and logged the gap for review.
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      {frequencies.slice(0, 8).map((item, index) => (
-                        <div key={`${icao}-${item.type || "other"}-${item.frequencyMhz || "na"}-${index}`} className={cn(plannerSubpanelMutedClass, "flex items-start justify-between gap-3 px-3 py-2")}>
-                          <div>
-                            <div className="text-sm font-medium">{formatFrequencyTypeLabel(item.type)}</div>
-                            {item.description ? (
-                              <div className="text-xs text-muted-foreground">{item.description}</div>
-                            ) : null}
+                    <div className="space-y-4">
+                      {frequencyGroups.map((group) => (
+                        <div key={`${icao}-${group.label}`} className="space-y-2">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            {group.label}
                           </div>
-                          <div className="text-sm font-semibold tabular-nums">
-                            {item.frequencyMhz ? `${item.frequencyMhz.toFixed(3)}` : "-"}
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {group.items.map((item, index) => (
+                              <div key={`${icao}-${group.label}-${item.type || "other"}-${item.frequency || item.frequencyMhz || "na"}-${index}`} className={cn(plannerSubpanelMutedClass, "flex min-h-20 items-start justify-between gap-3 px-3 py-2")}>
+                                <div className="min-w-0">
+                                  <div className="text-sm font-semibold">{formatFrequencyTypeLabel(item.type)}</div>
+                                  {item.description ? (
+                                    <div className="text-xs text-muted-foreground">{item.description}</div>
+                                  ) : null}
+                                  {item.source === "faa_chart_supplement" ? (
+                                    <Badge variant="outline" className="mt-2 border-[#5d6f85]/30 bg-[#141b24] text-[10px] uppercase tracking-wide text-[#B8CBDD]">
+                                      FAA supplemental
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                                <div className="shrink-0 font-mono text-base font-bold tabular-nums">
+                                  {formatCommunicationFrequency(item)}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       ))}

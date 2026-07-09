@@ -2114,6 +2114,15 @@ type AirportFrequencyMeta = {
   frequencyMhz: number | null;
 };
 
+type AirportCommunication = {
+  type: string;
+  frequency: string;
+  frequencyMhz: number;
+  description: string | null;
+  category: "weather" | "tower" | "ground" | "clearance" | "ctaf" | "approach_departure" | "flight_service" | "other";
+  source: "ourairports" | "faa_chart_supplement";
+};
+
 type AirportSurfaceGeometryFeature = {
   type: "Feature";
   geometry:
@@ -3358,11 +3367,148 @@ function airportFrequencyPriority(type?: string | null) {
   if (upper.includes("UNICOM")) return 2;
   if (upper.includes("APPROACH")) return 3;
   if (upper.includes("DEPARTURE")) return 4;
+  if (upper.includes("CLEARANCE")) return 4.5;
   if (upper.includes("GROUND")) return 5;
   if (upper.includes("ATIS")) return 6;
   if (upper.includes("AWOS")) return 7;
   if (upper.includes("ASOS")) return 8;
   return 20;
+}
+
+function normalizeAirportCommunicationType(type?: string | null, description?: string | null) {
+  const rawType = String(type || "").trim().toUpperCase();
+  const rawDescription = String(description || "").trim().toUpperCase();
+  const combined = `${rawType} ${rawDescription}`;
+  if (rawType === "A/D" || combined.includes("APP/DEP")) return "Approach / Departure";
+  if (rawType === "APP" || combined.includes("APPROACH")) return "Approach";
+  if (rawType === "DEP" || combined.includes("DEPARTURE")) return "Departure";
+  if (["CLD", "CLR", "CD", "GCCD"].includes(rawType) || combined.includes("CLNC") || combined.includes("CLEARANCE")) return rawType === "GCCD" ? "Ground / Clearance" : "Clearance Delivery";
+  if (rawType === "GND" || combined.includes("GROUND") || combined.includes("GND")) return "Ground";
+  if (rawType === "TWR" || combined.includes("TOWER") || combined.includes("TWR")) return "Tower";
+  if (rawType === "CTAF" || combined.includes("CTAF")) return "CTAF";
+  if (["UNIC", "UNICOM"].includes(rawType) || combined.includes("UNICOM")) return combined.includes("CTAF") ? "CTAF / UNICOM" : "UNICOM";
+  if (rawType === "AWOS" || combined.includes("AWOS")) return "AWOS";
+  if (rawType === "ASOS" || combined.includes("ASOS")) return "ASOS";
+  if (rawType === "ATIS" || combined.includes("ATIS")) return "ATIS";
+  if (rawType === "RDO" || combined.includes("RDO")) return "Flight Service";
+  return String(type || description || "Other").trim() || "Other";
+}
+
+function airportCommunicationCategory(type: string): AirportCommunication["category"] {
+  const normalized = type.toUpperCase();
+  if (normalized.includes("AWOS") || normalized.includes("ASOS") || normalized.includes("ATIS")) return "weather";
+  if (normalized.includes("TOWER")) return "tower";
+  if (normalized.includes("GROUND")) return "ground";
+  if (normalized.includes("CLEARANCE")) return "clearance";
+  if (normalized.includes("CTAF") || normalized.includes("UNICOM")) return "ctaf";
+  if (normalized.includes("APPROACH") || normalized.includes("DEPARTURE")) return "approach_departure";
+  if (normalized.includes("FLIGHT SERVICE")) return "flight_service";
+  return "other";
+}
+
+function normalizeAirportFrequencyMhz(value?: number | string | null) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return Number(numeric.toFixed(3));
+}
+
+function buildAirportCommunication(item: AirportFrequencyMeta & { source?: AirportCommunication["source"] }): AirportCommunication | null {
+  const frequencyMhz = normalizeAirportFrequencyMhz(item.frequencyMhz);
+  if (frequencyMhz === null) return null;
+  const type = normalizeAirportCommunicationType(item.type, item.description);
+  return {
+    type,
+    frequency: frequencyMhz.toFixed(3),
+    frequencyMhz,
+    description: item.description || null,
+    category: airportCommunicationCategory(type),
+    source: item.source || "ourairports",
+  };
+}
+
+const SUPPLEMENTAL_AIRPORT_COMMUNICATIONS: Record<string, AirportFrequencyMeta[]> = {
+  KEDC: [
+    { airportIdent: "KEDC", type: "AWOS", description: "AWOS-3", frequencyMhz: 118.825 },
+    { airportIdent: "KEDC", type: "CTAF", description: "CTAF", frequencyMhz: 120.3 },
+    { airportIdent: "KEDC", type: "UNIC", description: "UNICOM", frequencyMhz: 122.975 },
+    { airportIdent: "KEDC", type: "GND", description: "Executive Tower Ground", frequencyMhz: 119.45 },
+    { airportIdent: "KEDC", type: "TWR", description: "Executive Tower", frequencyMhz: 120.3 },
+    { airportIdent: "KEDC", type: "APP", description: "Austin Approach", frequencyMhz: 127.225 },
+    { airportIdent: "KEDC", type: "DEP", description: "Austin Departure", frequencyMhz: 127.225 },
+    { airportIdent: "KEDC", type: "CLD", description: "Clearance Delivery when tower closed", frequencyMhz: 126.025 },
+  ],
+};
+
+function getSupplementalAirportFrequencies(icao: string): AirportFrequencyMeta[] {
+  const candidates = buildIcaoCandidates(icao);
+  return candidates.flatMap((candidate) => {
+    const key = candidate.length === 3 ? `K${candidate}` : candidate;
+    return SUPPLEMENTAL_AIRPORT_COMMUNICATIONS[key] || [];
+  });
+}
+
+function normalizeAirportCommunications(
+  requestedIcao: string,
+  frequencyMap: Map<string, AirportFrequencyMeta[]> | null,
+) {
+  const candidates = buildIcaoCandidates(requestedIcao);
+  const sourceFrequencies = frequencyMap
+    ? candidates.flatMap((candidate) => frequencyMap.get(candidate) || [])
+    : [];
+  const supplemental = getSupplementalAirportFrequencies(requestedIcao).map((item) => ({
+    ...item,
+    source: "faa_chart_supplement" as const,
+  }));
+  const merged = [...sourceFrequencies, ...supplemental];
+  const deduped = Array.from(
+    new Map(
+      merged.map((item) => [
+        `${normalizeAirportCommunicationType(item.type, item.description)}|${normalizeAirportFrequencyMhz(item.frequencyMhz) ?? ""}|${item.description || ""}`,
+        item,
+      ])
+    ).values()
+  );
+  return deduped
+    .map(buildAirportCommunication)
+    .filter((item): item is AirportCommunication => Boolean(item))
+    .sort((a, b) => {
+      const byPriority = airportFrequencyPriority(a.type) - airportFrequencyPriority(b.type);
+      if (byPriority !== 0) return byPriority;
+      return a.type.localeCompare(b.type);
+    });
+}
+
+function logAirportCommunicationUnavailable(icao: string, reason: string) {
+  console.warn(JSON.stringify({
+    event: "airport_communications_unavailable",
+    icao,
+    reason,
+    source: "ourairports",
+    fallbackAttempted: true,
+  }));
+}
+
+async function attachAirportCommunications<T extends Record<string, unknown>>(airport: T, icao: string): Promise<T & {
+  communications: AirportCommunication[];
+  communicationsUnavailable: boolean;
+  frequencies: AirportCommunication[];
+}> {
+  let frequencyMap: Map<string, AirportFrequencyMeta[]> | null = null;
+  try {
+    frequencyMap = await loadAirportFrequencyCache();
+  } catch (error) {
+    logAirportCommunicationUnavailable(icao, "frequency_source_failed");
+  }
+  const communications = normalizeAirportCommunications(icao, frequencyMap);
+  if (communications.length === 0) {
+    logAirportCommunicationUnavailable(icao, "no_frequency_rows_for_airport");
+  }
+  return {
+    ...airport,
+    communications,
+    communicationsUnavailable: communications.length === 0,
+    frequencies: communications,
+  };
 }
 
 function isToweredFrequencyType(type?: string | null, description?: string | null) {
@@ -15073,29 +15219,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             )
           ).slice(0, 3);
 
-          const frequencies = frequencyMap
-            ? buildIcaoCandidates(station.icao).flatMap((candidate) => frequencyMap.get(candidate) || [])
-            : [];
-          const frequencySummary = Array.from(
-            new Map(
-              frequencies.map((item) => [
-                `${item.type || ""}|${item.description || ""}|${item.frequencyMhz || ""}`,
-                item,
-              ])
-            ).values()
-          )
-            .sort((a, b) => {
-              const byPriority = airportFrequencyPriority(a.type) - airportFrequencyPriority(b.type);
-              if (byPriority !== 0) return byPriority;
-              return String(a.type || "").localeCompare(String(b.type || ""));
-            })
+          const communications = normalizeAirportCommunications(station.icao, frequencyMap);
+          const frequencySummary = communications
             .slice(0, 3)
             .map((item) => ({
               type: item.type,
               description: item.description,
               frequencyMhz: item.frequencyMhz,
             }));
-          const towered = frequencies.some((item) => isToweredFrequencyType(item.type, item.description));
+          const towered = communications.some((item) => isToweredFrequencyType(item.type, item.description));
 
           provisional.push({
             station,
@@ -15638,7 +15770,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       for (const candidate of candidates) {
         const cached = getCachedAirport(candidate);
         if (cached) {
-          return res.json({ ...cached, cached: true });
+          return res.json(await attachAirportCommunications({ ...cached, cached: true }, candidate));
         }
 
         const stationUrls = [
@@ -15690,7 +15822,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             if (candidate !== requestedIcao) {
               setCachedAirport(requestedIcao, payload);
             }
-            return res.json({ ...payload, cached: false, source: "ourairports" });
+            return res.json(await attachAirportCommunications({ ...payload, cached: false, source: "ourairports" }, candidate));
           }
           continue;
         }
@@ -15727,7 +15859,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             if (candidate !== requestedIcao) {
               setCachedAirport(requestedIcao, payload);
             }
-            return res.json({ ...payload, cached: false, source: "ourairports" });
+            return res.json(await attachAirportCommunications({ ...payload, cached: false, source: "ourairports" }, candidate));
           }
           continue;
         }
@@ -15768,7 +15900,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         if (candidate !== requestedIcao) {
           setCachedAirport(requestedIcao, payload);
         }
-        return res.json({ ...payload, cached: false });
+        return res.json(await attachAirportCommunications({ ...payload, cached: false }, candidate));
       }
 
       return res.status(404).json({ error: "Airport not found" });
@@ -16677,27 +16809,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
 
       const frequencyMap = await loadAirportFrequencyCache();
-      const candidates = buildIcaoCandidates(requestedIcao);
-      const frequencies = candidates.flatMap((candidate) => frequencyMap.get(candidate) || []);
-
-      const deduped = Array.from(
-        new Map(
-          frequencies.map((item) => [
-            `${item.type || ""}|${item.description || ""}|${item.frequencyMhz || ""}`,
-            item,
-          ])
-        ).values()
-      );
+      const communications = normalizeAirportCommunications(requestedIcao, frequencyMap);
+      if (communications.length === 0) {
+        logAirportCommunicationUnavailable(requestedIcao, "no_frequency_rows_for_airport");
+      }
 
       return res.json({
         icao: requestedIcao,
-        frequencies: deduped
-          .filter((item) => item.frequencyMhz !== null || item.description || item.type)
-          .sort((a, b) => {
-            const byType = String(a.type || "").localeCompare(String(b.type || ""));
-            if (byType !== 0) return byType;
-            return String(a.description || "").localeCompare(String(b.description || ""));
-          }),
+        communications,
+        communicationsUnavailable: communications.length === 0,
+        frequencies: communications,
       });
     } catch (error) {
       console.error("Airport frequency lookup failed:", error);

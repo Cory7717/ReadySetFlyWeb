@@ -1327,6 +1327,17 @@ type FiledRouteAnalysisResponse = {
   warnings: string[];
   recognizedAirportTokens: string[];
   unresolvedAirportTokens: string[];
+  routePoints?: Array<{
+    ident: string;
+    kind: FiledRouteTokenKind;
+    name?: string | null;
+    type?: string | null;
+    frequencyKhz?: number | null;
+    lat: number;
+    lon: number;
+    source?: string | null;
+  }>;
+  unresolvedRoutePointTokens?: string[];
 };
 
 type ContextualTool = {
@@ -2975,6 +2986,30 @@ export default function FlightPlanner() {
   const filedRouteAnalysis = useMemo(() => analyzeFiledRoute(filedRouteInputNormalized), [filedRouteInputNormalized]);
   const filedRouteTokens = filedRouteAnalysis.tokens;
   const filedRouteAirportTokens = filedRouteAnalysis.airportTokens;
+  const filedRouteAnalysisQuery = useQuery<FiledRouteAnalysisResponse>({
+    queryKey: ["/api/flight-plans/route-analysis", filedRouteInputNormalized],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        route: filedRouteInputNormalized,
+      });
+      const res = await fetch(apiUrl(`/api/flight-plans/route-analysis?${params.toString()}`), {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to analyze filed route");
+      }
+      return res.json();
+    },
+    enabled: Boolean(filedRouteInputNormalized),
+    staleTime: 1000 * 60 * 10,
+  });
+  const resolvedFiledRouteAnalysis = filedRouteAnalysisQuery.data ?? {
+    ...filedRouteAnalysis,
+    recognizedAirportTokens: filedRouteAnalysis.airportTokens,
+    unresolvedAirportTokens: [] as string[],
+    routePoints: [] as NonNullable<FiledRouteAnalysisResponse["routePoints"]>,
+    unresolvedRoutePointTokens: [] as string[],
+  };
   const isUsingSuggestedWaypoints = useMemo(() => {
     if (suggestedWaypoints.length === 0) return false;
     const normalized = waypointsInput.trim().toUpperCase();
@@ -3492,6 +3527,22 @@ export default function FlightPlanner() {
       .filter(Boolean) as PlannerPoint[];
   }, [airportMap, routeSequenceOrdered]);
 
+  const filedRouteResolvedPoints: PlannerPoint[] = useMemo(() => {
+    const points = resolvedFiledRouteAnalysis.routePoints || [];
+    return points
+      .map((point) => {
+        if (!Number.isFinite(point.lat) || !Number.isFinite(point.lon)) return null;
+        const typeLabel = point.kind === "navaid" && point.type ? `${point.type} ` : "";
+        return {
+          icao: point.ident,
+          lat: Number(point.lat),
+          lon: Number(point.lon),
+          label: point.name ? `${typeLabel}${point.name}`.trim() : point.kind.toUpperCase(),
+        };
+      })
+      .filter(Boolean) as PlannerPoint[];
+  }, [resolvedFiledRouteAnalysis.routePoints]);
+
   const suggestedWaypoint = useMemo(() => {
     if (routeSuggestion !== "midpoint") return null;
     if (routeIntermediates.length > 0) return null;
@@ -3519,11 +3570,14 @@ export default function FlightPlanner() {
   }, [airportPoints, routeSuggestion, routeIntermediates.length]);
 
   const routePoints: PlannerPoint[] = useMemo(() => {
+    if (routeMode === "manual" && filedRouteResolvedPoints.length >= 2) {
+      return filedRouteResolvedPoints;
+    }
     if (!suggestedWaypoint) return airportPoints;
     const [start, ...rest] = airportPoints;
     if (!start || rest.length === 0) return airportPoints;
     return [start, suggestedWaypoint, rest[rest.length - 1]];
-  }, [airportPoints, suggestedWaypoint]);
+  }, [airportPoints, filedRouteResolvedPoints, routeMode, suggestedWaypoint]);
 
   const routeBbox = useMemo(() => {
     if (routePoints.length === 0) return null;
@@ -4484,28 +4538,6 @@ export default function FlightPlanner() {
     staleTime: 1000 * 60 * 5,
   });
 
-  const filedRouteAnalysisQuery = useQuery<FiledRouteAnalysisResponse>({
-    queryKey: ["/api/flight-plans/route-analysis", filedRouteInputNormalized],
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        route: filedRouteInputNormalized,
-      });
-      const res = await fetch(apiUrl(`/api/flight-plans/route-analysis?${params.toString()}`), {
-        credentials: "include",
-      });
-      if (!res.ok) {
-        throw new Error("Failed to analyze filed route");
-      }
-      return res.json();
-    },
-    enabled: Boolean(filedRouteInputNormalized),
-    staleTime: 1000 * 60 * 10,
-  });
-  const resolvedFiledRouteAnalysis = filedRouteAnalysisQuery.data ?? {
-    ...filedRouteAnalysis,
-    recognizedAirportTokens: filedRouteAnalysis.airportTokens,
-    unresolvedAirportTokens: [] as string[],
-  };
   const resolvedFiledRouteStructure = useMemo<FiledRouteStructureSegment[]>(
     () =>
       buildFiledRouteStructure(resolvedFiledRouteAnalysis.tokens, {
@@ -7732,7 +7764,7 @@ export default function FlightPlanner() {
                     <div>
                       <div className="text-sm font-semibold">Parsed Route Structure</div>
                       <div className="text-xs text-muted-foreground">
-                        RSF now recognizes route token types for review. Airports can drive map/frequency lookups; airways, fixes, navaids, and procedures stay in the filed route for ATC/filing provider while deeper route resolution is phased in.
+                        RSF recognizes route token types for review. Airports and resolved navaids can drive map geometry; unresolved fixes, airways, and procedures stay in the filed route for ATC/filing provider while deeper route resolution is phased in.
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
@@ -7844,6 +7876,11 @@ export default function FlightPlanner() {
                   {resolvedFiledRouteAnalysis.recognizedAirportTokens.length > 0 && (
                     <div className="text-xs text-muted-foreground">
                       Airport tokens currently usable for map/frequency lookups: {resolvedFiledRouteAnalysis.recognizedAirportTokens.join(", ")}.
+                    </div>
+                  )}
+                  {(resolvedFiledRouteAnalysis.routePoints?.length || 0) > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      Route points resolved for map geometry: {resolvedFiledRouteAnalysis.routePoints?.map((point) => point.ident).join(", ")}.
                     </div>
                   )}
                   {resolvedFiledRouteAnalysis.airportTokens.length === 0 && (

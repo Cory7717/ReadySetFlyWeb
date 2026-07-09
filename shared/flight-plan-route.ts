@@ -184,7 +184,7 @@ export function buildFiledRouteWarnings(tokens: FiledRouteToken[]) {
   }
 
   if (tokens.some((token) => token.kind === "fix" || token.kind === "navaid" || token.kind === "airway")) {
-    warnings.push("Fixes, navaids, and airways are recognized in the filed route, but RSF still uses airport-resolvable points for current map/weather geometry.");
+    warnings.push("Fixes, navaids, and airways are recognized in the filed route. RSF maps resolved airports and navaids, and preserves unresolved fixes and airways in the filed route.");
   }
 
   return warnings;

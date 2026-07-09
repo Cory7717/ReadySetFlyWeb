@@ -2114,6 +2114,17 @@ type AirportFrequencyMeta = {
   frequencyMhz: number | null;
 };
 
+type NavaidMeta = {
+  ident: string;
+  name: string | null;
+  type: string | null;
+  frequencyKhz: number | null;
+  lat: number;
+  lon: number;
+  elevationFt: number | null;
+  source: "ourairports";
+};
+
 type AirportCommunication = {
   type: string;
   frequency: string;
@@ -2299,6 +2310,10 @@ const AIRPORT_FREQUENCIES_CACHE_URL = "https://ourairports.com/data/airport-freq
 const AIRPORT_FREQUENCIES_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let airportFrequencyCache: { data: Map<string, AirportFrequencyMeta[]>; expiresAt: number } | null = null;
 let airportFrequencyCachePromise: Promise<Map<string, AirportFrequencyMeta[]>> | null = null;
+const NAVAIDS_CACHE_URL = "https://ourairports.com/data/navaids.csv";
+const NAVAIDS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+let navaidCache: { data: Map<string, NavaidMeta[]>; expiresAt: number } | null = null;
+let navaidCachePromise: Promise<Map<string, NavaidMeta[]>> | null = null;
 const AIRPORT_SURFACE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const airportSurfaceGeometryCache = new Map<string, { data: any; expiresAt: number }>();
 const airportSurfaceGeometryInFlight = new Map<string, Promise<any>>();
@@ -4001,6 +4016,72 @@ async function loadAirportFrequencyCache(): Promise<Map<string, AirportFrequency
     return await airportFrequencyCachePromise;
   } finally {
     airportFrequencyCachePromise = null;
+  }
+}
+
+async function loadNavaidCache(): Promise<Map<string, NavaidMeta[]>> {
+  const now = Date.now();
+  if (navaidCache && navaidCache.expiresAt > now) return navaidCache.data;
+  if (navaidCachePromise) return navaidCachePromise;
+
+  navaidCachePromise = (async () => {
+    const response = await fetch(NAVAIDS_CACHE_URL, {
+      headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to load navaids data: ${response.status}`);
+    }
+
+    const csvText = await response.text();
+    const lines = csvText.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    const map = new Map<string, NavaidMeta[]>();
+    if (lines.length === 0) {
+      navaidCache = { data: map, expiresAt: Date.now() + NAVAIDS_CACHE_TTL_MS };
+      return map;
+    }
+
+    const header = parseCsvLine(lines[0]);
+    const idx = (name: string) => header.indexOf(name);
+    const identIdx = idx("ident");
+    const nameIdx = idx("name");
+    const typeIdx = idx("type");
+    const frequencyIdx = idx("frequency_khz");
+    const latIdx = idx("latitude_deg");
+    const lonIdx = idx("longitude_deg");
+    const elevationIdx = idx("elevation_ft");
+
+    for (let i = 1; i < lines.length; i += 1) {
+      const row = parseCsvLine(lines[i]);
+      const ident = row[identIdx]?.trim().toUpperCase();
+      const lat = latIdx >= 0 ? Number(row[latIdx]) : NaN;
+      const lon = lonIdx >= 0 ? Number(row[lonIdx]) : NaN;
+      if (!ident || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+      const item: NavaidMeta = {
+        ident,
+        name: row[nameIdx]?.trim() || null,
+        type: row[typeIdx]?.trim() || null,
+        frequencyKhz: row[frequencyIdx] ? Number(row[frequencyIdx]) : null,
+        lat,
+        lon,
+        elevationFt: row[elevationIdx] ? Number(row[elevationIdx]) : null,
+        source: "ourairports",
+      };
+
+      if (!map.has(ident)) {
+        map.set(ident, []);
+      }
+      map.get(ident)!.push(item);
+    }
+
+    navaidCache = { data: map, expiresAt: Date.now() + NAVAIDS_CACHE_TTL_MS };
+    return map;
+  })();
+
+  try {
+    return await navaidCachePromise;
+  } finally {
+    navaidCachePromise = null;
   }
 }
 
@@ -22851,6 +22932,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const stations = await loadStationCache();
       const referenceMap = await loadAirportReferenceCache().catch(() => null);
+      const navaidMap = await loadNavaidCache().catch(() => null);
 
       const recognizedAirportTokens = analysis.airportTokens.filter((token) => {
         const candidates = buildIcaoCandidates(token);
@@ -22869,11 +22951,60 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         warnings.push(`RSF could not resolve these airport-style tokens in current route references: ${unresolvedAirportTokens.join(", ")}.`);
       }
 
+      const routePoints = analysis.tokens
+        .map((token) => {
+          if (token.kind === "airport") {
+            const candidates = buildIcaoCandidates(token.token);
+            const station = stations.find((entry) => candidates.includes(entry.icao));
+            const reference = !station && referenceMap
+              ? candidates.map((candidate) => referenceMap.get(candidate)).find(Boolean)
+              : null;
+            const source = station || reference;
+            if (!source || !Number.isFinite(source.lat) || !Number.isFinite(source.lon)) return null;
+            return {
+              ident: token.token,
+              kind: token.kind,
+              name: source.name || null,
+              lat: Number(source.lat),
+              lon: Number(source.lon),
+              source: station ? "aviationweather_station" : "ourairports_airport",
+            };
+          }
+          if (token.kind === "navaid") {
+            const candidates = navaidMap?.get(token.token) || [];
+            const match = candidates.find((candidate) => candidate.source === "ourairports") || candidates[0];
+            if (!match) return null;
+            return {
+              ident: token.token,
+              kind: token.kind,
+              name: match.name || null,
+              type: match.type || null,
+              frequencyKhz: match.frequencyKhz,
+              lat: match.lat,
+              lon: match.lon,
+              source: "ourairports_navaid",
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+
+      const resolvedRoutePointTokens = new Set(routePoints.map((point: any) => point.ident));
+      const unresolvedRoutePointTokens = analysis.tokens
+        .filter((token) => ["airport", "fix", "navaid", "coordinate"].includes(token.kind))
+        .map((token) => token.token)
+        .filter((token, index, arr) => !resolvedRoutePointTokens.has(token) && arr.indexOf(token) === index);
+      if (unresolvedRoutePointTokens.length > 0) {
+        warnings.push(`Unknown waypoint: ${unresolvedRoutePointTokens.join(", ")}`);
+      }
+
       return res.json({
         ...analysis,
         warnings,
         recognizedAirportTokens,
         unresolvedAirportTokens,
+        routePoints,
+        unresolvedRoutePointTokens,
       });
     } catch (error) {
       console.error("Failed to analyze filed route:", error);
@@ -24380,6 +24511,7 @@ export async function prewarmOperationalCaches(): Promise<{ ok: string[]; failed
       { name: "airport-reference", run: () => loadAirportReferenceCache() },
       { name: "airport-runways", run: () => loadRunwayCache() },
       { name: "airport-frequencies", run: () => loadAirportFrequencyCache() },
+      { name: "navaids", run: () => loadNavaidCache() },
     ];
 
     const prewarmPlateAirports = parseIcaoListEnv(process.env.PREWARM_PLATE_AIRPORTS);

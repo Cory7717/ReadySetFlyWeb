@@ -8,6 +8,17 @@ import { ICAO_OTHER_INFO_GUIDANCE, ICAO_OTHER_INFO_PREFIX_OPTIONS, ICAO_OTHER_IN
 import { formatDecimalCoordinatesForLeidos, normalizeZzzzActualLocation } from "../../shared/zzzz-location";
 import { buildLeidosActionPayload, buildOtherInfoWithAircraftType, buildOtherInfoWithRemarks, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, compareRetrievedProviderPlanFields, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
 
+const futureChicagoDate = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Chicago",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+}).format(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000));
+const testDepartureLocal = `${futureChicagoDate}T10:00`;
+const testDepartureAt = new Date(zonedLocalDateTimeToUtcIso(testDepartureLocal, "America/Chicago")!);
+const testArrivalAt = new Date(testDepartureAt.getTime() + 60 * 60 * 1000);
+const testDof = futureChicagoDate.slice(2).replaceAll("-", "");
+
 function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
   return {
     id: "demo-plan",
@@ -17,8 +28,8 @@ function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
     destination: "KDAL",
     route: "DCT",
     alternate: null,
-    plannedDepartureAt: new Date("2026-06-22T15:00:00.000Z"),
-    plannedArrivalAt: new Date("2026-06-22T16:00:00.000Z"),
+    plannedDepartureAt: testDepartureAt,
+    plannedArrivalAt: testArrivalAt,
     aircraftType: "C172",
     tailNumber: "N123RS",
     fuelOnBoard: "40",
@@ -57,7 +68,7 @@ function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
     filingActionHistory: [],
     plannerState: {
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-06-22T10:00",
+      userDisplayDepartureTimeLocal: testDepartureLocal,
     },
     notes: null,
     createdAt: new Date(),
@@ -179,20 +190,21 @@ test("reopened Arizona plan preserves selected local departure time as provider 
 });
 
 test("ZZZZ departure uses planning reference airport timezone stored in planner state", () => {
+  const phoenixDepartureAt = new Date(zonedLocalDateTimeToUtcIso(testDepartureLocal, "America/Phoenix")!);
   const plan = filingPlan({
     departure: "ZZZZ",
     filingDepartureName: "Private air strip",
-    plannedDepartureAt: new Date("2026-06-23T14:30:00.000Z"),
+    plannedDepartureAt: phoenixDepartureAt,
     plannerState: {
       planningReferenceDepartureAirport: "KFFZ",
       actualDepartureLocation: "52TS",
       departureTimeZone: "America/Phoenix",
-      userDisplayDepartureTimeLocal: "2026-06-23T09:30",
+      userDisplayDepartureTimeLocal: testDepartureLocal,
     },
   });
 
   assert.equal(validateFlightPlanForAction(plan, "file").ready, true);
-  assert.equal(getProviderDepartureInstantForPlan(plan), "2026-06-23T16:30:00.000Z");
+  assert.equal(getProviderDepartureInstantForPlan(plan), phoenixDepartureAt.toISOString());
 });
 
 test("filing validation rejects plans without a resolvable departure timezone", () => {
@@ -232,7 +244,7 @@ test("ZZZZ airports require actual FAA identifiers or lat/long locations", () =>
       actualDestinationLocation: "3001N09015W",
       actualAlternateLocation: "3015N09122W",
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-06-22T10:00",
+      userDisplayDepartureTimeLocal: testDepartureLocal,
     },
   }), "file");
   assert.equal(complete.ready, true);
@@ -253,7 +265,7 @@ test("ZZZZ airports require human-readable location descriptions", () => {
       actualDestinationLocation: "3001N09015W",
       actualAlternateLocation: "3015N09122W",
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-06-22T10:00",
+      userDisplayDepartureTimeLocal: testDepartureLocal,
     },
   }), "file");
 
@@ -275,7 +287,7 @@ test("ZZZZ aircraft type requires TYP details in Other Info", () => {
     aircraftType: "ZZZZ",
     plannerState: {
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-06-22T10:00",
+      userDisplayDepartureTimeLocal: testDepartureLocal,
       actualAircraftType: "TBM9",
     },
   }), "file");
@@ -334,7 +346,7 @@ test("ICAO Other Info guidance covers every prefix option", () => {
   }
 });
 
-test("ICAO validation rejects bad surveillance and warns for equipment dependencies", () => {
+test("ICAO validation rejects bad surveillance and blocks missing equipment dependencies", () => {
   const invalidSurveillance = validateFlightPlanForAction(filingPlan({ filingSurveillanceEquipment: "Q9" }), "file");
   assert.equal(invalidSurveillance.ready, false);
   assert.ok(invalidSurveillance.errors.some((error) => /surveillance equipment must use approved/i.test(error)));
@@ -351,8 +363,8 @@ test("ICAO validation rejects bad surveillance and warns for equipment dependenc
     filingEquipment: "S",
     filingOtherInfo: "PBN/A1B2C2D2S1 NAV/GPS",
   }), "file");
-  assert.equal(missingEquipment.ready, true);
-  assert.ok(missingEquipment.warnings.some((warning) => /requires additional aircraft equipment codes/i.test(warning)));
+  assert.equal(missingEquipment.ready, false);
+  assert.ok(missingEquipment.errors.some((error) => /PBN\/.*Aircraft Equipment.*R|Aircraft Equipment.*R.*PBN\//i.test(error)));
 });
 
 test("ICAO aircraft equipment validation blocks Flight Service-invalid equipment before file or amend", () => {
@@ -415,7 +427,7 @@ test("Flight Service payload puts normal filing remarks in Field 18 RMK and keep
   const fields = Object.fromEntries(payload.params.entries());
 
   assert.equal(fields.remarks, "TEST REMARK");
-  assert.equal(fields.otherInfo, "PBN/A1 RMK/TEST REMARK");
+  assert.equal(fields.otherInfo, `PBN/A1 DOF/${testDof} RMK/TEST REMARK`);
   assert.equal(fields.suppRemarksExtended, undefined);
   assert.equal(fields.pilotPhone, "5125550100");
   assert.equal(fields.aircraftHomeBase, "KEDC");
@@ -426,7 +438,7 @@ test("Flight Service payload collapses user-entered RMK prefix to one outbound R
     filingRemarks: "RMK/TEST MESSAGE",
     filingOtherInfo: "PBN/A1",
   }), "file", { otherInfo: null } as any).params.entries());
-  assert.equal(fromRemarks.otherInfo, "PBN/A1 RMK/TEST MESSAGE");
+  assert.equal(fromRemarks.otherInfo, `PBN/A1 DOF/${testDof} RMK/TEST MESSAGE`);
   assert.doesNotMatch(String(fromRemarks.otherInfo), /RMK\/RMK\//);
 
   const fromOtherInfo = Object.fromEntries(buildLeidosActionPayload(filingPlan({
@@ -434,7 +446,7 @@ test("Flight Service payload collapses user-entered RMK prefix to one outbound R
     notes: "TEST MESSAGE",
     filingOtherInfo: "PBN/A1 RMK/TEST MESSAGE",
   }), "file", { otherInfo: null } as any).params.entries());
-  assert.equal(fromOtherInfo.otherInfo, "PBN/A1 RMK/TEST MESSAGE");
+  assert.equal(fromOtherInfo.otherInfo, `PBN/A1 DOF/${testDof} RMK/TEST MESSAGE`);
   assert.doesNotMatch(String(fromOtherInfo.otherInfo), /RMK\/RMK\//);
 });
 
@@ -511,12 +523,12 @@ test("ZZZZ alternate private field filing keeps altDestination1 ZZZZ and sends o
     destination: "KSDL",
     alternate: "ZZZZ",
     route: "DCT",
-    filingOtherInfo: "DOF/260702",
+    filingOtherInfo: `DOF/${testDof}`,
     filingRemarks: "ZZZZ ALTERNATE VALIDATION TEST",
     filingAlternateName: "Rutherford Ranch Airport",
     plannerState: {
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-07-02T10:00",
+      userDisplayDepartureTimeLocal: testDepartureLocal,
       planningReferenceAlternateAirport: "KSDL",
       actualAlternateLocationMode: "identifier",
       actualAlternateLocation: "85TX",
@@ -525,7 +537,7 @@ test("ZZZZ alternate private field filing keeps altDestination1 ZZZZ and sends o
   const fields = Object.fromEntries(payload.params.entries());
 
   assert.equal(fields.altDestination1, "ZZZZ");
-  assert.equal(fields.otherInfo, "DOF/260702 RMK/ZZZZ ALTERNATE VALIDATION TEST ALTN/85TX");
+  assert.equal(fields.otherInfo, `DOF/${testDof} RMK/ZZZZ ALTERNATE VALIDATION TEST ALTN/85TX`);
   assert.doesNotMatch(String(fields.otherInfo), /RUTHERFORD/i);
   assert.equal(String(fields.otherInfo).match(/\bALTN\//g)?.length, 1);
 });
@@ -536,12 +548,12 @@ test("ZZZZ departure private field filing keeps departure ZZZZ and sends only DE
     destination: "KSDL",
     alternate: null,
     route: "DCT",
-    filingOtherInfo: "DOF/260702",
+    filingOtherInfo: `DOF/${testDof}`,
     filingRemarks: "ZZZZ DEPARTURE VALIDATION TEST",
     filingDepartureName: "Rutherford Ranch Airport",
     plannerState: {
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-07-02T10:00",
+      userDisplayDepartureTimeLocal: testDepartureLocal,
       planningReferenceDepartureAirport: "KDWH",
       actualDepartureLocationMode: "identifier",
       actualDepartureLocation: "85TX",
@@ -563,12 +575,12 @@ test("ZZZZ destination private field filing keeps destination ZZZZ and sends onl
     destination: "ZZZZ",
     alternate: null,
     route: "DCT",
-    filingOtherInfo: "DOF/260702",
+    filingOtherInfo: `DOF/${testDof}`,
     filingRemarks: "ZZZZ DESTINATION VALIDATION TEST",
     filingDestinationName: "Rutherford Ranch Airport",
     plannerState: {
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-07-02T10:00",
+      userDisplayDepartureTimeLocal: testDepartureLocal,
       planningReferenceDestinationAirport: "KSDL",
       actualDestinationLocationMode: "identifier",
       actualDestinationLocation: "85TX",
@@ -590,14 +602,14 @@ test("ZZZZ private field codes for departure destination and alternate do not ap
     destination: "ZZZZ",
     alternate: "ZZZZ",
     route: "DCT",
-    filingOtherInfo: "DOF/260702",
+    filingOtherInfo: `DOF/${testDof}`,
     filingRemarks: "ZZZZ ALL PRIVATE FIELD VALIDATION TEST",
     filingDepartureName: "Rutherford Ranch Airport",
     filingDestinationName: "Private Destination Airport",
     filingAlternateName: "Private Alternate Airport",
     plannerState: {
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-07-02T10:00",
+      userDisplayDepartureTimeLocal: testDepartureLocal,
       planningReferenceDepartureAirport: "KDWH",
       planningReferenceDestinationAirport: "KSDL",
       planningReferenceAlternateAirport: "KSDL",
@@ -639,12 +651,12 @@ test("non-ZZZZ filing does not add ZZZZ location Field 18 entries", () => {
       actualDestinationLocation: "3027N09749W",
       actualAlternateLocation: "3839N09045W",
       departureTimeZone: "America/Chicago",
-      userDisplayDepartureTimeLocal: "2026-06-22T10:00",
+      userDisplayDepartureTimeLocal: testDepartureLocal,
     },
   }), "file", { otherInfo: null } as any);
   const fields = Object.fromEntries(payload.params.entries());
 
-  assert.equal(fields.otherInfo, "PBN/A1 RMK/LEIDOS DEMO");
+  assert.equal(fields.otherInfo, `PBN/A1 DOF/${testDof} RMK/LEIDOS DEMO`);
   assert.doesNotMatch(String(fields.otherInfo), /\bDEP\//);
   assert.doesNotMatch(String(fields.otherInfo), /\bDEST\//);
   assert.doesNotMatch(String(fields.otherInfo), /\bALTN\//);

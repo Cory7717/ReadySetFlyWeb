@@ -94,6 +94,7 @@ import {
   validateFlightPlanForAction,
   verifyLeidosWebhookAuthorization,
 } from "./services/flight-plan-filing/provider";
+import { LEIDOS_WEBHOOK_SUCCESS_RESPONSE, summarizeLeidosWebhookPayload } from "./services/leidosWebhook";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import { analyzeFiledRoute } from "@shared/flight-plan-route";
 import { ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE, canCreateAnotherActiveFlightPlan } from "@shared/flight-plan-access";
@@ -21963,13 +21964,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   });
 
   app.post("/api/leidos/webhooks/flight-service", async (req: any, res) => {
-    // Always return 200 to Leidos — non-200 responses may cause duplicate retries.
+    // Acknowledge authenticated deliveries even when local processing cannot match a plan.
     try {
       if (!verifyLeidosWebhookAuthorization(req.headers.authorization)) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      // STEP 1 — Log the full raw payload for debugging during Leidos lab testing.
       const payload = req.body ?? {};
       const alert =
         payload.flightAlert && typeof payload.flightAlert === "object" && !Array.isArray(payload.flightAlert)
@@ -22047,9 +22047,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         console.info(JSON.stringify({
           event: "leidos_push_no_flight_identifier",
           timestamp: new Date().toISOString(),
-          body: payload,
+          ...summarizeLeidosWebhookPayload(payload),
         }));
-        return res.status(200).json({ ok: true });
+        return res.status(200).json(LEIDOS_WEBHOOK_SUCCESS_RESPONSE);
       }
 
       try {
@@ -22067,7 +22067,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             timestamp: new Date().toISOString(),
             flightIdentifier,
           }));
-          return res.status(200).json({ ok: true });
+          return res.status(200).json(LEIDOS_WEBHOOK_SUCCESS_RESPONSE);
         }
 
         const isAlert = notificationType.toUpperCase().includes("ALERT");
@@ -22309,7 +22309,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       // STEP 6 — Always return 200 to Leidos.
-      res.status(200).json({ ok: true });
+      res.status(200).json(LEIDOS_WEBHOOK_SUCCESS_RESPONSE);
     } catch (error) {
       console.error(JSON.stringify({
         event: "leidos_push_error",
@@ -22317,7 +22317,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         error: error instanceof Error ? error.message : String(error),
       }));
       // Return 200 even on unexpected errors to prevent Leidos retry storms.
-      res.status(200).json({ ok: true });
+      res.status(200).json(LEIDOS_WEBHOOK_SUCCESS_RESPONSE);
     }
   });
 

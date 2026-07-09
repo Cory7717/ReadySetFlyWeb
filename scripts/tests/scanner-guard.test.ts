@@ -68,4 +68,12 @@ test("Leidos filing action route remains protected by authentication middleware"
     routesSource,
     /app\.post\("\/api\/leidos\/webhooks\/flight-service"[\s\S]*verifyLeidosWebhookAuthorization\(req\.headers\.authorization\)/,
   );
+  assert.match(
+    routesSource,
+    /app\.post\("\/api\/leidos\/webhooks\/flight-service"[\s\S]*LEIDOS_WEBHOOK_SUCCESS_RESPONSE/,
+  );
+  assert.doesNotMatch(
+    routesSource,
+    /event:\s*"leidos_push_no_flight_identifier"[\s\S]{0,300}body:\s*payload/,
+  );
 });

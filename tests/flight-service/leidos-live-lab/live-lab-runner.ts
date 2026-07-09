@@ -142,6 +142,19 @@ const isTerminalProviderStatus = (value: unknown, action: CaseAction) => {
   return false;
 };
 
+type LifecycleDynamicTimingMetadata = {
+  lifecycleDynamicTimeEnabled: boolean;
+  lifecycleDepartureTimeStrategy: string;
+  activationWindowCheckPassed: boolean | null;
+  originalPlannedLocalTime?: string | null;
+  dynamicLifecycleLocalTime?: string | null;
+  departureTimeZone?: string;
+  departureInstantUtc?: string;
+  expectedProviderZulu?: string;
+  activationWindowCheckedAt?: string;
+  activationWindowProviderRejected?: boolean;
+};
+
 const applyLifecycleDynamicDepartureTime = (plan: FlightPlan, testCase: LiveLabCase) => {
   if (!lifecycleUsesActivationWindow(testCase)) {
     return {
@@ -150,7 +163,7 @@ const applyLifecycleDynamicDepartureTime = (plan: FlightPlan, testCase: LiveLabC
         lifecycleDynamicTimeEnabled: false,
         lifecycleDepartureTimeStrategy: "fixed deterministic departure time",
         activationWindowCheckPassed: null,
-      },
+      } satisfies LifecycleDynamicTimingMetadata,
     };
   }
 
@@ -173,7 +186,7 @@ const applyLifecycleDynamicDepartureTime = (plan: FlightPlan, testCase: LiveLabC
       lifecycleOriginalDepartureTimeLocal: originalLocal,
     },
   } as FlightPlan;
-  const metadata = {
+  const metadata: LifecycleDynamicTimingMetadata = {
     lifecycleDynamicTimeEnabled: true,
     lifecycleDepartureTimeStrategy: `current time + ${LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES} minutes`,
     originalPlannedLocalTime: originalLocal,

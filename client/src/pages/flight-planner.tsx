@@ -2100,6 +2100,7 @@ export default function FlightPlanner() {
   const [departureRunway, setDepartureRunway] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState<string>("none");
   const [selectedTypeId, setSelectedTypeId] = useState<string>(FALLBACK_TYPE.id);
+  const userSelectedAircraftTypeRef = useRef(false);
   const [fuelBurnMode, setFuelBurnMode] = useState<FuelBurnMode>("standard");
   const [reserveMinutes, setReserveMinutes] = useState("45");
   const [headwind, setHeadwind] = useState("0");
@@ -2341,7 +2342,16 @@ export default function FlightPlanner() {
       }
       if (typeof parsed?.departureRunway === "string") setDepartureRunway(parsed.departureRunway);
       if (typeof parsed?.selectedProfileId === "string") setSelectedProfileId(parsed.selectedProfileId);
-      if (typeof parsed?.selectedTypeId === "string") setSelectedTypeId(parsed.selectedTypeId);
+      if (typeof parsed?.selectedTypeId === "string") {
+        if (
+          parsed.selectedProfileId === "none" &&
+          parsed.selectedTypeId &&
+          parsed.selectedTypeId !== FALLBACK_TYPE.id
+        ) {
+          userSelectedAircraftTypeRef.current = true;
+        }
+        setSelectedTypeId(parsed.selectedTypeId);
+      }
       if (typeof parsed?.editingPlanId === "string") setDraftPlanId(parsed.editingPlanId);
       if (parsed?.fuelBurnMode === "standard" || parsed?.fuelBurnMode === "economy" || parsed?.fuelBurnMode === "performance") {
         setFuelBurnMode(parsed.fuelBurnMode);
@@ -2819,9 +2829,21 @@ export default function FlightPlanner() {
     }
   };
 
+  const handleAircraftTypeSelection = (value: string) => {
+    userSelectedAircraftTypeRef.current = true;
+    setSelectedTypeId(value);
+    setSelectedProfileId("none");
+  };
+
+  const handleAircraftProfileSelection = (value: string) => {
+    userSelectedAircraftTypeRef.current = value === "none";
+    setSelectedProfileId(value);
+  };
+
   useEffect(() => {
     if (!defaultAircraftProfile) return;
     if (selectedProfileId !== "none") return;
+    if (userSelectedAircraftTypeRef.current) return;
     if (editingPlan || draftPlanId) return;
     setSelectedProfileId(defaultAircraftProfile.id);
     setSelectedTypeId(defaultAircraftProfile.typeId || CUSTOM_TYPE_ID);
@@ -5333,6 +5355,7 @@ export default function FlightPlanner() {
     setWaypointsInput("");
     setPlannedStopsInput("");
     setDepartureRunway("");
+    userSelectedAircraftTypeRef.current = false;
     setSelectedProfileId("none");
     setSelectedTypeId(FALLBACK_TYPE.id);
     setFuelBurnMode("standard");
@@ -7673,10 +7696,7 @@ export default function FlightPlanner() {
                   <Label>RSF Aircraft Library</Label>
                   <Select
                     value={selectedTypeId}
-                    onValueChange={(value) => {
-                      setSelectedTypeId(value);
-                      setSelectedProfileId("none");
-                    }}
+                    onValueChange={handleAircraftTypeSelection}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select aircraft type" />
@@ -7694,7 +7714,7 @@ export default function FlightPlanner() {
                 </div>
                 <div className="space-y-2">
                   <Label>Saved Profile</Label>
-                  <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
+                  <Select value={selectedProfileId} onValueChange={handleAircraftProfileSelection}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select saved profile" />
                     </SelectTrigger>

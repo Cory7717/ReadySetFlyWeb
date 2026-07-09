@@ -40,6 +40,17 @@ test("readiness validates resolved aircraft data, not saved profile source", () 
   assert.match(plannerSource, /message: "Surveillance equipment code is required\."/);
 });
 
+test("library aircraft selection is not overridden by the default saved profile", () => {
+  assert.match(plannerSource, /const userSelectedAircraftTypeRef = useRef\(false\)/);
+  assert.match(plannerSource, /const handleAircraftTypeSelection = \(value: string\) => \{/);
+  assert.match(plannerSource, /userSelectedAircraftTypeRef\.current = true;\s+setSelectedTypeId\(value\);\s+setSelectedProfileId\("none"\);/);
+  assert.match(plannerSource, /const handleAircraftProfileSelection = \(value: string\) => \{/);
+  assert.match(plannerSource, /userSelectedAircraftTypeRef\.current = value === "none";/);
+  assert.match(plannerSource, /if \(userSelectedAircraftTypeRef\.current\) return;\s+if \(editingPlan \|\| draftPlanId\) return;/);
+  assert.match(plannerSource, /onValueChange=\{handleAircraftTypeSelection\}/);
+  assert.match(plannerSource, /onValueChange=\{handleAircraftProfileSelection\}/);
+});
+
 test("client and server log structured flight validation failures without payload values", () => {
   assert.match(plannerSource, /event: "flight_validation_failed"/);
   assert.match(plannerSource, /missingFields/);

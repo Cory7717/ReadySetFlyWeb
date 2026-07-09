@@ -6223,17 +6223,6 @@ export default function FlightPlanner() {
     const aircraftProfileHref = "/my-aircraft";
     const fileTab: FlightPlannerTab = "file";
 
-    addIssue(!selectedProfile, {
-      id: "aircraft-profile-selected",
-      category: "Aircraft Profile",
-      field: "aircraftProfile",
-      label: "Aircraft Profile",
-      severity: "required",
-      message: "Select or create an aircraft profile before filing.",
-      why: "RSF uses the aircraft profile to keep aircraft identity, performance, equipment, and filing defaults consistent across saved plans and provider submissions.",
-      actionLabel: "Edit",
-      actionHref: aircraftProfileHref,
-    });
     addIssue(!/^[A-Z0-9]{2,7}$/.test((filingDraft.aircraftId.trim() || form.tailNumber.trim()).toUpperCase()), {
       id: "aircraft-registration",
       category: "Aircraft Profile",

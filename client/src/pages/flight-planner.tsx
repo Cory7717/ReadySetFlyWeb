@@ -182,6 +182,20 @@ const buildPlannerIcaoCandidates = (value: string) => {
   return Array.from(new Set(candidates.filter(Boolean)));
 };
 
+const isConfirmedAirportRoutePoint = (point: { ident?: string | null; kind?: string | null } | null | undefined) =>
+  String(point?.kind || "").toLowerCase() === "airport" && ICAO_REGEX.test(String(point?.ident || "").trim().toUpperCase());
+
+const routePointToPlannerPoint = (point: NonNullable<FiledRouteAnalysisResponse["routePoints"]>[number]): PlannerPoint | null => {
+  if (!Number.isFinite(point.lat) || !Number.isFinite(point.lon)) return null;
+  const typeLabel = point.kind === "navaid" && point.type ? `${point.type} ` : "";
+  return {
+    icao: point.ident,
+    lat: Number(point.lat),
+    lon: Number(point.lon),
+    label: point.name ? `${typeLabel}${point.name}`.trim() : point.kind.toUpperCase(),
+  };
+};
+
 const summarizePlannerError = (value: unknown) => {
   let message = String(value || "").trim();
   if (!message) return "Unable to stage the filing action.";
@@ -3036,6 +3050,16 @@ export default function FlightPlanner() {
   const filedRouteAnalysis = useMemo(() => analyzeFiledRoute(filedRouteInputNormalized), [filedRouteInputNormalized]);
   const filedRouteTokens = filedRouteAnalysis.tokens;
   const filedRouteAirportTokens = filedRouteAnalysis.airportTokens;
+  const routeAssistAnalysisInput = useMemo(() => {
+    const tokens = [
+      planningDepartureCode,
+      ...waypoints,
+      planningDestinationCode,
+    ]
+      .map((token) => token.trim().toUpperCase())
+      .filter(Boolean);
+    return tokens.length >= 2 ? normalizeRouteText(tokens.join(" DCT ")) : "";
+  }, [planningDepartureCode, planningDestinationCode, waypoints]);
   const filedRouteAnalysisQuery = useQuery<FiledRouteAnalysisResponse>({
     queryKey: ["/api/flight-plans/route-analysis", filedRouteInputNormalized],
     queryFn: async () => {
@@ -3053,6 +3077,23 @@ export default function FlightPlanner() {
     enabled: Boolean(filedRouteInputNormalized),
     staleTime: 1000 * 60 * 10,
   });
+  const routeAssistAnalysisQuery = useQuery<FiledRouteAnalysisResponse>({
+    queryKey: ["/api/flight-plans/route-analysis", "route-assist", routeAssistAnalysisInput],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        route: routeAssistAnalysisInput,
+      });
+      const res = await fetch(apiUrl(`/api/flight-plans/route-analysis?${params.toString()}`), {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to analyze route assist waypoints");
+      }
+      return res.json();
+    },
+    enabled: Boolean(routeAssistAnalysisInput && waypoints.length > 0),
+    staleTime: 1000 * 60 * 10,
+  });
   const resolvedFiledRouteAnalysis = filedRouteAnalysisQuery.data ?? {
     ...filedRouteAnalysis,
     recognizedAirportTokens: filedRouteAnalysis.airportTokens,
@@ -3060,6 +3101,17 @@ export default function FlightPlanner() {
     routePoints: [] as NonNullable<FiledRouteAnalysisResponse["routePoints"]>,
     unresolvedRoutePointTokens: [] as string[],
   };
+  const resolvedRouteAssistAnalysis = routeAssistAnalysisQuery.data ?? null;
+  const routeAssistAirportTokens = useMemo(() => {
+    const points = resolvedRouteAssistAnalysis?.routePoints || [];
+    if (points.length > 0) {
+      return points
+        .filter(isConfirmedAirportRoutePoint)
+        .map((point) => point.ident.trim().toUpperCase())
+        .filter((icao, index, arr) => arr.indexOf(icao) === index);
+    }
+    return waypoints.filter((token) => token.length === 4 && ICAO_REGEX.test(token));
+  }, [resolvedRouteAssistAnalysis?.routePoints, waypoints]);
   const isUsingSuggestedWaypoints = useMemo(() => {
     if (suggestedWaypoints.length === 0) return false;
     const normalized = waypointsInput.trim().toUpperCase();
@@ -3094,14 +3146,14 @@ export default function FlightPlanner() {
       return [];
     }
     if (plannedStops.length > 0 || waypoints.length > 0) {
-      return [...plannedStops, ...waypoints];
+      return [...plannedStops, ...routeAssistAirportTokens];
     }
     if (routeMode === "manual" && filedRouteAirportTokens.length > 0) {
       return filedRouteAirportTokens;
     }
     if (routeMode !== "auto") return [];
     return autoSuggestedIntermediates;
-  }, [routeMode, plannedStops, waypoints, filedRouteAirportTokens, autoSuggestedIntermediates]);
+  }, [routeMode, plannedStops, waypoints.length, routeAssistAirportTokens, filedRouteAirportTokens, autoSuggestedIntermediates]);
 
   const routeSequenceRaw = useMemo(() => {
     return [
@@ -3580,18 +3632,16 @@ export default function FlightPlanner() {
   const filedRouteResolvedPoints: PlannerPoint[] = useMemo(() => {
     const points = resolvedFiledRouteAnalysis.routePoints || [];
     return points
-      .map((point) => {
-        if (!Number.isFinite(point.lat) || !Number.isFinite(point.lon)) return null;
-        const typeLabel = point.kind === "navaid" && point.type ? `${point.type} ` : "";
-        return {
-          icao: point.ident,
-          lat: Number(point.lat),
-          lon: Number(point.lon),
-          label: point.name ? `${typeLabel}${point.name}`.trim() : point.kind.toUpperCase(),
-        };
-      })
+      .map(routePointToPlannerPoint)
       .filter(Boolean) as PlannerPoint[];
   }, [resolvedFiledRouteAnalysis.routePoints]);
+
+  const routeAssistResolvedPoints: PlannerPoint[] = useMemo(() => {
+    const points = resolvedRouteAssistAnalysis?.routePoints || [];
+    return points
+      .map(routePointToPlannerPoint)
+      .filter(Boolean) as PlannerPoint[];
+  }, [resolvedRouteAssistAnalysis?.routePoints]);
 
   const suggestedWaypoint = useMemo(() => {
     if (routeSuggestion !== "midpoint") return null;
@@ -3623,11 +3673,14 @@ export default function FlightPlanner() {
     if (routeMode === "manual" && filedRouteResolvedPoints.length >= 2) {
       return filedRouteResolvedPoints;
     }
+    if (routeMode !== "manual" && waypoints.length > 0 && routeAssistResolvedPoints.length >= 2) {
+      return routeAssistResolvedPoints;
+    }
     if (!suggestedWaypoint) return airportPoints;
     const [start, ...rest] = airportPoints;
     if (!start || rest.length === 0) return airportPoints;
     return [start, suggestedWaypoint, rest[rest.length - 1]];
-  }, [airportPoints, filedRouteResolvedPoints, routeMode, suggestedWaypoint]);
+  }, [airportPoints, filedRouteResolvedPoints, routeAssistResolvedPoints, routeMode, suggestedWaypoint, waypoints.length]);
 
   const routeBbox = useMemo(() => {
     if (routePoints.length === 0) return null;

@@ -1,0 +1,48 @@
+{
+  "evidenceType": "final-leidos-lab-preflight",
+  "createdDate": "2026-07-09",
+  "status": "BLOCKED_BEFORE_PROVIDER_EXECUTION",
+  "providerRequestsSent": 0,
+  "baseline": {
+    "command": "npm run test:flight-service",
+    "passed": 92,
+    "failed": 0,
+    "webhookContractTestsPassed": true,
+    "evidenceSanitizationTestsPassed": true
+  },
+  "safety": {
+    "environment": "LAB",
+    "labEndpointEnforced": true,
+    "labAcknowledgementEnforced": true,
+    "productionFilingEnabled": false,
+    "failClosed": true
+  },
+  "providerCycle": {
+    "casesInSuite": 15,
+    "casesSelected": 0,
+    "casesExecuted": 0,
+    "negativeCasesLocallyBlocked": [],
+    "cleanupPlansTouched": 0,
+    "interCaseDelayMinutesRequested": 3,
+    "interCaseDelaysApplied": 0
+  },
+  "classification": {
+    "blockers": [
+      {
+        "id": "LAB-CONFIG-001",
+        "summary": "Required local LAB execution configuration is absent.",
+        "details": "Live LAB submission, current LAB test acknowledgement, provider credentials, and the dedicated test account are not configured in the supported local environment."
+      }
+    ],
+    "warnings": [],
+    "info": [
+      "The unified Flight Service release gate passed 92 of 92 tests.",
+      "The configured runtime environment and default provider endpoint are LAB.",
+      "Production operational filing remains disabled.",
+      "No provider request was attempted.",
+      "No cleanup action was attempted because this run created no plans.",
+      "Evidence serialization omits raw provider payloads and redacts account/contact data."
+    ]
+  },
+  "requiredNextAction": "Configure the approved LAB-only execution settings in the supported server environment, then rerun the 15-case command. Do not enable production filing."
+}

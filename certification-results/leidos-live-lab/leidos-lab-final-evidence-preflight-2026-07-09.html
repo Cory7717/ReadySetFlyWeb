@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>RSF Leidos LAB Final Evidence Preflight</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 32px; color: #172033; }
+    main { max-width: 900px; margin: 0 auto; }
+    h1, h2 { color: #102a43; }
+    .status { border-left: 5px solid #b45309; background: #fff7ed; padding: 16px; }
+    table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+    th, td { border: 1px solid #cbd5e1; padding: 9px; text-align: left; }
+    th { background: #f1f5f9; }
+    .pass { color: #166534; font-weight: 700; }
+    .blocked { color: #9a3412; font-weight: 700; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>RSF Leidos LAB Final Evidence Preflight</h1>
+  <div class="status">
+    <strong>Status:</strong> <span class="blocked">BLOCKED BEFORE PROVIDER EXECUTION</span>
+    <p>The live cycle was not started because required LAB-only execution settings are absent. No safety guard was bypassed.</p>
+  </div>
+  <h2>Baseline</h2>
+  <table>
+    <tr><th>Check</th><th>Result</th></tr>
+    <tr><td>Unified Flight Service gate</td><td class="pass">92/92 PASS</td></tr>
+    <tr><td>Webhook contract and evidence redaction</td><td class="pass">PASS</td></tr>
+    <tr><td>Environment and endpoint</td><td class="pass">LAB</td></tr>
+    <tr><td>Production operational filing</td><td class="pass">DISABLED</td></tr>
+    <tr><td>Provider requests sent</td><td>0</td></tr>
+  </table>
+  <h2>Blocker</h2>
+  <p><strong>LAB-CONFIG-001:</strong> Live LAB submission, current LAB acknowledgement, provider credentials, and the dedicated test account are not configured in the supported local environment.</p>
+  <h2>Cycle State</h2>
+  <p>Cases selected: 0 of 15. Cases executed: 0. Cleanup plans touched: 0. Three-minute delays applied: 0.</p>
+  <h2>Next Action</h2>
+  <p>Configure the approved LAB-only execution settings, then rerun the complete 15-case command. Production filing must remain disabled.</p>
+</main>
+</body>
+</html>

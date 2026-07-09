@@ -235,8 +235,7 @@ export const loadDedicatedTestContext = async () => {
   console.log("=========================================");
   console.log("Leidos Certification Session");
   console.log("");
-  console.log("Configured Test Account:");
-  console.log(email);
+  console.log("Configured test account: [verified]");
   console.log("=========================================");
   console.log("");
   const user = await storage.getUserByEmail(email);
@@ -300,15 +299,10 @@ export const printTestAccountVerification = (context: {
 }) => {
   const subscription = String(context.user.subscriptionStatus || context.user.subscriptionPlan || context.user.subscriptionTier || "unknown");
   console.log("✓ User Found");
-  console.log(`User ID: ${context.user.id}`);
-  console.log(`User Name: ${context.pilotName}`);
-  console.log(`Email: ${context.user.email}`);
-  console.log(`Pilot Profile ID: ${context.user.profileId || context.user.pilotProfileId || context.user.id}`);
-  console.log(`Aircraft ID: ${context.profile.id}`);
-  console.log(`Aircraft: ${context.aircraftType || context.profile.name || "-"}`);
-  console.log(`Tail Number: ${context.profile.tailNumber || "-"}`);
-  console.log(`Home Base: ${context.homeBase}`);
-  console.log(`Phone Number: ${context.phone}`);
+  console.log("User identity: [verified]");
+  console.log("Pilot profile: [verified]");
+  console.log("Aircraft profile: [verified]");
+  console.log("Contact fields: [verified]");
   console.log(`Subscription: ${subscription}`);
   console.log(`Admin Status: superAdmin=${Boolean(context.user.isSuperAdmin)} admin=${Boolean(context.user.isAdmin)}`);
   console.log("");
@@ -938,7 +932,7 @@ const buildCertificationMetadata = (runId: string, testCase: LiveLabCase) => ({
 });
 
 const formatPayloadReview = (payload: Record<string, any> | null, plan: FlightPlan) => ({
-  Aircraft: payload?.aircraft || `${plan.tailNumber || "-"} / ${plan.aircraftType || "-"}`,
+  Aircraft: plan.aircraftType || "-",
   Equipment: payload?.equipment || plan.filingEquipment || "-",
   Surveillance: payload?.surveillance || plan.filingSurveillanceEquipment || "-",
   PBN: payload?.pbn || pbnFromOtherInfo(plan.filingOtherInfo) || "-",
@@ -946,10 +940,10 @@ const formatPayloadReview = (payload: Record<string, any> | null, plan: FlightPl
   Destination: payload?.destination || plan.destination || "-",
   Alternate: payload?.altDestination1 || plan.alternate || "-",
   "Flight Rules": payload?.flightRules || plan.filingFlightRules || "-",
-  "Other Info": payload?.otherInfo || plan.filingOtherInfo || "-",
+  "Other Info": payload?.otherInfo || plan.filingOtherInfo ? "[present]" : "-",
   Remarks: payload?.remarks ? "[present]" : (plan.filingRemarks ? "[present]" : "-"),
-  Phone: payload?.phone || plan.filingPilotPhone || "-",
-  "Home Base": payload?.homeBase || plan.filingAircraftHomeBase || "-",
+  "Pilot Contact": plan.filingPilotPhone ? "[present]" : "-",
+  "Aircraft Home Base": plan.filingAircraftHomeBase ? "[present]" : "-",
   "Zulu Time": payload?.departureInstant || "-",
 });
 
@@ -1005,7 +999,7 @@ const promptLiveConfirmation = async (context: DedicatedTestContext, diagnostics
     console.log("");
     console.log("You are about to submit certification cases using:");
     console.log("");
-    console.log(context.user.email);
+    console.log("[verified test account]");
     console.log("");
     console.log(`Leidos Environment: ${String(diagnostics.environment || "LAB").toUpperCase()}`);
     console.log("");
@@ -1017,7 +1011,7 @@ const promptLiveConfirmation = async (context: DedicatedTestContext, diagnostics
     console.log("");
     const typed = (await rl.question("Type CONFIRM to begin: ")).trim();
     if (typed !== "CONFIRM") throw new Error("Live Leidos LAB certification aborted by operator.");
-    const yn = (await rl.question(`You are about to submit certification cases using ${context.user.email}. Continue? [Y/N] `)).trim().toLowerCase();
+    const yn = (await rl.question("Continue with the verified LAB test account? [Y/N] ")).trim().toLowerCase();
     if (yn !== "y") throw new Error("Live Leidos LAB certification aborted by operator.");
   } finally {
     rl.close();
@@ -1298,8 +1292,54 @@ export const buildCertificationVersion = (diagnostics?: ReturnType<typeof assert
     environment: diagnostics?.environment || process.env.NODE_ENV || "unknown",
     database,
     generatedTimestamp: new Date().toISOString(),
-    operator: context?.user?.email || process.env.LEIDOS_TEST_USER_EMAIL || "unknown",
+    operator: context ? "verified LAB test account" : "unknown",
   };
+};
+
+const EVIDENCE_OMITTED_KEYS = new Set([
+  "generatedpayload",
+  "providerpayload",
+  "payloadsenttoleidos",
+  "leidosresponse",
+  "requestpayload",
+  "response",
+  "raw",
+  "filingraw",
+  "filingpayload",
+]);
+
+const isSensitiveEvidenceKey = (key: string) =>
+  /email|phone|pilotname|pilotdata|pilotincommand|password|credential|authorization|username|supplementalremarks|suppremark|operator|database|tailnumber|aircraftid|homebase|userid/i.test(key);
+
+export const sanitizeCertificationEvidence = (value: unknown, sensitiveValues: string[] = [], key = ""): unknown => {
+  const normalizedKey = key.toLowerCase();
+  if (EVIDENCE_OMITTED_KEYS.has(normalizedKey)) return "[omitted from evidence artifact]";
+  if (isSensitiveEvidenceKey(key)) {
+    if (typeof value === "boolean") return value;
+    return value == null ? value : "[redacted]";
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeCertificationEvidence(entry, sensitiveValues));
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const comparisonField = String(record.field || "").toLowerCase();
+    const redactComparison = /phone|pilot|supplemental|homebase/.test(comparisonField);
+    return Object.fromEntries(Object.entries(record).map(([entryKey, entryValue]) => [
+      entryKey,
+      redactComparison && !["field", "issue", "classification", "severity", "comparisonResult"].includes(entryKey)
+        ? "[redacted]"
+        : sanitizeCertificationEvidence(entryValue, sensitiveValues, entryKey),
+    ]));
+  }
+  if (typeof value === "string") {
+    let sanitized = value.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]");
+    for (const sensitiveValue of sensitiveValues.filter((entry) => entry.length >= 3)) {
+      sanitized = sanitized.replaceAll(sensitiveValue, "[redacted]");
+    }
+    return sanitized;
+  }
+  return value;
 };
 
 export const buildValidationSummary = (results: any[], cases: LiveLabCase[]) => {
@@ -1723,7 +1763,7 @@ const run = async () => {
       : "LIVE LAB VALIDATION RUN - PROVIDER SUBMISSION DISABLED";
   console.log(`Leidos live LAB certification ${runModeLabel}`);
   console.log(`Endpoint: ${diagnostics.baseUrl}`);
-  console.log(`Test user: ${context.user.email || process.env.LEIDOS_TEST_USER_EMAIL}`);
+  console.log("Test user: [verified LAB test account]");
   console.log(`Cases: ${cases.length}/${MAX_CASES}`);
   console.log(`Case selection: ${JSON.stringify(caseSelection.request)}`);
   console.log(`Skipped by selection: ${caseSelection.skippedBySelection.map((item) => item.seed).join(", ") || "-"}`);
@@ -2253,7 +2293,19 @@ const run = async () => {
   const dir = join("certification-results", "leidos-live-lab");
   mkdirSync(dir, { recursive: true });
   const filePath = join(dir, `${runId}.json`);
-  const artifacts = await writeCertificationArtifacts(output, filePath);
+  const sensitiveEvidenceValues = [
+    context.user.email,
+    context.pilotName,
+    context.phone,
+    context.homeBase,
+    context.profile.tailNumber,
+    process.env.LEIDOS_FLIGHT_SERVICE_USERNAME,
+    process.env.LEIDOS_FLIGHT_SERVICE_PASSWORD,
+    process.env.LEIDOS_FLIGHT_SERVICE_WEBHOOK_USERNAME,
+    process.env.LEIDOS_FLIGHT_SERVICE_WEBHOOK_PASSWORD,
+  ].map((entry) => String(entry || "").trim()).filter(Boolean);
+  const evidenceOutput = sanitizeCertificationEvidence(output, sensitiveEvidenceValues) as typeof output;
+  const artifacts = await writeCertificationArtifacts(evidenceOutput, filePath);
   console.log(`Saved JSON results: ${artifacts.jsonPath}`);
   console.log(`Saved HTML report: ${artifacts.htmlPath}`);
   console.log(`Saved PDF report: ${artifacts.pdfPath}`);
@@ -2264,9 +2316,8 @@ const run = async () => {
   console.log(`  Name: Leidos LAB`);
   console.log(`  Endpoint: ${diagnostics.baseUrl}`);
   console.log("Operator");
-  console.log(`  Email: ${context.user.email}`);
+  console.log("  Verified LAB test account");
   console.log("Aircraft");
-  console.log(`  Tail Number: ${context.profile.tailNumber}`);
   console.log(`  Aircraft Type: ${context.aircraftType}`);
   console.log("Case Selection");
   console.log(`  Total Cases In Suite: ${output.suiteSelection.totalCasesInSuite}`);
@@ -2332,9 +2383,8 @@ const run = async () => {
   console.log(`  Delay Actually Applied: ${delayApplications.length} time(s)`);
   console.log("Database Persistence");
   console.log(`  RSF DB Records Created: ${dryRun ? "No" : "Yes"}`);
-  console.log(`  Test User ID: ${context.user.id}`);
   for (const record of dbPersistenceRecords) {
-    console.log(`  ${record.certificationCaseId}: localFlightPlanId=${record.localFlightPlanId} userId=${record.userId} providerPlanId=${record.providerPlanId || "-"}`);
+    console.log(`  ${record.certificationCaseId}: persisted=${Boolean(record.localFlightPlanId)} providerPlanCreated=${Boolean(record.providerPlanId)}`);
   }
   if (providerSubmissionDisabled) {
     console.log("");

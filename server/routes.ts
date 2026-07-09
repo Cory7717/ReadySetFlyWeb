@@ -22759,60 +22759,89 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       });
       const errors: string[] = [];
       const warnings: string[] = [];
-      if (!packet.departure) errors.push("Departure airport is required.");
-      if (!packet.destination) errors.push("Destination airport is required.");
-      if (!packet.aircraftId) errors.push("Aircraft ID / tail number is required.");
-      if (!packet.aircraftType) errors.push("Aircraft type is required.");
+      const failedRules: Array<{ category: string; field: string; message: string; severity: "required" | "recommended" }> = [];
+      const addError = (category: string, field: string, message: string) => {
+        errors.push(message);
+        failedRules.push({ category, field, message, severity: "required" });
+      };
+      const addWarning = (category: string, field: string, message: string) => {
+        warnings.push(message);
+        failedRules.push({ category, field, message, severity: "recommended" });
+      };
+      if (!packet.departure) addError("Flight Plan", "departure", "Departure airport is required.");
+      if (!packet.destination) addError("Flight Plan", "destination", "Destination airport is required.");
+      if (!packet.aircraftId) addError("Aircraft Profile", "aircraftRegistration", "Aircraft ID / tail number is required.");
+      if (!packet.aircraftType) addError("Aircraft Profile", "aircraftType", "Aircraft type is required.");
       if (packet.aircraftType?.toUpperCase() === "ZZZZ" && !normalizeActualAircraftTypeForIcao(packet.actualAircraftType)) {
-        errors.push("Actual aircraft type is required when Aircraft Type is ZZZZ.");
+        addError("Aircraft Profile", "actualAircraftType", "Actual aircraft type is required when Aircraft Type is ZZZZ.");
       }
-      if (!packet.pilotName) errors.push("Pilot in command name is required.");
-      if (!packet.pilotPhone) errors.push("Pilot phone number is required.");
-      if (!packet.aircraftHomeBase) errors.push("Aircraft home base is required.");
-      if (!packet.soulsOnBoard) errors.push("Souls on board must be entered.");
-      if (!packet.wakeTurbulence) errors.push("Wake turbulence category is required.");
-      if (!packet.typeOfFlight) errors.push("Type of flight is required.");
-      if (!packet.surveillanceEquipment) errors.push("Surveillance equipment is required.");
-      if (!packet.remarks) errors.push("Filing Remarks / ATC Remarks are required.");
+      if (!packet.pilotName) addError("Pilot Profile", "pilotName", "Pilot in command name is required.");
+      if (!packet.pilotPhone) addError("Pilot Profile", "pilotPhone", "Pilot phone number is required.");
+      if (!packet.aircraftHomeBase) addError("Leidos Requirements", "homeAirport", "Aircraft home base is required.");
+      if (!packet.soulsOnBoard) addError("Leidos Requirements", "soulsOnBoard", "Souls on board must be entered.");
+      if (!packet.wakeTurbulence) addError("Aircraft Profile", "wakeTurbulence", "Wake turbulence category is required.");
+      if (!packet.typeOfFlight) addError("Leidos Requirements", "typeOfFlight", "Type of flight is required.");
+      if (!packet.surveillanceEquipment) addError("Aircraft Profile", "surveillanceCode", "Surveillance equipment is required.");
+      if (!packet.remarks) addError("Leidos Requirements", "remarks", "Filing Remarks / ATC Remarks are required.");
       if (packet.departure?.toUpperCase() === "ZZZZ" && !isValidZzzzActualLocation(packet.actualDepartureLocation)) {
-        errors.push("Departure is ZZZZ - enter an actual departure FAA identifier or latitude/longitude.");
+        addError("Flight Plan", "actualDepartureLocation", "Departure is ZZZZ - enter an actual departure FAA identifier or latitude/longitude.");
       }
       if (packet.departure?.toUpperCase() === "ZZZZ" && !String(packet.departureName || "").trim()) {
-        errors.push("Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad).");
+        addError("Flight Plan", "departureDescription", "Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad).");
       }
       if (packet.destination?.toUpperCase() === "ZZZZ" && !isValidZzzzActualLocation(packet.actualDestinationLocation)) {
-        errors.push("Destination is ZZZZ - enter an actual destination FAA identifier or latitude/longitude.");
+        addError("Flight Plan", "actualDestinationLocation", "Destination is ZZZZ - enter an actual destination FAA identifier or latitude/longitude.");
       }
       if (packet.destination?.toUpperCase() === "ZZZZ" && !String(packet.destinationName || "").trim()) {
-        errors.push("Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad).");
+        addError("Flight Plan", "destinationDescription", "Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad).");
       }
       if (packet.alternate?.toUpperCase() === "ZZZZ" && !isValidZzzzActualLocation(packet.actualAlternateLocation)) {
-        errors.push("Alternate is ZZZZ - enter an actual alternate FAA identifier or latitude/longitude.");
+        addError("Flight Plan", "actualAlternateLocation", "Alternate is ZZZZ - enter an actual alternate FAA identifier or latitude/longitude.");
       }
       if (packet.alternate?.toUpperCase() === "ZZZZ" && !String(packet.alternateName || "").trim()) {
-        errors.push("Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad).");
+        addError("Flight Plan", "alternateDescription", "Please enter a brief description of this location (for example: Private Strip, Grass Airstrip, Smith Ranch, Helipad).");
       }
       if (flightRules === "IFR" && !routeNormalization.normalizedRoute) {
-        errors.push("IFR filing requires a route before handoff.");
+        addError("Flight Plan", "route", "IFR filing requires a route before handoff.");
       }
       if (!packet.plannedDepartureUtc) {
-        errors.push("Planned departure time is missing or not convertible to UTC.");
+        addError("Flight Plan", "departureTime", "Planned departure time is missing or not convertible to UTC.");
       }
       if (!packet.enduranceMinutes || packet.enduranceMinutes <= 0) {
-        warnings.push("Endurance is not available yet. Review fuel on board before filing.");
+        addWarning("Flight Plan", "fuelEndurance", "Endurance is not available yet. Review fuel on board before filing.");
       }
       if (flightRules === "IFR" && !packet.alternate) {
-        warnings.push("Consider adding an alternate before filing IFR.");
+        addWarning("Flight Plan", "alternate", "Consider adding an alternate before filing IFR.");
       }
       if (flightRules !== "IFR" && !routeNormalization.normalizedRoute) {
-        warnings.push("VFR handoff can proceed direct, but route detail improves the filing packet.");
+        addWarning("Flight Plan", "route", "VFR handoff can proceed direct, but route detail improves the filing packet.");
       }
-      warnings.push(...routeNormalization.notes);
+      routeNormalization.notes.forEach((note) => addWarning("Flight Plan", "route", note));
       if (!packet.equipment) {
-        warnings.push("Equipment code is blank. Verify equipment capability before filing.");
+        addWarning("Aircraft Profile", "equipmentCode", "Equipment code is blank. Verify equipment capability before filing.");
       }
       if (packet.route && String(packet.route).trim().toUpperCase() !== "DCT" && !routeNormalization.hasValidToken) {
-        errors.push("Route must contain at least one valid airport, fix, navaid, airway, or procedure token.");
+        addError("Flight Plan", "route", "Route must contain at least one valid airport, fix, navaid, airway, or procedure token.");
+      }
+      if (errors.length > 0) {
+        console.warn(JSON.stringify({
+          event: "flight_validation_failed",
+          userId: req.user?.id || null,
+          categories: Array.from(new Map(
+            failedRules
+              .filter((rule) => rule.severity === "required")
+              .map((rule) => [
+                rule.category,
+                {
+                  category: rule.category,
+                  missingFields: failedRules
+                    .filter((candidate) => candidate.severity === "required" && candidate.category === rule.category)
+                    .map((candidate) => candidate.field),
+                },
+              ])
+          ).values()),
+          missingFields: failedRules.filter((rule) => rule.severity === "required").map((rule) => rule.field),
+        }));
       }
 
       const normalizedPacket = {
@@ -22859,6 +22888,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         },
         errors,
         warnings,
+        validation: {
+          failedRules,
+        },
         nextSteps,
         preview: {
           localRoute: routeNormalization.localEnteredRoute,

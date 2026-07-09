@@ -1062,6 +1062,14 @@ type FilingPreviewResponse = {
   liveAvailable?: boolean;
   errors: string[];
   warnings: string[];
+  validation?: {
+    failedRules?: Array<{
+      category: string;
+      field: string;
+      message: string;
+      severity: "required" | "recommended";
+    }>;
+  };
   nextSteps: string[];
   preview?: {
     localRoute?: string | null;
@@ -1073,6 +1081,26 @@ type FilingPreviewResponse = {
     transmittedOtherInfo?: string | null;
   };
   packet: Record<string, unknown>;
+};
+
+type FilingReadinessCategory = "Aircraft Profile" | "Pilot Profile" | "Flight Plan" | "Leidos Requirements";
+type FilingReadinessSeverity = "required" | "recommended" | "optional";
+type FilingReadinessIssue = {
+  id: string;
+  category: FilingReadinessCategory;
+  field: string;
+  label: string;
+  severity: FilingReadinessSeverity;
+  message: string;
+  why?: string;
+  actionLabel: string;
+  actionHref?: string;
+  actionTab?: FlightPlannerTab;
+};
+type FilingReadinessCategorySummary = {
+  category: FilingReadinessCategory;
+  required: FilingReadinessIssue[];
+  recommended: FilingReadinessIssue[];
 };
 
 type ScratchPadFields = {
@@ -6188,31 +6216,330 @@ export default function FlightPlanner() {
         : true,
     ];
     const providerStateValid = !currentSavedPlan || !hasPendingProviderReview(currentSavedPlan);
-    const items = [
-      { id: "pilot-contact", label: "Pilot contact complete", ok: Boolean(filingDraft.pilotName.trim() && (filingDraft.pilotPhone.trim() || String((user as any)?.phone || "").trim())) },
-      { id: "phone", label: "Phone number present", ok: Boolean(filingDraft.pilotPhone.trim() || String((user as any)?.phone || "").trim()) },
-      { id: "home-base", label: "Home base present", ok: Boolean(filingDraft.aircraftHomeBase.trim() || String((user as any)?.homeBase || "").trim()) },
-      { id: "profile", label: "Aircraft profile complete", ok: Boolean(selectedProfile && selectedProfile.filingEquipmentDefault && selectedProfile.filingSurveillanceEquipmentDefault && selectedProfile.filingWakeTurbulenceDefault) },
-      { id: "aircraft-id", label: "Aircraft ID valid", ok: /^[A-Z0-9]{2,7}$/.test((filingDraft.aircraftId.trim() || form.tailNumber.trim()).toUpperCase()) },
-      { id: "departure", label: "Departure valid", ok: Boolean(effectiveDepartureCode) },
-      { id: "destination", label: "Destination valid", ok: Boolean(effectiveDestinationCode) },
-      { id: "zzzz", label: "ZZZZ details valid if used", ok: zzzzChecks.every(Boolean) },
-      { id: "route", label: "Route valid", ok: filingDraft.flightRules === "VFR" || Boolean(leidosFiledRoute && leidosFiledRoute.trim()) },
-      { id: "departure-time", label: "Departure time valid", ok: Boolean(departureAt && Number.isFinite(departureAt.getTime()) && departureAt.getTime() >= now - 60_000) },
-      { id: "zulu", label: "Local/Zulu conversion valid", ok: Boolean(form.plannedDepartureAt && departureTimeZone && departureAt && Number.isFinite(departureAt.getTime())) },
-      { id: "equipment", label: "Equipment valid", ok: !icaoReadiness.issues.some((issue) => issue.severity === "critical" && issue.field === "equipment") },
-      { id: "surveillance", label: "Surveillance valid", ok: Boolean(filingDraft.surveillanceEquipment.trim()) && !icaoReadiness.issues.some((issue) => issue.severity === "critical" && issue.field === "surveillance") },
-      { id: "pbn", label: "PBN valid", ok: !icaoReadiness.issues.some((issue) => issue.severity === "critical" && issue.field === "pbn") },
-      { id: "other-info", label: "Other Info / RMK valid", ok: Boolean(filingDraft.remarks.trim() || form.notes.trim()) && !icaoReadiness.issues.some((issue) => issue.severity === "critical" && issue.field === "otherInfo") },
-      { id: "provider-state", label: "Provider/versionStamp state valid for amend/cancel/activate/close", ok: providerStateValid },
-    ];
+    const issues: FilingReadinessIssue[] = [];
+    const addIssue = (condition: boolean, issue: FilingReadinessIssue) => {
+      if (condition) issues.push(issue);
+    };
+    const aircraftProfileHref = "/my-aircraft";
+    const fileTab: FlightPlannerTab = "file";
+
+    addIssue(!selectedProfile, {
+      id: "aircraft-profile-selected",
+      category: "Aircraft Profile",
+      field: "aircraftProfile",
+      label: "Aircraft Profile",
+      severity: "required",
+      message: "Select or create an aircraft profile before filing.",
+      why: "RSF uses the aircraft profile to keep aircraft identity, performance, equipment, and filing defaults consistent across saved plans and provider submissions.",
+      actionLabel: "Edit",
+      actionHref: aircraftProfileHref,
+    });
+    addIssue(!/^[A-Z0-9]{2,7}$/.test((filingDraft.aircraftId.trim() || form.tailNumber.trim()).toUpperCase()), {
+      id: "aircraft-registration",
+      category: "Aircraft Profile",
+      field: "aircraftRegistration",
+      label: "Aircraft Registration",
+      severity: "required",
+      message: "Aircraft registration / tail number is required.",
+      why: "Flight Service and ATC use the aircraft identifier to match the filed plan to the aircraft and radio callsign.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+    addIssue(!filingAircraftType, {
+      id: "aircraft-type",
+      category: "Aircraft Profile",
+      field: "aircraftType",
+      label: "Aircraft Type",
+      severity: "required",
+      message: "Aircraft type is required.",
+      why: "ICAO filing requires the aircraft type so Flight Service and ATC can evaluate performance, wake, and handling context.",
+      actionLabel: "Edit",
+      actionHref: aircraftProfileHref,
+    });
+    addIssue(filingDraft.aircraftType.trim().toUpperCase() === "ZZZZ" && !actualAircraftType, {
+      id: "actual-aircraft-type",
+      category: "Aircraft Profile",
+      field: "actualAircraftType",
+      label: "Actual Aircraft Type",
+      severity: "required",
+      message: "Actual aircraft type is required when Aircraft Type is ZZZZ.",
+      why: "When ZZZZ is filed, ICAO Field 18 needs the real aircraft type so Flight Service receives the missing aircraft detail.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+    addIssue(!filingDraft.aircraftColor.trim(), {
+      id: "aircraft-color",
+      category: "Aircraft Profile",
+      field: "aircraftColor",
+      label: "Aircraft Color",
+      severity: "required",
+      message: "Aircraft color is required.",
+      why: "Aircraft color supports Flight Service search and rescue and flight plan identification workflows.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+    addIssue(!filingDraft.equipment.trim(), {
+      id: "equipment-code",
+      category: "Aircraft Profile",
+      field: "equipmentCode",
+      label: "Equipment Code",
+      severity: "required",
+      message: "Aircraft equipment code is required.",
+      why: "Equipment codes are required for ICAO flight plan filing and tell ATC what communication, navigation, and surveillance capabilities are available.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+    addIssue(!filingDraft.surveillanceEquipment.trim(), {
+      id: "surveillance-code",
+      category: "Aircraft Profile",
+      field: "surveillanceCode",
+      label: "Surveillance Code",
+      severity: "required",
+      message: "Surveillance equipment code is required.",
+      why: "Surveillance codes tell ATC what transponder or surveillance capability is filed for the aircraft.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+    addIssue(!filingDraft.wakeTurbulence.trim(), {
+      id: "wake-turbulence",
+      category: "Aircraft Profile",
+      field: "wakeTurbulence",
+      label: "Wake Turbulence Category",
+      severity: "required",
+      message: "Wake turbulence category is required.",
+      why: "Wake category is part of ICAO aircraft data and supports ATC separation and provider validation.",
+      actionLabel: "Edit",
+      actionHref: aircraftProfileHref,
+    });
+    addIssue(!Number.isFinite(planningCruise) || planningCruise <= 0, {
+      id: "cruising-speed",
+      category: "Aircraft Profile",
+      field: "cruisingSpeed",
+      label: "Cruising Speed",
+      severity: "required",
+      message: "Cruising speed is required.",
+      why: "Flight Service needs true airspeed to calculate and validate the flight plan timing.",
+      actionLabel: "Edit",
+      actionHref: aircraftProfileHref,
+    });
+
+    addIssue(!filingDraft.pilotName.trim(), {
+      id: "pilot-name",
+      category: "Pilot Profile",
+      field: "pilotName",
+      label: "Pilot Name",
+      severity: "required",
+      message: "Pilot in command name is required.",
+      why: "Flight Service requires the pilot name for the filed plan record and follow-up contact.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+    addIssue(!(filingDraft.pilotPhone.trim() || String((user as any)?.phone || "").trim()), {
+      id: "pilot-phone",
+      category: "Pilot Profile",
+      field: "pilotPhone",
+      label: "Phone Number",
+      severity: "required",
+      message: "Pilot phone number is required.",
+      why: "Flight Service specialists may need to contact the pilot about amendments, activation, weather, overdue status, or emergencies.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+
+    addIssue(!effectiveDepartureCode, {
+      id: "departure-airport",
+      category: "Flight Plan",
+      field: "departure",
+      label: "Departure",
+      severity: "required",
+      message: "Departure airport is required.",
+      why: "The filing provider needs a departure point to create the flight plan.",
+      actionLabel: "Edit",
+      actionTab: "route",
+    });
+    addIssue(!effectiveDestinationCode, {
+      id: "destination-airport",
+      category: "Flight Plan",
+      field: "destination",
+      label: "Destination",
+      severity: "required",
+      message: "Destination airport is required.",
+      why: "The filing provider needs a destination point to create the flight plan.",
+      actionLabel: "Edit",
+      actionTab: "route",
+    });
+    addIssue(!zzzzChecks.every(Boolean), {
+      id: "zzzz-details",
+      category: "Flight Plan",
+      field: "zzzzDetails",
+      label: "ZZZZ Details",
+      severity: "required",
+      message: "ZZZZ locations need a planning reference airport, actual FAA identifier or lat/lon, and description.",
+      why: "ZZZZ is only valid when Field 18 supplies the actual location detail the provider cannot infer from the airport identifier.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+    addIssue(filingDraft.flightRules === "IFR" && !Boolean(leidosFiledRoute && leidosFiledRoute.trim()), {
+      id: "route",
+      category: "Flight Plan",
+      field: "route",
+      label: "Route",
+      severity: "required",
+      message: "IFR flight plans require a route.",
+      why: "IFR filing requires an enroute string so Flight Service and ATC know the requested routing.",
+      actionLabel: "Edit",
+      actionTab: "route",
+    });
+    addIssue(!Boolean(departureAt && Number.isFinite(departureAt.getTime()) && departureAt.getTime() >= now - 60_000), {
+      id: "departure-time",
+      category: "Flight Plan",
+      field: "departureTime",
+      label: "Departure Time",
+      severity: "required",
+      message: "Planned departure time must be valid and not in the past.",
+      why: "Flight Service needs a valid proposed departure time to accept the flight plan.",
+      actionLabel: "Edit",
+      actionTab: "route",
+    });
+    addIssue(!Boolean(form.plannedDepartureAt && departureTimeZone && departureAt && Number.isFinite(departureAt.getTime())), {
+      id: "departure-timezone",
+      category: "Flight Plan",
+      field: "departureTimezone",
+      label: "Departure Timezone",
+      severity: "required",
+      message: "Local/Zulu departure conversion could not be verified.",
+      why: "Provider filing uses UTC timing, so RSF must resolve the departure airport timezone before submission.",
+      actionLabel: "Edit",
+      actionTab: "route",
+    });
+    addIssue(!plannedAltitudeValue || plannedAltitudeValue <= 0, {
+      id: "planned-altitude",
+      category: "Flight Plan",
+      field: "plannedAltitude",
+      label: "Planned Altitude",
+      severity: "required",
+      message: "Planned altitude is required.",
+      why: "Flight Service requires planned altitude as part of the flight plan route and performance data.",
+      actionLabel: "Edit",
+      actionTab: "route",
+    });
+    addIssue(!filingEstimatedEnrouteMinutes || filingEstimatedEnrouteMinutes <= 0, {
+      id: "estimated-enroute-time",
+      category: "Flight Plan",
+      field: "estimatedEnrouteTime",
+      label: "Estimated Time En Route",
+      severity: "required",
+      message: "Estimated time en route is required.",
+      why: "Estimated enroute time is required for Flight Service timing, overdue monitoring, and search and rescue workflows.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+    addIssue(!filingEnduranceMinutes || filingEnduranceMinutes <= 0, {
+      id: "fuel-endurance",
+      category: "Flight Plan",
+      field: "fuelEndurance",
+      label: "Fuel Endurance",
+      severity: "required",
+      message: "Fuel endurance is required.",
+      why: "Fuel endurance is required for Flight Service and search and rescue context if the flight becomes overdue.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+
+    addIssue(!filingDraft.aircraftHomeBase.trim() && !String((user as any)?.homeBase || "").trim(), {
+      id: "home-airport",
+      category: "Leidos Requirements",
+      field: "homeAirport",
+      label: "Home Airport",
+      severity: "required",
+      message: "Aircraft home airport is required.",
+      why: "Leidos Flight Service expects aircraft home base data in the filing packet.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+    addIssue(!filingDraft.soulsOnBoard.trim(), {
+      id: "souls-on-board",
+      category: "Leidos Requirements",
+      field: "soulsOnBoard",
+      label: "Souls on Board",
+      severity: "required",
+      message: "Souls on board is required.",
+      why: "Souls on board is required for emergency response and Flight Service records.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+    addIssue(!filingDraft.typeOfFlight.trim(), {
+      id: "type-of-flight",
+      category: "Leidos Requirements",
+      field: "typeOfFlight",
+      label: "Type of Flight",
+      severity: "required",
+      message: "Type of flight is required.",
+      why: "ICAO filing includes type of flight so the provider can classify the operation correctly.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+    addIssue(!Boolean(filingDraft.remarks.trim() || form.notes.trim()), {
+      id: "filing-remarks",
+      category: "Leidos Requirements",
+      field: "remarks",
+      label: "Filing Remarks / ATC Remarks",
+      severity: "required",
+      message: "Filing remarks / ATC remarks are required.",
+      why: "RSF requires filing remarks so the provider packet has explicit ATC remarks rather than an empty operational note.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
+    addIssue(!providerStateValid, {
+      id: "provider-state",
+      category: "Leidos Requirements",
+      field: "providerState",
+      label: "Provider Change Review",
+      severity: "required",
+      message: "Review and accept provider changes before submitting another provider action.",
+      why: "RSF blocks lifecycle actions until provider-side changes are reviewed so local and provider state do not diverge.",
+      actionLabel: "Review",
+      actionTab: fileTab,
+    });
+    for (const issue of icaoReadiness.issues.filter((issue) => issue.severity === "critical")) {
+      issues.push({
+        id: `icao-${issue.id}`,
+        category: issue.field === "equipment" || issue.field === "surveillance" ? "Aircraft Profile" : "Leidos Requirements",
+        field: issue.field,
+        label: issue.field === "equipment" ? "Equipment Code" : issue.field === "surveillance" ? "Surveillance Code" : "ICAO Other Info",
+        severity: "required",
+        message: issue.suggestion ? `${issue.message} ${issue.suggestion}` : issue.message,
+        why: "ICAO equipment, surveillance, and Field 18 data must be internally consistent before Flight Service filing.",
+        actionLabel: "Edit",
+        actionTab: fileTab,
+      });
+    }
+    const recommendedIssues: FilingReadinessIssue[] = icaoReadiness.issues
+      .filter((issue) => issue.severity === "warning")
+      .map((issue) => ({
+        id: `warning-${issue.id}`,
+        category: issue.field === "equipment" || issue.field === "surveillance" ? "Aircraft Profile" : "Leidos Requirements",
+        field: issue.field,
+        label: issue.field === "equipment" ? "Equipment Code" : issue.field === "surveillance" ? "Surveillance Code" : "ICAO Readiness",
+        severity: "recommended" as const,
+        message: issue.suggestion ? `${issue.message} ${issue.suggestion}` : issue.message,
+        why: "Recommended filing cleanup can reduce provider or ATC review friction but does not block filing.",
+        actionLabel: "Edit",
+        actionTab: fileTab,
+      }));
+    const categories: FilingReadinessCategory[] = ["Aircraft Profile", "Pilot Profile", "Flight Plan", "Leidos Requirements"];
+    const categorySummaries = categories.map((category) => ({
+      category,
+      required: issues.filter((issue) => issue.category === category && issue.severity === "required"),
+      recommended: recommendedIssues.filter((issue) => issue.category === category),
+    }));
     const blockingIssues = [
-      ...items.filter((item) => !item.ok).map((item) => `${item.label} needs attention.`),
-      ...icaoReadiness.issues.filter((issue) => issue.severity === "critical").map((issue) => issue.suggestion ? `${issue.message} ${issue.suggestion}` : issue.message),
+      ...issues.filter((issue) => issue.severity === "required").map((issue) => issue.message),
     ];
     return {
       ready: blockingIssues.length === 0,
-      items,
+      issues,
+      categorySummaries,
       icaoIssues: icaoReadiness.issues,
       blockingIssues: Array.from(new Set(blockingIssues)),
       warnings: icaoReadiness.issues.filter((issue) => issue.severity === "warning"),
@@ -6227,20 +6554,42 @@ export default function FlightPlanner() {
     effectiveDepartureCode,
     effectiveDestinationCode,
     filingDraft,
+    filingAircraftType,
+    filingEnduranceMinutes,
+    filingEstimatedEnrouteMinutes,
     form.notes,
     form.plannedDepartureAt,
     form.tailNumber,
     leidosFiledRoute,
+    plannedAltitudeValue,
     planningReferenceAlternateAirport,
     planningReferenceDepartureAirport,
     planningReferenceDestinationAirport,
+    planningCruise,
     selectedProfile,
     user,
+    actualAircraftType,
     zzzzAlternateDescription,
     zzzzDepartureDescription,
     zzzzDestinationDescription,
   ]);
   const hasBlockingFilingReadinessIssue = filingReadiness.blockingIssues.length > 0;
+  const logFilingReadinessFailure = useCallback((action: "file" | "amend") => {
+    const categories = filingReadiness.categorySummaries
+      .map((summary: FilingReadinessCategorySummary) => ({
+        category: summary.category,
+        missingFields: summary.required.map((issue) => issue.field),
+      }))
+      .filter((entry) => entry.missingFields.length > 0);
+    console.warn(JSON.stringify({
+      event: "flight_validation_failed",
+      action,
+      categories,
+      missingFields: filingReadiness.issues
+        .filter((issue: FilingReadinessIssue) => issue.severity === "required")
+        .map((issue: FilingReadinessIssue) => issue.field),
+    }));
+  }, [filingReadiness.categorySummaries, filingReadiness.issues]);
   const filingActionLabels = useMemo(() => ({
     file: isFlightServiceTestMode ? "Submit Test Flight Plan" : "File Flight Plan",
     amend: isFlightServiceTestMode ? "Amend Test Flight Plan" : "Amend",
@@ -6496,6 +6845,7 @@ export default function FlightPlanner() {
 
   const submitFilingAction = useCallback((params: { planId: string; action: FilingActionName; closeLocation?: string | null }) => {
     if ((params.action === "file" || params.action === "amend") && hasBlockingFilingReadinessIssue) {
+      logFilingReadinessFailure(params.action);
       toast({
         title: "Resolve readiness issues",
         description: filingReadiness.blockingIssues[0] || "Issues must be resolved before filing.",
@@ -6513,7 +6863,7 @@ export default function FlightPlanner() {
             ? "test cancel a flight plan"
             : "test close a flight plan";
     requireFlightServiceTestAcknowledgement(label, () => filingActionMutation.mutate(params));
-  }, [filingActionMutation, filingReadiness.blockingIssues, hasBlockingFilingReadinessIssue, requireFlightServiceTestAcknowledgement, toast]);
+  }, [filingActionMutation, filingReadiness.blockingIssues, hasBlockingFilingReadinessIssue, logFilingReadinessFailure, requireFlightServiceTestAcknowledgement, toast]);
 
   const submitProviderSync = useCallback((planId: string) => {
     requireFlightServiceTestAcknowledgement("refresh provider sync in the validation environment", () => {
@@ -6523,6 +6873,7 @@ export default function FlightPlanner() {
 
   const requestSaveCurrentPlanWithFilingAction = useCallback((action: "file" | "amend", planId: string | null = null) => {
     if (hasBlockingFilingReadinessIssue) {
+      logFilingReadinessFailure(action);
       toast({
         title: "Resolve readiness issues",
         description: filingReadiness.blockingIssues[0] || "Issues must be resolved before filing.",
@@ -6541,7 +6892,7 @@ export default function FlightPlanner() {
         updatePlanMutation.mutate(planId);
       }
     });
-  }, [filingReadiness.blockingIssues, hasBlockingFilingReadinessIssue, requireFlightServiceTestAcknowledgement, toast, updatePlanMutation]);
+  }, [filingReadiness.blockingIssues, hasBlockingFilingReadinessIssue, logFilingReadinessFailure, requireFlightServiceTestAcknowledgement, toast, updatePlanMutation]);
 
   const insertComfortStopMutation = useMutation({
     mutationFn: async ({
@@ -9719,9 +10070,9 @@ export default function FlightPlanner() {
           )}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="font-semibold text-[#F5F8FC]">Flight Plan Readiness Check</div>
+                <div className="font-semibold text-[#F5F8FC]">Flight Filing Readiness</div>
                 <div className={cn("mt-1 text-sm", filingReadiness.ready ? "text-emerald-200" : "text-amber-100")}>
-                  {filingReadiness.ready ? "Ready to File." : "Issues must be resolved before filing."}
+                  {filingReadiness.ready ? "Ready to File." : "Required items must be completed before filing."}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -9739,14 +10090,93 @@ export default function FlightPlanner() {
                 </Button>
               </div>
             </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {filingReadiness.items.map((item) => (
-                <div key={item.id} className="flex items-center gap-2 rounded-md border border-white/10 bg-black/15 px-3 py-2 text-xs">
-                  <span className={item.ok ? "text-emerald-300" : "text-amber-300"}>{item.ok ? "OK" : "Needs review"}</span>
-                  <span className="text-[#DCE6F2]">{item.label}</span>
-                </div>
-              ))}
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {filingReadiness.categorySummaries.map((summary: FilingReadinessCategorySummary) => {
+                const hasRequired = summary.required.length > 0;
+                const hasRecommended = summary.recommended.length > 0;
+                return (
+                  <div key={summary.category} className="rounded-md border border-white/10 bg-black/15 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-medium text-[#F5F8FC]">{summary.category}</div>
+                      <Badge variant="outline" className={cn(
+                        hasRequired
+                          ? "border-amber-300/40 text-amber-100"
+                          : hasRecommended
+                            ? "border-blue-300/30 text-blue-100"
+                            : "border-emerald-300/35 text-emerald-100"
+                      )}>
+                        {hasRequired ? `${summary.required.length} Required` : hasRecommended ? "Recommended" : "Complete"}
+                      </Badge>
+                    </div>
+                    {!hasRequired && !hasRecommended ? (
+                      <div className="mt-2 text-xs text-emerald-200">Complete</div>
+                    ) : (
+                      <div className="mt-3 space-y-2">
+                        {[...summary.required, ...summary.recommended].map((issue) => (
+                          <div key={issue.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-white/10 bg-[#080c11]/70 px-3 py-2 text-xs">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={issue.severity === "required" ? "font-semibold text-amber-100" : "font-semibold text-blue-100"}>
+                                  {issue.label}
+                                </span>
+                                <Badge variant="outline" className={issue.severity === "required" ? "border-amber-300/35 text-amber-100" : "border-blue-300/30 text-blue-100"}>
+                                  {issue.severity === "required" ? "Required" : "Recommended"}
+                                </Badge>
+                              </div>
+                              <div className="mt-1 text-[#DCE6F2]">{issue.message}</div>
+                              {issue.why ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button type="button" className="mt-1 text-left text-[11px] font-medium text-[#9cc7ff] underline-offset-2 hover:underline">
+                                      Why is this required?
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <p>{issue.why}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : null}
+                            </div>
+                            {issue.actionHref ? (
+                              <Button asChild type="button" size="sm" variant="outline">
+                                <Link href={issue.actionHref}>{issue.actionLabel}</Link>
+                              </Button>
+                            ) : issue.actionTab ? (
+                              <Button type="button" size="sm" variant="outline" onClick={() => setActiveTab(issue.actionTab!)}>
+                                {issue.actionLabel}
+                              </Button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+            {filingReadiness.issues.length > 0 && (
+              <div className="mt-4 rounded-md border border-amber-300/35 bg-black/20 p-3 text-sm text-amber-100">
+                <div className="font-semibold">Required Filing Information</div>
+                <div className="mt-1 text-xs text-amber-100/80">The following required information is missing or invalid:</div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {filingReadiness.issues
+                    .filter((issue: FilingReadinessIssue) => issue.severity === "required")
+                    .map((issue: FilingReadinessIssue) => (
+                      <div key={`required-${issue.id}`} className="flex items-center justify-between gap-2 rounded-md border border-amber-300/20 bg-[#110f0a]/70 px-3 py-2 text-xs">
+                        <span>{issue.label}</span>
+                        {issue.actionHref ? (
+                          <Link href={issue.actionHref} className="font-semibold text-[#9cc7ff] hover:underline">Edit</Link>
+                        ) : issue.actionTab ? (
+                          <button type="button" className="font-semibold text-[#9cc7ff] hover:underline" onClick={() => setActiveTab(issue.actionTab!)}>
+                            Edit
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                </div>
+                <div className="mt-3 text-xs text-amber-100/80">These items are required before filing a flight plan.</div>
+              </div>
+            )}
             {filingReadiness.blockingIssues.length > 0 && (
               <div className="mt-4 rounded-md border border-amber-300/35 bg-black/20 p-3 text-sm text-amber-100">
                 <div className="font-semibold">Resolve before File or Amend</div>
@@ -9861,6 +10291,7 @@ export default function FlightPlanner() {
                       variant="outline"
                       onClick={() => {
                         if (hasBlockingFilingReadinessIssue) {
+                          logFilingReadinessFailure("amend");
                           toast({
                             title: "Resolve readiness issues",
                             description: filingReadiness.blockingIssues[0] || "Issues must be resolved before filing.",

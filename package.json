@@ -24,6 +24,7 @@
     "test:opsreport": "tsx --test scripts/tests/ops-report-parsers.test.ts",
     "test:airport-communications": "tsx --test scripts/tests/airport-communications.test.ts",
     "test:route-builder": "tsx --test scripts/tests/route-builder-navaids.test.ts",
+    "test:flight-filing-readiness": "tsx --test scripts/tests/flight-filing-readiness-messages.test.ts",
     "test:flight-service": "tsx --test tests/flight-service/validation.test.ts tests/flight-service/payload-build.test.ts tests/flight-service/retrieve-compare.test.ts tests/flight-service/lifecycle-buttons.test.ts tests/flight-service/zzzz.test.ts tests/flight-service/remarks.test.ts tests/flight-service/generated-scenarios.test.ts tests/flight-service/live-lab-duplicate-risk.test.ts tests/flight-service/ops-console.test.ts scripts/tests/flight-plan-filing-validation.test.ts scripts/tests/flight-plan-filing-workflow.test.ts scripts/tests/saved-flight-plans-sorting.test.ts scripts/tests/provider-notification-format.test.ts scripts/tests/leidos-webhook-contract.test.ts scripts/tests/scanner-guard.test.ts",
     "test:flight-service:watch": "tsx --test --watch tests/flight-service/validation.test.ts tests/flight-service/payload-build.test.ts tests/flight-service/retrieve-compare.test.ts tests/flight-service/lifecycle-buttons.test.ts tests/flight-service/zzzz.test.ts tests/flight-service/remarks.test.ts tests/flight-service/generated-scenarios.test.ts",
     "certification:flight-service": "tsx tests/flight-service/certification-report.ts --write",

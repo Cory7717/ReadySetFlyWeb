@@ -105,7 +105,7 @@ import {
 import { LEIDOS_WEBHOOK_SUCCESS_RESPONSE, summarizeLeidosWebhookPayload } from "./services/leidosWebhook";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import { analyzeFiledRoute } from "@shared/flight-plan-route";
-import { ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE, canCreateAnotherActiveFlightPlan } from "@shared/flight-plan-access";
+import { ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE, canCreateAnotherActiveFlightPlan, getActiveFlightPlans } from "@shared/flight-plan-access";
 import { isValidZzzzActualLocation } from "@shared/zzzz-location";
 import { formatArtccInfo, formatProviderNotificationValue, sanitizeNotificationMessage } from "@shared/provider-notification-format";
 import {
@@ -21956,6 +21956,87 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       : "user";
   };
 
+  const normalizeFlightServiceTesterEmail = (value: unknown) =>
+    String(value || "").trim().toLowerCase();
+
+  const getConfiguredFlightServiceTesterEmails = () =>
+    new Set(
+      String(process.env.FLIGHT_SERVICE_TESTER_EMAILS || "")
+        .split(",")
+        .map(normalizeFlightServiceTesterEmail)
+        .filter(Boolean),
+    );
+
+  const envFlagEnabled = (value: unknown) =>
+    /^(true|1|yes|on)$/i.test(String(value || "").trim());
+
+  const resolveFlightServiceUserEmail = (req: any, user: any) => {
+    const candidates = [
+      user?.email,
+      req.user?.email,
+      req.user?.primaryEmail,
+      req.user?.claims?.email,
+      req.user?.claims?.primaryEmail,
+      req.auth?.email,
+      req.auth?.primaryEmail,
+      req.auth?.token?.email,
+      req.session?.email,
+    ];
+    const found = candidates.find((candidate) => normalizeFlightServiceTesterEmail(candidate));
+    return {
+      userEmail: found ? String(found).trim() : "",
+      normalizedUserEmail: normalizeFlightServiceTesterEmail(found),
+    };
+  };
+
+  const logFlightServiceAuthGateDebug = async (args: {
+    req: any;
+    user: any;
+    userId: string;
+    planId?: string | null;
+    action: string;
+    requestSource: string;
+    certificationPlan: boolean;
+    runtimeMode: ReturnType<typeof getFlightServiceRuntimeMode>;
+    testerEmails: Set<string>;
+    testerEmailMatch: boolean;
+    acknowledgementAccepted: boolean;
+    rejectionReason: string;
+  }) => {
+    let activeOpenFlightPlanCount: number | null = null;
+    try {
+      const plans = await storage.getFlightPlansByUser(args.userId);
+      activeOpenFlightPlanCount = getActiveFlightPlans(plans as any, args.planId || null).length;
+    } catch {
+      activeOpenFlightPlanCount = null;
+    }
+
+    const { userEmail, normalizedUserEmail } = resolveFlightServiceUserEmail(args.req, args.user);
+    const entitlements = getEntitlementsForUser(args.user);
+    console.warn(JSON.stringify({
+      event: "flight_service_auth_gate_debug",
+      userId: args.userId,
+      userEmail: userEmail || null,
+      normalizedUserEmail: normalizedUserEmail || null,
+      isAdmin: Boolean(args.user?.isAdmin),
+      isSuperAdmin: Boolean(args.user?.isSuperAdmin),
+      testerEmailsConfigured: args.testerEmails.size > 0,
+      testerEmailCount: args.testerEmails.size,
+      testerEmailMatch: args.testerEmailMatch,
+      flightServiceEnvironment: args.runtimeMode.environment,
+      flightFilingOperationalEnabled: args.runtimeMode.operationalFilingEnabled,
+      leidosLabSubmissionEnabled: args.runtimeMode.environment !== "PRODUCTION" && envFlagEnabled(process.env.LEIDOS_FLIGHT_SERVICE_ENABLE_LIVE),
+      validationOnlyMode: !args.runtimeMode.operationalFilingEnabled,
+      labAcknowledgementAccepted: args.acknowledgementAccepted,
+      subscriptionTier: entitlements.tier,
+      activeOpenFlightPlanCount,
+      action: args.action,
+      requestSource: args.requestSource,
+      certificationPlan: args.certificationPlan,
+      rejectionReason: args.rejectionReason,
+    }));
+  };
+
   app.get("/api/flight-service/environment", (_req, res) => {
     const mode = getFlightServiceRuntimeMode();
     res.json({
@@ -23094,20 +23175,35 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const closeLocation = parsed.data.closeLocation || null;
       const requestSource = parsed.data.requestSource || "user";
       const runtimeMode = getFlightServiceRuntimeMode();
-      const testerEmails = new Set(
-        String(process.env.FLIGHT_SERVICE_TESTER_EMAILS || "")
-          .split(",")
-          .map((email) => email.trim().toLowerCase())
-          .filter(Boolean),
-      );
-      const userEmail = String((user as any).email || "").trim().toLowerCase();
+      const testerEmails = getConfiguredFlightServiceTesterEmails();
+      const { userEmail, normalizedUserEmail } = resolveFlightServiceUserEmail(req, user);
+      const testerEmailMatch = Boolean(normalizedUserEmail && testerEmails.has(normalizedUserEmail));
       const certificationPlan = Boolean((plan as any).isCertificationTest || String((plan as any).source || "") === "leidos-certification");
+      const acknowledgementAccepted = !runtimeMode.acknowledgementRequired ||
+        hasFlightServiceTestAcknowledgement(req.body, runtimeMode.environment);
       const canUseProviderFiling =
         runtimeMode.operationalFilingEnabled ||
         Boolean((user as any).isSuperAdmin || (user as any).isAdmin) ||
-        (userEmail && testerEmails.has(userEmail)) ||
+        testerEmailMatch ||
         (certificationPlan && ["cancel", "close"].includes(action));
       if (!canUseProviderFiling) {
+        const rejectionReason = runtimeMode.environment === "PRODUCTION" && !runtimeMode.operationalFilingEnabled
+          ? "operational_filing_disabled"
+          : "tester_not_authorized";
+        await logFlightServiceAuthGateDebug({
+          req,
+          user,
+          userId,
+          planId: plan.id,
+          action,
+          requestSource,
+          certificationPlan,
+          runtimeMode,
+          testerEmails,
+          testerEmailMatch,
+          acknowledgementAccepted,
+          rejectionReason,
+        });
         console.warn(JSON.stringify({
           event: "flight_service_test_mode_action_blocked",
           flight_service_environment: runtimeMode.environment,
@@ -23120,14 +23216,17 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           userId,
           userEmail: userEmail || null,
           blockedBecausePublicOperationalDisabled: true,
+          blockedReason: rejectionReason,
         }));
         return res.status(403).json({
-          error: "Flight filing is currently in validation mode and is not available for operational use.",
-          code: "FLIGHT_SERVICE_VALIDATION_ONLY",
+          error: rejectionReason === "operational_filing_disabled"
+            ? "Flight Service operational filing is disabled in this environment."
+            : "This account is not authorized for Flight Service LAB provider test filing. Confirm the API service has FLIGHT_SERVICE_TESTER_EMAILS configured for this signed-in email and has been restarted.",
+          code: rejectionReason === "operational_filing_disabled"
+            ? "FLIGHT_SERVICE_OPERATIONAL_FILING_DISABLED"
+            : "FLIGHT_SERVICE_TESTER_NOT_AUTHORIZED",
         });
       }
-      const acknowledgementAccepted = !runtimeMode.acknowledgementRequired ||
-        hasFlightServiceTestAcknowledgement(req.body, runtimeMode.environment);
       console.info(JSON.stringify({
         event: "flight_service_environment",
         flight_service_environment: runtimeMode.environment,
@@ -23143,6 +23242,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         blockedBecausePublicOperationalDisabled: false,
       }));
       if (!acknowledgementAccepted) {
+        await logFlightServiceAuthGateDebug({
+          req,
+          user,
+          userId,
+          planId: plan.id,
+          action,
+          requestSource,
+          certificationPlan,
+          runtimeMode,
+          testerEmails,
+          testerEmailMatch,
+          acknowledgementAccepted,
+          rejectionReason: "missing_lab_acknowledgement",
+        });
         if (certificationPlan && ["cancel", "close"].includes(action)) {
           console.warn(JSON.stringify({
             event: "flight_service_certification_cleanup_blocked",
@@ -23160,8 +23273,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           }));
         }
         return res.status(428).json({
-          error: "Flight Service validation mode acknowledgement is required before this test action.",
-          code: "FLIGHT_SERVICE_TEST_ACKNOWLEDGEMENT_REQUIRED",
+          error: "Flight Service test acknowledgement is required before submitting a LAB filing.",
+          code: "FLIGHT_SERVICE_TEST_ACK_REQUIRED",
           flightServiceEnvironment: runtimeMode.environment,
         });
       }
@@ -23292,9 +23405,23 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           exceptPlanId: plan.id,
         });
         if (!activePlanAccess.allowed) {
+          await logFlightServiceAuthGateDebug({
+            req,
+            user,
+            userId,
+            planId: plan.id,
+            action,
+            requestSource,
+            certificationPlan,
+            runtimeMode,
+            testerEmails,
+            testerEmailMatch,
+            acknowledgementAccepted,
+            rejectionReason: "flight_plan_limit_exceeded",
+          });
           return res.status(403).json({
             error: activePlanAccess.message || ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE,
-            code: "ACTIVE_FLIGHT_PLAN_LIMIT",
+            code: "FLIGHT_PLAN_LIMIT_EXCEEDED",
             activeFlightPlanCount: activePlanAccess.activeCount,
           });
         }
@@ -23356,6 +23483,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         }));
         return res.status(400).json({
           error: "Flight plan is not ready for this action.",
+          code: "FLIGHT_PLAN_READINESS_FAILED",
           validation,
         });
       }
@@ -23529,19 +23657,17 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       const runtimeMode = getFlightServiceRuntimeMode();
       const requestSource = getFlightPlanProviderRequestSource(req.body);
-      const testerEmails = new Set(
-        String(process.env.FLIGHT_SERVICE_TESTER_EMAILS || "")
-          .split(",")
-          .map((email) => email.trim().toLowerCase())
-          .filter(Boolean),
-      );
-      const userEmail = String((user as any).email || "").trim().toLowerCase();
+      const testerEmails = getConfiguredFlightServiceTesterEmails();
+      const { userEmail, normalizedUserEmail } = resolveFlightServiceUserEmail(req, user);
+      const testerEmailMatch = Boolean(normalizedUserEmail && testerEmails.has(normalizedUserEmail));
       const certificationPlan = Boolean((plan as any).isCertificationTest || String((plan as any).source || "") === "leidos-certification");
       const canUseProviderSync =
         runtimeMode.operationalFilingEnabled ||
         Boolean((user as any).isSuperAdmin || (user as any).isAdmin) ||
-        (userEmail && testerEmails.has(userEmail)) ||
+        testerEmailMatch ||
         certificationPlan;
+      const acknowledgementAccepted = !runtimeMode.acknowledgementRequired ||
+        hasFlightServiceTestAcknowledgement(req.body, runtimeMode.environment);
       if (!runtimeMode.operationalFilingEnabled && requestSource === "background" && certificationPlan) {
         console.info(JSON.stringify({
           event: "flight_service_certification_background_sync_skipped",
@@ -23564,6 +23690,23 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         });
       }
       if (!canUseProviderSync) {
+        const rejectionReason = runtimeMode.environment === "PRODUCTION" && !runtimeMode.operationalFilingEnabled
+          ? "operational_filing_disabled"
+          : "tester_not_authorized";
+        await logFlightServiceAuthGateDebug({
+          req,
+          user,
+          userId,
+          planId: plan.id,
+          action: "sync",
+          requestSource,
+          certificationPlan,
+          runtimeMode,
+          testerEmails,
+          testerEmailMatch,
+          acknowledgementAccepted,
+          rejectionReason,
+        });
         console.warn(JSON.stringify({
           event: "flight_service_test_mode_action_blocked",
           flight_service_environment: runtimeMode.environment,
@@ -23576,14 +23719,17 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           userId,
           userEmail: userEmail || null,
           blockedBecausePublicOperationalDisabled: true,
+          blockedReason: rejectionReason,
         }));
         return res.status(403).json({
-          error: "Flight filing is currently in validation mode and is not available for operational use.",
-          code: "FLIGHT_SERVICE_VALIDATION_ONLY",
+          error: rejectionReason === "operational_filing_disabled"
+            ? "Flight Service operational filing is disabled in this environment."
+            : "This account is not authorized for Flight Service LAB provider sync. Confirm the API service has FLIGHT_SERVICE_TESTER_EMAILS configured for this signed-in email and has been restarted.",
+          code: rejectionReason === "operational_filing_disabled"
+            ? "FLIGHT_SERVICE_OPERATIONAL_FILING_DISABLED"
+            : "FLIGHT_SERVICE_TESTER_NOT_AUTHORIZED",
         });
       }
-      const acknowledgementAccepted = !runtimeMode.acknowledgementRequired ||
-        hasFlightServiceTestAcknowledgement(req.body, runtimeMode.environment);
       console.info(JSON.stringify({
         event: "flight_service_environment",
         flight_service_environment: runtimeMode.environment,
@@ -23599,9 +23745,23 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         blockedBecausePublicOperationalDisabled: false,
       }));
       if (!acknowledgementAccepted) {
+        await logFlightServiceAuthGateDebug({
+          req,
+          user,
+          userId,
+          planId: plan.id,
+          action: "sync",
+          requestSource,
+          certificationPlan,
+          runtimeMode,
+          testerEmails,
+          testerEmailMatch,
+          acknowledgementAccepted,
+          rejectionReason: "missing_lab_acknowledgement",
+        });
         return res.status(428).json({
-          error: "Flight Service validation mode acknowledgement is required before this test action.",
-          code: "FLIGHT_SERVICE_TEST_ACKNOWLEDGEMENT_REQUIRED",
+          error: "Flight Service test acknowledgement is required before submitting a LAB filing.",
+          code: "FLIGHT_SERVICE_TEST_ACK_REQUIRED",
           flightServiceEnvironment: runtimeMode.environment,
         });
       }
@@ -23824,7 +23984,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!activePlanAccess.allowed) {
         return res.status(403).json({
           error: activePlanAccess.message || ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE,
-          code: "ACTIVE_FLIGHT_PLAN_LIMIT",
+          code: "FLIGHT_PLAN_LIMIT_EXCEEDED",
           activeFlightPlanCount: activePlanAccess.activeCount,
         });
       }

@@ -106,6 +106,7 @@ const CesiumGlobe = lazy(() => import("@/components/flight-planner/CesiumGlobe")
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 const FLIGHT_SERVICE_TEST_ACK_KEY = "rsf.flightServiceTestAcknowledgement.v1";
 const FLIGHT_SERVICE_TEST_ACK_TTL_MS = 24 * 60 * 60 * 1000;
+const ROUTE_ASSIST_UNAVAILABLE_MESSAGE = "Route Assist could not retrieve a suggested route. You can continue with a custom route or try again.";
 type FlightServiceEnvironmentMode = "LAB" | "TEST" | "VALIDATION" | "PRODUCTION";
 type FlightServiceEnvironmentConfig = {
   environment: FlightServiceEnvironmentMode;
@@ -1416,6 +1417,13 @@ type LeidosRouteSearchResponse = {
   warnings: string[];
   available?: boolean;
   message?: string | null;
+  diagnostics?: {
+    providerResponseMessages?: string[];
+    searchPathOption?: string;
+    providerEndpoint?: string;
+    httpStatus?: number;
+    providerReturnStatus?: boolean | null;
+  };
 };
 
 type FiledRouteAnalysisResponse = {
@@ -3068,6 +3076,7 @@ export default function FlightPlanner() {
       planningDepartureCode,
       planningDestinationCode,
       plannedAltitude,
+      filingAircraftType,
       filingDraft.flightRules,
     ],
     queryFn: async () => {
@@ -3078,12 +3087,14 @@ export default function FlightPlanner() {
       if (plannedAltitude) {
         params.set("altitudeFt", plannedAltitude);
       }
+      if (filingAircraftType) {
+        params.set("aircraftType", filingAircraftType);
+      }
       const res = await fetch(apiUrl(`/api/flight-plans/route-search?${params.toString()}`), {
         credentials: "include",
       });
       if (!res.ok) {
-        const payload = await res.json().catch(() => null);
-        throw new Error(payload?.error || "Failed to load route suggestions");
+        throw new Error(ROUTE_ASSIST_UNAVAILABLE_MESSAGE);
       }
       return res.json();
     },
@@ -3101,8 +3112,10 @@ export default function FlightPlanner() {
     [leidosRouteQuery.data?.route],
   );
   const routeAssistUnavailableMessage = useMemo(
-    () => normalizeRouteAssistMessage(leidosRouteQuery.data?.message),
-    [leidosRouteQuery.data?.message],
+    () => leidosRouteQuery.data?.available === false
+      ? ROUTE_ASSIST_UNAVAILABLE_MESSAGE
+      : normalizeRouteAssistMessage(leidosRouteQuery.data?.message),
+    [leidosRouteQuery.data?.available, leidosRouteQuery.data?.message],
   );
   const routeAssistWarnings = useMemo(
     () => Array.isArray(leidosRouteQuery.data?.warnings)
@@ -8522,7 +8535,7 @@ export default function FlightPlanner() {
                     {leidosRouteQuery.error && (
                       <Alert>
                         <AlertDescription>
-                          {(leidosRouteQuery.error as Error).message || "Route search is unavailable right now."}
+                          {ROUTE_ASSIST_UNAVAILABLE_MESSAGE}
                         </AlertDescription>
                       </Alert>
                     )}

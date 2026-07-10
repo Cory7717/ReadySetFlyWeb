@@ -23048,6 +23048,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const destination = typeof req.query.destination === "string" ? req.query.destination.trim().toUpperCase() : "";
       const altitudeRaw = typeof req.query.altitudeFt === "string" ? Number(req.query.altitudeFt) : null;
       const altitudeFt = Number.isFinite(altitudeRaw) ? altitudeRaw : null;
+      const aircraftType = typeof req.query.aircraftType === "string" ? req.query.aircraftType.trim().toUpperCase() : null;
 
       if (!departure || !destination) {
         return res.status(400).json({ error: "Departure and destination are required." });
@@ -23057,7 +23058,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(400).json({ error: "Departure and destination must be valid ICAO/IATA-style identifiers." });
       }
 
-      const payload = await searchLeidosRoute({ departure, destination, altitudeFt });
+      const payload = await searchLeidosRoute({ departure, destination, altitudeFt, aircraftType });
       res.json(payload);
     } catch (error: any) {
       const message = String(error?.message || "");
@@ -23077,7 +23078,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         faaPreferredRoutes: [],
         warnings: [],
         available: false,
-        message: message || "Provider route search is unavailable right now.",
+        message: "Route Assist could not retrieve a suggested route. You can continue with a custom route or try again.",
+        diagnostics: {
+          providerResponseMessages: message ? [message] : [],
+        },
       });
     }
   });

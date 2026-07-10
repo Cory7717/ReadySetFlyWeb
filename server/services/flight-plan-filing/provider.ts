@@ -27,6 +27,8 @@ const LAB_REST_BASE_URL = "https://ffspelabs.leidos.com/Website2/rest/";
 const PRODUCTION_REST_BASE_URL = "https://www.lmfsweb.afss.com/Website/rest/";
 const DEFAULT_USER_AGENT = "ReadySetFly Flight Service Interface";
 const DEFAULT_LEIDOS_REQUEST_TIMEOUT_MS = 25000;
+export const LEIDOS_ROUTE_SEARCH_OPTION_SYSTEM_RECOMMENDED = "SYSTEM_RECOMMENDED" as const;
+export const LEIDOS_ROUTE_SEARCH_PATH_OPTION_LOW_ALTITUDE_ONLY = "LOW_ALTITUDE_ONLY" as const;
 
 type LeidosEnvironment = "lab" | "test" | "validation" | "production";
 
@@ -76,6 +78,16 @@ export type LeidosRouteSearchResult = {
   codedDepartureRoutes: string[];
   faaPreferredRoutes: string[];
   warnings: string[];
+  available: boolean;
+  message?: string | null;
+  diagnostics?: {
+    searchOption: typeof LEIDOS_ROUTE_SEARCH_OPTION_SYSTEM_RECOMMENDED;
+    searchPathOption: typeof LEIDOS_ROUTE_SEARCH_PATH_OPTION_LOW_ALTITUDE_ONLY;
+    providerEndpoint: string;
+    httpStatus: number;
+    providerReturnStatus: boolean | null;
+    providerResponseMessages: string[];
+  };
 };
 
 export interface FlightPlanFilingProvider {
@@ -2089,10 +2101,12 @@ export const searchLeidosRoute = async ({
   departure,
   destination,
   altitudeFt,
+  aircraftType,
 }: {
   departure: string;
   destination: string;
   altitudeFt?: number | null;
+  aircraftType?: string | null;
 }): Promise<LeidosRouteSearchResult> => {
   const config = getLeidosFlightServiceConfig();
   if (!config.username || !config.password) {
@@ -2101,12 +2115,14 @@ export const searchLeidosRoute = async ({
 
   const baseUrl = config.baseUrl.endsWith("/") ? config.baseUrl : `${config.baseUrl}/`;
   const url = new URL("util/routeSearch", baseUrl);
-  url.searchParams.set("departure", departure.trim().toUpperCase());
-  url.searchParams.set("destination", destination.trim().toUpperCase());
-  url.searchParams.set("searchOption", "SYSTEM_RECOMMENDED");
-  if (altitudeFt && Number.isFinite(altitudeFt) && altitudeFt > 0 && altitudeFt < 18000) {
-    url.searchParams.set("searchPathOption", "LOW_ALTITUDE_ONLY");
-  }
+  const normalizedDeparture = departure.trim().toUpperCase();
+  const normalizedDestination = destination.trim().toUpperCase();
+  const searchOption = LEIDOS_ROUTE_SEARCH_OPTION_SYSTEM_RECOMMENDED;
+  const searchPathOption = LEIDOS_ROUTE_SEARCH_PATH_OPTION_LOW_ALTITUDE_ONLY;
+  url.searchParams.set("departure", normalizedDeparture);
+  url.searchParams.set("destination", normalizedDestination);
+  url.searchParams.set("searchOption", searchOption);
+  url.searchParams.set("searchPathOption", searchPathOption);
 
   const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
   let response: Response;
@@ -2127,10 +2143,6 @@ export const searchLeidosRoute = async ({
   }
 
   const parsed = await parseProviderResponse(response);
-  if (!response.ok) {
-    throw new Error(`Leidos route search failed with status ${response.status}`);
-  }
-
   const asRouteStringArray = (value: unknown) =>
     Array.isArray(value)
       ? value
@@ -2157,16 +2169,75 @@ export const searchLeidosRoute = async ({
           .filter((item): item is string => Boolean(item && item !== "[object Object]"))
       : [];
 
+  if (!response.ok) {
+    console.warn(JSON.stringify({
+      event: "flight_route_assist_provider_response",
+      departure: normalizedDeparture,
+      destination: normalizedDestination,
+      altitudeFt: altitudeFt && Number.isFinite(altitudeFt) ? Math.round(altitudeFt) : null,
+      aircraftType: aircraftType ? String(aircraftType).trim().toUpperCase() : null,
+      searchPathOption,
+      providerEndpoint: `${url.origin}${url.pathname}`,
+      httpStatus: response.status,
+      providerReturnStatus: typeof parsed.returnStatus === "boolean" ? parsed.returnStatus : null,
+      providerResponseMessages: [
+        ...asMessageStringArray(parsed.returnCodedMessage),
+        ...asMessageStringArray(parsed.returnMessage),
+        toDisplayString(parsed.returnMessage),
+        toDisplayString(parsed.text),
+      ].filter((message): message is string => Boolean(message)),
+    }));
+    throw new Error(`Leidos route search failed with status ${response.status}`);
+  }
+
+  const providerResponseMessages = [
+    ...asMessageStringArray(parsed.returnCodedMessage),
+    ...asMessageStringArray(parsed.returnMessage),
+    toDisplayString(parsed.returnMessage),
+  ].filter((message): message is string => Boolean(message));
+  const providerReturnStatus = typeof parsed.returnStatus === "boolean" ? parsed.returnStatus : null;
+  const route = extractNestedRouteString(parsed.route) || null;
+  const atcRecentIFRRoutes = asRouteStringArray(parsed.atcRecentIFRRoutes);
+  const codedDepartureRoutes = asRouteStringArray(parsed.codedDepartureRoutes);
+  const faaPreferredRoutes = asRouteStringArray(parsed.faaPreferredRoutes);
+  const hasSuggestions = Boolean(route || atcRecentIFRRoutes.length || codedDepartureRoutes.length || faaPreferredRoutes.length);
+  const providerAccepted = providerReturnStatus !== false;
+
+  console.info(JSON.stringify({
+    event: "flight_route_assist_provider_response",
+    departure: normalizedDeparture,
+    destination: normalizedDestination,
+    altitudeFt: altitudeFt && Number.isFinite(altitudeFt) ? Math.round(altitudeFt) : null,
+    aircraftType: aircraftType ? String(aircraftType).trim().toUpperCase() : null,
+    searchPathOption,
+    providerEndpoint: `${url.origin}${url.pathname}`,
+    httpStatus: response.status,
+    providerReturnStatus,
+    providerResponseMessages,
+  }));
+
   return {
     provider: "Leidos Flight Service",
     environment: config.environment,
-    departure: departure.trim().toUpperCase(),
-    destination: destination.trim().toUpperCase(),
-    route: extractNestedRouteString(parsed.route) || null,
-    atcRecentIFRRoutes: asRouteStringArray(parsed.atcRecentIFRRoutes),
-    codedDepartureRoutes: asRouteStringArray(parsed.codedDepartureRoutes),
-    faaPreferredRoutes: asRouteStringArray(parsed.faaPreferredRoutes),
-    warnings: asMessageStringArray(parsed.returnCodedMessage),
+    departure: normalizedDeparture,
+    destination: normalizedDestination,
+    route,
+    atcRecentIFRRoutes,
+    codedDepartureRoutes,
+    faaPreferredRoutes,
+    warnings: providerAccepted ? providerResponseMessages : [],
+    available: providerAccepted,
+    message: providerAccepted || hasSuggestions
+      ? null
+      : "Route Assist could not retrieve a suggested route. You can continue with a custom route or try again.",
+    diagnostics: {
+      searchOption,
+      searchPathOption,
+      providerEndpoint: `${url.origin}${url.pathname}`,
+      httpStatus: response.status,
+      providerReturnStatus,
+      providerResponseMessages,
+    },
   };
 };
 

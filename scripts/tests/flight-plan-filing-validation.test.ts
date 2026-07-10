@@ -101,6 +101,62 @@ test("provider departure instant uses departure airport timezone, not browser ti
   }
 });
 
+test("fuel endurance shorter than ETE is blocked before provider submission", () => {
+  const result = validateFlightPlanForAction(filingPlan({
+    filingEstimatedEnrouteMinutes: 328,
+    filingEnduranceMinutes: 240,
+    plannerState: {
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: testDepartureLocal,
+      fuelAvailableGallons: 40,
+      fuelBurnGph: 10,
+      calculatedEnduranceMinutes: 240,
+      reserveMinutes: 45,
+      filingEnduranceSource: "manual_icao_endurance",
+    },
+  }), "file");
+
+  assert.equal(result.ready, false);
+  assert.ok(result.errors.some((error) =>
+    error.includes("Fuel endurance is 4:00, but estimated time enroute is 5:28.")
+  ));
+});
+
+test("fuel endurance greater than ETE passes local endurance validation", () => {
+  const result = validateFlightPlanForAction(filingPlan({
+    filingEstimatedEnrouteMinutes: 300,
+    filingEnduranceMinutes: 360,
+  }), "file");
+
+  assert.equal(result.ready, true);
+  assert.equal(result.errors.some((error) => error.includes("Fuel endurance is")), false);
+});
+
+test("Leidos payload route removes endpoint airports without globally trimming DCT", () => {
+  const routeFor = (route: string, departure = "KBOS", destination = "KSEA") => {
+    const payload = buildLeidosActionPayload(filingPlan({
+      departure,
+      destination,
+      route,
+      filingFlightRules: "IFR",
+      filingEquipment: "SR",
+      filingOtherInfo: "PBN/A1",
+    }), "file", { otherInfo: null } as any);
+    return payload.params.get("route");
+  };
+
+  assert.equal(routeFor("KBOS DCT ALB DCT KSEA"), "ALB");
+  assert.equal(routeFor("KBOS DCT ALB DCT SYR DCT KSEA"), "ALB DCT SYR");
+  assert.equal(routeFor("DCT ALB J60 BOI"), "DCT ALB J60 BOI");
+  assert.equal(routeFor("ALB J60 BOI DCT"), "ALB J60 BOI DCT");
+  assert.equal(routeFor("DCT"), "DCT");
+  assert.equal(routeFor("KBOS DCT KSEA"), "DCT");
+  assert.equal(routeFor("ALB DCT DCT SYR"), "ALB DCT SYR");
+  assert.equal(routeFor("ALB DCT KBOS DCT SYR DCT KSEA DCT BOI"), "ALB DCT KBOS DCT SYR DCT KSEA DCT BOI");
+  assert.equal(routeFor("DALL3 EIC V18 MEI LGC4"), "DALL3 EIC V18 MEI LGC4");
+  assert.equal(routeFor("DCT EMI/D01+40 DCT MAPEL/D00+30 V143 DELRO DCT"), "DCT EMI/D01+40 DCT MAPEL/D00+30 V143 DELRO DCT");
+});
+
 test("Leidos payload logs redact pilot phone while retaining population metadata", () => {
   const phone = "15124121762";
   const payload = buildLeidosActionPayload(

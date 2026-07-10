@@ -519,6 +519,14 @@ const minutesToIsoDuration = (minutes?: number | null) => {
   return `PT${hourPart}${minutePart}`;
 };
 
+const formatDurationForValidation = (minutes?: number | null) => {
+  if (!minutes || !Number.isFinite(minutes) || minutes <= 0) return "-";
+  const wholeMinutes = Math.max(1, Math.round(minutes));
+  const hours = Math.floor(wholeMinutes / 60);
+  const minutesRemainder = wholeMinutes % 60;
+  return `${hours}:${String(minutesRemainder).padStart(2, "0")}`;
+};
+
 const appendLeidosAltitudeFields = (params: URLSearchParams, altitudeFt?: number | null) => {
   if (!altitudeFt || !Number.isFinite(altitudeFt) || altitudeFt <= 0) return;
   const roundedAltitude = Math.round(altitudeFt);
@@ -867,7 +875,10 @@ export const buildLocalDuplicateFlightSignature = (plan: FlightPlan) => ({
   departure: normalizeDuplicateFlightValue(plan.departure),
   destination: normalizeDuplicateFlightValue(plan.destination),
   departureInstant: getProviderDepartureInstantForPlan(plan) || "",
-  route: normalizeDuplicateFlightValue(normalizeRouteForProvider(plan.route || "DCT").normalizedRoute || "DCT"),
+  route: normalizeDuplicateFlightValue(normalizeRouteForProvider(plan.route || "DCT", {
+    departure: plan.departure,
+    destination: plan.destination,
+  }).normalizedRoute || "DCT"),
   altitude: Number(plan.filingPlannedAltitudeFt || 0),
 });
 
@@ -1524,7 +1535,10 @@ export const buildZzzzOtherInfoForLeidos = (
 
 export const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingAction, config: LeidosFlightServiceConfig) => {
   const params = new URLSearchParams();
-  const routeNormalization = normalizeRouteForProvider(plan.route || "DCT");
+  const routeNormalization = normalizeRouteForProvider(plan.route || "DCT", {
+    departure: plan.departure,
+    destination: plan.destination,
+  });
   const selectedLocalDepartureTime = getSelectedDepartureLocalDateTime(plan);
   const departureTimeZone = getPlannerTimeZone(plan);
   const providerDepartureInstant = getProviderDepartureInstantForPlan(plan);
@@ -2216,7 +2230,10 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   const warnings: string[] = [];
   const rules = normalizeFlightRules(plan.filingFlightRules);
   const lifecycleStatus = String(plan.filingStatus || "").toLowerCase();
-  const routeNormalization = normalizeRouteForProvider(plan.route || "DCT");
+  const routeNormalization = normalizeRouteForProvider(plan.route || "DCT", {
+    departure: plan.departure,
+    destination: plan.destination,
+  });
 
   if (!plan.departure) errors.push("Departure airport is required.");
   if (plan.departure?.toUpperCase() === "ZZZZ" && (action === "file" || action === "amend")) {
@@ -2272,6 +2289,33 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   }
   if ((action === "file" || action === "amend") && !plan.filingEnduranceMinutes) {
     errors.push("Endurance is required before sending this filing action to the filing provider.");
+  }
+  if (
+    (action === "file" || action === "amend") &&
+    Number(plan.filingEstimatedEnrouteMinutes || 0) > 0 &&
+    Number(plan.filingEnduranceMinutes || 0) > 0 &&
+    Number(plan.filingEnduranceMinutes) < Number(plan.filingEstimatedEnrouteMinutes)
+  ) {
+    const message = `Fuel endurance is ${formatDurationForValidation(plan.filingEnduranceMinutes)}, but estimated time enroute is ${formatDurationForValidation(plan.filingEstimatedEnrouteMinutes)}.`;
+    errors.push(`${message} Increase endurance or correct aircraft fuel data before filing.`);
+    const plannerState = plan.plannerState && typeof plan.plannerState === "object" && !Array.isArray(plan.plannerState)
+      ? plan.plannerState as Record<string, unknown>
+      : {};
+    console.warn(JSON.stringify({
+      event: "flight_fuel_endurance_diagnostic",
+      planId: plan.id,
+      action,
+      calculatedEteMinutes: plan.filingEstimatedEnrouteMinutes,
+      displayedFuelEnduranceMinutes: plan.filingEnduranceMinutes,
+      transmittedFuelEnduranceMinutes: plan.filingEnduranceMinutes,
+      usableFuelGallons: plannerState.fuelAvailableGallons ?? plan.fuelOnBoard ?? null,
+      burnRateGph: plannerState.fuelBurnGph ?? null,
+      calculatedEnduranceMinutes: plannerState.calculatedEnduranceMinutes ?? null,
+      reserveMinutes: plannerState.reserveMinutes ?? null,
+      surplusOrDeficitMinutes: Number(plan.filingEnduranceMinutes) - Number(plan.filingEstimatedEnrouteMinutes),
+      finalEnduranceSource: plannerState.filingEnduranceSource ?? null,
+      blockedBeforeProvider: true,
+    }));
   }
   if ((action === "file" || action === "amend") && !plan.filingEquipment) {
     errors.push("Aircraft equipment is required before sending this filing action to the filing provider.");

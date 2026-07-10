@@ -207,7 +207,22 @@ export const buildOtherInfoWithDof = ({
 const hasMeaningfulRouteToken = (tokenKind: FiledRouteTokenKind) =>
   tokenKind !== "direct" && tokenKind !== "unknown";
 
-export const normalizeRouteForProvider = (input?: string | null) => {
+export type ProviderRouteNormalizationOptions = {
+  departure?: string | null;
+  destination?: string | null;
+};
+
+export const normalizeRouteForProvider = (
+  input?: string | null,
+  options?: ProviderRouteNormalizationOptions,
+) => {
+  return normalizeRouteForProviderWithContext(input, options);
+};
+
+export const normalizeRouteForProviderWithContext = (
+  input?: string | null,
+  options?: ProviderRouteNormalizationOptions,
+) => {
   const localEnteredRoute = normalizeRouteText(String(input || ""));
   if (!localEnteredRoute) {
     return {
@@ -234,67 +249,66 @@ export const normalizeRouteForProvider = (input?: string | null) => {
   const dedupedTokens = rawTokens.filter((token, index, arr) =>
     !(token.token === "DCT" && arr[index - 1]?.token === "DCT")
   );
-  const normalizedTokens: string[] = [];
-  let insertedDirect = false;
-
-  const pushDirectIfNeeded = () => {
-    if (normalizedTokens[normalizedTokens.length - 1] !== "DCT") {
-      normalizedTokens.push("DCT");
-      insertedDirect = true;
+  const departure = normalizeRouteText(String(options?.departure || ""));
+  const destination = normalizeRouteText(String(options?.destination || ""));
+  const firstFiledTokenIndex = dedupedTokens.findIndex((token) => token.token !== "DCT");
+  const lastFiledTokenIndex = (() => {
+    for (let index = dedupedTokens.length - 1; index >= 0; index -= 1) {
+      if (dedupedTokens[index].token !== "DCT") return index;
     }
-  };
-
-  for (let index = 0; index < dedupedTokens.length; index += 1) {
-    const token = dedupedTokens[index];
-    if (token.token === "DCT") {
-      pushDirectIfNeeded();
-      continue;
+    return -1;
+  })();
+  let removedDepartureAirport = false;
+  let removedDestinationAirport = false;
+  let routeTokens = dedupedTokens.filter((token, index) => {
+    if (token.kind !== "airport") return true;
+    if (index === firstFiledTokenIndex && departure && token.token === departure) {
+      removedDepartureAirport = true;
+      return false;
     }
-
-    const previous = dedupedTokens[index - 1];
-    const next = dedupedTokens[index + 1];
-    const isValueToken = ICAO_ROUTE_VALUE_KINDS.has(token.kind);
-    const isStructuralToken = ICAO_ROUTE_STRUCTURAL_KINDS.has(token.kind);
-    const previousIsValue = previous ? ICAO_ROUTE_VALUE_KINDS.has(previous.kind) : false;
-    const nextIsValue = next ? ICAO_ROUTE_VALUE_KINDS.has(next.kind) : false;
-
-    if (
-      isValueToken &&
-      (index === 0 || previous?.token === "DCT" || previousIsValue)
-    ) {
-      pushDirectIfNeeded();
+    if (index === lastFiledTokenIndex && destination && token.token === destination) {
+      removedDestinationAirport = true;
+      return false;
     }
+    return true;
+  });
 
-    normalizedTokens.push(token.token);
-
-    if (
-      isValueToken &&
-      (!next || next.token === "DCT" || nextIsValue)
-    ) {
-      pushDirectIfNeeded();
+  const routeAfterEndpointRemoval = routeTokens;
+  if (
+    removedDepartureAirport &&
+    removedDestinationAirport &&
+    routeAfterEndpointRemoval.length > 0 &&
+    routeAfterEndpointRemoval.every((token) => token.token === "DCT")
+  ) {
+    routeTokens = [routeAfterEndpointRemoval[0]];
+  } else {
+    while (removedDepartureAirport && routeTokens[0]?.token === "DCT") {
+      routeTokens = routeTokens.slice(1);
     }
-
-    if (isStructuralToken && normalizedTokens[normalizedTokens.length - 1] === "DCT") {
-      normalizedTokens.pop();
+    while (removedDestinationAirport && routeTokens[routeTokens.length - 1]?.token === "DCT") {
+      routeTokens = routeTokens.slice(0, -1);
     }
   }
 
-  const normalizedRoute = normalizeRouteText(normalizedTokens.join(" "));
+  routeTokens = routeTokens.filter((token, index, arr) =>
+    !(token.token === "DCT" && arr[index - 1]?.token === "DCT")
+  );
+  const providerRoute = normalizeRouteText(routeTokens.map((token) => token.token).join(" ")) || null;
   const hasValidToken = rawTokens.some((token) => hasMeaningfulRouteToken(token.kind));
   if (!hasValidToken) {
     notes.push("Route must contain at least one recognized airport, fix, navaid, airway, or procedure token.");
   }
-  if (insertedDirect) {
-    notes.push("RSF added DCT segments so the transmitted route is ATC-safe.");
-  }
   if (dedupedTokens.length !== rawTokens.length) {
     notes.push("RSF removed duplicate DCT tokens before transmission.");
+  }
+  if (removedDepartureAirport || removedDestinationAirport) {
+    notes.push("RSF removed departure/destination airport tokens from the transmitted route because they are sent in dedicated filing fields.");
   }
 
   return {
     localEnteredRoute,
-    normalizedRoute: normalizedRoute || null,
-    changed: normalizeRouteText(localEnteredRoute) !== normalizeRouteText(normalizedRoute),
+    normalizedRoute: providerRoute,
+    changed: normalizeRouteText(localEnteredRoute) !== normalizeRouteText(providerRoute || ""),
     notes,
     hasValidToken,
   };

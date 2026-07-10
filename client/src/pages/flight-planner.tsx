@@ -362,6 +362,7 @@ const buildPlannerStateSnapshot = ({
   actualAircraftType,
   customProfile,
   routeMode,
+  fuelDiagnostics,
 }: {
   selectedProfileId: string;
   selectedTypeId: string;
@@ -390,6 +391,7 @@ const buildPlannerStateSnapshot = ({
     maxGrossWeightOverrideLb: string;
   };
   routeMode?: "auto" | "direct" | "manual";
+  fuelDiagnostics?: Record<string, unknown>;
 }) => ({
   selectedProfileId,
   selectedTypeId,
@@ -412,6 +414,16 @@ const buildPlannerStateSnapshot = ({
   actualAircraftType,
   customProfile,
   routeMode,
+  fuelDiagnostics,
+  calculatedEteMinutes: fuelDiagnostics?.calculatedEteMinutes ?? null,
+  displayedFuelEnduranceMinutes: fuelDiagnostics?.displayedFuelEnduranceMinutes ?? null,
+  transmittedFuelEnduranceMinutes: fuelDiagnostics?.transmittedFuelEnduranceMinutes ?? null,
+  fuelAvailableGallons: fuelDiagnostics?.usableFuelGallons ?? null,
+  fuelBurnGph: fuelDiagnostics?.burnRateGph ?? null,
+  calculatedEnduranceMinutes: fuelDiagnostics?.calculatedEnduranceMinutes ?? null,
+  reserveMinutes: fuelDiagnostics?.reserveMinutes ?? null,
+  fuelSurplusOrDeficitMinutes: fuelDiagnostics?.surplusOrDeficitMinutes ?? null,
+  filingEnduranceSource: fuelDiagnostics?.finalEnduranceSource ?? null,
 });
 
 const logZzzzPlannerStateEvent = (event: string, details: Record<string, unknown>) => {
@@ -1026,6 +1038,14 @@ const formatMinutesLabel = (minutes: number) => {
   if (hours === 0) return `${mins} min`;
   if (mins === 0) return `${hours}h`;
   return `${hours}h ${mins}m`;
+};
+
+const formatFilingDurationLabel = (minutes: number | null | undefined) => {
+  if (!minutes || !Number.isFinite(minutes) || minutes <= 0) return "-";
+  const rounded = Math.max(1, Math.round(minutes));
+  const hours = Math.floor(rounded / 60);
+  const mins = rounded % 60;
+  return `${hours}:${String(mins).padStart(2, "0")}`;
 };
 
 const formatFrequencyTypeLabel = (value?: string | null) => {
@@ -3949,7 +3969,51 @@ export default function FlightPlanner() {
     return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
   }, [filingDraft.manualEnduranceMinutes]);
   const filingEstimatedEnrouteMinutes = manualEstimatedEnrouteMinutes ?? (eteMinutes || null);
-  const filingEnduranceMinutes = manualEnduranceMinutes ?? (Math.round(enduranceMinutes) || null);
+  const calculatedEnduranceMinutes = Math.round(enduranceMinutes) || null;
+  const filingEnduranceMinutes = manualEnduranceMinutes ?? calculatedEnduranceMinutes;
+  const filingEnduranceSource = manualEnduranceMinutes ? "manual_icao_endurance" : calculatedEnduranceMinutes ? "calculated_from_fuel_and_burn" : "missing";
+  const fuelEnduranceComparison = useMemo(() => {
+    const ete = filingEstimatedEnrouteMinutes && filingEstimatedEnrouteMinutes > 0
+      ? Math.round(filingEstimatedEnrouteMinutes)
+      : null;
+    const transmitted = filingEnduranceMinutes && filingEnduranceMinutes > 0
+      ? Math.round(filingEnduranceMinutes)
+      : null;
+    const surplusOrDeficitMinutes = ete && transmitted ? transmitted - ete : null;
+    return {
+      eteMinutes: ete,
+      transmittedEnduranceMinutes: transmitted,
+      displayedEnduranceMinutes: transmitted,
+      calculatedEnduranceMinutes,
+      source: filingEnduranceSource,
+      surplusOrDeficitMinutes,
+      isDeficient: surplusOrDeficitMinutes !== null && surplusOrDeficitMinutes < 0,
+      message: surplusOrDeficitMinutes !== null && surplusOrDeficitMinutes < 0
+        ? `Fuel endurance is ${formatFilingDurationLabel(transmitted)}, but estimated time enroute is ${formatFilingDurationLabel(ete)}.`
+        : null,
+    };
+  }, [calculatedEnduranceMinutes, filingEnduranceMinutes, filingEnduranceSource, filingEstimatedEnrouteMinutes]);
+  const fuelEnduranceDiagnostics = useMemo(() => ({
+    calculatedEteMinutes: filingEstimatedEnrouteMinutes || null,
+    displayedFuelEnduranceMinutes: fuelEnduranceComparison.displayedEnduranceMinutes,
+    transmittedFuelEnduranceMinutes: fuelEnduranceComparison.transmittedEnduranceMinutes,
+    usableFuelGallons: Number.isFinite(fuelAvailableGallons) ? Number(fuelAvailableGallons.toFixed(1)) : null,
+    burnRateGph: Number.isFinite(planningBurn) ? Number(planningBurn.toFixed(2)) : null,
+    calculatedEnduranceMinutes,
+    reserveMinutes: Number(reserveMinutes) || null,
+    surplusOrDeficitMinutes: fuelEnduranceComparison.surplusOrDeficitMinutes,
+    finalEnduranceSource: filingEnduranceSource,
+  }), [
+    calculatedEnduranceMinutes,
+    filingEnduranceSource,
+    filingEstimatedEnrouteMinutes,
+    fuelAvailableGallons,
+    fuelEnduranceComparison.displayedEnduranceMinutes,
+    fuelEnduranceComparison.surplusOrDeficitMinutes,
+    fuelEnduranceComparison.transmittedEnduranceMinutes,
+    planningBurn,
+    reserveMinutes,
+  ]);
   const filingPacket = useMemo(() => ({
     filingLive: false,
     provider: "pending-flight-service-handoff",
@@ -3968,6 +4032,7 @@ export default function FlightPlanner() {
     plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
     estimatedEnrouteMinutes: filingEstimatedEnrouteMinutes,
     enduranceMinutes: filingEnduranceMinutes,
+    enduranceSource: filingEnduranceSource,
     fuelRequiredGallons: totalFuel ? Number(totalFuel.toFixed(1)) : null,
     fuelOnBoardGallons: fuelAvailableGallons ? Number(fuelAvailableGallons.toFixed(1)) : null,
     aircraftId: filingDraft.aircraftId.trim().toUpperCase() || form.tailNumber.trim().toUpperCase() || null,
@@ -4007,6 +4072,7 @@ export default function FlightPlanner() {
     plannedAltitude,
     filingEstimatedEnrouteMinutes,
     filingEnduranceMinutes,
+    filingEnduranceSource,
     totalFuel,
     fuelAvailableGallons,
     selectedProfile,
@@ -6036,6 +6102,7 @@ export default function FlightPlanner() {
             actualAircraftType: actualAircraftType || null,
             customProfile,
             routeMode,
+            fuelDiagnostics: fuelEnduranceDiagnostics,
           }),
           plannedDepartureAt: form.plannedDepartureAt
             ? toUtcIso(form.plannedDepartureAt, departureTimeZone)
@@ -6154,6 +6221,7 @@ export default function FlightPlanner() {
           actualAircraftType: actualAircraftType || null,
           customProfile,
           routeMode,
+          fuelDiagnostics: fuelEnduranceDiagnostics,
         }),
         plannedDepartureAt: form.plannedDepartureAt
           ? toUtcIso(form.plannedDepartureAt, departureTimeZone)
@@ -6582,6 +6650,17 @@ export default function FlightPlanner() {
       actionLabel: "Edit",
       actionTab: fileTab,
     });
+    addIssue(Boolean(fuelEnduranceComparison.isDeficient), {
+      id: "fuel-endurance-less-than-ete",
+      category: "Leidos Requirements",
+      field: "fuelEndurance",
+      label: "Fuel Endurance",
+      severity: "required",
+      message: `${fuelEnduranceComparison.message} Increase endurance or correct aircraft fuel data before filing.`,
+      why: "Flight Service requires ICAO fuel endurance to be at least the estimated time en route.",
+      actionLabel: "Edit",
+      actionTab: fileTab,
+    });
 
     addIssue(!filingDraft.aircraftHomeBase.trim() && !String((user as any)?.homeBase || "").trim(), {
       id: "home-airport",
@@ -6693,6 +6772,8 @@ export default function FlightPlanner() {
     filingDraft,
     filingAircraftType,
     filingEnduranceMinutes,
+    fuelEnduranceComparison.isDeficient,
+    fuelEnduranceComparison.message,
     filingEstimatedEnrouteMinutes,
     form.notes,
     form.plannedDepartureAt,
@@ -6725,8 +6806,9 @@ export default function FlightPlanner() {
       missingFields: filingReadiness.issues
         .filter((issue: FilingReadinessIssue) => issue.severity === "required")
         .map((issue: FilingReadinessIssue) => issue.field),
+      fuelEnduranceDiagnostic: fuelEnduranceDiagnostics,
     }));
-  }, [filingReadiness.categorySummaries, filingReadiness.issues]);
+  }, [filingReadiness.categorySummaries, filingReadiness.issues, fuelEnduranceDiagnostics]);
   const filingActionLabels = useMemo(() => ({
     file: isFlightServiceTestMode ? "Submit Test Flight Plan" : "File Flight Plan",
     amend: isFlightServiceTestMode ? "Amend Test Flight Plan" : "Amend",
@@ -8795,11 +8877,13 @@ export default function FlightPlanner() {
           {totalFuel > 0 && (
             <div className={cn(
               "rounded-lg border px-4 py-2 text-sm font-medium",
-              !fuelPlanSummary.firstUnreachableLeg && fuelSurplus >= 0
+              !fuelPlanSummary.firstUnreachableLeg && fuelSurplus >= 0 && !fuelEnduranceComparison.isDeficient
                 ? "border-green-300 bg-[#0d2220] text-[#4DA8A8]"
                 : "border-red-300 bg-red-50 text-red-800"
             )}>
-              {fuelPlanSummary.firstUnreachableLeg
+              {fuelEnduranceComparison.isDeficient
+                ? `${fuelEnduranceComparison.message} Increase endurance or correct aircraft fuel data before filing.`
+                : fuelPlanSummary.firstUnreachableLeg
                 ? `? You cannot reach ${fuelPlanSummary.firstUnreachableLeg.to} on current fuel planning. Short by ${Math.abs(fuelPlanSummary.firstUnreachableLeg.fuelAfterLeg).toFixed(1)} gal before planned uplift.`
                 : fuelSurplus >= 0
                   ? `Fuel surplus after planned stops: +${fuelSurplus.toFixed(1)} gal (${formatMinutesLabel(surplusMinutes)} beyond reserve)`
@@ -8807,7 +8891,7 @@ export default function FlightPlanner() {
             </div>
           )}
           <div className="text-xs text-muted-foreground">
-            Start fuel: {fuelAvailableGallons ? `${fuelAvailableGallons.toFixed(1)} gal` : "-"} | Planned uplift: {totalPlannedFuelUplift.toFixed(1)} gal | Usable fuel: {planningFuel ? `${planningFuel} gal` : "-"} | Max gross weight: {planningMaxWeight ? `${planningMaxWeight} lb` : "-"}
+            Start fuel: {fuelAvailableGallons ? `${fuelAvailableGallons.toFixed(1)} gal` : "-"} | Planned uplift: {totalPlannedFuelUplift.toFixed(1)} gal | Leidos endurance: {formatFilingDurationLabel(filingEnduranceMinutes)} ({filingEnduranceSource === "manual_icao_endurance" ? "manual" : filingEnduranceSource === "calculated_from_fuel_and_burn" ? "calculated" : "missing"}) | Usable fuel: {planningFuel ? `${planningFuel} gal` : "-"} | Max gross weight: {planningMaxWeight ? `${planningMaxWeight} lb` : "-"}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild type="button" variant="outline" size="sm">
@@ -10153,10 +10237,17 @@ export default function FlightPlanner() {
                 <div className={plannerMetricClass}>
                   <div className="text-xs text-[#A9BBCD]">Fuel on board / endurance</div>
                   <div className="font-semibold text-[#F5F8FC]">{fuelAvailableGallons.toFixed(1)} gal / {filingEnduranceMinutes ? formatMinutesLabel(filingEnduranceMinutes) : "-"}</div>
+                  <div className={cn("mt-1 text-xs", fuelEnduranceComparison.isDeficient ? "text-red-200" : "text-[#A9BBCD]")}>
+                    Leidos transmits {formatFilingDurationLabel(filingEnduranceMinutes)}
+                    {filingEnduranceSource === "manual_icao_endurance" ? " from manual ICAO endurance" : filingEnduranceSource === "calculated_from_fuel_and_burn" ? " from fuel and burn rate" : ""}
+                  </div>
                 </div>
                 <div className={plannerMetricClass}>
                   <div className="text-xs text-[#A9BBCD]">Estimated Enroute</div>
                   <div className="font-semibold text-[#F5F8FC]">{filingEstimatedEnrouteMinutes ? `${filingEstimatedEnrouteMinutes} min` : "-"}</div>
+                  {fuelEnduranceComparison.isDeficient && (
+                    <div className="mt-1 text-xs text-red-200">{fuelEnduranceComparison.message}</div>
+                  )}
                 </div>
                 <div className={plannerMetricClass}>
                   <div className="text-xs text-[#A9BBCD]">Filing status</div>

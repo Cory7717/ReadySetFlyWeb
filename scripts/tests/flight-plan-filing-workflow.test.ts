@@ -34,18 +34,51 @@ test("future-dated filing injects DOF in ICAO format", () => {
   assert.equal(result.otherInfo, "PBN/A1B2 DOF/260426");
 });
 
-test("standard airport-only route normalizes with DCT wrappers", () => {
+test("standard airport-only route preserves tokens without adding DCT wrappers", () => {
   const normalized = normalizeRouteForProvider("KBPG KSRR KINW");
   assert.equal(normalized.localEnteredRoute, "KBPG KSRR KINW");
-  assert.equal(normalized.normalizedRoute, "DCT KBPG DCT KSRR DCT KINW DCT");
-  assert.equal(normalized.changed, true);
+  assert.equal(normalized.normalizedRoute, "KBPG KSRR KINW");
+  assert.equal(normalized.changed, false);
   assert.equal(normalized.hasValidToken, true);
 });
 
-test("already normalized route stays stable", () => {
+test("already normalized route preserves intentional leading and trailing DCT", () => {
   const normalized = normalizeRouteForProvider("DCT KBPG DCT KSRR DCT KINW DCT");
   assert.equal(normalized.normalizedRoute, "DCT KBPG DCT KSRR DCT KINW DCT");
   assert.equal(normalized.changed, false);
+});
+
+test("provider route removes departure and destination airport tokens", () => {
+  const normalized = normalizeRouteForProvider("DCT KBOS DCT BAF V141 ALB DCT KSEA DCT", {
+    departure: "KBOS",
+    destination: "KSEA",
+  });
+  assert.equal(normalized.normalizedRoute, "BAF V141 ALB");
+  assert.equal(normalized.changed, true);
+  assert.ok(normalized.notes.some((note) => note.includes("removed departure/destination airport tokens")));
+});
+
+test("provider route removes endpoint airports and orphaned DCT only", () => {
+  const cases = [
+    ["KBOS DCT ALB DCT KSEA", "ALB"],
+    ["KBOS DCT ALB DCT SYR DCT KSEA", "ALB DCT SYR"],
+    ["DCT ALB J60 BOI", "DCT ALB J60 BOI"],
+    ["ALB J60 BOI DCT", "ALB J60 BOI DCT"],
+    ["DCT", "DCT"],
+    ["KBOS DCT KSEA", "DCT"],
+    ["ALB DCT DCT SYR", "ALB DCT SYR"],
+    ["ALB DCT KBOS DCT SYR DCT KSEA DCT BOI", "ALB DCT KBOS DCT SYR DCT KSEA DCT BOI"],
+    ["DALL3 EIC V18 MEI LGC4", "DALL3 EIC V18 MEI LGC4"],
+    ["DCT EMI/D01+40 DCT MAPEL/D00+30 V143 DELRO DCT", "DCT EMI/D01+40 DCT MAPEL/D00+30 V143 DELRO DCT"],
+  ] as const;
+
+  for (const [input, expected] of cases) {
+    const normalized = normalizeRouteForProvider(input, {
+      departure: "KBOS",
+      destination: "KSEA",
+    });
+    assert.equal(normalized.normalizedRoute, expected, input);
+  }
 });
 
 test("malformed route input does not count as valid", () => {

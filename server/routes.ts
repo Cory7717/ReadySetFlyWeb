@@ -21970,6 +21970,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const envFlagEnabled = (value: unknown) =>
     /^(true|1|yes|on)$/i.test(String(value || "").trim());
 
+  const isFlightServiceLabRuntime = (runtimeMode: ReturnType<typeof getFlightServiceRuntimeMode>) =>
+    runtimeMode.providerTestModeEnabled && runtimeMode.environment !== "PRODUCTION";
+
+  const isFlightServiceRestrictedLabTesterMode = () =>
+    envFlagEnabled(process.env.FLIGHT_SERVICE_RESTRICT_LAB_TO_TESTERS);
+
+  const isLeidosLabSubmissionEnabled = (runtimeMode: ReturnType<typeof getFlightServiceRuntimeMode>) =>
+    isFlightServiceLabRuntime(runtimeMode) && envFlagEnabled(process.env.LEIDOS_FLIGHT_SERVICE_ENABLE_LIVE);
+
   const resolveFlightServiceUserEmail = (req: any, user: any) => {
     const candidates = [
       user?.email,
@@ -22034,6 +22043,49 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       requestSource: args.requestSource,
       certificationPlan: args.certificationPlan,
       rejectionReason: args.rejectionReason,
+    }));
+  };
+
+  const logFlightServiceLabAuthorization = async (args: {
+    req: any;
+    user: any;
+    userId: string;
+    planId?: string | null;
+    action: string;
+    requestSource: string;
+    certificationPlan: boolean;
+    runtimeMode: ReturnType<typeof getFlightServiceRuntimeMode>;
+    testerEmails: Set<string>;
+    testerEmailMatch: boolean;
+    acknowledgementAccepted: boolean;
+    authorized: boolean;
+    authorizationReason: string;
+  }) => {
+    let openFlightPlanCount: number | null = null;
+    try {
+      const plans = await storage.getFlightPlansByUser(args.userId);
+      openFlightPlanCount = getActiveFlightPlans(plans as any, args.planId || null).length;
+    } catch {
+      openFlightPlanCount = null;
+    }
+
+    const entitlements = getEntitlementsForUser(args.user);
+    console.info(JSON.stringify({
+      event: "flight_service_lab_authorization",
+      userId: args.userId,
+      authenticated: Boolean(args.userId),
+      environment: String(args.runtimeMode.environment || "").toLowerCase(),
+      labSubmissionEnabled: isLeidosLabSubmissionEnabled(args.runtimeMode),
+      restrictedTesterMode: isFlightServiceRestrictedLabTesterMode(),
+      testerEmailMatch: args.testerEmailMatch,
+      subscriptionTier: entitlements.tier,
+      openFlightPlanCount,
+      acknowledgementAccepted: args.acknowledgementAccepted,
+      authorized: args.authorized,
+      authorizationReason: args.authorizationReason,
+      action: args.action,
+      requestSource: args.requestSource,
+      certificationPlan: args.certificationPlan,
     }));
   };
 
@@ -23152,7 +23204,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
-        return res.status(401).json({ error: "Unauthorized" });
+        return res.status(401).json({ error: "Authentication is required before submitting a Flight Service filing action.", code: "AUTHENTICATION_REQUIRED" });
       }
 
       const plan = await storage.getFlightPlanById(req.params.id);
@@ -23165,7 +23217,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       const user = await storage.getUser(userId);
       if (!user) {
-        return res.status(401).json({ error: "Unauthorized" });
+        return res.status(401).json({ error: "Authentication is required before submitting a Flight Service filing action.", code: "AUTHENTICATION_REQUIRED" });
       }
       const parsed = filingLifecycleActionSchema.safeParse(req.body ?? {});
       if (!parsed.success) {
@@ -23181,15 +23233,39 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const certificationPlan = Boolean((plan as any).isCertificationTest || String((plan as any).source || "") === "leidos-certification");
       const acknowledgementAccepted = !runtimeMode.acknowledgementRequired ||
         hasFlightServiceTestAcknowledgement(req.body, runtimeMode.environment);
+      const labRuntime = isFlightServiceLabRuntime(runtimeMode);
+      const labSubmissionEnabled = isLeidosLabSubmissionEnabled(runtimeMode);
+      const restrictedTesterMode = isFlightServiceRestrictedLabTesterMode();
+      const adminOrSuperAdmin = Boolean((user as any).isSuperAdmin || (user as any).isAdmin);
+      const labRestrictedUserAllowed = !restrictedTesterMode || adminOrSuperAdmin || testerEmailMatch;
+      const labUserAuthorized = labRuntime && labSubmissionEnabled && labRestrictedUserAllowed;
       const canUseProviderFiling =
         runtimeMode.operationalFilingEnabled ||
-        Boolean((user as any).isSuperAdmin || (user as any).isAdmin) ||
-        testerEmailMatch ||
+        labUserAuthorized ||
         (certificationPlan && ["cancel", "close"].includes(action));
       if (!canUseProviderFiling) {
         const rejectionReason = runtimeMode.environment === "PRODUCTION" && !runtimeMode.operationalFilingEnabled
-          ? "operational_filing_disabled"
-          : "tester_not_authorized";
+          ? "production_filing_disabled"
+          : labRuntime && !labSubmissionEnabled
+            ? "lab_provider_disabled"
+            : labRuntime && restrictedTesterMode && !labRestrictedUserAllowed
+              ? "lab_restricted"
+              : "lab_authorization_unavailable";
+        await logFlightServiceLabAuthorization({
+          req,
+          user,
+          userId,
+          planId: plan.id,
+          action,
+          requestSource,
+          certificationPlan,
+          runtimeMode,
+          testerEmails,
+          testerEmailMatch,
+          acknowledgementAccepted,
+          authorized: false,
+          authorizationReason: rejectionReason,
+        });
         await logFlightServiceAuthGateDebug({
           req,
           user,
@@ -23219,14 +23295,43 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           blockedReason: rejectionReason,
         }));
         return res.status(403).json({
-          error: rejectionReason === "operational_filing_disabled"
-            ? "Flight Service operational filing is disabled in this environment."
-            : "This account is not authorized for Flight Service LAB provider test filing. Confirm the API service has FLIGHT_SERVICE_TESTER_EMAILS configured for this signed-in email and has been restarted.",
-          code: rejectionReason === "operational_filing_disabled"
-            ? "FLIGHT_SERVICE_OPERATIONAL_FILING_DISABLED"
-            : "FLIGHT_SERVICE_TESTER_NOT_AUTHORIZED",
+          error: rejectionReason === "production_filing_disabled"
+            ? "Flight Service production filing is disabled in this environment."
+            : rejectionReason === "lab_provider_disabled"
+              ? "Flight Service LAB provider submission is disabled in this environment."
+              : rejectionReason === "lab_restricted"
+                ? "This account is not authorized for restricted Flight Service LAB provider test filing."
+                : "Flight Service LAB filing is unavailable in this environment.",
+          code: rejectionReason === "production_filing_disabled"
+            ? "FLIGHT_SERVICE_PRODUCTION_DISABLED"
+            : rejectionReason === "lab_provider_disabled"
+              ? "FLIGHT_SERVICE_LAB_PROVIDER_DISABLED"
+              : rejectionReason === "lab_restricted"
+                ? "FLIGHT_SERVICE_LAB_RESTRICTED"
+                : "FLIGHT_SERVICE_LAB_PROVIDER_DISABLED",
         });
       }
+      await logFlightServiceLabAuthorization({
+        req,
+        user,
+        userId,
+        planId: plan.id,
+        action,
+        requestSource,
+        certificationPlan,
+        runtimeMode,
+        testerEmails,
+        testerEmailMatch,
+        acknowledgementAccepted,
+        authorized: true,
+        authorizationReason: runtimeMode.operationalFilingEnabled
+          ? "production_operational_enabled"
+          : labRuntime
+            ? restrictedTesterMode
+              ? "restricted_lab_user"
+              : "authenticated_lab_user"
+            : "certification_cleanup",
+      });
       console.info(JSON.stringify({
         event: "flight_service_environment",
         flight_service_environment: runtimeMode.environment,
@@ -23242,6 +23347,21 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         blockedBecausePublicOperationalDisabled: false,
       }));
       if (!acknowledgementAccepted) {
+        await logFlightServiceLabAuthorization({
+          req,
+          user,
+          userId,
+          planId: plan.id,
+          action,
+          requestSource,
+          certificationPlan,
+          runtimeMode,
+          testerEmails,
+          testerEmailMatch,
+          acknowledgementAccepted,
+          authorized: false,
+          authorizationReason: "missing_lab_acknowledgement",
+        });
         await logFlightServiceAuthGateDebug({
           req,
           user,
@@ -23405,6 +23525,21 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           exceptPlanId: plan.id,
         });
         if (!activePlanAccess.allowed) {
+          await logFlightServiceLabAuthorization({
+            req,
+            user,
+            userId,
+            planId: plan.id,
+            action,
+            requestSource,
+            certificationPlan,
+            runtimeMode,
+            testerEmails,
+            testerEmailMatch,
+            acknowledgementAccepted,
+            authorized: false,
+            authorizationReason: "flight_plan_limit_exceeded",
+          });
           await logFlightServiceAuthGateDebug({
             req,
             user,
@@ -23464,6 +23599,21 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const validation = validateFlightPlanForAction(effectivePlanForAction, action);
       if (!validation.ready) {
+        await logFlightServiceLabAuthorization({
+          req,
+          user,
+          userId,
+          planId: plan.id,
+          action,
+          requestSource,
+          certificationPlan,
+          runtimeMode,
+          testerEmails,
+          testerEmailMatch,
+          acknowledgementAccepted,
+          authorized: false,
+          authorizationReason: "flight_plan_readiness_failed",
+        });
         console.warn(JSON.stringify({
           event: "flight_plan_filing_validation_failed",
           planId: plan.id,
@@ -23641,7 +23791,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
-        return res.status(401).json({ error: "Unauthorized" });
+        return res.status(401).json({ error: "Authentication is required before refreshing Flight Service provider sync.", code: "AUTHENTICATION_REQUIRED" });
       }
 
       const plan = await storage.getFlightPlanById(req.params.id);
@@ -23653,7 +23803,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       const user = await storage.getUser(userId);
       if (!user) {
-        return res.status(401).json({ error: "Unauthorized" });
+        return res.status(401).json({ error: "Authentication is required before refreshing Flight Service provider sync.", code: "AUTHENTICATION_REQUIRED" });
       }
       const runtimeMode = getFlightServiceRuntimeMode();
       const requestSource = getFlightPlanProviderRequestSource(req.body);
@@ -23661,13 +23811,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const { userEmail, normalizedUserEmail } = resolveFlightServiceUserEmail(req, user);
       const testerEmailMatch = Boolean(normalizedUserEmail && testerEmails.has(normalizedUserEmail));
       const certificationPlan = Boolean((plan as any).isCertificationTest || String((plan as any).source || "") === "leidos-certification");
-      const canUseProviderSync =
-        runtimeMode.operationalFilingEnabled ||
-        Boolean((user as any).isSuperAdmin || (user as any).isAdmin) ||
-        testerEmailMatch ||
-        certificationPlan;
       const acknowledgementAccepted = !runtimeMode.acknowledgementRequired ||
         hasFlightServiceTestAcknowledgement(req.body, runtimeMode.environment);
+      const labRuntime = isFlightServiceLabRuntime(runtimeMode);
+      const labSubmissionEnabled = isLeidosLabSubmissionEnabled(runtimeMode);
+      const restrictedTesterMode = isFlightServiceRestrictedLabTesterMode();
+      const adminOrSuperAdmin = Boolean((user as any).isSuperAdmin || (user as any).isAdmin);
+      const labRestrictedUserAllowed = !restrictedTesterMode || adminOrSuperAdmin || testerEmailMatch;
+      const labUserAuthorized = labRuntime && labSubmissionEnabled && labRestrictedUserAllowed;
+      const canUseProviderSync =
+        runtimeMode.operationalFilingEnabled ||
+        labUserAuthorized ||
+        certificationPlan;
       if (!runtimeMode.operationalFilingEnabled && requestSource === "background" && certificationPlan) {
         console.info(JSON.stringify({
           event: "flight_service_certification_background_sync_skipped",
@@ -23691,8 +23846,27 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       if (!canUseProviderSync) {
         const rejectionReason = runtimeMode.environment === "PRODUCTION" && !runtimeMode.operationalFilingEnabled
-          ? "operational_filing_disabled"
-          : "tester_not_authorized";
+          ? "production_filing_disabled"
+          : labRuntime && !labSubmissionEnabled
+            ? "lab_provider_disabled"
+            : labRuntime && restrictedTesterMode && !labRestrictedUserAllowed
+              ? "lab_restricted"
+              : "lab_authorization_unavailable";
+        await logFlightServiceLabAuthorization({
+          req,
+          user,
+          userId,
+          planId: plan.id,
+          action: "sync",
+          requestSource,
+          certificationPlan,
+          runtimeMode,
+          testerEmails,
+          testerEmailMatch,
+          acknowledgementAccepted,
+          authorized: false,
+          authorizationReason: rejectionReason,
+        });
         await logFlightServiceAuthGateDebug({
           req,
           user,
@@ -23722,14 +23896,43 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           blockedReason: rejectionReason,
         }));
         return res.status(403).json({
-          error: rejectionReason === "operational_filing_disabled"
-            ? "Flight Service operational filing is disabled in this environment."
-            : "This account is not authorized for Flight Service LAB provider sync. Confirm the API service has FLIGHT_SERVICE_TESTER_EMAILS configured for this signed-in email and has been restarted.",
-          code: rejectionReason === "operational_filing_disabled"
-            ? "FLIGHT_SERVICE_OPERATIONAL_FILING_DISABLED"
-            : "FLIGHT_SERVICE_TESTER_NOT_AUTHORIZED",
+          error: rejectionReason === "production_filing_disabled"
+            ? "Flight Service production filing is disabled in this environment."
+            : rejectionReason === "lab_provider_disabled"
+              ? "Flight Service LAB provider submission is disabled in this environment."
+              : rejectionReason === "lab_restricted"
+                ? "This account is not authorized for restricted Flight Service LAB provider sync."
+                : "Flight Service LAB sync is unavailable in this environment.",
+          code: rejectionReason === "production_filing_disabled"
+            ? "FLIGHT_SERVICE_PRODUCTION_DISABLED"
+            : rejectionReason === "lab_provider_disabled"
+              ? "FLIGHT_SERVICE_LAB_PROVIDER_DISABLED"
+              : rejectionReason === "lab_restricted"
+                ? "FLIGHT_SERVICE_LAB_RESTRICTED"
+                : "FLIGHT_SERVICE_LAB_PROVIDER_DISABLED",
         });
       }
+      await logFlightServiceLabAuthorization({
+        req,
+        user,
+        userId,
+        planId: plan.id,
+        action: "sync",
+        requestSource,
+        certificationPlan,
+        runtimeMode,
+        testerEmails,
+        testerEmailMatch,
+        acknowledgementAccepted,
+        authorized: true,
+        authorizationReason: runtimeMode.operationalFilingEnabled
+          ? "production_operational_enabled"
+          : labRuntime
+            ? restrictedTesterMode
+              ? "restricted_lab_user"
+              : "authenticated_lab_user"
+            : "certification_plan",
+      });
       console.info(JSON.stringify({
         event: "flight_service_environment",
         flight_service_environment: runtimeMode.environment,
@@ -23745,6 +23948,21 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         blockedBecausePublicOperationalDisabled: false,
       }));
       if (!acknowledgementAccepted) {
+        await logFlightServiceLabAuthorization({
+          req,
+          user,
+          userId,
+          planId: plan.id,
+          action: "sync",
+          requestSource,
+          certificationPlan,
+          runtimeMode,
+          testerEmails,
+          testerEmailMatch,
+          acknowledgementAccepted,
+          authorized: false,
+          authorizationReason: "missing_lab_acknowledgement",
+        });
         await logFlightServiceAuthGateDebug({
           req,
           user,

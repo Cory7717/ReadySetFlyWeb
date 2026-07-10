@@ -53,3 +53,17 @@ test("webhook diagnostics include raw flight and ARTCC state values", () => {
   assert.match(routes, /previousLifecycleStatus/);
   assert.match(routes, /mappingReason/);
 });
+
+test("duplicate webhook deliveries are identified before side effects", () => {
+  const routes = readFileSync("server/routes.ts", "utf8");
+  const webhookRoute = routes.slice(routes.indexOf('app.post("/api/leidos/webhooks/flight-service"'));
+  const duplicateCheck = webhookRoute.indexOf("leidos_push_duplicate_ignored");
+  const notificationCreate = webhookRoute.indexOf("storage.createUserNotification");
+  assert.ok(duplicateCheck > 0, "duplicate webhook ignore path should exist");
+  assert.ok(notificationCreate > 0, "webhook notification creation should exist");
+  assert.ok(duplicateCheck < notificationCreate, "duplicate check must run before notification creation");
+  assert.match(routes, /processedWebhookEvents/);
+  assert.match(routes, /activeLeidosWebhookEvents/);
+  assert.match(routes, /eventHash/);
+  assert.match(routes, /suppressTransitionLog: true/);
+});

@@ -21745,6 +21745,41 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const appendPlanProviderMessages = (existingMessages: unknown, incomingMessages: FilingProviderMessage[] | undefined) =>
     mergeProviderMessages(existingMessages, incomingMessages || []);
 
+  const activeLeidosWebhookEvents = new Set<string>();
+
+  const stableWebhookStringify = (value: unknown): string => {
+    if (value === null || value === undefined) return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableWebhookStringify).join(",")}]`;
+    if (typeof value === "object") {
+      const record = value as Record<string, unknown>;
+      return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableWebhookStringify(record[key])}`).join(",")}}`;
+    }
+    return JSON.stringify(value);
+  };
+
+  const hashLeidosWebhookEvent = (payload: unknown) =>
+    crypto.createHash("sha256").update(stableWebhookStringify(payload)).digest("hex");
+
+  const getProcessedWebhookEvents = (snapshot: Record<string, unknown>) =>
+    Array.isArray(snapshot.processedWebhookEvents)
+      ? snapshot.processedWebhookEvents
+        .filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object" && !Array.isArray(entry)))
+      : [];
+
+  const hasProcessedWebhookEvent = (snapshot: Record<string, unknown>, eventHash: string) =>
+    getProcessedWebhookEvents(snapshot).some((entry) => String(entry.eventHash || "") === eventHash);
+
+  const appendProcessedWebhookEvent = (
+    snapshot: Record<string, unknown>,
+    event: Record<string, unknown>,
+  ) => ({
+    ...snapshot,
+    processedWebhookEvents: [
+      ...getProcessedWebhookEvents(snapshot).filter((entry) => String(entry.eventHash || "") !== String(event.eventHash || "")),
+      event,
+    ].slice(-50),
+  });
+
   const getProviderLifecycleStatus = (snapshot: Record<string, unknown>) =>
     String(snapshot.providerLifecycleStatus || "").toLowerCase();
 
@@ -22056,7 +22091,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const persistLeidosProviderSync = async (
     plan: any,
     syncResult: Awaited<ReturnType<typeof syncLeidosPlanMetadata>>,
-    options: { extraMessages?: FilingProviderMessage[]; forceExternalNotice?: boolean } = {},
+    options: { extraMessages?: FilingProviderMessage[]; forceExternalNotice?: boolean; suppressTransitionLog?: boolean } = {},
   ) => {
     const now = new Date();
     const currentRaw =
@@ -22081,12 +22116,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         : null,
     );
     const previousProviderSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
-    logProviderLifecycleTransition({
-      plan,
-      previousSnapshot: previousProviderSnapshot,
-      nextSnapshot: nextProviderSnapshot,
-      source: "provider_retrieve",
-    });
+    if (!options.suppressTransitionLog) {
+      logProviderLifecycleTransition({
+        plan,
+        previousSnapshot: previousProviderSnapshot,
+        nextSnapshot: nextProviderSnapshot,
+        source: "provider_retrieve",
+      });
+    }
     const externalMessage = buildExternalProviderChangeMessage(plan, nextProviderSnapshot);
     const nextProviderMessages = appendPlanProviderMessages(
       (plan as Record<string, unknown>).filingProviderMessages,
@@ -22737,7 +22774,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(401).json({ error: "Unauthorized" });
       }
 
+      const processingId = crypto.randomUUID();
+      const processingStartedAt = new Date();
       const payload = req.body ?? {};
+      const eventHash = hashLeidosWebhookEvent(payload);
       const alert =
         payload.flightAlert && typeof payload.flightAlert === "object" && !Array.isArray(payload.flightAlert)
           ? payload.flightAlert
@@ -22774,13 +22814,38 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const expectedRoute: string | null = alert.expectedRoute ?? payload.expectedRoute ?? null;
       const artccState: string | null = alert.artccState ?? payload.artccState ?? null;
       const artccInfo = alert.artccInfo ?? payload.artccInfo ?? null;
+      const providerMessageId: string | null =
+        alert.messageId ??
+        alert.referenceId ??
+        alert.transactionId ??
+        payload.messageId ??
+        payload.referenceId ??
+        payload.transactionId ??
+        null;
+      const messageDateTime: string | null =
+        alert.messageDateTime ??
+        alert.notificationTimestamp ??
+        alert.timestamp ??
+        payload.messageDateTime ??
+        payload.notificationTimestamp ??
+        payload.timestamp ??
+        null;
 
       console.info(JSON.stringify({
         event: "leidos_push_received",
         timestamp: new Date().toISOString(),
+        processingId,
+        processingStart: processingStartedAt.toISOString(),
         userAgent: req.headers["user-agent"] || null,
         notificationType,
         flightIdentifier,
+        providerPlanId: flightIdentifier,
+        versionStamp: flightVersionStamp,
+        rawFlightState: normalizeNotificationValue(flightState),
+        rawArtccState: normalizeNotificationValue(artccState),
+        messageDateTime,
+        providerMessageId,
+        eventHash,
         payloadKeys: payload && typeof payload === "object" && !Array.isArray(payload) ? Object.keys(payload).slice(0, 25) : [],
       }));
 
@@ -22856,6 +22921,31 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             : `Flight Plan Change${changeType ? `: ${changeType}` : ""}`
           : "Provider push received";
         const previousProviderSnapshot = getProviderSnapshotRecord((matchedPlan as Record<string, unknown>).filingProviderSnapshot);
+        const eventKey = `${flightIdentifier}:${eventHash}`;
+        if (activeLeidosWebhookEvents.has(eventKey) || hasProcessedWebhookEvent(previousProviderSnapshot, eventHash)) {
+          const priorEvent = getProcessedWebhookEvents(previousProviderSnapshot).find((entry) => String(entry.eventHash || "") === eventHash) || null;
+          console.info(JSON.stringify({
+            event: "leidos_push_duplicate_ignored",
+            processingId,
+            processingStart: processingStartedAt.toISOString(),
+            processingFinish: new Date().toISOString(),
+            flightIdentifier,
+            providerPlanId: flightIdentifier,
+            versionStamp: flightVersionStamp,
+            rawFlightState: normalizeNotificationValue(flightState),
+            rawArtccState: normalizeNotificationValue(artccState),
+            messageDateTime,
+            providerMessageId,
+            eventHash,
+            payloadByteIdentical: true,
+            providerTimestampMatched: priorEvent ? String(priorEvent.messageDateTime || "") === String(messageDateTime || "") : null,
+            providerMessageIdMatched: priorEvent ? String(priorEvent.providerMessageId || "") === String(providerMessageId || "") : null,
+            originalProcessingId: priorEvent ? String(priorEvent.processingId || "") || null : null,
+            duplicateReason: activeLeidosWebhookEvents.has(eventKey) ? "already_processing" : "already_processed",
+          }));
+          return res.status(200).json(LEIDOS_WEBHOOK_SUCCESS_RESPONSE);
+        }
+        activeLeidosWebhookEvents.add(eventKey);
         const pushContext = {
           changeType,
           alertType,
@@ -22879,7 +22969,13 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         console.info(JSON.stringify({
           event: "provider_update_notification_context",
           timestamp: new Date().toISOString(),
+          processingId,
           flightIdentifier,
+          providerPlanId: flightIdentifier,
+          versionStamp: flightVersionStamp,
+          messageDateTime,
+          providerMessageId,
+          eventHash,
           notificationType,
           rawFlightState: normalizeNotificationValue(flightState),
           rawArtccState: normalizeNotificationValue(artccState),
@@ -22986,7 +23082,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         let syncedNotificationChanges: string[] = [];
         const syncResult = await syncLeidosPlanMetadata(matchedPlan as any).catch(() => null);
         if (syncResult) {
-          const syncedPlan = await persistLeidosProviderSync(matchedPlan as any, syncResult, { extraMessages: [providerMessage] });
+          const syncedPlan = await persistLeidosProviderSync(matchedPlan as any, syncResult, { extraMessages: [providerMessage], suppressTransitionLog: true });
           const syncedSnapshot =
             syncedPlan?.filingProviderSnapshot && typeof syncedPlan.filingProviderSnapshot === "object" && !Array.isArray(syncedPlan.filingProviderSnapshot)
               ? syncedPlan.filingProviderSnapshot as Record<string, unknown>
@@ -23049,6 +23145,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               },
             }
             : null;
+          const finalWebhookSnapshot = appendProcessedWebhookEvent({
+            ...syncedSnapshot,
+            ...providerReviewSnapshot,
+            versionStamp: providerReviewSnapshot.versionStamp || syncedSnapshot.versionStamp || null,
+          }, {
+            eventHash,
+            processingId,
+            providerMessageId,
+            messageDateTime,
+            processedAt: new Date().toISOString(),
+            rawFlightState: normalizeNotificationValue(flightState),
+            rawArtccState: normalizeNotificationValue(artccState),
+          });
           await storage.updateFlightPlan(matchedPlan.id, {
             filingProviderMessages: appendPlanProviderMessages(
               (syncedPlan as Record<string, unknown>)?.filingProviderMessages,
@@ -23058,20 +23167,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               (syncedPlan as Record<string, unknown>)?.filingActionHistory,
               providerHistoryEntry,
             ) as any,
-            filingProviderSnapshot: {
-              ...syncedSnapshot,
-              ...providerReviewSnapshot,
-              versionStamp: providerReviewSnapshot.versionStamp || syncedSnapshot.versionStamp || null,
-            },
+            filingProviderSnapshot: finalWebhookSnapshot,
           } as any);
           logProviderLifecycleTransition({
             plan: matchedPlan,
             previousSnapshot: previousProviderSnapshot,
-            nextSnapshot: {
-              ...syncedSnapshot,
-              ...providerReviewSnapshot,
-              versionStamp: providerReviewSnapshot.versionStamp || syncedSnapshot.versionStamp || null,
-            },
+            nextSnapshot: finalWebhookSnapshot,
             source: "leidos_webhook",
           });
         } else {
@@ -23083,22 +23184,27 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             (matchedPlan as Record<string, unknown>).filingProviderMessages,
             [providerMessage],
           );
+          const finalWebhookSnapshot = appendProcessedWebhookEvent({
+            ...existingSnapshot,
+            ...providerReviewSnapshot,
+            versionStamp: providerReviewSnapshot.versionStamp || existingSnapshot.versionStamp || null,
+          }, {
+            eventHash,
+            processingId,
+            providerMessageId,
+            messageDateTime,
+            processedAt: new Date().toISOString(),
+            rawFlightState: normalizeNotificationValue(flightState),
+            rawArtccState: normalizeNotificationValue(artccState),
+          });
           await storage.updateFlightPlan(matchedPlan.id, {
             filingProviderMessages: mergedMessages as any,
-            filingProviderSnapshot: {
-              ...existingSnapshot,
-              ...providerReviewSnapshot,
-              versionStamp: providerReviewSnapshot.versionStamp || existingSnapshot.versionStamp || null,
-            },
+            filingProviderSnapshot: finalWebhookSnapshot,
           } as any);
           logProviderLifecycleTransition({
             plan: matchedPlan,
             previousSnapshot: existingSnapshot,
-            nextSnapshot: {
-              ...existingSnapshot,
-              ...providerReviewSnapshot,
-              versionStamp: providerReviewSnapshot.versionStamp || existingSnapshot.versionStamp || null,
-            },
+            nextSnapshot: finalWebhookSnapshot,
             source: "leidos_webhook",
           });
         }
@@ -23117,11 +23223,32 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             })
             .where(eq(userNotifications.id, providerPushNotification.id));
         }
+        activeLeidosWebhookEvents.delete(eventKey);
+        console.info(JSON.stringify({
+          event: "leidos_push_processed",
+          processingId,
+          processingStart: processingStartedAt.toISOString(),
+          processingFinish: new Date().toISOString(),
+          flightIdentifier,
+          providerPlanId: flightIdentifier,
+          versionStamp: flightVersionStamp,
+          rawFlightState: normalizeNotificationValue(flightState),
+          rawArtccState: normalizeNotificationValue(artccState),
+          messageDateTime,
+          providerMessageId,
+          eventHash,
+        }));
       } catch (innerError) {
+        if (flightIdentifier) {
+          activeLeidosWebhookEvents.delete(`${flightIdentifier}:${eventHash}`);
+        }
         console.error(JSON.stringify({
           event: "leidos_push_error",
           timestamp: new Date().toISOString(),
+          processingId,
+          processingFinish: new Date().toISOString(),
           flightIdentifier,
+          eventHash,
           error: innerError instanceof Error ? innerError.message : String(innerError),
         }));
       }

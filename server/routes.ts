@@ -19,7 +19,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, insertFlyingClubSquawkSchema, insertFlyingClubMaintenanceItemSchema, insertFlyingClubBlackoutSchema, insertMembershipPartnerOfferSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, userNotifications, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, flightPlans, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type LeadCategory, type LeadStatus, type PromoCode, type MembershipPartnerOffer } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, insertFlyingClubSquawkSchema, insertFlyingClubMaintenanceItemSchema, insertFlyingClubBlackoutSchema, insertMembershipPartnerOfferSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, userNotifications, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, flightPlans, flightServiceWebhookEvents, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type LeadCategory, type LeadStatus, type PromoCode, type MembershipPartnerOffer } from "@shared/schema";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
@@ -21683,7 +21683,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       ? value as Record<string, unknown>
       : {};
 
-  const mergeProviderSnapshot = (existingSnapshot: unknown, incomingSnapshot: unknown) => {
+  const mergeProviderSnapshot = (
+    existingSnapshot: unknown,
+    incomingSnapshot: unknown,
+    context: { planId?: string | null; providerPlanId?: string | null; source?: string | null } = {},
+  ) => {
     const existing = asRecord(existingSnapshot);
     const incoming = asRecord(incomingSnapshot);
     const keepExistingWhenIncomingMissing = (key: string) =>
@@ -21701,24 +21705,68 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     );
     const incomingRetrievalState = String(incoming.providerRetrievalState || "").trim() || null;
     const incomingLifecycle = String(incoming.providerLifecycleStatus || "").trim().toLowerCase();
-    const preserveLifecycle =
-      incomingRetrievalState && incomingRetrievalState !== "retrievable" && (!incomingLifecycle || incomingLifecycle === "unknown");
+    const existingLifecycle = String(existing.providerLifecycleStatus || "").trim().toLowerCase();
+    const incomingReason = String(incoming.providerLifecycleReason || "").trim();
+    const incomingHasExplicitLifecycleEvidence = Boolean(
+      incomingLifecycle &&
+      incomingLifecycle !== "unknown" &&
+      (
+        String(incoming.providerFlightState || incoming.providerStatus || "").trim() ||
+        /^explicit_/.test(incomingReason) ||
+        ["user_action", "admin_action"].includes(String(incoming.providerLifecycleSource || ""))
+      )
+    );
+    const preserveLifecycle = Boolean(
+      existingLifecycle &&
+      existingLifecycle !== "unknown" &&
+      !incomingHasExplicitLifecycleEvidence
+    );
+    const resultLifecycle = preserveLifecycle
+      ? existing.providerLifecycleStatus || "unknown"
+      : incoming.providerLifecycleStatus ?? existing.providerLifecycleStatus ?? "unknown";
+    const resultLifecycleSource = preserveLifecycle
+      ? existing.providerLifecycleSource || "legacy"
+      : incoming.providerLifecycleSource ?? existing.providerLifecycleSource ?? null;
+    const resultLifecycleReason = preserveLifecycle
+      ? existing.providerLifecycleReason || "existing_known_lifecycle"
+      : incoming.providerLifecycleReason ?? existing.providerLifecycleReason ?? null;
+    const mergeReason = incomingHasExplicitLifecycleEvidence
+      ? incomingReason || "explicit_provider_flight_state"
+      : preserveLifecycle
+        ? incomingRetrievalState && incomingRetrievalState !== "retrievable"
+          ? "incoming_retrieve_unavailable"
+          : "incoming_retrieve_omitted_flight_state"
+        : "no_known_lifecycle";
+    console.info(JSON.stringify({
+      event: "provider_lifecycle_merge",
+      planId: context.planId || null,
+      providerPlanId: context.providerPlanId || keepExistingWhenIncomingMissing("providerPlanId"),
+      source: context.source || incoming.providerLifecycleSource || null,
+      existingLifecycle: existingLifecycle || "unknown",
+      incomingLifecycle: incomingLifecycle || "unknown",
+      incomingHasExplicitLifecycleEvidence,
+      existingEvidenceSource: existing.providerLifecycleSource || null,
+      incomingEvidenceSource: incoming.providerLifecycleSource || null,
+      resultLifecycle,
+      preservedExistingLifecycle: preserveLifecycle,
+      reason: mergeReason,
+    }));
     return {
       ...existing,
       ...incoming,
       providerPlanId: keepExistingWhenIncomingMissing("providerPlanId"),
       providerReferenceId: keepExistingWhenIncomingMissing("providerReferenceId"),
       versionStamp: keepExistingWhenIncomingMissing("versionStamp"),
-      providerStatus: incoming.providerStatus ?? null,
-      providerFlightState: incoming.providerFlightState ?? incoming.providerStatus ?? null,
+      providerStatus: incoming.providerStatus ?? (preserveLifecycle ? existing.providerStatus ?? null : null),
+      providerFlightState: incoming.providerFlightState ?? incoming.providerStatus ?? (preserveLifecycle ? existing.providerFlightState ?? existing.lastKnownProviderFlightState ?? null : null),
       artccState: keepExistingWhenIncomingMissing("artccState"),
       lastKnownProviderFlightState: keepExistingWhenIncomingMissing("lastKnownProviderFlightState") || keepExistingWhenIncomingMissing("providerFlightState") || keepExistingWhenIncomingMissing("providerStatus"),
       lastKnownArtccState: keepExistingWhenIncomingMissing("lastKnownArtccState") || keepExistingWhenIncomingMissing("artccState"),
       lastProviderDataAt: incoming.lastProviderDataAt || existing.lastProviderDataAt || (incomingHasProviderData ? incoming.syncedAt : null),
       lastProviderRetrieveAt: incoming.lastProviderRetrieveAt || incoming.syncedAt || existing.lastProviderRetrieveAt || null,
-      providerLifecycleStatus: preserveLifecycle ? existing.providerLifecycleStatus || "unknown" : incoming.providerLifecycleStatus ?? existing.providerLifecycleStatus ?? "unknown",
-      providerLifecycleSource: preserveLifecycle ? existing.providerLifecycleSource || "legacy" : incoming.providerLifecycleSource ?? existing.providerLifecycleSource ?? null,
-      providerLifecycleReason: preserveLifecycle ? existing.providerLifecycleReason || "provider_record_not_retrievable" : incoming.providerLifecycleReason ?? existing.providerLifecycleReason ?? null,
+      providerLifecycleStatus: resultLifecycle,
+      providerLifecycleSource: resultLifecycleSource,
+      providerLifecycleReason: resultLifecycleReason,
       providerRetrievalState: incoming.providerRetrievalState ?? existing.providerRetrievalState ?? null,
       route: {
         ...asRecord(existing.route),
@@ -21759,6 +21807,134 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   const hashLeidosWebhookEvent = (payload: unknown) =>
     crypto.createHash("sha256").update(stableWebhookStringify(payload)).digest("hex");
+
+  const collectWebhookDateTimes = (input: unknown): string[] => {
+    const found = new Set<string>();
+    const visit = (value: unknown, depth = 0) => {
+      if (!value || depth > 8) return;
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item, depth + 1);
+        return;
+      }
+      if (typeof value !== "object") return;
+      for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+        if (/messageDateTime|notificationTimestamp|timestamp/i.test(key) && nested != null) {
+          const text = String(nested).trim();
+          if (text) found.add(text);
+        }
+        visit(nested, depth + 1);
+      }
+    };
+    visit(input);
+    return Array.from(found).sort();
+  };
+
+  const buildLeidosWebhookFingerprint = ({
+    flightIdentifier,
+    flightVersionStamp,
+    flightState,
+    artccState,
+    notificationType,
+    messageDateTime,
+    providerMessageId,
+    artccInfo,
+  }: {
+    flightIdentifier: string | null;
+    flightVersionStamp: string | null;
+    flightState: string | null;
+    artccState: string | null;
+    notificationType: string | null;
+    messageDateTime: string | null;
+    providerMessageId: string | null;
+    artccInfo: unknown;
+  }) => hashLeidosWebhookEvent({
+    flightIdentifier: normalizeNotificationValue(flightIdentifier),
+    rawFlightState: normalizeNotificationValue(flightState),
+    rawArtccState: normalizeNotificationValue(artccState),
+    versionStamp: normalizeNotificationValue(flightVersionStamp),
+    notificationType: normalizeNotificationValue(notificationType),
+    messageDateTime: normalizeNotificationValue(messageDateTime),
+    providerMessageId: normalizeNotificationValue(providerMessageId),
+    providerMessageDateTimes: collectWebhookDateTimes(artccInfo),
+  });
+
+  const reserveLeidosWebhookEvent = async ({
+    eventFingerprint,
+    processingId,
+    flightIdentifier,
+    flightVersionStamp,
+    flightState,
+    artccState,
+    notificationType,
+    messageDateTime,
+    providerMessageId,
+    payload,
+    processingStartedAt,
+  }: {
+    eventFingerprint: string;
+    processingId: string;
+    flightIdentifier: string | null;
+    flightVersionStamp: string | null;
+    flightState: string | null;
+    artccState: string | null;
+    notificationType: string | null;
+    messageDateTime: string | null;
+    providerMessageId: string | null;
+    payload: unknown;
+    processingStartedAt: Date;
+  }) => {
+    const [inserted] = await db
+      .insert(flightServiceWebhookEvents)
+      .values({
+        provider: "leidos",
+        eventFingerprint,
+        flightIdentifier,
+        providerPlanId: flightIdentifier,
+        versionStamp: flightVersionStamp,
+        rawFlightState: flightState,
+        rawArtccState: artccState,
+        messageDateTime,
+        providerMessageId,
+        notificationType,
+        processingId,
+        status: "processing",
+        payloadSummary: summarizeLeidosWebhookPayload(payload) as any,
+        processingStartedAt,
+        updatedAt: processingStartedAt,
+      })
+      .onConflictDoNothing({
+        target: [flightServiceWebhookEvents.provider, flightServiceWebhookEvents.eventFingerprint],
+      })
+      .returning({ id: flightServiceWebhookEvents.id });
+
+    if (inserted?.id) return { reserved: true, duplicateReason: null as string | null };
+
+    await db
+      .update(flightServiceWebhookEvents)
+      .set({
+        duplicateCount: sql`${flightServiceWebhookEvents.duplicateCount} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(flightServiceWebhookEvents.provider, "leidos"),
+        eq(flightServiceWebhookEvents.eventFingerprint, eventFingerprint),
+      ));
+    return { reserved: false, duplicateReason: "already_reserved_or_processed" };
+  };
+
+  const finishLeidosWebhookEvent = async (eventFingerprint: string, status: string) => {
+    await db
+      .update(flightServiceWebhookEvents)
+      .set({
+        status,
+        processingFinishedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(flightServiceWebhookEvents.provider, "leidos"),
+        eq(flightServiceWebhookEvents.eventFingerprint, eventFingerprint),
+      ));
+  };
 
   const getProcessedWebhookEvents = (snapshot: Record<string, unknown>) =>
     Array.isArray(snapshot.processedWebhookEvents)
@@ -22106,7 +22282,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       retrievedAt: now.toISOString(),
     };
     const mergedSnapshotBase = syncResult.providerSnapshot
-      ? mergeProviderSnapshot((plan as Record<string, unknown>).filingProviderSnapshot, syncResult.providerSnapshot)
+      ? mergeProviderSnapshot((plan as Record<string, unknown>).filingProviderSnapshot, syncResult.providerSnapshot, {
+        planId: plan.id,
+        providerPlanId: syncResult.providerPlanId ?? plan.filingProviderPlanId,
+        source: "provider_retrieve",
+      })
       : asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
     const nextProviderSnapshot = addProviderStateMismatchNotice(
       plan,
@@ -22777,7 +22957,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const processingId = crypto.randomUUID();
       const processingStartedAt = new Date();
       const payload = req.body ?? {};
-      const eventHash = hashLeidosWebhookEvent(payload);
       const alert =
         payload.flightAlert && typeof payload.flightAlert === "object" && !Array.isArray(payload.flightAlert)
           ? payload.flightAlert
@@ -22830,6 +23009,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         payload.notificationTimestamp ??
         payload.timestamp ??
         null;
+      const eventHash = buildLeidosWebhookFingerprint({
+        flightIdentifier,
+        flightVersionStamp,
+        flightState,
+        artccState,
+        notificationType,
+        messageDateTime,
+        providerMessageId,
+        artccInfo,
+      });
 
       console.info(JSON.stringify({
         event: "leidos_push_received",
@@ -22884,6 +23073,39 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(200).json(LEIDOS_WEBHOOK_SUCCESS_RESPONSE);
       }
 
+      const reservation = await reserveLeidosWebhookEvent({
+        eventFingerprint: eventHash,
+        processingId,
+        flightIdentifier,
+        flightVersionStamp,
+        flightState,
+        artccState,
+        notificationType,
+        messageDateTime,
+        providerMessageId,
+        payload,
+        processingStartedAt,
+      });
+      if (!reservation.reserved) {
+        console.info(JSON.stringify({
+          event: "leidos_webhook_duplicate_ignored",
+          processingId,
+          processingStart: processingStartedAt.toISOString(),
+          processingFinish: new Date().toISOString(),
+          flightIdentifier,
+          providerPlanId: flightIdentifier,
+          versionStamp: flightVersionStamp,
+          rawFlightState: normalizeNotificationValue(flightState),
+          rawArtccState: normalizeNotificationValue(artccState),
+          messageDateTime,
+          providerMessageId,
+          eventFingerprint: eventHash,
+          eventHash,
+          reason: reservation.duplicateReason || "already_processed",
+        }));
+        return res.status(200).json(LEIDOS_WEBHOOK_SUCCESS_RESPONSE);
+      }
+
       try {
         // STEP 2 — Match to RSF flight plan.
         // NOTE: storage.getFlightPlanByProviderPlanId does not exist yet — using direct db query.
@@ -22899,6 +23121,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             timestamp: new Date().toISOString(),
             flightIdentifier,
           }));
+          await finishLeidosWebhookEvent(eventHash, "no_matching_plan");
           return res.status(200).json(LEIDOS_WEBHOOK_SUCCESS_RESPONSE);
         }
 
@@ -22943,6 +23166,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             originalProcessingId: priorEvent ? String(priorEvent.processingId || "") || null : null,
             duplicateReason: activeLeidosWebhookEvents.has(eventKey) ? "already_processing" : "already_processed",
           }));
+          await finishLeidosWebhookEvent(eventHash, "duplicate_snapshot_ignored");
           return res.status(200).json(LEIDOS_WEBHOOK_SUCCESS_RESPONSE);
         }
         activeLeidosWebhookEvents.add(eventKey);
@@ -23224,6 +23448,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             .where(eq(userNotifications.id, providerPushNotification.id));
         }
         activeLeidosWebhookEvents.delete(eventKey);
+        await finishLeidosWebhookEvent(eventHash, "processed");
         console.info(JSON.stringify({
           event: "leidos_push_processed",
           processingId,
@@ -23242,6 +23467,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         if (flightIdentifier) {
           activeLeidosWebhookEvents.delete(`${flightIdentifier}:${eventHash}`);
         }
+        await finishLeidosWebhookEvent(eventHash, "error").catch(() => undefined);
         console.error(JSON.stringify({
           event: "leidos_push_error",
           timestamp: new Date().toISOString(),
@@ -24083,7 +24309,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         : providerResult.providerPlanId;
       const nextFilingPayload = providerResult.payloadSnapshot ?? asRecord((plan as Record<string, unknown>).filingPayload);
       const nextProviderSnapshot = providerResult.providerSnapshot
-        ? mergeProviderSnapshot((plan as Record<string, unknown>).filingProviderSnapshot, providerResult.providerSnapshot)
+        ? mergeProviderSnapshot((plan as Record<string, unknown>).filingProviderSnapshot, providerResult.providerSnapshot, {
+          planId: plan.id,
+          providerPlanId: providerResult.providerPlanId || plan.filingProviderPlanId,
+          source: providerResult.action || "provider_action",
+        })
         : asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
       const nextProviderMessages = appendPlanProviderMessages(
         (plan as Record<string, unknown>).filingProviderMessages,

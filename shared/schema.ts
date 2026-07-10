@@ -3090,6 +3090,33 @@ export const flightPlans = pgTable("flight_plans", {
   index("idx_flight_plans_certification_run").on(table.certificationRunId),
 ]);
 
+export const flightServiceWebhookEvents = pgTable("flight_service_webhook_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  provider: text("provider").notNull().default("leidos"),
+  eventFingerprint: varchar("event_fingerprint", { length: 128 }).notNull(),
+  flightIdentifier: text("flight_identifier"),
+  providerPlanId: text("provider_plan_id"),
+  versionStamp: text("version_stamp"),
+  rawFlightState: text("raw_flight_state"),
+  rawArtccState: text("raw_artcc_state"),
+  messageDateTime: text("message_date_time"),
+  providerMessageId: text("provider_message_id"),
+  notificationType: text("notification_type"),
+  processingId: varchar("processing_id", { length: 64 }).notNull(),
+  status: text("status").notNull().default("processing"),
+  duplicateCount: integer("duplicate_count").notNull().default(0),
+  payloadSummary: jsonb("payload_summary"),
+  processingStartedAt: timestamp("processing_started_at").defaultNow().notNull(),
+  processingFinishedAt: timestamp("processing_finished_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_flight_service_webhook_events_provider_fingerprint").on(table.provider, table.eventFingerprint),
+  index("idx_flight_service_webhook_events_flight_identifier").on(table.flightIdentifier),
+  index("idx_flight_service_webhook_events_provider_plan").on(table.providerPlanId),
+  index("idx_flight_service_webhook_events_created").on(table.createdAt),
+]);
+
 export const aircraftTypes = pgTable("aircraft_types", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   make: text("make").notNull(),

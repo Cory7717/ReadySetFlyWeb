@@ -64,7 +64,7 @@ const latestProviderStatus = (plan: FlightPlan) => {
 
 const latestProviderFlightState = (plan: FlightPlan) => {
   const snapshot = asRecord(plan.filingProviderSnapshot);
-  return valueOrNull(snapshot.providerFlightState) || valueOrNull(snapshot.providerStatus);
+  return valueOrNull(snapshot.providerFlightState) || valueOrNull(snapshot.providerStatus) || valueOrNull(snapshot.lastKnownProviderFlightState);
 };
 
 const latestKnownArtccState = (plan: FlightPlan) => {

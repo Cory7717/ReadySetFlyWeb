@@ -88,7 +88,7 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
   const filedHomeBase = asString((plan as any).filingAircraftHomeBase) || pilotHomeBase;
   const assignedBeaconCode = asString((plan as any).filingAssignedBeaconCode) || asString(providerSnapshot.beaconCode);
   const providerLifecycle = asString(providerSnapshot.providerLifecycleStatus);
-  const providerFlightState = asString(providerSnapshot.providerFlightState || providerSnapshot.providerStatus);
+  const providerFlightState = asString(providerSnapshot.providerFlightState || providerSnapshot.providerStatus || providerSnapshot.lastKnownProviderFlightState);
   const lastKnownArtccState = asString(providerSnapshot.lastKnownArtccState || providerSnapshot.artccState);
   const plannedDeparture = formatFlightPlanDepartureTime(plan);
   const filedDeparture = formatFlightPlanDepartureTime(plan, {

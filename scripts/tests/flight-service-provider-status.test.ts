@@ -35,6 +35,10 @@ test("provider snapshot merge preserves last-known values on null retrieve", () 
   assert.match(routes, /provider_record_not_retrievable/);
   assert.match(routes, /preserveLifecycle/);
   assert.match(routes, /provider_lifecycle_transition/);
+  assert.match(routes, /incoming_retrieve_omitted_flight_state/);
+  assert.match(routes, /incomingHasExplicitLifecycleEvidence/);
+  assert.match(routes, /provider_lifecycle_merge/);
+  assert.match(routes, /providerFlightState: incoming\.providerFlightState \?\? incoming\.providerStatus \?\? \(preserveLifecycle/);
 });
 
 test("Flight Planner panel does not show local filingStatus as provider status", () => {
@@ -66,4 +70,26 @@ test("duplicate webhook deliveries are identified before side effects", () => {
   assert.match(routes, /activeLeidosWebhookEvents/);
   assert.match(routes, /eventHash/);
   assert.match(routes, /suppressTransitionLog: true/);
+});
+
+test("webhook idempotency is durable and concurrency-safe", () => {
+  const schema = readFileSync("shared/schema.ts", "utf8");
+  const migration = readFileSync("migrations/0112_add_flight_service_webhook_events.sql", "utf8");
+  const routes = readFileSync("server/routes.ts", "utf8");
+  assert.match(schema, /flightServiceWebhookEvents/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS flight_service_webhook_events/);
+  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS idx_flight_service_webhook_events_provider_fingerprint/);
+  assert.match(routes, /reserveLeidosWebhookEvent/);
+  assert.match(routes, /onConflictDoNothing/);
+  assert.match(routes, /leidos_webhook_duplicate_ignored/);
+  assert.match(routes, /finishLeidosWebhookEvent/);
+});
+
+test("UI and Ops Console read preserved last-known raw provider state", () => {
+  const panel = readFileSync("client/src/components/flight-planner/FilingProviderWorkspace.tsx", "utf8");
+  const ops = readFileSync("server/services/flightServiceOpsConsole.ts", "utf8");
+  assert.match(panel, /lastKnownProviderFlightState/);
+  assert.match(panel, /lastKnownArtccState/);
+  assert.match(ops, /lastKnownProviderFlightState/);
+  assert.match(ops, /lastKnownArtccState/);
 });

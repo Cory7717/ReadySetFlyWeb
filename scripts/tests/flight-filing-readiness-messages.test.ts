@@ -11,7 +11,8 @@ test("Flight Planner readiness uses field-level categories instead of generic ai
   assert.match(plannerSource, /Aircraft Profile/);
   assert.match(plannerSource, /Pilot Profile/);
   assert.match(plannerSource, /Flight Plan/);
-  assert.match(plannerSource, /Leidos Requirements/);
+  assert.match(plannerSource, /Filing Requirements/);
+  assert.doesNotMatch(plannerSource, /Leidos Requirements/);
   assert.match(plannerSource, /Home Airport/);
   assert.match(plannerSource, /Equipment Code/);
   assert.match(plannerSource, /Fuel Endurance/);

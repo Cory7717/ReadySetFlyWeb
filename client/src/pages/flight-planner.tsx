@@ -74,6 +74,7 @@ import {
   type FiledRouteTokenKind,
 } from "@shared/flight-plan-route";
 import { extractFilingVersionStamp } from "@shared/flight-plan-filing";
+import { buildFuelEnduranceState, calculateFuelEnduranceMinutes, calculateFuelRequiredGallons, formatFuelDurationClock, resolveAuthoritativeEteMinutes } from "@shared/flight-plan-fuel";
 import { composePlanningGeometryRoute } from "@shared/flight-plan-planning-route";
 import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
 import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
@@ -1159,7 +1160,7 @@ type FilingPreviewResponse = {
   packet: Record<string, unknown>;
 };
 
-type FilingReadinessCategory = "Aircraft Profile" | "Pilot Profile" | "Flight Plan" | "Leidos Requirements";
+type FilingReadinessCategory = "Aircraft Profile" | "Pilot Profile" | "Flight Plan" | "Filing Requirements";
 type FilingReadinessSeverity = "required" | "recommended" | "optional";
 type FilingReadinessIssue = {
   id: string;
@@ -2277,8 +2278,8 @@ export default function FlightPlanner() {
     departureName: "",
     destinationName: "",
     alternateName: "",
-    manualEstimatedEnrouteMinutes: "",
     manualEnduranceMinutes: "",
+    manualEnduranceOverrideEnabled: false,
   });
   const selectedEquipmentCodes = useMemo(
     () => Array.from(new Set(parseIcaoEquipmentCodes(filingDraft.equipment))),
@@ -2898,7 +2899,6 @@ export default function FlightPlanner() {
       typeOfFlight: selectedProfile.filingTypeOfFlightDefault?.trim() || current.typeOfFlight,
       surveillanceEquipment: selectedProfile.filingSurveillanceEquipmentDefault?.trim() || current.surveillanceEquipment,
       otherInfo: selectedProfile.filingOtherInfoDefault?.trim() || current.otherInfo,
-      manualEnduranceMinutes: selectedProfile.filingEnduranceMinutesDefault ? String(selectedProfile.filingEnduranceMinutesDefault) : current.manualEnduranceMinutes,
     }));
     if (selectedProfile.filingAltitudePreferenceDefault) {
       setPlannedAltitude(selectedProfile.filingAltitudePreferenceDefault);
@@ -3810,12 +3810,20 @@ export default function FlightPlanner() {
   const windValue = Number(headwind || 0);
   const groundspeed = Math.max(40, planningCruise - (isPro ? windValue : 0));
   const eteHours = totalDistance ? totalDistance / groundspeed : 0;
-  const reserveFuel = (Number(reserveMinutes) / 60) * planningBurn;
-  const tripFuel = eteHours * planningBurn;
-  const totalFuel = tripFuel + reserveFuel;
   const eteMinutes = totalDistance > 0 && Number.isFinite(eteHours)
     ? Math.max(1, Math.round(eteHours * 60))
     : 0;
+  const authoritativeEteMinutes = resolveAuthoritativeEteMinutes({
+    routeDerivedEteMinutes: eteMinutes,
+  });
+  const fuelRequiredSummary = useMemo(() => calculateFuelRequiredGallons({
+    eteMinutes: eteHours > 0 ? eteHours * 60 : authoritativeEteMinutes,
+    fuelBurnGph: planningBurn,
+    reserveMinutes: Number(reserveMinutes),
+  }), [authoritativeEteMinutes, eteHours, planningBurn, reserveMinutes]);
+  const reserveFuel = fuelRequiredSummary.reserveFuelGallons;
+  const tripFuel = fuelRequiredSummary.tripFuelGallons;
+  const totalFuel = fuelRequiredSummary.totalRequiredFuelGallons;
   const canAutoArrival = Boolean(form.plannedDepartureAt && totalDistance > 0 && groundspeed > 0);
   const generatedRouteCore = useMemo(
     () =>
@@ -3904,10 +3912,10 @@ export default function FlightPlanner() {
     if (suggestionMeta?.maxLegNm && suggestionMeta.maxLegNm > 0) return suggestionMeta.maxLegNm * 0.9;
     return null;
   }, [suggestionMeta]);
-  const enduranceMinutes = useMemo(() => {
-    if (!planningBurn || planningBurn <= 0) return 0;
-    return (fuelAvailableGallons / planningBurn) * 60;
-  }, [fuelAvailableGallons, planningBurn]);
+  const enduranceMinutes = useMemo(
+    () => calculateFuelEnduranceMinutes(fuelAvailableGallons, planningBurn) || 0,
+    [fuelAvailableGallons, planningBurn],
+  );
   const legNavRows = useMemo(() => {
     let cumulativeNm = 0;
     let cumulativeMinutes = 0;
@@ -3985,26 +3993,32 @@ export default function FlightPlanner() {
     () => filedAlternateCode,
     [filedAlternateCode],
   );
-  const manualEstimatedEnrouteMinutes = useMemo(() => {
-    const value = Number(filingDraft.manualEstimatedEnrouteMinutes);
-    return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
-  }, [filingDraft.manualEstimatedEnrouteMinutes]);
   const manualEnduranceMinutes = useMemo(() => {
     const value = Number(filingDraft.manualEnduranceMinutes);
     return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
   }, [filingDraft.manualEnduranceMinutes]);
-  const filingEstimatedEnrouteMinutes = manualEstimatedEnrouteMinutes ?? (eteMinutes || null);
-  const calculatedEnduranceMinutes = Math.round(enduranceMinutes) || null;
-  const filingEnduranceMinutes = manualEnduranceMinutes ?? calculatedEnduranceMinutes;
-  const filingEnduranceSource = manualEnduranceMinutes ? "manual_icao_endurance" : calculatedEnduranceMinutes ? "calculated_from_fuel_and_burn" : "missing";
+  const filingEstimatedEnrouteMinutes = authoritativeEteMinutes;
+  const fuelEnduranceState = useMemo(() => buildFuelEnduranceState({
+    eteMinutes: authoritativeEteMinutes,
+    fuelOnBoardGallons: fuelAvailableGallons,
+    fuelBurnGph: planningBurn,
+    manualEnduranceMinutes,
+    manualOverrideEnabled: filingDraft.manualEnduranceOverrideEnabled,
+  }), [
+    authoritativeEteMinutes,
+    filingDraft.manualEnduranceOverrideEnabled,
+    fuelAvailableGallons,
+    manualEnduranceMinutes,
+    planningBurn,
+  ]);
+  const calculatedEnduranceMinutes = fuelEnduranceState.calculatedEnduranceMinutes;
+  const filingEnduranceMinutes = fuelEnduranceState.filedEnduranceMinutes;
+  const filingEnduranceSource = fuelEnduranceState.source;
   const fuelEnduranceComparison = useMemo(() => {
-    const ete = filingEstimatedEnrouteMinutes && filingEstimatedEnrouteMinutes > 0
-      ? Math.round(filingEstimatedEnrouteMinutes)
-      : null;
-    const transmitted = filingEnduranceMinutes && filingEnduranceMinutes > 0
-      ? Math.round(filingEnduranceMinutes)
-      : null;
-    const surplusOrDeficitMinutes = ete && transmitted ? transmitted - ete : null;
+    const ete = fuelEnduranceState.authoritativeEteMinutes;
+    const transmitted = fuelEnduranceState.filedEnduranceMinutes;
+    const surplusOrDeficitMinutes = fuelEnduranceState.surplusOrDeficitMinutes;
+    const manualConflict = filingDraft.manualEnduranceOverrideEnabled && fuelEnduranceState.isDeficient;
     return {
       eteMinutes: ete,
       transmittedEnduranceMinutes: transmitted,
@@ -4012,12 +4026,14 @@ export default function FlightPlanner() {
       calculatedEnduranceMinutes,
       source: filingEnduranceSource,
       surplusOrDeficitMinutes,
-      isDeficient: surplusOrDeficitMinutes !== null && surplusOrDeficitMinutes < 0,
-      message: surplusOrDeficitMinutes !== null && surplusOrDeficitMinutes < 0
-        ? `Fuel endurance is ${formatFilingDurationLabel(transmitted)}, but estimated time enroute is ${formatFilingDurationLabel(ete)}.`
+      manualDifferenceMinutes: fuelEnduranceState.manualDifferenceMinutes,
+      manualDiffersMaterially: fuelEnduranceState.manualDiffersMaterially,
+      isDeficient: fuelEnduranceState.isDeficient,
+      message: fuelEnduranceState.isDeficient
+        ? `${manualConflict ? "Manual filed fuel endurance" : "Filed fuel endurance"} is ${formatFilingDurationLabel(transmitted)}, but estimated time enroute is ${formatFilingDurationLabel(ete)}.`
         : null,
     };
-  }, [calculatedEnduranceMinutes, filingEnduranceMinutes, filingEnduranceSource, filingEstimatedEnrouteMinutes]);
+  }, [calculatedEnduranceMinutes, filingDraft.manualEnduranceOverrideEnabled, filingEnduranceSource, fuelEnduranceState]);
   const fuelEnduranceDiagnostics = useMemo(() => ({
     calculatedEteMinutes: filingEstimatedEnrouteMinutes || null,
     displayedFuelEnduranceMinutes: fuelEnduranceComparison.displayedEnduranceMinutes,
@@ -4028,14 +4044,20 @@ export default function FlightPlanner() {
     reserveMinutes: Number(reserveMinutes) || null,
     surplusOrDeficitMinutes: fuelEnduranceComparison.surplusOrDeficitMinutes,
     finalEnduranceSource: filingEnduranceSource,
+    manualOverrideEnabled: filingDraft.manualEnduranceOverrideEnabled,
+    manualEnduranceMinutes,
+    manualDifferenceMinutes: fuelEnduranceComparison.manualDifferenceMinutes,
   }), [
     calculatedEnduranceMinutes,
+    filingDraft.manualEnduranceOverrideEnabled,
     filingEnduranceSource,
     filingEstimatedEnrouteMinutes,
     fuelAvailableGallons,
     fuelEnduranceComparison.displayedEnduranceMinutes,
+    fuelEnduranceComparison.manualDifferenceMinutes,
     fuelEnduranceComparison.surplusOrDeficitMinutes,
     fuelEnduranceComparison.transmittedEnduranceMinutes,
+    manualEnduranceMinutes,
     planningBurn,
     reserveMinutes,
   ]);
@@ -5617,8 +5639,8 @@ export default function FlightPlanner() {
       departureName: "",
       destinationName: "",
       alternateName: "",
-      manualEstimatedEnrouteMinutes: "",
       manualEnduranceMinutes: "",
+      manualEnduranceOverrideEnabled: false,
     });
   };
 
@@ -6677,11 +6699,11 @@ export default function FlightPlanner() {
     });
     addIssue(Boolean(fuelEnduranceComparison.isDeficient), {
       id: "fuel-endurance-less-than-ete",
-      category: "Leidos Requirements",
+      category: "Filing Requirements",
       field: "fuelEndurance",
       label: "Fuel Endurance",
       severity: "required",
-      message: `${fuelEnduranceComparison.message} Increase endurance or correct aircraft fuel data before filing.`,
+      message: `${fuelEnduranceComparison.message} ${filingDraft.manualEnduranceOverrideEnabled ? "The manual filed value conflicts with the calculated aircraft endurance. " : ""}Increase endurance or correct aircraft fuel data before filing.`,
       why: "Flight Service requires ICAO fuel endurance to be at least the estimated time en route.",
       actionLabel: "Edit",
       actionTab: fileTab,
@@ -6689,18 +6711,18 @@ export default function FlightPlanner() {
 
     addIssue(!filingDraft.aircraftHomeBase.trim() && !String((user as any)?.homeBase || "").trim(), {
       id: "home-airport",
-      category: "Leidos Requirements",
+      category: "Filing Requirements",
       field: "homeAirport",
       label: "Home Airport",
       severity: "required",
       message: "Aircraft home airport is required.",
-      why: "Leidos Flight Service expects aircraft home base data in the filing packet.",
+      why: "The filing provider expects aircraft home base data in the filing packet.",
       actionLabel: "Edit",
       actionTab: fileTab,
     });
     addIssue(!filingDraft.soulsOnBoard.trim(), {
       id: "souls-on-board",
-      category: "Leidos Requirements",
+      category: "Filing Requirements",
       field: "soulsOnBoard",
       label: "Souls on Board",
       severity: "required",
@@ -6711,7 +6733,7 @@ export default function FlightPlanner() {
     });
     addIssue(!filingDraft.typeOfFlight.trim(), {
       id: "type-of-flight",
-      category: "Leidos Requirements",
+      category: "Filing Requirements",
       field: "typeOfFlight",
       label: "Type of Flight",
       severity: "required",
@@ -6722,7 +6744,7 @@ export default function FlightPlanner() {
     });
     addIssue(!Boolean(filingDraft.remarks.trim() || form.notes.trim()), {
       id: "filing-remarks",
-      category: "Leidos Requirements",
+      category: "Filing Requirements",
       field: "remarks",
       label: "Filing Remarks / ATC Remarks",
       severity: "required",
@@ -6733,7 +6755,7 @@ export default function FlightPlanner() {
     });
     addIssue(!providerStateValid, {
       id: "provider-state",
-      category: "Leidos Requirements",
+      category: "Filing Requirements",
       field: "providerState",
       label: "Provider Change Review",
       severity: "required",
@@ -6745,7 +6767,7 @@ export default function FlightPlanner() {
     for (const issue of icaoReadiness.issues.filter((issue) => issue.severity === "critical")) {
       issues.push({
         id: `icao-${issue.id}`,
-        category: issue.field === "equipment" || issue.field === "surveillance" ? "Aircraft Profile" : "Leidos Requirements",
+        category: issue.field === "equipment" || issue.field === "surveillance" ? "Aircraft Profile" : "Filing Requirements",
         field: issue.field,
         label: issue.field === "equipment" ? "Equipment Code" : issue.field === "surveillance" ? "Surveillance Code" : "ICAO Other Info",
         severity: "required",
@@ -6759,7 +6781,7 @@ export default function FlightPlanner() {
       .filter((issue) => issue.severity === "warning")
       .map((issue) => ({
         id: `warning-${issue.id}`,
-        category: issue.field === "equipment" || issue.field === "surveillance" ? "Aircraft Profile" : "Leidos Requirements",
+        category: issue.field === "equipment" || issue.field === "surveillance" ? "Aircraft Profile" : "Filing Requirements",
         field: issue.field,
         label: issue.field === "equipment" ? "Equipment Code" : issue.field === "surveillance" ? "Surveillance Code" : "ICAO Readiness",
         severity: "recommended" as const,
@@ -6768,7 +6790,7 @@ export default function FlightPlanner() {
         actionLabel: "Edit",
         actionTab: fileTab,
       }));
-    const categories: FilingReadinessCategory[] = ["Aircraft Profile", "Pilot Profile", "Flight Plan", "Leidos Requirements"];
+    const categories: FilingReadinessCategory[] = ["Aircraft Profile", "Pilot Profile", "Flight Plan", "Filing Requirements"];
     const categorySummaries = categories.map((category) => ({
       category,
       required: issues.filter((issue) => issue.category === category && issue.severity === "required"),
@@ -7348,12 +7370,10 @@ export default function FlightPlanner() {
       departureName: editingPlan.filingDepartureName || current.departureName,
       destinationName: editingPlan.filingDestinationName || current.destinationName,
       alternateName: editingPlan.filingAlternateName || current.alternateName,
-      manualEstimatedEnrouteMinutes: editingPlan.filingEstimatedEnrouteMinutes
-        ? String(editingPlan.filingEstimatedEnrouteMinutes)
-        : current.manualEstimatedEnrouteMinutes,
-      manualEnduranceMinutes: editingPlan.filingEnduranceMinutes
+      manualEnduranceOverrideEnabled: (editingPlan.plannerState as any)?.filingEnduranceSource === "manual_icao_endurance",
+      manualEnduranceMinutes: (editingPlan.plannerState as any)?.filingEnduranceSource === "manual_icao_endurance" && editingPlan.filingEnduranceMinutes
         ? String(editingPlan.filingEnduranceMinutes)
-        : current.manualEnduranceMinutes,
+        : "",
     }));
     logZzzzPlannerStateEvent("zzzz_location_state_hydrated", {
       planId: editingPlan.id,
@@ -8887,7 +8907,7 @@ export default function FlightPlanner() {
             <div className={plannerMetricClass}>
               <div className="text-xs text-[#A9BBCD]">ETE</div>
               <div className="text-lg font-semibold text-[#F5F8FC]">
-                {eteHours ? `${Math.round(eteHours * 60)} min` : "-"}
+                {authoritativeEteMinutes ? `${authoritativeEteMinutes} min` : "-"}
               </div>
             </div>
             <div className={plannerMetricClass}>
@@ -8895,28 +8915,33 @@ export default function FlightPlanner() {
               <div className="text-lg font-semibold text-[#F5F8FC]">{tripFuel ? tripFuel.toFixed(1) : "-"} gal</div>
             </div>
             <div className={plannerMetricClass}>
-              <div className="text-xs text-[#A9BBCD]">Total Fuel + Reserve</div>
+              <div className="text-xs text-[#A9BBCD]">Total Required Fuel</div>
               <div className="text-lg font-semibold text-[#F5F8FC]">{totalFuel ? totalFuel.toFixed(1) : "-"} gal</div>
             </div>
           </div>
           {totalFuel > 0 && (
             <div className={cn(
               "rounded-lg border px-4 py-2 text-sm font-medium",
-              !fuelPlanSummary.firstUnreachableLeg && fuelSurplus >= 0 && !fuelEnduranceComparison.isDeficient
+              !fuelPlanSummary.firstUnreachableLeg && fuelSurplus >= 0
                 ? "border-green-300 bg-[#0d2220] text-[#4DA8A8]"
                 : "border-red-300 bg-red-50 text-red-800"
             )}>
-              {fuelEnduranceComparison.isDeficient
-                ? `${fuelEnduranceComparison.message} Increase endurance or correct aircraft fuel data before filing.`
-                : fuelPlanSummary.firstUnreachableLeg
+              {fuelPlanSummary.firstUnreachableLeg
                 ? `? You cannot reach ${fuelPlanSummary.firstUnreachableLeg.to} on current fuel planning. Short by ${Math.abs(fuelPlanSummary.firstUnreachableLeg.fuelAfterLeg).toFixed(1)} gal before planned uplift.`
                 : fuelSurplus >= 0
                   ? `Fuel surplus after planned stops: +${fuelSurplus.toFixed(1)} gal (${formatMinutesLabel(surplusMinutes)} beyond reserve)`
                   : `? Fuel deficit after planned stops: ${fuelSurplus.toFixed(1)} gal — add fuel, adjust stop uplifts, or reduce route`}
             </div>
           )}
+          {fuelEnduranceComparison.isDeficient && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                {fuelEnduranceComparison.message} {filingDraft.manualEnduranceOverrideEnabled ? "The manual filed value conflicts with the calculated aircraft endurance. " : ""}Increase endurance or correct aircraft fuel data before filing.
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="text-xs text-muted-foreground">
-            Start fuel: {fuelAvailableGallons ? `${fuelAvailableGallons.toFixed(1)} gal` : "-"} | Planned uplift: {totalPlannedFuelUplift.toFixed(1)} gal | Leidos endurance: {formatFilingDurationLabel(filingEnduranceMinutes)} ({filingEnduranceSource === "manual_icao_endurance" ? "manual" : filingEnduranceSource === "calculated_from_fuel_and_burn" ? "calculated" : "missing"}) | Usable fuel: {planningFuel ? `${planningFuel} gal` : "-"} | Max gross weight: {planningMaxWeight ? `${planningMaxWeight} lb` : "-"}
+            Fuel aboard: {fuelAvailableGallons ? `${fuelAvailableGallons.toFixed(1)} gal` : "-"} | Planned uplift: {totalPlannedFuelUplift.toFixed(1)} gal | Calculated endurance: {formatFilingDurationLabel(calculatedEnduranceMinutes)} | Filed ICAO endurance: {formatFilingDurationLabel(filingEnduranceMinutes)} ({filingEnduranceSource === "manual_icao_endurance" ? "manual override" : filingEnduranceSource === "calculated_from_fuel_and_burn" ? "calculated" : "missing"}) | Usable fuel: {planningFuel ? `${planningFuel} gal` : "-"} | Max gross weight: {planningMaxWeight ? `${planningMaxWeight} lb` : "-"}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild type="button" variant="outline" size="sm">
@@ -10031,24 +10056,42 @@ export default function FlightPlanner() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label>Manual ETE Minutes <span className="text-xs text-muted-foreground">(ZZZZ/IFR test)</span></Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={filingDraft.manualEstimatedEnrouteMinutes}
-                    onChange={(e) => setFilingDraft((current) => ({ ...current, manualEstimatedEnrouteMinutes: e.target.value }))}
-                    placeholder={eteMinutes ? String(eteMinutes) : "90"}
-                  />
+                  <Label>Estimated Time En Route</Label>
+                  <div className="rounded-md border bg-background/40 p-3 text-sm">
+                    <div className="font-semibold text-foreground">{authoritativeEteMinutes ? `${authoritativeEteMinutes} min (${formatFilingDurationLabel(authoritativeEteMinutes)})` : "-"}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">Calculated from the current route distance and groundspeed. This is the filed flight duration.</div>
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Manual Endurance Minutes <span className="text-xs text-muted-foreground">(ZZZZ/IFR test)</span></Label>
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Manual ICAO endurance override</Label>
+                    <Checkbox
+                      checked={filingDraft.manualEnduranceOverrideEnabled}
+                      onCheckedChange={(checked) => setFilingDraft((current) => ({
+                        ...current,
+                        manualEnduranceOverrideEnabled: Boolean(checked),
+                        manualEnduranceMinutes: checked ? current.manualEnduranceMinutes : "",
+                      }))}
+                    />
+                  </div>
                   <Input
                     type="number"
                     min="1"
                     value={filingDraft.manualEnduranceMinutes}
+                    disabled={!filingDraft.manualEnduranceOverrideEnabled}
                     onChange={(e) => setFilingDraft((current) => ({ ...current, manualEnduranceMinutes: e.target.value }))}
-                    placeholder={Math.round(enduranceMinutes) ? String(Math.round(enduranceMinutes)) : "180"}
+                    placeholder={calculatedEnduranceMinutes ? String(calculatedEnduranceMinutes) : "180"}
                   />
+                  <div className="text-xs text-muted-foreground">
+                    Calculated endurance: {formatFilingDurationLabel(calculatedEnduranceMinutes)}. Filed ICAO endurance: {formatFilingDurationLabel(filingEnduranceMinutes)}.
+                  </div>
+                  {fuelEnduranceComparison.manualDiffersMaterially && (
+                    <Alert>
+                      <AlertDescription>
+                        Manual filed endurance differs from calculated aircraft endurance by {Math.abs(fuelEnduranceComparison.manualDifferenceMinutes || 0)} minutes.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
                 {effectiveDepartureCode === "ZZZZ" && (
                   <div className="space-y-4 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-4 md:col-span-2">
@@ -10260,11 +10303,11 @@ export default function FlightPlanner() {
                   <div className="font-semibold text-[#F5F8FC]">{Math.round(planningCruise)} KTAS at {plannedAltitude || "-"} ft</div>
                 </div>
                 <div className={plannerMetricClass}>
-                  <div className="text-xs text-[#A9BBCD]">Fuel on board / endurance</div>
+                  <div className="text-xs text-[#A9BBCD]">Fuel aboard / endurance</div>
                   <div className="font-semibold text-[#F5F8FC]">{fuelAvailableGallons.toFixed(1)} gal / {filingEnduranceMinutes ? formatMinutesLabel(filingEnduranceMinutes) : "-"}</div>
                   <div className={cn("mt-1 text-xs", fuelEnduranceComparison.isDeficient ? "text-red-200" : "text-[#A9BBCD]")}>
-                    Leidos transmits {formatFilingDurationLabel(filingEnduranceMinutes)}
-                    {filingEnduranceSource === "manual_icao_endurance" ? " from manual ICAO endurance" : filingEnduranceSource === "calculated_from_fuel_and_burn" ? " from fuel and burn rate" : ""}
+                    Filed ICAO endurance {formatFilingDurationLabel(filingEnduranceMinutes)}
+                    {filingEnduranceSource === "manual_icao_endurance" ? " from manual override" : filingEnduranceSource === "calculated_from_fuel_and_burn" ? " from fuel and burn rate" : ""}
                   </div>
                 </div>
                 <div className={plannerMetricClass}>
@@ -10622,7 +10665,7 @@ export default function FlightPlanner() {
                       action: getCertificationCleanupAction(currentSavedPlan),
                     })}
                     disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
-                    title="Requires LAB acknowledgement. If Leidos is already terminal, RSF will close the local certification plan without another provider call."
+                    title="Requires LAB acknowledgement. If the provider plan is already terminal, RSF will close the local certification plan without another provider call."
                   >
                     Cleanup test plan
                   </Button>
@@ -11166,7 +11209,7 @@ export default function FlightPlanner() {
                         action: getCertificationCleanupAction(plan),
                       })}
                       disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
-                      title="Requires LAB acknowledgement. If Leidos is already terminal, RSF will close the local certification plan without another provider call."
+                      title="Requires LAB acknowledgement. If the provider plan is already terminal, RSF will close the local certification plan without another provider call."
                     >
                       Cleanup test plan
                     </Button>

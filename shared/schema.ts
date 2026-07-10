@@ -1633,6 +1633,55 @@ export const membershipPartnerOfferMembers = pgTable("membership_partner_offer_m
   index("idx_membership_partner_offer_members_redeemed_by").on(table.redeemedByUserId),
 ]);
 
+export const membershipPromotions = pgTable("membership_promotions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: varchar("code", { length: 120 }).notNull().unique(),
+  normalizedCode: varchar("normalized_code", { length: 120 }).notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  campaign: text("campaign"),
+  partnerName: text("partner_name"),
+  source: text("source"),
+  benefitType: text("benefit_type").notNull().default("complimentary_membership"),
+  membershipTier: text("membership_tier").notNull().default("premium"),
+  membershipDurationMonths: integer("membership_duration_months").notNull().default(12),
+  maxTotalRedemptions: integer("max_total_redemptions"),
+  maxRedemptionsPerUser: integer("max_redemptions_per_user").notNull().default(1),
+  redemptionCount: integer("redemption_count").notNull().default(0),
+  validFrom: timestamp("valid_from").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").notNull().default(true),
+  successMessage: text("success_message"),
+  createdBy: varchar("created_by").references(() => users.id),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_membership_promotions_active").on(table.isActive),
+  index("idx_membership_promotions_campaign").on(table.campaign),
+  index("idx_membership_promotions_expires").on(table.expiresAt),
+]);
+
+export const membershipPromotionRedemptions = pgTable("membership_promotion_redemptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  promotionId: varchar("promotion_id").notNull().references(() => membershipPromotions.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  normalizedCode: varchar("normalized_code", { length: 120 }).notNull(),
+  redeemedAt: timestamp("redeemed_at").defaultNow().notNull(),
+  membershipTierGranted: text("membership_tier_granted").notNull(),
+  membershipStartsAt: timestamp("membership_starts_at").notNull(),
+  membershipEndsAt: timestamp("membership_ends_at").notNull(),
+  previousMembershipTier: text("previous_membership_tier"),
+  previousMembershipExpiresAt: timestamp("previous_membership_expires_at"),
+  registrationSessionId: text("registration_session_id"),
+  ipHash: varchar("ip_hash", { length: 64 }),
+  userAgentSummary: text("user_agent_summary"),
+}, (table) => [
+  uniqueIndex("idx_membership_promotion_redemptions_unique_user").on(table.promotionId, table.userId),
+  index("idx_membership_promotion_redemptions_promotion").on(table.promotionId),
+  index("idx_membership_promotion_redemptions_user").on(table.userId),
+]);
+
 export const aiToolUsages = pgTable("ai_tool_usages", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: varchar("user_id").references(() => users.id),
@@ -3789,6 +3838,32 @@ export const insertMembershipPartnerOfferSchema = createInsertSchema(membershipP
   createdBy: z.string().optional(),
 });
 
+export const insertMembershipPromotionSchema = createInsertSchema(membershipPromotions).omit({
+  id: true,
+  normalizedCode: true,
+  redemptionCount: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  code: z.string().min(2, "Promotion code is required").max(120),
+  name: z.string().min(1, "Promotion name is required").max(160),
+  description: z.string().max(1000).optional().nullable(),
+  campaign: z.string().max(160).optional().nullable(),
+  partnerName: z.string().max(160).optional().nullable(),
+  source: z.string().max(160).optional().nullable(),
+  benefitType: z.literal("complimentary_membership").default("complimentary_membership"),
+  membershipTier: z.literal("premium").default("premium"),
+  membershipDurationMonths: z.number().int().min(1).max(36).default(12),
+  maxTotalRedemptions: z.number().int().min(1).max(100000).optional().nullable(),
+  maxRedemptionsPerUser: z.number().int().min(1).max(10).default(1),
+  validFrom: z.coerce.date().optional().nullable(),
+  expiresAt: z.coerce.date().optional().nullable(),
+  isActive: z.boolean().default(true),
+  successMessage: z.string().max(2000).optional().nullable(),
+  createdBy: z.string().optional().nullable(),
+  updatedBy: z.string().optional().nullable(),
+});
+
 export const insertExpenseSchema = createInsertSchema(expenses).omit({
   id: true,
   createdAt: true,
@@ -4090,6 +4165,10 @@ export type MembershipPartnerOffer = typeof membershipPartnerOffers.$inferSelect
 export type InsertMembershipPartnerOffer = z.infer<typeof insertMembershipPartnerOfferSchema>;
 export type MembershipPartnerOfferMember = typeof membershipPartnerOfferMembers.$inferSelect;
 export type InsertMembershipPartnerOfferMember = typeof membershipPartnerOfferMembers.$inferInsert;
+export type MembershipPromotion = typeof membershipPromotions.$inferSelect;
+export type InsertMembershipPromotion = z.infer<typeof insertMembershipPromotionSchema>;
+export type MembershipPromotionRedemption = typeof membershipPromotionRedemptions.$inferSelect;
+export type InsertMembershipPromotionRedemption = typeof membershipPromotionRedemptions.$inferInsert;
 export type AiToolUsage = typeof aiToolUsages.$inferSelect;
 export type InsertAiToolUsage = typeof aiToolUsages.$inferInsert;
 

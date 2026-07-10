@@ -107,6 +107,8 @@ import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import { analyzeFiledRoute } from "@shared/flight-plan-route";
 import { ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE, canCreateAnotherActiveFlightPlan, getActiveFlightPlans } from "@shared/flight-plan-access";
 import { isValidZzzzActualLocation } from "@shared/zzzz-location";
+import { insertMembershipPromotionSchema, membershipPromotions, membershipPromotionRedemptions, type MembershipPromotion } from "@shared/schema";
+import { normalizeMembershipPromoCode, redeemMembershipPromotion } from "./services/membershipPromotions";
 import { formatArtccInfo, formatProviderNotificationValue, sanitizeNotificationMessage } from "@shared/provider-notification-format";
 import {
   buildFilingEventId,
@@ -9523,6 +9525,148 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Promo code validation error:", error);
       res.status(500).json({ valid: false, message: "Failed to validate promo code" });
+    }
+  });
+
+  const membershipPromotionRedeemSchema = z.object({
+    code: z.string().min(1).max(120),
+  });
+
+  app.post("/api/membership-promotions/redeem", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getRequestUserId(req);
+      if (!userId) return res.status(401).json({ error: "Sign in to redeem this promo code." });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const parsed = membershipPromotionRedeemSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Enter a promo or invitation code.", validation: parsed.error.format() });
+      }
+
+      const result = await redeemMembershipPromotion({
+        code: parsed.data.code,
+        user,
+        registrationSessionId: req.sessionID || null,
+        ipAddress: req.ip || req.connection?.remoteAddress || null,
+        userAgent: req.headers["user-agent"] ? String(req.headers["user-agent"]) : null,
+      });
+
+      if (!result.ok) {
+        return res.status(400).json({ ...result, error: result.message });
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Membership promotion redeem error:", error);
+      res.status(500).json({ error: "Failed to redeem promo code" });
+    }
+  });
+
+  const membershipPromotionAdminSchema = insertMembershipPromotionSchema.extend({
+    code: z.string().min(2).max(120),
+  });
+
+  const summarizeMembershipPromotion = async (promotion: MembershipPromotion) => {
+    const redemptions = await db
+      .select({
+        id: membershipPromotionRedemptions.id,
+        userId: membershipPromotionRedemptions.userId,
+        redeemedAt: membershipPromotionRedemptions.redeemedAt,
+        membershipTierGranted: membershipPromotionRedemptions.membershipTierGranted,
+        membershipStartsAt: membershipPromotionRedemptions.membershipStartsAt,
+        membershipEndsAt: membershipPromotionRedemptions.membershipEndsAt,
+        userEmail: users.email,
+        userFirstName: users.firstName,
+        userLastName: users.lastName,
+      })
+      .from(membershipPromotionRedemptions)
+      .leftJoin(users, eq(membershipPromotionRedemptions.userId, users.id))
+      .where(eq(membershipPromotionRedemptions.promotionId, promotion.id))
+      .orderBy(desc(membershipPromotionRedemptions.redeemedAt));
+
+    const maxTotal = promotion.maxTotalRedemptions ?? null;
+    return {
+      ...promotion,
+      remainingUses: maxTotal === null ? null : Math.max(0, maxTotal - Number(promotion.redemptionCount || 0)),
+      redemptions,
+    };
+  };
+
+  app.get("/api/admin/membership-promotions", isAuthenticated, isSuperAdmin, async (_req, res) => {
+    try {
+      const promotions = await db.select().from(membershipPromotions).orderBy(desc(membershipPromotions.createdAt));
+      res.json(await Promise.all(promotions.map(summarizeMembershipPromotion)));
+    } catch (error) {
+      console.error("Failed to fetch membership promotions:", error);
+      res.status(500).json({ error: "Failed to fetch membership promotions" });
+    }
+  });
+
+  app.post("/api/admin/membership-promotions", isAuthenticated, isSuperAdmin, async (req: any, res) => {
+    try {
+      const parsed = membershipPromotionAdminSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Validation failed", validation: parsed.error.format() });
+      }
+      const adminId = getRequestUserId(req);
+      const normalizedCode = normalizeMembershipPromoCode(parsed.data.code);
+      const [promotion] = await db.insert(membershipPromotions).values({
+        ...parsed.data,
+        code: normalizedCode,
+        normalizedCode,
+        createdBy: adminId,
+        updatedBy: adminId,
+      }).returning();
+      console.info(JSON.stringify({
+        event: "membership_promotion_created",
+        promotionId: promotion.id,
+        campaign: promotion.campaign,
+        maxTotalRedemptions: promotion.maxTotalRedemptions,
+      }));
+      res.status(201).json(await summarizeMembershipPromotion(promotion));
+    } catch (error: any) {
+      console.error("Failed to create membership promotion:", error);
+      res.status(500).json({ error: "Failed to create membership promotion" });
+    }
+  });
+
+  app.patch("/api/admin/membership-promotions/:id", isAuthenticated, isSuperAdmin, async (req: any, res) => {
+    try {
+      const [existing] = await db.select().from(membershipPromotions).where(eq(membershipPromotions.id, req.params.id));
+      if (!existing) return res.status(404).json({ error: "Membership promotion not found" });
+
+      const parsed = membershipPromotionAdminSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Validation failed", validation: parsed.error.format() });
+      }
+
+      const updates: Record<string, unknown> = { ...parsed.data, updatedAt: new Date(), updatedBy: getRequestUserId(req) };
+      if (existing.redemptionCount && parsed.data.code && normalizeMembershipPromoCode(parsed.data.code) !== existing.normalizedCode) {
+        return res.status(400).json({ error: "Codes cannot be edited after the first redemption. Deactivate this code and create a replacement." });
+      }
+      if (parsed.data.code) {
+        const normalizedCode = normalizeMembershipPromoCode(parsed.data.code);
+        updates.code = normalizedCode;
+        updates.normalizedCode = normalizedCode;
+      }
+      if (parsed.data.maxTotalRedemptions != null && parsed.data.maxTotalRedemptions < Number(existing.redemptionCount || 0)) {
+        return res.status(400).json({ error: "Maximum redemptions cannot be lower than the existing redemption count." });
+      }
+
+      const [updated] = await db
+        .update(membershipPromotions)
+        .set(updates)
+        .where(eq(membershipPromotions.id, req.params.id))
+        .returning();
+      console.info(JSON.stringify({
+        event: "membership_promotion_updated",
+        promotionId: updated.id,
+        campaign: updated.campaign,
+      }));
+      res.json(await summarizeMembershipPromotion(updated));
+    } catch (error) {
+      console.error("Failed to update membership promotion:", error);
+      res.status(500).json({ error: "Failed to update membership promotion" });
     }
   });
 

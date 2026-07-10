@@ -34,6 +34,7 @@ import RentalPayment from "@/pages/rental-payment";
 import AdminDashboard from "@/pages/admin";
 import AdminInviteAccept from "@/pages/admin-invite";
 import FlightServiceOpsPage from "@/pages/flight-service-ops";
+import MembershipPromotionsAdminPage from "@/pages/membership-promotions-admin";
 import VerifyIdentity from "@/pages/verify-identity";
 import OwnerPayoutSetup from "@/pages/owner-payout-setup";
 import OwnerWithdrawals from "@/pages/owner-withdrawals";
@@ -45,6 +46,7 @@ import Settings from "@/pages/settings";
 import DeleteAccount from "@/pages/delete-account";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import Redeem from "@/pages/redeem";
 import VerifyEmail from "@/pages/verify-email";
 import BannerAdPaymentRedirect from "@/pages/banner-ad-payment";
 import BannerAdvertise from "@/pages/banner-advertise";
@@ -210,6 +212,7 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/redeem" component={Redeem} />
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/faq" component={FaqPage} />
       <Route path="/synthetic-vision" component={SyntheticVisionPage} />
@@ -295,7 +298,8 @@ function Router() {
           <Route path="/owner-withdrawals" component={OwnerWithdrawals} />
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/admin/certification" component={AdminDashboard} />
-          <Route path="/super-admin/flight-service-ops" component={FlightServiceOpsPage} />
+      <Route path="/super-admin/flight-service-ops" component={FlightServiceOpsPage} />
+      <Route path="/super-admin/membership-promotions" component={MembershipPromotionsAdminPage} />
           <Route path="/admin/invite" component={AdminInviteAccept} />
           <Route path="/verify-identity" component={VerifyIdentity} />
           <Route path="/settings" component={Settings} />
@@ -352,6 +356,7 @@ function Router() {
           <Route path="/admin" component={RequireAuth} />
           <Route path="/admin/certification" component={RequireAuth} />
           <Route path="/super-admin/flight-service-ops" component={RequireAuth} />
+          <Route path="/super-admin/membership-promotions" component={RequireAuth} />
           <Route path="/admin/invite" component={RequireAuth} />
           <Route path="/verify-identity" component={RequireAuth} />
           <Route path="/settings" component={RequireAuth} />

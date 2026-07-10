@@ -9,6 +9,7 @@ import { getUncachableResendClient } from './resendClient';
 import { sendFounderWelcomeEmail } from './email-templates';
 import { maybeSyncLogbookProSubscription } from './paypal-subscription-sync';
 import { getEntitlementsForUser, resolveMembershipFromStoreSignals } from './membership';
+import { redeemMembershipPromotion } from './services/membershipPromotions';
 import {
   buildFrontendUrl,
   emailDomainOnly,
@@ -104,6 +105,7 @@ const registerSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   turnstileToken: z.string().optional(),
+  promoCode: z.string().max(120).optional(),
 });
 
 const loginSchema = z.object({
@@ -185,7 +187,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         return;
       }
 
-      const { password, firstName, lastName, turnstileToken } = result.data;
+      const { password, firstName, lastName, turnstileToken, promoCode } = result.data;
       const email = normalizeAuthEmail(result.data.email);
 
       // Verify Turnstile CAPTCHA
@@ -273,10 +275,27 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         return;
       }
 
+      let promotionRedemption = null;
+      if (promoCode?.trim()) {
+        const redemption = await redeemMembershipPromotion({
+          code: promoCode,
+          user,
+          registrationSessionId: req.sessionID || null,
+          ipAddress: clientIp,
+          userAgent: req.headers["user-agent"] ? String(req.headers["user-agent"]) : null,
+        });
+        if (!redemption.ok) {
+          promotionRedemption = redemption;
+        } else {
+          promotionRedemption = redemption;
+        }
+      }
+
       // Return user data (excluding password)
       const { hashedPassword: _, passwordCreatedAt: __, emailVerificationToken: ___, ...userResponse } = user;
       res.status(201).json({ 
         user: userResponse,
+        promotionRedemption,
         message: 'Account created! Please check your email to verify your account.'
       });
     } catch (error) {
@@ -420,7 +439,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         return;
       }
 
-      const { password, firstName, lastName, turnstileToken } = result.data;
+      const { password, firstName, lastName, turnstileToken, promoCode } = result.data;
       const email = normalizeAuthEmail(result.data.email);
 
       // Verify Turnstile CAPTCHA
@@ -480,10 +499,27 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         ipAddress: req.ip || req.socket.remoteAddress || null,
       });
 
+      let promotionRedemption = null;
+      if (promoCode?.trim()) {
+        const redemption = await redeemMembershipPromotion({
+          code: promoCode,
+          user,
+          registrationSessionId: null,
+          ipAddress: clientIp,
+          userAgent: req.headers["user-agent"] ? String(req.headers["user-agent"]) : null,
+        });
+        if (!redemption.ok) {
+          promotionRedemption = redemption;
+        } else {
+          promotionRedemption = redemption;
+        }
+      }
+
       // Return tokens and user data (excluding password)
       const { hashedPassword: _, passwordCreatedAt: __, ...userResponse } = user;
       res.status(201).json({
         user: userResponse,
+        promotionRedemption,
         accessToken,
         refreshToken,
       });

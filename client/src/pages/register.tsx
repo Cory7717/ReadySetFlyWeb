@@ -22,6 +22,7 @@ const registerSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string().min(1, 'Please confirm your password'),
+  promoCode: z.string().max(120).optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -36,6 +37,7 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string>('');
   const redirectTarget = getReturnToFromWindow();
+  const initialPromoCode = new URLSearchParams(window.location.search).get("code") || "";
 
   useEffect(() => {
     trackEvent("signup_page_viewed", {
@@ -53,6 +55,7 @@ export default function RegisterPage() {
       email: '',
       password: '',
       confirmPassword: '',
+      promoCode: initialPromoCode,
     },
   });
 
@@ -86,7 +89,9 @@ export default function RegisterPage() {
       });
       toast({
         title: 'Account created!',
-        description: data.message || 'Please check your email to verify your account.',
+        description: data.promotionRedemption?.ok
+          ? data.promotionRedemption.message
+          : data.promotionRedemption?.message || data.message || 'Please check your email to verify your account.',
       });
       setLocation(redirectTarget);
     },
@@ -265,6 +270,23 @@ export default function RegisterPage() {
                 />
                 {form.formState.errors.email && (
                   <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="promoCode">Promo or invitation code</Label>
+                <Input
+                  id="promoCode"
+                  placeholder="Optional"
+                  {...form.register('promoCode')}
+                  data-testid="input-promo-code"
+                  disabled={isLoading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Have a partner, event, or giveaway code? Enter it here.
+                </p>
+                {form.formState.errors.promoCode && (
+                  <p className="text-sm text-destructive">{form.formState.errors.promoCode.message}</p>
                 )}
               </div>
 

@@ -68,11 +68,13 @@ import {
   filedRouteTokenKindLabel,
   normalizeRouteText,
   parseAirportWaypoints,
+  parseFiledRouteTokens,
   type FiledRouteStructureSegment,
   type FiledRouteToken,
   type FiledRouteTokenKind,
 } from "@shared/flight-plan-route";
 import { extractFilingVersionStamp } from "@shared/flight-plan-filing";
+import { composePlanningGeometryRoute } from "@shared/flight-plan-planning-route";
 import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
 import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
 import { formatFlightPlanDepartureTime, formatZulu } from "@shared/flight-plan-time";
@@ -3142,6 +3144,11 @@ export default function FlightPlanner() {
   const filedRouteAnalysis = useMemo(() => analyzeFiledRoute(filedRouteInputNormalized), [filedRouteInputNormalized]);
   const filedRouteTokens = filedRouteAnalysis.tokens;
   const filedRouteAirportTokens = filedRouteAnalysis.airportTokens;
+  const planningGeometryRouteInput = useMemo(() => composePlanningGeometryRoute({
+    departure: planningDepartureCode,
+    route: filedRouteInputNormalized || "DCT",
+    destination: planningDestinationCode,
+  }), [filedRouteInputNormalized, planningDepartureCode, planningDestinationCode]);
   const routeAssistAnalysisInput = useMemo(() => {
     const tokens = [
       planningDepartureCode,
@@ -3153,10 +3160,10 @@ export default function FlightPlanner() {
     return tokens.length >= 2 ? normalizeRouteText(tokens.join(" DCT ")) : "";
   }, [planningDepartureCode, planningDestinationCode, waypoints]);
   const filedRouteAnalysisQuery = useQuery<FiledRouteAnalysisResponse>({
-    queryKey: ["/api/flight-plans/route-analysis", filedRouteInputNormalized],
+    queryKey: ["/api/flight-plans/route-analysis", "planning-geometry", planningGeometryRouteInput],
     queryFn: async () => {
       const params = new URLSearchParams({
-        route: filedRouteInputNormalized,
+        route: planningGeometryRouteInput,
       });
       const res = await fetch(apiUrl(`/api/flight-plans/route-analysis?${params.toString()}`), {
         credentials: "include",
@@ -3166,7 +3173,7 @@ export default function FlightPlanner() {
       }
       return res.json();
     },
-    enabled: Boolean(filedRouteInputNormalized),
+    enabled: Boolean(planningGeometryRouteInput),
     staleTime: 1000 * 60 * 10,
   });
   const routeAssistAnalysisQuery = useQuery<FiledRouteAnalysisResponse>({
@@ -3842,6 +3849,24 @@ export default function FlightPlanner() {
     () => buildRoutePreview(form.departure, activeFiledRoute, form.destination),
     [form.departure, activeFiledRoute, form.destination]
   );
+  useEffect(() => {
+    if (routePoints.length < 2) return;
+    const firstPolylinePoint = routePoints[0];
+    const lastPolylinePoint = routePoints[routePoints.length - 1];
+    console.debug(JSON.stringify({
+      event: "flight_planner_route_geometry_debug",
+      providerRouteTokens: parseFiledRouteTokens(leidosFiledRoute || "DCT").map((token) => token.token),
+      planningGeometryTokens: parseFiledRouteTokens(planningGeometryRouteInput).map((token) => token.token),
+      firstPolylinePoint: firstPolylinePoint
+        ? { ident: firstPolylinePoint.icao, lat: firstPolylinePoint.lat, lon: firstPolylinePoint.lon }
+        : null,
+      lastPolylinePoint: lastPolylinePoint
+        ? { ident: lastPolylinePoint.icao, lat: lastPolylinePoint.lat, lon: lastPolylinePoint.lon }
+        : null,
+      departureAirport: planningDepartureCode || null,
+      destinationAirport: planningDestinationCode || null,
+    }));
+  }, [leidosFiledRoute, planningDepartureCode, planningDestinationCode, planningGeometryRouteInput, routePoints]);
   const fuelAvailableGallons = useMemo(() => {
     const onboard = Number(form.fuelOnBoard);
     if (Number.isFinite(onboard) && onboard > 0) return onboard;

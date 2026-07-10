@@ -93,3 +93,14 @@ test("UI and Ops Console read preserved last-known raw provider state", () => {
   assert.match(ops, /lastKnownProviderFlightState/);
   assert.match(ops, /lastKnownArtccState/);
 });
+
+test("webhook lifecycle updates local status while IFR close remains blocked", () => {
+  const routes = readFileSync("server/routes.ts", "utf8");
+  const client = readFileSync("client/src/pages/flight-planner.tsx", "utf8");
+  const provider = readFileSync("server/services/flight-plan-filing/provider.ts", "utf8");
+  assert.match(routes, /buildProviderLifecycleStatusUpdate/);
+  assert.match(routes, /webhookStatusUpdates/);
+  assert.match(routes, /filingStatus: providerStatus/);
+  assert.match(client, /String\(plan\.filingFlightRules \|\| "VFR"\)\.toUpperCase\(\) === "VFR"[\s\S]{0,220}normalizedClientFilingStatus\(plan\) === "activated"[\s\S]{0,220}getProviderActionAvailability\(plan\)\.close/);
+  assert.match(provider, /if \(\(action === "activate" \|\| action === "close"\) && rules !== "VFR"\)/);
+});

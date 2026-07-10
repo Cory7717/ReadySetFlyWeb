@@ -21976,6 +21976,29 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     return null;
   };
 
+  const buildProviderLifecycleStatusUpdate = (
+    plan: any,
+    snapshot: Record<string, unknown>,
+    now = new Date(),
+  ) => {
+    const providerStatus = getPlanStatusFromProviderLifecycle(snapshot);
+    const statusTimestamps: Record<string, Date> = {};
+    if (providerStatus === "activated" && !plan.activatedAt) statusTimestamps.activatedAt = now;
+    if (providerStatus === "cancelled" && !plan.cancelledAt) statusTimestamps.cancelledAt = now;
+    if (providerStatus === "closed" && !plan.closedAt) statusTimestamps.closedAt = now;
+    return {
+      providerStatus,
+      updates: providerStatus
+        ? {
+          filingStatus: providerStatus,
+          filingPendingAction: ["cancelled", "closed"].includes(providerStatus) ? null : plan.filingPendingAction,
+          filingIsLive: !["cancelled", "closed"].includes(providerStatus),
+          ...statusTimestamps,
+        }
+        : {},
+    };
+  };
+
   const logProviderLifecycleTransition = ({
     plan,
     previousSnapshot,
@@ -22313,23 +22336,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         ...syncResult.providerMessages,
       ],
     );
-    const providerStatus = getPlanStatusFromProviderLifecycle(nextProviderSnapshot);
-    const statusTimestamps: Record<string, Date> = {};
-    if (providerStatus === "activated" && !plan.activatedAt) statusTimestamps.activatedAt = now;
-    if (providerStatus === "cancelled" && !plan.cancelledAt) statusTimestamps.cancelledAt = now;
-    if (providerStatus === "closed" && !plan.closedAt) statusTimestamps.closedAt = now;
+    const { providerStatus, updates: providerStatusUpdates } = buildProviderLifecycleStatusUpdate(plan, nextProviderSnapshot, now);
 
     return storage.updateFlightPlan(plan.id, {
       filingProviderPlanId: syncResult.providerPlanId ?? plan.filingProviderPlanId,
-      filingStatus: providerStatus || plan.filingStatus,
-      filingPendingAction: providerStatus && ["cancelled", "closed"].includes(providerStatus) ? null : plan.filingPendingAction,
-      filingIsLive: providerStatus ? !["cancelled", "closed"].includes(providerStatus) : plan.filingIsLive,
       filingLastProviderSyncAt: now,
       filingProviderSnapshot: Object.keys(nextProviderSnapshot || {}).length > 0 ? nextProviderSnapshot as any : null,
       filingProviderMessages: nextProviderMessages as any,
       filingAssignedBeaconCode: String((nextProviderSnapshot as any)?.beaconCode || plan.filingAssignedBeaconCode || "").trim() || null,
       filingRaw: nextRaw as any,
-      ...statusTimestamps,
+      ...providerStatusUpdates,
     } as any);
   };
 
@@ -23373,6 +23389,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             ...syncedSnapshot,
             ...providerReviewSnapshot,
             versionStamp: providerReviewSnapshot.versionStamp || syncedSnapshot.versionStamp || null,
+            providerRetrievalState: syncedSnapshot.providerRetrievalState || providerReviewSnapshot.providerRetrievalState || null,
           }, {
             eventHash,
             processingId,
@@ -23382,6 +23399,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             rawFlightState: normalizeNotificationValue(flightState),
             rawArtccState: normalizeNotificationValue(artccState),
           });
+          const { updates: webhookStatusUpdates } = buildProviderLifecycleStatusUpdate(syncedPlan || matchedPlan, finalWebhookSnapshot);
           await storage.updateFlightPlan(matchedPlan.id, {
             filingProviderMessages: appendPlanProviderMessages(
               (syncedPlan as Record<string, unknown>)?.filingProviderMessages,
@@ -23392,6 +23410,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               providerHistoryEntry,
             ) as any,
             filingProviderSnapshot: finalWebhookSnapshot,
+            ...webhookStatusUpdates,
           } as any);
           logProviderLifecycleTransition({
             plan: matchedPlan,
@@ -23421,9 +23440,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             rawFlightState: normalizeNotificationValue(flightState),
             rawArtccState: normalizeNotificationValue(artccState),
           });
+          const { updates: webhookStatusUpdates } = buildProviderLifecycleStatusUpdate(matchedPlan, finalWebhookSnapshot);
           await storage.updateFlightPlan(matchedPlan.id, {
             filingProviderMessages: mergedMessages as any,
             filingProviderSnapshot: finalWebhookSnapshot,
+            ...webhookStatusUpdates,
           } as any);
           logProviderLifecycleTransition({
             plan: matchedPlan,

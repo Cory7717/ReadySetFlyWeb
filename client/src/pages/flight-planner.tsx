@@ -196,6 +196,46 @@ const routePointToPlannerPoint = (point: NonNullable<FiledRouteAnalysisResponse[
   };
 };
 
+const routeAssistRouteKeys = ["route", "routeText", "routeString", "providerRoute", "expectedRoute", "currentRoute"];
+const routeAssistMessageKeys = ["message", "details", "description", "text", "returnMessage", "codedMessage"];
+
+const normalizeRouteAssistText = (value: unknown, keys: string[], depth = 0): string | null => {
+  if (value == null || depth > 4) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    const text = String(value).trim();
+    return text && text !== "[object Object]" ? text : null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const text = normalizeRouteAssistText(item, keys, depth + 1);
+      if (text) return text;
+    }
+    return null;
+  }
+  if (typeof value !== "object") return null;
+
+  const record = value as Record<string, unknown>;
+  const normalizedKeys = new Map(Object.keys(record).map((key) => [key.toLowerCase().replace(/[^a-z0-9]/g, ""), key]));
+  for (const key of keys) {
+    const actualKey = normalizedKeys.get(key.toLowerCase().replace(/[^a-z0-9]/g, ""));
+    if (!actualKey) continue;
+    const text = normalizeRouteAssistText(record[actualKey], keys, depth + 1);
+    if (text) return text;
+  }
+  return null;
+};
+
+const normalizeRouteAssistRoute = (value: unknown) =>
+  normalizeRouteAssistText(value, routeAssistRouteKeys);
+
+const normalizeRouteAssistMessage = (value: unknown) =>
+  normalizeRouteAssistText(value, routeAssistMessageKeys);
+
+const normalizeRouteAssistRouteList = (value: unknown) =>
+  (Array.isArray(value) ? value : [])
+    .map(normalizeRouteAssistRoute)
+    .filter((route): route is string => Boolean(route));
+
 const summarizePlannerError = (value: unknown) => {
   let message = String(value || "").trim();
   if (!message) return "Unable to stage the filing action.";
@@ -3033,6 +3073,38 @@ export default function FlightPlanner() {
     staleTime: 1000 * 60 * 10,
     retry: false,
   });
+
+  const routeAssistRecommendedRoute = useMemo(
+    () => normalizeRouteAssistRoute(leidosRouteQuery.data?.route),
+    [leidosRouteQuery.data?.route],
+  );
+  const routeAssistUnavailableMessage = useMemo(
+    () => normalizeRouteAssistMessage(leidosRouteQuery.data?.message),
+    [leidosRouteQuery.data?.message],
+  );
+  const routeAssistWarnings = useMemo(
+    () => Array.isArray(leidosRouteQuery.data?.warnings)
+      ? leidosRouteQuery.data.warnings
+          .map(normalizeRouteAssistMessage)
+          .filter((warning): warning is string => Boolean(warning))
+      : [],
+    [leidosRouteQuery.data?.warnings],
+  );
+  const routeAssistGroups = useMemo(
+    () => [
+      { title: "Recent ATC IFR Routes", routes: normalizeRouteAssistRouteList(leidosRouteQuery.data?.atcRecentIFRRoutes) },
+      { title: "FAA Preferred Routes", routes: normalizeRouteAssistRouteList(leidosRouteQuery.data?.faaPreferredRoutes) },
+      { title: "Coded Departure Routes", routes: normalizeRouteAssistRouteList(leidosRouteQuery.data?.codedDepartureRoutes) },
+    ],
+    [
+      leidosRouteQuery.data?.atcRecentIFRRoutes,
+      leidosRouteQuery.data?.faaPreferredRoutes,
+      leidosRouteQuery.data?.codedDepartureRoutes,
+    ],
+  );
+  const routeAssistHasSuggestions = Boolean(
+    routeAssistRecommendedRoute || routeAssistGroups.some((group) => group.routes.length > 0)
+  );
 
   const suggestedWaypoints = routeSuggestionQuery.data?.waypoints ?? [];
   const suggestedStops = routeSuggestionQuery.data?.plannedStops ?? [];
@@ -8327,33 +8399,29 @@ export default function FlightPlanner() {
                         </AlertDescription>
                       </Alert>
                     )}
-                    {leidosRouteQuery.data?.available === false && leidosRouteQuery.data?.message && (
+                    {leidosRouteQuery.data?.available === false && routeAssistUnavailableMessage && (
                       <Alert>
-                        <AlertDescription>{leidosRouteQuery.data.message}</AlertDescription>
+                        <AlertDescription>{routeAssistUnavailableMessage}</AlertDescription>
                       </Alert>
                     )}
-                    {leidosRouteQuery.data?.route && (
+                    {routeAssistRecommendedRoute && (
                       <div className={cn("space-y-2", plannerSubpanelSuccessClass)}>
                         <div className="text-xs font-medium uppercase tracking-wide text-[#9ccfbe]">
                           System Recommended Assist
                         </div>
-                        <div className="font-mono text-sm break-words text-[#F5F8FC]">{leidosRouteQuery.data.route}</div>
+                        <div className="font-mono text-sm break-words text-[#F5F8FC]">{routeAssistRecommendedRoute}</div>
                         <div>
                           <Button
                             type="button"
                             size="sm"
-                            onClick={() => applyFiledRouteToPlanner(leidosRouteQuery.data?.route || "")}
+                            onClick={() => applyFiledRouteToPlanner(routeAssistRecommendedRoute)}
                           >
                             Use recommended route
                           </Button>
                         </div>
                       </div>
                     )}
-                    {[
-                      { title: "Recent ATC IFR Routes", routes: leidosRouteQuery.data?.atcRecentIFRRoutes || [] },
-                      { title: "FAA Preferred Routes", routes: leidosRouteQuery.data?.faaPreferredRoutes || [] },
-                      { title: "Coded Departure Routes", routes: leidosRouteQuery.data?.codedDepartureRoutes || [] },
-                    ].map((group) => (
+                    {routeAssistGroups.map((group) => (
                       group.routes.length > 0 ? (
                         <div key={group.title} className="space-y-2">
                           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.title}</div>
@@ -8375,18 +8443,15 @@ export default function FlightPlanner() {
                         </div>
                       ) : null
                     ))}
-                    {leidosRouteQuery.data?.warnings?.length ? (
+                    {routeAssistWarnings.length > 0 ? (
                       <div className={cn("text-xs", plannerSubpanelWarningClass)}>
-                        {leidosRouteQuery.data.warnings.join(" ")}
+                        {routeAssistWarnings.join(" ")}
                       </div>
                     ) : null}
                     {!leidosRouteQuery.isFetching &&
                       !leidosRouteQuery.error &&
                       leidosRouteQuery.data?.available !== false &&
-                      !leidosRouteQuery.data?.route &&
-                      !(leidosRouteQuery.data?.atcRecentIFRRoutes?.length) &&
-                      !(leidosRouteQuery.data?.faaPreferredRoutes?.length) &&
-                      !(leidosRouteQuery.data?.codedDepartureRoutes?.length) && (
+                      !routeAssistHasSuggestions && (
                         <div className="text-xs text-muted-foreground">
                           No Route Assist suggestions came back for this city pair yet. You can still file a custom route or use the planning helpers above.
                         </div>

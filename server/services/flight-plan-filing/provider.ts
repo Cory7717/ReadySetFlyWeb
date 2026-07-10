@@ -2117,19 +2117,42 @@ export const searchLeidosRoute = async ({
     throw new Error(`Leidos route search failed with status ${response.status}`);
   }
 
-  const asStringArray = (value: unknown) =>
-    Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  const asRouteStringArray = (value: unknown) =>
+    Array.isArray(value)
+      ? value
+          .map((item) => extractNestedRouteString(item) || (typeof item === "string" ? toDisplayString(item) : null))
+          .filter((item): item is string => Boolean(item && item !== "[object Object]"))
+      : [];
+
+  const asMessageStringArray = (value: unknown) =>
+    Array.isArray(value)
+      ? value
+          .map((item) => {
+            if (typeof item === "string" || typeof item === "number" || typeof item === "boolean" || item instanceof Date) {
+              return toDisplayString(item);
+            }
+            const record = getRecord(item);
+            if (!record) return null;
+            return toDisplayString(record.message) ||
+              toDisplayString(record.details) ||
+              toDisplayString(record.description) ||
+              toDisplayString(record.text) ||
+              toDisplayString(record.returnMessage) ||
+              toDisplayString(record.codedMessage);
+          })
+          .filter((item): item is string => Boolean(item && item !== "[object Object]"))
+      : [];
 
   return {
     provider: "Leidos Flight Service",
     environment: config.environment,
     departure: departure.trim().toUpperCase(),
     destination: destination.trim().toUpperCase(),
-    route: String((parsed.route as string | undefined) || "").trim() || null,
-    atcRecentIFRRoutes: asStringArray(parsed.atcRecentIFRRoutes),
-    codedDepartureRoutes: asStringArray(parsed.codedDepartureRoutes),
-    faaPreferredRoutes: asStringArray(parsed.faaPreferredRoutes),
-    warnings: asStringArray(parsed.returnCodedMessage),
+    route: extractNestedRouteString(parsed.route) || null,
+    atcRecentIFRRoutes: asRouteStringArray(parsed.atcRecentIFRRoutes),
+    codedDepartureRoutes: asRouteStringArray(parsed.codedDepartureRoutes),
+    faaPreferredRoutes: asRouteStringArray(parsed.faaPreferredRoutes),
+    warnings: asMessageStringArray(parsed.returnCodedMessage),
   };
 };
 

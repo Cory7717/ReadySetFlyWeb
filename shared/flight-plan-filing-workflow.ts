@@ -61,7 +61,7 @@ export type FilingProviderSnapshot = {
   artccInfo: string | null;
   providerLifecycleStatus?: "draft" | "proposed" | "filed" | "activated" | "active" | "cancelled" | "closed" | "rejected" | "unknown";
   providerLifecycleSource?: "provider_response" | "provider_retrieve" | "leidos_webhook" | "user_action" | "local_reconciliation" | "admin_action" | "legacy" | "unknown" | null;
-  providerLifecycleReason?: "explicit_provider_flight_state" | "explicit_provider_cancellation" | "explicit_provider_closure" | "explicit_provider_rejection" | "explicit_provider_active" | "explicit_provider_proposed" | "explicit_provider_filed" | "provider_record_not_retrievable" | "provider_error" | "unknown_mapping" | null;
+  providerLifecycleReason?: "explicit_provider_flight_state" | "explicit_provider_cancellation" | "explicit_provider_closure" | "explicit_provider_rejection" | "explicit_provider_active" | "explicit_provider_proposed" | "explicit_provider_filed" | "provider_record_not_retrievable" | "provider_error" | "local_filing_status_baseline" | "unknown_mapping" | null;
   providerRetrievalState?: "retrievable" | "not_found" | "unavailable" | "provider_error" | "not_attempted" | null;
   lastProviderDataAt?: string | null;
   lastProviderRetrieveAt?: string | null;

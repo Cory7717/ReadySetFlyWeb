@@ -21976,6 +21976,50 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     return null;
   };
 
+  const applyLocalFilingLifecycleBaseline = (plan: any, snapshot: Record<string, unknown>) => {
+    const lifecycle = String(snapshot.providerLifecycleStatus || "").trim().toLowerCase();
+    if (lifecycle && lifecycle !== "unknown") return snapshot;
+
+    const localStatus = String(plan?.filingStatus || "").trim().toLowerCase();
+    const baselineLifecycle =
+      localStatus === "filed" ? "proposed" :
+      localStatus === "activated" ? "activated" :
+      localStatus === "closed" ? "closed" :
+      localStatus === "cancelled" || localStatus === "canceled" ? "cancelled" :
+      null;
+    if (!baselineLifecycle) return snapshot;
+
+    console.info(JSON.stringify({
+      event: "provider_lifecycle_merge",
+      planId: plan?.id || null,
+      providerPlanId: String(plan?.filingProviderPlanId || snapshot.providerPlanId || "").trim() || null,
+      source: "local_reconciliation",
+      existingLifecycle: lifecycle || "unknown",
+      incomingLifecycle: "unknown",
+      incomingHasExplicitLifecycleEvidence: false,
+      existingEvidenceSource: snapshot.providerLifecycleSource || null,
+      resultLifecycle: baselineLifecycle,
+      preservedExistingLifecycle: false,
+      reason: "local_filing_status_baseline",
+    }));
+
+    return {
+      ...snapshot,
+      providerLifecycleStatus: baselineLifecycle,
+      providerLifecycleSource: snapshot.providerLifecycleSource || "local_reconciliation",
+      providerLifecycleReason: "local_filing_status_baseline",
+      providerActionAvailability: {
+        ...asRecord(snapshot.providerActionAvailability),
+        amend: ["proposed", "filed", "activated"].includes(baselineLifecycle),
+        activate: baselineLifecycle === "proposed",
+        cancel: baselineLifecycle === "proposed",
+        close: baselineLifecycle === "activated",
+        requiresSync: false,
+        reason: null,
+      },
+    };
+  };
+
   const buildProviderLifecycleStatusUpdate = (
     plan: any,
     snapshot: Record<string, unknown>,
@@ -22311,9 +22355,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         source: "provider_retrieve",
       })
       : asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+    const reconciledSnapshotBase = applyLocalFilingLifecycleBaseline(plan, mergedSnapshotBase);
     const nextProviderSnapshot = addProviderStateMismatchNotice(
       plan,
-      mergedSnapshotBase,
+      reconciledSnapshotBase,
       options.forceExternalNotice
         ? "External provider change detected: the filing provider rejected the requested action because the flight plan is no longer in the expected provider-side state."
         : null,
@@ -24336,6 +24381,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           source: providerResult.action || "provider_action",
         })
         : asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+      const reconciledProviderSnapshot = applyLocalFilingLifecycleBaseline(
+        { ...plan, filingStatus: nextFilingStatus, filingProviderPlanId: nextProviderPlanId },
+        nextProviderSnapshot,
+      );
       const nextProviderMessages = appendPlanProviderMessages(
         (plan as Record<string, unknown>).filingProviderMessages,
         providerResult.providerMessages,
@@ -24349,9 +24398,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         filingIsLive: nextFilingIsLive,
         filingLastProviderSyncAt: now,
         filingPayload: Object.keys(nextFilingPayload || {}).length > 0 ? nextFilingPayload as any : null,
-        filingProviderSnapshot: Object.keys(nextProviderSnapshot || {}).length > 0 ? nextProviderSnapshot as any : null,
+        filingProviderSnapshot: Object.keys(reconciledProviderSnapshot || {}).length > 0 ? reconciledProviderSnapshot as any : null,
         filingProviderMessages: nextProviderMessages as any,
-        filingAssignedBeaconCode: String((nextProviderSnapshot as any)?.beaconCode || plan.filingAssignedBeaconCode || "").trim() || null,
+        filingAssignedBeaconCode: String((reconciledProviderSnapshot as any)?.beaconCode || plan.filingAssignedBeaconCode || "").trim() || null,
         filingRaw: nextFilingRaw,
         filingActionHistory: [...currentHistory, historyEntry],
         ...statusTimestamps,

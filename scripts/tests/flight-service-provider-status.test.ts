@@ -39,6 +39,9 @@ test("provider snapshot merge preserves last-known values on null retrieve", () 
   assert.match(routes, /incomingHasExplicitLifecycleEvidence/);
   assert.match(routes, /provider_lifecycle_merge/);
   assert.match(routes, /providerFlightState: incoming\.providerFlightState \?\? incoming\.providerStatus \?\? \(preserveLifecycle/);
+  assert.match(routes, /applyLocalFilingLifecycleBaseline/);
+  assert.match(routes, /localStatus === "filed" \? "proposed"/);
+  assert.match(routes, /local_filing_status_baseline/);
 });
 
 test("Flight Planner panel does not show local filingStatus as provider status", () => {

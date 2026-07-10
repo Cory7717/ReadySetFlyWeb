@@ -41,6 +41,7 @@ import { buildMarketplaceListingFeeBreakdown } from "./marketplace-fees";
 import { resolveTfmsAccess } from "./lib/tier";
 import { buildCorsOptions } from "./corsOptions";
 import { getFrontendBaseUrl } from "./authRedirectUrls";
+import { normalizeMembershipTier } from "@shared/membership-plans";
 import {
   getFlightServiceCertificationReport,
   getLatestFlightServiceCertificationReport,
@@ -1271,8 +1272,7 @@ type AdminUserAudience =
   | "all_active"
   | "recently_joined"
   | "free_users"
-  | "rsf_pro"
-  | "rsf_pro_plus"
+  | "premium"
   | "without_subscription"
   | "selected_users"
   | "filtered_results";
@@ -1284,7 +1284,7 @@ type AdminUserFilterInput = {
   joinedTo?: string | null;
   accountStatus?: "all" | "active" | "inactive";
   marketingStatus?: "all" | "subscribed" | "unsubscribed";
-  subscriptionTier?: "all" | "free" | "pro" | "pro_plus";
+  subscriptionTier?: "all" | "free" | "premium";
   cfiProfile?: "all" | "with" | "without";
   aircraftOwner?: "all" | "with" | "without";
   sortBy?: AdminUserSortField;
@@ -1323,7 +1323,7 @@ const adminUserFiltersSchema = z.object({
   joinedTo: z.string().optional().nullable(),
   accountStatus: z.enum(["all", "active", "inactive"]).optional(),
   marketingStatus: z.enum(["all", "subscribed", "unsubscribed"]).optional(),
-  subscriptionTier: z.enum(["all", "free", "pro", "pro_plus"]).optional(),
+  subscriptionTier: z.enum(["all", "free", "premium"]).optional(),
   cfiProfile: z.enum(["all", "with", "without"]).optional(),
   aircraftOwner: z.enum(["all", "with", "without"]).optional(),
   sortBy: z.enum(["createdAt", "firstName", "lastName", "email", "membershipTier"]).optional(),
@@ -1335,8 +1335,7 @@ const adminAudienceRequestSchema = adminUserFiltersSchema.extend({
     "all_active",
     "recently_joined",
     "free_users",
-    "rsf_pro",
-    "rsf_pro_plus",
+    "premium",
     "without_subscription",
     "selected_users",
     "filtered_results",
@@ -1377,17 +1376,17 @@ const endOfDayLocal = (value: Date) => {
 };
 
 const membershipTierRank = (value?: string | null) =>
-  value === "pro_plus" ? 2 : value === "pro" ? 1 : 0;
+  normalizeMembershipTier(value) === "premium" ? 1 : 0;
 
 const resolveEffectiveMembershipTier = (row: AdminUserDirectoryRow) => {
   const now = new Date();
-  const baseTier = row.membershipTier === "pro_plus" || row.membershipTier === "pro" ? row.membershipTier : "free";
+  const baseTier = normalizeMembershipTier(row.membershipTier) === "premium" ? "premium" : "free";
   const membershipActive =
     membershipTierRank(baseTier) > 0 &&
     (row.membershipStatus === "active" ||
       row.membershipStatus === "trialing" ||
       (!!row.membershipEndsAt && new Date(row.membershipEndsAt) > now));
-  const grantTier = row.membershipGrantTier === "pro_plus" || row.membershipGrantTier === "pro" ? row.membershipGrantTier : null;
+  const grantTier = normalizeMembershipTier(row.membershipGrantTier) === "premium" ? "premium" : null;
   const grantActive = !!grantTier && !!row.membershipGrantEndsAt && new Date(row.membershipGrantEndsAt) > now;
 
   if (membershipActive && grantActive) {
@@ -1639,10 +1638,8 @@ const resolveAdminEmailAudience = (rows: AdminUserDirectoryRow[], request: Admin
       return applyAdminUserFilters(rows, { ...request, joinedPreset: "last30", accountStatus: "active" });
     case "free_users":
       return rows.filter((row) => isAdminUserActive(row) && row.membershipTier === "free");
-    case "rsf_pro":
-      return rows.filter((row) => isAdminUserActive(row) && resolveEffectiveMembershipTier(row) === "pro");
-    case "rsf_pro_plus":
-      return rows.filter((row) => isAdminUserActive(row) && resolveEffectiveMembershipTier(row) === "pro_plus");
+    case "premium":
+      return rows.filter((row) => isAdminUserActive(row) && resolveEffectiveMembershipTier(row) === "premium");
     case "without_subscription":
       return rows.filter((row) => isAdminUserActive(row) && !hasPaidOrGrantedAccess(row));
     case "filtered_results":
@@ -9740,10 +9737,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const members = await storage.getMembershipPartnerOfferMembers(offer.id);
     const redeemedCount = members.filter((member) => !!member.redeemedAt).length;
     const baseUrl = getPublicFrontendBaseUrl();
-    const sharePath = `/logbook/pro?offer=${encodeURIComponent(offer.slug)}`;
+    const sharePath = offer.slug === "abs-2mo-pro-plus"
+      ? "/abs/redeem"
+      : `/logbook/pro?offer=${encodeURIComponent(offer.slug)}`;
     const signupPath = `/register?redirect=${encodeURIComponent(sharePath)}`;
     return {
       ...offer,
+      tier: normalizeMembershipTier(offer.tier),
       totalMembers: members.length,
       redeemedCount,
       availableMembers: Math.max(0, members.length - redeemedCount),
@@ -9768,7 +9768,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         partnerName: offer.partnerName,
         slug: offer.slug,
         description: offer.description,
-        tier: offer.tier,
+        tier: normalizeMembershipTier(offer.tier),
         durationDays: offer.durationDays,
         acceptsFlexibleIdentifier: allowsFlexiblePartnerIdentifier(offer),
         memberInputLabel: allowsFlexiblePartnerIdentifier(offer) ? "Member number or email" : "Member number",
@@ -9838,7 +9838,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: offer.name,
           partnerName: offer.partnerName,
           slug: offer.slug,
-          tier: offer.tier,
+          tier: normalizeMembershipTier(offer.tier),
           durationDays: offer.durationDays,
           acceptsFlexibleIdentifier: allowsFlexiblePartnerIdentifier(offer),
         },
@@ -9891,19 +9891,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Offer not found" });
       }
 
-      const member = normalizedMemberNumber
+      let member = normalizedMemberNumber
         ? await storage.getMembershipPartnerOfferMemberByNumber(offer.id, normalizedMemberNumber)
         : undefined;
       const canUseFlexibleIdentifier = allowsFlexiblePartnerIdentifier(offer);
       const isSelfAttestedClaim = claimInputMode === "self_attest";
-      if (!member && !(canUseFlexibleIdentifier && (selfAttestedValue || isSelfAttestedClaim))) {
+      if (!member && canUseFlexibleIdentifier && (selfAttestedValue || isSelfAttestedClaim)) {
+        const flexibleIdentifier =
+          isSelfAttestedClaim && normalizedMemberNumber.startsWith("SELFATTEST:")
+            ? normalizedMemberNumber
+            : buildFlexiblePartnerIdentifier(selfAttestedValue || normalizedMemberNumber);
+        if (!flexibleIdentifier) {
+          return res.status(400).json({ error: "Member number or email is required" });
+        }
+        await storage.addMembershipPartnerOfferMembers(offer.id, [{
+          memberNumber: selfAttestedValue || normalizedMemberNumber,
+          normalizedMemberNumber: flexibleIdentifier,
+        }]);
+        normalizedMemberNumber = flexibleIdentifier;
+        member = await storage.getMembershipPartnerOfferMemberByNumber(offer.id, normalizedMemberNumber);
+      }
+      if (!member) {
         return res.status(400).json({ error: "Member number not recognized for this offer" });
       }
       if (member && tokenMemberId && member.id !== tokenMemberId) {
         return res.status(400).json({ error: "This partner offer claim does not match the member record" });
       }
 
-      if (member?.redeemedByUserId && member.redeemedByUserId !== userId) {
+      if (member?.redeemedAt || member?.redeemedByUserId) {
         return res.status(409).json({ error: "That member number has already been redeemed" });
       }
 
@@ -9913,16 +9928,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const tierRank = (value?: string | null) =>
-        value === "pro_plus" ? 2 : value === "pro" ? 1 : 0;
+        normalizeMembershipTier(value) === "premium" ? 1 : 0;
       const now = new Date();
       const currentGrantEndsAt = user.membershipGrantEndsAt ? new Date(user.membershipGrantEndsAt) : null;
       const currentGrantActive = !!currentGrantEndsAt && currentGrantEndsAt > now;
       const requestedEndsAt = addDays(now, offer.durationDays);
 
-      let resolvedTier: "pro" | "pro_plus" = offer.tier === "pro" ? "pro" : "pro_plus";
+      let resolvedTier: "premium" = "premium";
       let resolvedEndsAt = requestedEndsAt;
       if (currentGrantActive && tierRank(user.membershipGrantTier) > tierRank(resolvedTier)) {
-        resolvedTier = user.membershipGrantTier as "pro" | "pro_plus";
         resolvedEndsAt = currentGrantEndsAt as Date;
       } else if (
         currentGrantActive &&
@@ -9950,7 +9964,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         membershipGrantReason: reason,
       });
 
-      const tierLabel = resolvedTier === "pro_plus" ? "RSF Pro+" : "RSF Pro Core";
+      const tierLabel = "RSF Premium";
       await storage.createUserNotification({
         userId,
         type: "membership_grant",
@@ -11920,9 +11934,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ membershipGrantEndsAt: null, user: updated });
       }
 
-      const tier = req.body?.tier === "pro" ? "pro" : req.body?.tier === "pro_plus" ? "pro_plus" : null;
+      const tier = normalizeMembershipTier(req.body?.tier) === "premium" ? "premium" : null;
       if (!tier) {
-        return res.status(400).json({ error: "Tier must be pro or pro_plus" });
+        return res.status(400).json({ error: "Tier must be premium" });
       }
 
       const durationDays = Number(req.body?.durationDays || 14);
@@ -11945,7 +11959,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         membershipGrantReason: reason,
       });
 
-      const tierLabel = tier === "pro_plus" ? "RSF Pro+" : "RSF Pro Core";
+      const tierLabel = "RSF Premium";
       await storage.createUserNotification({
         userId: req.params.userId,
         type: "membership_grant",

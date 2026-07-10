@@ -78,7 +78,7 @@ interface MembershipPartnerOfferPublic {
   partnerName: string;
   slug: string;
   description?: string | null;
-  tier: "pro" | "pro_plus";
+  tier: "premium";
   durationDays: number;
 }
 
@@ -374,7 +374,7 @@ export default function Landing() {
   const hasProPlus = !!(user as any)?.entitlements?.isProPlus;
   const isPaidUser = hasProCore || hasProPlus;
   const membershipPageHref = "/logbook/pro";
-  const membershipCtaLabel = hasProCore && !hasProPlus ? "Upgrade to Pro+" : isPaidUser ? "Manage Membership" : "Subscribe Now";
+  const membershipCtaLabel = isPaidUser ? "Manage Membership" : "Subscribe Now";
   const membershipCtaDescription = hasProCore && !hasProPlus
     ? "Move into the training stack, advanced sims, and higher-end pilot workflow tools."
     : isPaidUser
@@ -1261,12 +1261,12 @@ export default function Landing() {
                 </Button>
               ) : (
                 <div className={`${metallicSubpanelClass} rounded-[1rem] p-4 text-sm text-[#E8EDF4]`}>
-                  <div className="mb-1 font-semibold text-[#F1F5FA]">Upgrade to Pro+</div>
+                  <div className="mb-1 font-semibold text-[#F1F5FA]">Upgrade to Premium</div>
                   <p className="mb-3 text-xs text-[#9bb1cc]">
                     Unlock GPS simulators and the CFI training center.
                   </p>
                   <Button asChild size="sm" className={`w-full ${metallicPrimaryButtonClass}`}>
-                    <Link href="/logbook/pro">Upgrade to Pro+</Link>
+                    <Link href="/logbook/pro">Upgrade to Premium</Link>
                   </Button>
                 </div>
               )}
@@ -1887,7 +1887,7 @@ export default function Landing() {
                       RSF Partner Membership Offers
                     </div>
                     <div className="max-w-2xl text-sm leading-6 text-[#CCD7E5]">
-                      Aircraft owners and pilots from student to ATP are already flying with RSF. Partner organizations can route members into a free RSF account and unlock time-limited RSF Pro+ access through a dedicated offer flow.
+                      Aircraft owners and pilots from student to ATP are already flying with RSF. Partner organizations can route members into a free RSF account and unlock time-limited RSF Premium access through a dedicated offer flow.
                     </div>
                   </div>
                   {partnerOffers.length > 0 ? (
@@ -1899,7 +1899,9 @@ export default function Landing() {
                 {partnerOffers.length > 0 ? (
                   <div className="grid gap-4 xl:grid-cols-2">
                     {partnerOffers.map((offer) => {
-                      const offerHref = `/logbook/pro?offer=${encodeURIComponent(offer.slug)}`;
+                      const offerHref = offer.slug === "abs-2mo-pro-plus"
+                        ? "/abs/redeem"
+                        : `/logbook/pro?offer=${encodeURIComponent(offer.slug)}`;
                       const partnerShortLabel =
                         offer.slug.startsWith("cpa-")
                           ? "CPA Exclusive"
@@ -1911,7 +1913,7 @@ export default function Landing() {
                           <div className="mb-3 flex flex-wrap items-center gap-2">
                             <Badge className="border border-[#5d6f85]/35 bg-[#151b23] text-[#dbe6f6] hover:bg-[#151b23]">{partnerShortLabel}</Badge>
                             <Badge className="border border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff] hover:bg-[#141d29]">
-                              {offer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
+                              RSF Premium
                             </Badge>
                           </div>
                           <h3 className="mb-2 text-lg font-semibold text-[#F5F8FC]">

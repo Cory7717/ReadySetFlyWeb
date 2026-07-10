@@ -434,20 +434,20 @@ type CrmCampaignPreview = {
 
 const MEMBERSHIP_OFFER_PRESETS = {
   cpa: {
-    name: "CPA 2 Months Free RSF Pro+",
+    name: "CPA 2 Months Free RSF Premium",
     partnerName: "Cessna Pilots Association",
     slug: "cpa-3mo-pro-plus",
-    tier: "pro_plus" as const,
+    tier: "premium" as const,
     durationDays: "60",
-    description: "Exclusive Cessna Pilots Association member offer for 2 months of RSF Pro+.",
+    description: "Exclusive Cessna Pilots Association member offer for 2 months of RSF Premium.",
   },
   abs: {
-    name: "ABS 2 Months Free RSF Pro+",
+    name: "ABS 2 Months Free RSF Premium",
     partnerName: "American Bonanza Society",
     slug: "abs-2mo-pro-plus",
-    tier: "pro_plus" as const,
+    tier: "premium" as const,
     durationDays: "60",
-    description: "Exclusive American Bonanza Society member offer for 2 months of RSF Pro+.",
+    description: "Exclusive American Bonanza Society member offer for 2 months of RSF Premium.",
   },
 };
 
@@ -537,7 +537,7 @@ type MembershipPartnerOfferSummary = {
   partnerName: string;
   slug: string;
   description: string | null;
-  tier: "pro" | "pro_plus";
+  tier: "premium";
   durationDays: number;
   isActive: boolean | null;
   totalMembers: number;
@@ -806,7 +806,7 @@ export default function AdminDashboard() {
   const [membershipOfferName, setMembershipOfferName] = useState(MEMBERSHIP_OFFER_PRESETS.cpa.name);
   const [membershipOfferPartnerName, setMembershipOfferPartnerName] = useState(MEMBERSHIP_OFFER_PRESETS.cpa.partnerName);
   const [membershipOfferSlug, setMembershipOfferSlug] = useState(MEMBERSHIP_OFFER_PRESETS.cpa.slug);
-  const [membershipOfferTier, setMembershipOfferTier] = useState<"pro" | "pro_plus">(MEMBERSHIP_OFFER_PRESETS.cpa.tier);
+  const [membershipOfferTier, setMembershipOfferTier] = useState<"premium">(MEMBERSHIP_OFFER_PRESETS.cpa.tier);
   const [membershipOfferDurationDays, setMembershipOfferDurationDays] = useState(MEMBERSHIP_OFFER_PRESETS.cpa.durationDays);
   const [membershipOfferDescription, setMembershipOfferDescription] = useState(MEMBERSHIP_OFFER_PRESETS.cpa.description);
   const [membershipOfferMemberNumbersByOffer, setMembershipOfferMemberNumbersByOffer] = useState<Record<string, string>>({});
@@ -1999,7 +1999,7 @@ export default function AdminDashboard() {
       name: string;
       partnerName: string;
       slug: string;
-      tier: "pro" | "pro_plus";
+      tier: "premium";
       durationDays: number;
       description?: string;
       memberNumbersText?: string;
@@ -4629,7 +4629,7 @@ export default function AdminDashboard() {
                 <CardHeader>
                   <CardTitle>Partner Membership Offers</CardTitle>
                   <CardDescription>
-                    Create controlled RSF Pro / Pro+ offers for partner organizations and gate redemption by member number. Use this for CPA, ABS, and similar member-only partner rollouts.
+                    Create controlled RSF Premium offers for partner organizations and gate redemption by member number. Use this for CPA, ABS, and similar member-only partner rollouts.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -4657,7 +4657,7 @@ export default function AdminDashboard() {
                         id="membership-offer-name"
                         value={membershipOfferName}
                         onChange={(e) => setMembershipOfferName(e.target.value)}
-                        placeholder="CPA 3 Months Free RSF Pro+"
+                        placeholder="ABS 2 Months Free RSF Premium"
                         data-testid="input-membership-offer-name"
                       />
                     </div>
@@ -4684,13 +4684,12 @@ export default function AdminDashboard() {
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
                         <Label>Tier</Label>
-                        <Select value={membershipOfferTier} onValueChange={(value) => setMembershipOfferTier(value as "pro" | "pro_plus")}>
+                        <Select value={membershipOfferTier} onValueChange={(value) => setMembershipOfferTier(value as "premium")}>
                           <SelectTrigger data-testid="select-membership-offer-tier">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="pro">RSF Pro</SelectItem>
-                            <SelectItem value="pro_plus">RSF Pro+</SelectItem>
+                            <SelectItem value="premium">RSF Premium</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -4771,7 +4770,7 @@ export default function AdminDashboard() {
                                 <Badge variant={offer.isActive ? "default" : "secondary"}>
                                   {offer.isActive ? "Active" : "Paused"}
                                 </Badge>
-                                <Badge variant="outline">{offer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}</Badge>
+                                <Badge variant="outline">RSF Premium</Badge>
                                 <Badge variant="outline">{offer.durationDays} days</Badge>
                               </div>
                               <div className="text-sm text-muted-foreground">{offer.partnerName}</div>

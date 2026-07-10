@@ -5,11 +5,15 @@ import { normalizeMembershipPromoCode } from "../../server/services/membershipPr
 
 const schemaSource = readFileSync("shared/schema.ts", "utf8");
 const migrationSource = readFileSync("migrations/0111_add_membership_promotions.sql", "utf8");
+const absPartnerMigrationSource = readFileSync("migrations/0069_seed_abs_partner_offer.sql", "utf8");
 const serviceSource = readFileSync("server/services/membershipPromotions.ts", "utf8");
 const routesSource = readFileSync("server/routes.ts", "utf8");
 const registerSource = readFileSync("client/src/pages/register.tsx", "utf8");
 const redeemSource = readFileSync("client/src/pages/redeem.tsx", "utf8");
+const absRedeemSource = readFileSync("client/src/pages/abs-redeem.tsx", "utf8");
 const appSource = readFileSync("client/src/App.tsx", "utf8");
+const logbookProSource = readFileSync("client/src/pages/logbook-pro.tsx", "utf8");
+const landingSource = readFileSync("client/src/pages/landing.tsx", "utf8");
 
 test("membership promotion schema is separate from listing promo codes", () => {
   assert.match(schemaSource, /export const promoCodes = pgTable\("promo_codes"/);
@@ -29,6 +33,9 @@ test("ABS campaign is seeded through migration, not application source", () => {
   assert.match(migrationSource, /ABS2026WINNER/);
   assert.match(migrationSource, /max_total_redemptions[\s\S]*5/);
   assert.match(migrationSource, /membership_duration_months[\s\S]*12/);
+  assert.match(migrationSource, /max_redemptions_per_user[\s\S]*1/);
+  assert.match(migrationSource, /membership_tier[\s\S]*'premium'/);
+  assert.match(migrationSource, /expires_at[\s\S]*'2026-12-31 23:59:59'/);
   assert.doesNotMatch(serviceSource, /ABS2026WINNER/);
   assert.doesNotMatch(registerSource, /ABS2026WINNER/);
 });
@@ -46,8 +53,14 @@ test("registration and redeem page support optional membership promo codes", () 
   assert.match(registerSource, /promoCode: z\.string\(\)\.max\(120\)\.optional\(\)/);
   assert.match(registerSource, /Have a partner, event, or giveaway code\? Enter it here\./);
   assert.match(routesSource, /\/api\/membership-promotions\/redeem/);
+  assert.match(routesSource, /app\.post\("\/api\/membership-promotions\/redeem", isAuthenticated/);
   assert.match(redeemSource, /PENDING_PROMO_KEY/);
   assert.match(redeemSource, /Continue with Google/);
+  assert.match(redeemSource, /setLocation\(`\/register\?code=\$\{encodeURIComponent\(code\.trim\(\)\)\}&returnTo=/);
+  assert.match(registerSource, /window\.location\.href = apiUrl\(withReturnTo\('\/api\/auth\/google', redirectTarget\)\)/);
+  assert.match(registerSource, /fetch\(apiUrl\('\/api\/auth\/web-register'\)/);
+  assert.match(registerSource, /promoCode/);
+  assert.match(readFileSync("server/unified-auth-routes.ts", "utf8"), /redeemMembershipPromotion\(\{\s*code: promoCode/s);
   assert.match(appSource, /path="\/redeem" component=\{Redeem\}/);
 });
 
@@ -55,4 +68,41 @@ test("super admin membership promotions are distinct from listing promo admin", 
   assert.match(routesSource, /\/api\/admin\/membership-promotions", isAuthenticated, isSuperAdmin/);
   assert.match(appSource, /super-admin\/membership-promotions/);
   assert.match(readFileSync("client/src/pages/membership-promotions-admin.tsx", "utf8"), /Membership Promotions/);
+});
+
+test("ABS 2 month partner offer is seeded and surfaced through the partner flow", () => {
+  assert.match(absPartnerMigrationSource, /ABS 2 Months Free RSF Premium/);
+  assert.match(absPartnerMigrationSource, /American Bonanza Society/);
+  assert.match(absPartnerMigrationSource, /'abs-2mo-pro-plus'/);
+  assert.match(absPartnerMigrationSource, /'premium'/);
+  assert.match(absPartnerMigrationSource, /duration_days[\s\S]*60/);
+  assert.match(absPartnerMigrationSource, /is_active[\s\S]*true/);
+  assert.match(landingSource, /"abs-2mo-pro-plus"/);
+  assert.match(landingSource, /\/abs\/redeem/);
+  assert.match(logbookProSource, /\/api\/membership-partner-offers\/\$\{offerSlug\}/);
+  assert.match(logbookProSource, /\/api\/membership-partner-offers\/validate-member/);
+  assert.match(logbookProSource, /\/api\/membership-partner-offers\/redeem/);
+  assert.match(absRedeemSource, /offerSlugOverride="abs-2mo-pro-plus"/);
+  assert.match(appSource, /path="\/abs\/redeem" component=\{AbsRedeem\}/);
+  assert.match(appSource, /path="\/logbook\/pro" component=\{\(\) => <LogbookPro \/>\}/);
+});
+
+test("ABS flexible member identifiers are persisted before redemption to prevent reuse", () => {
+  assert.match(routesSource, /FLEXIBLE_PARTNER_IDENTIFIER_SLUGS = new Set\(\["abs-2mo-pro-plus"\]\)/);
+  assert.match(routesSource, /buildFlexiblePartnerIdentifier\(selfAttestedValue \|\| normalizedMemberNumber\)/);
+  assert.match(routesSource, /storage\.addMembershipPartnerOfferMembers\(offer\.id, \[\{/);
+  assert.match(routesSource, /normalizedMemberNumber = flexibleIdentifier/);
+  assert.match(routesSource, /member = await storage\.getMembershipPartnerOfferMemberByNumber\(offer\.id, normalizedMemberNumber\)/);
+  assert.match(routesSource, /if \(member\?\.redeemedAt \|\| member\?\.redeemedByUserId\)/);
+  assert.match(routesSource, /storage\.redeemMembershipPartnerOfferMember\(member\.id, userId\)/);
+});
+
+test("membership grants do not mutate recurring billing state", () => {
+  const promotionUpdateMatch = serviceSource.match(/UPDATE users\s+SET[\s\S]*?WHERE id = \$5/);
+  assert.ok(promotionUpdateMatch, "expected membership promotion user update");
+  assert.doesNotMatch(promotionUpdateMatch[0], /paypal|membership_provider|membership_status/i);
+
+  const partnerGrantMatch = routesSource.match(/const updated = await storage\.updateUser\(userId, \{[\s\S]*?membershipGrantReason: reason,[\s\S]*?\}\);/);
+  assert.ok(partnerGrantMatch, "expected partner offer grant update");
+  assert.doesNotMatch(partnerGrantMatch[0], /paypal|membershipProvider|membershipStatus/i);
 });

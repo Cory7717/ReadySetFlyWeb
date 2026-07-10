@@ -215,14 +215,14 @@ export const users = pgTable("users", {
   logbookProCancelAtPeriodEnd: boolean("logbook_pro_cancel_at_period_end").default(false),
 
   // RSF Membership (new - keep legacy Logbook Pro fields for compatibility)
-  membershipTier: text("membership_tier").default("free"), // free, pro, pro_plus
+  membershipTier: text("membership_tier").default("free"), // free, premium; legacy pro/pro_plus normalize to premium
   membershipStatus: text("membership_status").default("inactive"), // active, inactive, cancelled, past_due
   membershipProvider: text("membership_provider"), // paypal or null
   membershipEndsAt: timestamp("membership_ends_at"),
   membershipInterval: text("membership_interval"), // monthly, biannual, annual
   membershipTrialEndsAt: timestamp("membership_trial_ends_at"),
   membershipNextBillingAt: timestamp("membership_next_billing_at"),
-  membershipGrantTier: text("membership_grant_tier"), // pro, pro_plus, or null
+  membershipGrantTier: text("membership_grant_tier"), // premium, or null; legacy pro/pro_plus normalize to premium
   membershipGrantEndsAt: timestamp("membership_grant_ends_at"),
   membershipGrantGrantedBy: varchar("membership_grant_granted_by"),
   membershipGrantGrantedAt: timestamp("membership_grant_granted_at"),
@@ -1608,7 +1608,7 @@ export const membershipPartnerOffers = pgTable("membership_partner_offers", {
   partnerName: text("partner_name").notNull(),
   slug: varchar("slug", { length: 120 }).notNull().unique(),
   description: text("description"),
-  tier: text("tier").notNull().default("pro_plus"), // pro, pro_plus
+  tier: text("tier").notNull().default("premium"), // premium; legacy pro/pro_plus normalize to premium
   durationDays: integer("duration_days").notNull().default(90),
   isActive: boolean("is_active").default(true),
   createdBy: varchar("created_by").references(() => users.id),
@@ -3859,7 +3859,7 @@ export const insertMembershipPartnerOfferSchema = createInsertSchema(membershipP
     .max(120)
     .regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers, and hyphens only"),
   description: z.string().max(500).optional(),
-  tier: z.enum(["pro", "pro_plus"]),
+  tier: z.enum(["premium", "pro", "pro_plus"]),
   durationDays: z.number().int().min(1).max(365),
   isActive: z.boolean().default(true),
   createdBy: z.string().optional(),

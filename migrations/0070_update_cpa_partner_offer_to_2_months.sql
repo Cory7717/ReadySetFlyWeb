@@ -7,8 +7,9 @@ BEGIN;
 
 UPDATE membership_partner_offers
 SET
-  name = 'CPA 2 Months Free RSF Pro+',
-  description = 'Exclusive Cessna Pilots Association member offer for 2 months of RSF Pro+.',
+  name = 'CPA 2 Months Free RSF Premium',
+  description = 'Exclusive Cessna Pilots Association member offer for 2 months of RSF Premium.',
+  tier = 'premium',
   duration_days = 60,
   updated_at = NOW()
 WHERE slug = 'cpa-3mo-pro-plus';

@@ -33,7 +33,7 @@ type AdminUserSummary = {
   isSuspended: boolean | null;
   membershipTier: string | null;
   membershipStatus: string | null;
-  effectiveMembershipTier: "free" | "pro" | "pro_plus";
+  effectiveMembershipTier: "free" | "premium";
   marketingSubscribed: boolean;
   emailVerified: boolean | null;
   hasCfiProfile: boolean;
@@ -76,8 +76,7 @@ const EMAIL_AUDIENCE_OPTIONS = [
   { value: "all_active", label: "All active users" },
   { value: "recently_joined", label: "Recently joined users" },
   { value: "free_users", label: "Free users only" },
-  { value: "rsf_pro", label: "RSF Pro users" },
-  { value: "rsf_pro_plus", label: "RSF Pro+ users" },
+  { value: "premium", label: "Premium users" },
   { value: "without_subscription", label: "Users without a subscription" },
   { value: "filtered_results", label: "Current filtered users" },
   { value: "selected_users", label: "Selected users" },
@@ -95,8 +94,7 @@ function buildQueryString(filters: Record<string, string>) {
 }
 
 function formatTier(tier: AdminUserSummary["effectiveMembershipTier"]) {
-  if (tier === "pro_plus") return "RSF Pro+";
-  if (tier === "pro") return "RSF Pro";
+  if (tier === "premium") return "Premium";
   return "Free";
 }
 
@@ -400,8 +398,7 @@ export function AdminUsersManager() {
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="free">Free</SelectItem>
-                  <SelectItem value="pro">RSF Pro</SelectItem>
-                  <SelectItem value="pro_plus">RSF Pro+</SelectItem>
+                  <SelectItem value="premium">Premium</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -43,7 +43,7 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [selectedPromoListingId, setSelectedPromoListingId] = useState<string | null>(null);
   const [promoDuration, setPromoDuration] = useState("7");
-  const [membershipGrantTier, setMembershipGrantTier] = useState<"pro" | "pro_plus">("pro_plus");
+  const [membershipGrantTier, setMembershipGrantTier] = useState<"premium">("premium");
   const [membershipGrantDuration, setMembershipGrantDuration] = useState("14");
   const [membershipGrantReason, setMembershipGrantReason] = useState("");
   const { user: adminUser } = useAuth();
@@ -203,7 +203,7 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
       reason,
     }: {
       action: "grant" | "revoke";
-      tier?: "pro" | "pro_plus";
+      tier?: "premium";
       durationDays?: number;
       reason?: string;
     }) => {
@@ -1127,7 +1127,7 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                               <div>
                                 Support grant:{" "}
                                 {membershipGrantActive && user.membershipGrantTier
-                                  ? `${String(user.membershipGrantTier).toUpperCase()} until ${membershipGrantEndsAt?.toLocaleString()}`
+                                  ? `Premium until ${membershipGrantEndsAt?.toLocaleString()}`
                                   : "No active support grant"}
                               </div>
                               {user.membershipGrantReason && (
@@ -1140,14 +1140,13 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                               <Label>Grant tier</Label>
                               <Select
                                 value={membershipGrantTier}
-                                onValueChange={(value) => setMembershipGrantTier(value as "pro" | "pro_plus")}
+                                onValueChange={(value) => setMembershipGrantTier(value as "premium")}
                               >
                                 <SelectTrigger>
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="pro">RSF Pro Core</SelectItem>
-                                  <SelectItem value="pro_plus">RSF Pro+</SelectItem>
+                                  <SelectItem value="premium">RSF Premium</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>

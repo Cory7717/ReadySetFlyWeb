@@ -21,14 +21,19 @@ type MembershipPartnerOfferDetails = {
   partnerName: string;
   slug: string;
   description?: string | null;
-  tier: "pro" | "pro_plus";
+  tier: "premium";
   durationDays: number;
   acceptsFlexibleIdentifier?: boolean;
   memberInputLabel?: string;
   memberInputHint?: string;
 };
 
-export default function LogbookProPage() {
+type LogbookProPageProps = {
+  offerSlugOverride?: string;
+  offerBasePath?: string;
+};
+
+export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/logbook/pro" }: LogbookProPageProps = {}) {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -37,14 +42,22 @@ export default function LogbookProPage() {
   const [loading, setLoading] = useState(false);
   const sourcePage = getSourceFromWindow();
   const offerSlug = useMemo(() => {
+    if (offerSlugOverride) return offerSlugOverride;
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("offer")?.trim().toLowerCase() || "";
-  }, []);
+  }, [offerSlugOverride]);
   const claimToken = useMemo(() => {
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("claim")?.trim() || "";
   }, []);
   const [partnerMemberNumber, setPartnerMemberNumber] = useState("");
+  const buildPartnerOfferPath = (claim?: string) => {
+    const base = offerSlugOverride
+      ? offerBasePath
+      : `/logbook/pro?offer=${encodeURIComponent(offerSlug)}`;
+    if (!claim) return base;
+    return `${base}${base.includes("?") ? "&" : "?"}claim=${encodeURIComponent(claim)}`;
+  };
   const logbookPanelClass = "rsf-metal-panel text-[#E8EDF4]";
   const logbookSubpanelClass = "rsf-logbook-subpanel rounded-[1rem] text-[#DCE6F2]";
   const logbookMetricClass = "rsf-logbook-metric px-4 py-4";
@@ -75,9 +88,7 @@ export default function LogbookProPage() {
       return res.json();
     },
     onSuccess: async (data) => {
-      const returnTarget = `/logbook/pro?offer=${encodeURIComponent(offerSlug)}&claim=${encodeURIComponent(
-        data.claimToken
-      )}`;
+      const returnTarget = buildPartnerOfferPath(data.claimToken);
       window.location.href = withReturnTo("/register", returnTarget);
     },
     onError: (error: Error) => {
@@ -132,7 +143,7 @@ export default function LogbookProPage() {
   }, [claimToken, isAuthenticated, offerSlug]);
 
   if (!isAuthenticated && !offerSlug) {
-    const returnTarget = offerSlug ? `/logbook/pro?offer=${encodeURIComponent(offerSlug)}` : "/logbook/pro";
+    const returnTarget = offerSlug ? buildPartnerOfferPath() : "/logbook/pro";
     return (
       <div className="container mx-auto px-4 py-10">
         <Card>
@@ -409,7 +420,7 @@ export default function LogbookProPage() {
                             <a
                               href={withReturnTo(
                                 "/login",
-                                `/logbook/pro?offer=${encodeURIComponent(offerSlug)}`
+                                buildPartnerOfferPath()
                               )}
                             >
                               I already have an account
@@ -428,7 +439,7 @@ export default function LogbookProPage() {
                         </Button>
                       )}
                       <Badge variant="outline">
-                        This applies a temporary RSF grant and does not start recurring billing.
+                        This applies temporary RSF Premium access and does not start recurring billing.
                       </Badge>
                     </div>
                   </div>

@@ -18,11 +18,11 @@ INSERT INTO membership_partner_offers (
 )
 SELECT
   gen_random_uuid(),
-  'ABS 2 Months Free RSF Pro+',
+  'ABS 2 Months Free RSF Premium',
   'American Bonanza Society',
   'abs-2mo-pro-plus',
-  'Exclusive American Bonanza Society member offer for 2 months of RSF Pro+.',
-  'pro_plus',
+  'Exclusive American Bonanza Society member offer for 2 months of RSF Premium.',
+  'premium',
   60,
   true,
   NOW(),

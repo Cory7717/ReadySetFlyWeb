@@ -847,7 +847,7 @@ export async function sendFounderWelcomeEmail(data: {
       <p>Hi ${escapeHtml(firstName)},</p>
       <p>Thanks for signing up for Ready Set Fly.</p>
       <p>RSF is being built to bring more of general aviation into one place - flight planning, weather tools, aircraft marketplaces, training resources, logbook tools, CFI and flight school discovery, and more.</p>
-      <p>You can start using RSF for free, but if you want access to more advanced tools, history, saved features, and expanded functionality, you can also check out RSF Pro and RSF Pro+.</p>
+      <p>You can start using RSF for free, then upgrade to RSF Premium for more advanced tools, history, saved features, and expanded functionality.</p>
       <div style="text-align:center; margin: 24px 0;">
         <a class="cta" href="${appUrl}">Start exploring</a>
       </div>
@@ -871,7 +871,7 @@ Thanks for signing up for Ready Set Fly.
 
 RSF is being built to bring more of general aviation into one place - flight planning, weather tools, aircraft marketplaces, training resources, logbook tools, CFI and flight school discovery, and more.
 
-You can start using RSF for free, but if you want access to more advanced tools, history, saved features, and expanded functionality, you can also check out RSF Pro and RSF Pro+.
+You can start using RSF for free, then upgrade to RSF Premium for more advanced tools, history, saved features, and expanded functionality.
 
 View plans:
 ${plansUrl}
@@ -954,7 +954,7 @@ export async function sendUserMarketingEmail(data: {
 export async function sendMembershipGrantEmail(data: {
   email: string;
   firstName?: string | null;
-  tier: "pro" | "pro_plus";
+  tier: "premium" | "pro" | "pro_plus";
   durationDays: number;
   endsAt: Date;
   reason?: string | null;
@@ -964,7 +964,7 @@ export async function sendMembershipGrantEmail(data: {
   const supportFrom = process.env.SUPPORT_EMAIL || "Ready Set Fly <support@readysetfly.us>";
   const frontendBase = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
   const firstName = data.firstName || "Pilot";
-  const tierLabel = data.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro Core";
+  const tierLabel = "RSF Premium";
   const endsAtLabel = data.endsAt.toLocaleString();
   const reasonLine = data.reason?.trim()
     ? `<p style="margin: 16px 0 0 0; color: #475569;"><strong>Note from RSF:</strong> ${data.reason.trim()}</p>`
@@ -997,9 +997,9 @@ export async function sendMembershipGrantEmail(data: {
         <div><strong>Access level:</strong> ${tierLabel}</div>
         <div><strong>Access ends:</strong> ${endsAtLabel}</div>
       </div>
-      <p style="margin-top: 20px;">During this access window, you can explore the full RSF Pro experience including saved workflow, planning continuity, training history, and the broader premium toolset tied to your account.</p>
+      <p style="margin-top: 20px;">During this access window, you can explore the full RSF Premium experience including saved workflow, planning continuity, training history, and the broader premium toolset tied to your account.</p>
       ${reasonLine}
-      <a class="cta" href="${frontendBase}/logbook/pro">Open RSF Pro</a>
+      <a class="cta" href="${frontendBase}/logbook/pro">Open RSF Premium</a>
       <p style="margin-top: 22px;">If you have questions, reply to this email and the RSF team will help.</p>
     </div>
     <div class="footer">Ready Set Fly account update</div>
@@ -1018,9 +1018,9 @@ Ready Set Fly has granted your account ${tierLabel} access for ${data.durationDa
 Access level: ${tierLabel}
 Access ends: ${endsAtLabel}
 
-During this access window, you can explore the full RSF Pro experience including saved workflow, planning continuity, training history, and the broader premium toolset tied to your account.${reasonText}
+During this access window, you can explore the full RSF Premium experience including saved workflow, planning continuity, training history, and the broader premium toolset tied to your account.${reasonText}
 
-Open RSF Pro: ${frontendBase}/logbook/pro
+Open RSF Premium: ${frontendBase}/logbook/pro
 
 If you have questions, reply to this email and the RSF team will help.
   `.trim();

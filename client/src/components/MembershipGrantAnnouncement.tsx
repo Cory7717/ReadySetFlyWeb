@@ -59,11 +59,9 @@ export function MembershipGrantAnnouncement() {
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
 
-  const grantTier = user?.membershipGrantTier === "pro_plus"
-    ? "pro_plus"
-    : user?.membershipGrantTier === "pro"
-      ? "pro"
-      : null;
+  const grantTier = ["premium", "pro", "pro_plus"].includes(String(user?.membershipGrantTier || ""))
+    ? "premium"
+    : null;
   const grantEndsAt = user?.membershipGrantEndsAt || null;
   const grantGrantedAt = user?.membershipGrantGrantedAt || null;
   const grantActive = useMemo(() => {
@@ -116,7 +114,7 @@ export function MembershipGrantAnnouncement() {
 
   if (!visible || !grantTier) return null;
 
-  const tierLabel = grantTier === "pro_plus" ? "RSF Pro+" : "RSF Pro Core";
+  const tierLabel = "RSF Premium";
   const remaining = formatGrantRemaining(grantEndsAt);
 
   return (

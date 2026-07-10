@@ -47,6 +47,7 @@ import DeleteAccount from "@/pages/delete-account";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import Redeem from "@/pages/redeem";
+import AbsRedeem from "@/pages/abs-redeem";
 import VerifyEmail from "@/pages/verify-email";
 import BannerAdPaymentRedirect from "@/pages/banner-ad-payment";
 import BannerAdvertise from "@/pages/banner-advertise";
@@ -213,11 +214,12 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/redeem" component={Redeem} />
+      <Route path="/abs/redeem" component={AbsRedeem} />
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/faq" component={FaqPage} />
       <Route path="/synthetic-vision" component={SyntheticVisionPage} />
       <Route path="/flight-demo" component={SyntheticVisionPage} />
-      <Route path="/logbook/pro" component={LogbookPro} />
+      <Route path="/logbook/pro" component={() => <LogbookPro />} />
       <Route path="/flight-planner" component={FlightPlanner} />
       <Route path="/pilot-tools" component={() => <PaidToolAccess component={PilotTools} />} />
       <Route path="/aviation-weather" component={() => <PaidToolAccess component={AviationWeatherHub} />} />

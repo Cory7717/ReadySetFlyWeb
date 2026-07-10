@@ -58,9 +58,23 @@ const latestProviderStatus = (plan: FlightPlan) => {
   return (
     valueOrNull(snapshot.providerLifecycleStatus) ||
     valueOrNull(snapshot.lifecycleStatus) ||
-    valueOrNull(snapshot.providerStatus) ||
-    valueOrNull(snapshot.artccState)
+    valueOrNull(snapshot.providerStatus)
   );
+};
+
+const latestProviderFlightState = (plan: FlightPlan) => {
+  const snapshot = asRecord(plan.filingProviderSnapshot);
+  return valueOrNull(snapshot.providerFlightState) || valueOrNull(snapshot.providerStatus);
+};
+
+const latestKnownArtccState = (plan: FlightPlan) => {
+  const snapshot = asRecord(plan.filingProviderSnapshot);
+  return valueOrNull(snapshot.lastKnownArtccState) || valueOrNull(snapshot.artccState);
+};
+
+const providerRetrievalState = (plan: FlightPlan) => {
+  const snapshot = asRecord(plan.filingProviderSnapshot);
+  return valueOrNull(snapshot.providerRetrievalState) || "not_attempted";
 };
 
 const sanitizeOperationalHistoryEntry = (entry: Record<string, unknown>) => {
@@ -181,6 +195,10 @@ export const buildFlightServiceOpsDetail = (plan: FlightPlan, user?: Pick<User, 
     status: {
       currentRsfStatus: plan.filingStatus,
       currentProviderStatus: latestProviderStatus(plan),
+      providerLifecycle: latestProviderStatus(plan),
+      providerFlightState: latestProviderFlightState(plan),
+      lastKnownArtccState: latestKnownArtccState(plan),
+      providerRetrievalState: providerRetrievalState(plan),
       operationalState: classifyFlightServiceOperationalState(plan),
       filed: Boolean(plan.filedAt || plan.filingProviderPlanId),
       active: statusOf(plan) === "activated",
@@ -228,7 +246,10 @@ export const buildFlightServiceOpsDetail = (plan: FlightPlan, user?: Pick<User, 
       messages,
       providerRoute: valueOrNull(routeSnapshot.providerRoute),
       routeChangedByProvider: routeSnapshot.changedByProvider === true,
-      retrievalStatus: latestProviderStatus(plan),
+      retrievalStatus: providerRetrievalState(plan),
+      providerLifecycle: latestProviderStatus(plan),
+      providerFlightState: latestProviderFlightState(plan),
+      lastKnownArtccState: latestKnownArtccState(plan),
       lastSyncTime: iso(plan.filingLastProviderSyncAt),
     },
     lastKnownRsfActivity: {

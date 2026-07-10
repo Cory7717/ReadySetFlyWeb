@@ -1097,6 +1097,21 @@ const normalizeLeidosBeaconCode = (value?: string | null) => {
   return octalMatch?.[0] || (normalized.length >= 4 && normalized.length <= 8 ? normalized : null);
 };
 
+export const normalizeLeidosProviderLifecycle = (rawValue: string | null | undefined): {
+  lifecycle: FilingProviderSnapshot["providerLifecycleStatus"];
+  reason: FilingProviderSnapshot["providerLifecycleReason"];
+} => {
+  const text = String(rawValue || "").trim().toLowerCase();
+  if (!text) return { lifecycle: "unknown", reason: "unknown_mapping" };
+  if (/cancelled|canceled|cancellation/.test(text)) return { lifecycle: "cancelled", reason: "explicit_provider_cancellation" };
+  if (/\bclosed\b|closure|closeout/.test(text)) return { lifecycle: "closed", reason: "explicit_provider_closure" };
+  if (/reject/.test(text)) return { lifecycle: "rejected", reason: "explicit_provider_rejection" };
+  if (/\bactivated\b|\bactive\b|\bopened\b/.test(text)) return { lifecycle: "activated", reason: "explicit_provider_active" };
+  if (/\bproposed\b/.test(text)) return { lifecycle: "proposed", reason: "explicit_provider_proposed" };
+  if (/\bfiled\b|\baccepted\b/.test(text)) return { lifecycle: "filed", reason: "explicit_provider_filed" };
+  return { lifecycle: "unknown", reason: "unknown_mapping" };
+};
+
 export const normalizeLeidosOtherInfoForTransmission = (otherInfo: string | null) => {
   const normalized = String(otherInfo || "")
     .toUpperCase()
@@ -1373,6 +1388,14 @@ const buildProviderSnapshot = ({
     "flightPlanStatus",
     "flightState",
   ]);
+  const providerFlightState = findNestedString(source, [
+    "flightState",
+    "flight_state",
+    "flightPlanState",
+    "flightPlanStatus",
+    "state",
+    "status",
+  ]);
   const artccState = findNestedString(source, ["artccState", "artcc_status"]);
   const artccInfo = findNestedString(source, ["artccInfo", "artcc_info"]);
   const directBeaconCode = findNestedString(source, [
@@ -1414,31 +1437,25 @@ const buildProviderSnapshot = ({
   const beaconCode = normalizeLeidosBeaconCode(directBeaconCode) ||
     normalizeLeidosBeaconCode(notices.join(" ")) ||
     normalizeLeidosBeaconCode(JSON.stringify(source));
-  const lifecycleText = [
-    providerStatus,
-    artccState,
-    artccInfo,
-    ...notices,
-    JSON.stringify(source),
-  ].filter(Boolean).join(" ").toLowerCase();
-  const providerLifecycleStatus: FilingProviderSnapshot["providerLifecycleStatus"] =
-    /cancelled|canceled|cancellation/.test(lifecycleText) ? "cancelled" :
-    /\bclosed\b|closure/.test(lifecycleText) ? "closed" :
-    /\bactivated\b|\bactive\b|\bopened\b/.test(lifecycleText) ? "activated" :
-    /\bproposed\b/.test(lifecycleText) ? "proposed" :
-    /\bfiled\b|\baccepted\b/.test(lifecycleText) ? "filed" :
-    "unknown";
-  const cancellationIndicator = /cancelled|canceled|cancellation/.test(lifecycleText)
-    ? (providerStatus || artccState || notices.find((notice) => /cancelled|canceled|cancellation/i.test(notice)) || "Provider indicates cancellation")
+  const lifecycleMapping = normalizeLeidosProviderLifecycle(providerFlightState || providerStatus);
+  const providerLifecycleStatus = lifecycleMapping.lifecycle;
+  const providerLifecycleReason = lifecycleMapping.reason;
+  const providerRetrievalState: FilingProviderSnapshot["providerRetrievalState"] =
+    metadataResponse || response || versionStamp || providerRoute || providerStatus || providerFlightState || artccState
+      ? "retrievable"
+      : "not_found";
+  const hasProviderData = Boolean(versionStamp || providerRoute || providerStatus || providerFlightState || artccState || artccInfo);
+  const cancellationIndicator = providerLifecycleStatus === "cancelled"
+    ? (providerFlightState || providerStatus || "Provider explicitly reported cancellation")
     : null;
-  const closureIndicator = /\bclosed\b|closure/.test(lifecycleText)
-    ? (providerStatus || artccState || notices.find((notice) => /\bclosed\b|closure/i.test(notice)) || "Provider indicates closure")
+  const closureIndicator = providerLifecycleStatus === "closed"
+    ? (providerFlightState || providerStatus || "Provider explicitly reported closure")
     : null;
   const providerActionAvailability = {
-    amend: ["proposed", "filed", "activated"].includes(providerLifecycleStatus || ""),
+    amend: ["proposed", "filed", "activated", "active"].includes(providerLifecycleStatus || ""),
     activate: providerLifecycleStatus === "proposed" || providerLifecycleStatus === "filed",
     cancel: providerLifecycleStatus === "proposed",
-    close: providerLifecycleStatus === "activated",
+    close: providerLifecycleStatus === "activated" || providerLifecycleStatus === "active",
     requiresSync: providerLifecycleStatus === "unknown",
     reason: providerLifecycleStatus === "unknown"
       ? "RSF could not determine the current Leidos state. Refresh provider sync before taking lifecycle actions."
@@ -1464,9 +1481,17 @@ const buildProviderSnapshot = ({
     providerReferenceId,
     versionStamp,
     providerStatus,
+    providerFlightState,
     artccState,
     artccInfo,
     providerLifecycleStatus,
+    providerLifecycleSource: metadataResponse ? "provider_retrieve" : response ? "provider_response" : "unknown",
+    providerLifecycleReason,
+    providerRetrievalState,
+    lastProviderRetrieveAt: syncedAt,
+    lastProviderDataAt: hasProviderData ? syncedAt : null,
+    lastKnownProviderFlightState: providerFlightState || providerStatus || null,
+    lastKnownArtccState: artccState || null,
     providerActionAvailability,
     cancellationIndicator,
     closureIndicator,

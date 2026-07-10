@@ -5933,7 +5933,9 @@ export default function FlightPlanner() {
             <div class="cell"><div class="label">ICAO DOF</div><div class="value">${escapeHtml(String(payload?.dof || "—"))}</div></div>
             <div class="cell"><div class="label">Local Other Info</div><div class="value">${escapeHtml(plan.filingOtherInfo || "—")}</div></div>
             <div class="cell"><div class="label">Transmitted Other Info</div><div class="value">${escapeHtml(String(payload?.otherInfo || "—"))}</div></div>
-            <div class="cell"><div class="label">Provider Status</div><div class="value">${escapeHtml(String(providerSnapshot?.providerStatus || providerSnapshot?.artccState || "—"))}</div></div>
+            <div class="cell"><div class="label">Provider Lifecycle</div><div class="value">${escapeHtml(String(providerSnapshot?.providerLifecycleStatus || "Unknown"))}</div></div>
+            <div class="cell"><div class="label">Provider Flight State</div><div class="value">${escapeHtml(String(providerSnapshot?.providerFlightState || providerSnapshot?.providerStatus || "Not returned"))}</div></div>
+            <div class="cell"><div class="label">Last Known ARTCC State</div><div class="value">${escapeHtml(String(providerSnapshot?.lastKnownArtccState || providerSnapshot?.artccState || "Not returned"))}</div></div>
             <div class="cell"><div class="label">Internal Remarks</div><div class="value">${escapeHtml(plan.filingRemarks || plan.notes || "—")}</div></div>
           </div>
         </div>

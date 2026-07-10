@@ -57,6 +57,9 @@ type OpsDetail = {
     providerRoute: string | null;
     routeChangedByProvider: boolean;
     retrievalStatus: string | null;
+    providerLifecycle?: string | null;
+    providerFlightState?: string | null;
+    lastKnownArtccState?: string | null;
     lastSyncTime: string | null;
   };
   lastKnownRsfActivity: Record<string, any>;
@@ -661,7 +664,10 @@ export default function FlightServiceOpsPage() {
                       <FieldGrid fields={[
                         ["Provider route", detail.providerCommunication.providerRoute],
                         ["Route changed by provider", detail.providerCommunication.routeChangedByProvider ? "Yes" : "No"],
-                        ["Retrieval status", detail.providerCommunication.retrievalStatus],
+                        ["Provider lifecycle", detail.providerCommunication.providerLifecycle],
+                        ["Provider flight state", detail.providerCommunication.providerFlightState || "Not returned"],
+                        ["Last known ARTCC state", detail.providerCommunication.lastKnownArtccState || "Not returned"],
+                        ["Provider retrieval", detail.providerCommunication.retrievalStatus],
                         ["Last provider update", formatTime(detail.providerCommunication.lastSyncTime)],
                       ]} />
                       <div className="space-y-3">

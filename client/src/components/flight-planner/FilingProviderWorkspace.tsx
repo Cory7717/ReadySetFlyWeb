@@ -34,6 +34,22 @@ const formatDateTime = (value: unknown) => {
   return parsed.toLocaleString();
 };
 
+const formatStatusValue = (value: unknown) => {
+  const text = asString(value);
+  if (!text) return "Unknown";
+  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+};
+
+const formatRetrievalState = (value: unknown) => {
+  const state = String(value || "").trim().toLowerCase();
+  if (state === "retrievable") return "Retrievable";
+  if (state === "not_found") return "No longer retrievable";
+  if (state === "unavailable") return "Unavailable";
+  if (state === "provider_error") return "Provider error";
+  if (state === "not_attempted") return "Not attempted";
+  return "Not checked";
+};
+
 const readPayload = (plan: FlightPlan) => asRecord((plan as Record<string, unknown>).filingPayload);
 const readProviderSnapshot = (plan: FlightPlan) => asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
 export const readProviderMessages = (plan: FlightPlan): ProviderMessage[] =>
@@ -71,6 +87,9 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
   const filedPilotPhone = asString((plan as any).filingPilotPhone) || pilotPhone;
   const filedHomeBase = asString((plan as any).filingAircraftHomeBase) || pilotHomeBase;
   const assignedBeaconCode = asString((plan as any).filingAssignedBeaconCode) || asString(providerSnapshot.beaconCode);
+  const providerLifecycle = asString(providerSnapshot.providerLifecycleStatus);
+  const providerFlightState = asString(providerSnapshot.providerFlightState || providerSnapshot.providerStatus);
+  const lastKnownArtccState = asString(providerSnapshot.lastKnownArtccState || providerSnapshot.artccState);
   const plannedDeparture = formatFlightPlanDepartureTime(plan);
   const filedDeparture = formatFlightPlanDepartureTime(plan, {
     instantUtc: asString(payload.departureInstant) || plan.plannedDepartureAt,
@@ -163,14 +182,34 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <div>
-              <div className="text-xs text-muted-foreground">Provider status</div>
+              <div className="text-xs text-muted-foreground">Provider lifecycle</div>
+              <div className="font-medium">{formatStatusValue(providerLifecycle)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Provider flight state</div>
+              <div className="font-medium">{providerFlightState || "Not returned"}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Last known ARTCC state</div>
+              <div className="font-medium">{lastKnownArtccState || "Not returned"}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Provider retrieval</div>
+              <div className="font-medium">{formatRetrievalState(providerSnapshot.providerRetrievalState)}</div>
+            </div>
+          </div>
+          {false && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <div className="text-xs text-muted-foreground">Current provider status</div>
               <div className="font-medium">{asString(providerSnapshot.providerStatus) || plan.filingStatus || "—"}</div>
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">ARTCC state</div>
+              <div className="text-xs text-muted-foreground">Current ARTCC state</div>
               <div className="font-medium">{asString(providerSnapshot.artccState) || "—"}</div>
             </div>
           </div>
+          )}
           {assignedBeaconCode && (
             <div>
               <div className="text-xs text-muted-foreground">Assigned Beacon Code</div>

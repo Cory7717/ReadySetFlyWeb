@@ -21686,12 +21686,44 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const mergeProviderSnapshot = (existingSnapshot: unknown, incomingSnapshot: unknown) => {
     const existing = asRecord(existingSnapshot);
     const incoming = asRecord(incomingSnapshot);
+    const keepExistingWhenIncomingMissing = (key: string) =>
+      incoming[key] !== null && incoming[key] !== undefined && String(incoming[key] || "").trim() !== ""
+        ? incoming[key]
+        : existing[key] ?? null;
+    const incomingHasProviderData = Boolean(
+      keepExistingWhenIncomingMissing("versionStamp") ||
+      keepExistingWhenIncomingMissing("providerStatus") ||
+      keepExistingWhenIncomingMissing("providerFlightState") ||
+      keepExistingWhenIncomingMissing("artccState") ||
+      keepExistingWhenIncomingMissing("providerReferenceId") ||
+      keepExistingWhenIncomingMissing("providerPlanId") ||
+      asRecord(incoming.route).providerRoute
+    );
+    const incomingRetrievalState = String(incoming.providerRetrievalState || "").trim() || null;
+    const incomingLifecycle = String(incoming.providerLifecycleStatus || "").trim().toLowerCase();
+    const preserveLifecycle =
+      incomingRetrievalState && incomingRetrievalState !== "retrievable" && (!incomingLifecycle || incomingLifecycle === "unknown");
     return {
       ...existing,
       ...incoming,
+      providerPlanId: keepExistingWhenIncomingMissing("providerPlanId"),
+      providerReferenceId: keepExistingWhenIncomingMissing("providerReferenceId"),
+      versionStamp: keepExistingWhenIncomingMissing("versionStamp"),
+      providerStatus: incoming.providerStatus ?? null,
+      providerFlightState: incoming.providerFlightState ?? incoming.providerStatus ?? null,
+      artccState: keepExistingWhenIncomingMissing("artccState"),
+      lastKnownProviderFlightState: keepExistingWhenIncomingMissing("lastKnownProviderFlightState") || keepExistingWhenIncomingMissing("providerFlightState") || keepExistingWhenIncomingMissing("providerStatus"),
+      lastKnownArtccState: keepExistingWhenIncomingMissing("lastKnownArtccState") || keepExistingWhenIncomingMissing("artccState"),
+      lastProviderDataAt: incoming.lastProviderDataAt || existing.lastProviderDataAt || (incomingHasProviderData ? incoming.syncedAt : null),
+      lastProviderRetrieveAt: incoming.lastProviderRetrieveAt || incoming.syncedAt || existing.lastProviderRetrieveAt || null,
+      providerLifecycleStatus: preserveLifecycle ? existing.providerLifecycleStatus || "unknown" : incoming.providerLifecycleStatus ?? existing.providerLifecycleStatus ?? "unknown",
+      providerLifecycleSource: preserveLifecycle ? existing.providerLifecycleSource || "legacy" : incoming.providerLifecycleSource ?? existing.providerLifecycleSource ?? null,
+      providerLifecycleReason: preserveLifecycle ? existing.providerLifecycleReason || "provider_record_not_retrievable" : incoming.providerLifecycleReason ?? existing.providerLifecycleReason ?? null,
+      providerRetrievalState: incoming.providerRetrievalState ?? existing.providerRetrievalState ?? null,
       route: {
         ...asRecord(existing.route),
         ...asRecord(incoming.route),
+        providerRoute: asRecord(incoming.route).providerRoute ?? asRecord(existing.route).providerRoute ?? null,
       },
       timestamps: {
         ...asRecord(existing.timestamps),
@@ -21727,9 +21759,37 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     const lifecycle = getProviderLifecycleStatus(snapshot);
     if (lifecycle === "cancelled") return "cancelled";
     if (lifecycle === "closed") return "closed";
-    if (lifecycle === "activated") return "activated";
+    if (lifecycle === "activated" || lifecycle === "active") return "activated";
     if (lifecycle === "proposed" || lifecycle === "filed") return "filed";
+    if (lifecycle === "rejected") return "rejected";
     return null;
+  };
+
+  const logProviderLifecycleTransition = ({
+    plan,
+    previousSnapshot,
+    nextSnapshot,
+    source,
+  }: {
+    plan: any;
+    previousSnapshot: Record<string, unknown>;
+    nextSnapshot: Record<string, unknown>;
+    source: string;
+  }) => {
+    const previous = String(previousSnapshot.providerLifecycleStatus || "").trim().toLowerCase() || null;
+    const current = String(nextSnapshot.providerLifecycleStatus || "").trim().toLowerCase() || null;
+    if (!current || previous === current) return;
+    console.info(JSON.stringify({
+      event: "provider_lifecycle_transition",
+      planId: plan.id,
+      providerPlanId: String(plan.filingProviderPlanId || nextSnapshot.providerPlanId || "").trim() || null,
+      previous,
+      current,
+      source,
+      rawFlightState: normalizeNotificationValue(nextSnapshot.providerFlightState || nextSnapshot.providerStatus),
+      rawArtccState: normalizeNotificationValue(nextSnapshot.artccState || nextSnapshot.lastKnownArtccState),
+      reason: normalizeNotificationValue(nextSnapshot.providerLifecycleReason) || "unknown_mapping",
+    }));
   };
 
   const normalizeNotificationValue = (value: unknown) => {
@@ -21855,9 +21915,22 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     const previousFlightState = normalizeNotificationValue(previous.providerLifecycleStatus || previous.providerStatus);
     const nextFlightState = normalizeNotificationValue(next.providerLifecycleStatus || next.providerStatus);
     if (nextFlightState && previousFlightState && nextFlightState !== previousFlightState) {
-      addLine(`Flight state changed: ${formatArrow(previousFlightState, nextFlightState)}`);
+      const rawProviderFlightState = normalizeNotificationValue(next.providerFlightState || next.providerStatus);
+      const lifecycleReason = normalizeNotificationValue(next.providerLifecycleReason);
+      if (rawProviderFlightState) {
+        addLine(`Leidos reported the flight state as ${rawProviderFlightState}.`);
+        addLine(`RSF normalized the provider flight state ${rawProviderFlightState} to lifecycle ${nextFlightState}.`);
+      } else if (lifecycleReason === "provider_record_not_retrievable") {
+        const lastKnownArtcc = normalizeNotificationValue(next.lastKnownArtccState || next.artccState);
+        addLine(`The provider record was no longer retrievable.${lastKnownArtcc ? ` The last known ARTCC state was ${lastKnownArtcc}.` : ""}`);
+      } else {
+        addLine(`RSF lifecycle changed: ${formatArrow(previousFlightState, nextFlightState)}.`);
+      }
     } else if (nextFlightState && !previousFlightState) {
-      addLine(`Flight state received: ${nextFlightState}`);
+      const rawProviderFlightState = normalizeNotificationValue(next.providerFlightState || next.providerStatus);
+      addLine(rawProviderFlightState
+        ? `Leidos reported the flight state as ${rawProviderFlightState}.`
+        : `RSF lifecycle received: ${nextFlightState}.`);
     }
 
     const previousVersion = normalizeNotificationValue(previous.versionStamp);
@@ -22007,6 +22080,13 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         ? "External provider change detected: the filing provider rejected the requested action because the flight plan is no longer in the expected provider-side state."
         : null,
     );
+    const previousProviderSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+    logProviderLifecycleTransition({
+      plan,
+      previousSnapshot: previousProviderSnapshot,
+      nextSnapshot: nextProviderSnapshot,
+      source: "provider_retrieve",
+    });
     const externalMessage = buildExternalProviderChangeMessage(plan, nextProviderSnapshot);
     const nextProviderMessages = appendPlanProviderMessages(
       (plan as Record<string, unknown>).filingProviderMessages,
@@ -22786,11 +22866,26 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           artccInfo,
           flightVersionStamp,
         };
+        const normalizedPushLifecycle = (() => {
+          const text = String(flightState || "").trim().toLowerCase();
+          if (/cancelled|canceled|cancellation/.test(text)) return "cancelled";
+          if (/\bclosed\b|closure|closeout/.test(text)) return "closed";
+          if (/reject/.test(text)) return "rejected";
+          if (/\bactivated\b|\bactive\b|\bopened\b/.test(text)) return "activated";
+          if (/\bproposed\b/.test(text)) return "proposed";
+          if (/\bfiled\b|\baccepted\b/.test(text)) return "filed";
+          return null;
+        })();
         console.info(JSON.stringify({
           event: "provider_update_notification_context",
           timestamp: new Date().toISOString(),
           flightIdentifier,
           notificationType,
+          rawFlightState: normalizeNotificationValue(flightState),
+          rawArtccState: normalizeNotificationValue(artccState),
+          previousLifecycleStatus: normalizeNotificationValue(previousProviderSnapshot.providerLifecycleStatus),
+          normalizedLifecycleStatus: normalizedPushLifecycle,
+          mappingReason: normalizedPushLifecycle ? "explicit_provider_flight_state" : flightState ? "unknown_mapping" : "no_provider_flight_state",
           artccInfoRaw: (() => {
             try {
               return JSON.stringify(artccInfo);
@@ -22862,8 +22957,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           versionStamp: flightVersionStamp || null,
           providerExpectedRoute: expectedRoute || null,
           providerFlightState: flightState || null,
+          providerStatus: flightState || null,
           providerArtccState: artccState || null,
+          artccState: artccState || null,
           providerArtccInfo: artccInfo || null,
+          providerLifecycleStatus: normalizedPushLifecycle || previousProviderSnapshot.providerLifecycleStatus || "unknown",
+          providerLifecycleSource: normalizedPushLifecycle ? "leidos_webhook" : previousProviderSnapshot.providerLifecycleSource || "unknown",
+          providerLifecycleReason: normalizedPushLifecycle
+            ? normalizedPushLifecycle === "cancelled"
+              ? "explicit_provider_cancellation"
+              : normalizedPushLifecycle === "closed"
+                ? "explicit_provider_closure"
+                : normalizedPushLifecycle === "rejected"
+                  ? "explicit_provider_rejection"
+                  : "explicit_provider_flight_state"
+            : previousProviderSnapshot.providerLifecycleReason || "unknown_mapping",
+          providerRetrievalState: previousProviderSnapshot.providerRetrievalState || "not_attempted",
+          lastKnownProviderFlightState: flightState || previousProviderSnapshot.lastKnownProviderFlightState || previousProviderSnapshot.providerFlightState || previousProviderSnapshot.providerStatus || null,
+          lastKnownArtccState: artccState || previousProviderSnapshot.lastKnownArtccState || previousProviderSnapshot.artccState || null,
           providerModifiedBySpecialist: hasExplicitProviderChange,
           providerPendingReview: hasExplicitProviderChange,
           providerLastPushTitle: notificationTitle,
@@ -22953,6 +23064,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               versionStamp: providerReviewSnapshot.versionStamp || syncedSnapshot.versionStamp || null,
             },
           } as any);
+          logProviderLifecycleTransition({
+            plan: matchedPlan,
+            previousSnapshot: previousProviderSnapshot,
+            nextSnapshot: {
+              ...syncedSnapshot,
+              ...providerReviewSnapshot,
+              versionStamp: providerReviewSnapshot.versionStamp || syncedSnapshot.versionStamp || null,
+            },
+            source: "leidos_webhook",
+          });
         } else {
           const existingSnapshot =
             matchedPlan.filingProviderSnapshot && typeof matchedPlan.filingProviderSnapshot === "object" && !Array.isArray(matchedPlan.filingProviderSnapshot)
@@ -22970,6 +23091,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               versionStamp: providerReviewSnapshot.versionStamp || existingSnapshot.versionStamp || null,
             },
           } as any);
+          logProviderLifecycleTransition({
+            plan: matchedPlan,
+            previousSnapshot: existingSnapshot,
+            nextSnapshot: {
+              ...existingSnapshot,
+              ...providerReviewSnapshot,
+              versionStamp: providerReviewSnapshot.versionStamp || existingSnapshot.versionStamp || null,
+            },
+            source: "leidos_webhook",
+          });
         }
         if (syncedNotificationMessage !== providerMessageDetails || syncedNotificationChanges.length > 0) {
           await db

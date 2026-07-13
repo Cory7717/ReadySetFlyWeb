@@ -597,7 +597,7 @@ const canDeleteLocalDraftPlan = (plan: FlightPlan | null | undefined) => {
     plan.filingProviderPlanId ||
     plan.filingLastProviderSyncAt ||
     (Array.isArray(plan.filingActionHistory) && plan.filingActionHistory.length > 0) ||
-    ["staged", "filed", "activated", "cancelled", "closed"].includes(status)
+    ["staged", "provider-outcome-unknown", "filed", "activated", "cancelled", "closed"].includes(status)
   );
 };
 
@@ -1227,6 +1227,8 @@ const filingStatusLabel = (status?: string | null) => {
   switch ((status || "draft").toLowerCase()) {
     case "staged":
       return "Staged";
+    case "provider-outcome-unknown":
+      return "Provider outcome unknown";
     case "filed":
       return "Filed";
     case "activated":

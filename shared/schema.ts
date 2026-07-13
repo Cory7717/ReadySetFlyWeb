@@ -29,7 +29,7 @@ export const leadCategories = [
   "other",
 ] as const;
 export const crmSalesEmailTemplateTypes = ["initial_outreach", "direct_pitch", "partnership_pitch", "relist", "promo_offer"] as const;
-export const flightPlanFilingStatuses = ["draft", "staged", "filed", "activated", "cancelled", "closed"] as const;
+export const flightPlanFilingStatuses = ["draft", "staged", "provider-outcome-unknown", "filed", "activated", "cancelled", "closed"] as const;
 export const flightPlanFilingActions = ["file", "amend", "activate", "cancel", "close"] as const;
 export const flyingClubStatuses = ["draft", "active", "paused", "archived"] as const;
 export const flyingClubVisibility = ["private", "listed"] as const;
@@ -3115,6 +3115,34 @@ export const flightServiceWebhookEvents = pgTable("flight_service_webhook_events
   index("idx_flight_service_webhook_events_flight_identifier").on(table.flightIdentifier),
   index("idx_flight_service_webhook_events_provider_plan").on(table.providerPlanId),
   index("idx_flight_service_webhook_events_created").on(table.createdAt),
+]);
+
+export const flightServiceProviderActionAttempts = pgTable("flight_service_provider_action_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  flightPlanId: varchar("flight_plan_id").notNull().references(() => flightPlans.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull().default("leidos"),
+  action: text("action").notNull(),
+  idempotencyKey: text("idempotency_key"),
+  requestFingerprint: varchar("request_fingerprint", { length: 128 }).notNull(),
+  status: text("status").notNull().default("pending"),
+  statusReason: text("status_reason"),
+  providerPlanId: text("provider_plan_id"),
+  versionStamp: text("version_stamp"),
+  responseStatusCode: integer("response_status_code"),
+  responsePlan: jsonb("response_plan"),
+  responseBody: jsonb("response_body"),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  dispatchedAt: timestamp("dispatched_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_flight_service_provider_action_attempts_plan").on(table.flightPlanId),
+  index("idx_flight_service_provider_action_attempts_user").on(table.userId),
+  index("idx_flight_service_provider_action_attempts_status").on(table.status),
+  uniqueIndex("idx_flight_service_provider_action_attempts_key").on(table.flightPlanId, table.idempotencyKey),
 ]);
 
 export const aircraftTypes = pgTable("aircraft_types", {

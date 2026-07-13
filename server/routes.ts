@@ -19,7 +19,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, insertFlyingClubSquawkSchema, insertFlyingClubMaintenanceItemSchema, insertFlyingClubBlackoutSchema, insertMembershipPartnerOfferSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, userNotifications, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, flightPlans, flightServiceWebhookEvents, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type LeadCategory, type LeadStatus, type PromoCode, type MembershipPartnerOffer } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, insertFlyingClubSquawkSchema, insertFlyingClubMaintenanceItemSchema, insertFlyingClubBlackoutSchema, insertMembershipPartnerOfferSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, userNotifications, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, flightPlans, flightServiceWebhookEvents, flightServiceProviderActionAttempts, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type LeadCategory, type LeadStatus, type PromoCode, type MembershipPartnerOffer } from "@shared/schema";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
@@ -131,6 +131,182 @@ import {
   fetchWindsAloftReport,
   buildEmptyStub,
 } from "./services/aviation-weather";
+
+const PUBLIC_FLIGHT_PLAN_PROVIDER_FIELDS = [
+  "filingProvider",
+  "filingProviderPlanId",
+  "filingStatus",
+  "filingPendingAction",
+  "filingIsLive",
+  "filedAt",
+  "activatedAt",
+  "cancelledAt",
+  "closedAt",
+  "filingLastProviderSyncAt",
+  "filingPayload",
+  "filingProviderSnapshot",
+  "filingProviderMessages",
+  "filingAssignedBeaconCode",
+  "filingRaw",
+  "filingActionHistory",
+  "isCertificationTest",
+  "certificationRunId",
+  "certificationCaseId",
+  "certificationCaseName",
+  "certificationSeed",
+  "certificationAudit",
+  "versionStamp",
+  "providerPlanId",
+  "providerLifecycleStatus",
+  "providerLifecycle",
+  "providerStatus",
+  "providerVersionStamp",
+] as const;
+
+const publicFlightPlanProviderFieldSet = new Set<string>(PUBLIC_FLIGHT_PLAN_PROVIDER_FIELDS);
+
+const publicFlightPlanCreateSchema = insertFlightPlanSchema.omit({
+  filingStatus: true,
+});
+const publicFlightPlanPatchSchema = publicFlightPlanCreateSchema.partial();
+
+const rejectPublicFlightPlanProviderFields = (payload: Record<string, unknown>) => {
+  const rejectedFields = Object.keys(payload).filter((field) => publicFlightPlanProviderFieldSet.has(field));
+  if (rejectedFields.length === 0) return null;
+  return {
+    error: "Flight Service provider-owned fields cannot be changed through this endpoint.",
+    code: "PROVIDER_OWNED_FIELDS_REJECTED",
+    rejectedFields,
+  };
+};
+
+const ACTIVE_PROVIDER_ACTION_ATTEMPT_STATUSES = ["pending", "dispatched", "provider-outcome-unknown"];
+const COMPLETED_PROVIDER_ACTION_ATTEMPT_STATUSES = ["succeeded", "rejected", "failed-before-dispatch"];
+
+const buildFlightServiceActionFingerprint = (
+  plan: Record<string, unknown>,
+  action: string,
+  body: Record<string, unknown>,
+) => {
+  const snapshot = plan.filingProviderSnapshot && typeof plan.filingProviderSnapshot === "object" && !Array.isArray(plan.filingProviderSnapshot)
+    ? plan.filingProviderSnapshot as Record<string, unknown>
+    : {};
+  const raw = plan.filingRaw && typeof plan.filingRaw === "object" && !Array.isArray(plan.filingRaw)
+    ? plan.filingRaw as Record<string, unknown>
+    : {};
+  const fingerprintBasis = {
+    action,
+    planId: plan.id,
+    providerPlanId: plan.filingProviderPlanId || null,
+    filingStatus: plan.filingStatus || null,
+    versionStamp: snapshot.versionStamp || raw.versionStamp || null,
+    departure: plan.departure || null,
+    destination: plan.destination || null,
+    plannedDepartureAt: plan.plannedDepartureAt || null,
+    route: plan.route || null,
+    altitude: plan.filingPlannedAltitudeFt || null,
+    closeLocation: body.closeLocation || null,
+  };
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(fingerprintBasis))
+    .digest("hex");
+};
+
+const getFlightServiceIdempotencyKey = (req: any) => {
+  const header = req.headers?.["idempotency-key"] || req.headers?.["x-idempotency-key"];
+  const raw = Array.isArray(header) ? header[0] : header || req.body?.idempotencyKey;
+  const normalized = String(raw || "").trim();
+  return normalized || null;
+};
+
+const compactProviderActionResultForStorage = (providerResult: Record<string, unknown>) => {
+  const compact = { ...providerResult };
+  delete (compact as any).raw;
+  delete (compact as any).payloadSnapshot;
+  return compact;
+};
+
+const reserveFlightServiceProviderActionAttempt = async (params: {
+  flightPlanId: string;
+  userId: string;
+  action: FlightPlanFilingAction;
+  idempotencyKey: string | null;
+  requestFingerprint: string;
+}) => {
+  return db.transaction(async (tx) => {
+    if (params.idempotencyKey) {
+      const [existing] = await tx
+        .select()
+        .from(flightServiceProviderActionAttempts)
+        .where(and(
+          eq(flightServiceProviderActionAttempts.flightPlanId, params.flightPlanId),
+          eq(flightServiceProviderActionAttempts.idempotencyKey, params.idempotencyKey),
+        ))
+        .limit(1);
+      if (existing) {
+        if (existing.requestFingerprint !== params.requestFingerprint) {
+          return { kind: "conflicting-key" as const, attempt: existing };
+        }
+        if (COMPLETED_PROVIDER_ACTION_ATTEMPT_STATUSES.includes(existing.status)) {
+          return { kind: "replay" as const, attempt: existing };
+        }
+        return { kind: existing.status === "provider-outcome-unknown" ? "outcome-unknown" as const : "in-progress" as const, attempt: existing };
+      }
+    }
+
+    const [active] = await tx
+      .select()
+      .from(flightServiceProviderActionAttempts)
+      .where(and(
+        eq(flightServiceProviderActionAttempts.flightPlanId, params.flightPlanId),
+        eq(flightServiceProviderActionAttempts.action, params.action),
+        inArray(flightServiceProviderActionAttempts.status, ACTIVE_PROVIDER_ACTION_ATTEMPT_STATUSES),
+      ))
+      .limit(1);
+    if (active) {
+      return { kind: active.status === "provider-outcome-unknown" ? "outcome-unknown" as const : "in-progress" as const, attempt: active };
+    }
+
+    try {
+      const [attempt] = await tx
+        .insert(flightServiceProviderActionAttempts)
+        .values({
+          flightPlanId: params.flightPlanId,
+          userId: params.userId,
+          action: params.action,
+          idempotencyKey: params.idempotencyKey,
+          requestFingerprint: params.requestFingerprint,
+          status: "pending",
+        })
+        .returning();
+      return { kind: "reserved" as const, attempt };
+    } catch (error: any) {
+      const [conflict] = await tx
+        .select()
+        .from(flightServiceProviderActionAttempts)
+        .where(and(
+          eq(flightServiceProviderActionAttempts.flightPlanId, params.flightPlanId),
+          eq(flightServiceProviderActionAttempts.action, params.action),
+          inArray(flightServiceProviderActionAttempts.status, ACTIVE_PROVIDER_ACTION_ATTEMPT_STATUSES),
+        ))
+        .limit(1);
+      return { kind: conflict?.status === "provider-outcome-unknown" ? "outcome-unknown" as const : "in-progress" as const, attempt: conflict || null, error };
+    }
+  });
+};
+
+const markFlightServiceProviderActionAttempt = async (
+  attemptId: string,
+  updates: Record<string, unknown>,
+) => {
+  const [attempt] = await db
+    .update(flightServiceProviderActionAttempts)
+    .set({ ...updates, updatedAt: new Date() } as any)
+    .where(eq(flightServiceProviderActionAttempts.id, attemptId))
+    .returning();
+  return attempt;
+};
 
 // Rental payout hold period — earnings credited to owner balance only after this many hours.
 // Env override supported but defaults to 24h so production works without any new env var.
@@ -22057,6 +22233,43 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     };
   };
 
+  const compareProviderVersionStamp = (left: unknown, right: unknown) => {
+    const a = String(left || "").trim();
+    const b = String(right || "").trim();
+    if (!a || !b) return 0;
+    if (/^\d+$/.test(a) && /^\d+$/.test(b)) {
+      if (a.length !== b.length) return a.length > b.length ? 1 : -1;
+      return a === b ? 0 : a > b ? 1 : -1;
+    }
+    return a.localeCompare(b);
+  };
+
+  const applyProviderWebhookOrderingGuard = (
+    previousSnapshot: Record<string, unknown>,
+    nextSnapshot: Record<string, unknown>,
+  ) => {
+    const previousLifecycle = String(previousSnapshot.providerLifecycleStatus || "").trim().toLowerCase();
+    const nextLifecycle = String(nextSnapshot.providerLifecycleStatus || "").trim().toLowerCase();
+    const previousVersion = String(previousSnapshot.versionStamp || "").trim();
+    const nextVersion = String(nextSnapshot.versionStamp || "").trim();
+    const incomingLowerVersion = Boolean(previousVersion && nextVersion && compareProviderVersionStamp(nextVersion, previousVersion) < 0);
+    const terminalWouldRegress =
+      ["closed", "cancelled", "canceled"].includes(previousLifecycle) &&
+      Boolean(nextLifecycle && !["closed", "cancelled", "canceled"].includes(nextLifecycle));
+    if (!incomingLowerVersion && !terminalWouldRegress) return nextSnapshot;
+    return {
+      ...nextSnapshot,
+      versionStamp: previousVersion || nextVersion || null,
+      providerLifecycleStatus: previousSnapshot.providerLifecycleStatus || nextSnapshot.providerLifecycleStatus || "unknown",
+      providerLifecycleSource: previousSnapshot.providerLifecycleSource || nextSnapshot.providerLifecycleSource || "unknown",
+      providerLifecycleReason: incomingLowerVersion ? "stale_lower_version_ignored" : "terminal_state_regression_ignored",
+      providerStaleEventIgnored: true,
+      providerStaleEventReason: incomingLowerVersion ? "lower_version_stamp" : "terminal_state_regression",
+      staleEventLifecycleStatus: nextLifecycle || null,
+      staleEventVersionStamp: nextVersion || null,
+    };
+  };
+
   const logProviderLifecycleTransition = ({
     plan,
     previousSnapshot,
@@ -23302,6 +23515,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             : "The filing provider pushed an update for this flight plan. RSF refreshed provider sync; no route, status, ARTCC, or notice changes were reported in the push payload.",
         });
         const pushReceivedAt = String(payload.notificationTimestamp || payload.timestamp || new Date().toISOString());
+        const safeWebhookPayloadSummary = summarizeLeidosWebhookPayload(payload);
         const providerMessage: FilingProviderMessage = {
           id: buildFilingEventId("webhook", flightIdentifier, notificationTitle, extractedMessage, pushReceivedAt),
           timestamp: pushReceivedAt,
@@ -23312,11 +23526,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           provider: "Leidos Flight Service",
           providerPlanId: flightIdentifier,
           providerReferenceId: String(payload.messageId || payload.referenceId || "").trim() || null,
-          raw: payload,
+          raw: safeWebhookPayloadSummary,
         };
 
         // STEP 3 — Create in-app notification.
-        const providerPushNotification = await storage.createUserNotification({
+        let providerPushNotification: any = null;
+        /* providerPushNotification = await storage.createUserNotification({
           userId: matchedPlan.userId,
           type: inAppType,
           title: notificationTitle,
@@ -23324,7 +23539,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           meta: {
             flightPlanId: matchedPlan.id,
             providerPlanId: flightIdentifier,
-            raw: payload,
+            payloadSummary: safeWebhookPayloadSummary,
           },
         });
 
@@ -23347,6 +23562,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             ),
           });
         }
+        */
 
         const providerReviewSnapshot = {
           versionStamp: flightVersionStamp || null,
@@ -23444,7 +23660,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               },
             }
             : null;
-          const finalWebhookSnapshot = appendProcessedWebhookEvent({
+          let finalWebhookSnapshot = appendProcessedWebhookEvent({
             ...syncedSnapshot,
             ...providerReviewSnapshot,
             versionStamp: providerReviewSnapshot.versionStamp || syncedSnapshot.versionStamp || null,
@@ -23458,6 +23674,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             rawFlightState: normalizeNotificationValue(flightState),
             rawArtccState: normalizeNotificationValue(artccState),
           });
+          finalWebhookSnapshot = applyProviderWebhookOrderingGuard(previousProviderSnapshot, finalWebhookSnapshot) as typeof finalWebhookSnapshot;
           const { updates: webhookStatusUpdates } = buildProviderLifecycleStatusUpdate(syncedPlan || matchedPlan, finalWebhookSnapshot);
           await storage.updateFlightPlan(matchedPlan.id, {
             filingProviderMessages: appendPlanProviderMessages(
@@ -23486,7 +23703,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             (matchedPlan as Record<string, unknown>).filingProviderMessages,
             [providerMessage],
           );
-          const finalWebhookSnapshot = appendProcessedWebhookEvent({
+          let finalWebhookSnapshot = appendProcessedWebhookEvent({
             ...existingSnapshot,
             ...providerReviewSnapshot,
             versionStamp: providerReviewSnapshot.versionStamp || existingSnapshot.versionStamp || null,
@@ -23499,6 +23716,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             rawFlightState: normalizeNotificationValue(flightState),
             rawArtccState: normalizeNotificationValue(artccState),
           });
+          finalWebhookSnapshot = applyProviderWebhookOrderingGuard(existingSnapshot, finalWebhookSnapshot) as typeof finalWebhookSnapshot;
           const { updates: webhookStatusUpdates } = buildProviderLifecycleStatusUpdate(matchedPlan, finalWebhookSnapshot);
           await storage.updateFlightPlan(matchedPlan.id, {
             filingProviderMessages: mergedMessages as any,
@@ -23512,20 +23730,45 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             source: "leidos_webhook",
           });
         }
-        if (syncedNotificationMessage !== providerMessageDetails || syncedNotificationChanges.length > 0) {
-          await db
-            .update(userNotifications)
-            .set({
-              message: syncedNotificationMessage,
-              meta: {
-                flightPlanId: matchedPlan.id,
-                providerPlanId: flightIdentifier,
-                changedFields: syncedNotificationChanges,
-                raw: payload,
-              } as any,
-              updatedAt: new Date(),
-            })
-            .where(eq(userNotifications.id, providerPushNotification.id));
+        providerPushNotification = await storage.createUserNotification({
+          userId: matchedPlan.userId,
+          type: inAppType,
+          title: syncedNotificationChanges.length > 0 ? "Provider changes detected" : notificationTitle,
+          message: syncedNotificationMessage,
+          meta: {
+            flightPlanId: matchedPlan.id,
+            providerPlanId: flightIdentifier,
+            changedFields: syncedNotificationChanges,
+            payloadSummary: safeWebhookPayloadSummary,
+          } as any,
+        });
+        try {
+          const tokens = await storage.getPushTokensByUser(matchedPlan.userId);
+          if (tokens.length > 0) {
+            await fetch("https://exp.host/--/api/v2/push/send", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(
+                tokens.map((token) => ({
+                  to: token.token,
+                  title: pushTitle,
+                  body: String(syncedNotificationMessage || providerMessageDetails).slice(0, 100),
+                  data: {
+                    flightPlanId: matchedPlan.id,
+                    notificationId: providerPushNotification?.id || null,
+                    type: inAppType,
+                  },
+                }))
+              ),
+            });
+          }
+        } catch (pushError: any) {
+          console.warn(JSON.stringify({
+            event: "leidos_push_expo_delivery_failed",
+            processingId,
+            flightIdentifier,
+            error: pushError?.message || String(pushError),
+          }));
         }
         activeLeidosWebhookEvents.delete(eventKey);
         await finishLeidosWebhookEvent(eventHash, "processed");
@@ -23895,6 +24138,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.post("/api/flight-plans/:id/filing-action", isAuthenticated, flightFilingRateLimiter, async (req: any, res) => {
     let planForErrorSync: any = null;
+    let providerActionAttempt: any = null;
     try {
       const mergePreservedFilingRaw = (existingRaw: unknown, incomingRaw: unknown) => {
         const existingRecord =
@@ -23936,6 +24180,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(400).json({ error: parsed.error.format() });
       }
       const action = parsed.data.action as FlightPlanFilingAction;
+      const idempotencyKey = getFlightServiceIdempotencyKey(req);
       const closeLocation = parsed.data.closeLocation || null;
       const requestSource = parsed.data.requestSource || "user";
       const runtimeMode = getFlightServiceRuntimeMode();
@@ -24350,7 +24595,58 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         });
       }
 
+      const actionFingerprint = buildFlightServiceActionFingerprint(effectivePlanForAction as any, action, req.body ?? {});
+      const attemptReservation = await reserveFlightServiceProviderActionAttempt({
+        flightPlanId: plan.id,
+        userId,
+        action,
+        idempotencyKey,
+        requestFingerprint: actionFingerprint,
+      });
+      if (attemptReservation.kind === "conflicting-key") {
+        return res.status(409).json({
+          error: "This idempotency key was already used for a different Flight Service action payload.",
+          code: "FLIGHT_SERVICE_IDEMPOTENCY_KEY_CONFLICT",
+        });
+      }
+      if (attemptReservation.kind === "replay") {
+        const replayPlan = await storage.getFlightPlanById(plan.id);
+        const responseRecord = attemptReservation.attempt.responseBody && typeof attemptReservation.attempt.responseBody === "object" && !Array.isArray(attemptReservation.attempt.responseBody)
+          ? attemptReservation.attempt.responseBody as Record<string, unknown>
+          : {};
+        return res.json({
+          ...responseRecord,
+          idempotentReplay: true,
+          plan: replayPlan || plan,
+        });
+      }
+      if (attemptReservation.kind === "outcome-unknown") {
+        return res.status(409).json({
+          error: "A previous Flight Service action for this plan has an unknown provider outcome. Refresh provider sync or reconcile the plan before retrying.",
+          code: "FLIGHT_SERVICE_PROVIDER_OUTCOME_UNKNOWN",
+          action,
+          attemptId: attemptReservation.attempt?.id || null,
+        });
+      }
+      if (attemptReservation.kind === "in-progress") {
+        return res.status(409).json({
+          error: "A Flight Service action is already in progress for this plan.",
+          code: "FLIGHT_SERVICE_ACTION_IN_PROGRESS",
+          action,
+          attemptId: attemptReservation.attempt?.id || null,
+        });
+      }
+      providerActionAttempt = attemptReservation.attempt;
+      await markFlightServiceProviderActionAttempt(providerActionAttempt.id, {
+        status: "dispatched",
+        dispatchedAt: new Date(),
+      });
+
       const providerResult = await flightPlanFilingProvider.stageAction(effectivePlanForAction, action);
+      const providerOutcomeUnknown =
+        action === "file" &&
+        providerResult.live === false &&
+        /accepted[\s\S]*did not return|did not return a usable flightIdentifier/i.test(String(providerResult.message || ""));
       const currentHistory = Array.isArray(plan.filingActionHistory) ? plan.filingActionHistory : [];
       const now = new Date();
       const historyEntry = {
@@ -24375,7 +24671,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         providerResult.nextStatus === "staged" &&
         ["filed", "activated", "cancelled", "closed"].includes(String(plan.filingStatus || "").toLowerCase());
 
-      const nextFilingStatus = preserveExistingLifecycleState
+      const nextFilingStatus = providerOutcomeUnknown
+        ? "provider-outcome-unknown"
+        : preserveExistingLifecycleState
         ? plan.filingStatus
         : providerResult.nextStatus;
       const nextFilingIsLive = preserveExistingLifecycleState
@@ -24388,7 +24686,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         ? providerResult.providerPlanId || plan.filingProviderPlanId
         : providerResult.providerPlanId;
       const nextFilingPayload = providerResult.payloadSnapshot ?? asRecord((plan as Record<string, unknown>).filingPayload);
-      const nextProviderSnapshot = providerResult.providerSnapshot
+      const nextProviderSnapshot = providerOutcomeUnknown
+        ? {
+          ...asRecord((plan as Record<string, unknown>).filingProviderSnapshot),
+          providerOutcomeUnknown: true,
+          providerOutcomeUnknownAction: action,
+          providerOutcomeUnknownAt: now.toISOString(),
+          providerOutcomeUnknownReason: "provider_accepted_without_flight_identifier",
+        }
+        : providerResult.providerSnapshot
         ? mergeProviderSnapshot((plan as Record<string, unknown>).filingProviderSnapshot, providerResult.providerSnapshot, {
           planId: plan.id,
           providerPlanId: providerResult.providerPlanId || plan.filingProviderPlanId,
@@ -24427,6 +24733,23 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         } catch (syncError: any) {
           console.warn("Leidos post-action sync failed:", syncError?.message || syncError);
         }
+      }
+
+      if (providerActionAttempt?.id) {
+        const attemptStatus = providerOutcomeUnknown
+          ? "provider-outcome-unknown"
+          : providerResult.live
+            ? "succeeded"
+            : "failed-before-dispatch";
+        await markFlightServiceProviderActionAttempt(providerActionAttempt.id, {
+          status: attemptStatus,
+          statusReason: providerOutcomeUnknown ? "provider_accepted_without_flight_identifier" : providerResult.message || null,
+          providerPlanId: nextProviderPlanId || null,
+          versionStamp: (reconciledProviderSnapshot as any)?.versionStamp || null,
+          responsePlan: updated as any,
+          responseBody: compactProviderActionResultForStorage(providerResult as any) as any,
+          completedAt: attemptStatus === "provider-outcome-unknown" ? null : new Date(),
+        });
       }
 
       if (providerResult.live) {
@@ -24475,7 +24798,44 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const isProviderValidationError = /Webservice\.ValidationError/i.test(message);
       const isProviderStateRejected = /Webservice\.Cannot|not in the PROPOSED state|could not be cancelled/i.test(message);
       const isProviderRejected = /Leidos returned an unsuccessful/i.test(message);
+      const dispatchedAttemptHasUnknownOutcome = Boolean(
+        providerActionAttempt?.id &&
+        !isProviderValidationError &&
+        !isProviderStateRejected &&
+        !isProviderRejected,
+      );
       let syncedPlan: any = null;
+      if (providerActionAttempt?.id) {
+        if (dispatchedAttemptHasUnknownOutcome) {
+          await markFlightServiceProviderActionAttempt(providerActionAttempt.id, {
+            status: "provider-outcome-unknown",
+            statusReason: isTimeout ? "provider_timeout_after_dispatch" : "provider_transport_or_parse_error_after_dispatch",
+            errorCode: isTimeout ? "PROVIDER_TIMEOUT_AFTER_DISPATCH" : "PROVIDER_OUTCOME_UNKNOWN",
+            errorMessage: message,
+          }).catch(() => undefined);
+          if (planForErrorSync?.id) {
+            syncedPlan = await storage.updateFlightPlan(planForErrorSync.id, {
+              filingStatus: "provider-outcome-unknown",
+              filingPendingAction: providerActionAttempt.action || null,
+              filingProviderSnapshot: {
+                ...asRecord((planForErrorSync as Record<string, unknown>).filingProviderSnapshot),
+                providerOutcomeUnknown: true,
+                providerOutcomeUnknownAction: providerActionAttempt.action || null,
+                providerOutcomeUnknownAt: new Date().toISOString(),
+                providerOutcomeUnknownReason: isTimeout ? "provider_timeout_after_dispatch" : "provider_transport_or_parse_error_after_dispatch",
+              } as any,
+            } as any).catch(() => null);
+          }
+        } else {
+          await markFlightServiceProviderActionAttempt(providerActionAttempt.id, {
+            status: "rejected",
+            statusReason: isProviderStateRejected ? "provider_state_rejected" : "provider_rejected",
+            errorCode: isProviderStateRejected ? "PROVIDER_STATE_REJECTED" : "PROVIDER_REJECTED",
+            errorMessage: message,
+            completedAt: new Date(),
+          }).catch(() => undefined);
+        }
+      }
       if (isProviderStateRejected && planForErrorSync?.filingProviderPlanId) {
         try {
           const mismatchSync = await syncLeidosPlanMetadata(planForErrorSync as any);
@@ -24498,9 +24858,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         }
       }
       res.status(isTimeout ? 504 : isProviderStateRejected ? 409 : (isProviderValidationError || isProviderRejected) ? 400 : 500).json({
-        error: isProviderStateRejected
+        error: dispatchedAttemptHasUnknownOutcome
+          ? "The Flight Service request may have reached the provider, but RSF could not confirm the outcome. Refresh provider sync or reconcile the plan before retrying."
+          : isProviderStateRejected
           ? "The filing provider says this flight plan is no longer in the provider state required for that action. RSF refreshed the provider record; review the current status and available actions."
           : message,
+        code: dispatchedAttemptHasUnknownOutcome ? "FLIGHT_SERVICE_PROVIDER_OUTCOME_UNKNOWN" : undefined,
         providerMessage: message,
         plan: syncedPlan,
       });
@@ -24909,7 +25272,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           payload[field] = payload[field].trim().toUpperCase();
         }
       }
-      const result = insertFlightPlanSchema.safeParse(payload);
+      const providerFieldRejection = rejectPublicFlightPlanProviderFields(payload);
+      if (providerFieldRejection) {
+        return res.status(400).json(providerFieldRejection);
+      }
+      const result = publicFlightPlanCreateSchema.safeParse(payload);
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
       }
@@ -24975,7 +25342,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           payload[field] = payload[field].trim().toUpperCase();
         }
       }
-      const result = insertFlightPlanSchema.partial().safeParse(payload);
+      const providerFieldRejection = rejectPublicFlightPlanProviderFields(payload);
+      if (providerFieldRejection) {
+        return res.status(400).json(providerFieldRejection);
+      }
+      const result = publicFlightPlanPatchSchema.safeParse(payload);
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
       }

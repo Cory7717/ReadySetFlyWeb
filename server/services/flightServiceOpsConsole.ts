@@ -117,7 +117,7 @@ export const classifyFlightServiceOperationalState = (plan: FlightPlan, now = ne
   if (arrival && !Number.isNaN(arrival.getTime()) && arrival.getTime() < now.getTime() && ["filed", "activated"].includes(status)) {
     return "overdue-like";
   }
-  if (["filed", "activated", "staged", "pending"].includes(status)) return "open";
+  if (["filed", "activated", "staged", "provider-outcome-unknown", "pending"].includes(status)) return "open";
   return "inactive";
 };
 

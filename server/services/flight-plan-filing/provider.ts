@@ -2740,7 +2740,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         savedDisplayTime: (payloadContext.payloadSnapshot as Record<string, unknown>).selectedLocalDepartureTime ?? null,
         remarksPopulated: Boolean(requestPayloadRecord.remarks),
         remarksInput: requestPayloadRecord.remarks ? "[redacted]" : null,
-        otherInfoGenerated: requestPayloadRecord.otherInfo || null,
+        otherInfoGenerated: requestPayloadRecord.otherInfo ? "[redacted]" : null,
         suppRemarksExtendedPopulated: Boolean(requestPayloadRecord.suppRemarksExtended),
         otherInfoPopulated: Boolean(requestPayloadRecord.otherInfo),
         pilotPhonePopulated: Boolean(requestPayloadRecord.pilotPhone),
@@ -2782,7 +2782,6 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
           payloadSnapshot: payloadContext.payloadSnapshot,
           rawExtras: {
             requestUrl,
-            requestPayload: requestPayloadRecord,
             providerError: message,
             providerTimeout: isLeidosTimeoutLikeError(error),
           },
@@ -2905,7 +2904,6 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
           }),
           rawExtras: {
             requestUrl,
-            requestPayload: requestPayloadRecord,
             response: parsedResponse,
             responseMessages,
             returnStatus: providerReturnStatus,
@@ -2957,7 +2955,6 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       providerMessages,
       raw: {
         requestUrl,
-        requestPayload: requestPayloadRecord,
         providerPlanId,
         versionStamp,
         metadataResponse,

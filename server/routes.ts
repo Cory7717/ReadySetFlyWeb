@@ -104,7 +104,7 @@ import {
   validateFlightPlanForAction,
   verifyLeidosWebhookAuthorization,
 } from "./services/flight-plan-filing/provider";
-import { LEIDOS_WEBHOOK_SUCCESS_RESPONSE, summarizeLeidosWebhookPayload } from "./services/leidosWebhook";
+import { extractLeidosWebhookFields, LEIDOS_WEBHOOK_SUCCESS_RESPONSE, summarizeLeidosWebhookPayload } from "./services/leidosWebhook";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import { analyzeFiledRoute } from "@shared/flight-plan-route";
 import { ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE, canCreateAnotherActiveFlightPlan, getActiveFlightPlans } from "@shared/flight-plan-access";
@@ -23246,6 +23246,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const processingId = crypto.randomUUID();
       const processingStartedAt = new Date();
       const payload = req.body ?? {};
+      const parsedWebhook = extractLeidosWebhookFields(payload);
+      const safeWebhookPayloadSummary = summarizeLeidosWebhookPayload(payload);
       const alert =
         payload.flightAlert && typeof payload.flightAlert === "object" && !Array.isArray(payload.flightAlert)
           ? payload.flightAlert
@@ -23259,6 +23261,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         payload.notificationType ??
         payload.type ??
         payload.eventType ??
+        parsedWebhook.notificationType ??
         "";
 
       // Defensive extraction — Leidos lab payload field names may vary.
@@ -23271,17 +23274,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         payload.planId ??
         payload.flightPlanId ??
         payload.id ??
+        parsedWebhook.flightIdentifier ??
         null;
       const flightVersionStamp: string | null =
         alert.flightVersionStamp ??
         alert.versionStamp ??
         payload.flightVersionStamp ??
         payload.versionStamp ??
+        parsedWebhook.flightVersionStamp ??
         null;
-      const flightState: string | null = alert.flightState ?? payload.flightState ?? null;
-      const expectedRoute: string | null = alert.expectedRoute ?? payload.expectedRoute ?? null;
-      const artccState: string | null = alert.artccState ?? payload.artccState ?? null;
-      const artccInfo = alert.artccInfo ?? payload.artccInfo ?? null;
+      const flightState: string | null = alert.flightState ?? payload.flightState ?? parsedWebhook.flightState ?? null;
+      const expectedRoute: string | null = alert.expectedRoute ?? payload.expectedRoute ?? parsedWebhook.expectedRoute ?? null;
+      const artccState: string | null = alert.artccState ?? payload.artccState ?? parsedWebhook.artccState ?? null;
+      const artccInfo = alert.artccInfo ?? payload.artccInfo ?? parsedWebhook.artccInfo ?? null;
       const providerMessageId: string | null =
         alert.messageId ??
         alert.referenceId ??
@@ -23289,6 +23294,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         payload.messageId ??
         payload.referenceId ??
         payload.transactionId ??
+        parsedWebhook.providerMessageId ??
         null;
       const messageDateTime: string | null =
         alert.messageDateTime ??
@@ -23297,7 +23303,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         payload.messageDateTime ??
         payload.notificationTimestamp ??
         payload.timestamp ??
+        parsedWebhook.messageDateTime ??
         null;
+      const hasMeaningfulProviderChange = parsedWebhook.hasMeaningfulProviderChange;
       const eventHash = buildLeidosWebhookFingerprint({
         flightIdentifier,
         flightVersionStamp,
@@ -23332,6 +23340,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         alert.change ??
         payload.changeType ??
         payload.change ??
+        parsedWebhook.changeType ??
         null;
 
       const alertType: string | null =
@@ -23339,6 +23348,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         alert.alert ??
         payload.alertType ??
         payload.alert ??
+        parsedWebhook.alertType ??
         null;
 
       const extractedMessage: string =
@@ -23350,6 +23360,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         payload.message ??
         payload.description ??
         payload.detail ??
+        parsedWebhook.extractedMessage ??
         notificationType ??
         "Flight plan update received";
 
@@ -23417,16 +23428,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const isAlert = notificationType.toUpperCase().includes("ALERT");
         const inAppType = isAlert ? "flight_alert" : "flight_change";
         const pushTitle = isAlert ? "Flight Alert" : "Flight Plan Update";
-        const hasExplicitProviderChange = Boolean(
-          flightVersionStamp ||
-          flightState ||
-          expectedRoute ||
-          artccState ||
-          artccInfo ||
-          changeType ||
-          alertType ||
-          notificationType,
-        );
+        const hasExplicitProviderChange = hasMeaningfulProviderChange;
         const notificationTitle = hasExplicitProviderChange
           ? isAlert
             ? `Flight Alert${alertType ? `: ${alertType}` : ""}`
@@ -23469,16 +23471,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           artccInfo,
           flightVersionStamp,
         };
-        const normalizedPushLifecycle = (() => {
-          const text = String(flightState || "").trim().toLowerCase();
-          if (/cancelled|canceled|cancellation/.test(text)) return "cancelled";
-          if (/\bclosed\b|closure|closeout/.test(text)) return "closed";
-          if (/reject/.test(text)) return "rejected";
-          if (/\bactivated\b|\bactive\b|\bopened\b/.test(text)) return "activated";
-          if (/\bproposed\b/.test(text)) return "proposed";
-          if (/\bfiled\b|\baccepted\b/.test(text)) return "filed";
-          return null;
-        })();
+        const normalizedPushLifecycle = parsedWebhook.normalizedLifecycle;
         console.info(JSON.stringify({
           event: "provider_update_notification_context",
           timestamp: new Date().toISOString(),
@@ -23507,6 +23500,41 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           hasFlightState: Boolean(flightState),
           hasArtccState: Boolean(artccState),
         }));
+        if (!hasExplicitProviderChange) {
+          const finalWebhookSnapshot = appendProcessedWebhookEvent(previousProviderSnapshot, {
+            eventHash,
+            processingId,
+            providerMessageId,
+            messageDateTime,
+            processedAt: new Date().toISOString(),
+            rawFlightState: normalizeNotificationValue(flightState),
+            rawArtccState: normalizeNotificationValue(artccState),
+            noProviderChange: true,
+          });
+          await storage.updateFlightPlan(matchedPlan.id, {
+            filingProviderSnapshot: finalWebhookSnapshot,
+          } as any);
+          activeLeidosWebhookEvents.delete(eventKey);
+          await finishLeidosWebhookEvent(eventHash, "processed_noop");
+          console.info(JSON.stringify({
+            event: "leidos_webhook_noop_processed",
+            processingId,
+            processingStart: processingStartedAt.toISOString(),
+            processingFinish: new Date().toISOString(),
+            flightIdentifier,
+            providerPlanId: flightIdentifier,
+            versionStamp: flightVersionStamp,
+            rawFlightState: normalizeNotificationValue(flightState),
+            rawArtccState: normalizeNotificationValue(artccState),
+            messageDateTime,
+            providerMessageId,
+            eventHash,
+            reason: "no_lifecycle_artcc_route_version_notice_or_provider_change",
+            payloadSummary: safeWebhookPayloadSummary,
+          }));
+          return res.status(200).json(LEIDOS_WEBHOOK_SUCCESS_RESPONSE);
+        }
+
         const providerMessageDetails = buildFlightPlanNotificationMessage({
           plan: matchedPlan,
           previousSnapshot: previousProviderSnapshot,
@@ -23516,7 +23544,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             : "The filing provider pushed an update for this flight plan. RSF refreshed provider sync; no route, status, ARTCC, or notice changes were reported in the push payload.",
         });
         const pushReceivedAt = String(payload.notificationTimestamp || payload.timestamp || new Date().toISOString());
-        const safeWebhookPayloadSummary = summarizeLeidosWebhookPayload(payload);
         const providerMessage: FilingProviderMessage = {
           id: buildFilingEventId("webhook", flightIdentifier, notificationTitle, extractedMessage, pushReceivedAt),
           timestamp: pushReceivedAt,

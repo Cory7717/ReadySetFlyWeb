@@ -198,7 +198,7 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
               <div className="font-medium">{formatRetrievalState(providerSnapshot.providerRetrievalState)}</div>
             </div>
           </div>
-          {false && (
+          {(providerSnapshot.providerStatus || providerSnapshot.artccState || plan.filingStatus) && (
           <div className="grid gap-2 sm:grid-cols-2">
             <div>
               <div className="text-xs text-muted-foreground">Current provider status</div>

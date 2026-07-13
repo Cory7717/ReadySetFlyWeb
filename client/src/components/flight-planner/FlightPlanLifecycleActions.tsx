@@ -1,0 +1,349 @@
+import React from "react";
+import { Bell } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import type { FlightPlan } from "@shared/schema";
+import { extractFilingVersionStamp } from "@shared/flight-plan-filing";
+import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
+import { summarizeProviderUpdates } from "./FilingProviderWorkspace";
+
+type FilingActionName = "file" | "amend" | "activate" | "cancel" | "close";
+
+export const getProviderSnapshot = (plan: FlightPlan | null | undefined) => {
+  const snapshot = (plan as any)?.filingProviderSnapshot;
+  return snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+    ? snapshot as Record<string, any>
+    : {};
+};
+
+export const hasLiveProviderPlan = (plan: FlightPlan | null | undefined) =>
+  Boolean(plan?.filingIsLive && plan?.filingProviderPlanId);
+
+export const isCertificationFlightPlan = (plan: FlightPlan | null | undefined) =>
+  Boolean((plan as any)?.isCertificationTest || String((plan as any)?.source || "") === "leidos-certification");
+
+export const hasPendingProviderReview = (plan: FlightPlan | null | undefined) =>
+  getProviderSnapshot(plan).providerPendingReview === true;
+
+export const getProviderActionAvailability = (plan: FlightPlan | null | undefined) => {
+  const snapshot = getProviderSnapshot(plan);
+  const availability = snapshot.providerActionAvailability;
+  const lifecycle = String(snapshot.providerLifecycleStatus || "").toLowerCase();
+  const providerStatusKnown = Boolean(
+    lifecycle &&
+    lifecycle !== "unknown" &&
+    (snapshot.providerStatus || snapshot.artccState || snapshot.versionStamp || snapshot.cancellationIndicator || snapshot.closureIndicator)
+  );
+  return {
+    lifecycle: lifecycle || "unknown",
+    providerStatusKnown,
+    amend: Boolean(availability?.amend),
+    activate: Boolean(availability?.activate),
+    cancel: Boolean(availability?.cancel),
+    close: Boolean(availability?.close),
+    reason: String(availability?.reason || ""),
+  };
+};
+
+const normalizedClientFilingStatus = (plan: FlightPlan | null | undefined) =>
+  String(plan?.filingStatus || "").toLowerCase();
+
+export const canSubmitAmendForPlan = (plan: FlightPlan | null | undefined) => {
+  if (!plan) return false;
+  const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
+  const status = normalizedClientFilingStatus(plan);
+  const provider = getProviderActionAvailability(plan);
+  return Boolean(
+    hasLiveProviderPlan(plan) &&
+    provider.providerStatusKnown &&
+    provider.amend &&
+    (rules === "VFR" ? ["filed", "activated"].includes(status) : status === "filed"),
+  );
+};
+
+export const canActivatePlan = (plan: FlightPlan | null | undefined) =>
+  Boolean(
+    plan &&
+    String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
+    normalizedClientFilingStatus(plan) === "filed" &&
+    getProviderActionAvailability(plan).providerStatusKnown &&
+    getProviderActionAvailability(plan).activate &&
+    hasLiveProviderPlan(plan),
+  );
+
+export const canClosePlan = (plan: FlightPlan | null | undefined) =>
+  Boolean(
+    plan &&
+    String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
+    normalizedClientFilingStatus(plan) === "activated" &&
+    getProviderActionAvailability(plan).providerStatusKnown &&
+    getProviderActionAvailability(plan).close &&
+    hasLiveProviderPlan(plan),
+  );
+
+export const isPlanOverdueForClose = (plan: FlightPlan | null | undefined) =>
+  Boolean(plan && isFlightPlanCloseOverdue(plan.plannedArrivalAt));
+
+export const canCancelPlan = (plan: FlightPlan | null | undefined) =>
+  Boolean(
+    plan &&
+    normalizedClientFilingStatus(plan) === "filed" &&
+    getProviderActionAvailability(plan).providerStatusKnown &&
+    getProviderActionAvailability(plan).cancel &&
+    hasLiveProviderPlan(plan),
+  );
+
+export const canFilePlan = (plan: FlightPlan | null | undefined) => {
+  if (!plan) return true;
+  if (hasPendingProviderReview(plan)) return false;
+  const status = normalizedClientFilingStatus(plan) || "draft";
+  return !hasLiveProviderPlan(plan) && !["filed", "activated", "cancelled", "closed"].includes(status);
+};
+
+export const getFileAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
+  if (!plan) return "Save the current values first, then RSF will submit the saved packet.";
+  if (hasPendingProviderReview(plan)) return "Review and accept provider changes before filing another provider action.";
+  if (!canFilePlan(plan)) return "This plan already has a provider lifecycle state. Use Amend, Activate, Cancel, Close, or Provider Sync as applicable.";
+  return "RSF saves the visible planner values first, then files that saved packet.";
+};
+
+export const isTerminalFilingPlan = (plan: FlightPlan | null | undefined) =>
+  ["cancelled", "closed"].includes(normalizedClientFilingStatus(plan));
+
+export const getCertificationCleanupAction = (plan: FlightPlan | null | undefined): FilingActionName =>
+  normalizedClientFilingStatus(plan) === "activated" ? "close" : "cancel";
+
+export const getAmendAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
+  if (!plan) {
+    return "Save this plan first, then file it before trying to amend it through the filing provider.";
+  }
+
+  const status = normalizedClientFilingStatus(plan);
+  const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
+
+  if (!plan.filingIsLive) {
+    return "This saved plan is still local or staged. File it live with the filing provider first, then amend it from the filed record.";
+  }
+
+  if (!plan.filingProviderPlanId) {
+    return "This filed record is missing the provider flight identifier. File it again so RSF can refresh the amend tracking.";
+  }
+
+  if (!extractFilingVersionStamp(plan)) {
+    return "This filed record is still waiting on the provider amend token. Refresh provider sync in a few minutes, then try amend again.";
+  }
+
+  const provider = getProviderActionAvailability(plan);
+  if (!provider.providerStatusKnown) {
+    return provider.reason || "Refresh provider sync before taking filing provider lifecycle actions. RSF could not determine the current provider state.";
+  }
+
+  if (rules === "IFR" && status !== "filed") {
+    return "IFR plans can only be amended from the filed state.";
+  }
+
+  if (rules === "VFR" && !["filed", "activated"].includes(status)) {
+    return "VFR plans can only be amended from the filed or active state.";
+  }
+
+  return "This plan is not currently in a live amendable state. Save your edits, then use File to submit the updated version.";
+};
+
+export const getProviderLifecycleAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
+  if (!plan?.filingProviderPlanId) return null;
+  const provider = getProviderActionAvailability(plan);
+  const snapshot = getProviderSnapshot(plan);
+  if (snapshot.externalChangeNotice) return String(snapshot.externalChangeNotice);
+  if (!provider.providerStatusKnown) {
+    return provider.reason || "Provider state is unknown. Refresh provider sync before cancel, close, or activate.";
+  }
+  return null;
+};
+
+type FlightPlanLifecycleActionsProps = {
+  plan: FlightPlan;
+  labels: {
+    file: string;
+    amend: string;
+    activate: string;
+    cancel: string;
+    close: string;
+    sync: string;
+  };
+  pending?: {
+    filingAction?: boolean;
+    updatePlan?: boolean;
+    createPlan?: boolean;
+    sync?: boolean;
+    acceptProviderReview?: boolean;
+  };
+  hasBlockingReadinessIssue?: boolean;
+  amendUnavailableReason?: string | null;
+  fileUnavailableReason?: string | null;
+  certificationPlan?: boolean;
+  syncLabel?: string;
+  onFile: () => void;
+  onAmend: () => void;
+  onSync: () => void;
+  onAcceptProviderChanges: () => void;
+  onProviderUpdates: () => void;
+  onActivate: () => void;
+  onClose: () => void;
+  onCancel: () => void;
+  onCertificationCleanup: () => void;
+  onDownloadSummary: () => void;
+};
+
+export function FlightPlanLifecycleActions({
+  plan,
+  labels,
+  pending,
+  hasBlockingReadinessIssue = false,
+  amendUnavailableReason,
+  fileUnavailableReason,
+  certificationPlan,
+  syncLabel,
+  onFile,
+  onAmend,
+  onSync,
+  onAcceptProviderChanges,
+  onProviderUpdates,
+  onActivate,
+  onClose,
+  onCancel,
+  onCertificationCleanup,
+  onDownloadSummary,
+}: FlightPlanLifecycleActionsProps) {
+  const terminal = isTerminalFilingPlan(plan);
+  const liveProviderPlan = hasLiveProviderPlan(plan);
+  const providerReviewPending = hasPendingProviderReview(plan);
+  const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
+  const isVfr = rules === "VFR";
+  const actionPending = Boolean(pending?.filingAction);
+  const syncPending = Boolean(pending?.sync);
+  const updatePending = Boolean(pending?.updatePlan);
+  const createPending = Boolean(pending?.createPlan);
+  const acceptPending = Boolean(pending?.acceptProviderReview);
+  const amendBlockedReason =
+    hasBlockingReadinessIssue ? "Resolve readiness check issues before amending." : amendUnavailableReason || null;
+  const amendDisabled = actionPending || updatePending || syncPending || Boolean(amendBlockedReason);
+  const fileBlockedReason =
+    hasBlockingReadinessIssue ? "Resolve readiness check issues before filing." : fileUnavailableReason || getFileAvailabilityMessage(plan);
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {canFilePlan(plan) && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onFile}
+          disabled={actionPending || updatePending || createPending || syncPending || hasBlockingReadinessIssue}
+          title={fileBlockedReason}
+        >
+          {labels.file}
+        </Button>
+      )}
+      {!terminal && liveProviderPlan && (
+        <>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onAmend}
+            disabled={amendDisabled}
+            title={amendBlockedReason || "Save the current values, then submit an amendment to the filed provider record."}
+          >
+            {labels.amend}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onSync}
+            disabled={actionPending || syncPending}
+          >
+            {syncLabel || labels.sync}
+          </Button>
+        </>
+      )}
+      {providerReviewPending && (
+        <Button
+          size="sm"
+          variant="default"
+          onClick={onAcceptProviderChanges}
+          disabled={actionPending || syncPending || acceptPending}
+        >
+          {acceptPending ? "Accepting..." : "Accept provider changes"}
+        </Button>
+      )}
+      <Button
+        size="sm"
+        variant="outline"
+        className={cn(
+          "relative",
+          summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "error" && "border-red-400/50 text-red-200",
+          summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "warning" && "border-amber-400/50 text-amber-200",
+          summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "success" && "border-emerald-400/50 text-emerald-200",
+          summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "info" && "border-blue-400/50 text-blue-200",
+        )}
+        onClick={onProviderUpdates}
+        aria-label="Provider updates"
+        title="Provider updates"
+      >
+        <Bell className="h-4 w-4 mr-1" />
+        {summarizeProviderUpdates(plan).count > 0 ? (
+          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+            {summarizeProviderUpdates(plan).count}
+          </span>
+        ) : null}
+        Provider updates
+      </Button>
+      {!terminal && isVfr && (
+        <>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onActivate}
+            disabled={actionPending || syncPending || !canActivatePlan(plan)}
+          >
+            {labels.activate}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onClose}
+            disabled={actionPending || syncPending || !canClosePlan(plan)}
+          >
+            {labels.close}
+          </Button>
+        </>
+      )}
+      {!terminal && liveProviderPlan && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onCancel}
+          disabled={actionPending || syncPending || !canCancelPlan(plan)}
+        >
+          {labels.cancel}
+        </Button>
+      )}
+      {certificationPlan && !terminal && (
+        <Button
+          size="sm"
+          variant="destructive"
+          onClick={onCertificationCleanup}
+          disabled={actionPending || syncPending}
+          title="Requires LAB acknowledgement. If the provider plan is already terminal, RSF will close the local certification plan without another provider call."
+        >
+          Cleanup test plan
+        </Button>
+      )}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onDownloadSummary}
+      >
+        Download filing summary
+      </Button>
+    </div>
+  );
+}

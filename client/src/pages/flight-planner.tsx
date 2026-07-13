@@ -7559,6 +7559,7 @@ export default function FlightPlanner() {
     soulsOnBoard: { tab: "file", sectionId: "planner-filing-details", focusId: "planner-field-souls-on-board" },
     typeOfFlight: { tab: "file", sectionId: "planner-filing-details", focusId: "planner-field-type-of-flight" },
     remarks: { tab: "file", sectionId: "planner-field-filing-remarks" },
+    otherInfo: { tab: "file", sectionId: "planner-field-icao-other-info" },
     providerState: { tab: "file", sectionId: "planner-current-plan-actions" },
   };
   const jumpToPlannerSection = (sectionId: string, tab?: FlightPlannerTab, focusId?: string) => {
@@ -7890,7 +7891,7 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
 
-      <Card className={cn(plannerPanelClass, "order-1")}>
+      <Card className={plannerPanelClass}>
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Route Setup</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>Enter airports, pick your aircraft, and add waypoints or stops before you plot the trip.</CardDescription>
@@ -9111,7 +9112,7 @@ export default function FlightPlanner() {
       </Card>
       </PressDemoSpotlight>
 
-      <Card className={cn(plannerPanelClass, "order-1")}>
+      <Card className={plannerPanelClass}>
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Airport Communications Briefing</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>
@@ -10038,7 +10039,7 @@ export default function FlightPlanner() {
                     </Alert>
                   )}
                 </div>
-                <div className="space-y-2 md:col-span-2">
+                <div id="planner-field-icao-other-info" className="space-y-2 md:col-span-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <Label>Other ICAO Information</Label>
                     <Button
@@ -10454,7 +10455,7 @@ export default function FlightPlanner() {
                 <Button type="button" size="sm" variant="outline" onClick={() => jumpToPlannerSection("planner-field-equipment", "file")}>
                   Edit Equipment
                 </Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => jumpToPlannerSection("planner-field-equipment", "file")}>
+                <Button type="button" size="sm" variant="outline" onClick={() => jumpToPlannerSection("planner-field-icao-other-info", "file")}>
                   Edit PBN
                 </Button>
               </div>
@@ -10852,7 +10853,7 @@ export default function FlightPlanner() {
       </Card>
       </PressDemoSpotlight>
 
-      <Card className={cn(plannerPanelClass, "order-2")}>
+      <Card className={plannerPanelClass}>
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Draft Details</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>
@@ -11382,7 +11383,7 @@ export default function FlightPlanner() {
           )}
         </CardContent>
       </Card>
-      <Card className={cn(plannerPanelClass, "order-1")}>
+      <Card className={plannerPanelClass}>
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Post-Flight</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>After the flight, send the completed route to your logbook workflow.</CardDescription>

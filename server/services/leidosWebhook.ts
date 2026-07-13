@@ -314,6 +314,15 @@ export const extractLeidosWebhookFields = (payload: unknown) => {
     findNestedString(record, ["messageDateTime", "notificationTimestamp", "timestamp", "dateTime"]);
   const changeType = findNestedString(searchRoot, ["changeType", "change"]);
   const alertType = findNestedString(searchRoot, ["alertType", "alert"]);
+  const codedMessage = findNestedString(searchRoot, [
+    "codedMessage",
+    "messageCode",
+    "alertCode",
+    "eventCode",
+    "notificationCode",
+    "flightEventCode",
+    "flightAlertCode",
+  ]);
   const extractedMessage =
     findNestedString(alert, ["alertMessage", "message", "description", "detail"]) ||
     findNestedString(record, ["alertMessage", "message", "description", "detail"]) ||
@@ -323,7 +332,7 @@ export const extractLeidosWebhookFields = (payload: unknown) => {
     normalizeLeidosWebhookLifecycle(directFlightState) ||
     normalizeLeidosWebhookLifecycle(changeType) ||
     normalizeLeidosWebhookLifecycle(alertType) ||
-    normalizeLeidosWebhookLifecycle(extractedMessage);
+    normalizeLeidosWebhookLifecycle(codedMessage);
   const flightState = directFlightState || (lifecycleFromCodedNotification ? lifecycleFromCodedNotification.toUpperCase() : null);
   const normalizedLifecycle = normalizeLeidosWebhookLifecycle(flightState);
   const hasMeaningfulProviderChange = Boolean(

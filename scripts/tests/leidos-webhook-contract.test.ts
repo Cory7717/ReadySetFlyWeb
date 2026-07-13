@@ -112,13 +112,37 @@ test("coded flightAlert message extracts IFR closure evidence without raw messag
     flightAlert: {
       flightIdentifier: "658167349_806440_3217",
       flightVersionStamp: "20260713174500000",
-      alertMessage: "IFR flight plan closed by Flight Service.",
+      providerNotice: {
+        codedMessage: "IFR_AUTO_CLOSED",
+      },
     },
   });
 
   assert.equal(parsed.flightIdentifier, "658167349_806440_3217");
   assert.equal(parsed.flightState, "CLOSED");
   assert.equal(parsed.normalizedLifecycle, "closed");
+  assert.equal(parsed.hasMeaningfulProviderChange, true);
+});
+
+test("generic prose does not create authoritative webhook lifecycle evidence", () => {
+  const parsed = extractLeidosWebhookFields({
+    notificationType: "FLIGHT_ALERT",
+    flightAlert: {
+      flightIdentifier: "658167349_806440_3217",
+      flightVersionStamp: "20260713174500000",
+      alertMessage: "The word activated appears in generic notification prose.",
+      description: "This unrelated text says closed but is not a lifecycle field.",
+      message: "Do not treat this prose as activated or closed.",
+      remarks: "Pilot-entered remark: activated closed.",
+      routeText: "DCT CLOSED DCT ACTIVATED DCT",
+      pilotNote: "Pilot text says closed.",
+    },
+  });
+
+  assert.equal(parsed.flightIdentifier, "658167349_806440_3217");
+  assert.equal(parsed.flightState, null);
+  assert.equal(parsed.normalizedLifecycle, null);
+  assert.equal(parsed.expectedRoute, "DCT CLOSED DCT ACTIVATED DCT");
   assert.equal(parsed.hasMeaningfulProviderChange, true);
 });
 

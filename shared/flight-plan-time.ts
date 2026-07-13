@@ -1,7 +1,6 @@
 import { resolveDepartureAirportTimezone } from "./airport-timezones";
 
 type PlannerStateLike = {
-  departureTimeZone?: unknown;
   planningReferenceDepartureAirport?: unknown;
 };
 
@@ -55,17 +54,14 @@ export const formatZulu = (value: Date | string | null | undefined) => {
 
 export const resolvePlanDepartureTimezone = (plan: FlightPlanTimeLike) => {
   const plannerState = asRecord(plan.plannerState) as PlannerStateLike;
-  const departureTimeZone = asString(plannerState.departureTimeZone);
   const planningReferenceDepartureAirport = asString(plannerState.planningReferenceDepartureAirport)?.toUpperCase() || null;
   return resolveDepartureAirportTimezone({
     departureAirport: {
       icao: plan.departure || null,
-      timezone: departureTimeZone,
     },
     planningReferenceDepartureAirport: planningReferenceDepartureAirport
       ? { icao: planningReferenceDepartureAirport }
       : null,
-    explicitDepartureTimezone: departureTimeZone,
   });
 };
 

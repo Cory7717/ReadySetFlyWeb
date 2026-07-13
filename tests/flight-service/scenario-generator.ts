@@ -1,5 +1,6 @@
 import type { FlightPlan } from "../../shared/schema";
 import type { FlightServiceScenario, ProviderRetrieveMode } from "./scenario-runner";
+import { resolveDepartureAirportTimezone } from "../../shared/airport-timezones";
 
 export interface ScenarioGeneratorOptions {
   seed?: number;
@@ -33,6 +34,17 @@ const makeRng = (seed: number) => {
 };
 
 const pick = <T>(rng: () => number, values: T[]) => values[Math.floor(rng() * values.length)];
+
+const departureTimezoneForScenario = (departure: string, planningReferenceDepartureAirport?: string | null) => {
+  const resolution = resolveDepartureAirportTimezone({
+    departureAirport: { icao: departure },
+    planningReferenceDepartureAirport: planningReferenceDepartureAirport
+      ? { icao: planningReferenceDepartureAirport }
+      : null,
+  });
+  if (!resolution.timezone) throw new Error(`Generated scenario has unresolved departure timezone for ${departure}`);
+  return resolution.timezone;
+};
 
 const expectedMismatchFieldsForMode = (mode: ProviderRetrieveMode | undefined) => {
   switch (mode) {
@@ -370,6 +382,12 @@ export const generateRandomScenarios = ({ seed = 20260701, count = 50 }: Scenari
     const missingFuel = rng() < 0.12;
     const providerRetrieveMode = pick(rng, RETRIEVE_MODES);
     const zzzzPlannerState = useZzzz ? zzzzState(zzzzKind, zzzzMode) : {};
+    const scenarioDepartureTimeZone = departureTimezoneForScenario(
+      departure,
+      typeof zzzzPlannerState.planningReferenceDepartureAirport === "string"
+        ? zzzzPlannerState.planningReferenceDepartureAirport
+        : null,
+    );
     const zzzzNames = useZzzz ? {
       filingDepartureName: zzzzKind === "departure" ? "Private Strip" : undefined,
       filingDestinationName: zzzzKind === "destination" ? "Private Strip" : undefined,
@@ -393,7 +411,7 @@ export const generateRandomScenarios = ({ seed = 20260701, count = 50 }: Scenari
         filingOtherInfo: otherInfo,
         filingRemarks: rng() < 0.5 ? "CERTIFICATION TEST" : "SUPPLEMENTAL TEST",
         plannerState: {
-          departureTimeZone: "America/Chicago",
+          departureTimeZone: scenarioDepartureTimeZone,
           userDisplayDepartureTimeLocal: "2026-07-02T10:00",
           ...zzzzPlannerState,
         },

@@ -10,6 +10,7 @@ import type { FlightPlan, FlightPlanFilingAction } from "../../../shared/schema"
 import { flightPlans } from "../../../shared/schema";
 import { db } from "../../../server/db";
 import { storage } from "../../../server/storage";
+import { resolveDepartureAirportTimezone } from "../../../shared/airport-timezones";
 import {
   buildLeidosActionPayload,
   flightPlanFilingProvider,
@@ -123,8 +124,20 @@ const getPlannerStateRecord = (plan: FlightPlan) =>
     ? plan.plannerState as Record<string, any>
     : {};
 
-const getDepartureTimeZone = (plan: FlightPlan) =>
-  String(getPlannerStateRecord(plan).departureTimeZone || "America/Chicago").trim() || "America/Chicago";
+const getDepartureTimeZone = (plan: FlightPlan) => {
+  const plannerState = getPlannerStateRecord(plan);
+  const planningReferenceDepartureAirport = String(plannerState.planningReferenceDepartureAirport || "").trim().toUpperCase();
+  const resolution = resolveDepartureAirportTimezone({
+    departureAirport: { icao: plan.departure || null },
+    planningReferenceDepartureAirport: planningReferenceDepartureAirport
+      ? { icao: planningReferenceDepartureAirport }
+      : null,
+  });
+  if (!resolution.timezone) {
+    throw new Error(`Unable to resolve departure timezone for ${plan.departure || "unknown departure"}${planningReferenceDepartureAirport ? ` using planning reference ${planningReferenceDepartureAirport}` : ""}.`);
+  }
+  return resolution.timezone;
+};
 
 const lifecycleUsesActivationWindow = (testCase: LiveLabCase) =>
   testCase.actions.includes("activate") || testCase.actions.includes("close");

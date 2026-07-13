@@ -807,16 +807,7 @@ const getPlannerStateRecord = (plan: FlightPlan) => {
     : null;
 };
 
-const getPlannerTimeZoneFromState = (plan: FlightPlan) => {
-  const plannerState = getPlannerStateRecord(plan);
-  const departureTimeZone =
-    plannerState && typeof plannerState.departureTimeZone === "string"
-      ? plannerState.departureTimeZone.trim()
-      : "";
-  return departureTimeZone || "";
-};
-
-const getPlannerTimeZone = (plan: FlightPlan) => {
+const getDepartureTimezoneResolutionForPlan = (plan: FlightPlan) => {
   const plannerState = getPlannerStateRecord(plan);
   const planningReferenceDepartureAirport =
     plannerState && typeof plannerState.planningReferenceDepartureAirport === "string"
@@ -825,14 +816,14 @@ const getPlannerTimeZone = (plan: FlightPlan) => {
   return resolveDepartureAirportTimezone({
     departureAirport: {
       icao: plan.departure || null,
-      timezone: getPlannerTimeZoneFromState(plan),
     },
     planningReferenceDepartureAirport: planningReferenceDepartureAirport
       ? { icao: planningReferenceDepartureAirport }
       : null,
-    explicitDepartureTimezone: getPlannerTimeZoneFromState(plan),
-  }).timezone || "";
+  });
 };
+
+const getPlannerTimeZone = (plan: FlightPlan) => getDepartureTimezoneResolutionForPlan(plan).timezone || "";
 
 const getSelectedDepartureLocalDateTime = (plan: FlightPlan) => {
   const plannerState = getPlannerStateRecord(plan);
@@ -875,7 +866,7 @@ export const getProviderDepartureInstantForPlan = (plan: FlightPlan) => {
   if (selectedLocalDepartureTime && isValidIanaTimeZone(departureTimeZone)) {
     return zonedLocalDateTimeToUtcIso(selectedLocalDepartureTime, departureTimeZone);
   }
-  return formatDepartureInstant(plan.plannedDepartureAt);
+  return null;
 };
 
 const normalizeDuplicateFlightValue = (value: unknown) =>
@@ -2520,7 +2511,7 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     if (String(plan.departure || "").trim().toUpperCase() === "ZZZZ" && !getPlannerStateString(plan, "planningReferenceDepartureAirport")) {
       errors.push("Departure timezone is required when using ZZZZ without a planning reference airport.");
     } else {
-      errors.push("Departure airport timezone could not be determined. Please select the departure timezone before filing.");
+      errors.push("Departure airport timezone could not be determined from airport metadata. Confirm the departure airport or select a planning-reference airport for ZZZZ before filing.");
     }
   }
 

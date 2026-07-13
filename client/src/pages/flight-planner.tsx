@@ -2346,6 +2346,8 @@ export default function FlightPlanner() {
   const [checklist, setChecklist] = useState(checklistDefaults);
   const [departureSuggestions, setDepartureSuggestions] = useState<AirportSearchResult[]>([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState<AirportSearchResult[]>([]);
+  const [departureSearchActive, setDepartureSearchActive] = useState(false);
+  const [destinationSearchActive, setDestinationSearchActive] = useState(false);
   const [departureResolved, setDepartureResolved] = useState("");
   const [destinationResolved, setDestinationResolved] = useState("");
   const departureLookupRef = useRef<{ value: string; ok: boolean } | null>(null);
@@ -2362,6 +2364,21 @@ export default function FlightPlanner() {
   useEffect(() => {
     editingPlanRef.current = editingPlan;
   }, [editingPlan]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    const scrollToTop = () => window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    scrollToTop();
+    const animationFrame = window.requestAnimationFrame(scrollToTop);
+    const timeout = window.setTimeout(scrollToTop, 50);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.clearTimeout(timeout);
+      window.history.scrollRestoration = previousScrollRestoration;
+    };
+  }, [plannerLocation]);
 
   useEffect(() => {
     draftPlanIdRef.current = draftPlanId;
@@ -2551,6 +2568,7 @@ export default function FlightPlanner() {
     const value = form.departure.trim();
     if (!value || value.length < 2) {
       setDepartureSuggestions([]);
+      setDepartureSearchActive(false);
       return;
     }
     const timer = setTimeout(async () => {
@@ -2637,6 +2655,7 @@ export default function FlightPlanner() {
     const value = form.destination.trim();
     if (!value || value.length < 2) {
       setDestinationSuggestions([]);
+      setDestinationSearchActive(false);
       return;
     }
     const timer = setTimeout(async () => {
@@ -7920,20 +7939,33 @@ export default function FlightPlanner() {
               <Input
               id="planner-field-departure"
               value={form.departure}
-              onChange={(e) => setForm({ ...form, departure: e.target.value.toUpperCase() })}
+              onFocus={() => {
+                if (form.departure.trim().toUpperCase() !== departureSelectedRef.current) {
+                  setDepartureSearchActive(true);
+                }
+              }}
+              onBlur={() => window.setTimeout(() => setDepartureSearchActive(false), 150)}
+              onChange={(e) => {
+                const value = e.target.value.toUpperCase();
+                departureSelectedRef.current = null;
+                setDepartureSearchActive(true);
+                setForm((current) => ({ ...current, departure: value }));
+              }}
               placeholder="KJFK or Austin, TX"
             />
-            {departureSuggestions.length > 0 && (
+            {departureSearchActive && departureSuggestions.length > 0 && (
               <div className="max-h-40 space-y-1 overflow-y-auto rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] p-2 text-sm">
                 {departureSuggestions.map((airport) => (
                   <button
                     key={`${airport.icao}-${airport.name ?? ""}`}
                     type="button"
                     className="w-full rounded-[0.8rem] px-2 py-1 text-left transition-colors hover:bg-[#1a2430]"
+                    onMouseDown={(event) => event.preventDefault()}
                     onClick={() => {
                       departureSelectedRef.current = airport.icao.toUpperCase();
-                      setForm({ ...form, departure: airport.icao.toUpperCase() });
+                      setForm((current) => ({ ...current, departure: airport.icao.toUpperCase() }));
                       setDepartureResolved(airport.icao.toUpperCase());
+                      setDepartureSearchActive(false);
                       setDepartureSuggestions([]);
                     }}
                   >
@@ -7950,20 +7982,33 @@ export default function FlightPlanner() {
               <Input
               id="planner-field-destination"
               value={form.destination}
-              onChange={(e) => setForm({ ...form, destination: e.target.value.toUpperCase() })}
+              onFocus={() => {
+                if (form.destination.trim().toUpperCase() !== destinationSelectedRef.current) {
+                  setDestinationSearchActive(true);
+                }
+              }}
+              onBlur={() => window.setTimeout(() => setDestinationSearchActive(false), 150)}
+              onChange={(e) => {
+                const value = e.target.value.toUpperCase();
+                destinationSelectedRef.current = null;
+                setDestinationSearchActive(true);
+                setForm((current) => ({ ...current, destination: value }));
+              }}
               placeholder="KBOS or Dallas, TX"
             />
-            {destinationSuggestions.length > 0 && (
+            {destinationSearchActive && destinationSuggestions.length > 0 && (
               <div className="max-h-40 space-y-1 overflow-y-auto rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] p-2 text-sm">
                 {destinationSuggestions.map((airport) => (
                   <button
                     key={`${airport.icao}-${airport.name ?? ""}`}
                     type="button"
                     className="w-full rounded-[0.8rem] px-2 py-1 text-left transition-colors hover:bg-[#1a2430]"
+                    onMouseDown={(event) => event.preventDefault()}
                     onClick={() => {
                       destinationSelectedRef.current = airport.icao.toUpperCase();
-                      setForm({ ...form, destination: airport.icao.toUpperCase() });
+                      setForm((current) => ({ ...current, destination: airport.icao.toUpperCase() }));
                       setDestinationResolved(airport.icao.toUpperCase());
+                      setDestinationSearchActive(false);
                       setDestinationSuggestions([]);
                     }}
                   >

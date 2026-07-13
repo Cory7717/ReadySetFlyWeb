@@ -234,6 +234,27 @@ test("flight planner preserves Flight Service lifecycle action buttons", () => {
   assert.match(source, /setProviderUpdatesPlan\(plan\)/);
 });
 
+test("flight planner keeps hydrated airport suggestions closed until the user edits", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /const \[departureSearchActive, setDepartureSearchActive\] = useState\(false\)/);
+  assert.match(source, /const \[destinationSearchActive, setDestinationSearchActive\] = useState\(false\)/);
+  assert.match(source, /departureSearchActive && departureSuggestions\.length > 0/);
+  assert.match(source, /destinationSearchActive && destinationSuggestions\.length > 0/);
+  assert.match(source, /setDepartureSearchActive\(true\);\s*setForm\(\(current\) => \(\{ \.\.\.current, departure: value \}\)\)/);
+  assert.match(source, /setDestinationSearchActive\(true\);\s*setForm\(\(current\) => \(\{ \.\.\.current, destination: value \}\)\)/);
+  assert.match(source, /setDepartureSearchActive\(false\);\s*setDepartureSuggestions\(\[\]\)/);
+  assert.match(source, /setDestinationSearchActive\(false\);\s*setDestinationSuggestions\(\[\]\)/);
+  assert.match(source, /onMouseDown=\{\(event\) => event\.preventDefault\(\)\}/);
+});
+
+test("flight planner resets restored scroll position on page entry", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /previousScrollRestoration = window\.history\.scrollRestoration/);
+  assert.match(source, /window\.history\.scrollRestoration = "manual"/);
+  assert.match(source, /window\.scrollTo\(\{ top: 0, left: 0, behavior: "auto" \}\)/);
+  assert.match(source, /window\.history\.scrollRestoration = previousScrollRestoration/);
+});
+
 test("rendered lifecycle actions show saved unfiled plan filing controls", () => {
   const html = renderLifecycleActions(lifecyclePlan({
     filingStatus: "draft",

@@ -68,6 +68,7 @@ import {
   buildFlightServiceOpsSearchResult,
   buildFlightServiceSarReport,
   classifyFlightServiceOperationalState,
+  FLIGHT_SERVICE_OPS_RETENTION_NOTICE,
   logFlightServiceOpsAuditEvent,
 } from "./services/flightServiceOpsConsole";
 import { resolveTfmsProviderKey, type TfmsOverlay, type TfmsStatus } from "./services/tfms/provider";
@@ -22980,7 +22981,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       res.json({
         results,
         totalReturned: results.length,
-        retentionNotice: "TODO: Confirm Flight Service operational support retention period with business/legal before changing retained data.",
+        retentionNotice: FLIGHT_SERVICE_OPS_RETENTION_NOTICE,
       });
     } catch (error) {
       console.error("Failed to search Flight Service operations records:", error);
@@ -23529,40 +23530,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           raw: safeWebhookPayloadSummary,
         };
 
-        // STEP 3 — Create in-app notification.
         let providerPushNotification: any = null;
-        /* providerPushNotification = await storage.createUserNotification({
-          userId: matchedPlan.userId,
-          type: inAppType,
-          title: notificationTitle,
-          message: providerMessageDetails,
-          meta: {
-            flightPlanId: matchedPlan.id,
-            providerPlanId: flightIdentifier,
-            payloadSummary: safeWebhookPayloadSummary,
-          },
-        });
-
-        // STEP 4 — Deliver Expo push notification.
-        const tokens = await storage.getPushTokensByUser(matchedPlan.userId);
-        if (tokens.length > 0) {
-          await fetch("https://exp.host/--/api/v2/push/send", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(
-              tokens.map((token) => ({
-                to: token.token,
-                title: pushTitle,
-                body: providerMessageDetails.slice(0, 100),
-                data: {
-                  flightPlanId: matchedPlan.id,
-                  type: inAppType,
-                },
-              }))
-            ),
-          });
-        }
-        */
 
         const providerReviewSnapshot = {
           versionStamp: flightVersionStamp || null,

@@ -34,6 +34,11 @@ const valueOrNull = (value: unknown) => {
 
 export const formatFlightServiceOpsDisplayValue = (value: unknown) => valueOrNull(value) || "Not available";
 
+export const FLIGHT_SERVICE_OPS_RETENTION_NOTICE =
+  "Flight Service operational support reports are restricted to authorized RSF administrators and should be retained only as long as needed for provider support, SAR coordination, audit, or legal obligations.";
+
+export const FLIGHT_SERVICE_OPS_SUPPORT_CONTACT = process.env.FLIGHT_SERVICE_OPS_SUPPORT_CONTACT || process.env.SUPPORT_EMAIL || "support@readysetfly.us";
+
 const statusOf = (plan: FlightPlan) => String(plan.filingStatus || "draft").trim().toLowerCase();
 
 const latestVersionStamp = (plan: FlightPlan) => {
@@ -75,6 +80,47 @@ const latestKnownArtccState = (plan: FlightPlan) => {
 const providerRetrievalState = (plan: FlightPlan) => {
   const snapshot = asRecord(plan.filingProviderSnapshot);
   return valueOrNull(snapshot.providerRetrievalState) || "not_attempted";
+};
+
+const plannerStateOf = (plan: FlightPlan) => asRecord(plan.plannerState);
+
+const displayLocalTime = (
+  utcValue: Date | string | null | undefined,
+  userEnteredLocal: unknown,
+  timeZone: unknown,
+) => {
+  const entered = valueOrNull(userEnteredLocal);
+  const zone = valueOrNull(timeZone);
+  if (entered && zone) return `${entered} ${zone}`;
+  if (!utcValue || !zone) return entered || iso(utcValue);
+  const parsed = utcValue instanceof Date ? utcValue : new Date(utcValue);
+  if (Number.isNaN(parsed.getTime())) return entered || null;
+  try {
+    const formatted = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZoneName: "short",
+    }).format(parsed);
+    return `${formatted} (${zone})`;
+  } catch {
+    return entered ? `${entered} ${zone}` : iso(utcValue);
+  }
+};
+
+const emergencyContactSummary = (plan: FlightPlan) => {
+  const plannerState = plannerStateOf(plan);
+  const candidates = [
+    plannerState.emergencyContact,
+    plannerState.secondaryEmergencyContact,
+    plannerState.emergencyContactName,
+    plannerState.emergencyContactPhone,
+  ].map(valueOrNull).filter(Boolean);
+  return candidates.length > 0 ? candidates.join(" / ") : "Not recorded separately in RSF";
 };
 
 const sanitizeOperationalHistoryEntry = (entry: Record<string, unknown>) => {
@@ -148,7 +194,11 @@ export const buildFlightServiceOpsSearchResult = (plan: FlightPlan, user?: Pick<
   departure: plan.departure,
   destination: plan.destination,
   etdZulu: iso(plan.plannedDepartureAt),
-  etdLocal: iso(plan.plannedDepartureAt),
+  etdLocal: displayLocalTime(
+    plan.plannedDepartureAt,
+    plannerStateOf(plan).userDisplayDepartureTimeLocal,
+    plannerStateOf(plan).departureTimeZone,
+  ),
   currentRsfStatus: plan.filingStatus,
   operationalState: classifyFlightServiceOperationalState(plan),
   providerPlanId: plan.filingProviderPlanId || null,
@@ -169,6 +219,7 @@ export const buildFlightServiceOpsDetail = (plan: FlightPlan, user?: Pick<User, 
   const snapshot = asRecord(plan.filingProviderSnapshot);
   const routeSnapshot = asRecord(snapshot.route);
   const pbnMatch = String(plan.filingOtherInfo || "").match(/(?:^|\s)PBN\/([^\s]+)/);
+  const plannerState = plannerStateOf(plan);
 
   const timeline = [
     timelineEvent(iso(plan.createdAt), "created", "Planner created"),
@@ -191,7 +242,7 @@ export const buildFlightServiceOpsDetail = (plan: FlightPlan, user?: Pick<User, 
   return {
     planId: plan.id,
     generatedAt: new Date().toISOString(),
-    retentionNotice: "TODO: Confirm Flight Service operational support retention period with business/legal before changing retained data.",
+    retentionNotice: FLIGHT_SERVICE_OPS_RETENTION_NOTICE,
     status: {
       currentRsfStatus: plan.filingStatus,
       currentProviderStatus: latestProviderStatus(plan),
@@ -232,13 +283,15 @@ export const buildFlightServiceOpsDetail = (plan: FlightPlan, user?: Pick<User, 
       pilotPhone: plan.filingPilotPhone || user?.phone || null,
       aircraftHomeBase: plan.filingAircraftHomeBase || user?.homeBase || null,
       etdZulu: iso(plan.plannedDepartureAt),
+      etdLocal: displayLocalTime(plan.plannedDepartureAt, plannerState.userDisplayDepartureTimeLocal, plannerState.departureTimeZone),
       etaZulu: iso(plan.plannedArrivalAt),
+      etaLocal: displayLocalTime(plan.plannedArrivalAt, plannerState.userDisplayArrivalTimeLocal, plannerState.destinationTimeZone),
     },
     pilot: {
       name: plan.filingPilotName || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || null,
       phone: plan.filingPilotPhone || user?.phone || null,
       email: user?.email || null,
-      secondaryEmergencyContact: null,
+      secondaryEmergencyContact: emergencyContactSummary(plan),
     },
     timeline,
     amendmentHistory: history.map(sanitizeOperationalHistoryEntry),
@@ -265,7 +318,7 @@ export const buildFlightServiceSarReport = (plan: FlightPlan, user?: Pick<User, 
   const detail = buildFlightServiceOpsDetail(plan, user);
   return {
     generatedAt: new Date().toISOString(),
-    supportContact: "RSF support contact placeholder",
+    supportContact: FLIGHT_SERVICE_OPS_SUPPORT_CONTACT,
     note: "Generated from RSF records for operational support. Verify against Leidos/provider records before relying on this report.",
     plan: detail,
   };

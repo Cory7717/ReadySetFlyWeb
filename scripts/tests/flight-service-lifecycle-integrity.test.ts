@@ -1,12 +1,19 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
+import {
+  buildFlightServiceOpsDetail,
+  buildFlightServiceOpsSearchResult,
+  buildFlightServiceSarReport,
+  FLIGHT_SERVICE_OPS_RETENTION_NOTICE,
+} from "../../server/services/flightServiceOpsConsole";
 
 const routes = readFileSync("server/routes.ts", "utf8");
 const schema = readFileSync("shared/schema.ts", "utf8");
 const provider = readFileSync("server/services/flight-plan-filing/provider.ts", "utf8");
 const migration = readFileSync("migrations/0114_add_flight_service_provider_action_attempts.sql", "utf8");
 const packageJson = readFileSync("package.json", "utf8");
+const opsConsole = readFileSync("server/services/flightServiceOpsConsole.ts", "utf8");
 
 test("public flight-plan mutations reject provider-owned lifecycle fields", () => {
   for (const field of [
@@ -66,6 +73,7 @@ test("webhook lifecycle persistence happens before notification and push side ef
   assert.ok(notificationIndex > persistenceIndex, "notification should be created after persistence");
   assert.ok(expoIndex > notificationIndex, "Expo push should happen after notification creation");
   assert.match(webhookRoute, /leidos_push_expo_delivery_failed/);
+  assert.doesNotMatch(webhookRoute, /\/\*\s*providerPushNotification = await storage\.createUserNotification/);
 });
 
 test("webhook ordering guard prevents terminal regression and lower version overwrite", () => {
@@ -95,4 +103,59 @@ test("non-writing flight-service release gate includes adjacent omitted tests", 
     assert.match(packageJson, new RegExp(filename.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.doesNotMatch(packageJson.match(/"test:flight-service:release":\s*"([^"]+)"/)?.[1] || "", /certification:flight-service|certification:leidos-live-lab/);
+});
+
+test("Ops and SAR reports use explicit support, retention, and local time fields", () => {
+  const plan = {
+    id: "plan-1",
+    userId: "user-1",
+    title: "Test",
+    departure: "KBOS",
+    destination: "KSEA",
+    route: "ALB DCT BOI",
+    plannedDepartureAt: new Date("2026-07-13T15:00:00.000Z"),
+    plannedArrivalAt: new Date("2026-07-13T21:00:00.000Z"),
+    tailNumber: "N12345",
+    filingProvider: "leidos_flight_service",
+    filingProviderPlanId: "provider-1",
+    filingStatus: "filed",
+    filingActionHistory: [],
+    filingProviderMessages: [],
+    filingProviderSnapshot: {},
+    plannerState: {
+      userDisplayDepartureTimeLocal: "2026-07-13T11:00",
+      departureTimeZone: "America/New_York",
+      userDisplayArrivalTimeLocal: "2026-07-13T14:00",
+      destinationTimeZone: "America/Los_Angeles",
+      emergencyContactName: "Dispatch",
+      emergencyContactPhone: "555-0100",
+    },
+    createdAt: new Date("2026-07-13T14:00:00.000Z"),
+    updatedAt: new Date("2026-07-13T14:05:00.000Z"),
+  } as any;
+
+  const searchResult = buildFlightServiceOpsSearchResult(plan, { email: "pilot@example.com" });
+  assert.equal(searchResult.etdZulu, "2026-07-13T15:00:00.000Z");
+  assert.equal(searchResult.etdLocal, "2026-07-13T11:00 America/New_York");
+
+  const detail = buildFlightServiceOpsDetail(plan, { email: "pilot@example.com" } as any);
+  assert.equal(detail.retentionNotice, FLIGHT_SERVICE_OPS_RETENTION_NOTICE);
+  assert.equal(detail.summary.etdLocal, "2026-07-13T11:00 America/New_York");
+  assert.equal(detail.summary.etaLocal, "2026-07-13T14:00 America/Los_Angeles");
+  assert.equal(detail.pilot.secondaryEmergencyContact, "Dispatch / 555-0100");
+
+  const sar = buildFlightServiceSarReport(plan, { email: "pilot@example.com" } as any);
+  assert.notEqual(sar.supportContact, "RSF support contact placeholder");
+  assert.equal(sar.plan.retentionNotice, FLIGHT_SERVICE_OPS_RETENTION_NOTICE);
+});
+
+test("WSDL drift checker is available but not part of the non-live release gate", () => {
+  const wsdlScript = readFileSync("scripts/check-leidos-wsdl.mjs", "utf8");
+  assert.match(packageJson, /"flight-service:wsdl-check":\s*"node scripts\/check-leidos-wsdl\.mjs"/);
+  assert.match(wsdlScript, /ffspelabs\.leidos\.com\/Website2\/resources\/doc\/WebService\.xml/);
+  assert.match(wsdlScript, /www\.1800wxbrief\.com\/Website\/resources\/doc\/WebService\.xml/);
+  assert.match(wsdlScript, /LEIDOS_WSDL_EXPECTED_SHA256/);
+  assert.match(wsdlScript, /crossEnvironmentDrift/);
+  assert.doesNotMatch(packageJson.match(/"test:flight-service:release":\s*"([^"]+)"/)?.[1] || "", /wsdl-check/);
+  assert.doesNotMatch(opsConsole, /TODO: Confirm Flight Service operational support retention period|RSF support contact placeholder/);
 });

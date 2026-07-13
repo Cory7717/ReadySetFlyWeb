@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FilingProviderUpdatesList, FilingProviderWorkspace } from "../../client/src/components/flight-planner/FilingProviderWorkspace";
@@ -98,4 +100,48 @@ test("provider updates list renders event entries", () => {
   assert.ok(html.includes("Provider route changed"));
   assert.ok(html.includes("Leidos returned an expectedRoute with TCC inserted."));
   assert.ok(html.includes("Provider reference: ABC123"));
+});
+
+test("flight planner review workflow exposes one clear filing surface", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /Review &amp; File/);
+  assert.match(source, /Review &amp; Submit/);
+  assert.match(source, /guestFileMutation\.mutate\(\)/);
+  assert.match(source, /Submit Test Flight Plan -/);
+  assert.match(source, /Save & Submit Test Flight Plan/);
+  assert.match(source, /Save Changes & Amend Test Flight Plan/);
+  assert.doesNotMatch(source, /File & Save/);
+  assert.doesNotMatch(source, /Save local changes/);
+  assert.doesNotMatch(source, /Save and continue to filing/);
+  assert.doesNotMatch(source, /Return to Filing/);
+  assert.doesNotMatch(source, /Required Filing Information/);
+  assert.doesNotMatch(source, /Resolve before File or Amend/);
+});
+
+test("flight planner readiness edit actions target stable planner fields", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  for (const id of [
+    "planner-field-departure",
+    "planner-field-destination",
+    "planner-field-route",
+    "planner-field-equipment",
+    "planner-field-surveillance",
+    "planner-field-fuel-endurance",
+    "planner-filing-details",
+    "planner-current-plan-actions",
+  ]) {
+    assert.ok(source.includes(id), `expected ${id} target`);
+  }
+  assert.match(source, /jumpToReadinessIssue\(issue\)/);
+});
+
+test("planner map overlays are constrained for narrow screens", () => {
+  const leafletSource = readFileSync(resolve("client/src/components/flight-planner/PlannerMap.tsx"), "utf8");
+  const mapLibreSource = readFileSync(resolve("client/src/components/flight-planner/MapLibrePlannerMap.tsx"), "utf8");
+  const cesiumSource = readFileSync(resolve("client/src/components/flight-planner/CesiumGlobe.tsx"), "utf8");
+  assert.match(leafletSource, /max-w-\[calc\(100%-9rem\)\]/);
+  assert.match(leafletSource, /truncate/);
+  assert.match(mapLibreSource, /max-w-\[calc\(100%-9rem\)\]/);
+  assert.match(mapLibreSource, /truncate/);
+  assert.match(cesiumSource, /max-w-\[calc\(100%-11rem\)\]/);
 });

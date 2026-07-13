@@ -1071,11 +1071,11 @@ export default function CesiumGlobe({
     <div className={heightClassName}>
       <div className="relative h-full w-full overflow-hidden rounded-[1.2rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))]">
         {tokenWarning && (
-          <div className="absolute left-3 top-3 z-[1100] rounded-[0.9rem] border border-[#5d6f85]/30 bg-[linear-gradient(180deg,rgba(22,28,36,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-xs text-[#D7E3F2] shadow-[0_16px_28px_-24px_rgba(0,0,0,0.88)]">
+          <div className="absolute left-3 top-3 z-[1100] max-w-[calc(100%-11rem)] rounded-[0.9rem] border border-[#5d6f85]/30 bg-[linear-gradient(180deg,rgba(22,28,36,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-xs text-[#D7E3F2] shadow-[0_16px_28px_-24px_rgba(0,0,0,0.88)] sm:max-w-[55%]">
             {tokenWarning}
           </div>
         )}
-        <div className="absolute right-3 top-3 z-[1100] space-y-2 rounded-[0.9rem] border border-[#5d6f85]/30 bg-[linear-gradient(180deg,rgba(22,28,36,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-xs text-[#D7E3F2] shadow-[0_16px_28px_-24px_rgba(0,0,0,0.88)]">
+        <div className="absolute right-3 top-3 z-[1100] max-w-[9.5rem] space-y-2 rounded-[0.9rem] border border-[#5d6f85]/30 bg-[linear-gradient(180deg,rgba(22,28,36,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-xs text-[#D7E3F2] shadow-[0_16px_28px_-24px_rgba(0,0,0,0.88)]">
           <div className="font-semibold text-[#F5F8FC]">Globe overlays</div>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={showClouds} onChange={(e) => setShowClouds(e.target.checked)} />

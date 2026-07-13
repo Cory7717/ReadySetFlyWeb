@@ -1721,7 +1721,7 @@ function ScratchField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           rows={tall ? 4 : 2}
-          className="w-full rounded-[0.95rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-sm font-mono text-[#F5F8FC] placeholder:text-[#6d829c] focus:border-[#6ea2ff]/55 focus:outline-none focus:ring-2 focus:ring-[#6ea2ff]/20 resize-none"
+          className="w-full rounded-[0.95rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-sm font-mono text-[#F5F8FC] placeholder:text-[#A9BBCD] focus:border-[#6ea2ff]/55 focus:outline-none focus:ring-2 focus:ring-[#6ea2ff]/20 resize-none"
           spellCheck={false}
         />
       ) : (
@@ -1733,7 +1733,7 @@ function ScratchField({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-[0.95rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-sm font-mono text-[#F5F8FC] placeholder:text-[#6d829c] focus:border-[#6ea2ff]/55 focus:outline-none focus:ring-2 focus:ring-[#6ea2ff]/20"
+          className="w-full rounded-[0.95rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-sm font-mono text-[#F5F8FC] placeholder:text-[#A9BBCD] focus:border-[#6ea2ff]/55 focus:outline-none focus:ring-2 focus:ring-[#6ea2ff]/20"
           spellCheck={false}
         />
       )}
@@ -1983,7 +1983,7 @@ export default function FlightPlanner() {
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [providerUpdatesPlan, setProviderUpdatesPlan] = useState<FlightPlan | null>(null);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
-  const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string } | null>(null);
+  const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string; focusId?: string } | null>(null);
   const [scratchPadOpen, setScratchPadOpen] = useState(false);
   const [scratchPadMode, setScratchPadMode] = useState<"ink" | "craft">("ink");
   const [scratchPad, setScratchPad] = useState<ScratchPadFields>(() => {
@@ -2061,6 +2061,12 @@ export default function FlightPlanner() {
       const element = document.getElementById(pendingSectionJump.id);
       if (element) {
         element.scrollIntoView({ behavior: "smooth", block: "start" });
+        const focusTarget = pendingSectionJump.focusId
+          ? document.getElementById(pendingSectionJump.focusId)
+          : element.matches("input, textarea, button, [tabindex]") ? element : null;
+        if (focusTarget instanceof HTMLElement) {
+          focusTarget.focus({ preventScroll: true });
+        }
         trackEvent(pendingSectionJump.eventName, { target: pendingSectionJump.id });
       }
       setPendingSectionJump(null);
@@ -6096,7 +6102,7 @@ export default function FlightPlanner() {
     setActiveTab("route");
     toast({
       title: "Filed plan loaded for amendment",
-      description: "Make your changes anywhere in the planner, then return to File & Save and click Amend to submit the updated plan to the filing provider.",
+      description: "Make your changes anywhere in the planner, then return to Review & File and submit the amendment from the primary action panel.",
     });
   };
 
@@ -6215,7 +6221,7 @@ export default function FlightPlanner() {
         setReturnToFileAfterSave(false);
         toast({
           title: "Flight plan saved",
-          description: "The saved plan is ready in File & Save for filing actions.",
+          description: "The saved plan is ready in Review & File for filing actions.",
         });
         return;
       }
@@ -7258,6 +7264,13 @@ export default function FlightPlanner() {
     onSuccess: (result) => {
       recordAnonFlightPlanFile();
       setGuestFlightPlanFiles((current) => current + 1);
+      setFilingActionFeedback({
+        tone: "success",
+        title: result.live ? "Guest test flight plan submitted" : "Guest filing staged",
+        message: result.message || "RSF processed the guest filing request.",
+        providerPlanId: result.providerPlanId ?? null,
+        beaconCode: null,
+      });
       toast({
         title: result.live ? "Guest flight plan submitted" : "Guest filing staged",
         description: result.live
@@ -7512,13 +7525,57 @@ export default function FlightPlanner() {
   const plannerSubpanelDangerClass = "rounded-[1rem] border border-[#7a3440]/38 bg-[linear-gradient(180deg,rgba(34,15,19,0.98),rgba(17,10,12,0.98))] p-3 text-[#F4CDD3] shadow-[0_18px_38px_-28px_rgba(0,0,0,0.9)]";
   const plannerSelectContentClass = "border-[#5d6f85]/30 bg-[#11161d] text-[#E8EDF4] shadow-[0_22px_44px_-30px_rgba(0,0,0,0.9)]";
   const plannerInsetActionClass = "border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4] hover:bg-[#1a2430]";
-  const jumpToPlannerSection = (sectionId: string, tab?: FlightPlannerTab) => {
+  const workflowStepCopy: Record<FlightPlannerTab, { step: number; label: string }> = {
+    route: { step: 1, label: "Route & Aircraft" },
+    weather: { step: 2, label: "Briefing" },
+    navlog: { step: 3, label: "Flight Review" },
+    analysis: { step: 3, label: "Flight Review" },
+    file: { step: 5, label: "Review & Submit" },
+  };
+  const activeWorkflowStep = workflowStepCopy[activeTab] ?? workflowStepCopy.route;
+  const readinessFieldTargets: Record<string, { tab: FlightPlannerTab; sectionId: string; focusId?: string }> = {
+    aircraftRegistration: { tab: "file", sectionId: "planner-filing-details", focusId: "planner-field-aircraft-id" },
+    aircraftType: { tab: "route", sectionId: "planner-aircraft-setup" },
+    actualAircraftType: { tab: "file", sectionId: "planner-filing-details", focusId: "planner-field-actual-aircraft-type" },
+    aircraftColor: { tab: "file", sectionId: "planner-filing-details", focusId: "planner-field-aircraft-color" },
+    equipmentCode: { tab: "file", sectionId: "planner-field-equipment" },
+    equipment: { tab: "file", sectionId: "planner-field-equipment" },
+    surveillanceCode: { tab: "file", sectionId: "planner-field-surveillance" },
+    surveillance: { tab: "file", sectionId: "planner-field-surveillance" },
+    wakeTurbulence: { tab: "file", sectionId: "planner-filing-details", focusId: "planner-field-wake-turbulence" },
+    cruisingSpeed: { tab: "route", sectionId: "planner-distance-performance", focusId: "planner-field-cruise-speed" },
+    pilotName: { tab: "file", sectionId: "planner-filing-details", focusId: "planner-field-pilot-name" },
+    pilotPhone: { tab: "file", sectionId: "planner-filing-details", focusId: "planner-field-pilot-phone" },
+    departure: { tab: "route", sectionId: "planner-route-setup", focusId: "planner-field-departure" },
+    destination: { tab: "route", sectionId: "planner-route-setup", focusId: "planner-field-destination" },
+    zzzzDetails: { tab: "file", sectionId: "planner-zzzz-details" },
+    route: { tab: "route", sectionId: "planner-field-route" },
+    departureTime: { tab: "route", sectionId: "planner-distance-performance", focusId: "planner-field-departure-time" },
+    departureTimezone: { tab: "route", sectionId: "planner-route-setup", focusId: "planner-field-departure" },
+    plannedAltitude: { tab: "route", sectionId: "planner-distance-performance", focusId: "planner-field-planned-altitude" },
+    estimatedEnrouteTime: { tab: "file", sectionId: "planner-filing-details" },
+    fuelEndurance: { tab: "file", sectionId: "planner-field-fuel-endurance" },
+    homeAirport: { tab: "file", sectionId: "planner-filing-details", focusId: "planner-field-home-base" },
+    soulsOnBoard: { tab: "file", sectionId: "planner-filing-details", focusId: "planner-field-souls-on-board" },
+    typeOfFlight: { tab: "file", sectionId: "planner-filing-details", focusId: "planner-field-type-of-flight" },
+    remarks: { tab: "file", sectionId: "planner-field-filing-remarks" },
+    providerState: { tab: "file", sectionId: "planner-current-plan-actions" },
+  };
+  const jumpToPlannerSection = (sectionId: string, tab?: FlightPlannerTab, focusId?: string) => {
     if (tab) {
       setActiveTab(tab);
     }
-    window.requestAnimationFrame(() => {
-      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    setPendingSectionJump({ id: sectionId, eventName: "planner_field_edit_jump", focusId });
+  };
+  const jumpToReadinessIssue = (issue: FilingReadinessIssue) => {
+    const target = readinessFieldTargets[issue.field] ?? readinessFieldTargets[issue.id];
+    if (target) {
+      jumpToPlannerSection(target.sectionId, target.tab, target.focusId);
+      return;
+    }
+    if (issue.actionTab) {
+      jumpToPlannerSection(issue.actionTab === "file" ? "planner-filing-details" : "planner-route-setup", issue.actionTab);
+    }
   };
 
   return (
@@ -7593,13 +7650,13 @@ export default function FlightPlanner() {
               {effectiveFlightServiceEnvironment.environment === "VALIDATION" ? "VALIDATION MODE" : "TEST ENVIRONMENT"}
             </Badge>
           )}
-          <span className="font-semibold text-[#F5F8FC]">Current step:</span>
+          <span className="font-semibold text-[#F5F8FC]">Step {activeWorkflowStep.step} of 5: {activeWorkflowStep.label}</span>
         </div>
-        {activeTab === "route" && "Route setup and aircraft planning"}
-        {activeTab === "weather" && "Weather, hazards, and airport context"}
-        {activeTab === "navlog" && "Navigation log and leg review"}
-        {activeTab === "analysis" && "Route analysis and terrain review"}
-        {activeTab === "file" && "Save, preview, and filing actions"}
+        {activeTab === "route" && "Build the route, select aircraft data, and confirm planning assumptions."}
+        {activeTab === "weather" && "Review weather, hazards, airport communications, and briefing context."}
+        {activeTab === "navlog" && "Review navigation legs, distances, timing, and fuel planning."}
+        {activeTab === "analysis" && "Review terrain, airspace, route quality, and planning alerts."}
+        {activeTab === "file" && "Confirm filing details, readiness, and the single next submit action."}
       </div>
       {isFlightServiceTestMode && (
         <Alert className="border-amber-300/70 bg-[linear-gradient(180deg,rgba(71,50,10,0.98),rgba(29,21,6,0.98))] text-amber-50 shadow-[0_18px_42px_-28px_rgba(0,0,0,0.9)]">
@@ -7650,7 +7707,7 @@ export default function FlightPlanner() {
       )}
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_540px]">
       <div className="min-w-0 space-y-4">
-      {!pressDemo.enabled && (
+      {!pressDemo.enabled && (plansLoading || recentPlans.length > 0) && (
       <Card className={plannerPanelClass}>
         <CardHeader className="pb-3">
           <CardTitle className={cn("text-base", plannerCardTitleClass)}>Recent Flights</CardTitle>
@@ -7659,8 +7716,6 @@ export default function FlightPlanner() {
         <CardContent>
           {plansLoading ? (
             <div className="text-sm text-[#A9BBCD]">Loading plans...</div>
-          ) : recentPlans.length === 0 ? (
-            <div className="text-sm text-[#A9BBCD]">No saved plans yet.</div>
           ) : (
             <div className="flex gap-2 overflow-x-auto pb-1">
               <Button
@@ -7763,7 +7818,7 @@ export default function FlightPlanner() {
               <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => setActiveTab("weather")}>Weather</Button>
               <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => setActiveTab("analysis")}>Analysis</Button>
               <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToPlannerSection("planner-route-map", "route")}>Map</Button>
-              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => setActiveTab("file")}>File & Save</Button>
+              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => setActiveTab("file")}>Review & File</Button>
             </div>
           </CardContent>
         </Card>
@@ -7779,16 +7834,16 @@ export default function FlightPlanner() {
           <TabsTrigger value="weather" className="h-10 rounded-[0.95rem]">Weather</TabsTrigger>
           <TabsTrigger value="navlog" className="h-10 rounded-[0.95rem]">Nav Log</TabsTrigger>
           <TabsTrigger value="analysis" className="h-10 rounded-[0.95rem]">Analysis</TabsTrigger>
-          <TabsTrigger value="file" className="h-10 rounded-[0.95rem]">File &amp; Save</TabsTrigger>
+          <TabsTrigger value="file" className="h-10 rounded-[0.95rem]">Review &amp; File</TabsTrigger>
         </TabsList>
-        <TabsContent value="route" className="min-w-0 space-y-6">
+        <TabsContent value="route" className="flex min-w-0 flex-col gap-6">
       <PressDemoSpotlight
         active={pressDemo.isActive("route-setup")}
         stepNumber={(pressDemo.getStep("route-setup")?.index ?? 0) + 1}
         title={pressDemo.getStep("route-setup")?.title ?? "Route Setup"}
         body={pressDemo.getStep("route-setup")?.body ?? ""}
       >
-      <Card className={plannerPanelClass}>
+      <Card className={cn(plannerPanelClass, "order-2")}>
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Quick Planning References</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>Open and hide each reference as needed without leaving the planner workflow.</CardDescription>
@@ -7835,7 +7890,7 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
 
-      <Card className={plannerPanelClass}>
+      <Card className={cn(plannerPanelClass, "order-1")}>
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Route Setup</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>Enter airports, pick your aircraft, and add waypoints or stops before you plot the trip.</CardDescription>
@@ -7844,6 +7899,7 @@ export default function FlightPlanner() {
             <div className="space-y-2">
               <Label>Departure (ICAO)</Label>
               <Input
+              id="planner-field-departure"
               value={form.departure}
               onChange={(e) => setForm({ ...form, departure: e.target.value.toUpperCase() })}
               placeholder="KJFK or Austin, TX"
@@ -7873,6 +7929,7 @@ export default function FlightPlanner() {
             <div className="space-y-2">
               <Label>Destination (ICAO)</Label>
               <Input
+              id="planner-field-destination"
               value={form.destination}
               onChange={(e) => setForm({ ...form, destination: e.target.value.toUpperCase() })}
               placeholder="KBOS or Dallas, TX"
@@ -7953,7 +8010,7 @@ export default function FlightPlanner() {
                 Pulling live runway options for the selected departure airport. You can still type a manual runway if needed.
               </p>
             </div>
-            <div className={cn("md:col-span-2 p-4 space-y-3", plannerSubpanelClass)}>
+            <div id="planner-aircraft-setup" className={cn("md:col-span-2 p-4 space-y-3", plannerSubpanelClass)}>
               <div className="flex flex-col gap-1">
                 <div className="font-semibold text-[#F5F8FC]">Aircraft setup</div>
                 <div className="text-xs text-[#A9BBCD]">
@@ -8375,6 +8432,7 @@ export default function FlightPlanner() {
                 </div>
               </div>
               <Textarea
+                id="planner-field-route"
                 value={form.route}
                 onChange={(e) => {
                   setRouteMode("manual");
@@ -8615,6 +8673,7 @@ export default function FlightPlanner() {
             <div className="space-y-2">
               <Label>Planned Departure</Label>
               <Input
+                id="planner-field-departure-time"
                 type="datetime-local"
                 value={form.plannedDepartureAt}
                 onChange={(e) => setForm({ ...form, plannedDepartureAt: e.target.value })}
@@ -8724,6 +8783,7 @@ export default function FlightPlanner() {
             <div className="space-y-2">
               <Label>Planned Altitude (ft)</Label>
               <Input
+                id="planner-field-planned-altitude"
                 value={plannedAltitude}
                 onChange={(e) => setPlannedAltitude(e.target.value)}
                 placeholder="8500"
@@ -8988,6 +9048,7 @@ export default function FlightPlanner() {
             <div className="space-y-2">
               <Label>Cruise KTAS</Label>
               <Input
+                id="planner-field-cruise-speed"
                 value={customProfile.cruiseKtasOverride}
                 onChange={(e) => setCustomProfile({ ...customProfile, cruiseKtasOverride: e.target.value })}
                 placeholder="110"
@@ -9050,7 +9111,7 @@ export default function FlightPlanner() {
       </Card>
       </PressDemoSpotlight>
 
-      <Card className={plannerPanelClass}>
+      <Card className={cn(plannerPanelClass, "order-1")}>
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Airport Communications Briefing</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>
@@ -9701,7 +9762,7 @@ export default function FlightPlanner() {
         title={pressDemo.getStep("filing")?.title ?? "Flight Plan Summary & Filing"}
         body={pressDemo.getStep("filing")?.body ?? ""}
       >
-      <Card className={plannerPanelClass}>
+      <Card id="planner-review-and-file" className={plannerPanelClass}>
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Flight Plan Summary &amp; Filing</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>
@@ -9750,7 +9811,7 @@ export default function FlightPlanner() {
             </div>
           </div>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-            <div className={cn("space-y-4 p-4", plannerSubpanelClass)}>
+            <div id="planner-filing-details" className={cn("space-y-4 p-4", plannerSubpanelClass)}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="font-semibold">Filing Identity</div>
@@ -9787,6 +9848,7 @@ export default function FlightPlanner() {
                 <div className="space-y-2">
                   <Label>Aircraft ID / Tail</Label>
                   <Input
+                    id="planner-field-aircraft-id"
                     value={filingDraft.aircraftId}
                     onChange={(e) => setFilingDraft((current) => ({ ...current, aircraftId: e.target.value.toUpperCase() }))}
                     placeholder="Enter aircraft ID / tail number"
@@ -9818,6 +9880,7 @@ export default function FlightPlanner() {
                   <div className="space-y-2">
                     <Label>Actual Aircraft Type <span className="text-amber-400 text-xs">(required)</span></Label>
                     <Input
+                      id="planner-field-actual-aircraft-type"
                       value={filingDraft.actualAircraftType}
                       onChange={(e) => setFilingDraft((current) => ({ ...current, actualAircraftType: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
                       placeholder="TBM9"
@@ -9828,7 +9891,7 @@ export default function FlightPlanner() {
                     </div>
                   </div>
                 )}
-                <div className="space-y-2">
+                <div id="planner-field-equipment" className="space-y-2">
                   <Label>Aircraft Equipment</Label>
                   <Select
                     value=""
@@ -9862,6 +9925,7 @@ export default function FlightPlanner() {
                 <div className="space-y-2">
                   <Label>Souls On Board</Label>
                   <Input
+                    id="planner-field-souls-on-board"
                     value={filingDraft.soulsOnBoard}
                     onChange={(e) => setFilingDraft((current) => ({ ...current, soulsOnBoard: e.target.value }))}
                     placeholder="1"
@@ -9870,6 +9934,7 @@ export default function FlightPlanner() {
                 <div className="space-y-2">
                   <Label>Aircraft Color</Label>
                   <Input
+                    id="planner-field-aircraft-color"
                     value={filingDraft.aircraftColor}
                     onChange={(e) => setFilingDraft((current) => ({ ...current, aircraftColor: e.target.value }))}
                     placeholder="White / Blue"
@@ -9878,6 +9943,7 @@ export default function FlightPlanner() {
                 <div className="space-y-2">
                   <Label>PIC Name</Label>
                   <Input
+                    id="planner-field-pilot-name"
                     value={filingDraft.pilotName}
                     onChange={(e) => setFilingDraft((current) => ({ ...current, pilotName: e.target.value }))}
                     placeholder="Pilot name"
@@ -9886,6 +9952,7 @@ export default function FlightPlanner() {
                 <div className="space-y-2">
                   <Label>Pilot Phone Number</Label>
                   <Input
+                    id="planner-field-pilot-phone"
                     value={filingDraft.pilotPhone}
                     onChange={(e) => setFilingDraft((current) => ({ ...current, pilotPhone: e.target.value }))}
                     placeholder="+1 555 123 4567"
@@ -9894,6 +9961,7 @@ export default function FlightPlanner() {
                 <div className="space-y-2">
                   <Label>Aircraft Home Base</Label>
                   <Input
+                    id="planner-field-home-base"
                     value={filingDraft.aircraftHomeBase}
                     onChange={(e) => setFilingDraft((current) => ({ ...current, aircraftHomeBase: e.target.value.toUpperCase() }))}
                     placeholder="KADS"
@@ -9932,7 +10000,7 @@ export default function FlightPlanner() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
+                <div id="planner-field-surveillance" className="space-y-2">
                   <Label>Surveillance Equipment</Label>
                   <Select
                     value=""
@@ -10072,7 +10140,7 @@ export default function FlightPlanner() {
                     </Alert>
                   )}
                 </div>
-                <div className="space-y-2">
+                <div id="planner-field-fuel-endurance" className="space-y-2">
                   <Label>Estimated Time En Route</Label>
                   <div className="rounded-md border bg-background/40 p-3 text-sm">
                     <div className="font-semibold text-foreground">{authoritativeEteMinutes ? `${authoritativeEteMinutes} min (${formatFilingDurationLabel(authoritativeEteMinutes)})` : "-"}</div>
@@ -10111,7 +10179,7 @@ export default function FlightPlanner() {
                   )}
                 </div>
                 {effectiveDepartureCode === "ZZZZ" && (
-                  <div className="space-y-4 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-4 md:col-span-2">
+                  <div id="planner-zzzz-details" className="space-y-4 rounded-lg border border-[#D9A441]/35 bg-[#1f1a0f]/70 p-4 md:col-span-2">
                     <div className="space-y-1">
                       <div className="font-semibold text-[#F5E6B8]">ZZZZ Departure Details</div>
                       <div className="text-xs leading-5 text-[#D9C28A]">
@@ -10356,6 +10424,7 @@ export default function FlightPlanner() {
           <div className="space-y-2">
             <Label>Filing Remarks / ATC Remarks</Label>
             <Textarea
+              id="planner-field-filing-remarks"
               value={filingDraft.remarks}
               onChange={(e) => setFilingDraft((current) => ({ ...current, remarks: e.target.value }))}
               rows={2}
@@ -10364,7 +10433,7 @@ export default function FlightPlanner() {
           </div>
           <Alert>
             <AlertDescription>
-              Filing guidance: save the plan, then use the filing actions below on the saved plan you are editing. RSF validates the packet before sending it to the filing provider.
+              Filing guidance: review the packet, then use the single Review & Submit action below. RSF validates the packet before sending it to the filing provider.
             </AlertDescription>
           </Alert>
           <div className={cn(
@@ -10375,21 +10444,18 @@ export default function FlightPlanner() {
               <div>
                 <div className="font-semibold text-[#F5F8FC]">Flight Filing Readiness</div>
                 <div className={cn("mt-1 text-sm", filingReadiness.ready ? "text-emerald-200" : "text-amber-100")}>
-                  {filingReadiness.ready ? "Ready to File." : "Required items must be completed before filing."}
+                  {filingReadiness.ready ? "Ready to submit." : "Required items must be completed before submission."}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button asChild type="button" size="sm" variant="outline">
                   <Link href="/my-aircraft">Review Aircraft Profile</Link>
                 </Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => setActiveTab("file")}>
+                <Button type="button" size="sm" variant="outline" onClick={() => jumpToPlannerSection("planner-field-equipment", "file")}>
                   Edit Equipment
                 </Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => setActiveTab("file")}>
+                <Button type="button" size="sm" variant="outline" onClick={() => jumpToPlannerSection("planner-field-equipment", "file")}>
                   Edit PBN
-                </Button>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setActiveTab("file")}>
-                  Return to Filing
                 </Button>
               </div>
             </div>
@@ -10445,7 +10511,7 @@ export default function FlightPlanner() {
                                 <Link href={issue.actionHref}>{issue.actionLabel}</Link>
                               </Button>
                             ) : issue.actionTab ? (
-                              <Button type="button" size="sm" variant="outline" onClick={() => setActiveTab(issue.actionTab!)}>
+                              <Button type="button" size="sm" variant="outline" onClick={() => jumpToReadinessIssue(issue)}>
                                 {issue.actionLabel}
                               </Button>
                             ) : null}
@@ -10457,49 +10523,11 @@ export default function FlightPlanner() {
                 );
               })}
             </div>
-            {filingReadiness.issues.length > 0 && (
-              <div className="mt-4 rounded-md border border-amber-300/35 bg-black/20 p-3 text-sm text-amber-100">
-                <div className="font-semibold">Required Filing Information</div>
-                <div className="mt-1 text-xs text-amber-100/80">The following required information is missing or invalid:</div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {filingReadiness.issues
-                    .filter((issue: FilingReadinessIssue) => issue.severity === "required")
-                    .map((issue: FilingReadinessIssue) => (
-                      <div key={`required-${issue.id}`} className="flex items-center justify-between gap-2 rounded-md border border-amber-300/20 bg-[#110f0a]/70 px-3 py-2 text-xs">
-                        <span>{issue.label}</span>
-                        {issue.actionHref ? (
-                          <Link href={issue.actionHref} className="font-semibold text-[#9cc7ff] hover:underline">Edit</Link>
-                        ) : issue.actionTab ? (
-                          <button type="button" className="font-semibold text-[#9cc7ff] hover:underline" onClick={() => setActiveTab(issue.actionTab!)}>
-                            Edit
-                          </button>
-                        ) : null}
-                      </div>
-                    ))}
-                </div>
-                <div className="mt-3 text-xs text-amber-100/80">These items are required before filing a flight plan.</div>
-              </div>
-            )}
-            {filingReadiness.blockingIssues.length > 0 && (
-              <div className="mt-4 rounded-md border border-amber-300/35 bg-black/20 p-3 text-sm text-amber-100">
-                <div className="font-semibold">Resolve before File or Amend</div>
-                <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {filingReadiness.blockingIssues.map((issue) => (
-                    <li key={issue}>{issue}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {filingReadiness.warnings.length > 0 && (
-              <div className="mt-3 rounded-md border border-blue-300/25 bg-blue-500/10 p-3 text-sm text-blue-100">
-                <div className="font-semibold">Review suggestions</div>
-                <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {filingReadiness.warnings.map((issue) => (
-                    <li key={issue.id}>{issue.suggestion ? `${issue.message} ${issue.suggestion}` : issue.message}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div className={cn("mt-4 rounded-md border p-3 text-sm", filingReadiness.ready ? "border-emerald-300/35 bg-emerald-500/10 text-emerald-100" : "border-amber-300/35 bg-black/20 text-amber-100")}>
+              {filingReadiness.ready
+                ? "Ready to submit. Required filing, aircraft, pilot, and provider readiness checks are complete."
+                : `${filingReadiness.issues.filter((issue: FilingReadinessIssue) => issue.severity === "required").length} required ${filingReadiness.issues.filter((issue: FilingReadinessIssue) => issue.severity === "required").length === 1 ? "item remains" : "items remain"}. Use the Edit actions above to fix each item.`}
+            </div>
           </div>
           {terrainOperationalNotes.length > 0 && (
             <Alert
@@ -10519,28 +10547,110 @@ export default function FlightPlanner() {
               </AlertDescription>
             </Alert>
           )}
-          <div className="flex flex-col gap-2 sm:flex-row">
-            {isGuest && (
+          <div className={cn("space-y-3 p-4", plannerSubpanelClass)} aria-live="polite">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold text-[#F5F8FC]">Review &amp; Submit</div>
+                <div className="text-xs text-[#A9BBCD]">
+                  One primary action is shown for the current plan state. RSF saves current edits before sending a file or amend request when needed.
+                </div>
+              </div>
+              <Badge variant="outline">{filingReadiness.ready ? "Ready" : "Needs attention"}</Badge>
+            </div>
+            {hasBlockingFilingReadinessIssue && (
+              <div className="rounded-md border border-amber-300/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                {filingReadiness.blockingIssues[0] || "Resolve readiness issues before submitting."}
+              </div>
+            )}
+            {isGuest ? (
+              guestFlightPlanFileLimitReached ? (
+                <div className={cn(plannerSubpanelMutedClass, "border-dashed p-4 text-sm text-[#A9BBCD]")}>
+                  <div className="font-semibold text-[#F5F8FC]">Guest filing limit reached</div>
+                  <div className="mt-1">Create or sign in to an RSF account to save plans, keep filing, and receive provider updates.</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button asChild size="sm">
+                      <Link href={withReturnTo("/register", getCurrentReturnTo())}>Create account</Link>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={withReturnTo("/login", getCurrentReturnTo())}>Sign in</Link>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  className="rsf-metal-button-primary"
+                  onClick={() => {
+                    if (hasBlockingFilingReadinessIssue) {
+                      logFilingReadinessFailure("file");
+                      toast({
+                        title: "Resolve readiness issues",
+                        description: filingReadiness.blockingIssues[0] || "Issues must be resolved before submitting.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    requireFlightServiceTestAcknowledgement("submit a guest test flight plan", () => guestFileMutation.mutate());
+                  }}
+                  disabled={filingPreviewMutation.isPending || guestFileMutation.isPending || hasBlockingFilingReadinessIssue}
+                  title={hasBlockingFilingReadinessIssue ? "Resolve readiness issues before submitting." : undefined}
+                >
+                  {guestFileMutation.isPending
+                    ? "Submitting test flight plan..."
+                    : `Submit Test Flight Plan - ${guestFlightPlanFilesRemaining} guest ${guestFlightPlanFilesRemaining === 1 ? "filing" : "filings"} remaining`}
+                </Button>
+              )
+            ) : currentSavedPlan && currentDraftCanAmend ? (
               <Button
                 type="button"
-                onClick={() => {
-                  runWithAuth("file_flight_plan", async () => {
-                    await saveCurrentPlan({ returnToFile: true });
-                  });
-                }}
-                disabled={filingPreviewMutation.isPending || guestFileMutation.isPending}
+                className="rsf-metal-button-primary"
+                onClick={() => requestSaveCurrentPlanWithFilingAction("amend", currentSavedPlan.id)}
+                disabled={filingActionMutation.isPending || updatePlanMutation.isPending || filingSyncMutation.isPending || hasBlockingFilingReadinessIssue}
+                title={hasBlockingFilingReadinessIssue ? "Resolve readiness issues before amending." : draftAmendAvailabilityMessage || undefined}
               >
-                Create or sign in to your RSF account to file flight plans.
+                {filingActionMutation.isPending || updatePlanMutation.isPending ? "Saving and amending..." : "Save Changes & Amend Test Flight Plan"}
               </Button>
+            ) : currentSavedPlan && canFilePlan(currentSavedPlan) ? (
+              <Button
+                type="button"
+                className="rsf-metal-button-primary"
+                onClick={() => requestSaveCurrentPlanWithFilingAction("file")}
+                disabled={filingActionMutation.isPending || updatePlanMutation.isPending || createPlanMutation.isPending || filingSyncMutation.isPending || hasBlockingFilingReadinessIssue}
+                title={hasBlockingFilingReadinessIssue ? "Resolve readiness issues before filing." : getFileAvailabilityMessage(currentSavedPlan)}
+              >
+                {filingActionMutation.isPending || updatePlanMutation.isPending ? "Saving and submitting..." : "Submit Test Flight Plan"}
+              </Button>
+            ) : !currentSavedPlan ? (
+              <Button
+                type="button"
+                className="rsf-metal-button-primary"
+                onClick={() => requestSaveCurrentPlanWithFilingAction("file")}
+                disabled={filingActionMutation.isPending || updatePlanMutation.isPending || createPlanMutation.isPending || hasBlockingFilingReadinessIssue}
+                title={hasBlockingFilingReadinessIssue ? "Resolve readiness issues before filing." : undefined}
+              >
+                {createPlanMutation.isPending || filingActionMutation.isPending ? "Saving and submitting..." : "Save & Submit Test Flight Plan"}
+              </Button>
+            ) : (
+              <div className={cn(plannerSubpanelMutedClass, "text-sm")}>
+                This saved provider plan has no file/amend action available. Use Current Plan Actions below for status refresh, review, or lifecycle actions that apply to this state.
+              </div>
+            )}
+            {!isGuest && (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => runWithAuth("save_flight_plan", async () => {
+                    await saveCurrentPlan();
+                  })}
+                  disabled={createPlanMutation.isPending || updatePlanMutation.isPending}
+                >
+                  {editingPlan ? "Save Changes" : "Save Draft"}
+                </Button>
+              </div>
             )}
           </div>
-          {isGuest && (
-            <div className={cn(plannerSubpanelMutedClass, "border-dashed p-4 text-sm text-[#A9BBCD]")}>
-              {guestFlightPlanFileLimitReached
-                ? "Guest filing limit reached. Create a free account to save plans, keep filing, and receive real-time provider updates and route change notifications."
-                : `You have ${guestFlightPlanFilesRemaining} free ${guestFlightPlanFilesRemaining === 1 ? "filing" : "filings"} remaining as a guest. Create a free account to save plans, manage lifecycle actions, and get notified when the provider changes your route.`}
-            </div>
-          )}
           {filingActionFeedback && (
             <Alert
               role="status"
@@ -10565,10 +10675,10 @@ export default function FlightPlanner() {
             </Alert>
           )}
           {hasCurrentSavedPlan ? (
-            <div className={cn("space-y-3 p-4", plannerSubpanelClass)}>
+            <div id="planner-current-plan-actions" className={cn("space-y-3 p-4", plannerSubpanelClass)}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <div className="font-semibold">Current Saved Plan Actions</div>
+                  <div className="font-semibold">Current Plan Actions</div>
                   <div className="text-xs text-muted-foreground">
                     Editing <span className="font-medium text-foreground">{currentSavedPlan?.title || `${currentSavedPlan?.departure} to ${currentSavedPlan?.destination}`}</span>. Use these actions for the active plan instead of hunting through the saved list below.
                   </div>
@@ -10576,7 +10686,7 @@ export default function FlightPlanner() {
                 <Badge variant="outline">{currentSavedPlanStatus}</Badge>
               </div>
               <div className="flex flex-wrap gap-2">
-                {canFilePlan(currentSavedPlan) && (
+                {false && canFilePlan(currentSavedPlan) && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -10589,6 +10699,7 @@ export default function FlightPlanner() {
                 )}
                 {!isTerminalFilingPlan(currentSavedPlan) && hasLiveProviderPlan(currentSavedPlan) && (
                   <>
+                    {false && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -10616,6 +10727,7 @@ export default function FlightPlanner() {
                     >
                       {currentDraftCanAmend ? filingActionLabels.amend : "Review amend requirements"}
                     </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -10742,42 +10854,15 @@ export default function FlightPlanner() {
       </Card>
       </PressDemoSpotlight>
 
-      <Card className={plannerPanelClass}>
+      <Card className={cn(plannerPanelClass, "order-2")}>
         <CardHeader>
-          <CardTitle className={plannerCardTitleClass}>Save Flight Plan</CardTitle>
+          <CardTitle className={plannerCardTitleClass}>Draft Details</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>
-            Save plans with a free account. After you fly, log it to update currency and history.
+            Name the draft and keep local planning notes separate from filing actions.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {isGuest && (
-            <Alert>
-              <AlertDescription>
-                Create a free RSF account to save your first flight plan, come back to it later, and keep building toward a cleaner logbook and currency workflow.
-              </AlertDescription>
-            </Alert>
-          )}
-          {isGuest && (
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button asChild variant="outline">
-                <Link
-                  href={withReturnTo("/register", getCurrentReturnTo())}
-                  onClick={() => trackEvent("cta_click", { label: "planner_save_register", target: "/register" })}
-                >
-                  Create Free Account
-                </Link>
-              </Button>
-              <Button asChild variant="ghost">
-                <Link
-                  href={withReturnTo("/login", getCurrentReturnTo())}
-                  onClick={() => trackEvent("cta_click", { label: "planner_save_sign_in", target: "/login" })}
-                >
-                  Sign In
-                </Link>
-              </Button>
-            </div>
-          )}
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <div className="space-y-2">
               <Label>Plan Title</Label>
               <Input
@@ -10787,14 +10872,6 @@ export default function FlightPlanner() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Aircraft Type (optional)</Label>
-              <Input
-                value={form.aircraftType}
-                onChange={(e) => setForm({ ...form, aircraftType: e.target.value })}
-                placeholder={selectedProfile?.name || ""}
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
               <Label>Notes</Label>
               <Textarea
                 value={form.notes}
@@ -10805,6 +10882,7 @@ export default function FlightPlanner() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Button
+              variant="outline"
               onClick={() => {
                 if (isGuest) {
                   trackEvent("cta_click", { label: "planner_save_requires_auth", target: "/register" });
@@ -10815,38 +10893,7 @@ export default function FlightPlanner() {
               }}
               disabled={createPlanMutation.isPending || updatePlanMutation.isPending}
             >
-              {editingPlan ? "Save local changes" : "Save Flight Plan"}
-            </Button>
-            {editingPlan && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (isGuest) {
-                    trackEvent("cta_click", { label: "planner_save_return_requires_auth", target: "/register" });
-                  }
-                  runWithAuth("save_flight_plan", async () => {
-                    await saveCurrentPlan({ returnToFile: true });
-                  });
-                }}
-                disabled={createPlanMutation.isPending || updatePlanMutation.isPending}
-              >
-                Save and continue to filing
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (isGuest) {
-                  trackEvent("cta_click", { label: "planner_logbook_requires_auth", target: "/register" });
-                } else if (isFree) {
-                  trackEvent("cta_click", { label: "planner_logbook_upgrade_interest", target: "/logbook/pro" });
-                }
-                runWithAuth("sync_logbook_entry", async () => {
-                  await sendToLogbookActionRef.current();
-                });
-              }}
-            >
-              Log this flight (after you fly)
+              {editingPlan ? "Save Changes" : "Save Draft"}
             </Button>
             <Button variant="ghost" onClick={handleClearForm}>
               Clear Form
@@ -10970,7 +11017,7 @@ export default function FlightPlanner() {
                     setEditingPlan(plan);
                   }}
                     >
-                      Edit
+                      Open / Load
                     </Button>
                     {deletable && (
                       <Button
@@ -11074,7 +11121,7 @@ export default function FlightPlanner() {
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  {canFilePlan(plan) && (
+                  {false && canFilePlan(plan) && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -11093,7 +11140,7 @@ export default function FlightPlanner() {
                       {filingActionLabels.file}
                     </Button>
                   )}
-                  {!isTerminalFilingPlan(plan) && hasLiveProviderPlan(plan) && (
+                  {false && !isTerminalFilingPlan(plan) && hasLiveProviderPlan(plan) && (
                     <>
                       <Button
                         size="sm"
@@ -11148,7 +11195,7 @@ export default function FlightPlanner() {
                       </Button>
                     </>
                   )}
-                  {hasPendingProviderReview(plan) && (
+                  {false && hasPendingProviderReview(plan) && (
                     <Button
                       size="sm"
                       variant="default"
@@ -11180,7 +11227,7 @@ export default function FlightPlanner() {
                     ) : null}
                     Provider updates
                   </Button>
-                  {!isTerminalFilingPlan(plan) && (plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
+                  {false && !isTerminalFilingPlan(plan) && (plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
                     <>
                       <Button
                         size="sm"
@@ -11207,7 +11254,7 @@ export default function FlightPlanner() {
                       </Button>
                     </>
                   )}
-                  {!isTerminalFilingPlan(plan) && hasLiveProviderPlan(plan) && (
+                  {false && !isTerminalFilingPlan(plan) && hasLiveProviderPlan(plan) && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -11217,7 +11264,7 @@ export default function FlightPlanner() {
                       {filingActionLabels.cancel}
                     </Button>
                   )}
-                  {certificationPlan && !isTerminalFilingPlan(plan) && (
+                  {false && certificationPlan && !isTerminalFilingPlan(plan) && (
                     <Button
                       size="sm"
                       variant="destructive"
@@ -11335,6 +11382,29 @@ export default function FlightPlanner() {
               })()}
             </div>
           )}
+        </CardContent>
+      </Card>
+      <Card className={cn(plannerPanelClass, "order-1")}>
+        <CardHeader>
+          <CardTitle className={plannerCardTitleClass}>Post-Flight</CardTitle>
+          <CardDescription className={plannerCardDescriptionClass}>After the flight, send the completed route to your logbook workflow.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (isGuest) {
+                trackEvent("cta_click", { label: "planner_logbook_requires_auth", target: "/register" });
+              } else if (isFree) {
+                trackEvent("cta_click", { label: "planner_logbook_upgrade_interest", target: "/logbook/pro" });
+              }
+              runWithAuth("sync_logbook_entry", async () => {
+                await sendToLogbookActionRef.current();
+              });
+            }}
+          >
+            Log this flight after you fly
+          </Button>
         </CardContent>
       </Card>
       </TabsContent>

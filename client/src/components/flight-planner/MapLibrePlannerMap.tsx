@@ -582,7 +582,7 @@ export default function MapLibrePlannerMap({
           {isFullscreen ? "Close full screen" : "Full screen"}
         </button>
         <div ref={containerRef} className="h-full w-full rounded-xl" />
-        <div className="absolute left-3 top-3 z-[1000] rounded-full border border-[#5d6f85]/25 bg-[rgba(9,13,18,0.9)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#A9BBCD]">
+        <div className="absolute left-3 top-3 z-[1000] max-w-[calc(100%-9rem)] truncate rounded-full border border-[#5d6f85]/25 bg-[rgba(9,13,18,0.9)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#A9BBCD] sm:max-w-[60%]" title={engineLabel}>
           {engineLabel}
         </div>
       </div>

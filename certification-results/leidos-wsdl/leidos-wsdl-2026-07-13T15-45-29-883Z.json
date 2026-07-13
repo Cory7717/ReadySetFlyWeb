@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-07-13T15:45:29.882Z",
+  "source": "Leidos public WSDL documentation endpoints",
+  "crossEnvironmentDrift": false,
+  "results": [
+    {
+      "environment": "LAB",
+      "url": "https://ffspelabs.leidos.com/Website2/resources/doc/WebService.xml",
+      "status": 200,
+      "ok": true,
+      "contentType": "application/xml",
+      "bytes": 734350,
+      "sha256": "1adb3b5b1c25124ac7e868db09700d121164f898d68bac0bd7645cc34ae57c4b",
+      "expectedSha256": null,
+      "driftDetected": false,
+      "retrievedAt": "2026-07-13T15:45:28.916Z"
+    },
+    {
+      "environment": "PRODUCTION",
+      "url": "https://www.1800wxbrief.com/Website/resources/doc/WebService.xml",
+      "status": 200,
+      "ok": true,
+      "contentType": "application/xml",
+      "bytes": 734350,
+      "sha256": "1adb3b5b1c25124ac7e868db09700d121164f898d68bac0bd7645cc34ae57c4b",
+      "expectedSha256": null,
+      "driftDetected": false,
+      "retrievedAt": "2026-07-13T15:45:29.487Z"
+    }
+  ]
+}

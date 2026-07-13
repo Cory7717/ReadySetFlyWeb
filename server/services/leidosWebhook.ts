@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 export const LEIDOS_WEBHOOK_SUCCESS_RESPONSE = Object.freeze({
   success: "true",
 });
@@ -13,6 +15,19 @@ const normalizeText = (value: unknown) => {
   const text = String(value).trim();
   return text || null;
 };
+
+const stableWebhookStringify = (value: unknown): string => {
+  if (value === null || value === undefined) return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableWebhookStringify).join(",")}]`;
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableWebhookStringify(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const hashLeidosWebhookEvent = (payload: unknown) =>
+  crypto.createHash("sha256").update(stableWebhookStringify(payload)).digest("hex");
 
 const keyAliases = (key: string) => new Set([
   key,
@@ -135,12 +150,131 @@ export const normalizeLeidosWebhookLifecycle = (value: unknown): string | null =
   const text = String(value || "").trim().toLowerCase();
   if (!text) return null;
   if (/cancelled|canceled|cancellation/.test(text)) return "cancelled";
-  if (/\bclosed\b|closure|closeout/.test(text)) return "closed";
+  if (/\bclosed\b|closure|closeout|auto[_\-\s]*closed/.test(text)) return "closed";
   if (/reject/.test(text)) return "rejected";
-  if (/\bactivated\b|\bactive\b|\bopened\b/.test(text)) return "activated";
+  if (/\bactivated\b|\bactive\b|\bopened\b|auto[_\-\s]*activated/.test(text)) return "activated";
   if (/\bproposed\b/.test(text)) return "proposed";
   if (/\bfiled\b|\baccepted\b/.test(text)) return "filed";
   return null;
+};
+
+const collectWebhookDateTimes = (input: unknown): string[] => {
+  const found = new Set<string>();
+  const visit = (value: unknown, depth = 0) => {
+    if (!value || depth > 8) return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, depth + 1);
+      return;
+    }
+    if (typeof value !== "object") return;
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      if (/messageDateTime|notificationTimestamp|timestamp|dateTime/i.test(key) && nested != null) {
+        const text = String(nested).trim();
+        if (text) found.add(text);
+      }
+      visit(nested, depth + 1);
+    }
+  };
+  visit(input);
+  return Array.from(found).sort();
+};
+
+const normalizeFingerprintValue = (value: unknown) => {
+  const text = normalizeText(value);
+  return text ? text.toUpperCase() : null;
+};
+
+const sensitiveWebhookKeyPattern = /name|phone|remark|comment|route|address|email|pilot|crew|passenger|supplemental|credential|password|authorization/i;
+const lifecycleRelevantWebhookKeyPattern = /flight|plan|identifier|(^|_)id$|version|stamp|state|status|type|reference|transaction|timestamp|datetime|artcc|alert|change|lifecycle|event|operation|action|code|reason|category|notification|message/i;
+const rawValueAllowedWebhookKeyPattern = /identifier|(^|_)id$|version|stamp|state|status|type|reference|transaction|timestamp|datetime|artcc|alert|change|lifecycle|event|operation|action|code|reason|category|notification/i;
+
+const sanitizeWebhookFingerprintContent = (value: unknown, key = "", depth = 0): unknown => {
+  if (value === null || value === undefined || depth > 8) return null;
+
+  if (Array.isArray(value)) {
+    const items = value
+      .slice(0, 20)
+      .map((item) => sanitizeWebhookFingerprintContent(item, key, depth + 1))
+      .filter((item) => item !== null && item !== undefined);
+    return items.length > 0 ? items : null;
+  }
+
+  if (typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [nestedKey, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+      if (sensitiveWebhookKeyPattern.test(nestedKey)) continue;
+      if (!lifecycleRelevantWebhookKeyPattern.test(nestedKey)) {
+        const nestedLifecycle = normalizeLeidosWebhookLifecycle(nestedValue);
+        if (nestedLifecycle) output[nestedKey] = { lifecycleToken: nestedLifecycle };
+        const nestedContent = sanitizeWebhookFingerprintContent(nestedValue, nestedKey, depth + 1);
+        if (nestedContent !== null && nestedContent !== undefined) output[nestedKey] = nestedContent;
+        continue;
+      }
+      const sanitized = sanitizeWebhookFingerprintContent(nestedValue, nestedKey, depth + 1);
+      if (sanitized !== null && sanitized !== undefined) output[nestedKey] = sanitized;
+    }
+    return Object.keys(output).length > 0 ? output : null;
+  }
+
+  const text = normalizeText(value);
+  if (!text) return null;
+  const lifecycleToken = normalizeLeidosWebhookLifecycle(text);
+  if (lifecycleToken && /message|description|detail/i.test(key)) {
+    return { lifecycleToken };
+  }
+  if (
+    rawValueAllowedWebhookKeyPattern.test(key) &&
+    !sensitiveWebhookKeyPattern.test(key) &&
+    text.length <= 120
+  ) {
+    return text.toUpperCase();
+  }
+  return lifecycleToken ? { lifecycleToken } : null;
+};
+
+export const buildLeidosWebhookEventFingerprint = ({
+  payload,
+  flightIdentifier,
+  flightVersionStamp,
+  flightState,
+  artccState,
+  notificationType,
+  messageDateTime,
+  providerMessageId,
+  artccInfo,
+}: {
+  payload: unknown;
+  flightIdentifier: string | null;
+  flightVersionStamp: string | null;
+  flightState: string | null;
+  artccState: string | null;
+  notificationType: string | null;
+  messageDateTime: string | null;
+  providerMessageId: string | null;
+  artccInfo: unknown;
+}) => {
+  const parsedIdentity = {
+    flightIdentifier: normalizeFingerprintValue(flightIdentifier),
+    rawFlightState: normalizeFingerprintValue(flightState),
+    rawArtccState: normalizeFingerprintValue(artccState),
+    versionStamp: normalizeFingerprintValue(flightVersionStamp),
+    notificationType: normalizeFingerprintValue(notificationType),
+    messageDateTime: normalizeFingerprintValue(messageDateTime),
+    providerMessageId: normalizeFingerprintValue(providerMessageId),
+    providerMessageDateTimes: collectWebhookDateTimes(artccInfo),
+  };
+  const providerMessageIdentity = parsedIdentity.providerMessageId
+    ? {
+      flightIdentifier: parsedIdentity.flightIdentifier,
+      notificationType: parsedIdentity.notificationType,
+      providerMessageId: parsedIdentity.providerMessageId,
+    }
+    : null;
+  return hashLeidosWebhookEvent({
+    providerMessageIdentity,
+    parsedIdentity,
+    sanitizedNotificationContent: sanitizeWebhookFingerprintContent(payload),
+  });
 };
 
 export const extractLeidosWebhookFields = (payload: unknown) => {
@@ -157,7 +291,7 @@ export const extractLeidosWebhookFields = (payload: unknown) => {
   const flightVersionStamp =
     findNestedString(alert, ["flightVersionStamp", "versionStamp", "version", "providerVersionStamp"]) ||
     findNestedString(record, ["flightVersionStamp", "versionStamp", "version", "providerVersionStamp"]);
-  const flightState = findNestedString(searchRoot, [
+  const directFlightState = findNestedString(searchRoot, [
     "flightState",
     "flight_state",
     "flightPlanState",
@@ -185,6 +319,12 @@ export const extractLeidosWebhookFields = (payload: unknown) => {
     findNestedString(record, ["alertMessage", "message", "description", "detail"]) ||
     notificationType ||
     "Flight plan update received";
+  const lifecycleFromCodedNotification =
+    normalizeLeidosWebhookLifecycle(directFlightState) ||
+    normalizeLeidosWebhookLifecycle(changeType) ||
+    normalizeLeidosWebhookLifecycle(alertType) ||
+    normalizeLeidosWebhookLifecycle(extractedMessage);
+  const flightState = directFlightState || (lifecycleFromCodedNotification ? lifecycleFromCodedNotification.toUpperCase() : null);
   const normalizedLifecycle = normalizeLeidosWebhookLifecycle(flightState);
   const hasMeaningfulProviderChange = Boolean(
     flightVersionStamp ||

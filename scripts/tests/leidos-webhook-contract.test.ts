@@ -2,11 +2,27 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  buildLeidosWebhookEventFingerprint,
   extractLeidosWebhookFields,
   LEIDOS_WEBHOOK_SUCCESS_RESPONSE,
   normalizeLeidosWebhookLifecycle,
   summarizeLeidosWebhookPayload,
 } from "../../server/services/leidosWebhook";
+
+const fingerprint = (payload: unknown) => {
+  const parsed = extractLeidosWebhookFields(payload);
+  return buildLeidosWebhookEventFingerprint({
+    payload,
+    flightIdentifier: parsed.flightIdentifier,
+    flightVersionStamp: parsed.flightVersionStamp,
+    flightState: parsed.flightState,
+    artccState: parsed.artccState,
+    notificationType: parsed.notificationType,
+    messageDateTime: parsed.messageDateTime,
+    providerMessageId: parsed.providerMessageId,
+    artccInfo: parsed.artccInfo,
+  });
+};
 
 test("Leidos webhook acknowledgement matches the documented response contract", () => {
   assert.deepEqual(LEIDOS_WEBHOOK_SUCCESS_RESPONSE, { success: "true" });
@@ -90,6 +106,22 @@ test("nested flightAlert status shape extracts IFR activation evidence", () => {
   assert.equal(parsed.hasMeaningfulProviderChange, true);
 });
 
+test("coded flightAlert message extracts IFR closure evidence without raw message state", () => {
+  const parsed = extractLeidosWebhookFields({
+    notificationType: "FLIGHT_ALERT",
+    flightAlert: {
+      flightIdentifier: "658167349_806440_3217",
+      flightVersionStamp: "20260713174500000",
+      alertMessage: "IFR flight plan closed by Flight Service.",
+    },
+  });
+
+  assert.equal(parsed.flightIdentifier, "658167349_806440_3217");
+  assert.equal(parsed.flightState, "CLOSED");
+  assert.equal(parsed.normalizedLifecycle, "closed");
+  assert.equal(parsed.hasMeaningfulProviderChange, true);
+});
+
 test("empty flightAlert is classified as no-op instead of provider review", () => {
   const parsed = extractLeidosWebhookFields({
     notificationType: "FLIGHT_ALERT",
@@ -106,6 +138,71 @@ test("empty flightAlert is classified as no-op instead of provider review", () =
   assert.equal(parsed.expectedRoute, null);
   assert.equal(parsed.normalizedLifecycle, null);
   assert.equal(parsed.hasMeaningfulProviderChange, false);
+});
+
+test("exact duplicate webhook fingerprints match despite key-order differences", () => {
+  const first = {
+    notificationType: "FLIGHT_ALERT",
+    flightAlert: {
+      flightIdentifier: "658167349_806440_3217",
+      flightVersionStamp: "20260713174500000",
+      flightState: "PROPOSED",
+      artccState: "ROGERED",
+    },
+  };
+  const reordered = {
+    flightAlert: {
+      artccState: "ROGERED",
+      flightState: "PROPOSED",
+      flightVersionStamp: "20260713174500000",
+      flightIdentifier: "658167349_806440_3217",
+    },
+    notificationType: "FLIGHT_ALERT",
+  };
+
+  assert.equal(fingerprint(first), fingerprint(reordered));
+});
+
+test("same provider and version with proposed activated and closed lifecycle events do not collide", () => {
+  const base = {
+    notificationType: "FLIGHT_ALERT",
+    flightAlert: {
+      flightIdentifier: "658167349_806440_3217",
+      flightVersionStamp: "20260713174500000",
+    },
+  };
+  const proposed = fingerprint({ ...base, flightAlert: { ...base.flightAlert, flightState: "PROPOSED" } });
+  const activated = fingerprint({ ...base, flightAlert: { ...base.flightAlert, flightState: "ACTIVATED" } });
+  const closed = fingerprint({ ...base, flightAlert: { ...base.flightAlert, flightState: "CLOSED" } });
+
+  assert.notEqual(proposed, activated);
+  assert.notEqual(activated, closed);
+  assert.notEqual(proposed, closed);
+});
+
+test("different nested unrecognized flightAlert lifecycle messages do not collide", () => {
+  const activation = {
+    notificationType: "FLIGHT_ALERT",
+    flightAlert: {
+      flightIdentifier: "658167349_806440_3217",
+      flightVersionStamp: "20260713174500000",
+      providerNotice: {
+        codedMessage: "IFR_AUTO_ACTIVATED",
+      },
+    },
+  };
+  const closure = {
+    notificationType: "FLIGHT_ALERT",
+    flightAlert: {
+      flightIdentifier: "658167349_806440_3217",
+      flightVersionStamp: "20260713174500000",
+      providerNotice: {
+        codedMessage: "IFR_AUTO_CLOSED",
+      },
+    },
+  };
+
+  assert.notEqual(fingerprint(activation), fingerprint(closure));
 });
 
 test("unknown incoming state remains unknown and does not normalize over known lifecycle", () => {

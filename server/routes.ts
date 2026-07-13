@@ -104,7 +104,7 @@ import {
   validateFlightPlanForAction,
   verifyLeidosWebhookAuthorization,
 } from "./services/flight-plan-filing/provider";
-import { extractLeidosWebhookFields, LEIDOS_WEBHOOK_SUCCESS_RESPONSE, summarizeLeidosWebhookPayload } from "./services/leidosWebhook";
+import { buildLeidosWebhookEventFingerprint, extractLeidosWebhookFields, LEIDOS_WEBHOOK_SUCCESS_RESPONSE, summarizeLeidosWebhookPayload } from "./services/leidosWebhook";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import { analyzeFiledRoute } from "@shared/flight-plan-route";
 import { ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE, canCreateAnotherActiveFlightPlan, getActiveFlightPlans } from "@shared/flight-plan-access";
@@ -21986,41 +21986,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   const activeLeidosWebhookEvents = new Set<string>();
 
-  const stableWebhookStringify = (value: unknown): string => {
-    if (value === null || value === undefined) return JSON.stringify(value);
-    if (Array.isArray(value)) return `[${value.map(stableWebhookStringify).join(",")}]`;
-    if (typeof value === "object") {
-      const record = value as Record<string, unknown>;
-      return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableWebhookStringify(record[key])}`).join(",")}}`;
-    }
-    return JSON.stringify(value);
-  };
-
-  const hashLeidosWebhookEvent = (payload: unknown) =>
-    crypto.createHash("sha256").update(stableWebhookStringify(payload)).digest("hex");
-
-  const collectWebhookDateTimes = (input: unknown): string[] => {
-    const found = new Set<string>();
-    const visit = (value: unknown, depth = 0) => {
-      if (!value || depth > 8) return;
-      if (Array.isArray(value)) {
-        for (const item of value) visit(item, depth + 1);
-        return;
-      }
-      if (typeof value !== "object") return;
-      for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-        if (/messageDateTime|notificationTimestamp|timestamp/i.test(key) && nested != null) {
-          const text = String(nested).trim();
-          if (text) found.add(text);
-        }
-        visit(nested, depth + 1);
-      }
-    };
-    visit(input);
-    return Array.from(found).sort();
-  };
-
   const buildLeidosWebhookFingerprint = ({
+    payload,
     flightIdentifier,
     flightVersionStamp,
     flightState,
@@ -22030,6 +21997,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     providerMessageId,
     artccInfo,
   }: {
+    payload: unknown;
     flightIdentifier: string | null;
     flightVersionStamp: string | null;
     flightState: string | null;
@@ -22038,15 +22006,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     messageDateTime: string | null;
     providerMessageId: string | null;
     artccInfo: unknown;
-  }) => hashLeidosWebhookEvent({
-    flightIdentifier: normalizeNotificationValue(flightIdentifier),
-    rawFlightState: normalizeNotificationValue(flightState),
-    rawArtccState: normalizeNotificationValue(artccState),
-    versionStamp: normalizeNotificationValue(flightVersionStamp),
-    notificationType: normalizeNotificationValue(notificationType),
-    messageDateTime: normalizeNotificationValue(messageDateTime),
-    providerMessageId: normalizeNotificationValue(providerMessageId),
-    providerMessageDateTimes: collectWebhookDateTimes(artccInfo),
+  }) => buildLeidosWebhookEventFingerprint({
+    payload,
+    flightIdentifier,
+    flightVersionStamp,
+    flightState,
+    artccState,
+    notificationType,
+    messageDateTime,
+    providerMessageId,
+    artccInfo,
   });
 
   const reserveLeidosWebhookEvent = async ({
@@ -23307,6 +23276,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         null;
       const hasMeaningfulProviderChange = parsedWebhook.hasMeaningfulProviderChange;
       const eventHash = buildLeidosWebhookFingerprint({
+        payload,
         flightIdentifier,
         flightVersionStamp,
         flightState,

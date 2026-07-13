@@ -922,6 +922,33 @@ test("VFR and IFR lifecycle action matrix matches the Leidos demo", () => {
   assert.equal(validateFlightPlanForAction(filedIfr, "close").ready, false);
 });
 
+test("file and amend with past departure remain blocked before provider submission", () => {
+  const pastDeparture = new Date(Date.now() - 15 * 60 * 1000);
+  const pastArrival = new Date(Date.now() + 45 * 60 * 1000);
+  const pastDraft = filingPlan({
+    plannedDepartureAt: pastDeparture,
+    plannedArrivalAt: pastArrival,
+    plannerState: {
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-07-13T12:45",
+    },
+  });
+  const fileResult = validateFlightPlanForAction(pastDraft, "file");
+  assert.equal(fileResult.ready, false);
+  assert.ok(fileResult.errors.some((error) => /departure time/i.test(error) && /past/i.test(error)));
+
+  const pastFiledIfr = filingPlan({
+    ...pastDraft,
+    filingFlightRules: "IFR",
+    filingStatus: "filed",
+    filingIsLive: true,
+    filingProviderPlanId: "LEIDOS-IFR-PAST",
+  });
+  const amendResult = validateFlightPlanForAction(pastFiledIfr, "amend");
+  assert.equal(amendResult.ready, false);
+  assert.ok(amendResult.errors.some((error) => /departure time/i.test(error) && /past/i.test(error)));
+});
+
 test("provider push review blocks filing actions until acknowledged", () => {
   const pendingReview = filingPlan({
     filingStatus: "filed",

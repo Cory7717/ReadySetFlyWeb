@@ -89,7 +89,11 @@ import {
   FilingProviderUpdatesList,
   FilingProviderWorkspace,
 } from "@/components/flight-planner/FilingProviderWorkspace";
-import { FlightPlanLifecycleActions } from "@/components/flight-planner/FlightPlanLifecycleActions";
+import {
+  FlightPlanLifecycleActions,
+  getPastDepartureLifecycleMessage,
+  shouldApplyPastDepartureReadinessBlock,
+} from "@/components/flight-planner/FlightPlanLifecycleActions";
 import { getSavedPlanStatusChip, groupSavedFlightPlans } from "@/components/flight-planner/savedPlanSorting";
 import { AppDownloadBadges } from "@/components/GooglePlayBadge";
 import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
@@ -670,6 +674,11 @@ const getAmendAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
     return provider.reason || "Refresh provider sync before taking filing provider lifecycle actions. RSF could not determine the current provider state.";
   }
 
+  const plannedDepartureAt = plan.plannedDepartureAt ? new Date(plan.plannedDepartureAt) : null;
+  if (plannedDepartureAt && Number.isFinite(plannedDepartureAt.getTime()) && plannedDepartureAt.getTime() < Date.now() - 60_000) {
+    return "This plan's departure time has passed. Synchronize with Flight Service to confirm its current lifecycle before amending.";
+  }
+
   if (rules === "IFR" && status !== "filed") {
     return "IFR plans can only be amended from the filed state.";
   }
@@ -712,6 +721,10 @@ const getDraftAmendAvailabilityMessage = ({
 
   if (!plannedDepartureAt) {
     return "Planned departure time is required before RSF can send this amend request.";
+  }
+  const plannedDepartureDate = new Date(plannedDepartureAt);
+  if (Number.isFinite(plannedDepartureDate.getTime()) && plannedDepartureDate.getTime() < Date.now() - 60_000) {
+    return "This plan's departure time has passed. Synchronize with Flight Service to confirm its current lifecycle before amending.";
   }
 
   if (!trueAirspeedKtas || trueAirspeedKtas <= 0) {
@@ -6498,6 +6511,7 @@ export default function FlightPlanner() {
         : true,
     ];
     const providerStateValid = !currentSavedPlan || !hasPendingProviderReview(currentSavedPlan);
+    const requireFutureDepartureForReadiness = shouldApplyPastDepartureReadinessBlock(currentSavedPlan);
     const issues: FilingReadinessIssue[] = [];
     const addIssue = (condition: boolean, issue: FilingReadinessIssue) => {
       if (condition) issues.push(issue);
@@ -6661,7 +6675,10 @@ export default function FlightPlanner() {
       actionLabel: "Edit",
       actionTab: "route",
     });
-    addIssue(!Boolean(departureAt && Number.isFinite(departureAt.getTime()) && departureAt.getTime() >= now - 60_000), {
+    addIssue(
+      requireFutureDepartureForReadiness &&
+      !Boolean(departureAt && Number.isFinite(departureAt.getTime()) && departureAt.getTime() >= now - 60_000),
+    {
       id: "departure-time",
       category: "Flight Plan",
       field: "departureTime",
@@ -6824,7 +6841,7 @@ export default function FlightPlanner() {
       categorySummaries,
       icaoIssues: icaoReadiness.issues,
       blockingIssues: Array.from(new Set(blockingIssues)),
-      warnings: icaoReadiness.issues.filter((issue) => issue.severity === "warning"),
+    warnings: icaoReadiness.issues.filter((issue) => issue.severity === "warning"),
     };
   }, [
     actualAlternateLocation,
@@ -6857,6 +6874,11 @@ export default function FlightPlanner() {
     zzzzDepartureDescription,
     zzzzDestinationDescription,
   ]);
+  const currentPlanPastDepartureLifecycleMessage = useMemo(() => {
+    const departureAtIso = form.plannedDepartureAt ? toUtcIso(form.plannedDepartureAt, departureTimeZone) : null;
+    const departureAt = departureAtIso ? new Date(departureAtIso) : null;
+    return getPastDepartureLifecycleMessage(currentSavedPlan, departureAt);
+  }, [currentSavedPlan, departureTimeZone, form.plannedDepartureAt]);
   const hasBlockingFilingReadinessIssue = filingReadiness.blockingIssues.length > 0;
   const logFilingReadinessFailure = useCallback((action: "file" | "amend") => {
     const categories = filingReadiness.categorySummaries
@@ -10729,6 +10751,11 @@ export default function FlightPlanner() {
               {currentProviderLifecycleMessage && (
                 <div className="rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
                   {currentProviderLifecycleMessage}
+                </div>
+              )}
+              {currentPlanPastDepartureLifecycleMessage && (
+                <div className="rounded-md border border-blue-400/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-100">
+                  {currentPlanPastDepartureLifecycleMessage}
                 </div>
               )}
               {isPlanOverdueForClose(currentSavedPlan) && normalizedClientFilingStatus(currentSavedPlan) === "activated" && (

@@ -5,6 +5,10 @@ import { resolve } from "node:path";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FlightPlanLifecycleActions } from "../../client/src/components/flight-planner/FlightPlanLifecycleActions";
+import {
+  getPastDepartureLifecycleMessage,
+  shouldApplyPastDepartureReadinessBlock,
+} from "../../client/src/components/flight-planner/FlightPlanLifecycleActions";
 import { FilingProviderUpdatesList, FilingProviderWorkspace } from "../../client/src/components/flight-planner/FilingProviderWorkspace";
 import type { FlightPlan } from "../../shared/schema";
 
@@ -370,6 +374,83 @@ test("rendered lifecycle actions keep amend visible but disabled when an amend p
 
   assert.match(button, /\sdisabled(?:=""|>| )/);
   assert.ok(button.includes(reason));
+});
+
+test("past departure readiness block applies only to unfiled plans", () => {
+  assert.equal(shouldApplyPastDepartureReadinessBlock(null), true);
+  assert.equal(shouldApplyPastDepartureReadinessBlock(lifecyclePlan({
+    filingStatus: "draft",
+    filingIsLive: false,
+    filingProviderPlanId: null,
+    filingProviderSnapshot: {},
+  })), true);
+  assert.equal(shouldApplyPastDepartureReadinessBlock(lifecyclePlan({
+    filingStatus: "filed",
+    filingFlightRules: "IFR",
+  })), false);
+  assert.equal(shouldApplyPastDepartureReadinessBlock(lifecyclePlan({
+    filingStatus: "activated",
+    filingFlightRules: "IFR",
+    filingProviderSnapshot: { providerLifecycleStatus: "activated" },
+  })), false);
+  assert.equal(shouldApplyPastDepartureReadinessBlock(lifecyclePlan({ filingStatus: "closed" })), false);
+  assert.equal(shouldApplyPastDepartureReadinessBlock(lifecyclePlan({ filingStatus: "cancelled" })), false);
+});
+
+test("past filed departure renders provider lifecycle status instead of incomplete-plan copy", () => {
+  const now = Date.parse("2026-07-13T18:00:00.000Z");
+  const pastDeparture = new Date("2026-07-13T17:45:00.000Z");
+
+  assert.equal(
+    getPastDepartureLifecycleMessage(lifecyclePlan({
+      filingStatus: "filed",
+      filingFlightRules: "IFR",
+      filingProviderSnapshot: { providerLifecycleStatus: "proposed" },
+    }), pastDeparture, now),
+    "Departure time has passed. Waiting for provider lifecycle confirmation.",
+  );
+  assert.equal(
+    getPastDepartureLifecycleMessage(lifecyclePlan({
+      filingStatus: "activated",
+      filingFlightRules: "IFR",
+      filingProviderSnapshot: { providerLifecycleStatus: "activated" },
+    }), pastDeparture, now),
+    "Provider lifecycle: ACTIVE.",
+  );
+  assert.equal(
+    getPastDepartureLifecycleMessage(lifecyclePlan({ filingStatus: "closed" }), pastDeparture, now),
+    null,
+  );
+  assert.equal(
+    getPastDepartureLifecycleMessage(lifecyclePlan({ filingStatus: "cancelled" }), pastDeparture, now),
+    null,
+  );
+});
+
+test("filed IFR lifecycle actions never render activate or close after departure", () => {
+  const html = renderLifecycleActions(lifecyclePlan({
+    filingStatus: "filed",
+    filingFlightRules: "IFR",
+    plannedDepartureAt: new Date("2026-07-13T17:45:00.000Z"),
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "proposed",
+      providerStatus: "PROPOSED",
+      artccState: "ROGERED",
+      versionStamp: "20260713174500000",
+      providerActionAvailability: {
+        amend: true,
+        activate: true,
+        cancel: true,
+        close: true,
+      },
+    },
+  }));
+
+  assertButtonVisible(html, lifecycleLabels.amend, { disabled: false });
+  assertButtonVisible(html, lifecycleLabels.cancel, { disabled: false });
+  assertButtonVisible(html, lifecycleLabels.sync, { disabled: false });
+  assertButtonAbsent(html, lifecycleLabels.activate);
+  assertButtonAbsent(html, lifecycleLabels.close);
 });
 
 test("flight planner readiness edit actions target stable planner fields", () => {

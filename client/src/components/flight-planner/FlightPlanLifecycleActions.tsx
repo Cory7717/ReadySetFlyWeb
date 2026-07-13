@@ -110,6 +110,27 @@ export const getFileAvailabilityMessage = (plan: FlightPlan | null | undefined) 
 export const isTerminalFilingPlan = (plan: FlightPlan | null | undefined) =>
   ["cancelled", "closed"].includes(normalizedClientFilingStatus(plan));
 
+export const shouldApplyPastDepartureReadinessBlock = (plan: FlightPlan | null | undefined) => {
+  if (!plan) return true;
+  return canFilePlan(plan);
+};
+
+export const getPastDepartureLifecycleMessage = (plan: FlightPlan | null | undefined, departureAt: Date | null | undefined, nowMs = Date.now()) => {
+  if (!plan || !departureAt || !Number.isFinite(departureAt.getTime()) || departureAt.getTime() >= nowMs - 60_000) {
+    return null;
+  }
+  if (canFilePlan(plan)) return null;
+  const snapshot = getProviderSnapshot(plan);
+  const lifecycle = String(snapshot.providerLifecycleStatus || "").trim().toLowerCase();
+  if (lifecycle === "activated" || lifecycle === "active" || normalizedClientFilingStatus(plan) === "activated") {
+    return "Provider lifecycle: ACTIVE.";
+  }
+  if (!["cancelled", "closed"].includes(normalizedClientFilingStatus(plan))) {
+    return "Departure time has passed. Waiting for provider lifecycle confirmation.";
+  }
+  return null;
+};
+
 export const getCertificationCleanupAction = (plan: FlightPlan | null | undefined): FilingActionName =>
   normalizedClientFilingStatus(plan) === "activated" ? "close" : "cancel";
 

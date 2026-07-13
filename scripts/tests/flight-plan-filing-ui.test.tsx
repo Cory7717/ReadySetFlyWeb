@@ -118,6 +118,18 @@ test("flight planner review workflow exposes one clear filing surface", () => {
   assert.doesNotMatch(source, /Resolve before File or Amend/);
 });
 
+test("flight planner preserves Flight Service lifecycle action buttons", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.doesNotMatch(source, /false && canFilePlan/);
+  assert.doesNotMatch(source, /false && !isTerminalFilingPlan/);
+  assert.doesNotMatch(source, /false && hasPendingProviderReview/);
+  assert.match(source, /submitFilingAction\(\{ planId: currentSavedPlan!\.id, action: "activate" \}\)/);
+  assert.match(source, /submitFilingAction\(\{ planId: currentSavedPlan!\.id, action: "cancel" \}\)/);
+  assert.match(source, /requestSaveCurrentPlanWithFilingAction\("amend", currentSavedPlan!\.id\)/);
+  assert.match(source, /submitFilingAction\(\{ planId: plan\.id, action: "activate" \}\)/);
+  assert.match(source, /submitFilingAction\(\{ planId: plan\.id, action: "cancel" \}\)/);
+});
+
 test("flight planner readiness edit actions target stable planner fields", () => {
   const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
   for (const id of [

@@ -10686,7 +10686,7 @@ export default function FlightPlanner() {
                 <Badge variant="outline">{currentSavedPlanStatus}</Badge>
               </div>
               <div className="flex flex-wrap gap-2">
-                {false && canFilePlan(currentSavedPlan) && (
+                {canFilePlan(currentSavedPlan) && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -10699,7 +10699,6 @@ export default function FlightPlanner() {
                 )}
                 {!isTerminalFilingPlan(currentSavedPlan) && hasLiveProviderPlan(currentSavedPlan) && (
                   <>
-                    {false && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -10727,7 +10726,6 @@ export default function FlightPlanner() {
                     >
                       {currentDraftCanAmend ? filingActionLabels.amend : "Review amend requirements"}
                     </Button>
-                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -11121,7 +11119,7 @@ export default function FlightPlanner() {
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  {false && canFilePlan(plan) && (
+                  {canFilePlan(plan) && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -11140,7 +11138,7 @@ export default function FlightPlanner() {
                       {filingActionLabels.file}
                     </Button>
                   )}
-                  {false && !isTerminalFilingPlan(plan) && hasLiveProviderPlan(plan) && (
+                  {!isTerminalFilingPlan(plan) && hasLiveProviderPlan(plan) && (
                     <>
                       <Button
                         size="sm"
@@ -11195,7 +11193,7 @@ export default function FlightPlanner() {
                       </Button>
                     </>
                   )}
-                  {false && hasPendingProviderReview(plan) && (
+                  {hasPendingProviderReview(plan) && (
                     <Button
                       size="sm"
                       variant="default"
@@ -11227,7 +11225,7 @@ export default function FlightPlanner() {
                     ) : null}
                     Provider updates
                   </Button>
-                  {false && !isTerminalFilingPlan(plan) && (plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
+                  {!isTerminalFilingPlan(plan) && (plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
                     <>
                       <Button
                         size="sm"
@@ -11254,7 +11252,7 @@ export default function FlightPlanner() {
                       </Button>
                     </>
                   )}
-                  {false && !isTerminalFilingPlan(plan) && hasLiveProviderPlan(plan) && (
+                  {!isTerminalFilingPlan(plan) && hasLiveProviderPlan(plan) && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -11264,7 +11262,7 @@ export default function FlightPlanner() {
                       {filingActionLabels.cancel}
                     </Button>
                   )}
-                  {false && certificationPlan && !isTerminalFilingPlan(plan) && (
+                  {certificationPlan && !isTerminalFilingPlan(plan) && (
                     <Button
                       size="sm"
                       variant="destructive"

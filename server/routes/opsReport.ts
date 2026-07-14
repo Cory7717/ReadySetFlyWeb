@@ -326,7 +326,7 @@ export function opsLaborBucketForSchedule(employee: any, assignment: any, shiftT
   }
   if (isFrontDeskSupervisorForOps(employee) || isFrontDeskSupervisorText(shiftText)) {
     return {
-      department: "OTHER",
+      department: "FRONT DESK / NIGHT AUDIT HOURS",
       label: employee?.displayName ? `Front Desk Supervisor (${employee.displayName})` : "Front Desk Supervisor",
     };
   }
@@ -410,7 +410,7 @@ function isBistroManagerForOps(employee: any) {
 
 function opsDepartmentFromText(value: string) {
   const text = String(value || "").toLowerCase();
-  if (isFrontDeskSupervisorText(text)) return "OTHER";
+  if (isFrontDeskSupervisorText(text)) return "FRONT DESK / NIGHT AUDIT HOURS";
   if (text.includes("audit") || text.includes("night") || text.includes("front") || text.includes("fd ") || text.includes("desk")) return "FRONT DESK / NIGHT AUDIT HOURS";
   if (text.includes("house") || text.includes("hk") || text.includes("laundry") || text.includes("room attendant") || text.includes("inspector")) return "HOUSEKEEPING HOURS";
   if (text.includes("bistro") || text.includes("breakfast") || text.includes("barista") || text.includes("cook") || text.includes("f&b") || text.includes("restaurant")) return "BREAKFAST / BISTRO HOURS";
@@ -481,7 +481,6 @@ function emptyLaborDepartments() {
     "HOUSEKEEPING HOURS": 0,
     "BREAKFAST / BISTRO HOURS": 0,
     "MAINTENANCE HOURS": 0,
-    OTHER: 0,
   } as Record<string, number>;
 }
 
@@ -517,7 +516,7 @@ function parseEmployeeLaborTotals(text: string, employees: any[], departments: R
     const employee = findLaborEmployeeMatch(name, employees);
     if (isExcludedActualOpsLaborEmployee(employee) || (!employee && isExcludedActualOpsLaborLabel(name))) continue;
     const department = employee ? opsDepartmentForEmployee(employee) : "OTHER";
-    addDepartmentHours(departments, department, hours);
+    if (department !== "OTHER") addDepartmentHours(departments, department, hours);
     employeeHours.push({
       name,
       employeeNumber,
@@ -565,6 +564,7 @@ export function parseLaborSummaryText(text: string, employees: any[] = []) {
 }
 
 function addDepartmentHours(target: Record<string, number>, department: string, hours: number) {
+  if (!Object.prototype.hasOwnProperty.call(target, department)) return;
   target[department] = Number(((target[department] || 0) + hours).toFixed(2));
 }
 
@@ -900,7 +900,6 @@ export function registerOpsReportRoutes(app: Express) {
         "HOUSEKEEPING HOURS": 0,
         "BREAKFAST / BISTRO HOURS": 0,
         "MAINTENANCE HOURS": 0,
-        OTHER: 0,
       };
       const breakdown = emptyLaborBreakdown();
       const wageEstimates = emptyLaborWageEstimates();
@@ -922,6 +921,7 @@ export function registerOpsReportRoutes(app: Express) {
         const hours = shiftHours(assignment, shiftType);
         if (hours <= 0) continue;
         const bucket = opsLaborBucketForSchedule(employee, assignment, shiftType);
+        if (!Object.prototype.hasOwnProperty.call(departments, bucket.department)) continue;
         addDepartmentHours(departments, bucket.department, hours);
         addLaborWageEstimate(
           wageEstimates,

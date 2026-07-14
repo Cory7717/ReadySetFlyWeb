@@ -80,6 +80,43 @@ type OpsDraftResponse = {
     updatedAt: string;
   };
 };
+
+const ONLINE_REPUTATION_SOURCES = ["GOOGLE", "BOOKING.COM", "EXPEDIA", "TRIPADVISOR", "YELP", "BRAND.COM"];
+const buildReputationRows = () =>
+  ONLINE_REPUTATION_SOURCES.map((label) => ({ label, reviews: "", score: "", outOf: "", goal: "", variance: "", strategy: "" }));
+const ensureReputationSources = (rows: Row[] | undefined | null) => {
+  const currentRows = Array.isArray(rows) ? rows : [];
+  const existingLabels = new Set(currentRows.map((row) => String(row.label || "").trim().toUpperCase()));
+  const missingRows = ONLINE_REPUTATION_SOURCES
+    .filter((label) => !existingLabels.has(label))
+    .map((label) => ({ label, reviews: "", score: "", outOf: "", goal: "", variance: "", strategy: "" }));
+  return [...currentRows, ...missingRows];
+};
+const CONTROLLABLE_LABOR_DEPARTMENTS = [
+  "FRONT DESK / NIGHT AUDIT HOURS",
+  "HOUSEKEEPING HOURS",
+  "BREAKFAST / BISTRO HOURS",
+  "MAINTENANCE HOURS",
+];
+const defaultLaborRows = (): Row[] => [
+  { department: "FRONT DESK / NIGHT AUDIT HOURS", scheduledHours: "", actualHours: "", budget: "168", comments: "112 FD + 56 Night Audit + Front Desk Supervisor" },
+  { department: "HOUSEKEEPING HOURS", scheduledHours: "", actualHours: "", budget: "45", comments: "" },
+  { department: "BREAKFAST / BISTRO HOURS", scheduledHours: "", actualHours: "", budget: "41", comments: "" },
+  { department: "MAINTENANCE HOURS", scheduledHours: "", actualHours: "", budget: "56", comments: "" },
+];
+const normalizeLaborRows = (rows: Row[] | undefined | null): Row[] => {
+  const currentRows = Array.isArray(rows) ? rows : [];
+  const allowed = new Set(CONTROLLABLE_LABOR_DEPARTMENTS);
+  const byDepartment = new Map(
+    currentRows
+      .filter((row) => allowed.has(String(row.department || "").trim().toUpperCase()))
+      .map((row) => [String(row.department || "").trim().toUpperCase(), row]),
+  );
+  return defaultLaborRows().map((defaultRow) => ({
+    ...defaultRow,
+    ...(byDepartment.get(defaultRow.department) || {}),
+  }));
+};
 type MonthlySummaryAccount = { name: string; roomNights: string };
 type MonthlySummaryForm = {
   reportMonth: string;
@@ -1073,13 +1110,7 @@ export default function OpsReportPage() {
   const [ar, setAr] = useState({ current: "", d30: "", d60: "", d90: "", comments: "" });
   const [ledger, setLedger] = useState({ balance: "", over1000: "", uncovered: "", comment: "" });
   const [ledgerExceptions, setLedgerExceptions] = useState<Row[]>([]);
-  const [labor, setLabor] = useState<Row[]>([
-    { department: "FRONT DESK / NIGHT AUDIT HOURS", scheduledHours: "", actualHours: "", budget: "168", comments: "112 FD + 56 Night Audit" },
-    { department: "HOUSEKEEPING HOURS", scheduledHours: "", actualHours: "", budget: "45", comments: "" },
-    { department: "BREAKFAST / BISTRO HOURS", scheduledHours: "", actualHours: "", budget: "41", comments: "" },
-    { department: "MAINTENANCE HOURS", scheduledHours: "", actualHours: "", budget: "56", comments: "" },
-    { department: "OTHER", scheduledHours: "", actualHours: "", budget: "5", comments: "" },
-  ]);
+  const [labor, setLabor] = useState<Row[]>(defaultLaborRows());
   const [laborFile, setLaborFile] = useState<File | null>(null);
   const [uploadedReports, setUploadedReports] = useState<Array<Record<string, any>>>([]);
   const [draftHydrated, setDraftHydrated] = useState(false);
@@ -1140,7 +1171,7 @@ export default function OpsReportPage() {
   const [gmOverviewRows, setGmOverviewRows] = useState<Row[]>(emptyRows(6, ["no", "bullet"]));
   const [gssRows, setGssRows] = useState<Row[]>(defaultGssRows(true));
   const [gssWaveRows, setGssWaveRows] = useState<Row[]>(defaultGssRows());
-  const [reputationRows, setReputationRows] = useState<Row[]>(["GOOGLE", "BOOKING.COM", "EXPEDIA", "TRIPADVISOR", "YELP"].map((label) => ({ label, reviews: "", score: "", outOf: "", goal: "", variance: "", strategy: "" })));
+  const [reputationRows, setReputationRows] = useState<Row[]>(buildReputationRows());
   const [positiveReviews, setPositiveReviews] = useState<Row[]>(emptyRows(5, ["source", "score", "comment"]));
   const [negativeReviews, setNegativeReviews] = useState<Row[]>(emptyRows(5, ["source", "score", "comment"]));
   const [followUp, setFollowUp] = useState<Row[]>(emptyRows(5, ["point", "direction", "owner", "dueDate", "status", "notes"]));
@@ -1841,19 +1872,13 @@ export default function OpsReportPage() {
     setAr({ current: "", d30: "", d60: "", d90: "", comments: "" });
     setLedger({ balance: "", over1000: "", uncovered: "", comment: "" });
     setLedgerExceptions([]);
-    setLabor([
-      { department: "FRONT DESK / NIGHT AUDIT HOURS", scheduledHours: "", actualHours: "", budget: "168", comments: "112 FD + 56 Night Audit" },
-      { department: "HOUSEKEEPING HOURS", scheduledHours: "", actualHours: "", budget: "45", comments: "" },
-      { department: "BREAKFAST / BISTRO HOURS", scheduledHours: "", actualHours: "", budget: "41", comments: "" },
-      { department: "MAINTENANCE HOURS", scheduledHours: "", actualHours: "", budget: "56", comments: "" },
-      { department: "OTHER", scheduledHours: "", actualHours: "", budget: "5", comments: "" },
-    ]);
+    setLabor(defaultLaborRows());
     setStaffing({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
     setCases(emptyRows(5, ["no", "guest", "incidentType", "resolution", "comment"]));
     setGmOverviewRows(emptyRows(6, ["no", "bullet"]));
     setGssRows(defaultGssRows(true));
     setGssWaveRows(defaultGssRows());
-    setReputationRows(["GOOGLE", "BOOKING.COM", "EXPEDIA", "TRIPADVISOR", "YELP"].map((label) => ({ label, reviews: "", score: "", outOf: "", goal: "", variance: "", strategy: "" })));
+    setReputationRows(buildReputationRows());
     setPositiveReviews(emptyRows(5, ["source", "score", "comment"]));
     setNegativeReviews(emptyRows(5, ["source", "score", "comment"]));
     setFollowUp(emptyRows(5, ["point", "direction", "owner", "dueDate", "status", "notes"]));
@@ -1876,7 +1901,7 @@ export default function OpsReportPage() {
     if (payload.ar) setAr(payload.ar);
     if (payload.ledger) setLedger(payload.ledger);
     if (payload.ledgerExceptions) setLedgerExceptions(payload.ledgerExceptions);
-    if (payload.labor) setLabor(payload.labor);
+    if (payload.labor) setLabor(normalizeLaborRows(payload.labor));
     if (payload.monthlyBudgets) setMonthlyBudgets(payload.monthlyBudgets.map(normalizeMonthlyBudgetRow));
     if (payload.bistroProductions) setBistroProductions(payload.bistroProductions);
     if (payload.meetingProductions) setMeetingProductions(payload.meetingProductions);
@@ -1886,7 +1911,7 @@ export default function OpsReportPage() {
     else if (typeof payload.gmOverview === "string") setGmOverviewRows(payload.gmOverview.split(/\n+/).filter(Boolean).slice(0, 6).map((bullet: string, index: number) => ({ no: String(index + 1), bullet: bullet.replace(/^[-*•\s]+/, "") })));
     if (payload.gssRows) setGssRows(normalizeGssRows(payload.gssRows));
     if (payload.gssWaveRows) setGssWaveRows(normalizeGssRows(payload.gssWaveRows));
-    if (payload.reputationRows) setReputationRows(payload.reputationRows);
+    if (payload.reputationRows) setReputationRows(ensureReputationSources(payload.reputationRows));
     if (payload.positiveReviews) setPositiveReviews(payload.positiveReviews);
     if (payload.negativeReviews) setNegativeReviews(payload.negativeReviews);
     if (payload.followUp) setFollowUp(payload.followUp);

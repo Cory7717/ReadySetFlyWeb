@@ -18,7 +18,7 @@ test("Excel serial dates normalize without time-zone drift", () => {
   assert.equal(excelDateToIso(" May 30, 2026"), "2026-05-30");
 });
 
-test("OpsReport scheduled labor keeps front desk supervisor fallback out of Bistro and labels Bistro managers correctly", () => {
+test("OpsReport scheduled labor counts front desk supervisor with Front Desk and labels Bistro managers correctly", () => {
   const crossTrainedFrontDeskEmployee = {
     displayName: "Avalon Fletcher",
     department: "Front Desk",
@@ -32,7 +32,7 @@ test("OpsReport scheduled labor keeps front desk supervisor fallback out of Bist
     { label: "Bistro Attendant", departmentHint: "Bistro" },
   );
   assert.deepEqual(attendantBucket, {
-    department: "OTHER",
+    department: "FRONT DESK / NIGHT AUDIT HOURS",
     label: "Front Desk Supervisor (Avalon Fletcher)",
   });
 
@@ -74,7 +74,7 @@ test("OpsReport wage estimates produce hourly-only and with-salary blended rates
   assert.equal(finalized["FRONT DESK / NIGHT AUDIT HOURS"].blendedHourlyRate, 22);
 });
 
-test("OpsReport actual labor excludes GM and DOS but keeps front desk supervisor in Other", () => {
+test("OpsReport actual labor excludes GM DOS and Other while counting front desk supervisor with Front Desk", () => {
   const parsed = parseLaborSummaryText([
     "Department(Management) ~ Position(General Manager) Totals",
     "Total Earnings 40.00",
@@ -84,11 +84,13 @@ test("OpsReport actual labor excludes GM and DOS but keeps front desk supervisor
     "Total Earnings 38.00",
     "Department(Front Desk) ~ Position(Front Desk Agent) Totals",
     "Total Earnings 80.00",
+    "Department(Admin) ~ Position(Other) Totals",
+    "Total Earnings 12.00",
     "Grand Totals",
   ].join("\n"));
 
-  assert.equal(parsed.departments.OTHER, 38);
-  assert.equal(parsed.departments["FRONT DESK / NIGHT AUDIT HOURS"], 80);
+  assert.equal("OTHER" in parsed.departments, false);
+  assert.equal(parsed.departments["FRONT DESK / NIGHT AUDIT HOURS"], 118);
   assert.equal(Object.values(parsed.departments).reduce((sum, hours) => sum + hours, 0), 118);
 });
 

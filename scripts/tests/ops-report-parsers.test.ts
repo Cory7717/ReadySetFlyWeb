@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { excelDateToIso, parseOpsReportFile } from "../../server/opsReportParsers";
+import { excelDateToIso, parseOooText, parseOpsReportFile } from "../../server/opsReportParsers";
 import { addLaborWageEstimate, emptyLaborWageEstimates, finalizeLaborWageEstimates, parseLaborSummaryText, opsLaborBreakdownLabelForSchedule, opsLaborBucketForSchedule } from "../../server/routes/opsReport";
 
 const context = { weekStart: "2026-05-30", weekEnd: "2026-06-05", reportMonth: "2026-06" };
@@ -154,4 +154,31 @@ test("AR Aging warns on missing buckets and aggregates available balances", asyn
   assert.equal(report.reportType, "ar_aging");
   assert.equal((report.mapping.summary as any).total, 137);
   assert.equal((report.mapping.summary as any).d120, 2);
+});
+
+test("OOO Rooms parser extracts table-style PDF text rows", () => {
+  const parsed = parseOooText([
+    "OOO Rooms",
+    "Start Date: Jun 01, 2026 - End Date: Jun 07, 2026",
+    "Room No Room Type Type Reason Status OOO Start Date Expected Return",
+    "214 KING OOO HVAC repair VAC Jun 01, 2026 Jun 03, 2026",
+    "318 QQ OUT OF ORDER Plumbing leak DIRTY 06/02/2026 06/04/2026",
+  ].join("\n"));
+
+  assert.deepEqual(parsed.reportRange, { startDate: "2026-06-01", endDate: "2026-06-07" });
+  assert.equal(parsed.rooms.length, 2);
+  assert.equal(parsed.rooms[0].room, "214");
+  assert.equal(parsed.rooms[0].startDate, "2026-06-01");
+  assert.equal(parsed.rooms[0].returnDate, "2026-06-03");
+  assert.equal(parsed.rooms[1].oooType, "OUT_OF_ORDER");
+  assert.equal(parsed.rooms[1].startDate, "2026-06-02");
+});
+
+test("OOO Rooms parser keeps compact hotel export rows working", () => {
+  const parsed = parseOooText("start date Jun 01, 2026 || end date Jun 07, 2026 HOTEL214KINGOOOHVAC repairVACJun 01, 2026Jun 03, 2026");
+
+  assert.equal(parsed.rooms.length, 1);
+  assert.equal(parsed.rooms[0].room, "214");
+  assert.equal(parsed.rooms[0].roomType, "KING");
+  assert.equal(parsed.rooms[0].comment, "OOO / VAC - HVAC repair (KING)");
 });

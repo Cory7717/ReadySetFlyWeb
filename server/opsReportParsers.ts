@@ -655,30 +655,84 @@ function parseAr(file: Express.Multer.File, rows: string[][], context: OpsParser
   return { ...baseReport(file, "ar_aging", context, warnings), preview: accounts.slice(0, 10), mapping: { accounts, summary } };
 }
 
+const OOO_DATE_PATTERN = String.raw`(?:[A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})`;
+
+function cleanOooReason(value: unknown) {
+  return String(value || "")
+    .replace(/\b(?:Room|Room No|Room Type|Type|OOO|OTM|Status|Reason|Start Date|End Date|Expected Return|Return Date|Guest|Housekeeping|Front Desk)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[|:,\-\s]+|[|:,\-\s]+$/g, "")
+    .trim();
+}
+
+export function parseOooText(text: string) {
+  const normalizedText = String(text || "")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+  const rangePattern = new RegExp(String.raw`(?:start\s*date|from)\s*[:\-]?\s*(${OOO_DATE_PATTERN})\s*(?:\|\||\||-|to|through|thru)\s*(?:end\s*date|to|through|thru)?\s*[:\-]?\s*(${OOO_DATE_PATTERN})`, "i");
+  const range = normalizedText.match(rangePattern);
+  const rooms: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
+  const addRoom = (room: string, roomType: string, oooType: string, reason: string, status: string, startDate: string, returnDate: string) => {
+    const cleanedRoom = String(room || "").trim();
+    const cleanedStart = excelDateToIso(startDate);
+    const cleanedReturn = excelDateToIso(returnDate);
+    if (!cleanedRoom || !cleanedStart) return;
+    const key = [cleanedRoom, oooType, cleanedStart, cleanedReturn].join("|");
+    if (seen.has(key)) return;
+    seen.add(key);
+    const cleanedReason = cleanOooReason(reason);
+    const cleanedRoomType = String(roomType || "").trim();
+    const cleanedStatus = String(status || "").trim();
+    rooms.push({
+      no: String(rooms.length + 1),
+      room: cleanedRoom,
+      roomType: cleanedRoomType,
+      oooType: String(oooType || "OOO").trim().toUpperCase(),
+      reason: cleanedReason,
+      status: cleanedStatus,
+      startDate: cleanedStart,
+      returnDate: cleanedReturn,
+      comment: [
+        String(oooType || "OOO").trim().toUpperCase(),
+        cleanedStatus ? `/ ${cleanedStatus}` : "",
+        cleanedReason ? `- ${cleanedReason}` : "",
+        cleanedRoomType ? `(${cleanedRoomType})` : "",
+      ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim(),
+    });
+  };
+
+  const compactPattern = new RegExp(String.raw`HOTEL\s*(\d+)\s*([A-Z0-9][A-Z0-9 /-]*?)\s*(OOO|OTM)\s*(.*?)\s*(VAC|OCC|DIRTY|CLEAN)\s*(${OOO_DATE_PATTERN})\s*(${OOO_DATE_PATTERN})`, "gi");
+  let match: RegExpExecArray | null;
+  while ((match = compactPattern.exec(normalizedText))) {
+    addRoom(match[1], match[2], match[3], match[4], match[5], match[6], match[7]);
+  }
+
+  const linePattern = new RegExp(String.raw`(?:^|\n)\s*(?:HOTEL\s*)?(\d{2,5})\s+([A-Z0-9][A-Z0-9 /-]{0,24}?)\s+(OOO|OTM|OUT\s+OF\s+ORDER|OUT\s+OF\s+SERVICE)\s+(.{0,160}?)\s+(VAC|OCC|DIRTY|CLEAN|VACANT|OCCUPIED)\s+(${OOO_DATE_PATTERN})\s+(${OOO_DATE_PATTERN})(?=\s*(?:\n|$))`, "gi");
+  while ((match = linePattern.exec(normalizedText))) {
+    addRoom(match[1], match[2], match[3].replace(/\s+/g, "_"), match[4], match[5], match[6], match[7]);
+  }
+
+  const noTypeLinePattern = new RegExp(String.raw`(?:^|\n)\s*(?:Room\s*)?(\d{2,5})\s+(OOO|OTM|OUT\s+OF\s+ORDER|OUT\s+OF\s+SERVICE)\s+(.{0,160}?)\s+(VAC|OCC|DIRTY|CLEAN|VACANT|OCCUPIED)\s+(${OOO_DATE_PATTERN})\s+(${OOO_DATE_PATTERN})(?=\s*(?:\n|$))`, "gi");
+  while ((match = noTypeLinePattern.exec(normalizedText))) {
+    addRoom(match[1], "", match[2].replace(/\s+/g, "_"), match[3], match[4], match[5], match[6]);
+  }
+
+  return {
+    rooms,
+    reportRange: { startDate: excelDateToIso(range?.[1]), endDate: excelDateToIso(range?.[2]) },
+  };
+}
+
 async function parseOoo(file: Express.Multer.File, context: OpsParserContext): Promise<ParsedReport> {
   const warnings: string[] = [];
   const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (buffer: Buffer) => Promise<{ text?: string }>;
-  const text = String((await pdfParse(file.buffer)).text || "").replace(/\r/g, "");
-  const range = text.match(/start date\s+([A-Z][a-z]{2}\s+\d{1,2},\s+\d{4})\s+\|\|\s+end date\s+([A-Z][a-z]{2}\s+\d{1,2},\s+\d{4})/i);
-  const rowPattern = /HOTEL(\d+)([A-Z0-9]+)(OOO|OTM)(.*?)(VAC|OCC|DIRTY|CLEAN)([A-Z][a-z]{2}\s+\d{1,2},\s+\d{4})([A-Z][a-z]{2}\s+\d{1,2},\s+\d{4})/g;
-  const rooms: Array<Record<string, unknown>> = [];
-  let match: RegExpExecArray | null;
-  while ((match = rowPattern.exec(text))) {
-    rooms.push({
-      no: String(rooms.length + 1),
-      room: match[1],
-      roomType: match[2],
-      oooType: match[3],
-      reason: match[4].trim(),
-      status: match[5],
-      startDate: excelDateToIso(match[6]),
-      returnDate: excelDateToIso(match[7]),
-      comment: `${match[3]} / ${match[5]} - ${match[4].trim()} (${match[2]})`,
-    });
-  }
+  const text = String((await pdfParse(file.buffer)).text || "");
+  const { rooms, reportRange } = parseOooText(text);
   if (!rooms.length) warnings.push("No room-level OOO rows were extracted from the PDF.");
-  if (!range) warnings.push("The OOO report date range was not found.");
-  const reportRange = { startDate: excelDateToIso(range?.[1]), endDate: excelDateToIso(range?.[2]) };
+  if (!reportRange.startDate || !reportRange.endDate) warnings.push("The OOO report date range was not found.");
   if (context.weekStart && reportRange.startDate && context.weekStart !== reportRange.startDate) warnings.push("OOO report start date does not match the selected week.");
   if (context.weekEnd && reportRange.endDate && context.weekEnd !== reportRange.endDate) warnings.push("OOO report end date does not match the selected week.");
   return { ...baseReport(file, "ooo_rooms", context, warnings), preview: rooms.slice(0, 10), mapping: { rooms, reportRange } };
@@ -873,7 +927,7 @@ export async function parseOpsReportFile(file: Express.Multer.File, context: Ops
   const isPdf = /\.pdf$/i.test(file.originalname) || file.mimetype === "application/pdf";
   if (isPdf) {
     if (/credit\s*limit|creditlimit/i.test(file.originalname)) return parseCreditLimit(file, context);
-    if (!/ooo\s*rooms|out\s*of\s*order/i.test(file.originalname)) throw new Error("Only OOO Rooms and Credit Limit PDFs are supported in the ops report uploader.");
+    if (!/\booo\b|out\s*of\s*order|out\s*of\s*service/i.test(file.originalname)) throw new Error("Only OOO Rooms and Credit Limit PDFs are supported in the ops report uploader.");
     return parseOoo(file, context);
   }
   const isCsv = /\.csv$/i.test(file.originalname) || file.mimetype === "text/csv";

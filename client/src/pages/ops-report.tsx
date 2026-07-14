@@ -485,15 +485,29 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
   }
   if (resolvedReportType === "next_month_otb") {
     const total = mapping.total || {};
+    const priorYearTotal = mapping.priorYearTotal || null;
     next.nextMonthRows = (next.nextMonthRows || []).map((row: Row) => {
-      if (String(row.label || "").toUpperCase() !== "FUTURE BOOKED FOR NEXT MONTH") return row;
+      const label = String(row.label || "").toUpperCase();
+      if (label === "SDLY OTB FOR NEXT MONTH" && priorYearTotal) {
+        return {
+          ...row,
+          occupancy: percentDisplay(priorYearTotal.occupancy),
+          rooms: rowValue(priorYearTotal.roomsSold, 0),
+          adr: accounting(priorYearTotal.adr),
+          revenue: accounting(priorYearTotal.roomRevenue),
+          comments: `SDLY pacing as of ${mapping.reportRunDate || "uploaded snapshot"} for ${mapping.dateStart} to ${mapping.dateEnd}`,
+        };
+      }
+      if (label !== "FUTURE BOOKED FOR NEXT MONTH") return row;
       return {
         ...row,
         occupancy: percentDisplay(total.occupancy),
         rooms: rowValue(total.roomsSold, 0),
         adr: accounting(total.adr),
         revenue: accounting(total.roomRevenue),
-        comments: `Imported ${mapping.dateStart} to ${mapping.dateEnd}`,
+        comments: mapping.currentYearTotal
+          ? `TY pacing as of ${mapping.reportRunDate || "uploaded snapshot"} for ${mapping.dateStart} to ${mapping.dateEnd}`
+          : `Imported ${mapping.dateStart} to ${mapping.dateEnd}`,
       };
     });
   }
@@ -1689,8 +1703,8 @@ export default function OpsReportPage() {
     {
       name: "Next Month OTB",
       scope: `${displayOpsDate(followingMonthStart)} through ${displayOpsDate(followingMonthEnd)}`,
-      parameters: `Run the full ${monthLabelFromKey(followingMonthKey)} calendar month, including the TOTAL row.`,
-      fileName: `MMDDYYYY_${monthLabelFromKey(followingMonthKey).split(" ")[0]} Month OTB.csv`,
+      parameters: `Upload a MINT pacing screenshot showing the full ${monthLabelFromKey(followingMonthKey)} Stay Date Range, Grand Total row, and report run timestamp. The importer maps Grand Total TY rooms, ADR, and room revenue into Future Booked for Next Month, and STLY into SDLY OTB for Next Month.`,
+      fileName: `MMDDYYYY_MINT_${monthLabelFromKey(followingMonthKey).split(" ")[0]}_Pacing.png`,
     },
     {
       name: "Next Month SDLY OTB",
@@ -2637,8 +2651,7 @@ export default function OpsReportPage() {
             </Section>
             <Section title="Next Month Data">
               <SectionReportUpload
-                reports={reportGuideFor("Next Month OTB", "Next Month SDLY OTB")}
-                multiple
+                reports={reportGuideFor("Next Month OTB")}
                 uploading={opsReportUpload.isPending}
                 onUpload={(files) => uploadSectionReports("Next Month", files)}
               />

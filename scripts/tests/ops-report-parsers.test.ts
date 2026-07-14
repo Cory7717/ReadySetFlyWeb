@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { excelDateToIso, parseOooText, parseOpsReportFile } from "../../server/opsReportParsers";
 import { addLaborWageEstimate, emptyLaborWageEstimates, finalizeLaborWageEstimates, parseLaborSummaryText, opsLaborBreakdownLabelForSchedule, opsLaborBucketForSchedule } from "../../server/routes/opsReport";
@@ -181,4 +182,15 @@ test("OOO Rooms parser keeps compact hotel export rows working", () => {
   assert.equal(parsed.rooms[0].room, "214");
   assert.equal(parsed.rooms[0].roomType, "KING");
   assert.equal(parsed.rooms[0].comment, "OOO / VAC - HVAC repair (KING)");
+});
+
+test("Next Month Data uses one MINT pacing PNG instead of the CSV OTB upload", () => {
+  const pageSource = readFileSync("client/src/pages/ops-report.tsx", "utf8");
+  const parserSource = readFileSync("server/opsReportParsers.ts", "utf8");
+
+  assert.match(pageSource, /name:\s*"Next Month OTB"[\s\S]*Grand Total TY rooms[\s\S]*Pacing\.png/);
+  assert.match(pageSource, /reports=\{reportGuideFor\("Next Month OTB"\)\}/);
+  assert.doesNotMatch(pageSource, /reports=\{reportGuideFor\("Next Month OTB", "Next Month SDLY OTB"\)\}/);
+  assert.match(parserSource, /isCurrentMonthPacing \? "current_month_sdly_otb" : "next_month_otb"/);
+  assert.match(parserSource, /priorYearTotal: stlyTotal/);
 });

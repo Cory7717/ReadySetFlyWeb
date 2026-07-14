@@ -885,35 +885,49 @@ Do not use percentages, detail rows, or infer unreadable values.`;
   }
   const days = Math.round((expectedEndDate.getTime() - new Date(`${expectedStart}T00:00:00Z`).getTime()) / 86_400_000) + 1;
   const availableRoomNights = totalRooms * days;
-  const occupancy = availableRoomNights ? data.roomNightsStly / availableRoomNights : 0;
+  const stlyOccupancy = availableRoomNights ? data.roomNightsStly / availableRoomNights : 0;
+  const tyOccupancy = availableRoomNights ? data.roomNightsTy / availableRoomNights : 0;
   const warnings: string[] = [];
   if (Math.abs(data.roomNightsStly * data.adrStly - data.roomRevenueStly) > Math.max(5, data.roomRevenueStly * 0.01)) {
     warnings.push("Grand Total STLY rooms multiplied by ADR does not closely match STLY room revenue; review the screenshot values.");
   }
+  if (Math.abs(data.roomNightsTy * data.adrTy - data.roomRevenueTy) > Math.max(5, data.roomRevenueTy * 0.01)) {
+    warnings.push("Grand Total TY rooms multiplied by ADR does not closely match TY room revenue; review the screenshot values.");
+  }
+  const isCurrentMonthPacing = expectedMonth === reportMonth;
+  const tyTotal = {
+    roomsSold: round(data.roomNightsTy, 0),
+    occupancy: round(tyOccupancy, 6),
+    adr: round(data.adrTy, 2),
+    roomRevenue: round(data.roomRevenueTy, 2),
+    roomsActive: availableRoomNights,
+  };
+  const stlyTotal = {
+    roomsSold: round(data.roomNightsStly, 0),
+    occupancy: round(stlyOccupancy, 6),
+    adr: round(data.adrStly, 2),
+    roomRevenue: round(data.roomRevenueStly, 2),
+    roomsActive: availableRoomNights,
+  };
   const mapping = {
     dateStart: data.stayDateStart,
     dateEnd: data.stayDateEnd,
     reportRunDate: data.reportRunDate,
-    total: {
-      roomsSold: round(data.roomNightsStly, 0),
-      occupancy: round(occupancy, 6),
-      adr: round(data.adrStly, 2),
-      roomRevenue: round(data.roomRevenueStly, 2),
-      roomsActive: availableRoomNights,
-    },
-    currentYearTotal: {
-      roomsSold: round(data.roomNightsTy, 0),
-      adr: round(data.adrTy, 2),
-      roomRevenue: round(data.roomRevenueTy, 2),
-    },
+    total: isCurrentMonthPacing ? stlyTotal : tyTotal,
+    currentYearTotal: tyTotal,
+    priorYearTotal: stlyTotal,
   };
   return {
-    ...baseReport(file, expectedMonth === reportMonth ? "current_month_sdly_otb" : "next_month_sdly_otb", context, warnings),
+    ...baseReport(file, isCurrentMonthPacing ? "current_month_sdly_otb" : "next_month_otb", context, warnings),
     preview: [{
       stayDateRange: `${data.stayDateStart} to ${data.stayDateEnd}`,
       reportRunDate: data.reportRunDate,
+      tyRooms: data.roomNightsTy,
+      tyOccupancy: round(tyOccupancy * 100, 2),
+      tyAdr: data.adrTy,
+      tyRoomRevenue: data.roomRevenueTy,
       stlyRooms: data.roomNightsStly,
-      stlyOccupancy: round(occupancy * 100, 2),
+      stlyOccupancy: round(stlyOccupancy * 100, 2),
       stlyAdr: data.adrStly,
       stlyRoomRevenue: data.roomRevenueStly,
     }],

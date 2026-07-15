@@ -813,7 +813,7 @@ test("flight planner phase three route winds use calculated component with expli
   assert.match(source, /const selectedWindComponentKt = manualWindOverrideEnabled \? manualWindValue : calculatedWindComponentKt/);
   assert.match(source, /const groundspeed = Math\.max\(40, planningCruise - selectedWindComponentKt\)/);
   assert.match(source, /Route wind component/);
-  assert.match(source, /Override calculated winds/);
+  assert.match(source, /Override winds/);
   assert.match(source, /Use calculated winds/);
   assert.doesNotMatch(source, /<Label>Avg Headwind \(kt\)<\/Label>/);
 });
@@ -827,4 +827,21 @@ test("flight planner route mode and route controls appear before aircraft setup"
   assert.ok(routeModeIndex > 0, "route mode exists");
   assert.ok(routeAssistIndex > routeModeIndex, "route assist helpers are after route mode");
   assert.ok(aircraftSetupIndex > routeAssistIndex, "aircraft setup is after route controls");
+});
+
+test("flight planner keeps schedule fields above airports and alternate below runway", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  const routeSetupIndex = source.indexOf('id="planner-route-setup"');
+  const plannedDepartureIndex = source.indexOf("<Label>Planned Departure</Label>", routeSetupIndex);
+  const departureAirportIndex = source.indexOf("<Label>Departure airport - Required</Label>", routeSetupIndex);
+  const departureRunwayIndex = source.indexOf("<Label>Departure runway (optional)</Label>", routeSetupIndex);
+  const alternateIndex = source.indexOf("<Label>Alternate airport (optional)</Label>", routeSetupIndex);
+  const routeModeIndex = source.indexOf('id="planner-route-method"', routeSetupIndex);
+
+  assert.ok(plannedDepartureIndex > routeSetupIndex, "planned departure appears in route setup");
+  assert.ok(plannedDepartureIndex < departureAirportIndex, "planned departure is above airport selection");
+  assert.ok(alternateIndex > departureRunwayIndex, "alternate is below departure runway");
+  assert.ok(alternateIndex < routeModeIndex, "alternate remains before route construction controls");
+  assert.match(source, /xl:grid-cols-5/);
+  assert.match(source, /Override winds/);
 });

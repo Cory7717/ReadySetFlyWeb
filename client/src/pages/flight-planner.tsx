@@ -8091,6 +8091,43 @@ export default function FlightPlanner() {
         </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
+              <Label>Planned Departure</Label>
+              <Input
+                id="planner-field-departure-time"
+                type="datetime-local"
+                value={form.plannedDepartureAt}
+                onChange={(e) => setForm({ ...form, plannedDepartureAt: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Local time at departure ({departureTimeZone}).
+              </p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Planned Arrival</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={!canAutoArrival}
+                  onClick={() => setArrivalAuto(true)}
+                >
+                  Auto-calc
+                </Button>
+              </div>
+              <Input
+                type="datetime-local"
+                value={form.plannedArrivalAt}
+                onChange={(e) => {
+                  setForm({ ...form, plannedArrivalAt: e.target.value });
+                  setArrivalAuto(false);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Local time at destination ({destinationTimeZone}).
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label>Departure airport - Required</Label>
               <Input
               id="planner-field-departure"
@@ -8241,6 +8278,14 @@ export default function FlightPlanner() {
               <p className="text-xs text-muted-foreground">
                 Pulling runway options for the selected departure airport. Turf and paved runways remain selectable when they exist in the runway dataset.
               </p>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Alternate airport (optional)</Label>
+              <Input
+                value={form.alternate}
+                onChange={(e) => setForm({ ...form, alternate: e.target.value })}
+                placeholder="Optional alternate, e.g. KBDL"
+              />
             </div>
             <div className="space-y-2 md:col-span-2">
               <div id="planner-route-method" tabIndex={-1} className="space-y-2 scroll-mt-24 focus:outline-none">
@@ -8925,51 +8970,6 @@ export default function FlightPlanner() {
                 </Alert>
               )}
             </div>
-          <div className="space-y-2">
-            <Label>Alternate airport (optional)</Label>
-            <Input
-              value={form.alternate}
-              onChange={(e) => setForm({ ...form, alternate: e.target.value })}
-              placeholder="Optional alternate, e.g. KBDL"
-            />
-          </div>
-            <div className="space-y-2">
-              <Label>Planned Departure</Label>
-              <Input
-                id="planner-field-departure-time"
-                type="datetime-local"
-                value={form.plannedDepartureAt}
-                onChange={(e) => setForm({ ...form, plannedDepartureAt: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                Local time at departure ({departureTimeZone}).
-              </p>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Planned Arrival</Label>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={!canAutoArrival}
-                  onClick={() => setArrivalAuto(true)}
-                >
-                  Auto-calc
-                </Button>
-              </div>
-              <Input
-                type="datetime-local"
-                value={form.plannedArrivalAt}
-                onChange={(e) => {
-                  setForm({ ...form, plannedArrivalAt: e.target.value });
-                  setArrivalAuto(false);
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                Local time at destination ({destinationTimeZone}).
-              </p>
-            </div>
             <div className={cn("md:col-span-2 space-y-2 p-4", plannerSubpanelClass)}>
               <div className="font-semibold">Quick Route Helpers</div>
               <div className="text-xs text-muted-foreground">
@@ -9019,7 +9019,7 @@ export default function FlightPlanner() {
           <CardDescription className={plannerCardDescriptionClass}>Review trip distance, time, and fuel after your aircraft selection fills in the planning assumptions above.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <div className="space-y-2">
               <Label>Reserve Fuel (minutes)</Label>
               <Select value={reserveMinutes} onValueChange={setReserveMinutes}>
@@ -9033,9 +9033,9 @@ export default function FlightPlanner() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 md:col-span-2 xl:col-span-2">
               <Label>Route wind component</Label>
-              <div className={cn("rounded-[0.9rem] border border-[#5d6f85]/24 bg-[#101820] px-3 py-2 text-sm text-[#D9E4F0]")}>
+              <div className={cn("min-h-[134px] rounded-[0.9rem] border border-[#5d6f85]/24 bg-[#101820] px-3 py-2 text-sm text-[#D9E4F0]")}>
                 <div className="font-semibold text-[#F5F8FC]">
                   {manualWindOverrideEnabled
                     ? `Manual wind override: ${manualWindValue >= 0 ? `${manualWindValue} kt headwind` : `${Math.abs(manualWindValue)} kt tailwind`}`
@@ -9054,10 +9054,11 @@ export default function FlightPlanner() {
                   <Button
                     type="button"
                     size="sm"
+                    className="max-w-full whitespace-normal text-left leading-tight"
                     variant={manualWindOverrideEnabled ? "default" : "outline"}
                     onClick={() => setManualWindOverrideEnabled((value) => !value)}
                   >
-                    {manualWindOverrideEnabled ? "Manual Override On" : "Override calculated winds"}
+                    {manualWindOverrideEnabled ? "Manual override on" : "Override winds"}
                   </Button>
                   {manualWindOverrideEnabled && (
                     <>
@@ -9072,6 +9073,7 @@ export default function FlightPlanner() {
                       <Button
                         type="button"
                         size="sm"
+                        className="whitespace-normal text-left leading-tight"
                         variant="outline"
                         onClick={() => setManualWindOverrideEnabled(false)}
                       >

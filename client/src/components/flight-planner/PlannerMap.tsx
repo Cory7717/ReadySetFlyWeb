@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, Marker, Polyline, Tooltip, useMap } from "react-leaflet";
+import { GeoJSON, MapContainer, Marker, Polyline, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { apiUrl } from "@/lib/api";
@@ -327,6 +327,9 @@ export default function PlannerMap({
   terrainSegments = [],
   terrainHotSpots = [],
   legHealthMarkers = [],
+  tfrFeatures = [],
+  showTfrOverlay = false,
+  onSelectTfr,
 }: Planner2DMapProps) {
   const center: [number, number] = points.length
     ? [points[0].lat, points[0].lon]
@@ -563,6 +566,38 @@ export default function PlannerMap({
           );
         })}
         <MapStyleController mapStyle={mapStyle} />
+        {showTfrOverlay && tfrFeatures.length > 0 && (
+          <GeoJSON
+            key={`planner-tfr-${tfrFeatures.map((feature) => feature.id || feature.properties?.notamId || feature.properties?.title || "tfr").join("|")}`}
+            data={{ type: "FeatureCollection", features: tfrFeatures } as any}
+            style={(feature: any) => {
+              const status = feature?.properties?.corridorStatus;
+              const active = status === "active";
+              return {
+                color: active ? "#ef4444" : "#f59e0b",
+                weight: active ? 2 : 1.5,
+                opacity: 0.9,
+                fillColor: active ? "#ef4444" : "#f59e0b",
+                fillOpacity: active ? 0.16 : 0.1,
+              };
+            }}
+            eventHandlers={{
+              click: (event) => {
+                const feature = (event as any).layer?.feature;
+                if (feature && onSelectTfr) onSelectTfr(feature);
+              },
+            }}
+            onEachFeature={(feature, layer) => {
+              const props: any = feature?.properties || {};
+              const label = props.notamId || props.title || props.reason || "TFR";
+              layer.bindTooltip(String(label), {
+                direction: "top",
+                opacity: 1,
+                className: plannerTooltipClassName,
+              });
+            }}
+          />
+        )}
         {terrainSegments.length > 0
           ? terrainSegments.map((segment, index) => (
               <Fragment key={`planner-terrain-segment-${index}`}>

@@ -776,3 +776,55 @@ test("flight planner runway selector exposes all runway options with surface and
   assert.match(source, /Selected runway surface is/);
   assert.match(source, /planner_runway_options_loaded/);
 });
+
+test("flight planner phase three TFR corridor overlay is wired into supported 2D maps", () => {
+  const plannerSource = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  const typesSource = readFileSync(resolve("client/src/components/flight-planner/plannerMapTypes.ts"), "utf8");
+  const leafletSource = readFileSync(resolve("client/src/components/flight-planner/PlannerMap.tsx"), "utf8");
+  const mapLibreSource = readFileSync(resolve("client/src/components/flight-planner/MapLibrePlannerMap.tsx"), "utf8");
+
+  assert.match(plannerSource, /const \[tfrCorridorNm, setTfrCorridorNm\] = useState\("10"\)/);
+  assert.match(plannerSource, /<SelectItem value="5">5 NM<\/SelectItem>/);
+  assert.match(plannerSource, /<SelectItem value="10">10 NM<\/SelectItem>/);
+  assert.match(plannerSource, /<SelectItem value="25">25 NM<\/SelectItem>/);
+  assert.match(plannerSource, /<SelectItem value="50">50 NM<\/SelectItem>/);
+  assert.match(plannerSource, /filterTfrFeaturesForCorridor/);
+  assert.match(plannerSource, /ringIntersectsRouteCorridor/);
+  assert.match(plannerSource, /tfrOverlayStatus === "unavailable"/);
+  assert.match(plannerSource, /TFR corridor check completed with no relevant TFRs/);
+  assert.match(typesSource, /tfrFeatures\?: PlannerTfrFeature\[\]/);
+  assert.match(leafletSource, /<GeoJSON/);
+  assert.match(leafletSource, /showTfrOverlay && tfrFeatures\.length > 0/);
+  assert.match(mapLibreSource, /TFR_SOURCE_ID/);
+  assert.match(mapLibreSource, /TFR_FILL_LAYER_ID/);
+  assert.match(mapLibreSource, /TFR_LINE_LAYER_ID/);
+});
+
+test("flight planner phase three route winds use calculated component with explicit manual override", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+
+  assert.match(source, /calculateWindComponentKt/);
+  assert.match(source, /calculateRouteWindComponent/);
+  assert.match(source, /distance_weighted/);
+  assert.match(source, /const \[manualWindOverrideEnabled, setManualWindOverrideEnabled\] = useState\(false\)/);
+  assert.match(source, /const rawManualWindValue = Number\(headwind \|\| 0\)/);
+  assert.match(source, /const manualWindValue = Number\.isFinite\(rawManualWindValue\) \? rawManualWindValue : 0/);
+  assert.match(source, /const calculatedWindComponentKt = Number\.isFinite\(calculatedRouteWind\.componentKt\)/);
+  assert.match(source, /const selectedWindComponentKt = manualWindOverrideEnabled \? manualWindValue : calculatedWindComponentKt/);
+  assert.match(source, /const groundspeed = Math\.max\(40, planningCruise - selectedWindComponentKt\)/);
+  assert.match(source, /Route wind component/);
+  assert.match(source, /Override calculated winds/);
+  assert.match(source, /Use calculated winds/);
+  assert.doesNotMatch(source, /<Label>Avg Headwind \(kt\)<\/Label>/);
+});
+
+test("flight planner route mode and route controls appear before aircraft setup", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  const routeModeIndex = source.indexOf('id="planner-route-method"');
+  const routeAssistIndex = source.indexOf("Route Assist Waypoints (optional)");
+  const aircraftSetupIndex = source.indexOf('id="planner-aircraft-setup"');
+
+  assert.ok(routeModeIndex > 0, "route mode exists");
+  assert.ok(routeAssistIndex > routeModeIndex, "route assist helpers are after route mode");
+  assert.ok(aircraftSetupIndex > routeAssistIndex, "aircraft setup is after route controls");
+});

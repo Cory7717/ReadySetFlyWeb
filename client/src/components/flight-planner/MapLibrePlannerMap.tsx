@@ -22,9 +22,12 @@ import { addOrReplaceRasterLayer, createRasterBaseStyle, removeRasterLayer } fro
 
 const MAP_SOURCE_ID = "rsf-planner-route";
 const TERRAIN_SOURCE_ID = "rsf-planner-terrain";
+const TFR_SOURCE_ID = "rsf-planner-tfr";
 const ROUTE_LAYER_ID = "rsf-planner-route-line";
 const TERRAIN_SURFACE_LAYER_ID = "rsf-planner-terrain-surface";
 const TERRAIN_LINE_LAYER_ID = "rsf-planner-terrain-line";
+const TFR_FILL_LAYER_ID = "rsf-planner-tfr-fill";
+const TFR_LINE_LAYER_ID = "rsf-planner-tfr-line";
 const SECTIONAL_SOURCE_ID = "rsf-planner-sectional";
 const SECTIONAL_LAYER_ID = "rsf-planner-sectional-layer";
 const RADAR_SOURCE_ID = "rsf-planner-radar";
@@ -90,6 +93,20 @@ function buildTerrainGeoJson(segments: PlannerTerrainSegment[]) {
       },
     })),
   };
+}
+
+function buildTfrGeoJson(features: Planner2DMapProps["tfrFeatures"] = []) {
+  return {
+    type: "FeatureCollection" as const,
+    features: features
+      .filter((feature) => feature?.geometry)
+      .map((feature) => ({
+        type: "Feature" as const,
+        id: feature.id,
+        geometry: feature.geometry as any,
+        properties: feature.properties || {},
+      })),
+  } as any;
 }
 
 function buildAirportMarkerElement(point: PlannerPoint, airportLabelMode: Planner2DMapProps["airportLabelMode"]) {
@@ -176,6 +193,9 @@ export default function MapLibrePlannerMap({
   terrainHotSpots = [],
   legHealthMarkers = [],
   airportLabelMode = "icao",
+  tfrFeatures = [],
+  showTfrOverlay = false,
+  onSelectTfr,
 }: Planner2DMapProps) {
   const center = useMemo<[number, number]>(
     () => (points.length ? [points[0].lon, points[0].lat] : [-98.35, 39.5]),
@@ -203,6 +223,7 @@ export default function MapLibrePlannerMap({
 
   const routeGeoJson = useMemo(() => buildRouteGeoJson(points), [points]);
   const terrainGeoJson = useMemo(() => buildTerrainGeoJson(terrainSegments), [terrainSegments]);
+  const tfrGeoJson = useMemo(() => buildTfrGeoJson(tfrFeatures), [tfrFeatures]);
 
   const radarTileUrl = useMemo(() => {
     if (mapStyle !== "radar" || radarFrames.length === 0) return "";
@@ -375,6 +396,75 @@ export default function MapLibrePlannerMap({
         type: "geojson",
         data: terrainGeoJson,
       });
+      map.addSource(TFR_SOURCE_ID, {
+        type: "geojson",
+        data: tfrGeoJson,
+      });
+
+      map.addLayer({
+        id: TFR_FILL_LAYER_ID,
+        type: "fill",
+        source: TFR_SOURCE_ID,
+        layout: {
+          visibility: showTfrOverlay && tfrFeatures.length > 0 ? "visible" : "none",
+        },
+        paint: {
+          "fill-color": [
+            "match",
+            ["get", "corridorStatus"],
+            "active",
+            "#ef4444",
+            "planned-flight-window",
+            "#f59e0b",
+            "#f59e0b",
+          ],
+          "fill-opacity": [
+            "match",
+            ["get", "corridorStatus"],
+            "active",
+            0.16,
+            "planned-flight-window",
+            0.1,
+            0.08,
+          ],
+        },
+      });
+
+      map.addLayer({
+        id: TFR_LINE_LAYER_ID,
+        type: "line",
+        source: TFR_SOURCE_ID,
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
+          visibility: showTfrOverlay && tfrFeatures.length > 0 ? "visible" : "none",
+        },
+        paint: {
+          "line-color": [
+            "match",
+            ["get", "corridorStatus"],
+            "active",
+            "#ef4444",
+            "planned-flight-window",
+            "#f59e0b",
+            "#f59e0b",
+          ],
+          "line-width": 2,
+          "line-opacity": 0.9,
+        },
+      });
+
+      map.on("click", TFR_FILL_LAYER_ID, (event) => {
+        const feature = event.features?.[0] as any;
+        if (!feature) return;
+        onSelectTfr?.(feature);
+        const props = feature.properties || {};
+        const label = props.notamId || props.title || props.reason || "TFR";
+        new maplibregl.Popup({ offset: 12 })
+          .setLngLat(event.lngLat)
+          .setHTML(`<div style="font-size:12px;line-height:1.35"><strong>${String(label).replace(/[<>&]/g, "")}</strong><br/>${props.corridorStatus || "TFR"}</div>`)
+          .addTo(map);
+      });
 
       map.addLayer({
         id: TERRAIN_SURFACE_LAYER_ID,
@@ -483,6 +573,15 @@ export default function MapLibrePlannerMap({
     if (map.getLayer(TERRAIN_SURFACE_LAYER_ID)) map.setLayoutProperty(TERRAIN_SURFACE_LAYER_ID, "visibility", terrainVisible);
     if (map.getLayer(TERRAIN_LINE_LAYER_ID)) map.setLayoutProperty(TERRAIN_LINE_LAYER_ID, "visibility", terrainVisible);
   }, [mapReady, terrainGeoJson, terrainSegments.length]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !map.isStyleLoaded()) return;
+    setGeoJsonSourceData(map, TFR_SOURCE_ID, tfrGeoJson);
+    const visible = showTfrOverlay && tfrFeatures.length > 0 ? "visible" : "none";
+    if (map.getLayer(TFR_FILL_LAYER_ID)) map.setLayoutProperty(TFR_FILL_LAYER_ID, "visibility", visible);
+    if (map.getLayer(TFR_LINE_LAYER_ID)) map.setLayoutProperty(TFR_LINE_LAYER_ID, "visibility", visible);
+  }, [mapReady, showTfrOverlay, tfrFeatures.length, tfrGeoJson]);
 
   useEffect(() => {
     const map = mapRef.current;

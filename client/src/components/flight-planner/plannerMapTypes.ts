@@ -33,6 +33,16 @@ export type PlannerLegHealthMarker = {
   lon: number;
 };
 
+export type PlannerTfrFeature = {
+  type?: "Feature";
+  id?: string | number;
+  geometry?: {
+    type?: string;
+    coordinates?: any;
+  } | null;
+  properties?: Record<string, any> | null;
+};
+
 export type Planner2DMapProps = {
   points: PlannerPoint[];
   heightClassName?: string;
@@ -43,4 +53,7 @@ export type Planner2DMapProps = {
   terrainSegments?: PlannerTerrainSegment[];
   terrainHotSpots?: PlannerTerrainHotSpot[];
   legHealthMarkers?: PlannerLegHealthMarker[];
+  tfrFeatures?: PlannerTfrFeature[];
+  showTfrOverlay?: boolean;
+  onSelectTfr?: (feature: PlannerTfrFeature) => void;
 };

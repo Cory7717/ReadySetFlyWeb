@@ -959,6 +959,174 @@ const routeIntersectsRing = (
   return false;
 };
 
+const pointToRouteDistanceNm = (point: { lat: number; lon: number }, route: AirportPoint[]) => {
+  if (route.length === 0) return Number.POSITIVE_INFINITY;
+  let best = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < route.length; i += 1) {
+    best = Math.min(best, distanceNm(point as AirportPoint, route[i]));
+  }
+  for (let i = 0; i < route.length - 1; i += 1) {
+    const start = route[i];
+    const end = route[i + 1];
+    const meanLat = toRadians((start.lat + end.lat + point.lat) / 3);
+    const x1 = start.lon * 60 * Math.cos(meanLat);
+    const y1 = start.lat * 60;
+    const x2 = end.lon * 60 * Math.cos(meanLat);
+    const y2 = end.lat * 60;
+    const xp = point.lon * 60 * Math.cos(meanLat);
+    const yp = point.lat * 60;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lengthSq = dx * dx + dy * dy;
+    if (lengthSq <= EPSILON) continue;
+    const t = Math.max(0, Math.min(1, ((xp - x1) * dx + (yp - y1) * dy) / lengthSq));
+    const projX = x1 + t * dx;
+    const projY = y1 + t * dy;
+    best = Math.min(best, Math.hypot(xp - projX, yp - projY));
+  }
+  return best;
+};
+
+const ringIntersectsRouteCorridor = (route: AirportPoint[], ring: [number, number][], corridorNm: number) => {
+  if (route.length < 2 || ring.length < 3) return false;
+  const routeLats = route.map((point) => point.lat);
+  const routeLons = route.map((point) => point.lon);
+  const padDeg = Math.max(0.1, corridorNm / 60);
+  const routeBbox = {
+    west: Math.min(...routeLons) - padDeg,
+    east: Math.max(...routeLons) + padDeg,
+    south: Math.min(...routeLats) - padDeg,
+    north: Math.max(...routeLats) + padDeg,
+  };
+  if (routeIntersectsRing(route, ring, routeBbox)) return true;
+  if (route.some((point) => pointInPolygon(point, ring))) return true;
+  return ring.some(([lon, lat]) => pointToRouteDistanceNm({ lat, lon }, route) <= corridorNm);
+};
+
+const classifyTfrTiming = (feature: any, flightStartUtc: Date | null, flightEndUtc: Date | null) => {
+  const props = feature?.properties || {};
+  const startRaw = props.effectiveStart || props.startTime || props.notamStart || props.validFrom || props.start;
+  const endRaw = props.effectiveEnd || props.endTime || props.notamEnd || props.validTo || props.end;
+  const start = startRaw ? new Date(startRaw) : null;
+  const end = endRaw ? new Date(endRaw) : null;
+  const startMs = start && Number.isFinite(start.getTime()) ? start.getTime() : null;
+  const endMs = end && Number.isFinite(end.getTime()) ? end.getTime() : null;
+  const now = Date.now();
+  if (startMs === null && endMs === null) return "candidate" as const;
+  if (endMs !== null && endMs < now) return "expired" as const;
+  const activeNow = (startMs === null || startMs <= now) && (endMs === null || endMs >= now);
+  const flightStart = flightStartUtc?.getTime() ?? null;
+  const flightEnd = flightEndUtc?.getTime() ?? null;
+  const duringFlight =
+    flightStart !== null &&
+    flightEnd !== null &&
+    (startMs === null || startMs <= flightEnd) &&
+    (endMs === null || endMs >= flightStart);
+  if (activeNow) return "active" as const;
+  if (duringFlight) return "planned-flight-window" as const;
+  return "candidate" as const;
+};
+
+const filterTfrFeaturesForCorridor = ({
+  features,
+  route,
+  corridorNm,
+  flightStartUtc,
+  flightEndUtc,
+}: {
+  features: any[];
+  route: AirportPoint[];
+  corridorNm: number;
+  flightStartUtc: Date | null;
+  flightEndUtc: Date | null;
+}) => {
+  if (route.length < 2) return [];
+  return features
+    .filter((feature) => {
+      const rings = extractPolygonRings(feature?.geometry);
+      return rings.some((ring) => ringIntersectsRouteCorridor(route, ring, corridorNm));
+    })
+    .filter((feature) => classifyTfrTiming(feature, flightStartUtc, flightEndUtc) !== "expired")
+    .map((feature) => ({
+      ...feature,
+      properties: {
+        ...(feature?.properties || {}),
+        corridorStatus: classifyTfrTiming(feature, flightStartUtc, flightEndUtc),
+      },
+    }));
+};
+
+const calculateWindComponentKt = (courseDeg: number, windDirFromDeg: number, windSpeedKt: number) => {
+  if (![courseDeg, windDirFromDeg, windSpeedKt].every(Number.isFinite)) return null;
+  const diff = toRadians(normalizeDegrees(windDirFromDeg - courseDeg));
+  return Math.round(windSpeedKt * Math.cos(diff));
+};
+
+const findNearestWindStation = (point: AirportPoint, stations: any[]): { station: any; distanceNm: number } | null => {
+  let best: { station: any; distanceNm: number } | null = null;
+  stations.forEach((station) => {
+    const lat = Number(station?.lat);
+    const lon = Number(station?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    const dist = distanceNm(point, { lat, lon, icao: String(station?.icao || station?.stationId || "WIND") });
+    if (!best || dist < best.distanceNm) best = { station, distanceNm: dist };
+  });
+  return best;
+};
+
+const calculateRouteWindComponent = ({
+  legs,
+  stations,
+}: {
+  legs: ReturnType<typeof buildLegs>;
+  stations: any[];
+}) => {
+  if (!legs.length) {
+    return { status: "unavailable" as const, componentKt: 0, coveredLegs: 0, totalLegs: 0, source: "no_route" as const };
+  }
+  if (!Array.isArray(stations) || stations.length === 0) {
+    return { status: "unavailable" as const, componentKt: 0, coveredLegs: 0, totalLegs: legs.length, source: "no_winds" as const };
+  }
+  let weightedSum = 0;
+  let weightedDistance = 0;
+  let coveredLegs = 0;
+  const legDetails = legs.map((leg) => {
+    const midpoint: AirportPoint = {
+      icao: `${leg.from.icao}-${leg.to.icao}`,
+      lat: (leg.from.lat + leg.to.lat) / 2,
+      lon: (leg.from.lon + leg.to.lon) / 2,
+    };
+    const nearest = findNearestWindStation(midpoint, stations);
+    if (!nearest) {
+      return { key: `${leg.from.icao}-${leg.to.icao}`, componentKt: null, distanceNm: leg.distanceNm, station: null };
+    }
+    const windDir = Number(nearest.station?.windDir);
+    const windSpeed = Number(nearest.station?.windSpeed);
+    if (!Number.isFinite(windDir) || !Number.isFinite(windSpeed)) {
+      return { key: `${leg.from.icao}-${leg.to.icao}`, componentKt: null, distanceNm: leg.distanceNm, station: null };
+    }
+    const component = calculateWindComponentKt(bearingDeg(leg.from, leg.to), windDir, windSpeed);
+    if (component === null) {
+      return { key: `${leg.from.icao}-${leg.to.icao}`, componentKt: null, distanceNm: leg.distanceNm, station: nearest.station };
+    }
+    coveredLegs += 1;
+    weightedSum += component * leg.distanceNm;
+    weightedDistance += leg.distanceNm;
+    return { key: `${leg.from.icao}-${leg.to.icao}`, componentKt: component, distanceNm: leg.distanceNm, station: nearest.station };
+  });
+  if (weightedDistance <= 0) {
+    return { status: "unavailable" as const, componentKt: 0, coveredLegs, totalLegs: legs.length, source: "no_valid_samples" as const, legDetails };
+  }
+  return {
+    status: coveredLegs === legs.length ? "calculated" as const : "partial" as const,
+    componentKt: Math.round(weightedSum / weightedDistance),
+    coveredLegs,
+    totalLegs: legs.length,
+    source: "distance_weighted" as const,
+    legDetails,
+  };
+};
+
 type AircraftProfile = {
   id: string;
   name: string;
@@ -1896,6 +2064,7 @@ export default function FlightPlanner() {
   const [fuelBurnMode, setFuelBurnMode] = useState<FuelBurnMode>("standard");
   const [reserveMinutes, setReserveMinutes] = useState("45");
   const [headwind, setHeadwind] = useState("0");
+  const [manualWindOverrideEnabled, setManualWindOverrideEnabled] = useState(false);
   const [plannedAltitude, setPlannedAltitude] = useState("");
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
@@ -2010,6 +2179,9 @@ export default function FlightPlanner() {
   const [destinationSearchActive, setDestinationSearchActive] = useState(false);
   const [departureResolved, setDepartureResolved] = useState("");
   const [destinationResolved, setDestinationResolved] = useState("");
+  const [tfrCorridorNm, setTfrCorridorNm] = useState("10");
+  const [showTfrOverlay, setShowTfrOverlay] = useState(true);
+  const [selectedTfrFeature, setSelectedTfrFeature] = useState<any | null>(null);
   const departureLookupRef = useRef<{ value: string; ok: boolean } | null>(null);
   const destinationLookupRef = useRef<{ value: string; ok: boolean } | null>(null);
   const departureSelectedRef = useRef<string | null>(null);
@@ -2141,6 +2313,9 @@ export default function FlightPlanner() {
       }
       if (typeof parsed?.reserveMinutes === "string") setReserveMinutes(parsed.reserveMinutes);
       if (typeof parsed?.headwind === "string") setHeadwind(parsed.headwind);
+      if (typeof parsed?.manualWindOverrideEnabled === "boolean") setManualWindOverrideEnabled(parsed.manualWindOverrideEnabled);
+      if (["5", "10", "25", "50"].includes(String(parsed?.tfrCorridorNm))) setTfrCorridorNm(String(parsed.tfrCorridorNm));
+      if (typeof parsed?.showTfrOverlay === "boolean") setShowTfrOverlay(parsed.showTfrOverlay);
       if (typeof parsed?.plannedAltitude === "string") setPlannedAltitude(parsed.plannedAltitude);
       if (typeof parsed?.arrivalAuto === "boolean") setArrivalAuto(parsed.arrivalAuto);
       if (parsed?.routeSuggestion === "direct" || parsed?.routeSuggestion === "midpoint") {
@@ -2169,6 +2344,9 @@ export default function FlightPlanner() {
         fuelBurnMode,
         reserveMinutes,
         headwind,
+        manualWindOverrideEnabled,
+        tfrCorridorNm,
+        showTfrOverlay,
         plannedAltitude,
         arrivalAuto,
         routeSuggestion,
@@ -2184,6 +2362,7 @@ export default function FlightPlanner() {
     fuelBurnMode,
     form,
     headwind,
+    manualWindOverrideEnabled,
     plannedAltitude,
     plannedFuelUplifts,
     plannedStopsInput,
@@ -2424,6 +2603,9 @@ export default function FlightPlanner() {
         fuelBurnMode,
         reserveMinutes,
         headwind,
+        manualWindOverrideEnabled,
+        tfrCorridorNm,
+        showTfrOverlay,
         plannedAltitude,
         arrivalAuto,
         routeSuggestion,
@@ -2450,6 +2632,7 @@ export default function FlightPlanner() {
     form,
     fuelBurnMode,
     headwind,
+    manualWindOverrideEnabled,
     plannedAltitude,
     plannedFuelUplifts,
     plannedStopsInput,
@@ -2457,6 +2640,8 @@ export default function FlightPlanner() {
     routeSuggestion,
     selectedProfileId,
     selectedTypeId,
+    showTfrOverlay,
+    tfrCorridorNm,
     waypointsInput,
   ]);
 
@@ -3629,11 +3814,47 @@ export default function FlightPlanner() {
     [routePoints]
   );
 
+  const windsSummaryQuery = useQuery({
+    queryKey: ["/api/aviation/winds-temps", routeBboxParam, windsAltitudeFt],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (windsAltitudeFt) params.set("altitude", String(windsAltitudeFt));
+      if (routeBboxParam) params.set("bbox", routeBboxParam);
+      const res = await fetch(apiUrl(`/api/aviation/winds-temps?${params.toString()}`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch winds aloft");
+      return res.json();
+    },
+    enabled: Boolean(routeBboxParam),
+    staleTime: 1000 * 60 * 15,
+  });
+
   const legs = useMemo(() => buildLegs(routePoints), [routePoints]);
   const totalDistance = useMemo(() => sumDistance(legs), [legs]);
 
-  const windValue = Number(headwind || 0);
-  const groundspeed = Math.max(40, planningCruise - (isPro ? windValue : 0));
+  const calculatedRouteWind = useMemo(
+    () => calculateRouteWindComponent({
+      legs,
+      stations: Array.isArray(windsSummaryQuery.data?.stations) ? windsSummaryQuery.data.stations : [],
+    }),
+    [legs, windsSummaryQuery.data?.stations],
+  );
+  const rawManualWindValue = Number(headwind || 0);
+  const manualWindValue = Number.isFinite(rawManualWindValue) ? rawManualWindValue : 0;
+  const calculatedWindComponentKt = Number.isFinite(calculatedRouteWind.componentKt)
+    ? calculatedRouteWind.componentKt
+    : 0;
+  const selectedWindComponentKt = manualWindOverrideEnabled ? manualWindValue : calculatedWindComponentKt;
+  const windValue = selectedWindComponentKt;
+  const windSourceLabel = manualWindOverrideEnabled
+    ? "manual override"
+    : calculatedRouteWind.status === "calculated"
+      ? "calculated winds aloft"
+      : calculatedRouteWind.status === "partial"
+        ? "partial winds aloft"
+        : "winds unavailable";
+  const groundspeed = Math.max(40, planningCruise - selectedWindComponentKt);
   const eteHours = totalDistance ? totalDistance / groundspeed : 0;
   const eteMinutes = totalDistance > 0 && Number.isFinite(eteHours)
     ? Math.max(1, Math.round(eteHours * 60))
@@ -4006,16 +4227,49 @@ export default function FlightPlanner() {
     staleTime: 1000 * 60 * 15,
   });
 
+  const tfrCorridorNmValue = Number(tfrCorridorNm) || 10;
+  const plannedArrivalUtcForTfr = useMemo(() => {
+    if (!plannedDepartureUtc || !authoritativeEteMinutes) return null;
+    return new Date(plannedDepartureUtc.getTime() + authoritativeEteMinutes * 60000);
+  }, [authoritativeEteMinutes, plannedDepartureUtc]);
+
   const tfrConflicts = useMemo(() => {
-    if (!routeBbox || routePoints.length < 2) return [];
+    if (routePoints.length < 2) return [];
     const features = tfrRouteQuery.data?.features ?? [];
     if (!Array.isArray(features) || features.length === 0) return [];
-    return features.filter((feature: any) => {
-      const rings = extractPolygonRings(feature?.geometry);
-      if (!rings.length) return false;
-      return rings.some((ring) => routeIntersectsRing(routePoints, ring, routeBbox));
+    return filterTfrFeaturesForCorridor({
+      features,
+      route: routePoints,
+      corridorNm: tfrCorridorNmValue,
+      flightStartUtc: plannedDepartureUtc,
+      flightEndUtc: plannedArrivalUtcForTfr,
     });
-  }, [routeBbox, routePoints, tfrRouteQuery.data?.features]);
+  }, [plannedArrivalUtcForTfr, plannedDepartureUtc, routePoints, tfrCorridorNmValue, tfrRouteQuery.data?.features]);
+
+  const tfrOverlayFeatures = showTfrOverlay ? tfrConflicts : [];
+  const tfrOverlayStatus = !tfrBboxParam || routePoints.length < 2
+    ? "no-route"
+    : tfrRouteQuery.isLoading || tfrRouteQuery.isFetching
+      ? "loading"
+      : tfrRouteQuery.isError
+        ? "unavailable"
+        : Boolean((tfrRouteQuery.data as any)?.stale)
+          ? "stale"
+          : tfrConflicts.length > 0
+            ? "found"
+            : "none";
+  const tfrOverlayStatusText =
+    tfrOverlayStatus === "no-route"
+      ? "Enter a route to check TFRs."
+      : tfrOverlayStatus === "loading"
+        ? "Checking TFRs near the route corridor..."
+        : tfrOverlayStatus === "unavailable"
+          ? "TFR data unavailable. Verify restrictions with official sources before departure."
+          : tfrOverlayStatus === "stale"
+            ? "TFR data may be stale. Recheck before departure."
+            : tfrOverlayStatus === "found"
+              ? `${tfrConflicts.length} TFR${tfrConflicts.length === 1 ? "" : "s"} within ${tfrCorridorNmValue} NM corridor`
+              : `No TFRs found within ${tfrCorridorNmValue} NM corridor.`;
 
   const tfrConflictIds = useMemo(() => {
     return tfrConflicts
@@ -4634,22 +4888,6 @@ export default function FlightPlanner() {
   const primaryIcao = planningDepartureCode;
   const hasPrimaryIcao = ICAO_REGEX.test(primaryIcao);
 
-  const windsSummaryQuery = useQuery({
-    queryKey: ["/api/aviation/winds-temps", routeBboxParam, windsAltitudeFt],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (windsAltitudeFt) params.set("altitude", String(windsAltitudeFt));
-      if (routeBboxParam) params.set("bbox", routeBboxParam);
-      const res = await fetch(apiUrl(`/api/aviation/winds-temps?${params.toString()}`), {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch winds aloft");
-      return res.json();
-    },
-    enabled: Boolean(routeBboxParam),
-    staleTime: 1000 * 60 * 15,
-  });
-
   const pirepsQuery = useQuery({
     queryKey: ["/api/aviation/pireps", primaryIcao],
     queryFn: async () => {
@@ -4780,7 +5018,7 @@ export default function FlightPlanner() {
     return lookup;
   }, [weatherFindings]);
   const legRiskByKey = useMemo(() => {
-    const features = Array.isArray(tfrRouteQuery.data?.features) ? tfrRouteQuery.data.features : [];
+    const features = tfrConflicts;
     const riskMap = new Map<string, LegRiskSummary>();
     let cumulativeFuelUsed = 0;
 
@@ -4832,7 +5070,7 @@ export default function FlightPlanner() {
     });
 
     return riskMap;
-  }, [tfrRouteQuery.data?.features, legs, legNavRows, weatherByIcao, reserveFuel]);
+  }, [tfrConflicts, legs, legNavRows, weatherByIcao, reserveFuel]);
   const legHealthMarkers = useMemo<PlannerLegHealthMarker[]>(() => {
     if (routePoints.length < 2 || legNavRows.length === 0) return [];
     return legNavRows.map((leg, index) => {
@@ -4959,16 +5197,22 @@ export default function FlightPlanner() {
       : hasIfrWeather
         ? "text-red-300"
         : "text-emerald-300";
-  const tfrStatusText = !tfrRouteQuery.isFetched
+  const tfrStatusText = tfrOverlayStatus === "loading" || tfrOverlayStatus === "no-route"
     ? "Not checked"
-    : tfrConflicts.length > 0
-      ? `${tfrConflicts.length} conflict${tfrConflicts.length === 1 ? "" : "s"}`
-      : "No conflicts";
-  const tfrStatusTone = !tfrRouteQuery.isFetched
+    : tfrOverlayStatus === "unavailable"
+      ? "Unavailable"
+      : tfrOverlayStatus === "stale"
+        ? "Stale"
+        : tfrConflicts.length > 0
+          ? `${tfrConflicts.length} corridor conflict${tfrConflicts.length === 1 ? "" : "s"}`
+          : "No corridor TFRs";
+  const tfrStatusTone = tfrOverlayStatus === "loading" || tfrOverlayStatus === "no-route"
     ? "text-[#A9BBCD]"
-    : tfrConflicts.length > 0
+    : tfrOverlayStatus === "unavailable" || tfrOverlayStatus === "stale"
       ? "text-amber-300"
-      : "text-emerald-300";
+      : tfrConflicts.length > 0
+        ? "text-amber-300"
+        : "text-emerald-300";
   const weatherDataUpdatedAtMs = useMemo(
     () =>
       weatherQueries.reduce((maxValue, query) => {
@@ -5008,12 +5252,12 @@ export default function FlightPlanner() {
     weather: weatherData.length > 0 && !hasIfrWeather && !hasThunderRisk,
     fuel: totalFuel > 0 && !fuelPlanSummary.firstUnreachableLeg && fuelPlanSummary.reserveBalanceGallons >= 0,
     notams: notamsSummaryQuery.isFetched && !notamsSummaryQuery.isError,
-    tfr: tfrRouteQuery.isFetched && tfrConflicts.length === 0,
+    tfr: tfrOverlayStatus === "none",
     fuelSufficient: totalFuel > 0 && !fuelPlanSummary.firstUnreachableLeg && fuelPlanSummary.reserveBalanceGallons >= 0,
     currency: false,
   }), [weatherData, hasIfrWeather, hasThunderRisk, totalFuel,
     fuelPlanSummary.firstUnreachableLeg, fuelPlanSummary.reserveBalanceGallons, notamsSummaryQuery.isFetched,
-    notamsSummaryQuery.isError, tfrRouteQuery.isFetched, tfrConflicts]);
+    notamsSummaryQuery.isError, tfrOverlayStatus]);
   const checklistCompletionCount = useMemo(() => {
     const keys: (keyof typeof autoChecklist)[] = ["weather", "fuel", "currency", "notams", "tfr", "fuelSufficient"];
     return keys.filter((key) => checklist[key] || autoChecklist[key]).length;
@@ -7998,369 +8242,6 @@ export default function FlightPlanner() {
                 Pulling runway options for the selected departure airport. Turf and paved runways remain selectable when they exist in the runway dataset.
               </p>
             </div>
-            <div id="planner-aircraft-setup" className={cn("md:col-span-2 p-4 space-y-3", plannerSubpanelClass)}>
-              <div className="flex flex-col gap-1">
-                <div className="font-semibold text-[#F5F8FC]">Aircraft setup</div>
-                <div className="text-xs text-[#A9BBCD]">
-                  Select an aircraft from the RSF library or a saved profile to prefill performance assumptions before you plan the route.
-                </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>RSF Aircraft Library</Label>
-                  <Select
-                    value={selectedTypeId}
-                    onValueChange={handleAircraftTypeSelection}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select aircraft type" />
-                    </SelectTrigger>
-                    <SelectContent className={cn("max-h-72 overflow-y-auto", plannerSelectContentClass)}>
-                      <SelectItem value={CUSTOM_TYPE_ID}>Custom entry</SelectItem>
-                      <SelectItem value={FALLBACK_TYPE.id}>Select your aircraft</SelectItem>
-                      {aircraftTypes.map((type) => (
-                        <SelectItem key={type.id} value={type.id}>
-                          {type.make} {type.model}{type.icaoType ? ` (${type.icaoType})` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Saved Profile</Label>
-                  <Select value={selectedProfileId} onValueChange={handleAircraftProfileSelection}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select saved profile" />
-                    </SelectTrigger>
-                    <SelectContent className={plannerSelectContentClass}>
-                      <SelectItem value="none">None</SelectItem>
-                      {savedProfiles.map((profile) => (
-                        <SelectItem key={profile.id} value={profile.id}>
-                          {profile.isDefault ? "Default - " : ""}{profile.tailNumber || profile.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="text-xs text-[#A9BBCD]">
-                Saved profiles override library values when selected. This prefill is one of RSF's strongest planning workflow advantages.
-              </div>
-              {selectedTypeNeedsVerification && (
-                <Alert className="border-[#D9A441] bg-[#271d0b] text-[#D9A441]">
-                  <AlertDescription>
-                    This RSF library template is still marked as a planning estimate. Verify the performance values against the POH/AFM before relying on them for fuel, range, or cost planning.
-                    {selectedType.sourceNote ? ` ${selectedType.sourceNote}` : ""}
-                    {selectedType.verificationSource ? ` Source: ${selectedType.verificationSource}.` : ""}
-                  </AlertDescription>
-                </Alert>
-              )}
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Route Assist Waypoints (optional)</Label>
-              <Input
-                value={waypointsInput}
-                onChange={(e) => setWaypointsInput(e.target.value.toUpperCase())}
-                placeholder="KISP KPVD (comma or space separated)"
-              />
-              <p className="text-xs text-muted-foreground">
-                Optional planning aids only. Add ICAO codes separated by space or comma, or use the helper suggestions below and edit as needed.
-              </p>
-              {!isAuthenticated && planningDepartureCode && planningDestinationCode && (
-                <div className={cn("rounded-md border border-[#35516e]/40 bg-[#102236] px-3 py-2 text-xs text-[#CFE4FA]")}>
-                  Sign in to calculate RSF route-assist waypoints for this city pair. You can still type a custom filed route below or choose Direct.
-                </div>
-              )}
-              {autoSuggestedIntermediates.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  RSF is previewing the helper route on the map and in ETE until you enter custom waypoints, planned stops, or a filed airport route.
-                </p>
-              )}
-              {routeSuggestionQuery.isFetching && planningDepartureCode && planningDestinationCode && (
-                <div className="text-xs text-muted-foreground">Calculating route-assist waypoints...</div>
-              )}
-              {suggestedWaypoints.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Route assist:</span>
-                  {suggestedWaypoints.map((icao) => (
-                    <span key={`waypoint-${icao}`}>
-                      {renderAirportIcaoTooltip(
-                        icao,
-                        <Badge variant="secondary">
-                          {icao}
-                        </Badge>,
-                      )}
-                    </span>
-                  ))}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setWaypointsInput(suggestedWaypoints.join(" "))}
-                  >
-                    {waypoints.length > 0 ? "Replace with assist" : "Use assist"}
-                  </Button>
-                </div>
-              )}
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Suggested Fuel Stops (optional)</Label>
-              <Input
-                value={plannedStopsInput}
-                onChange={(e) => setPlannedStopsInput(e.target.value.toUpperCase())}
-                placeholder="KACT KTYR (fuel/meal stops)"
-              />
-              <p className="text-xs text-muted-foreground">
-                Optional planning aids for fuel or rest stops. Pilots can keep these, replace them, or ignore them entirely.
-              </p>
-              {routeSuggestionQuery.isFetching && planningDepartureCode && planningDestinationCode && (
-                <div className="text-xs text-muted-foreground">Estimating suggested fuel stops...</div>
-              )}
-              {suggestedStops.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Suggested fuel stops:</span>
-                  {suggestedStops.map((icao) => (
-                    <span key={`stop-${icao}`}>
-                      {renderAirportIcaoTooltip(
-                        icao,
-                        <Badge variant="secondary">
-                          {icao}
-                        </Badge>,
-                      )}
-                    </span>
-                  ))}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPlannedStopsInput(suggestedStops.join(" "))}
-                  >
-                    {plannedStops.length > 0 ? "Replace with suggested stops" : "Use suggested stops"}
-                  </Button>
-                </div>
-              )}
-              {hasCoastlineRouteOption && (
-                <div className={cn("space-y-2 text-xs", plannerSubpanelInfoClass)}>
-                  <div className="font-medium">Water crossing route options</div>
-                  <div className="text-[#AFC4DB]">
-                    RSF sees this as a likely overwater route. You can keep the more direct helper route, or switch to a coastline-biased assist that adds land-based route guidance for pilots who prefer to stay closer to shore.
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setWaypointsInput(suggestedWaypoints.join(" "));
-                        setPlannedStopsInput(suggestedStops.join(" "));
-                      }}
-                    >
-                      Use direct / overwater assist
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        setWaypointsInput(suggestedCoastlineWaypoints.join(" "));
-                        setPlannedStopsInput(suggestedCoastlineStops.join(" "));
-                      }}
-                    >
-                      Use coastline assist
-                    </Button>
-                  </div>
-                  <div className="text-[#92AAC3]">
-                    Coastline assist:
-                    {" "}
-                    {suggestedCoastlineStops.length > 0 ? `stops ${suggestedCoastlineStops.join(", ")}` : "no fuel stops"}
-                    {suggestedCoastlineWaypoints.length > 0 ? ` � waypoints ${suggestedCoastlineWaypoints.join(", ")}` : ""}
-                  </div>
-                </div>
-              )}
-              {suggestionMeta && suggestedStops.length > 0 && (
-                <div className={cn("space-y-1 text-xs text-[#D9E4F0]", plannerSubpanelMutedClass)}>
-                  <div>
-                    Max leg ~{suggestionMeta.maxLegNm.toFixed(0)} NM based on {suggestionMeta.fuelGallons.toFixed(0)} gal
-                    at {suggestionMeta.fuelBurnGph.toFixed(1)} gph with {suggestionMeta.reserveMinutes} min reserve.
-                  </div>
-                  {suggestionMeta.planningLegNm ? (
-                    <div>
-                      RSF is targeting legs of about {suggestionMeta.planningLegNm.toFixed(0)} NM and placing fuel stops sequentially from the last stop instead of spacing everything only from departure.
-                    </div>
-                  ) : null}
-                  <div>
-                    Direct assist: {suggestionMeta.suggestedStopCount ?? suggestedStops.length} planned fuel stop{(suggestionMeta.suggestedStopCount ?? suggestedStops.length) === 1 ? "" : "s"}.
-                    {suggestionMeta.overwaterLikely
-                      ? ` Coastline assist currently uses ${suggestionMeta.coastlineSuggestedStopCount ?? suggestedCoastlineStops.length} stop${(suggestionMeta.coastlineSuggestedStopCount ?? suggestedCoastlineStops.length) === 1 ? "" : "s"} while biasing the helper route back toward shore.`
-                      : ""}
-                  </div>
-                </div>
-              )}
-              {terrainAdvisorSummaries.length > 0 && plannedAltitudeValue && (
-                <div className={cn("space-y-2 text-xs", plannerSubpanelSuccessClass)}>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-medium">Terrain + leg health advisor</div>
-                    <Badge variant="outline" className="border-[#4d8d7d] bg-[#122621] text-[#d7efe7]">
-                      {Math.round(plannedAltitudeValue).toLocaleString()} ft planned
-                    </Badge>
-                  </div>
-                  <div className="text-[#b9ddd1]">
-                    RSF compares the current route and helper alternatives against USGS terrain plus fuel-leg practicality at your selected altitude. Leg comparisons assume a top-off at each planned fuel stop.
-                  </div>
-                  {terrainAdjustmentRecommendation && (
-                    <div className={cn("space-y-2", plannerSubpanelClass, "border-[#3a7d6e]/40 bg-[linear-gradient(180deg,rgba(14,29,25,0.98),rgba(10,18,16,0.98))]")}>
-                      <div className="font-semibold">{terrainAdjustmentRecommendation.title}</div>
-                      <div className="text-[#b9ddd1]">{terrainAdjustmentRecommendation.detail}</div>
-                      <div className="flex flex-wrap gap-2">
-                        {terrainAdjustmentRecommendation.kind === "raise-altitude" && terrainAdjustmentRecommendation.targetAltitudeFt ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => setPlannedAltitude(String(terrainAdjustmentRecommendation.targetAltitudeFt))}
-                          >
-                            Set altitude to {terrainAdjustmentRecommendation.targetAltitudeFt.toLocaleString()} ft
-                          </Button>
-                        ) : null}
-                        {terrainAdjustmentRecommendation.kind === "switch-route" && terrainAdjustmentRecommendation.targetRouteId === "assist" ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => {
-                              setWaypointsInput(suggestedWaypoints.join(" "));
-                              setPlannedStopsInput(suggestedStops.join(" "));
-                            }}
-                          >
-                            Apply route assist
-                          </Button>
-                        ) : null}
-                        {terrainAdjustmentRecommendation.kind === "switch-route" && terrainAdjustmentRecommendation.targetRouteId === "coastline" ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => {
-                              setWaypointsInput(suggestedCoastlineWaypoints.join(" "));
-                              setPlannedStopsInput(suggestedCoastlineStops.join(" "));
-                            }}
-                          >
-                            Apply coastline assist
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                  )}
-                  <div className="grid gap-2 md:grid-cols-3">
-                    {terrainAdvisorSummaries.map((summary) => (
-                      <div
-                        key={`terrain-advisor-${summary.id}`}
-                        className={cn(
-                          "rounded-[1rem] border p-3 space-y-2 shadow-[0_16px_32px_-26px_rgba(0,0,0,0.88)]",
-                          recommendedTerrainRoute?.id === summary.id
-                            ? "border-[#5aa28e] bg-[linear-gradient(180deg,rgba(15,33,29,0.98),rgba(10,18,16,0.98))]"
-                            : "border-[#40695f]/34 bg-[linear-gradient(180deg,rgba(14,23,21,0.96),rgba(10,15,15,0.96))]"
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="font-semibold">{summary.label}</div>
-                            <div className="text-[11px] text-[#a9cec3]">{summary.description}</div>
-                          </div>
-                          {recommendedTerrainRoute?.id === summary.id && (
-                            <Badge className="border-0 bg-[#2f7a6a] text-[#f2fbf8] hover:bg-[#2f7a6a]">Recommended</Badge>
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <div>
-                            Min clearance:{" "}
-                            <span className="font-medium">
-                              {summary.available && summary.minClearanceFt != null ? `${Math.round(summary.minClearanceFt).toLocaleString()} ft` : "--"}
-                            </span>
-                          </div>
-                          <div>
-                            Highest terrain:{" "}
-                            <span className="font-medium">
-                              {summary.available && summary.maxElevationFt != null ? `${Math.round(summary.maxElevationFt).toLocaleString()} ft` : "--"}
-                            </span>
-                          </div>
-                          <div>
-                            Risk:{" "}
-                            <span className={cn(
-                              "font-medium",
-                              summary.risk === "warning"
-                                ? "text-[#f09aa8]"
-                                : summary.risk === "caution"
-                                  ? "text-[#e2c06d]"
-                                  : "text-[#8fd0bf]"
-                            )}>
-                              {summary.risk === "warning" ? "Terrain warning" : summary.risk === "caution" ? "Tight clearance" : "Comfortable"}
-                            </span>
-                          </div>
-                          <div>
-                            Fuel legs:{" "}
-                            <span
-                              className={cn(
-                                "font-medium",
-                                summary.fuelStatus === "unreachable"
-                                  ? "text-[#f09aa8]"
-                                  : summary.fuelStatus === "tight"
-                                    ? "text-[#e2c06d]"
-                                    : "text-[#8fd0bf]"
-                              )}
-                            >
-                              {summary.fuelStatus === "unreachable"
-                                ? "Unreachable leg"
-                                : summary.fuelStatus === "tight"
-                                  ? "Tight reserve"
-                                  : "Healthy"}
-                            </span>
-                          </div>
-                          <div>
-                            Longest leg:{" "}
-                            <span className="font-medium">
-                              {summary.longestLegNm != null ? `${summary.longestLegNm.toFixed(0)} NM` : "--"}
-                            </span>
-                          </div>
-                          <div>
-                            Reserve balance:{" "}
-                            <span className="font-medium">
-                              {summary.reserveBalanceGallons != null
-                                ? `${summary.reserveBalanceGallons >= 0 ? "+" : ""}${summary.reserveBalanceGallons.toFixed(1)} gal`
-                                : "--"}
-                            </span>
-                          </div>
-                        </div>
-                        {summary.firstUnreachableLeg ? (
-                          <div className={cn(plannerSubpanelDangerClass, "px-2 py-1 text-[11px]")}>
-                            Cannot reach {(summary.firstUnreachableLeg as { from: string; to: string; shortageGallons: number }).to} from {(summary.firstUnreachableLeg as { from: string; to: string; shortageGallons: number }).from}; short about {(summary.firstUnreachableLeg as { from: string; to: string; shortageGallons: number }).shortageGallons.toFixed(1)} gal before the planned stop.
-                          </div>
-                        ) : null}
-                        {summary.applyKind !== "current" && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={recommendedTerrainRoute?.id === summary.id ? "default" : "outline"}
-                            onClick={() => {
-                              if (summary.applyKind === "assist") {
-                                setWaypointsInput(suggestedWaypoints.join(" "));
-                                setPlannedStopsInput(suggestedStops.join(" "));
-                              } else if (summary.applyKind === "coastline") {
-                                setWaypointsInput(suggestedCoastlineWaypoints.join(" "));
-                                setPlannedStopsInput(suggestedCoastlineStops.join(" "));
-                              }
-                            }}
-                          >
-                            Apply route
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  {recommendedTerrainRoute && recommendedTerrainRoute.id !== "current" && (
-                    <div className="text-[#b9ddd1]">
-                      {recommendedTerrainRoute.label} currently offers the healthiest balance of terrain margin and stop-planning practicality at this altitude.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
             <div className="space-y-2 md:col-span-2">
               <div id="planner-route-method" tabIndex={-1} className="space-y-2 scroll-mt-24 focus:outline-none">
                 <Label>Route Mode</Label>
@@ -8681,6 +8562,369 @@ export default function FlightPlanner() {
                 </div>
               )}
             </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Route Assist Waypoints (optional)</Label>
+              <Input
+                value={waypointsInput}
+                onChange={(e) => setWaypointsInput(e.target.value.toUpperCase())}
+                placeholder="KISP KPVD (comma or space separated)"
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional planning aids only. Add ICAO codes separated by space or comma, or use the helper suggestions below and edit as needed.
+              </p>
+              {!isAuthenticated && planningDepartureCode && planningDestinationCode && (
+                <div className={cn("rounded-md border border-[#35516e]/40 bg-[#102236] px-3 py-2 text-xs text-[#CFE4FA]")}>
+                  Sign in to calculate RSF route-assist waypoints for this city pair. You can still type a custom filed route below or choose Direct.
+                </div>
+              )}
+              {autoSuggestedIntermediates.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  RSF is previewing the helper route on the map and in ETE until you enter custom waypoints, planned stops, or a filed airport route.
+                </p>
+              )}
+              {routeSuggestionQuery.isFetching && planningDepartureCode && planningDestinationCode && (
+                <div className="text-xs text-muted-foreground">Calculating route-assist waypoints...</div>
+              )}
+              {suggestedWaypoints.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Route assist:</span>
+                  {suggestedWaypoints.map((icao) => (
+                    <span key={`waypoint-${icao}`}>
+                      {renderAirportIcaoTooltip(
+                        icao,
+                        <Badge variant="secondary">
+                          {icao}
+                        </Badge>,
+                      )}
+                    </span>
+                  ))}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setWaypointsInput(suggestedWaypoints.join(" "))}
+                  >
+                    {waypoints.length > 0 ? "Replace with assist" : "Use assist"}
+                  </Button>
+                </div>
+              )}
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Suggested Fuel Stops (optional)</Label>
+              <Input
+                value={plannedStopsInput}
+                onChange={(e) => setPlannedStopsInput(e.target.value.toUpperCase())}
+                placeholder="KACT KTYR (fuel/meal stops)"
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional planning aids for fuel or rest stops. Pilots can keep these, replace them, or ignore them entirely.
+              </p>
+              {routeSuggestionQuery.isFetching && planningDepartureCode && planningDestinationCode && (
+                <div className="text-xs text-muted-foreground">Estimating suggested fuel stops...</div>
+              )}
+              {suggestedStops.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Suggested fuel stops:</span>
+                  {suggestedStops.map((icao) => (
+                    <span key={`stop-${icao}`}>
+                      {renderAirportIcaoTooltip(
+                        icao,
+                        <Badge variant="secondary">
+                          {icao}
+                        </Badge>,
+                      )}
+                    </span>
+                  ))}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPlannedStopsInput(suggestedStops.join(" "))}
+                  >
+                    {plannedStops.length > 0 ? "Replace with suggested stops" : "Use suggested stops"}
+                  </Button>
+                </div>
+              )}
+              {hasCoastlineRouteOption && (
+                <div className={cn("space-y-2 text-xs", plannerSubpanelInfoClass)}>
+                  <div className="font-medium">Water crossing route options</div>
+                  <div className="text-[#AFC4DB]">
+                    RSF sees this as a likely overwater route. You can keep the more direct helper route, or switch to a coastline-biased assist that adds land-based route guidance for pilots who prefer to stay closer to shore.
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setWaypointsInput(suggestedWaypoints.join(" "));
+                        setPlannedStopsInput(suggestedStops.join(" "));
+                      }}
+                    >
+                      Use direct / overwater assist
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        setWaypointsInput(suggestedCoastlineWaypoints.join(" "));
+                        setPlannedStopsInput(suggestedCoastlineStops.join(" "));
+                      }}
+                    >
+                      Use coastline assist
+                    </Button>
+                  </div>
+                  <div className="text-[#92AAC3]">
+                    Coastline assist:
+                    {" "}
+                    {suggestedCoastlineStops.length > 0 ? `stops ${suggestedCoastlineStops.join(", ")}` : "no fuel stops"}
+                    {suggestedCoastlineWaypoints.length > 0 ? ` � waypoints ${suggestedCoastlineWaypoints.join(", ")}` : ""}
+                  </div>
+                </div>
+              )}
+              {suggestionMeta && suggestedStops.length > 0 && (
+                <div className={cn("space-y-1 text-xs text-[#D9E4F0]", plannerSubpanelMutedClass)}>
+                  <div>
+                    Max leg ~{suggestionMeta.maxLegNm.toFixed(0)} NM based on {suggestionMeta.fuelGallons.toFixed(0)} gal
+                    at {suggestionMeta.fuelBurnGph.toFixed(1)} gph with {suggestionMeta.reserveMinutes} min reserve.
+                  </div>
+                  {suggestionMeta.planningLegNm ? (
+                    <div>
+                      RSF is targeting legs of about {suggestionMeta.planningLegNm.toFixed(0)} NM and placing fuel stops sequentially from the last stop instead of spacing everything only from departure.
+                    </div>
+                  ) : null}
+                  <div>
+                    Direct assist: {suggestionMeta.suggestedStopCount ?? suggestedStops.length} planned fuel stop{(suggestionMeta.suggestedStopCount ?? suggestedStops.length) === 1 ? "" : "s"}.
+                    {suggestionMeta.overwaterLikely
+                      ? ` Coastline assist currently uses ${suggestionMeta.coastlineSuggestedStopCount ?? suggestedCoastlineStops.length} stop${(suggestionMeta.coastlineSuggestedStopCount ?? suggestedCoastlineStops.length) === 1 ? "" : "s"} while biasing the helper route back toward shore.`
+                      : ""}
+                  </div>
+                </div>
+              )}
+              {terrainAdvisorSummaries.length > 0 && plannedAltitudeValue && (
+                <div className={cn("space-y-2 text-xs", plannerSubpanelSuccessClass)}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium">Terrain + leg health advisor</div>
+                    <Badge variant="outline" className="border-[#4d8d7d] bg-[#122621] text-[#d7efe7]">
+                      {Math.round(plannedAltitudeValue).toLocaleString()} ft planned
+                    </Badge>
+                  </div>
+                  <div className="text-[#b9ddd1]">
+                    RSF compares the current route and helper alternatives against USGS terrain plus fuel-leg practicality at your selected altitude. Leg comparisons assume a top-off at each planned fuel stop.
+                  </div>
+                  {terrainAdjustmentRecommendation && (
+                    <div className={cn("space-y-2", plannerSubpanelClass, "border-[#3a7d6e]/40 bg-[linear-gradient(180deg,rgba(14,29,25,0.98),rgba(10,18,16,0.98))]")}>
+                      <div className="font-semibold">{terrainAdjustmentRecommendation.title}</div>
+                      <div className="text-[#b9ddd1]">{terrainAdjustmentRecommendation.detail}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {terrainAdjustmentRecommendation.kind === "raise-altitude" && terrainAdjustmentRecommendation.targetAltitudeFt ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => setPlannedAltitude(String(terrainAdjustmentRecommendation.targetAltitudeFt))}
+                          >
+                            Set altitude to {terrainAdjustmentRecommendation.targetAltitudeFt.toLocaleString()} ft
+                          </Button>
+                        ) : null}
+                        {terrainAdjustmentRecommendation.kind === "switch-route" && terrainAdjustmentRecommendation.targetRouteId === "assist" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setWaypointsInput(suggestedWaypoints.join(" "));
+                              setPlannedStopsInput(suggestedStops.join(" "));
+                            }}
+                          >
+                            Apply route assist
+                          </Button>
+                        ) : null}
+                        {terrainAdjustmentRecommendation.kind === "switch-route" && terrainAdjustmentRecommendation.targetRouteId === "coastline" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setWaypointsInput(suggestedCoastlineWaypoints.join(" "));
+                              setPlannedStopsInput(suggestedCoastlineStops.join(" "));
+                            }}
+                          >
+                            Apply coastline assist
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid gap-2 md:grid-cols-3">
+                    {terrainAdvisorSummaries.map((summary) => (
+                      <div
+                        key={`terrain-advisor-${summary.id}`}
+                        className={cn(
+                          "rounded-[1rem] border p-3 space-y-2 shadow-[0_16px_32px_-26px_rgba(0,0,0,0.88)]",
+                          recommendedTerrainRoute?.id === summary.id
+                            ? "border-[#5aa28e] bg-[linear-gradient(180deg,rgba(15,33,29,0.98),rgba(10,18,16,0.98))]"
+                            : "border-[#40695f]/34 bg-[linear-gradient(180deg,rgba(14,23,21,0.96),rgba(10,15,15,0.96))]"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-semibold">{summary.label}</div>
+                            <div className="text-[11px] text-[#a9cec3]">{summary.description}</div>
+                          </div>
+                          {recommendedTerrainRoute?.id === summary.id && (
+                            <Badge className="border-0 bg-[#2f7a6a] text-[#f2fbf8] hover:bg-[#2f7a6a]">Recommended</Badge>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <div>
+                            Min clearance:{" "}
+                            <span className="font-medium">
+                              {summary.available && summary.minClearanceFt != null ? `${Math.round(summary.minClearanceFt).toLocaleString()} ft` : "--"}
+                            </span>
+                          </div>
+                          <div>
+                            Highest terrain:{" "}
+                            <span className="font-medium">
+                              {summary.available && summary.maxElevationFt != null ? `${Math.round(summary.maxElevationFt).toLocaleString()} ft` : "--"}
+                            </span>
+                          </div>
+                          <div>
+                            Risk:{" "}
+                            <span className={cn(
+                              "font-medium",
+                              summary.risk === "warning"
+                                ? "text-[#f09aa8]"
+                                : summary.risk === "caution"
+                                  ? "text-[#e2c06d]"
+                                  : "text-[#8fd0bf]"
+                            )}>
+                              {summary.risk === "warning" ? "Terrain warning" : summary.risk === "caution" ? "Tight clearance" : "Comfortable"}
+                            </span>
+                          </div>
+                          <div>
+                            Fuel legs:{" "}
+                            <span
+                              className={cn(
+                                "font-medium",
+                                summary.fuelStatus === "unreachable"
+                                  ? "text-[#f09aa8]"
+                                  : summary.fuelStatus === "tight"
+                                    ? "text-[#e2c06d]"
+                                    : "text-[#8fd0bf]"
+                              )}
+                            >
+                              {summary.fuelStatus === "unreachable"
+                                ? "Unreachable leg"
+                                : summary.fuelStatus === "tight"
+                                  ? "Tight reserve"
+                                  : "Healthy"}
+                            </span>
+                          </div>
+                          <div>
+                            Longest leg:{" "}
+                            <span className="font-medium">
+                              {summary.longestLegNm != null ? `${summary.longestLegNm.toFixed(0)} NM` : "--"}
+                            </span>
+                          </div>
+                          <div>
+                            Reserve balance:{" "}
+                            <span className="font-medium">
+                              {summary.reserveBalanceGallons != null
+                                ? `${summary.reserveBalanceGallons >= 0 ? "+" : ""}${summary.reserveBalanceGallons.toFixed(1)} gal`
+                                : "--"}
+                            </span>
+                          </div>
+                        </div>
+                        {summary.firstUnreachableLeg ? (
+                          <div className={cn(plannerSubpanelDangerClass, "px-2 py-1 text-[11px]")}>
+                            Cannot reach {(summary.firstUnreachableLeg as { from: string; to: string; shortageGallons: number }).to} from {(summary.firstUnreachableLeg as { from: string; to: string; shortageGallons: number }).from}; short about {(summary.firstUnreachableLeg as { from: string; to: string; shortageGallons: number }).shortageGallons.toFixed(1)} gal before the planned stop.
+                          </div>
+                        ) : null}
+                        {summary.applyKind !== "current" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={recommendedTerrainRoute?.id === summary.id ? "default" : "outline"}
+                            onClick={() => {
+                              if (summary.applyKind === "assist") {
+                                setWaypointsInput(suggestedWaypoints.join(" "));
+                                setPlannedStopsInput(suggestedStops.join(" "));
+                              } else if (summary.applyKind === "coastline") {
+                                setWaypointsInput(suggestedCoastlineWaypoints.join(" "));
+                                setPlannedStopsInput(suggestedCoastlineStops.join(" "));
+                              }
+                            }}
+                          >
+                            Apply route
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {recommendedTerrainRoute && recommendedTerrainRoute.id !== "current" && (
+                    <div className="text-[#b9ddd1]">
+                      {recommendedTerrainRoute.label} currently offers the healthiest balance of terrain margin and stop-planning practicality at this altitude.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div id="planner-aircraft-setup" className={cn("md:col-span-2 p-4 space-y-3", plannerSubpanelClass)}>
+              <div className="flex flex-col gap-1">
+                <div className="font-semibold text-[#F5F8FC]">Aircraft setup</div>
+                <div className="text-xs text-[#A9BBCD]">
+                  Select an aircraft from the RSF library or a saved profile to prefill performance assumptions before you plan the route.
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>RSF Aircraft Library</Label>
+                  <Select
+                    value={selectedTypeId}
+                    onValueChange={handleAircraftTypeSelection}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select aircraft type" />
+                    </SelectTrigger>
+                    <SelectContent className={cn("max-h-72 overflow-y-auto", plannerSelectContentClass)}>
+                      <SelectItem value={CUSTOM_TYPE_ID}>Custom entry</SelectItem>
+                      <SelectItem value={FALLBACK_TYPE.id}>Select your aircraft</SelectItem>
+                      {aircraftTypes.map((type) => (
+                        <SelectItem key={type.id} value={type.id}>
+                          {type.make} {type.model}{type.icaoType ? ` (${type.icaoType})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Saved Profile</Label>
+                  <Select value={selectedProfileId} onValueChange={handleAircraftProfileSelection}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select saved profile" />
+                    </SelectTrigger>
+                    <SelectContent className={plannerSelectContentClass}>
+                      <SelectItem value="none">None</SelectItem>
+                      {savedProfiles.map((profile) => (
+                        <SelectItem key={profile.id} value={profile.id}>
+                          {profile.isDefault ? "Default - " : ""}{profile.tailNumber || profile.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="text-xs text-[#A9BBCD]">
+                Saved profiles override library values when selected. This prefill is one of RSF's strongest planning workflow advantages.
+              </div>
+              {selectedTypeNeedsVerification && (
+                <Alert className="border-[#D9A441] bg-[#271d0b] text-[#D9A441]">
+                  <AlertDescription>
+                    This RSF library template is still marked as a planning estimate. Verify the performance values against the POH/AFM before relying on them for fuel, range, or cost planning.
+                    {selectedType.sourceNote ? ` ${selectedType.sourceNote}` : ""}
+                    {selectedType.verificationSource ? ` Source: ${selectedType.verificationSource}.` : ""}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
           <div className="space-y-2">
             <Label>Alternate airport (optional)</Label>
             <Input
@@ -8790,14 +9034,53 @@ export default function FlightPlanner() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Avg Headwind (kt)</Label>
-              <Input
-                value={headwind}
-                onChange={(e) => setHeadwind(e.target.value)}
-                disabled={!isPro}
-                placeholder="Enter headwind, e.g. 10"
-              />
-              {!isPro && <p className="text-xs text-muted-foreground">RSF Premium unlocks wind-adjusted ETE.</p>}
+              <Label>Route wind component</Label>
+              <div className={cn("rounded-[0.9rem] border border-[#5d6f85]/24 bg-[#101820] px-3 py-2 text-sm text-[#D9E4F0]")}>
+                <div className="font-semibold text-[#F5F8FC]">
+                  {manualWindOverrideEnabled
+                    ? `Manual wind override: ${manualWindValue >= 0 ? `${manualWindValue} kt headwind` : `${Math.abs(manualWindValue)} kt tailwind`}`
+                    : calculatedRouteWind.status === "unavailable"
+                      ? "Calculated winds unavailable"
+                      : selectedWindComponentKt >= 0
+                        ? `Calculated headwind: ${selectedWindComponentKt} kt`
+                        : `Calculated tailwind: ${Math.abs(selectedWindComponentKt)} kt`}
+                </div>
+                <div className="mt-1 text-xs text-[#A9BBCD]">
+                  Source: {windSourceLabel}. {calculatedRouteWind.status === "partial" ? `${calculatedRouteWind.coveredLegs}/${calculatedRouteWind.totalLegs} route legs have wind coverage. ` : ""}
+                  {windsSummaryQuery.data?.validTime ? `Valid ${windsSummaryQuery.data.validTime}. ` : ""}
+                  {windsSummaryQuery.data?.altitudeFt ? `Altitude ${windsSummaryQuery.data.altitudeFt} ft.` : ""}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={manualWindOverrideEnabled ? "default" : "outline"}
+                    onClick={() => setManualWindOverrideEnabled((value) => !value)}
+                  >
+                    {manualWindOverrideEnabled ? "Manual Override On" : "Override calculated winds"}
+                  </Button>
+                  {manualWindOverrideEnabled && (
+                    <>
+                      <Input
+                        className="h-8 w-28"
+                        value={headwind}
+                        onChange={(e) => setHeadwind(e.target.value)}
+                        placeholder="Headwind kt"
+                        type="number"
+                        aria-label="Manual wind override in knots, positive for headwind and negative for tailwind"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setManualWindOverrideEnabled(false)}
+                      >
+                        Use calculated winds
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Planned Altitude (ft) - Required</Label>
@@ -9776,7 +10059,7 @@ export default function FlightPlanner() {
               fuel: "Fuel sufficient for trip + reserve",
               currency: "Pilot currency verified",
               notams: "NOTAMs acknowledged",
-              tfr: "No TFR conflicts on route",
+              tfr: "TFR corridor check completed with no relevant TFRs",
               fuelSufficient: "Fuel on board = fuel required",
             };
             return (Object.keys(checklistDefaults) as Array<keyof typeof checklistDefaults>).map((key) => {
@@ -11490,6 +11773,71 @@ export default function FlightPlanner() {
                 )}
               </div>
             )}
+            {routePoints.length > 1 && (
+              <div className={cn("mb-3 space-y-3 p-3", plannerSubpanelClass)}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-[#F5F8FC]">TFR corridor overlay</div>
+                    <div className="text-xs text-[#A9BBCD]">{tfrOverlayStatusText}</div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={showTfrOverlay ? "default" : "outline"}
+                      aria-pressed={showTfrOverlay}
+                      aria-label={showTfrOverlay ? "Turn TFR overlay off" : "Turn TFR overlay on"}
+                      onClick={() => setShowTfrOverlay((value) => !value)}
+                    >
+                      {showTfrOverlay ? "TFR Overlay On" : "TFR Overlay Off"}
+                    </Button>
+                    <Select value={tfrCorridorNm} onValueChange={setTfrCorridorNm}>
+                      <SelectTrigger className="h-8 w-[130px]" aria-label="TFR route corridor width">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className={plannerSelectContentClass}>
+                        <SelectItem value="5">5 NM</SelectItem>
+                        <SelectItem value="10">10 NM</SelectItem>
+                        <SelectItem value="25">25 NM</SelectItem>
+                        <SelectItem value="50">50 NM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} asChild>
+                      <a href="/tfr-map" target="_blank" rel="noopener noreferrer">Open full TFR map</a>
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full border border-red-400/60 bg-red-500/15 px-2 py-1 text-red-100">Active TFR</span>
+                  <span className="rounded-full border border-amber-400/60 bg-amber-500/15 px-2 py-1 text-amber-100">Active during planned flight</span>
+                  <span className="rounded-full border border-[#5d6f85]/30 bg-[#121820] px-2 py-1 text-[#D9E4F0]">Corridor: {tfrCorridorNmValue} NM each side</span>
+                </div>
+                {selectedTfrFeature && (
+                  <div className={cn("rounded-[0.9rem] border border-[#5d6f85]/24 bg-[#101820] p-3 text-xs text-[#D9E4F0]")}>
+                    {(() => {
+                      const props = selectedTfrFeature.properties || {};
+                      const id = props.notamId || props.tfrId || props.id || "TFR";
+                      const title = props.title || props.reason || props.tfrType || null;
+                      const start = props.effectiveStart || props.startTime || props.validFrom || null;
+                      const end = props.effectiveEnd || props.endTime || props.validTo || null;
+                      const altitude = props.altitude || props.altitudeLimits || props.lowerAltitude || props.upperAltitude || null;
+                      const source = props.source || props.lastUpdated || props.updatedAt || null;
+                      const status = props.corridorStatus === "active" ? "Active now" : props.corridorStatus === "planned-flight-window" ? "Active during planned flight" : "Candidate";
+                      return (
+                        <div className="space-y-1">
+                          <div className="font-semibold text-[#F5F8FC]">{String(id)}</div>
+                          {title ? <div>{String(title)}</div> : null}
+                          <div>Status: {status}</div>
+                          {start || end ? <div>Effective: {start ? String(start) : "Not returned"} to {end ? String(end) : "Not returned"}</div> : null}
+                          {altitude ? <div>Altitude: {String(altitude)}</div> : null}
+                          {source ? <div>Source/updated: {String(source)}</div> : null}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
             {routeIcaos.length === 0 ? (
               <div className="text-sm text-muted-foreground">Enter a departure and destination to preview the route.</div>
             ) : routePoints.length === 0 ? (
@@ -11524,6 +11872,9 @@ export default function FlightPlanner() {
                   terrainSegments={terrainCueSegments}
                   terrainHotSpots={terrainMapHotSpots}
                   legHealthMarkers={legHealthMarkers}
+                  tfrFeatures={tfrOverlayFeatures}
+                  showTfrOverlay={showTfrOverlay}
+                  onSelectTfr={setSelectedTfrFeature}
                 />
               )
             )}

@@ -2109,6 +2109,7 @@ export default function FlightPlanner() {
   const [headwind, setHeadwind] = useState("0");
   const [manualWindOverrideEnabled, setManualWindOverrideEnabled] = useState(false);
   const [plannedAltitude, setPlannedAltitude] = useState("");
+  const [altitudePracticalityDialogOpen, setAltitudePracticalityDialogOpen] = useState(false);
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
   const [routeMode, setRouteMode] = useState<"auto" | "direct" | "manual">("direct");
@@ -4030,6 +4031,19 @@ export default function FlightPlanner() {
     selectedWindComponentKt,
     totalDistance,
   ]);
+  const cruiseAltitudePracticalityLabel = cruiseAltitudePracticality.classification === "unable"
+    ? "Unable to assess"
+    : cruiseAltitudePracticality.classification[0].toUpperCase() + cruiseAltitudePracticality.classification.slice(1);
+  const cruiseAltitudePracticalityToneClass = cn(
+    "rounded-[0.9rem] border px-3 py-2 text-xs",
+    cruiseAltitudePracticality.classification === "impractical"
+      ? "border-[#c77b7b]/45 bg-[#2a1518] text-[#ffd8dc]"
+      : cruiseAltitudePracticality.classification === "marginal"
+        ? "border-[#d6b76b]/45 bg-[#2a2415] text-[#fff1c7]"
+        : cruiseAltitudePracticality.classification === "practical"
+          ? "border-[#5ca889]/45 bg-[#10211d] text-[#d7efe7]"
+          : "border-[#5d6f85]/30 bg-[#101820] text-[#D9E4F0]",
+  );
   const altitudePracticalityAnalyticsKeyRef = useRef<string | null>(null);
   useEffect(() => {
     const key = [
@@ -9440,50 +9454,26 @@ export default function FlightPlanner() {
               <p className="text-xs text-muted-foreground">
                 Required for route analysis, terrain awareness, winds aloft, and filing readiness.
               </p>
-              <div
-                className={cn(
-                  "rounded-[0.9rem] border px-3 py-2 text-xs",
-                  cruiseAltitudePracticality.classification === "impractical"
-                    ? "border-[#c77b7b]/45 bg-[#2a1518] text-[#ffd8dc]"
-                    : cruiseAltitudePracticality.classification === "marginal"
-                      ? "border-[#d6b76b]/45 bg-[#2a2415] text-[#fff1c7]"
-                      : cruiseAltitudePracticality.classification === "practical"
-                        ? "border-[#5ca889]/45 bg-[#10211d] text-[#d7efe7]"
-                        : "border-[#5d6f85]/30 bg-[#101820] text-[#D9E4F0]",
-                )}
-              >
-                <div className="flex items-start gap-2">
-                  <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                  <div className="min-w-0">
-                    <div className="font-semibold text-[#F5F8FC]">
-                      Cruise altitude practicality: {cruiseAltitudePracticality.classification === "unable" ? "Unable to assess" : cruiseAltitudePracticality.classification[0].toUpperCase() + cruiseAltitudePracticality.classification.slice(1)}
-                    </div>
-                    <div className="mt-1">{cruiseAltitudePracticality.message}</div>
-                    {cruiseAltitudePracticality.classification !== "practical" && cruiseAltitudePracticality.classification !== "unable" && (
-                      <div className="mt-1 font-medium">Consider reviewing a lower cruise altitude.</div>
-                    )}
-                    <details className="mt-2">
-                      <summary className="cursor-pointer font-semibold text-[#BBD8F2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8FC7FF]">
-                        View estimate
-                      </summary>
-                      <div className="mt-2 grid gap-1 text-[#D9E4F0]">
-                        <div>Departure elevation: {cruiseAltitudePracticality.departureElevationFt != null ? `${Math.round(cruiseAltitudePracticality.departureElevationFt).toLocaleString()} ft` : "Unavailable"}</div>
-                        <div>Selected altitude: {cruiseAltitudePracticality.plannedAltitudeFt != null ? `${Math.round(cruiseAltitudePracticality.plannedAltitudeFt).toLocaleString()} ft` : "Unavailable"}</div>
-                        <div>Destination elevation: {cruiseAltitudePracticality.destinationElevationFt != null ? `${Math.round(cruiseAltitudePracticality.destinationElevationFt).toLocaleString()} ft` : "Unavailable"}</div>
-                        <div>Climb estimate: {cruiseAltitudePracticality.climbTimeMinutes != null && cruiseAltitudePracticality.climbDistanceNm != null ? `${cruiseAltitudePracticality.climbTimeMinutes.toFixed(1)} min / ${cruiseAltitudePracticality.climbDistanceNm.toFixed(1)} NM` : "Unavailable"}</div>
-                        <div>Descent estimate: {cruiseAltitudePracticality.descentTimeMinutes != null && cruiseAltitudePracticality.descentDistanceNm != null ? `${cruiseAltitudePracticality.descentTimeMinutes.toFixed(1)} min / ${cruiseAltitudePracticality.descentDistanceNm.toFixed(1)} NM` : "Unavailable"}</div>
-                        <div>Remaining cruise distance: {cruiseAltitudePracticality.remainingCruiseDistanceNm != null ? `${cruiseAltitudePracticality.remainingCruiseDistanceNm.toFixed(1)} NM` : "Unavailable"}</div>
-                        <div>Performance source: {cruiseAltitudePracticality.performanceSource.replace(/_/g, " ")}</div>
-                        {cruiseAltitudePracticality.missingInputs.length > 0 && (
-                          <div>Missing inputs: {cruiseAltitudePracticality.missingInputs.join(", ")}</div>
-                        )}
-                        {cruiseAltitudePracticality.assumptions.map((assumption) => (
-                          <div key={assumption}>Assumption: {assumption}</div>
-                        ))}
-                        <div>This advisory is not a filing blocker and does not assess terrain clearance, MEA/MOCA, oxygen, icing, density altitude, or ATC altitude requirements.</div>
+              <div className={cruiseAltitudePracticalityToneClass}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-2">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <div className="font-semibold text-[#F5F8FC]">
+                        Cruise altitude practicality: {cruiseAltitudePracticalityLabel}
                       </div>
-                    </details>
+                      <div className="mt-1 line-clamp-2">{cruiseAltitudePracticality.message}</div>
+                    </div>
                   </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className={cn("shrink-0 self-start", plannerInsetActionClass)}
+                    onClick={() => setAltitudePracticalityDialogOpen(true)}
+                  >
+                    View estimate
+                  </Button>
                 </div>
               </div>
             </div>
@@ -9697,7 +9687,7 @@ export default function FlightPlanner() {
               <div>
                 <div className="text-xs text-[#A9BBCD]">Cruise altitude practicality</div>
                 <div className="font-semibold text-[#F5F8FC]">
-                  {cruiseAltitudePracticality.classification === "unable" ? "Unable to assess" : cruiseAltitudePracticality.classification[0].toUpperCase() + cruiseAltitudePracticality.classification.slice(1)}
+                  {cruiseAltitudePracticalityLabel}
                 </div>
               </div>
               <div className="max-w-3xl text-xs text-[#A9BBCD]">
@@ -12957,6 +12947,84 @@ export default function FlightPlanner() {
             </div>
           )}
           {providerUpdatesPlan ? <FilingProviderUpdatesList plan={providerUpdatesPlan} /> : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={altitudePracticalityDialogOpen} onOpenChange={setAltitudePracticalityDialogOpen}>
+        <DialogContent className="max-h-[85vh] max-w-xl overflow-y-auto border-[#5d6f85]/35 bg-[#11161d] text-[#F5F8FC] shadow-[0_24px_70px_-36px_rgba(0,0,0,0.95)]">
+          <DialogHeader>
+            <DialogTitle>Cruise altitude practicality</DialogTitle>
+            <DialogDescription className="text-[#A9BBCD]">
+              Planning advisory only. It does not change filing readiness, ETE, fuel endurance, or the filed altitude.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <div className={cruiseAltitudePracticalityToneClass}>
+              <div className="flex items-start gap-2">
+                <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <div>
+                  <div className="font-semibold text-[#F5F8FC]">{cruiseAltitudePracticalityLabel}</div>
+                  <div className="mt-1">{cruiseAltitudePracticality.message}</div>
+                  {cruiseAltitudePracticality.classification !== "practical" && cruiseAltitudePracticality.classification !== "unable" && (
+                    <div className="mt-1 font-medium">Consider reviewing a lower cruise altitude.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-2 rounded-[0.9rem] border border-[#5d6f85]/25 bg-[#0f141a] p-3 text-[#D9E4F0]">
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-[#A9BBCD]">Departure elevation</span>
+                <span className="text-right font-medium text-[#F5F8FC]">{cruiseAltitudePracticality.departureElevationFt != null ? `${Math.round(cruiseAltitudePracticality.departureElevationFt).toLocaleString()} ft` : "Unavailable"}</span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-[#A9BBCD]">Selected altitude</span>
+                <span className="text-right font-medium text-[#F5F8FC]">{cruiseAltitudePracticality.plannedAltitudeFt != null ? `${Math.round(cruiseAltitudePracticality.plannedAltitudeFt).toLocaleString()} ft` : "Unavailable"}</span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-[#A9BBCD]">Destination elevation</span>
+                <span className="text-right font-medium text-[#F5F8FC]">{cruiseAltitudePracticality.destinationElevationFt != null ? `${Math.round(cruiseAltitudePracticality.destinationElevationFt).toLocaleString()} ft` : "Unavailable"}</span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-[#A9BBCD]">Climb estimate</span>
+                <span className="text-right font-medium text-[#F5F8FC]">{cruiseAltitudePracticality.climbTimeMinutes != null && cruiseAltitudePracticality.climbDistanceNm != null ? `${cruiseAltitudePracticality.climbTimeMinutes.toFixed(1)} min / ${cruiseAltitudePracticality.climbDistanceNm.toFixed(1)} NM` : "Unavailable"}</span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-[#A9BBCD]">Descent estimate</span>
+                <span className="text-right font-medium text-[#F5F8FC]">{cruiseAltitudePracticality.descentTimeMinutes != null && cruiseAltitudePracticality.descentDistanceNm != null ? `${cruiseAltitudePracticality.descentTimeMinutes.toFixed(1)} min / ${cruiseAltitudePracticality.descentDistanceNm.toFixed(1)} NM` : "Unavailable"}</span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-[#A9BBCD]">Remaining cruise distance</span>
+                <span className="text-right font-medium text-[#F5F8FC]">{cruiseAltitudePracticality.remainingCruiseDistanceNm != null ? `${cruiseAltitudePracticality.remainingCruiseDistanceNm.toFixed(1)} NM` : "Unavailable"}</span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-[#A9BBCD]">Performance source</span>
+                <span className="text-right font-medium text-[#F5F8FC]">{cruiseAltitudePracticality.performanceSource.replace(/_/g, " ")}</span>
+              </div>
+              {cruiseAltitudePracticality.missingInputs.length > 0 && (
+                <div className="flex items-start justify-between gap-4">
+                  <span className="text-[#A9BBCD]">Missing inputs</span>
+                  <span className="text-right font-medium text-[#F5F8FC]">{cruiseAltitudePracticality.missingInputs.join(", ")}</span>
+                </div>
+              )}
+            </div>
+            {cruiseAltitudePracticality.assumptions.length > 0 && (
+              <div className="rounded-[0.9rem] border border-[#5d6f85]/25 bg-[#0f141a] p-3 text-xs text-[#D9E4F0]">
+                <div className="mb-2 font-semibold text-[#F5F8FC]">Assumptions</div>
+                <div className="grid gap-1">
+                  {cruiseAltitudePracticality.assumptions.map((assumption) => (
+                    <div key={assumption}>{assumption}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="rounded-[0.9rem] border border-[#5d6f85]/25 bg-[#0f141a] p-3 text-xs text-[#A9BBCD]">
+              This advisory is not a filing blocker and does not assess terrain clearance, MEA/MOCA, oxygen, icing, density altitude, or ATC altitude requirements.
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" className="rsf-metal-button-primary" onClick={() => setAltitudePracticalityDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </PageShell>

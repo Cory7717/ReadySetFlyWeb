@@ -50,6 +50,14 @@ test("Route Builder classifies and preserves MLP as a navaid token without airpo
   assert.equal(providerRoute.includes("KMLP"), false);
 });
 
+test("Route Builder classifies FAA airport identifiers with numbers as airports without prefixing", () => {
+  const analysis = analyzeFiledRoute("KARB DCT 22T");
+  const tokens = new Map(analysis.tokens.map((token) => [token.token, token.kind]));
+  assert.equal(tokens.get("KARB"), "airport");
+  assert.equal(tokens.get("22T"), "airport");
+  assert.equal(tokens.has("K22T"), false);
+});
+
 test("route analysis resolves navaids for map geometry and reports unknown waypoints", () => {
   assert.match(routesSource, /NAVAIDS_CACHE_URL/);
   assert.match(routesSource, /loadNavaidCache/);
@@ -60,7 +68,7 @@ test("route analysis resolves navaids for map geometry and reports unknown waypo
 
 test("Flight Planner consumes resolved route points for manual Route Builder map geometry", () => {
   assert.match(flightPlannerSource, /filedRouteResolvedPoints/);
-  assert.match(flightPlannerSource, /routeMode === "manual" && filedRouteResolvedPoints\.length >= 2/);
+  assert.match(flightPlannerSource, /routeMode === "manual" && hasCanonicalRouteEndpoints && filedRouteResolvedPoints\.length >= 2/);
   assert.match(flightPlannerSource, /Route points resolved for map geometry/);
 });
 

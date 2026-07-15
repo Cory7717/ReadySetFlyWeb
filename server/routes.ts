@@ -2263,15 +2263,26 @@ type AirportMeta = {
 
 type AirportSearchResult = {
   icao: string;
+  ident?: string | null;
+  gpsCode?: string | null;
+  localCode?: string | null;
+  iataCode?: string | null;
+  displayIdentifier?: string | null;
   name: string | null;
   city?: string | null;
   state?: string | null;
   lat: number;
   lon: number;
+  timezone?: string | null;
+  weatherStationAvailable?: boolean;
+  source?: string;
 };
 
 type AirportReference = AirportSearchResult & {
-  timezone?: string | null;
+  ident?: string | null;
+  gpsCode?: string | null;
+  localCode?: string | null;
+  iataCode?: string | null;
 };
 
 type RunwayMeta = {
@@ -4162,12 +4173,19 @@ async function loadAirportReferenceCache(): Promise<Map<string, AirportReference
       const canonical = ident || gpsCode || localCode || iataCode;
       const reference: AirportReference = {
         icao: canonical,
+        ident: ident || null,
+        gpsCode: gpsCode || null,
+        localCode: localCode || null,
+        iataCode: iataCode || null,
+        displayIdentifier: localCode || gpsCode || ident || iataCode || canonical,
         name: name || null,
         city: city || null,
         state: state || null,
         lat,
         lon,
         timezone: timezone || null,
+        weatherStationAvailable: false,
+        source: "ourairports",
       };
 
       const candidates = [gpsCode, ident, localCode, iataCode].filter(Boolean);
@@ -4187,6 +4205,43 @@ async function loadAirportReferenceCache(): Promise<Map<string, AirportReference
   } finally {
     airportReferenceCachePromise = null;
   }
+}
+
+function airportReferenceCodes(reference: AirportReference) {
+  return Array.from(new Set([
+    reference.gpsCode,
+    reference.ident,
+    reference.localCode,
+    reference.iataCode,
+    reference.icao,
+    reference.displayIdentifier,
+  ]
+    .map((code) => String(code || "").trim().toUpperCase())
+    .filter(Boolean)));
+}
+
+function airportReferenceToSearchResult(
+  reference: AirportReference,
+  selectedIdentifier: string,
+  weatherStationAvailable: boolean,
+): AirportSearchResult {
+  const selected = selectedIdentifier.trim().toUpperCase() || reference.displayIdentifier || reference.icao;
+  return {
+    icao: selected,
+    ident: reference.ident ?? null,
+    gpsCode: reference.gpsCode ?? null,
+    localCode: reference.localCode ?? null,
+    iataCode: reference.iataCode ?? null,
+    displayIdentifier: selected,
+    name: reference.name ?? null,
+    city: reference.city ?? null,
+    state: reference.state ?? null,
+    lat: Number(reference.lat),
+    lon: Number(reference.lon),
+    timezone: reference.timezone ?? null,
+    weatherStationAvailable,
+    source: weatherStationAvailable ? "merged_airport_reference_weather_station" : "ourairports",
+  };
 }
 
 function getAirportReferenceByIcao(referenceMap: Map<string, AirportReference>, icao: string) {
@@ -15776,7 +15831,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       res.setHeader("x-rsf-airport-search", "1");
       res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=1800");
-      const cacheKey = query;
+      const cacheKey = `v2:${query}`;
       const cachedPayload = await getCachedAirportSearchPayload(cacheKey);
       if (cachedPayload) {
         return res.json(cachedPayload);
@@ -15789,30 +15844,85 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const buildPromise = (async () => {
         const stations = await loadStationCache();
+        const referenceMap = await loadAirportReferenceCache().catch(() => null);
         const terms = query.split(" ").filter(Boolean);
+        const stationByIcao = new Map<string, AirportSearchResult>();
+        stations.forEach((station) => {
+          const code = normalizeIcao(station.icao);
+          if (!code) return;
+          stationByIcao.set(code, {
+            ...station,
+            displayIdentifier: station.displayIdentifier || code,
+            weatherStationAvailable: true,
+            source: station.source || "aviationweather_station",
+          });
+        });
 
-        const scored = stations
-          .map((station) => {
-            const haystack = normalizeSearch(
-              `${station.icao} ${station.name ?? ""} ${station.city ?? ""} ${station.state ?? ""}`
-            );
+        const scoredByIdentifier = new Map<string, { airport: AirportSearchResult; score: number }>();
+        const addScoredAirport = (airport: AirportSearchResult, searchableIdentifiers: string[], haystackText: string) => {
+          const identifiers = Array.from(new Set(
+            searchableIdentifiers
+              .map((code) => String(code || "").trim().toUpperCase())
+              .filter(Boolean)
+          ));
+          const haystack = normalizeSearch(`${identifiers.join(" ")} ${haystackText}`);
+          let score = 0;
+          if (identifiers.some((code) => code.toLowerCase() === query)) score += 160;
+          if (identifiers.some((code) => code.toLowerCase().startsWith(query))) score += 90;
+          if (haystack.includes(query)) score += 40;
+          for (const term of terms) {
+            if (identifiers.some((code) => code.toLowerCase().startsWith(term))) score += 30;
+            if (haystack.includes(term)) score += 10;
+          }
+          if (airport.weatherStationAvailable) score += 3;
+          if (score <= 0) return;
 
-            let score = 0;
-            if (station.icao.toLowerCase() === query) score += 100;
-            if (station.icao.toLowerCase().startsWith(query)) score += 80;
-            if (haystack.includes(query)) score += 40;
-            for (const term of terms) {
-              if (station.icao.toLowerCase().startsWith(term)) score += 30;
-              if (haystack.includes(term)) score += 10;
+          const key = normalizeIcao(airport.icao || airport.displayIdentifier || identifiers[0] || "");
+          if (!key) return;
+          const existing = scoredByIdentifier.get(key);
+          if (!existing || score > existing.score || (score === existing.score && airport.weatherStationAvailable && !existing.airport.weatherStationAvailable)) {
+            scoredByIdentifier.set(key, { airport, score });
+          }
+        };
+
+        stations.forEach((station) => {
+          const code = normalizeIcao(station.icao);
+          addScoredAirport(
+            stationByIcao.get(code) || station,
+            [code],
+            `${station.name ?? ""} ${station.city ?? ""} ${station.state ?? ""}`
+          );
+        });
+
+        if (referenceMap) {
+          const uniqueReferences = new Map<string, AirportReference>();
+          Array.from(referenceMap.values()).forEach((reference) => {
+            const referenceKey = `${airportReferenceCodes(reference).join("|")}|${reference.lat}|${reference.lon}`;
+            if (!uniqueReferences.has(referenceKey)) {
+              uniqueReferences.set(referenceKey, reference);
             }
+          });
+          Array.from(uniqueReferences.values()).forEach((reference) => {
+            const codes = airportReferenceCodes(reference);
+            const weatherStationAvailable = codes.some((candidate) => stationByIcao.has(candidate));
+            const selectedCode =
+              codes.find((candidate) => candidate.toLowerCase() === query) ||
+              reference.displayIdentifier ||
+              reference.icao;
+            addScoredAirport(
+              airportReferenceToSearchResult(reference, selectedCode, weatherStationAvailable),
+              codes,
+              `${reference.name ?? ""} ${reference.city ?? ""} ${reference.state ?? ""}`
+            );
+          });
+        }
 
-            return score > 0 ? { station, score } : null;
-          })
-          .filter(Boolean) as { station: AirportSearchResult; score: number }[];
+        const scored = Array.from(scoredByIdentifier.values()).sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          return String(a.airport.icao).localeCompare(String(b.airport.icao));
+        });
 
-        scored.sort((a, b) => b.score - a.score);
-
-        const results = scored.slice(0, 12).map(({ station }) => station);
+        const results = scored.slice(0, 12).map(({ airport }) => airport);
         await setCachedAirportSearchPayload(cacheKey, results);
         return results;
       })();

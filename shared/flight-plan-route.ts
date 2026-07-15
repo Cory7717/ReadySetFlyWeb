@@ -76,6 +76,7 @@ export function classifyFiledRouteToken(token: string): FiledRouteTokenKind {
   if (/^\d{2,4}[NS]\d{3,5}[EW]$/.test(normalized) || /^\d{2,4}[NS]\/\d{3,5}[EW]$/.test(normalized)) {
     return "coordinate";
   }
+  if (/^[A-Z0-9]{3,4}$/.test(normalized) && /\d/.test(normalized)) return "airport";
   if (/^[A-Z]{5}$/.test(normalized)) return "fix";
   if (/^[A-Z]{3,6}\d[A-Z]?$/.test(normalized)) return "procedure";
   if (/^[A-Z]{2,3}$/.test(normalized)) return "navaid";

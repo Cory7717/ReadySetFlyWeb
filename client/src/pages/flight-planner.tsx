@@ -188,7 +188,7 @@ const buildPlannerIcaoCandidates = (value: string) => {
   const normalized = value.trim().toUpperCase();
   if (!normalized) return [] as string[];
   const candidates = [normalized];
-  if (normalized.length === 3) {
+  if (/^[A-Z]{3}$/.test(normalized)) {
     candidates.push(`K${normalized}`);
   } else if (normalized.length === 4 && normalized.startsWith("K")) {
     candidates.push(normalized.slice(1));
@@ -3745,6 +3745,8 @@ export default function FlightPlanner() {
       .filter(Boolean) as PlannerPoint[];
   }, [resolvedFiledRouteAnalysis.routePoints]);
 
+  const hasCanonicalRouteEndpoints = Boolean(planningDepartureCode && planningDestinationCode);
+
   const routeAssistResolvedPoints: PlannerPoint[] = useMemo(() => {
     const points = resolvedRouteAssistAnalysis?.routePoints || [];
     return points
@@ -3779,7 +3781,7 @@ export default function FlightPlanner() {
   }, [airportPoints, routeSuggestion, routeIntermediates.length]);
 
   const routePoints: PlannerPoint[] = useMemo(() => {
-    if (routeMode === "manual" && filedRouteResolvedPoints.length >= 2) {
+    if (routeMode === "manual" && hasCanonicalRouteEndpoints && filedRouteResolvedPoints.length >= 2) {
       return filedRouteResolvedPoints;
     }
     if (routeMode !== "manual" && waypoints.length > 0 && routeAssistResolvedPoints.length >= 2) {
@@ -3789,7 +3791,7 @@ export default function FlightPlanner() {
     const [start, ...rest] = airportPoints;
     if (!start || rest.length === 0) return airportPoints;
     return [start, suggestedWaypoint, rest[rest.length - 1]];
-  }, [airportPoints, filedRouteResolvedPoints, routeAssistResolvedPoints, routeMode, suggestedWaypoint, waypoints.length]);
+  }, [airportPoints, filedRouteResolvedPoints, hasCanonicalRouteEndpoints, routeAssistResolvedPoints, routeMode, suggestedWaypoint, waypoints.length]);
 
   const routeBbox = useMemo(() => {
     if (routePoints.length === 0) return null;
@@ -8385,6 +8387,11 @@ export default function FlightPlanner() {
                     placeholder="Enter route, e.g. DCT TXK V18 MEM J42 ATL"
                     className="min-h-[88px]"
                   />
+                  {routeMode === "manual" && !hasCanonicalRouteEndpoints && (
+                    <div className={cn("rounded-md border border-[#7f6327]/40 bg-[#241c0d] px-3 py-2 text-xs text-[#f2dca4]")}>
+                      Select a departure and destination before building the enroute route. Route Builder text is saved as draft text, but map, distance, fuel, weather, TFR, and filing readiness use the selected airport fields as the authoritative endpoints.
+                    </div>
+                  )}
                 </>
               )}
               <div className={cn(plannerSubpanelMutedClass, "border-dashed px-3 py-2 text-xs")}>

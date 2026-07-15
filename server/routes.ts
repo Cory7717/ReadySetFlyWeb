@@ -2280,8 +2280,40 @@ type RunwayMeta = {
   leHeading: number | null;
   heHeading: number | null;
   lengthFt: number | null;
+  widthFt: number | null;
   surface: string | null;
 };
+
+const SUPPLEMENTAL_RUNWAYS: Record<string, RunwayMeta[]> = {
+  KARB: [
+    {
+      leIdent: "12",
+      heIdent: "30",
+      leHeading: 122,
+      heHeading: 302,
+      lengthFt: 2750,
+      widthFt: 110,
+      surface: "TURF - FAIR",
+    },
+  ],
+};
+
+function getRunwaysForAirport(runwayMap: Map<string, RunwayMeta[]> | null, requestedIcao: string) {
+  const candidates = buildIcaoCandidates(requestedIcao);
+  const fromMap = runwayMap
+    ? candidates.flatMap((candidate) => runwayMap.get(candidate) || [])
+    : [];
+  const supplemental = candidates.flatMap((candidate) => SUPPLEMENTAL_RUNWAYS[candidate] || []);
+  const merged = [...fromMap, ...supplemental];
+  const deduped = new Map<string, RunwayMeta>();
+  for (const runway of merged) {
+    const key = `${runway.leIdent || ""}/${runway.heIdent || ""}|${runway.lengthFt || ""}|${runway.widthFt || ""}|${runway.surface || ""}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, runway);
+    }
+  }
+  return Array.from(deduped.values());
+}
 
 type AirportFrequencyMeta = {
   airportIdent: string;
@@ -3671,7 +3703,7 @@ function computeRunwayAdvisory(runways: RunwayMeta[], windDir: number, windSpeed
 
 function buildIcaoCandidates(value: string) {
   const normalized = normalizeIcao(value);
-  if (normalized.length === 3) {
+  if (/^[A-Z]{3}$/.test(normalized)) {
     return Array.from(new Set([`K${normalized}`, normalized]));
   }
   return [normalized];
@@ -4317,6 +4349,7 @@ async function loadRunwayCache(): Promise<Map<string, RunwayMeta[]>> {
 
     const airportIdentIdx = idx("airport_ident");
     const lengthIdx = idx("length_ft");
+    const widthIdx = idx("width_ft");
     const surfaceIdx = idx("surface");
     const closedIdx = idx("closed");
     const leIdentIdx = idx("le_ident");
@@ -4339,6 +4372,7 @@ async function loadRunwayCache(): Promise<Map<string, RunwayMeta[]>> {
         leHeading: row[leHeadingIdx] ? Number(row[leHeadingIdx]) : null,
         heHeading: row[heHeadingIdx] ? Number(row[heHeadingIdx]) : null,
         lengthFt: row[lengthIdx] ? Number(row[lengthIdx]) : null,
+        widthFt: row[widthIdx] ? Number(row[widthIdx]) : null,
         surface: row[surfaceIdx] || null,
       };
 
@@ -15841,7 +15875,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           const distanceNm = distanceNmBetween(lat, lon, station.lat, station.lon);
           if (!Number.isFinite(distanceNm) || distanceNm > radiusNm) continue;
 
-          const runwayCandidates = runwayMap ? buildIcaoCandidates(station.icao).flatMap((candidate) => runwayMap.get(candidate) || []) : [];
+          const runwayCandidates = getRunwaysForAirport(runwayMap, station.icao);
           if (runwayMap && runwayCandidates.length === 0) continue;
 
           const maxRunwayFt = runwayCandidates
@@ -15897,9 +15931,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               if (metar) break;
             }
 
-            const runwayCandidates = runwayMap
-              ? buildIcaoCandidates(candidate.station.icao).flatMap((icaoCandidate) => runwayMap.get(icaoCandidate) || [])
-              : [];
+            const runwayCandidates = getRunwaysForAirport(runwayMap, candidate.station.icao);
             const wind = metar ? parseMetarWind(metar) : { direction: null, speed: null, gust: null };
             const advisory =
               metar &&
@@ -16087,16 +16119,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const runwayMap = await loadRunwayCache().catch(() => null);
         const maxRunwayLengthFor = (icao: string) => {
           if (!runwayMap) return null;
-          const candidates = buildIcaoCandidates(icao);
-          for (const candidate of candidates) {
-            const runways = runwayMap.get(candidate);
-            if (!runways?.length) continue;
-            const lengths = runways
-              .map((runway) => runway.lengthFt)
-              .filter((value): value is number => Number.isFinite(value ?? NaN));
-            if (lengths.length > 0) {
-              return Math.max(...lengths);
-            }
+          const runways = getRunwaysForAirport(runwayMap, icao);
+          const lengths = runways
+            .map((runway) => runway.lengthFt)
+            .filter((value): value is number => Number.isFinite(value ?? NaN));
+          if (lengths.length > 0) {
+            return Math.max(...lengths);
           }
           return null;
         };
@@ -17441,7 +17469,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
 
       const runwayMap = await loadRunwayCache();
-      const runways = runwayMap.get(requestedIcao) || [];
+      const runways = getRunwaysForAirport(runwayMap, requestedIcao);
       return res.json({ icao: requestedIcao, runways });
     } catch (error) {
       console.error("Runway lookup failed:", error);
@@ -17522,7 +17550,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const buildPromise = (async () => {
         const runwayMap = await loadRunwayCache();
-        const runways = runwayMap.get(requestedIcao) || [];
+        const runways = getRunwaysForAirport(runwayMap, requestedIcao);
 
         const candidates = buildIcaoCandidates(requestedIcao);
         let metar: any | null = null;

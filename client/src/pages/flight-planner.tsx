@@ -1020,6 +1020,7 @@ type RunwayBriefingRunway = {
   leHeading?: number | null;
   heHeading?: number | null;
   lengthFt?: number | null;
+  widthFt?: number | null;
   surface?: string | null;
 };
 
@@ -2265,20 +2266,12 @@ export default function FlightPlanner() {
       setDepartureResolved(value);
       return;
     }
-    if (value.length === 3 && ICAO_REGEX.test(value)) {
-      setDepartureResolved(value);
-      return;
-    }
-    if (value.length === 4 && ICAO_REGEX.test(value)) {
-      setDepartureResolved(value);
-      return;
-    }
     setDepartureResolved("");
   }, [form.departure, departureSuggestions]);
 
   useEffect(() => {
     const value = form.departure.trim().toUpperCase();
-    if (value.length !== 4 || !ICAO_REGEX.test(value)) return;
+    if (!/^[A-Z0-9]{3,4}$/.test(value)) return;
     const cached = departureLookupRef.current;
     if (cached?.value === value) {
       if (cached.ok) setDepartureResolved(value);
@@ -2297,6 +2290,9 @@ export default function FlightPlanner() {
         departureLookupRef.current = { value, ok };
         if (ok) {
           setDepartureResolved(value);
+          trackEvent("planner_airport_identifier_resolution", { field: "departure", result: "resolved", identifier_length: value.length });
+        } else {
+          trackEvent("planner_airport_identifier_resolution", { field: "departure", result: "not_found", identifier_length: value.length });
         }
       } catch (error: any) {
         if (!active || error?.name === "AbortError") return;
@@ -2352,20 +2348,12 @@ export default function FlightPlanner() {
       setDestinationResolved(value);
       return;
     }
-    if (value.length === 3 && ICAO_REGEX.test(value)) {
-      setDestinationResolved(value);
-      return;
-    }
-    if (value.length === 4 && ICAO_REGEX.test(value)) {
-      setDestinationResolved(value);
-      return;
-    }
     setDestinationResolved("");
   }, [form.destination, destinationSuggestions]);
 
   useEffect(() => {
     const value = form.destination.trim().toUpperCase();
-    if (value.length !== 4 || !ICAO_REGEX.test(value)) return;
+    if (!/^[A-Z0-9]{3,4}$/.test(value)) return;
     const cached = destinationLookupRef.current;
     if (cached?.value === value) {
       if (cached.ok) setDestinationResolved(value);
@@ -2384,6 +2372,9 @@ export default function FlightPlanner() {
         destinationLookupRef.current = { value, ok };
         if (ok) {
           setDestinationResolved(value);
+          trackEvent("planner_airport_identifier_resolution", { field: "destination", result: "resolved", identifier_length: value.length });
+        } else {
+          trackEvent("planner_airport_identifier_resolution", { field: "destination", result: "not_found", identifier_length: value.length });
         }
       } catch (error: any) {
         if (!active || error?.name === "AbortError") return;
@@ -3815,6 +3806,32 @@ export default function FlightPlanner() {
   }, [fuelAvailableGallons, legNavRows, reserveFuel]);
   const fuelSurplus = fuelPlanSummary.reserveBalanceGallons;
   const surplusMinutes = planningBurn > 0 ? (fuelSurplus / planningBurn) * 60 : 0;
+  const planningAnalysisMissingInputs = useMemo(() => {
+    const missing: string[] = [];
+    if (!planningDepartureCode) missing.push("departure");
+    if (!planningDestinationCode) missing.push("destination");
+    if (!plannedAltitudeFt || plannedAltitudeFt <= 0) missing.push("plannedAltitude");
+    if (!fuelAvailableGallons || fuelAvailableGallons <= 0) missing.push("fuelOnBoard");
+    if (!planningBurn || planningBurn <= 0) missing.push("fuelBurn");
+    if (!groundspeed || groundspeed <= 0) missing.push("groundspeed");
+    return missing;
+  }, [fuelAvailableGallons, groundspeed, plannedAltitudeFt, planningBurn, planningDepartureCode, planningDestinationCode]);
+  const planningAnalysisIncomplete = planningAnalysisMissingInputs.length > 0;
+  useEffect(() => {
+    if (!planningAnalysisIncomplete) return;
+    trackEvent("planner_incomplete_analysis_shown", {
+      missing_count: planningAnalysisMissingInputs.length,
+      has_departure: Boolean(planningDepartureCode),
+      has_destination: Boolean(planningDestinationCode),
+    });
+    trackEvent("planner_required_field_state", {
+      missing_count: planningAnalysisMissingInputs.length,
+      has_departure: Boolean(planningDepartureCode),
+      has_destination: Boolean(planningDestinationCode),
+      has_altitude: Boolean(plannedAltitudeFt && plannedAltitudeFt > 0),
+      has_fuel_on_board: Boolean(fuelAvailableGallons && fuelAvailableGallons > 0),
+    });
+  }, [fuelAvailableGallons, plannedAltitudeFt, planningAnalysisIncomplete, planningAnalysisMissingInputs.length, planningDepartureCode, planningDestinationCode]);
   const effectiveDepartureCode = useMemo(
     () => filedDepartureCode,
     [filedDepartureCode],
@@ -5020,12 +5037,21 @@ export default function FlightPlanner() {
 
   const departureRunwayOptions = useMemo(() => {
     const runways = departureRunwayBriefingQuery.data?.runways || [];
-    const options = new Map<string, { label: string; heading: number | null; lengthFt: number | null; source: "runway" | "advisory" | "metar" }>();
+    const options = new Map<string, {
+      label: string;
+      heading: number | null;
+      lengthFt: number | null;
+      widthFt: number | null;
+      surface: string | null;
+      source: "runway" | "advisory" | "metar";
+    }>();
 
     const addOption = (
       ident: string | null | undefined,
       heading: number | null | undefined,
       lengthFt: number | null | undefined,
+      widthFt: number | null | undefined,
+      surface: string | null | undefined,
       source: "runway" | "advisory" | "metar",
     ) => {
       const normalized = extractRunwayIdent(ident);
@@ -5038,10 +5064,19 @@ export default function FlightPlanner() {
       if (lengthFt !== null && lengthFt !== undefined && Number.isFinite(lengthFt)) {
         parts.push(`${Math.round(lengthFt).toLocaleString()} ft`);
       }
+      if (widthFt !== null && widthFt !== undefined && Number.isFinite(widthFt)) {
+        parts.push(`${Math.round(widthFt).toLocaleString()} ft wide`);
+      }
+      const normalizedSurface = String(surface || "").trim();
+      if (normalizedSurface) {
+        parts.push(normalizedSurface);
+      }
       options.set(normalized, {
-        label: parts.join(" � "),
+        label: parts.join(" - "),
         heading: heading ?? null,
         lengthFt: lengthFt ?? null,
+        widthFt: widthFt ?? null,
+        surface: normalizedSurface || null,
         source,
       });
     };
@@ -5052,18 +5087,20 @@ export default function FlightPlanner() {
         advisoryRunway,
         departureRunwayBriefingQuery.data?.advisory?.heading ?? null,
         null,
+        null,
+        null,
         "advisory",
       );
     }
 
     const metarRunway = extractRunwayIdent(departureRunwayBriefingQuery.data?.runwayInUse);
     if (metarRunway) {
-      addOption(metarRunway, parseRunwayHeading(metarRunway), null, "metar");
+      addOption(metarRunway, parseRunwayHeading(metarRunway), null, null, null, "metar");
     }
 
     runways.forEach((runway) => {
-      addOption(runway.leIdent, runway.leHeading ?? null, runway.lengthFt ?? null, "runway");
-      addOption(runway.heIdent, runway.heHeading ?? null, runway.lengthFt ?? null, "runway");
+      addOption(runway.leIdent, runway.leHeading ?? null, runway.lengthFt ?? null, runway.widthFt ?? null, runway.surface ?? null, "runway");
+      addOption(runway.heIdent, runway.heHeading ?? null, runway.lengthFt ?? null, runway.widthFt ?? null, runway.surface ?? null, "runway");
     });
 
     const advisory = extractRunwayIdent(departureRunwayBriefingQuery.data?.advisory?.runway);
@@ -5082,7 +5119,6 @@ export default function FlightPlanner() {
         return a.ident.localeCompare(b.ident);
       });
   }, [departureRunwayBriefingQuery.data]);
-
   const departureSuggestedRunway = useMemo(() => {
     return (
       extractRunwayIdent(departureRunwayBriefingQuery.data?.advisory?.runway) ||
@@ -5091,6 +5127,21 @@ export default function FlightPlanner() {
       null
     );
   }, [departureRunwayBriefingQuery.data, departureRunwayOptions]);
+  const selectedDepartureRunwayOption = useMemo(() => {
+    const normalized = extractRunwayIdent(departureRunway);
+    return normalized ? departureRunwayOptions.find((option) => option.ident === normalized) || null : null;
+  }, [departureRunway, departureRunwayOptions]);
+  const selectedDepartureRunwayIsTurf = Boolean(
+    selectedDepartureRunwayOption?.surface &&
+      /(TURF|GRASS|SOD)/i.test(selectedDepartureRunwayOption.surface),
+  );
+  useEffect(() => {
+    if (!planningDepartureCode || departureRunwayOptions.length === 0) return;
+    trackEvent("planner_runway_options_loaded", {
+      option_count: departureRunwayOptions.length,
+      has_turf: departureRunwayOptions.some((option) => option.surface && /(TURF|GRASS|SOD)/i.test(option.surface)),
+    });
+  }, [departureRunwayOptions, planningDepartureCode]);
 
   useEffect(() => {
     const departureIcao = planningDepartureCode;
@@ -7796,7 +7847,7 @@ export default function FlightPlanner() {
         </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Departure (ICAO)</Label>
+              <Label>Departure airport - Required</Label>
               <Input
               id="planner-field-departure"
               value={form.departure}
@@ -7812,8 +7863,11 @@ export default function FlightPlanner() {
                 setDepartureSearchActive(true);
                 setForm((current) => ({ ...current, departure: value }));
               }}
-              placeholder="KJFK or Austin, TX"
+              placeholder="Search airport name, city, FAA ID, or ICAO ID"
             />
+            <p className="text-xs text-muted-foreground">
+              Select a verified airport. FAA location IDs such as 22T are supported when found in the airport dataset.
+            </p>
             {departureSearchActive && departureSuggestions.length > 0 && (
               <div className="max-h-40 space-y-1 overflow-y-auto rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] p-2 text-sm">
                 {departureSuggestions.map((airport) => (
@@ -7839,7 +7893,7 @@ export default function FlightPlanner() {
               )}
             </div>
             <div className="space-y-2">
-              <Label>Destination (ICAO)</Label>
+              <Label>Destination airport - Required</Label>
               <Input
               id="planner-field-destination"
               value={form.destination}
@@ -7855,8 +7909,11 @@ export default function FlightPlanner() {
                 setDestinationSearchActive(true);
                 setForm((current) => ({ ...current, destination: value }));
               }}
-              placeholder="KBOS or Dallas, TX"
+              placeholder="Search airport name, city, FAA ID, or ICAO ID"
             />
+            <p className="text-xs text-muted-foreground">
+              Select a verified destination before planning or filing.
+            </p>
             {destinationSearchActive && destinationSuggestions.length > 0 && (
               <div className="max-h-40 space-y-1 overflow-y-auto rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] p-2 text-sm">
                 {destinationSuggestions.map((airport) => (
@@ -7887,7 +7944,7 @@ export default function FlightPlanner() {
                 value={departureRunway}
                 onChange={(e) => setDepartureRunway(e.target.value.toUpperCase())}
                 list="departure-runway-options"
-                placeholder={departureSuggestedRunway || "Select runway"}
+                placeholder={departureSuggestedRunway || "Type or select runway"}
               />
               <datalist id="departure-runway-options">
                 {departureRunwayOptions.map((option) => (
@@ -7898,17 +7955,23 @@ export default function FlightPlanner() {
               </datalist>
               {departureRunwayOptions.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {departureRunwayOptions.slice(0, 6).map((option) => (
+                  {departureRunwayOptions.map((option) => (
                     <Button
                       key={option.ident}
                       type="button"
                       size="sm"
                       className={departureRunway === option.ident ? "rsf-metal-button-primary" : plannerInsetActionClass}
                       onClick={() => setDepartureRunway(option.ident)}
+                      title={option.label}
                     >
-                      {option.ident}
+                      {option.label}
                     </Button>
                   ))}
+                </div>
+              )}
+              {selectedDepartureRunwayIsTurf && (
+                <div className={cn("rounded-md border border-[#7f6327]/40 bg-[#241c0d] px-3 py-2 text-xs text-[#f2dca4]")}>
+                  Selected runway surface is {selectedDepartureRunwayOption?.surface}. Verify aircraft performance and airport notes before departure.
                 </div>
               )}
               {departureRunwayBriefingQuery.data && (
@@ -7932,7 +7995,7 @@ export default function FlightPlanner() {
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Pulling live runway options for the selected departure airport. You can still type a manual runway if needed.
+                Pulling runway options for the selected departure airport. Turf and paved runways remain selectable when they exist in the runway dataset.
               </p>
             </div>
             <div id="planner-aircraft-setup" className={cn("md:col-span-2 p-4 space-y-3", plannerSubpanelClass)}>
@@ -8314,6 +8377,9 @@ export default function FlightPlanner() {
                       variant={routeMode === option.value ? "default" : "outline"}
                       onClick={() => {
                         const nextMode = option.value as typeof routeMode;
+                        if (nextMode !== routeMode) {
+                          trackEvent("planner_route_mode_change", { from_mode: routeMode, to_mode: nextMode });
+                        }
                         setRouteMode(nextMode);
                         if (nextMode === "direct") setForm((current) => ({ ...current, route: "DCT" }));
                         if (nextMode === "auto" && form.route.trim().toUpperCase() === "DCT") setForm((current) => ({ ...current, route: "" }));
@@ -8331,59 +8397,69 @@ export default function FlightPlanner() {
                       : "RSF will preview selected Route Assist waypoints on the map."}
                 </p>
               </div>
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <Label>Filed route (ATC / filing provider)</Label>
-                  <p className="text-xs text-muted-foreground">
-                    This is the route that actually matters for filing. Enter the enroute string you want to file, including fixes, VORs, airways, SIDs, STARs, or `DCT`.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {generatedRouteCore && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setForm((current) => ({ ...current, route: generatedRouteCore }))}
-                    >
-                      Use route builder
-                    </Button>
-                  )}
-                  {filedRouteInputNormalized && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setForm((current) => ({ ...current, route: "" }))}
-                    >
-                      Clear override
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <Textarea
-                id="planner-field-route"
-                value={form.route}
-                onChange={(e) => {
-                  setRouteMode("manual");
-                  setForm({ ...form, route: e.target.value.toUpperCase() });
-                }}
-                placeholder="DCT TXK V18 MEM J42 ATL"
-                className="min-h-[88px]"
-                readOnly={routeMode === "direct"}
-              />
-              {routeMode === "direct" && (
-                <div className={cn("flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#35516e]/40 bg-[#102236] px-3 py-2 text-xs text-[#CFE4FA]")}>
-                  <span>Direct mode files this route as DCT, so the route text box is locked.</span>
+              {routeMode === "direct" ? (
+                <div className={cn("flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#35516e]/40 bg-[#102236] px-3 py-3 text-sm text-[#CFE4FA]")}>
+                  <div>
+                    <div className="font-semibold text-[#F5F8FC]">Route: Direct</div>
+                    <div className="text-xs text-[#AFC4DB]">
+                      Filed enroute value: <span className="font-mono text-[#F5F8FC]">DCT</span>
+                    </div>
+                  </div>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => setRouteMode("manual")}
+                    onClick={() => {
+                      trackEvent("planner_route_mode_change", { from_mode: "direct", to_mode: "manual" });
+                      setRouteMode("manual");
+                    }}
                   >
                     Switch to Route Builder
                   </Button>
                 </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <Label>{routeMode === "manual" ? "Route Builder filed route" : "Filed route (ATC / filing provider)"}</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Enter the enroute string you want to file, including fixes, VORs, airways, SIDs, STARs, or DCT. Example: DCT TXK V18 MEM J42 ATL.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {generatedRouteCore && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setForm((current) => ({ ...current, route: generatedRouteCore }))}
+                        >
+                          Use route builder
+                        </Button>
+                      )}
+                      {filedRouteInputNormalized && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setForm((current) => ({ ...current, route: "" }))}
+                        >
+                          Clear override
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <Textarea
+                    id="planner-field-route"
+                    value={form.route}
+                    onChange={(e) => {
+                      setRouteMode("manual");
+                      setForm({ ...form, route: e.target.value.toUpperCase() });
+                    }}
+                    placeholder="Enter route, e.g. DCT TXK V18 MEM J42 ATL"
+                    className="min-h-[88px]"
+                  />
+                </>
               )}
               <div className={cn(plannerSubpanelMutedClass, "border-dashed px-3 py-2 text-xs")}>
                 Planning preview only: <span className="font-medium text-[#F5F8FC]">{routePreviewFull || "-"}</span>
@@ -8606,11 +8682,11 @@ export default function FlightPlanner() {
               )}
             </div>
           <div className="space-y-2">
-            <Label>Alternate (optional)</Label>
+            <Label>Alternate airport (optional)</Label>
             <Input
               value={form.alternate}
               onChange={(e) => setForm({ ...form, alternate: e.target.value })}
-              placeholder="KBDL"
+              placeholder="Optional alternate, e.g. KBDL"
             />
           </div>
             <div className="space-y-2">
@@ -8719,33 +8795,33 @@ export default function FlightPlanner() {
                 value={headwind}
                 onChange={(e) => setHeadwind(e.target.value)}
                 disabled={!isPro}
-                placeholder="0"
+                placeholder="Enter headwind, e.g. 10"
               />
               {!isPro && <p className="text-xs text-muted-foreground">RSF Premium unlocks wind-adjusted ETE.</p>}
             </div>
             <div className="space-y-2">
-              <Label>Planned Altitude (ft)</Label>
+              <Label>Planned Altitude (ft) - Required</Label>
               <Input
                 id="planner-field-planned-altitude"
                 value={plannedAltitude}
                 onChange={(e) => setPlannedAltitude(e.target.value)}
-                placeholder="8500"
+                placeholder="Enter altitude, e.g. 8500"
                 type="number"
               />
               <p className="text-xs text-muted-foreground">
-                Used for enroute awareness and winds aloft checks.
+                Required for route analysis, terrain awareness, winds aloft, and filing readiness.
               </p>
             </div>
             <div className="space-y-2">
-              <Label>Fuel On Board (gal)</Label>
+              <Label>Fuel On Board (gal) - Required</Label>
               <Input
                 value={form.fuelOnBoard}
                 onChange={(e) => setForm({ ...form, fuelOnBoard: e.target.value })}
-                placeholder={String(planningFuel)}
+                placeholder="Enter actual fuel aboard"
                 type="number"
               />
               <p className="text-xs text-muted-foreground">
-                Drives trip fuel, endurance, reserve margin, and suggested fuel stops.
+                Drives trip fuel, filed endurance, reserve margin, and suggested fuel stops. {planningFuel ? `Aircraft usable fuel reference: ${planningFuel} gal.` : ""}
               </p>
             </div>
           </div>
@@ -8939,7 +9015,12 @@ export default function FlightPlanner() {
               <div className="text-lg font-semibold text-[#F5F8FC]">{totalFuel ? totalFuel.toFixed(1) : "-"} gal</div>
             </div>
           </div>
-          {totalFuel > 0 && (
+          {planningAnalysisIncomplete && (
+            <div className={cn("rounded-lg border border-[#5d6f85]/30 bg-[#121820] px-4 py-2 text-sm text-[#D9E4F0]")}>
+              Fuel, route, and performance analysis is incomplete until the required planning inputs are filled in. Missing items: {planningAnalysisMissingInputs.join(", ")}.
+            </div>
+          )}
+          {totalFuel > 0 && !planningAnalysisIncomplete && (
             <div className={cn(
               "rounded-lg border px-4 py-2 text-sm font-medium",
               !fuelPlanSummary.firstUnreachableLeg && fuelSurplus >= 0
@@ -8985,7 +9066,7 @@ export default function FlightPlanner() {
               <Input
                 value={customProfile.name}
                 onChange={(e) => setCustomProfile({ ...customProfile, name: e.target.value })}
-                placeholder="My C172"
+                placeholder="Name this aircraft setup"
               />
             </div>
             <div className="space-y-2">
@@ -8994,7 +9075,7 @@ export default function FlightPlanner() {
                 id="planner-field-cruise-speed"
                 value={customProfile.cruiseKtasOverride}
                 onChange={(e) => setCustomProfile({ ...customProfile, cruiseKtasOverride: e.target.value })}
-                placeholder="110"
+                placeholder="Override KTAS, e.g. 110"
                 type="number"
               />
             </div>
@@ -9003,7 +9084,7 @@ export default function FlightPlanner() {
               <Input
                 value={customProfile.fuelBurnOverrideGph}
                 onChange={(e) => setCustomProfile({ ...customProfile, fuelBurnOverrideGph: e.target.value })}
-                placeholder="8.5"
+                placeholder="Override burn, e.g. 8.5"
                 type="number"
               />
             </div>
@@ -9014,7 +9095,7 @@ export default function FlightPlanner() {
               <Input
                 value={customProfile.usableFuelOverrideGal}
                 onChange={(e) => setCustomProfile({ ...customProfile, usableFuelOverrideGal: e.target.value })}
-                placeholder="40"
+                placeholder="Override usable fuel, e.g. 40"
                 type="number"
               />
               {usableFuelCapacityWarning && (
@@ -9026,7 +9107,7 @@ export default function FlightPlanner() {
               <Input
                 value={customProfile.maxGrossWeightOverrideLb}
                 onChange={(e) => setCustomProfile({ ...customProfile, maxGrossWeightOverrideLb: e.target.value })}
-                placeholder="2400"
+                placeholder="Override max gross, e.g. 2400"
                 type="number"
               />
             </div>

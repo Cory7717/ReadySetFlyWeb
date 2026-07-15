@@ -715,3 +715,64 @@ test("flight planner route summary is a semantic action targeting route setup fo
   assert.match(source, /Enter departure and destination/);
   assert.match(source, /handleRouteSummaryAction\("quick_jump"\)/);
 });
+
+test("flight planner phase two input clarity avoids operational-looking placeholders", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+
+  assert.match(source, /Departure airport - Required/);
+  assert.match(source, /Destination airport - Required/);
+  assert.match(source, /Search airport name, city, FAA ID, or ICAO ID/);
+  assert.match(source, /FAA location IDs such as 22T are supported/);
+  assert.match(source, /Planned Altitude \(ft\) - Required/);
+  assert.match(source, /Fuel On Board \(gal\) - Required/);
+  assert.match(source, /Enter actual fuel aboard/);
+  assert.match(source, /Override KTAS, e\.g\. 110/);
+  assert.match(source, /Override burn, e\.g\. 8\.5/);
+  assert.match(source, /Override usable fuel, e\.g\. 40/);
+  assert.match(source, /Override max gross, e\.g\. 2400/);
+  assert.doesNotMatch(source, /placeholder=\{String\(planningFuel\)\}/);
+  assert.match(source, /planner_required_field_state/);
+  assert.match(source, /planner_incomplete_analysis_shown/);
+});
+
+test("flight planner direct mode hides manual route text and files DCT", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+
+  assert.match(source, /Route: Direct/);
+  assert.match(source, /Filed enroute value:[\s\S]*DCT/);
+  assert.match(source, /routeMode === "direct" \? \(/);
+  assert.match(source, /Switch to Route Builder/);
+  assert.match(source, /placeholder="Enter route, e\.g\. DCT TXK V18 MEM J42 ATL"/);
+  assert.doesNotMatch(source, /readOnly=\{routeMode === "direct"\}/);
+  assert.match(source, /planner_route_mode_change/);
+});
+
+test("airport identifier resolution supports FAA LIDs without arbitrary K-prefixing", () => {
+  const plannerSource = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  const serverSource = readFileSync(resolve("server/routes.ts"), "utf8");
+
+  assert.ok(serverSource.includes('if (/^[A-Z]{3}$/.test(normalized))'));
+  assert.doesNotMatch(serverSource, /if \(normalized\.length === 3\)/);
+  assert.match(plannerSource, /\/\^\[A-Z0-9\]\{3,4\}\$\/\.test\(value\)/);
+  assert.doesNotMatch(plannerSource, /value\.length === 3 && ICAO_REGEX\.test\(value\)[\s\S]{0,80}setDepartureResolved\(value\)/);
+  assert.doesNotMatch(plannerSource, /value\.length === 3 && ICAO_REGEX\.test\(value\)[\s\S]{0,80}setDestinationResolved\(value\)/);
+  assert.match(plannerSource, /planner_airport_identifier_resolution/);
+});
+
+test("flight planner runway selector exposes all runway options with surface and dimensions", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  const serverSource = readFileSync(resolve("server/routes.ts"), "utf8");
+
+  assert.match(serverSource, /const widthIdx = idx\("width_ft"\)/);
+  assert.match(serverSource, /widthFt: row\[widthIdx\]/);
+  assert.match(serverSource, /SUPPLEMENTAL_RUNWAYS/);
+  assert.match(serverSource, /KARB:[\s\S]*leIdent: "12"[\s\S]*heIdent: "30"[\s\S]*surface: "TURF - FAIR"/);
+  assert.match(serverSource, /getRunwaysForAirport\(runwayMap, requestedIcao\)/);
+  assert.match(source, /widthFt\?: number \| null/);
+  assert.match(source, /parts\.push\(`\$\{Math\.round\(widthFt\)\.toLocaleString\(\)\} ft wide`\)/);
+  assert.match(source, /parts\.push\(normalizedSurface\)/);
+  assert.match(source, /departureRunwayOptions\.map\(\(option\) =>/);
+  assert.doesNotMatch(source, /departureRunwayOptions\.slice\(0, 6\)/);
+  assert.match(source, /Selected runway surface is/);
+  assert.match(source, /planner_runway_options_loaded/);
+});

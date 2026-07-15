@@ -9454,28 +9454,6 @@ export default function FlightPlanner() {
               <p className="text-xs text-muted-foreground">
                 Required for route analysis, terrain awareness, winds aloft, and filing readiness.
               </p>
-              <div className={cruiseAltitudePracticalityToneClass}>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex min-w-0 items-start gap-2">
-                    <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                    <div className="min-w-0">
-                      <div className="font-semibold text-[#F5F8FC]">
-                        Cruise altitude practicality: {cruiseAltitudePracticalityLabel}
-                      </div>
-                      <div className="mt-1 line-clamp-2">{cruiseAltitudePracticality.message}</div>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className={cn("shrink-0 self-start", plannerInsetActionClass)}
-                    onClick={() => setAltitudePracticalityDialogOpen(true)}
-                  >
-                    View estimate
-                  </Button>
-                </div>
-              </div>
             </div>
             <div className="space-y-2">
               <Label>Fuel On Board (gal) - Required</Label>
@@ -9488,6 +9466,28 @@ export default function FlightPlanner() {
               <p className="text-xs text-muted-foreground">
                 Drives trip fuel, filed endurance, reserve margin, and suggested fuel stops. {planningFuel ? `Aircraft usable fuel reference: ${planningFuel} gal.` : ""}
               </p>
+            </div>
+          </div>
+          <div className={cruiseAltitudePracticalityToneClass}>
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="flex min-w-0 items-start gap-2">
+                <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <div className="min-w-0">
+                  <div className="font-semibold text-[#F5F8FC]">
+                    Cruise altitude practicality: {cruiseAltitudePracticalityLabel}
+                  </div>
+                  <div className="mt-1 text-[#D9E4F0]">{cruiseAltitudePracticality.message}</div>
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className={cn("shrink-0 whitespace-nowrap", plannerInsetActionClass)}
+                onClick={() => setAltitudePracticalityDialogOpen(true)}
+              >
+                View estimate
+              </Button>
             </div>
           </div>
 

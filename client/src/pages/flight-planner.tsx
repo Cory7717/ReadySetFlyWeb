@@ -94,6 +94,11 @@ import {
   getPastDepartureLifecycleMessage,
   shouldApplyPastDepartureReadinessBlock,
 } from "@/components/flight-planner/FlightPlanLifecycleActions";
+import {
+  PlannerWorkflowFooter,
+  type PlannerWorkflowStep,
+  type PlannerWorkflowStepId,
+} from "@/components/flight-planner/PlannerWorkflowFooter";
 import { getSavedPlanStatusChip, groupSavedFlightPlans } from "@/components/flight-planner/savedPlanSorting";
 import { AppDownloadBadges } from "@/components/GooglePlayBadge";
 import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
@@ -1971,6 +1976,7 @@ export default function FlightPlanner() {
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [guestFlightPlanFiles, setGuestFlightPlanFiles] = useState(() => getAnonFlightPlanFileCount());
   const [activeTab, setActiveTab] = useState<FlightPlannerTab>("route");
+  const plannerWorkflowRef = useRef<HTMLDivElement | null>(null);
   const vfrRouteIfrWarningToastKeyRef = useRef("");
   const [returnToFileAfterSave, setReturnToFileAfterSave] = useState(false);
   const [pendingFilingActionAfterSave, setPendingFilingActionAfterSave] = useState<{
@@ -7564,13 +7570,83 @@ export default function FlightPlanner() {
   const plannerInsetActionClass = "border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4] hover:bg-[#1a2430]";
   const plannerSafeBadgeClass = "!border-[#60758C] !bg-[#18212B] !text-[#E3EDF7] hover:!bg-[#1d2a36]";
   const workflowStepCopy: Record<FlightPlannerTab, { step: number; label: string }> = {
-    route: { step: 1, label: "Route & Aircraft" },
-    weather: { step: 2, label: "Briefing" },
-    navlog: { step: 3, label: "Flight Review" },
-    analysis: { step: 3, label: "Flight Review" },
-    file: { step: 5, label: "Review & Submit" },
+    route: { step: 1, label: "Route" },
+    weather: { step: 2, label: "Weather" },
+    navlog: { step: 3, label: "Nav Log" },
+    analysis: { step: 4, label: "Analysis" },
+    file: { step: 5, label: "Review & File" },
   };
   const activeWorkflowStep = workflowStepCopy[activeTab] ?? workflowStepCopy.route;
+  const plannerWorkflowSteps: Record<FlightPlannerTab, PlannerWorkflowStep> = {
+    route: { id: "route", ...workflowStepCopy.route },
+    weather: { id: "weather", ...workflowStepCopy.weather },
+    navlog: { id: "navlog", ...workflowStepCopy.navlog },
+    analysis: { id: "analysis", ...workflowStepCopy.analysis },
+    file: { id: "file", ...workflowStepCopy.file },
+  };
+  const plannerWorkflowOrder: FlightPlannerTab[] = ["route", "weather", "navlog", "analysis", "file"];
+  const getWorkflowStatus = (tab: FlightPlannerTab) => {
+    if (tab === "route") {
+      const required = filingReadiness.issues.filter((issue: FilingReadinessIssue) => issue.actionTab === "route" && issue.severity === "required").length;
+      if (required > 0) return `Route has ${required} required ${required === 1 ? "item" : "items"} remaining.`;
+      return routePoints.length >= 2 ? "Route is ready." : "Route can be refined before filing.";
+    }
+    if (tab === "weather") {
+      if (weatherData.length === 0) return "Weather review is recommended before continuing.";
+      return tfrConflicts.length > 0 ? `Weather and airspace review found ${tfrConflicts.length} TFR ${tfrConflicts.length === 1 ? "conflict" : "conflicts"}.` : "Weather review is ready.";
+    }
+    if (tab === "navlog") {
+      return legNavRows.length > 0 ? "Nav Log is ready." : "Nav Log needs a valid route before it can populate.";
+    }
+    if (tab === "analysis") {
+      const reviewItems = tfrConflicts.length + terrainCueCounts.warning + terrainCueCounts.caution;
+      if (reviewItems > 0) return `Analysis has ${reviewItems} ${reviewItems === 1 ? "item" : "items"} requiring review.`;
+      return "Analysis is ready.";
+    }
+    const required = filingReadiness.issues.filter((issue: FilingReadinessIssue) => issue.severity === "required").length;
+    return filingReadiness.ready
+      ? "Review & File is ready."
+      : `Review & File has ${required} required ${required === 1 ? "item" : "items"} remaining.`;
+  };
+  const scrollToPlannerWorkflowTop = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+    window.requestAnimationFrame(() => {
+      plannerWorkflowRef.current?.scrollIntoView({
+        behavior: reduceMotion ? "auto" : "smooth",
+        block: "start",
+      });
+      plannerWorkflowRef.current?.focus({ preventScroll: true });
+    });
+  }, []);
+  const navigatePlannerWorkflowStep = useCallback((toStep: PlannerWorkflowStepId, direction: "forward" | "back") => {
+    const nextTab = toStep as FlightPlannerTab;
+    trackEvent("planner_step_navigation", {
+      from_step: activeTab,
+      to_step: nextTab,
+      direction,
+      source: "workflow_footer",
+      authenticated: Boolean(isAuthenticated),
+      guest: Boolean(isGuest),
+    });
+    setActiveTab(nextTab);
+    scrollToPlannerWorkflowTop();
+  }, [activeTab, isAuthenticated, isGuest, scrollToPlannerWorkflowTop]);
+  const renderPlannerWorkflowFooter = (tab: FlightPlannerTab) => {
+    const index = plannerWorkflowOrder.indexOf(tab);
+    const previousTab = index > 0 ? plannerWorkflowOrder[index - 1] : undefined;
+    const nextTab = index >= 0 && index < plannerWorkflowOrder.length - 1 ? plannerWorkflowOrder[index + 1] : undefined;
+    return (
+      <PlannerWorkflowFooter
+        currentStep={plannerWorkflowSteps[tab]}
+        previousStep={previousTab ? plannerWorkflowSteps[previousTab] : undefined}
+        nextStep={nextTab ? plannerWorkflowSteps[nextTab] : undefined}
+        status={getWorkflowStatus(tab)}
+        onNavigate={navigatePlannerWorkflowStep}
+        onReturnToTop={tab === "file" ? scrollToPlannerWorkflowTop : undefined}
+      />
+    );
+  };
   const readinessFieldTargets: Record<string, { tab: FlightPlannerTab; sectionId: string; focusId?: string }> = {
     aircraftRegistration: { tab: "file", sectionId: "planner-filing-details", focusId: "planner-field-aircraft-id" },
     aircraftType: { tab: "route", sectionId: "planner-aircraft-setup" },
@@ -7862,6 +7938,12 @@ export default function FlightPlanner() {
           </CardContent>
         </Card>
       )}
+      <div
+        id="planner-workflow"
+        ref={plannerWorkflowRef}
+        tabIndex={-1}
+        className="scroll-mt-24 focus:outline-none"
+      >
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
         <TabsList
           className={cn(
@@ -9242,6 +9324,7 @@ export default function FlightPlanner() {
           )}
         </CardContent>
       </Card>
+      {renderPlannerWorkflowFooter("route")}
       </TabsContent>
 
       <TabsContent value="navlog" className="space-y-6">
@@ -9345,6 +9428,7 @@ export default function FlightPlanner() {
           )}
         </CardContent>
       </Card>
+      {renderPlannerWorkflowFooter("navlog")}
       </TabsContent>
 
       <TabsContent value="weather" className="space-y-6">
@@ -9417,6 +9501,7 @@ export default function FlightPlanner() {
         overlayEnabled={tfmsOverlayEnabled}
         onToggleOverlay={setTfmsOverlayEnabled}
       />
+      {renderPlannerWorkflowFooter("weather")}
       </TabsContent>
 
       <TabsContent value="analysis" className="space-y-6">
@@ -9817,6 +9902,7 @@ export default function FlightPlanner() {
           })()}
         </CardContent>
       </Card>
+      {renderPlannerWorkflowFooter("analysis")}
       </TabsContent>
 
       <TabsContent value="file" className="space-y-6">
@@ -11281,8 +11367,10 @@ export default function FlightPlanner() {
           </Button>
         </CardContent>
       </Card>
+      {renderPlannerWorkflowFooter("file")}
       </TabsContent>
       </Tabs>
+      </div>
         </div>
       <div className="min-w-0 space-y-4">
         <PressDemoSpotlight

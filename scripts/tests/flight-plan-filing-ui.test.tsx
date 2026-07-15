@@ -10,6 +10,11 @@ import {
   shouldApplyPastDepartureReadinessBlock,
 } from "../../client/src/components/flight-planner/FlightPlanLifecycleActions";
 import { FilingProviderUpdatesList, FilingProviderWorkspace } from "../../client/src/components/flight-planner/FilingProviderWorkspace";
+import {
+  PlannerWorkflowFooter,
+  type PlannerWorkflowStep,
+  type PlannerWorkflowStepId,
+} from "../../client/src/components/flight-planner/PlannerWorkflowFooter";
 import type { FlightPlan } from "../../shared/schema";
 
 const plan = {
@@ -98,6 +103,33 @@ const lifecycleLabels = {
 };
 
 const noop = () => undefined;
+
+const workflowSteps: Record<PlannerWorkflowStepId, PlannerWorkflowStep> = {
+  route: { id: "route", step: 1, label: "Route" },
+  weather: { id: "weather", step: 2, label: "Weather" },
+  navlog: { id: "navlog", step: 3, label: "Nav Log" },
+  analysis: { id: "analysis", step: 4, label: "Analysis" },
+  file: { id: "file", step: 5, label: "Review & File" },
+};
+
+const renderWorkflowFooter = ({
+  current,
+  previous,
+  next,
+}: {
+  current: PlannerWorkflowStepId;
+  previous?: PlannerWorkflowStepId;
+  next?: PlannerWorkflowStepId;
+}) => renderToStaticMarkup(
+  <PlannerWorkflowFooter
+    currentStep={workflowSteps[current]}
+    previousStep={previous ? workflowSteps[previous] : undefined}
+    nextStep={next ? workflowSteps[next] : undefined}
+    status={`${workflowSteps[current].label} is ready.`}
+    onNavigate={noop as any}
+    onReturnToTop={current === "file" ? noop : undefined}
+  />
+);
 
 const lifecyclePlan = (overrides: Partial<FlightPlan> & Record<string, unknown> = {}) => ({
   ...plan,
@@ -278,6 +310,54 @@ test("flight planner route-structure badges use explicit planner-safe contrast c
 
   assert.ok(contrast("#E3EDF7", "#18212B") >= 4.5, "badge text contrast should meet WCAG AA");
   assert.ok(contrast("#60758C", "#18212B") >= 3, "badge border contrast should identify the chip boundary");
+});
+
+test("rendered workflow footer exposes named next-step navigation for every planner tab", () => {
+  const route = renderWorkflowFooter({ current: "route", next: "weather" });
+  assert.match(route, /Step 1 of 5 - Route/);
+  assert.match(route, /Continue to Weather/);
+  assert.doesNotMatch(route, /Back to/);
+
+  const weather = renderWorkflowFooter({ current: "weather", previous: "route", next: "navlog" });
+  assert.match(weather, /Step 2 of 5 - Weather/);
+  assert.match(weather, /Back to Route/);
+  assert.match(weather, /Continue to Nav Log/);
+
+  const navlog = renderWorkflowFooter({ current: "navlog", previous: "weather", next: "analysis" });
+  assert.match(navlog, /Step 3 of 5 - Nav Log/);
+  assert.match(navlog, /Back to Weather/);
+  assert.match(navlog, /Continue to Analysis/);
+
+  const analysis = renderWorkflowFooter({ current: "analysis", previous: "navlog", next: "file" });
+  assert.match(analysis, /Step 4 of 5 - Analysis/);
+  assert.match(analysis, /Back to Nav Log/);
+  assert.match(analysis, /Continue to Review &amp; File/);
+
+  const file = renderWorkflowFooter({ current: "file", previous: "analysis" });
+  assert.match(file, /Step 5 of 5 - Review &amp; File/);
+  assert.match(file, /Back to Analysis/);
+  assert.match(file, /Return to Top/);
+  assert.doesNotMatch(file, /Continue to/);
+  assert.doesNotMatch(file, /Submit|Amend|Cancel|Activate|Close|Provider Sync/);
+});
+
+test("flight planner workflow footer wiring is navigation-only and preserves planner state", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /<div\s+id="planner-workflow"[\s\S]*?ref=\{plannerWorkflowRef\}[\s\S]*?tabIndex=\{-1\}/);
+  assert.match(source, /const plannerWorkflowOrder: FlightPlannerTab\[\] = \["route", "weather", "navlog", "analysis", "file"\]/);
+  assert.match(source, /trackEvent\("planner_step_navigation"/);
+  assert.match(source, /setActiveTab\(nextTab\);/);
+  assert.match(source, /scrollToPlannerWorkflowTop\(\);/);
+  assert.match(source, /prefers-reduced-motion: reduce/);
+  assert.match(source, /renderPlannerWorkflowFooter\("route"\)/);
+  assert.match(source, /renderPlannerWorkflowFooter\("weather"\)/);
+  assert.match(source, /renderPlannerWorkflowFooter\("navlog"\)/);
+  assert.match(source, /renderPlannerWorkflowFooter\("analysis"\)/);
+  assert.match(source, /renderPlannerWorkflowFooter\("file"\)/);
+
+  const navigationBlock = source.match(/const navigatePlannerWorkflowStep = useCallback\([\s\S]*?\}, \[activeTab, isAuthenticated, isGuest, scrollToPlannerWorkflowTop\]\);/)?.[0] || "";
+  assert.ok(navigationBlock, "navigation callback should be present");
+  assert.doesNotMatch(navigationBlock, /save|fileFlightPlan|amend|cancel|activate|close|sync|invalidate|resetForm|setForm|setEditingPlan|setDraftPlanId/i);
 });
 
 test("rendered lifecycle actions show saved unfiled plan filing controls", () => {

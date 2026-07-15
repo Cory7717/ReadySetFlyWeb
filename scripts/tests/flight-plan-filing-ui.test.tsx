@@ -675,3 +675,43 @@ test("flight planner account prompt preserves guest test filing and uses safe au
     assert.equal(analyticsBlocks.includes(forbidden), false, `analytics must not include ${forbidden}`);
   }
 });
+
+test("flight planner first-use route flow removes scratch pad and assigns stable section ids", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+
+  assert.doesNotMatch(source, /Scratch Pad|scratchPad|SCRATCH_PAD|ScratchField|ScratchPadInkBoard/);
+  assert.match(source, /id="planner-route-summary"/);
+  assert.match(source, /id="planner-route-setup"/);
+  assert.match(source, /id="planner-field-departure"/);
+  assert.match(source, /id="planner-field-destination"/);
+  assert.match(source, /id="planner-route-method"/);
+  assert.match(source, /id="planner-quick-references"/);
+
+  const setupIndex = source.indexOf('id="planner-route-setup"');
+  const refsIndex = source.indexOf('id="planner-quick-references"');
+  assert.ok(setupIndex >= 0, "expected real route setup section");
+  assert.ok(refsIndex >= 0, "expected quick references section");
+  assert.ok(setupIndex > refsIndex || source.includes('"order-2"'), "references must render after primary route setup");
+
+  const idMatches = Array.from(source.matchAll(/id="([^"]+)"/g)).map((match) => match[1]);
+  const duplicates = idMatches.filter((id, index) => idMatches.indexOf(id) !== index);
+  assert.equal(duplicates.includes("planner-route-setup"), false);
+  assert.equal(duplicates.includes("planner-route-summary"), false);
+});
+
+test("flight planner route summary is a semantic action targeting route setup focus", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+
+  assert.match(source, /handleRouteSummaryAction/);
+  assert.match(source, /planner_route_summary_action/);
+  assert.match(source, /planner_route_setup_reached/);
+  assert.match(source, /getRouteSetupFocusId/);
+  assert.match(source, /return "planner-field-departure"/);
+  assert.match(source, /return "planner-field-destination"/);
+  assert.match(source, /return "planner-route-method"/);
+  assert.match(source, /<button[\s\S]*aria-label=\{planningDepartureCode && planningDestinationCode \? "Edit route departure and destination" : "Start route by entering departure and destination"\}/);
+  assert.match(source, /Start Route/);
+  assert.match(source, /Edit Route/);
+  assert.match(source, /Enter departure and destination/);
+  assert.match(source, /handleRouteSummaryAction\("quick_jump"\)/);
+});

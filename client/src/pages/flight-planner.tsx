@@ -1,5 +1,5 @@
-﻿
-import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
+
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { ChevronDown, ChevronRight, Info, X } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -282,11 +282,11 @@ const summarizePlannerError = (value: unknown) => {
   if (/<[^>]+>/.test(message)) {
     const stripped = message.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     if (stripped) {
-      return stripped.length > 280 ? `${stripped.slice(0, 279).trimEnd()}…` : stripped;
+      return stripped.length > 280 ? `${stripped.slice(0, 279).trimEnd()}�` : stripped;
     }
   }
 
-  return message.length > 280 ? `${message.slice(0, 279).trimEnd()}…` : message;
+  return message.length > 280 ? `${message.slice(0, 279).trimEnd()}�` : message;
 };
 
 const isLeidosTimeoutMessage = (value: unknown) =>
@@ -1200,47 +1200,11 @@ type FilingReadinessCategorySummary = {
   recommended: FilingReadinessIssue[];
 };
 
-type ScratchPadFields = {
-  clearanceLimit: string;
-  departure: string;
-  route: string;
-  altitude: string;
-  frequency: string;
-  squawk: string;
-  void: string;
-  notes: string;
-};
-
-type ScratchInkPoint = {
-  x: number;
-  y: number;
-};
-
-type ScratchInkStroke = {
-  points: ScratchInkPoint[];
-};
-
-type ScratchPadInkLayout = "ruled" | "blank" | "craft";
-
-const SCRATCH_PAD_DEFAULT: ScratchPadFields = {
-  clearanceLimit: "",
-  departure: "",
-  route: "",
-  altitude: "",
-  frequency: "",
-  squawk: "",
-  void: "",
-  notes: "",
-};
-
 const FLIGHT_PLANNER_DRAFT_KEY = "rsf_flight_planner_draft_v1";
 const FLIGHT_PLANNER_AUTH_RETURN_KEY = "rsf_flight_planner_auth_return_v1";
 const FLIGHT_PLANNER_AUTH_RETURN_TTL_MS = 30 * 60 * 1000;
 const FLIGHT_PLANNER_ACTIVE_TAB_KEY = "rsf_planner_active_tab";
 type FuelBurnMode = "standard" | "economy" | "performance";
-const SCRATCH_PAD_KEY = "rsf.scratchPad";
-const SCRATCH_PAD_INK_KEY = "rsf.scratchPadInk";
-const SCRATCH_PAD_INK_LAYOUT_KEY = "rsf.scratchPadInkLayout";
 const FLIGHT_PLANNER_TABS = ["route", "weather", "navlog", "analysis", "file"] as const;
 type FlightPlannerTab = typeof FLIGHT_PLANNER_TABS[number];
 type FlightPlannerAccountAction =
@@ -1353,6 +1317,15 @@ type WeatherResponse = {
   icao: string;
   metar: any;
   taf: any;
+  weatherSource?: "requested_airport" | "nearby_station";
+  requestedIcao?: string;
+  reportingStation?: {
+    icao: string;
+    name?: string | null;
+    distanceNm?: number | null;
+  } | null;
+  unavailable?: boolean;
+  message?: string;
 };
 
 type RouteSuggestionMeta = {
@@ -1711,253 +1684,6 @@ function flightCategoryClassName(cat: string): string {
   }
 }
 
-type ScratchFieldProps = {
-  label: string;
-  hint?: string;
-  value: string;
-  onChange: (value: string) => void;
-  multiline?: boolean;
-  tall?: boolean;
-};
-
-function ScratchField({
-  label,
-  hint,
-  value,
-  onChange,
-  multiline = false,
-  tall = false,
-}: ScratchFieldProps) {
-  const fieldId = useId();
-  return (
-    <div className="space-y-1">
-      <div className="flex items-baseline gap-2">
-        <label htmlFor={fieldId} className="text-sm font-semibold text-[#F5F8FC]">
-          {label}
-        </label>
-        {hint && (
-          <span className="text-xs text-[#8fa6c0]">{hint}</span>
-        )}
-      </div>
-      {multiline ? (
-        <textarea
-          id={fieldId}
-          aria-label={label}
-          title={label}
-          placeholder={label}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          rows={tall ? 4 : 2}
-          className="w-full rounded-[0.95rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-sm font-mono text-[#F5F8FC] placeholder:text-[#A9BBCD] focus:border-[#6ea2ff]/55 focus:outline-none focus:ring-2 focus:ring-[#6ea2ff]/20 resize-none"
-          spellCheck={false}
-        />
-      ) : (
-        <input
-          id={fieldId}
-          aria-label={label}
-          title={label}
-          placeholder={label}
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-[0.95rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-3 py-2 text-sm font-mono text-[#F5F8FC] placeholder:text-[#A9BBCD] focus:border-[#6ea2ff]/55 focus:outline-none focus:ring-2 focus:ring-[#6ea2ff]/20"
-          spellCheck={false}
-        />
-      )}
-    </div>
-  );
-}
-
-type ScratchPadInkBoardProps = {
-  strokes: ScratchInkStroke[];
-  layout: ScratchPadInkLayout;
-  onChange: (strokes: ScratchInkStroke[]) => void;
-};
-
-function ScratchPadInkBoard({ strokes, layout, onChange }: ScratchPadInkBoardProps) {
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [draftStroke, setDraftStroke] = useState<ScratchInkStroke | null>(null);
-  const [boardSize, setBoardSize] = useState({ width: 0, height: 0 });
-  const activePointerIdRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const updateSize = () => {
-      const nextWidth = wrapperRef.current?.clientWidth ?? 0;
-      const nextHeight = wrapperRef.current?.clientHeight ?? 0;
-      setBoardSize((current) =>
-        current.width === nextWidth && current.height === nextHeight
-          ? current
-          : { width: nextWidth, height: nextHeight }
-      );
-    };
-
-    updateSize();
-
-    if (typeof ResizeObserver !== "undefined" && wrapperRef.current) {
-      const observer = new ResizeObserver(() => updateSize());
-      observer.observe(wrapperRef.current);
-      return () => observer.disconnect();
-    }
-
-    window.addEventListener("resize", updateSize);
-    return () => window.removeEventListener("resize", updateSize);
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || boardSize.width === 0 || boardSize.height === 0) return;
-
-    const ratio = window.devicePixelRatio || 1;
-    canvas.width = Math.round(boardSize.width * ratio);
-    canvas.height = Math.round(boardSize.height * ratio);
-    canvas.style.width = `${boardSize.width}px`;
-    canvas.style.height = `${boardSize.height}px`;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(ratio, ratio);
-    ctx.clearRect(0, 0, boardSize.width, boardSize.height);
-    ctx.fillStyle = "#111827";
-    ctx.fillRect(0, 0, boardSize.width, boardSize.height);
-
-    if (layout === "ruled") {
-      ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([6, 8]);
-      for (let line = 1; line < 4; line += 1) {
-        const y = (boardSize.height / 4) * line;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(boardSize.width, y);
-        ctx.stroke();
-      }
-      ctx.setLineDash([]);
-    }
-
-    if (layout === "craft") {
-      const sections = [
-        { key: "C", label: "CLEARANCE", width: 0.18 },
-        { key: "R", label: "ROUTE", width: 0.28 },
-        { key: "A", label: "ALTITUDE", width: 0.18 },
-        { key: "F", label: "FREQ", width: 0.18 },
-        { key: "T", label: "SQUAWK", width: 0.18 },
-      ];
-      let x = 0;
-      ctx.strokeStyle = "rgba(148, 163, 184, 0.2)";
-      ctx.fillStyle = "rgba(30, 41, 59, 0.45)";
-      ctx.lineWidth = 1;
-      sections.forEach((section, index) => {
-        const width = index === sections.length - 1
-          ? boardSize.width - x
-          : Math.round(boardSize.width * section.width);
-        ctx.fillRect(x, 0, width, 32);
-        ctx.strokeRect(x, 0, width, boardSize.height);
-        ctx.fillStyle = "#cbd5e1";
-        ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, monospace";
-        ctx.fillText(`${section.key} ${section.label}`, x + 10, 20);
-        ctx.fillStyle = "rgba(30, 41, 59, 0.45)";
-        x += width;
-      });
-      ctx.strokeStyle = "rgba(148, 163, 184, 0.12)";
-      ctx.setLineDash([4, 8]);
-      for (let line = 1; line < 6; line += 1) {
-        const y = 32 + ((boardSize.height - 32) / 6) * line;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(boardSize.width, y);
-        ctx.stroke();
-      }
-      ctx.setLineDash([]);
-    }
-
-    const drawStroke = (stroke: ScratchInkStroke) => {
-      if (stroke.points.length === 0) return;
-      ctx.strokeStyle = "#f8fafc";
-      ctx.lineWidth = 3;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-      stroke.points.slice(1).forEach((point) => {
-        ctx.lineTo(point.x, point.y);
-      });
-      if (stroke.points.length === 1) {
-        ctx.lineTo(stroke.points[0].x + 0.01, stroke.points[0].y + 0.01);
-      }
-      ctx.stroke();
-    };
-
-    strokes.forEach(drawStroke);
-    if (draftStroke) drawStroke(draftStroke);
-  }, [boardSize, draftStroke, layout, strokes]);
-
-  const pointFromEvent = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    };
-  };
-
-  const finishStroke = () => {
-    if (!draftStroke || draftStroke.points.length === 0) {
-      setDraftStroke(null);
-      activePointerIdRef.current = null;
-      return;
-    }
-    onChange([...strokes, draftStroke]);
-    setDraftStroke(null);
-    activePointerIdRef.current = null;
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#A9BBCD]">
-        <div>Finger, mouse, or stylus. Write the clearance first, organize later.</div>
-        <div className="font-mono">{strokes.length} stroke{strokes.length === 1 ? "" : "s"} saved</div>
-      </div>
-      <div
-        ref={wrapperRef}
-        className="relative h-[60vh] min-h-[360px] overflow-hidden rounded-[1.2rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_24px_48px_-36px_rgba(0,0,0,0.88)]"
-      >
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between border-b border-[#5d6f85]/20 px-3 py-2 text-[10px] uppercase tracking-[0.24em] text-[#8fa6c0]">
-          <span>Ink Pad</span>
-          <span>Auto-saved</span>
-        </div>
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 mt-8 h-[calc(100%-2rem)] w-full touch-none"
-          onPointerDown={(event) => {
-            const point = pointFromEvent(event);
-            activePointerIdRef.current = event.pointerId;
-            event.currentTarget.setPointerCapture(event.pointerId);
-            setDraftStroke({ points: [point] });
-          }}
-          onPointerMove={(event) => {
-            if (activePointerIdRef.current !== event.pointerId) return;
-            const point = pointFromEvent(event);
-            setDraftStroke((current) => {
-              if (!current) return current;
-              return { points: [...current.points, point] };
-            });
-          }}
-          onPointerUp={(event) => {
-            if (activePointerIdRef.current !== event.pointerId) return;
-            finishStroke();
-          }}
-          onPointerCancel={(event) => {
-            if (activePointerIdRef.current !== event.pointerId) return;
-            finishStroke();
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
 export default function FlightPlanner() {
   const { user, isAuthenticated } = useAuth();
   const { profile: studentProfile } = useStudentProfile();
@@ -2016,37 +1742,6 @@ export default function FlightPlanner() {
   const [providerUpdatesPlan, setProviderUpdatesPlan] = useState<FlightPlan | null>(null);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
   const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string; focusId?: string } | null>(null);
-  const [scratchPadOpen, setScratchPadOpen] = useState(false);
-  const [scratchPadMode, setScratchPadMode] = useState<"ink" | "craft">("ink");
-  const [scratchPad, setScratchPad] = useState<ScratchPadFields>(() => {
-    if (typeof window === "undefined") return SCRATCH_PAD_DEFAULT;
-    try {
-      const raw = localStorage.getItem(SCRATCH_PAD_KEY);
-      if (raw) return { ...SCRATCH_PAD_DEFAULT, ...JSON.parse(raw) };
-    } catch {}
-    return SCRATCH_PAD_DEFAULT;
-  });
-  const [scratchInk, setScratchInk] = useState<ScratchInkStroke[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = localStorage.getItem(SCRATCH_PAD_INK_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  });
-  const [scratchInkLayout, setScratchInkLayout] = useState<ScratchPadInkLayout>(() => {
-    if (typeof window === "undefined") return "ruled";
-    try {
-      const raw = localStorage.getItem(SCRATCH_PAD_INK_LAYOUT_KEY);
-      return raw === "blank" || raw === "craft" || raw === "ruled" ? raw : "ruled";
-    } catch {
-      return "ruled";
-    }
-  });
-
   useEffect(() => {
     trackEvent("planner_page_view", { page: "flight-planner" });
   }, []);
@@ -2092,7 +1787,8 @@ export default function FlightPlanner() {
     const timer = window.setTimeout(() => {
       const element = document.getElementById(pendingSectionJump.id);
       if (element) {
-        element.scrollIntoView({ behavior: "smooth", block: "start" });
+        const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+        element.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
         const focusTarget = pendingSectionJump.focusId
           ? document.getElementById(pendingSectionJump.focusId)
           : element.matches("input, textarea, button, [tabindex]") ? element : null;
@@ -2105,27 +1801,6 @@ export default function FlightPlanner() {
     }, 80);
     return () => window.clearTimeout(timer);
   }, [activeTab, pendingSectionJump]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      localStorage.setItem(SCRATCH_PAD_KEY, JSON.stringify(scratchPad));
-    } catch {}
-  }, [scratchPad]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      localStorage.setItem(SCRATCH_PAD_INK_KEY, JSON.stringify(scratchInk));
-    } catch {}
-  }, [scratchInk]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      localStorage.setItem(SCRATCH_PAD_INK_LAYOUT_KEY, scratchInkLayout);
-    } catch {}
-  }, [scratchInkLayout]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2189,15 +1864,6 @@ export default function FlightPlanner() {
     const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash || ""}`;
     window.history.replaceState({}, "", nextUrl);
   }, [plannerLocation, toast]);
-
-  useEffect(() => {
-    if (!scratchPadOpen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setScratchPadOpen(false);
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [scratchPadOpen]);
 
   const [editingPlan, setEditingPlan] = useState<FlightPlan | null>(null);
   const editingPlanRef = useRef<FlightPlan | null>(null);
@@ -2264,32 +1930,6 @@ export default function FlightPlanner() {
   const [activeWeatherDetail, setActiveWeatherDetail] = useState<
     "metar" | "notams" | "pireps" | "hazards" | "winds" | "icing" | "turbulence" | null
   >(null);
-  const setScratchField = (
-    field: keyof ScratchPadFields,
-    value: string
-  ) => setScratchPad((prev) => ({ ...prev, [field]: value }));
-  const scratchPadHasText = useMemo(
-    () => Object.values(scratchPad).some((value) => value.trim()),
-    [scratchPad]
-  );
-  const scratchPadHasInk = scratchInk.length > 0;
-  const scratchPadHasContent = useMemo(
-    () => scratchPadHasText || scratchPadHasInk,
-    [scratchPadHasInk, scratchPadHasText]
-  );
-  const openScratchPad = () => {
-    setScratchPad((prev) => ({
-      ...prev,
-      clearanceLimit: prev.clearanceLimit || form.destination || "",
-      departure: prev.departure || form.departure || "",
-      route: prev.route || routePreviewFull || "",
-      altitude: prev.altitude ||
-        (plannedAltitudeFt ? String(plannedAltitudeFt) : ""),
-    }));
-    setScratchPadMode("ink");
-    setScratchPadOpen(true);
-    trackEvent("scratch_pad_opened");
-  };
   const [, setWakeLockError] = useState<string | null>(null);
   const [customProfile, setCustomProfile] = useState({
     name: "",
@@ -3834,7 +3474,7 @@ export default function FlightPlanner() {
       return `Planned departure is ${days.toFixed(1)} days out. Long-range forecasts are limited; recheck weather 24 hours and day-of.`;
     }
     if (days > 3) {
-      return `Planned departure is about ${Math.round(days)} days out. TAFs cover ~24–30 hours; recheck the night before and day-of.`;
+      return `Planned departure is about ${Math.round(days)} days out. TAFs cover ~24�30 hours; recheck the night before and day-of.`;
     }
     return `Planned departure is about ${Math.round(hoursToDeparture)} hours out. Recheck weather within 24 hours of departure.`;
   }, [hoursToDeparture]);
@@ -3896,7 +3536,7 @@ export default function FlightPlanner() {
   const getAirportHoverLabel = useCallback((icao: string) => {
     const airport = airportMap.get(icao);
     if (!airport?.name) return icao;
-    return `${icao} — ${airport.name}`;
+    return `${icao} � ${airport.name}`;
   }, [airportMap]);
 
   const renderAirportIcaoTooltip = useCallback((icao: string, child: ReactElement) => {
@@ -5199,7 +4839,7 @@ export default function FlightPlanner() {
             : status === "caution"
               ? `${leg.from} to ${leg.to}: leg is getting tight`
               : `${leg.from} to ${leg.to}: leg looks healthy`,
-        detail: detailParts.join(" • "),
+        detail: detailParts.join(" � "),
         lat: midLat,
         lon: midLon,
       };
@@ -5399,7 +5039,7 @@ export default function FlightPlanner() {
         parts.push(`${Math.round(lengthFt).toLocaleString()} ft`);
       }
       options.set(normalized, {
-        label: parts.join(" · "),
+        label: parts.join(" � "),
         heading: heading ?? null,
         lengthFt: lengthFt ?? null,
         source,
@@ -5949,9 +5589,9 @@ export default function FlightPlanner() {
     const payloadRoute = payload?.route && typeof payload.route === "object" ? payload.route as Record<string, any> : null;
     const providerRoute = providerSnapshot?.route && typeof providerSnapshot.route === "object" ? providerSnapshot.route as Record<string, any> : null;
     const formatDateTime = (value?: string | Date | null) => {
-      if (!value) return "—";
+      if (!value) return "�";
       const parsed = new Date(value);
-      if (Number.isNaN(parsed.getTime())) return "—";
+      if (Number.isNaN(parsed.getTime())) return "�";
       return parsed.toLocaleString();
     };
     const departureSummary = formatFlightPlanDepartureTime(plan, {
@@ -5961,8 +5601,8 @@ export default function FlightPlanner() {
     const title = plan.title || `${plan.departure || "Departure"} to ${plan.destination || "Destination"}`;
     const status = filingStatusLabel(plan.filingStatus);
     const provider = formatFilingProviderDisplayName(plan.filingProvider);
-    const providerPlanId = plan.filingProviderPlanId || "—";
-    const versionStamp = extractClientVersionStamp(plan) || "—";
+    const providerPlanId = plan.filingProviderPlanId || "�";
+    const versionStamp = extractClientVersionStamp(plan) || "�";
     const history = Array.isArray(plan.filingActionHistory) ? [...plan.filingActionHistory].slice().reverse().slice(0, 8) : [];
     const logoUrl = typeof window !== "undefined" ? new URL(logoImage, window.location.origin).toString() : logoImage;
     const generatedAt = new Date().toLocaleString();
@@ -6061,20 +5701,20 @@ export default function FlightPlanner() {
         <div class="panel">
           <h2>Flight Details</h2>
           <div class="grid">
-            <div class="cell"><div class="label">Departure</div><div class="value">${escapeHtml(plan.departure || "—")}</div></div>
-            <div class="cell"><div class="label">Destination</div><div class="value">${escapeHtml(plan.destination || "—")}</div></div>
-            <div class="cell"><div class="label">Alternate</div><div class="value">${escapeHtml(plan.alternate || "—")}</div></div>
+            <div class="cell"><div class="label">Departure</div><div class="value">${escapeHtml(plan.departure || "�")}</div></div>
+            <div class="cell"><div class="label">Destination</div><div class="value">${escapeHtml(plan.destination || "�")}</div></div>
+            <div class="cell"><div class="label">Alternate</div><div class="value">${escapeHtml(plan.alternate || "�")}</div></div>
             <div class="cell"><div class="label">Flight Rules</div><div class="value">${escapeHtml(plan.filingFlightRules || "VFR")}</div></div>
             <div class="cell"><div class="label">Planned Departure</div><div class="value">${escapeHtml(`${departureSummary.displayDepartureAirportTime} / ${departureSummary.displayZulu}`)}</div></div>
             <div class="cell"><div class="label">Planned Arrival</div><div class="value">${escapeHtml(formatDateTime(plan.plannedArrivalAt))}</div></div>
-            <div class="cell"><div class="label">Aircraft / Tail</div><div class="value">${escapeHtml(plan.tailNumber || "—")}</div></div>
-            <div class="cell"><div class="label">Aircraft Type</div><div class="value">${escapeHtml(plan.aircraftType || "—")}</div></div>
-            <div class="cell"><div class="label">Expected Flight Altitude</div><div class="value">${escapeHtml(plan.filingPlannedAltitudeFt ? `${plan.filingPlannedAltitudeFt.toLocaleString()} ft` : "—")}</div></div>
-            <div class="cell"><div class="label">True Airspeed</div><div class="value">${escapeHtml(plan.filingTrueAirspeedKtas ? `${plan.filingTrueAirspeedKtas} KTAS` : "—")}</div></div>
-            <div class="cell"><div class="label">Endurance / Souls</div><div class="value">${escapeHtml(`${formatMinutesLabel(Number(plan.filingEnduranceMinutes || 0))} / ${plan.filingSoulsOnBoard || "—"} onboard`)}</div></div>
-            <div class="cell"><div class="label">Estimated Enroute Time</div><div class="value">${escapeHtml(plan.filingEstimatedEnrouteMinutes ? formatMinutesLabel(Number(plan.filingEstimatedEnrouteMinutes)) : "—")}</div></div>
-            <div class="cell"><div class="label">Total Fuel Required</div><div class="value">${escapeHtml(plan.fuelRequired ? `${plan.fuelRequired} gal` : "—")}</div></div>
-            <div class="cell"><div class="label">Fuel On Board</div><div class="value">${escapeHtml(plan.fuelOnBoard ? `${plan.fuelOnBoard} gal` : "—")}</div></div>
+            <div class="cell"><div class="label">Aircraft / Tail</div><div class="value">${escapeHtml(plan.tailNumber || "�")}</div></div>
+            <div class="cell"><div class="label">Aircraft Type</div><div class="value">${escapeHtml(plan.aircraftType || "�")}</div></div>
+            <div class="cell"><div class="label">Expected Flight Altitude</div><div class="value">${escapeHtml(plan.filingPlannedAltitudeFt ? `${plan.filingPlannedAltitudeFt.toLocaleString()} ft` : "�")}</div></div>
+            <div class="cell"><div class="label">True Airspeed</div><div class="value">${escapeHtml(plan.filingTrueAirspeedKtas ? `${plan.filingTrueAirspeedKtas} KTAS` : "�")}</div></div>
+            <div class="cell"><div class="label">Endurance / Souls</div><div class="value">${escapeHtml(`${formatMinutesLabel(Number(plan.filingEnduranceMinutes || 0))} / ${plan.filingSoulsOnBoard || "�"} onboard`)}</div></div>
+            <div class="cell"><div class="label">Estimated Enroute Time</div><div class="value">${escapeHtml(plan.filingEstimatedEnrouteMinutes ? formatMinutesLabel(Number(plan.filingEstimatedEnrouteMinutes)) : "�")}</div></div>
+            <div class="cell"><div class="label">Total Fuel Required</div><div class="value">${escapeHtml(plan.fuelRequired ? `${plan.fuelRequired} gal` : "�")}</div></div>
+            <div class="cell"><div class="label">Fuel On Board</div><div class="value">${escapeHtml(plan.fuelOnBoard ? `${plan.fuelOnBoard} gal` : "�")}</div></div>
           </div>
         </div>
         <div class="panel">
@@ -6108,16 +5748,16 @@ export default function FlightPlanner() {
         <div class="panel">
           <h2>Route and ICAO Fields</h2>
           <div class="grid">
-            <div class="cell"><div class="label">User-entered Route</div><div class="value route">${escapeHtml(plan.route || "—")}</div></div>
-            <div class="cell"><div class="label">Filed / Normalized Route</div><div class="value route">${escapeHtml(String(payloadRoute?.normalizedTransmittedRoute || "—"))}</div></div>
-            <div class="cell"><div class="label">Provider Effective Route</div><div class="value route">${escapeHtml(String(providerRoute?.providerRoute || "—"))}</div></div>
-            <div class="cell"><div class="label">ICAO DOF</div><div class="value">${escapeHtml(String(payload?.dof || "—"))}</div></div>
-            <div class="cell"><div class="label">Local Other Info</div><div class="value">${escapeHtml(plan.filingOtherInfo || "—")}</div></div>
-            <div class="cell"><div class="label">Transmitted Other Info</div><div class="value">${escapeHtml(String(payload?.otherInfo || "—"))}</div></div>
+            <div class="cell"><div class="label">User-entered Route</div><div class="value route">${escapeHtml(plan.route || "�")}</div></div>
+            <div class="cell"><div class="label">Filed / Normalized Route</div><div class="value route">${escapeHtml(String(payloadRoute?.normalizedTransmittedRoute || "�"))}</div></div>
+            <div class="cell"><div class="label">Provider Effective Route</div><div class="value route">${escapeHtml(String(providerRoute?.providerRoute || "�"))}</div></div>
+            <div class="cell"><div class="label">ICAO DOF</div><div class="value">${escapeHtml(String(payload?.dof || "�"))}</div></div>
+            <div class="cell"><div class="label">Local Other Info</div><div class="value">${escapeHtml(plan.filingOtherInfo || "�")}</div></div>
+            <div class="cell"><div class="label">Transmitted Other Info</div><div class="value">${escapeHtml(String(payload?.otherInfo || "�"))}</div></div>
             <div class="cell"><div class="label">Provider Lifecycle</div><div class="value">${escapeHtml(String(providerSnapshot?.providerLifecycleStatus || "Unknown"))}</div></div>
             <div class="cell"><div class="label">Provider Flight State</div><div class="value">${escapeHtml(String(providerSnapshot?.providerFlightState || providerSnapshot?.providerStatus || "Not returned"))}</div></div>
             <div class="cell"><div class="label">Last Known ARTCC State</div><div class="value">${escapeHtml(String(providerSnapshot?.lastKnownArtccState || providerSnapshot?.artccState || "Not returned"))}</div></div>
-            <div class="cell"><div class="label">Internal Remarks</div><div class="value">${escapeHtml(plan.filingRemarks || plan.notes || "—")}</div></div>
+            <div class="cell"><div class="label">Internal Remarks</div><div class="value">${escapeHtml(plan.filingRemarks || plan.notes || "�")}</div></div>
           </div>
         </div>
         <div class="panel">
@@ -7817,6 +7457,30 @@ export default function FlightPlanner() {
     }
     setPendingSectionJump({ id: sectionId, eventName: "planner_field_edit_jump", focusId });
   };
+  const getRouteSetupFocusId = () => {
+    if (!planningDepartureCode) return "planner-field-departure";
+    if (!planningDestinationCode) return "planner-field-destination";
+    return "planner-route-method";
+  };
+  const handleRouteSummaryAction = (source: "summary_action" | "quick_jump" | "validation_edit" = "summary_action") => {
+    const target = getRouteSetupFocusId();
+    const state = !planningDepartureCode && !planningDestinationCode
+      ? "empty"
+      : planningDepartureCode && planningDestinationCode
+        ? "complete"
+        : "partial";
+    trackEvent("planner_route_summary_action", {
+      state,
+      target: target === "planner-field-departure" ? "departure" : target === "planner-field-destination" ? "destination" : "route_method",
+      source,
+    });
+    setActiveTab("route");
+    setPendingSectionJump({
+      id: "planner-route-setup",
+      eventName: "planner_route_setup_reached",
+      focusId: target,
+    });
+  };
   const jumpToReadinessIssue = (issue: FilingReadinessIssue) => {
     const target = readinessFieldTargets[issue.field] ?? readinessFieldTargets[issue.id];
     if (target) {
@@ -7853,14 +7517,6 @@ export default function FlightPlanner() {
                 Available today on Android. iPhone version coming soon.
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="rsf-metal-button-secondary"
-              onClick={openScratchPad}
-            >
-              ? Scratch Pad
-            </Button>
           </div>
         )
       }
@@ -7926,35 +7582,6 @@ export default function FlightPlanner() {
           </AlertDescription>
         </Alert>
       )}
-      {!pressDemo.enabled && (
-      <Card className={plannerPanelClass}>
-        <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff] hover:bg-[#141d29]">IFR Scratch Pad</Badge>
-              <Badge variant="outline" className="border-[#5d6f85]/30 bg-[#141b24] text-[#d7e1ef]">CRAFT</Badge>
-              {scratchPadHasContent && (
-                <Badge variant="secondary" className="border-0 bg-[#21324a] text-[#e3ecfb]">Notes saved</Badge>
-              )}
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-[#F5F8FC]">Write IFR clearance notes with your finger, stylus, or keyboard.</div>
-              <div className="text-sm text-[#A9BBCD]">
-                Ink Pad is fastest for live readback. CRAFT fields stay available when you want the structured version, and both auto-save on this device.
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 sm:min-w-[220px]">
-            <Button onClick={openScratchPad} className="rsf-metal-button-primary">
-              {scratchPadHasContent ? "Open scratch pad" : "Start scratch pad"}
-            </Button>
-            <div className="text-xs text-[#A9BBCD]">
-              Opens full-screen. Press <span className="font-mono">Esc</span> to close.
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      )}
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_540px]">
       <div className="min-w-0 space-y-4">
       {!pressDemo.enabled && (plansLoading || recentPlans.length > 0) && (
@@ -8005,15 +7632,31 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
       )}
-      <Card id="planner-route-setup" className={plannerPanelClass}>
+      <Card id="planner-route-summary" className={plannerPanelClass}>
         <CardContent className="pt-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 2xl:grid-cols-7">
-            <div className={plannerMetricClass}>
-              <div className="text-[11px] uppercase tracking-[0.12em] text-[#8fa6c0]">Route</div>
-              <div className="truncate text-base font-semibold text-[#F5F8FC]">
-                {(form.departure || "---").toUpperCase()} to {(form.destination || "---").toUpperCase()}
+            <button
+              type="button"
+              className={cn(
+                plannerMetricClass,
+                "min-h-[64px] rounded-[1rem] text-left transition-colors hover:border-[#6f86a7]/45 hover:bg-[#172130] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8FC7FF]"
+              )}
+              aria-label={planningDepartureCode && planningDestinationCode ? "Edit route departure and destination" : "Start route by entering departure and destination"}
+              onClick={() => handleRouteSummaryAction("summary_action")}
+            >
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#8fa6c0]">
+                {planningDepartureCode || planningDestinationCode ? "Edit Route" : "Start Route"}
               </div>
-            </div>
+              <div className="truncate text-base font-semibold text-[#F5F8FC]">
+                {planningDepartureCode && planningDestinationCode
+                  ? `${planningDepartureCode} -> ${planningDestinationCode}`
+                  : planningDepartureCode
+                    ? `${planningDepartureCode} -> destination needed`
+                    : planningDestinationCode
+                      ? `Departure needed -> ${planningDestinationCode}`
+                      : "Enter departure and destination"}
+              </div>
+            </button>
             <div className={plannerMetricClass}>
               <div className="text-[11px] uppercase tracking-[0.12em] text-[#8fa6c0]">Legs</div>
               <div className="text-base font-semibold text-[#F5F8FC]">{legNavRows.length || 0}</div>
@@ -8063,7 +7706,7 @@ export default function FlightPlanner() {
               Use quick jumps for the dense planner sections. Full planning stays available; this just keeps the phone workflow navigable.
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToPlannerSection("planner-route-setup", "route")}>Route</Button>
+              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => handleRouteSummaryAction("quick_jump")}>Route</Button>
               <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToPlannerSection("planner-distance-performance", "route")}>Performance</Button>
               <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => setActiveTab("weather")}>Weather</Button>
               <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => setActiveTab("analysis")}>Analysis</Button>
@@ -8099,13 +7742,13 @@ export default function FlightPlanner() {
         title={pressDemo.getStep("route-setup")?.title ?? "Route Setup"}
         body={pressDemo.getStep("route-setup")?.body ?? ""}
       >
-      <Card className={cn(plannerPanelClass, "order-2")}>
+      <Card id="planner-quick-references" className={cn(plannerPanelClass, "order-2")}>
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Quick Planning References</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>Open and hide each reference as needed without leaving the planner workflow.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Accordion type="multiple" className="w-full space-y-2">
+          <Accordion type="single" collapsible className="w-full space-y-2">
             <AccordionItem value="airport-conditions" className="rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] px-4">
               <AccordionTrigger className="text-sm">Airport conditions</AccordionTrigger>
               <AccordionContent className="space-y-3 pb-3 text-sm text-[#A9BBCD]">
@@ -8146,7 +7789,7 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
 
-      <Card className={plannerPanelClass}>
+      <Card id="planner-route-setup" className={plannerPanelClass}>
         <CardHeader>
           <CardTitle className={plannerCardTitleClass}>Route Setup</CardTitle>
           <CardDescription className={plannerCardDescriptionClass}>Enter airports, pick your aircraft, and add waypoints or stops before you plot the trip.</CardDescription>
@@ -8188,7 +7831,7 @@ export default function FlightPlanner() {
                     }}
                   >
                     <span className="font-medium">{airport.icao}</span>
-                    {airport.name ? ` — ${airport.name}` : ""}
+                    {airport.name ? ` � ${airport.name}` : ""}
                     {airport.city ? ` (${airport.city}${airport.state ? `, ${airport.state}` : ""})` : ""}
                   </button>
                 ))}
@@ -8231,7 +7874,7 @@ export default function FlightPlanner() {
                     }}
                   >
                     <span className="font-medium">{airport.icao}</span>
-                    {airport.name ? ` — ${airport.name}` : ""}
+                    {airport.name ? ` � ${airport.name}` : ""}
                     {airport.city ? ` (${airport.city}${airport.state ? `, ${airport.state}` : ""})` : ""}
                   </button>
                   ))}
@@ -8466,7 +8109,7 @@ export default function FlightPlanner() {
                     Coastline assist:
                     {" "}
                     {suggestedCoastlineStops.length > 0 ? `stops ${suggestedCoastlineStops.join(", ")}` : "no fuel stops"}
-                    {suggestedCoastlineWaypoints.length > 0 ? ` • waypoints ${suggestedCoastlineWaypoints.join(", ")}` : ""}
+                    {suggestedCoastlineWaypoints.length > 0 ? ` � waypoints ${suggestedCoastlineWaypoints.join(", ")}` : ""}
                   </div>
                 </div>
               )}
@@ -8656,7 +8299,7 @@ export default function FlightPlanner() {
               )}
             </div>
             <div className="space-y-2 md:col-span-2">
-              <div className="space-y-2">
+              <div id="planner-route-method" tabIndex={-1} className="space-y-2 scroll-mt-24 focus:outline-none">
                 <Label>Route Mode</Label>
                 <div className="flex flex-wrap gap-2">
                   {[
@@ -8831,7 +8474,7 @@ export default function FlightPlanner() {
                             <div className="mt-1 text-xs text-[#D9E4F0]">{segment.tokens.join(" ")}</div>
                             <div className="mt-1 text-[11px] text-muted-foreground">
                               {segment.transitionHint ? `Transition ${segment.transitionHint}` : "Transition context pending nav-data resolution."}
-                              {segment.runwayHint ? ` · ${segment.runwayHint}` : ""}
+                              {segment.runwayHint ? ` � ${segment.runwayHint}` : ""}
                             </div>
                           </div>
                         ))}
@@ -9136,7 +8779,7 @@ export default function FlightPlanner() {
               </div>
               <div className={cn("p-3 text-sm", plannerSubpanelClass)}>
                 <div className="text-xs text-[#A9BBCD]">Selected burn profile</div>
-                <div className="font-semibold text-[#F5F8FC]">{fuelBurnMode[0].toUpperCase() + fuelBurnMode.slice(1)} • {planningBurn.toFixed(1)} gph</div>
+                <div className="font-semibold text-[#F5F8FC]">{fuelBurnMode[0].toUpperCase() + fuelBurnMode.slice(1)} � {planningBurn.toFixed(1)} gph</div>
                 <div className="mt-1 text-xs text-[#A9BBCD]">
                   Library baseline {selectedType.fuel_burn_gph_effective?.toFixed(1) || "-"} gph
                   {selectedType.fuel_burn_economy_gph_effective ? ` | Economy ${selectedType.fuel_burn_economy_gph_effective.toFixed(1)}` : ""}
@@ -9307,7 +8950,7 @@ export default function FlightPlanner() {
                 ? `? You cannot reach ${fuelPlanSummary.firstUnreachableLeg.to} on current fuel planning. Short by ${Math.abs(fuelPlanSummary.firstUnreachableLeg.fuelAfterLeg).toFixed(1)} gal before planned uplift.`
                 : fuelSurplus >= 0
                   ? `Fuel surplus after planned stops: +${fuelSurplus.toFixed(1)} gal (${formatMinutesLabel(surplusMinutes)} beyond reserve)`
-                  : `? Fuel deficit after planned stops: ${fuelSurplus.toFixed(1)} gal — add fuel, adjust stop uplifts, or reduce route`}
+                  : `? Fuel deficit after planned stops: ${fuelSurplus.toFixed(1)} gal � add fuel, adjust stop uplifts, or reduce route`}
             </div>
           )}
           {fuelEnduranceComparison.isDeficient && (
@@ -9437,7 +9080,7 @@ export default function FlightPlanner() {
                       <div className="font-semibold">{icao}</div>,
                     )}
                     <div className="text-xs text-muted-foreground">
-                      {airport?.name || "Airport"}{airport?.timezone ? ` • ${airport.timezone}` : ""}
+                      {airport?.name || "Airport"}{airport?.timezone ? ` � ${airport.timezone}` : ""}
                     </div>
                   </div>
                   {communicationsUnavailable || frequencies.length === 0 ? (
@@ -9564,7 +9207,7 @@ export default function FlightPlanner() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-2 pr-3">{String(leg.course).padStart(3, "0")}°</td>
+                      <td className="py-2 pr-3">{String(leg.course).padStart(3, "0")}�</td>
                       <td className="py-2 pr-3">{leg.distanceNm.toFixed(1)} NM</td>
                       <td className="py-2 pr-3">{formatMinutesLabel(leg.legMinutes)}</td>
                       <td className="py-2 pr-3 text-xs text-muted-foreground">
@@ -9704,7 +9347,7 @@ export default function FlightPlanner() {
                       const title = feature?.properties?.title || feature?.properties?.reason || "";
                       return (
                         <Badge key={`${id}-${title}`} variant="outline">
-                          {title ? `${id} • ${title}` : id}
+                          {title ? `${id} � ${title}` : id}
                         </Badge>
                       );
                     })}
@@ -9892,7 +9535,7 @@ export default function FlightPlanner() {
                                 <Badge variant="outline">{item.progressLabel}</Badge>
                               </div>
                               <div className="mt-1 text-xs text-muted-foreground">
-                                Highest terrain {item.segment.maxElevationFt != null ? `${Math.round(item.segment.maxElevationFt).toLocaleString()} ft` : "--"} · clearance {item.segment.clearanceFt != null ? `${Math.round(item.segment.clearanceFt).toLocaleString()} ft` : "--"}
+                                Highest terrain {item.segment.maxElevationFt != null ? `${Math.round(item.segment.maxElevationFt).toLocaleString()} ft` : "--"} � clearance {item.segment.clearanceFt != null ? `${Math.round(item.segment.clearanceFt).toLocaleString()} ft` : "--"}
                               </div>
                             </div>
                           ))}
@@ -9908,14 +9551,29 @@ export default function FlightPlanner() {
             ) : (
               <div className="grid gap-3 md:grid-cols-3">
                 {weatherData.map(({ icao, data }) => {
-                  const category = parseFlightCategory(data?.metar);
+                  const hasMetar = Boolean(data?.metar?.rawOb);
+                  const hasTaf = Boolean(data?.taf?.rawTAF);
+                  const category = hasMetar ? parseFlightCategory(data?.metar) : "UNKNOWN";
                   const hazards = parseWeatherHazards(data?.metar, data?.taf);
+                  const reportingStation = data?.weatherSource === "nearby_station" ? data.reportingStation?.icao : null;
                   return (
                     <div key={icao} className="rounded-lg border p-3">
                       <div className="flex items-center justify-between">
-                        <div className="font-semibold">{icao}</div>
+                        <div>
+                          <div className="font-semibold">{reportingStation || icao}</div>
+                          {reportingStation ? (
+                            <div className="text-[11px] text-muted-foreground">
+                              Nearby weather for {icao}{data?.reportingStation?.distanceNm != null ? ` - ${data.reportingStation.distanceNm} NM away` : ""}
+                            </div>
+                          ) : null}
+                        </div>
                         <Badge className={flightCategoryClassName(category)}>{category}</Badge>
                       </div>
+                      {!hasMetar && !hasTaf && (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          Flight category unavailable. No usable METAR/TAF is available for this airport.
+                        </div>
+                      )}
                       {hazards.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
                           {hazards.map((hazard) => (
@@ -9936,10 +9594,10 @@ export default function FlightPlanner() {
                         </div>
                       )}
                       <div className="text-xs text-muted-foreground mt-2 line-clamp-3">
-                        {data?.metar?.rawOb || "No METAR data"}
+                        {hasMetar ? data?.metar?.rawOb : "No METAR data"}
                       </div>
                       <div className="text-xs text-muted-foreground mt-2 line-clamp-3">
-                        {data?.taf?.rawTAF || "No TAF data"}
+                        {hasTaf ? data?.taf?.rawTAF : "No TAF data"}
                       </div>
                       {hazards.length > 0 && (
                         <div className="text-[11px] text-[#D9A441] mt-2">
@@ -10033,7 +9691,7 @@ export default function FlightPlanner() {
         <CardContent className="grid gap-3 text-sm">
           {(() => {
             const checklistLabels: Record<string, string> = {
-              weather: "Weather reviewed — no IFR/TS risk detected",
+              weather: "Weather reviewed � no IFR/TS risk detected",
               fuel: "Fuel sufficient for trip + reserve",
               currency: "Pilot currency verified",
               notams: "NOTAMs acknowledged",
@@ -10051,7 +9709,7 @@ export default function FlightPlanner() {
                   />
                   <span>{checklistLabels[key] || key}</span>
                   {isAutoSatisfied && !checklist[key as keyof typeof checklist] && (
-                    <span className="text-xs text-[#4DA8A8]/80">(auto-checked — click to override)</span>
+                    <span className="text-xs text-[#4DA8A8]/80">(auto-checked � click to override)</span>
                   )}
                 </label>
               );
@@ -11083,7 +10741,7 @@ export default function FlightPlanner() {
               )}
               {isPlanOverdueForClose(currentSavedPlan) && normalizedClientFilingStatus(currentSavedPlan) === "activated" && (
                 <div className="text-xs text-amber-400/80">
-                  This plan is overdue — you'll be asked for your actual close location before submitting to the filing provider.
+                  This plan is overdue � you'll be asked for your actual close location before submitting to the filing provider.
                 </div>
               )}
             </div>
@@ -11701,7 +11359,7 @@ export default function FlightPlanner() {
                           >
                             <div className="font-semibold">{leg.from} to {leg.to}</div>
                             <div className="text-[#B5C8DB]">
-                              {String(leg.course).padStart(3, "0")} deg · {leg.distanceNm.toFixed(1)} NM
+                              {String(leg.course).padStart(3, "0")} deg � {leg.distanceNm.toFixed(1)} NM
                             </div>
                             <div className="text-[#89a0b8]">
                               ETA {leg.legEtaUtc ? `${leg.legEtaUtc.toISOString().slice(11, 16)}Z` : "--"}
@@ -11995,20 +11653,33 @@ export default function FlightPlanner() {
               <div className="space-y-3 text-sm">
                 {weatherData.length === 0 && <div className="text-muted-foreground">No METAR/TAF data yet.</div>}
                 {weatherData.map(({ icao, data }) => {
-                  const category = parseFlightCategory(data?.metar);
+                  const hasMetar = Boolean(data?.metar?.rawOb);
+                  const hasTaf = Boolean(data?.taf?.rawTAF);
+                  const category = hasMetar ? parseFlightCategory(data?.metar) : "UNKNOWN";
                   const wind = parseMetarWind(data?.metar);
                   const tempC = parseMetarTempC(data?.metar);
                   const hazards = parseWeatherHazards(data?.metar, data?.taf);
+                  const reportingStation = data?.weatherSource === "nearby_station" ? data.reportingStation?.icao : null;
                   return (
                     <div key={icao} className="rounded-lg border p-3">
-                      <div className="font-semibold">{icao}</div>
+                      <div className="font-semibold">{reportingStation || icao}</div>
+                      {reportingStation ? (
+                        <div className="text-[11px] text-muted-foreground">
+                          Nearby weather for {icao}{data?.reportingStation?.distanceNm != null ? ` - ${data.reportingStation.distanceNm} NM away` : ""}
+                        </div>
+                      ) : null}
                       <div className="flex flex-wrap gap-3 text-xs font-medium mt-1 mb-1">
                         <span className={cn("px-1.5 py-0.5 rounded border", flightCategoryClassName(category))}>
                           {category}
                         </span>
-                        {wind && <span>{wind.direction}° @ {wind.speed}kt</span>}
-                        {tempC !== null && <span>Temp {tempC}°C</span>}
+                        {wind && <span>{wind.direction}� @ {wind.speed}kt</span>}
+                        {tempC !== null && <span>Temp {tempC}�C</span>}
                       </div>
+                      {!hasMetar && !hasTaf && (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          Flight category unavailable. No usable METAR/TAF is available for this airport.
+                        </div>
+                      )}
                       {hazards.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
                           {hazards.map((hazard) => (
@@ -12033,8 +11704,8 @@ export default function FlightPlanner() {
                           {category} reflects ceiling/visibility only; review hazards before launch.
                         </div>
                       )}
-                      <div className="text-xs text-muted-foreground mt-2">{data?.metar?.rawOb || "No METAR"}</div>
-                      <div className="text-xs text-muted-foreground mt-2">{data?.taf?.rawTAF || "No TAF"}</div>
+                      <div className="text-xs text-muted-foreground mt-2">{hasMetar ? data?.metar?.rawOb : "No METAR"}</div>
+                      <div className="text-xs text-muted-foreground mt-2">{hasTaf ? data?.taf?.rawTAF : "No TAF"}</div>
                     </div>
                   );
                 })}
@@ -12325,11 +11996,11 @@ export default function FlightPlanner() {
                       <div className="space-y-2 text-xs text-muted-foreground">
                         <div>
                           <div className="uppercase tracking-[0.14em]">User-entered route</div>
-                          <div className="mt-1 text-sm text-foreground break-words">{filingPreview.preview.localRoute || "—"}</div>
+                          <div className="mt-1 text-sm text-foreground break-words">{filingPreview.preview.localRoute || "�"}</div>
                         </div>
                         <div>
                           <div className="uppercase tracking-[0.14em]">Filed / normalized route</div>
-                          <div className="mt-1 text-sm text-foreground break-words">{filingPreview.preview.transmittedRoute || "—"}</div>
+                          <div className="mt-1 text-sm text-foreground break-words">{filingPreview.preview.transmittedRoute || "�"}</div>
                         </div>
                       </div>
                     </div>
@@ -12338,15 +12009,15 @@ export default function FlightPlanner() {
                       <div className="space-y-2 text-xs text-muted-foreground">
                         <div>
                           <div className="uppercase tracking-[0.14em]">Local Other Info</div>
-                          <div className="mt-1 text-sm text-foreground break-words">{filingPreview.preview.localOtherInfo || "—"}</div>
+                          <div className="mt-1 text-sm text-foreground break-words">{filingPreview.preview.localOtherInfo || "�"}</div>
                         </div>
                         <div>
                           <div className="uppercase tracking-[0.14em]">Transmitted Other Info</div>
-                          <div className="mt-1 text-sm text-foreground break-words">{filingPreview.preview.transmittedOtherInfo || "—"}</div>
+                          <div className="mt-1 text-sm text-foreground break-words">{filingPreview.preview.transmittedOtherInfo || "�"}</div>
                         </div>
                         <div>
                           <div className="uppercase tracking-[0.14em]">ICAO DOF</div>
-                          <div className="mt-1 text-sm text-foreground">{filingPreview.preview.dof || "—"}</div>
+                          <div className="mt-1 text-sm text-foreground">{filingPreview.preview.dof || "�"}</div>
                         </div>
                       </div>
                     </div>
@@ -12397,214 +12068,6 @@ export default function FlightPlanner() {
           {providerUpdatesPlan ? <FilingProviderUpdatesList plan={providerUpdatesPlan} /> : null}
         </DialogContent>
       </Dialog>
-      {scratchPadOpen && (
-        <div
-          className="fixed inset-0 z-[2000] flex flex-col bg-[linear-gradient(180deg,rgba(10,12,16,0.99),rgba(6,8,11,1))] text-white"
-          role="dialog"
-          aria-modal="true"
-          aria-label="IFR Clearance Scratch Pad"
-        >
-          <Tabs
-            value={scratchPadMode}
-            onValueChange={(value) => setScratchPadMode(value as "ink" | "craft")}
-            className="flex h-full flex-col"
-          >
-            <div className="border-b border-[#5d6f85]/20 px-4 py-3">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-lg font-bold tracking-tight">
-                      ? IFR Clearance Scratch Pad
-                    </span>
-                    <span className="rounded-full border border-[#5d6f85]/30 bg-[#141b24] px-2 py-0.5 text-xs font-mono tracking-widest text-[#A9BBCD]">
-                      INK + CRAFT
-                    </span>
-                  </div>
-                  <div className="text-sm text-[#A9BBCD]">
-                    Ink Pad is built for finger-speed readback. Switch to CRAFT fields when you need structured notes.
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={plannerInsetActionClass}
-                    onClick={() => setScratchInk((current) => current.slice(0, -1))}
-                    disabled={!scratchPadHasInk}
-                  >
-                    Undo ink
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={plannerInsetActionClass}
-                    onClick={() => {
-                      if (window.confirm("Clear all scratch pad notes and ink?")) {
-                        setScratchPad(SCRATCH_PAD_DEFAULT);
-                        setScratchInk([]);
-                      }
-                    }}
-                  >
-                    Clear all
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={plannerInsetActionClass}
-                    onClick={() => setScratchPadOpen(false)}
-                  >
-                    Close <span className="ml-1 opacity-50">Esc</span>
-                  </Button>
-                </div>
-              </div>
-              <TabsList className="mt-3 grid w-full max-w-[320px] grid-cols-2 rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(20,24,31,0.98),rgba(13,17,22,0.98))] p-1.5">
-                <TabsTrigger value="ink">Ink Pad</TabsTrigger>
-                <TabsTrigger value="craft">CRAFT Fields</TabsTrigger>
-              </TabsList>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-4 py-4">
-              <TabsContent value="ink" className="mt-0 h-full focus-visible:outline-none">
-                <div className="mx-auto max-w-5xl space-y-4">
-                  <div className={`${plannerSubpanelClass} flex flex-wrap items-center justify-between gap-3 px-4 py-3`}>
-                    <div>
-                      <div className="text-sm font-semibold text-[#F5F8FC]">Writing surface</div>
-                      <div className="text-xs text-[#A9BBCD]">
-                        Choose the pad that matches how you copy clearance notes.
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        { value: "ruled" as ScratchPadInkLayout, label: "Ruled" },
-                        { value: "blank" as ScratchPadInkLayout, label: "Blank" },
-                        { value: "craft" as ScratchPadInkLayout, label: "CRAFT grid" },
-                      ].map((option) => (
-                        <Button
-                          key={option.value}
-                          type="button"
-                          size="sm"
-                          variant={scratchInkLayout === option.value ? "default" : "outline"}
-                          className={scratchInkLayout === option.value ? "rsf-metal-button-primary" : plannerInsetActionClass}
-                          onClick={() => setScratchInkLayout(option.value)}
-                        >
-                          {option.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-                    <ScratchPadInkBoard
-                      strokes={scratchInk}
-                      layout={scratchInkLayout}
-                      onChange={setScratchInk}
-                    />
-                    <div className="space-y-3">
-                      <div className={`${plannerSubpanelClass} p-4`}>
-                        <div className="text-sm font-semibold text-[#F5F8FC]">Fast IFR copy flow</div>
-                        <div className="mt-2 space-y-2 text-xs text-[#A9BBCD]">
-                          <div>1. Write the readback freehand while ATC is talking.</div>
-                          <div>2. Use Undo if you miss a stroke.</div>
-                          <div>3. Use Ruled, Blank, or CRAFT grid depending on the clearance.</div>
-                          <div>4. Switch to CRAFT fields if you want a cleaner final copy.</div>
-                        </div>
-                      </div>
-                      <div className={`${plannerSubpanelClass} p-4`}>
-                        <div className="text-sm font-semibold text-[#F5F8FC]">Current plan prefill</div>
-                        <div className="mt-2 space-y-1 text-xs text-[#A9BBCD]">
-                          <div>Departure: <span className="font-mono text-[#E8EDF4]">{form.departure || "-"}</span></div>
-                          <div>Destination: <span className="font-mono text-[#E8EDF4]">{form.destination || "-"}</span></div>
-                          <div>Altitude: <span className="font-mono text-[#E8EDF4]">{plannedAltitudeFt ? `${plannedAltitudeFt} ft` : "-"}</span></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="craft" className="mt-0 focus-visible:outline-none">
-                <div className="mx-auto max-w-3xl space-y-3">
-                  <ScratchField
-                    label="C — Clearance Limit"
-                    hint="Usually destination airport or fix"
-                    value={scratchPad.clearanceLimit}
-                    onChange={(v) => setScratchField("clearanceLimit", v)}
-                  />
-
-                  <ScratchField
-                    label="R — Route"
-                    hint="Departure procedure, airways, fixes"
-                    value={scratchPad.route}
-                    onChange={(v) => setScratchField("route", v)}
-                    multiline
-                  />
-
-                  <ScratchField
-                    label="A — Altitude"
-                    hint="Initial altitude / expect altitude / time"
-                    value={scratchPad.altitude}
-                    onChange={(v) => setScratchField("altitude", v)}
-                  />
-
-                  <ScratchField
-                    label="F — Frequency"
-                    hint="Departure control frequency"
-                    value={scratchPad.frequency}
-                    onChange={(v) => setScratchField("frequency", v)}
-                  />
-
-                  <ScratchField
-                    label="T — Transponder / Squawk"
-                    hint="4-digit squawk code"
-                    value={scratchPad.squawk}
-                    onChange={(v) => setScratchField("squawk", v)}
-                  />
-
-                  <div className="border-t border-[#5d6f85]/20 pt-3">
-                    <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-[#8fa6c0]">
-                      Additional
-                    </div>
-                  </div>
-
-                  <ScratchField
-                    label="Departure Airport"
-                    hint="ICAO identifier"
-                    value={scratchPad.departure}
-                    onChange={(v) => setScratchField("departure", v)}
-                  />
-
-                  <ScratchField
-                    label="Void / Release Time"
-                    hint="IFR void time if clearance on ground"
-                    value={scratchPad.void}
-                    onChange={(v) => setScratchField("void", v)}
-                  />
-
-                  <ScratchField
-                    label="Notes"
-                    hint="Anything else — hold instructions, restrictions, remarks"
-                    value={scratchPad.notes}
-                    onChange={(v) => setScratchField("notes", v)}
-                    multiline
-                    tall
-                  />
-                </div>
-              </TabsContent>
-            </div>
-
-            <div className="flex items-center justify-between border-t border-[#5d6f85]/20 px-4 py-2 text-xs text-[#8fa6c0]">
-              <span>Content auto-saved - Escape to close</span>
-              <span className="font-mono">
-                {scratchPadHasContent
-                  ? "? Notes present"
-                  : "? Empty"}
-              </span>
-            </div>
-          </Tabs>
-        </div>
-      )}
     </PageShell>
     <FlightPlannerAccountRequirementDialog
       open={Boolean(accountRequirementPrompt)}

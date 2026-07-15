@@ -2535,6 +2535,9 @@ const TFR_ARCGIS_URLS = TFR_ARCGIS_URLS_ENV
 const TFR_WFS_ENABLED = String(process.env.TFR_WFS_ENABLED || "true").toLowerCase() === "true";
 const TFR_WFS_URL = (process.env.TFR_WFS_URL || "https://sua.faa.gov/geoserver/wfs").trim();
 const TFR_WFS_TIMEOUT_MS = boundedEnvNumber(process.env.TFR_WFS_TIMEOUT_MS, 3000, 1000, 10000);
+const TFR_OFFICIAL_WFS_URL = (process.env.TFR_OFFICIAL_WFS_URL || "https://tfr.faa.gov/geoserver/TFR/ows").trim();
+const TFR_OFFICIAL_WFS_ENABLED = String(process.env.TFR_OFFICIAL_WFS_ENABLED || "true").toLowerCase() === "true";
+const TFR_OFFICIAL_WFS_TIMEOUT_MS = boundedEnvNumber(process.env.TFR_OFFICIAL_WFS_TIMEOUT_MS, 5000, 1000, 15000);
 const TFR_WFS_ACCESS_DENIED_COOLDOWN_MS = boundedEnvNumber(
   process.env.TFR_WFS_ACCESS_DENIED_COOLDOWN_MS,
   15 * 60 * 1000,
@@ -2934,6 +2937,70 @@ function parseArcGisCompactDate(value: any) {
   return parseArcGisDate(raw);
 }
 
+function webMercatorToLonLat(x: number, y: number) {
+  const lon = (x / 20037508.34) * 180;
+  let lat = (y / 20037508.34) * 180;
+  lat = (180 / Math.PI) * (2 * Math.atan(Math.exp((lat * Math.PI) / 180)) - Math.PI / 2);
+  return [lon, lat];
+}
+
+function convertWebMercatorGeometryToWgs84(geometry: any): any {
+  if (!geometry?.type || !Array.isArray(geometry.coordinates)) return geometry;
+  const convertCoordinates = (coordinates: any): any => {
+    if (
+      Array.isArray(coordinates) &&
+      coordinates.length >= 2 &&
+      typeof coordinates[0] === "number" &&
+      typeof coordinates[1] === "number"
+    ) {
+      return webMercatorToLonLat(coordinates[0], coordinates[1]);
+    }
+    if (Array.isArray(coordinates)) {
+      return coordinates.map(convertCoordinates);
+    }
+    return coordinates;
+  };
+  return {
+    ...geometry,
+    coordinates: convertCoordinates(geometry.coordinates),
+  };
+}
+
+function normalizeOfficialFaaTfrFeature(feature: any) {
+  if (!feature?.geometry) return null;
+  const props = feature?.properties || {};
+  const notamKey = props.NOTAM_KEY || props.NOTAMID || props.NOTAM_ID || props.notam_id || props.GID || null;
+  const notamId = notamKey ? String(notamKey).split("-")[0] : String(props.GID || "TFR");
+  const title = props.TITLE || props.title || "Temporary Flight Restriction";
+  return {
+    type: "Feature",
+    geometry: convertWebMercatorGeometryToWgs84(feature.geometry),
+    properties: {
+      notamId,
+      notamKey: notamKey ? String(notamKey) : null,
+      title,
+      legal: props.LEGAL || props.legal || null,
+      location: title,
+      reason: props.LEGAL || props.type || null,
+      altitude: null,
+      effectiveAt: null,
+      expiresAt: null,
+      lastUpdatedAt: parseArcGisCompactDate(props.LAST_MODIFICATION_DATETIME || props.mod_abs_time || props.mod_date),
+      icao: props.CNS_LOCATION_ID || props.facility || null,
+      source: "faa-tfr-wfs",
+      raw: {
+        GID: props.GID,
+        CNS_LOCATION_ID: props.CNS_LOCATION_ID,
+        NOTAM_KEY: props.NOTAM_KEY,
+        TITLE: props.TITLE,
+        LAST_MODIFICATION_DATETIME: props.LAST_MODIFICATION_DATETIME,
+        STATE: props.STATE,
+        LEGAL: props.LEGAL,
+      },
+    },
+  };
+}
+
 function normalizeArcGisTfrFeature(feature: any) {
   if (!feature?.geometry) return null;
   const props = feature?.properties || feature?.attributes || {};
@@ -3110,6 +3177,69 @@ async function fetchArcGisTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
   }
 
   return { data: null, error: `${lastError} (${lastUrl})`, attempts };
+}
+
+async function fetchOfficialFaaTfrs() {
+  const attempts: Array<{ url: string; ok: boolean; status?: number; error?: string }> = [];
+  if (!TFR_OFFICIAL_WFS_ENABLED || !TFR_OFFICIAL_WFS_URL) {
+    return { data: null, error: "Official FAA TFR WFS disabled", attempts };
+  }
+
+  const params = new URLSearchParams({
+    service: "WFS",
+    version: "1.1.0",
+    request: "GetFeature",
+    typeName: "TFR:V_TFR_LOC",
+    maxFeatures: "300",
+    outputFormat: "application/json",
+    srsname: "EPSG:3857",
+  });
+  const url = `${TFR_OFFICIAL_WFS_URL}?${params.toString()}`;
+
+  try {
+    const response = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
+          "Accept": "application/json",
+        },
+      },
+      TFR_OFFICIAL_WFS_TIMEOUT_MS
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      const snippet = errorText.trim().slice(0, 200);
+      const message = `HTTP ${response.status}${snippet ? `: ${snippet}` : ""}`;
+      attempts.push({ url, ok: false, status: response.status, error: message });
+      return { data: null, error: message, attempts };
+    }
+
+    const payload = await response.json().catch(() => null);
+    if (!payload?.features || !Array.isArray(payload.features)) {
+      const message = "Official FAA TFR WFS response missing features";
+      attempts.push({ url, ok: false, status: response.status, error: message });
+      return { data: null, error: message, attempts };
+    }
+
+    const features = payload.features.map(normalizeOfficialFaaTfrFeature).filter(Boolean);
+    const data = {
+      type: "FeatureCollection",
+      features,
+      updatedAt: new Date().toISOString(),
+      source: "faa-tfr-wfs",
+    };
+    if (features.length) {
+      tfrLastSuccess = { data, fetchedAt: Date.now() };
+    }
+    attempts.push({ url, ok: true, status: response.status });
+    return { data, attempts };
+  } catch (error: any) {
+    const message = error?.message || "Official FAA TFR WFS fetch failed";
+    attempts.push({ url, ok: false, error: message });
+    return { data: null, error: `${message} (${url})`, attempts };
+  }
 }
 
 function normalizeSuaWfsTfrFeature(feature: any) {
@@ -17961,8 +18091,25 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       let wfsMeta:
         | TfrFetchMeta
         | null = null;
+      let officialTfrMeta:
+        | TfrFetchMeta
+        | null = null;
 
       const buildPayload = async () => {
+        const officialResult = await fetchOfficialFaaTfrs();
+        officialTfrMeta = {
+          attempted: true,
+          ok: Boolean(officialResult?.data),
+          error: officialResult?.error,
+          attempts: officialResult?.attempts,
+        };
+        if (officialResult?.data) {
+          return {
+            payload: officialResult.data,
+            staleHint: false,
+          };
+        }
+
         const wfsResult = await fetchSuaWfsTfrs();
         wfsMeta = {
           attempted: true,
@@ -18150,7 +18297,21 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         };
       }
 
-      const liveUpstreamSucceeded = payload?.source === "faa-sua-wfs" || payload?.source === "faa-arcgis";
+      const liveUpstreamSucceeded = payload?.source === "faa-tfr-wfs" || payload?.source === "faa-sua-wfs" || payload?.source === "faa-arcgis";
+
+      const officialTfrMetaSnapshot = officialTfrMeta as TfrFetchMeta | null;
+      const failedOfficialTfrMeta = officialTfrMetaSnapshot && officialTfrMetaSnapshot.attempted && !officialTfrMetaSnapshot.ok ? officialTfrMetaSnapshot : null;
+      if (!liveUpstreamSucceeded && failedOfficialTfrMeta) {
+        console.warn(
+          JSON.stringify({
+            event: "tfr_official_wfs_upstream_degraded",
+            requestId,
+            error: failedOfficialTfrMeta.error,
+            attempts: failedOfficialTfrMeta.attempts,
+            fallbackSource: payload?.source || "unknown",
+          })
+        );
+      }
 
       if (!liveUpstreamSucceeded && arcgisMeta?.attempted && !arcgisMeta.ok) {
         console.warn(
@@ -18184,8 +18345,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         stale,
       };
 
-      if (debug && (arcgisMeta || wfsMeta)) {
+      if (debug && (officialTfrMeta || arcgisMeta || wfsMeta)) {
         responsePayload.debug = {
+          ...(officialTfrMeta ? { officialTfrWfs: officialTfrMeta } : {}),
           ...(arcgisMeta ? { arcgis: arcgisMeta } : {}),
           ...(wfsMeta ? { wfs: wfsMeta } : {}),
         };
@@ -18199,6 +18361,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           requestId,
           proxyConfigured: Boolean(TFR_ARCGIS_PROXY_URL),
           source: payload?.source || "unknown",
+          officialTfrWfsStatus: officialTfrMetaSnapshot?.attempts?.[0]?.status,
           arcgisUrl: arcgisAttempt?.url,
           arcgisStatus: arcgisAttempt?.status,
           count: filteredFeatures.length,

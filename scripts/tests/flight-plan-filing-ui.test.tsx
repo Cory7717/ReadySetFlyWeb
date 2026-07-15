@@ -15,6 +15,7 @@ import {
   type PlannerWorkflowStep,
   type PlannerWorkflowStepId,
 } from "../../client/src/components/flight-planner/PlannerWorkflowFooter";
+import { FlightPlannerAccountRequirementContent } from "../../client/src/components/flight-planner/FlightPlannerAccountRequirementDialog";
 import type { FlightPlan } from "../../shared/schema";
 
 const plan = {
@@ -605,4 +606,72 @@ test("planner map overlays are constrained for narrow screens", () => {
   assert.match(mapLibreSource, /max-w-\[calc\(100%-9rem\)\]/);
   assert.match(mapLibreSource, /truncate/);
   assert.match(cesiumSource, /max-w-\[calc\(100%-11rem\)\]/);
+});
+
+test("flight planner account requirement dialog renders required account, privacy, and no-auto-action copy", () => {
+  const html = renderToStaticMarkup(
+    <FlightPlannerAccountRequirementContent
+      sourceAction="file_flight_plan"
+      activeStep="file"
+      environment="LAB"
+      showLabDisclosure
+      onCreateAccount={noop}
+      onSignIn={noop}
+      onContinueExploring={noop}
+    />,
+  );
+
+  assert.ok(html.includes("Create an RSF account"));
+  assert.ok(html.includes("Flight Services requires pilot and contact information"));
+  assert.ok(html.includes("provider updates, amendments, cancellation, and lifecycle history"));
+  assert.ok(html.includes("It will not automatically file, amend, cancel, activate, or close anything."));
+  assert.ok(html.includes("Ready Set Fly does not sell pilot filing information."));
+  assert.ok(html.includes("/privacy-policy"));
+  assert.ok(html.includes("Current environment: LAB"));
+  assert.ok(html.includes("Create an Account &amp; Continue"));
+  assert.ok(html.includes("Sign In"));
+  assert.ok(html.includes("Continue Exploring Without Filing"));
+});
+
+test("flight planner account requirement dialog hides LAB disclosure in production", () => {
+  const html = renderToStaticMarkup(
+    <FlightPlannerAccountRequirementContent
+      sourceAction="save_flight_plan"
+      activeStep="route"
+      environment="PRODUCTION"
+      showLabDisclosure={false}
+      onCreateAccount={noop}
+      onSignIn={noop}
+      onContinueExploring={noop}
+    />,
+  );
+
+  assert.equal(html.includes("Current environment:"), false);
+  assert.equal(html.includes("not available to Air Traffic Control"), false);
+});
+
+test("flight planner account prompt preserves guest test filing and uses safe auth-return analytics", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+
+  assert.match(source, /POST", "\/api\/flight-plans\/guest-file"/);
+  assert.match(source, /guestFlightPlanFiles >= 2/);
+  assert.match(source, /Submit Test Flight Plan - \$\{guestFlightPlanFilesRemaining\}/);
+  assert.match(source, /Guest test filing remains available in this validation environment/);
+
+  assert.match(source, /FLIGHT_PLANNER_AUTH_RETURN_KEY = "rsf_flight_planner_auth_return_v1"/);
+  assert.match(source, /FLIGHT_PLANNER_AUTH_RETURN_TTL_MS = 30 \* 60 \* 1000/);
+  assert.match(source, /account_requirement_prompt_shown/);
+  assert.match(source, /account_requirement_choice/);
+  assert.match(source, /planner_draft_restored_after_auth/);
+  assert.match(source, /intended_action: String\(parsed\?\.intendedAction \|\| "unknown"\)/);
+  assert.match(source, /restored_step: restoredStep/);
+  assert.match(source, /window\.location\.href = withReturnTo\(choice === "create_account" \? "\/register" : "\/login", "\/flight-planner"\)/);
+
+  const analyticsBlocks = Array.from(source.matchAll(/trackEvent\("(account_requirement_prompt_shown|account_requirement_choice|planner_draft_restored_after_auth)"[\s\S]*?\}\);/g))
+    .map((match) => match[0])
+    .join("\n");
+  assert.ok(analyticsBlocks.length > 0, "expected account requirement analytics");
+  for (const forbidden of ["route:", "departure:", "destination:", "tailNumber", "pilotPhone", "pilotName", "filingDraft"]) {
+    assert.equal(analyticsBlocks.includes(forbidden), false, `analytics must not include ${forbidden}`);
+  }
 });

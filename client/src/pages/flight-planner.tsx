@@ -99,6 +99,7 @@ import {
   type PlannerWorkflowStep,
   type PlannerWorkflowStepId,
 } from "@/components/flight-planner/PlannerWorkflowFooter";
+import { FlightPlannerAccountRequirementDialog } from "@/components/flight-planner/FlightPlannerAccountRequirementDialog";
 import { getSavedPlanStatusChip, groupSavedFlightPlans } from "@/components/flight-planner/savedPlanSorting";
 import { AppDownloadBadges } from "@/components/GooglePlayBadge";
 import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
@@ -1233,6 +1234,8 @@ const SCRATCH_PAD_DEFAULT: ScratchPadFields = {
 };
 
 const FLIGHT_PLANNER_DRAFT_KEY = "rsf_flight_planner_draft_v1";
+const FLIGHT_PLANNER_AUTH_RETURN_KEY = "rsf_flight_planner_auth_return_v1";
+const FLIGHT_PLANNER_AUTH_RETURN_TTL_MS = 30 * 60 * 1000;
 const FLIGHT_PLANNER_ACTIVE_TAB_KEY = "rsf_planner_active_tab";
 type FuelBurnMode = "standard" | "economy" | "performance";
 const SCRATCH_PAD_KEY = "rsf.scratchPad";
@@ -1240,6 +1243,12 @@ const SCRATCH_PAD_INK_KEY = "rsf.scratchPadInk";
 const SCRATCH_PAD_INK_LAYOUT_KEY = "rsf.scratchPadInkLayout";
 const FLIGHT_PLANNER_TABS = ["route", "weather", "navlog", "analysis", "file"] as const;
 type FlightPlannerTab = typeof FLIGHT_PLANNER_TABS[number];
+type FlightPlannerAccountAction =
+  | "save_flight_plan"
+  | "save_aircraft_profile"
+  | "sync_logbook_entry"
+  | "file_flight_plan"
+  | "account_explanation";
 
 const filingStatusLabel = (status?: string | null) => {
   switch ((status || "draft").toLowerCase()) {
@@ -1976,6 +1985,10 @@ export default function FlightPlanner() {
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [guestFlightPlanFiles, setGuestFlightPlanFiles] = useState(() => getAnonFlightPlanFileCount());
   const [activeTab, setActiveTab] = useState<FlightPlannerTab>("route");
+  const [accountRequirementPrompt, setAccountRequirementPrompt] = useState<{
+    action: FlightPlannerAccountAction;
+    restoreStep: FlightPlannerTab;
+  } | null>(null);
   const plannerWorkflowRef = useRef<HTMLDivElement | null>(null);
   const vfrRouteIfrWarningToastKeyRef = useRef("");
   const [returnToFileAfterSave, setReturnToFileAfterSave] = useState(false);
@@ -2759,6 +2772,128 @@ export default function FlightPlanner() {
     testBannerMessage: "This feature is operating in a non-operational Flight Service validation environment. Flight plans created here are not transmitted to the operational air traffic system and are not available to Air Traffic Control.",
   };
   const isFlightServiceTestMode = effectiveFlightServiceEnvironment.acknowledgementRequired;
+  const showAccountRequirementLabDisclosure =
+    effectiveFlightServiceEnvironment.environment !== "PRODUCTION" ||
+    effectiveFlightServiceEnvironment.providerTestModeEnabled ||
+    effectiveFlightServiceEnvironment.acknowledgementRequired;
+
+  const persistPlannerDraftForAuth = useCallback((intendedAction: FlightPlannerAccountAction, restoreStep: FlightPlannerTab) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      FLIGHT_PLANNER_DRAFT_KEY,
+      JSON.stringify({
+        form,
+        waypointsInput,
+        plannedStopsInput,
+        plannedFuelUplifts,
+        departureRunway,
+        selectedProfileId,
+        selectedTypeId,
+        editingPlanId: draftPlanId || editingPlanRef.current?.id || null,
+        fuelBurnMode,
+        reserveMinutes,
+        headwind,
+        plannedAltitude,
+        arrivalAuto,
+        routeSuggestion,
+        filingDraft,
+        customProfile,
+      }),
+    );
+    window.sessionStorage.setItem(
+      FLIGHT_PLANNER_AUTH_RETURN_KEY,
+      JSON.stringify({
+        version: 1,
+        intendedAction,
+        restoreStep,
+        savedAt: Date.now(),
+        expiresAt: Date.now() + FLIGHT_PLANNER_AUTH_RETURN_TTL_MS,
+      }),
+    );
+  }, [
+    arrivalAuto,
+    customProfile,
+    departureRunway,
+    draftPlanId,
+    filingDraft,
+    form,
+    fuelBurnMode,
+    headwind,
+    plannedAltitude,
+    plannedFuelUplifts,
+    plannedStopsInput,
+    reserveMinutes,
+    routeSuggestion,
+    selectedProfileId,
+    selectedTypeId,
+    waypointsInput,
+  ]);
+
+  const showAccountRequirementPrompt = useCallback((action: FlightPlannerAccountAction, restoreStep: FlightPlannerTab = activeTab) => {
+    setAccountRequirementPrompt({ action, restoreStep });
+    trackEvent("account_requirement_prompt_shown", {
+      source_action: action,
+      active_step: activeTab,
+      environment: effectiveFlightServiceEnvironment.environment,
+      guest: true,
+    });
+  }, [activeTab, effectiveFlightServiceEnvironment.environment]);
+
+  const handleAccountRequirementChoice = useCallback((choice: "create_account" | "sign_in" | "continue_exploring") => {
+    const prompt = accountRequirementPrompt;
+    if (!prompt) return;
+    trackEvent("account_requirement_choice", {
+      source_action: prompt.action,
+      active_step: activeTab,
+      choice,
+      environment: effectiveFlightServiceEnvironment.environment,
+    });
+    if (choice === "continue_exploring") {
+      setAccountRequirementPrompt(null);
+      return;
+    }
+    const restoreStep = prompt.action === "file_flight_plan" ? "file" : prompt.restoreStep;
+    persistPlannerDraftForAuth(prompt.action, restoreStep);
+    setAccountRequirementPrompt(null);
+    window.location.href = withReturnTo(choice === "create_account" ? "/register" : "/login", "/flight-planner");
+  }, [
+    accountRequirementPrompt,
+    activeTab,
+    effectiveFlightServiceEnvironment.environment,
+    persistPlannerDraftForAuth,
+  ]);
+
+  useEffect(() => {
+    if (!isAuthenticated || typeof window === "undefined") return;
+    const stored = window.sessionStorage.getItem(FLIGHT_PLANNER_AUTH_RETURN_KEY);
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored);
+      const expiresAt = Number(parsed?.expiresAt || 0);
+      if (!expiresAt || expiresAt < Date.now()) {
+        window.sessionStorage.removeItem(FLIGHT_PLANNER_AUTH_RETURN_KEY);
+        return;
+      }
+      const restoredStep = (FLIGHT_PLANNER_TABS as readonly string[]).includes(parsed?.restoreStep)
+        ? parsed.restoreStep as FlightPlannerTab
+        : "file";
+      setActiveTab(restoredStep);
+      window.sessionStorage.removeItem(FLIGHT_PLANNER_AUTH_RETURN_KEY);
+      trackEvent("planner_draft_restored_after_auth", {
+        intended_action: String(parsed?.intendedAction || "unknown"),
+        restored_step: restoredStep,
+        environment: effectiveFlightServiceEnvironment.environment,
+      });
+      toast({
+        title: "Planner restored",
+        description: restoredStep === "file"
+          ? "Review the restored plan and submit when ready. RSF did not send anything automatically."
+          : "Your planner draft is back where you left it.",
+      });
+    } catch {
+      window.sessionStorage.removeItem(FLIGHT_PLANNER_AUTH_RETURN_KEY);
+    }
+  }, [effectiveFlightServiceEnvironment.environment, isAuthenticated, toast]);
 
   const [showCertificationTestPlans, setShowCertificationTestPlans] = useState(false);
   const { data: savedPlansRaw = [], isLoading: plansLoading } = useQuery<FlightPlan[]>({
@@ -9242,6 +9377,10 @@ export default function FlightPlanner() {
             variant="outline"
             disabled={!customProfile.name || saveProfileMutation.isPending}
             onClick={() => {
+              if (isGuest) {
+                showAccountRequirementPrompt("save_aircraft_profile", "route");
+                return;
+              }
               runWithAuth("save_aircraft_profile", async () => {
                 await saveProfileActionRef.current();
               });
@@ -10719,17 +10858,39 @@ export default function FlightPlanner() {
                 {filingReadiness.blockingIssues[0] || "Resolve readiness issues before submitting."}
               </div>
             )}
+            {isGuest && (
+              <div className="rounded-md border border-[#5d6f85]/30 bg-[#18212b] px-3 py-2 text-xs text-[#C8D4E1]">
+                Guest test filing remains available in this validation environment. Create an account when you need saved plan management, provider updates, amendments, cancellation, lifecycle history, or future operational filing.
+                {" "}
+                <button
+                  type="button"
+                  className="font-semibold text-[#9CCBFF] underline-offset-4 hover:underline"
+                  onClick={() => showAccountRequirementPrompt("account_explanation", "file")}
+                >
+                  Why do I need an account?
+                </button>
+              </div>
+            )}
             {isGuest ? (
               guestFlightPlanFileLimitReached ? (
                 <div className={cn(plannerSubpanelMutedClass, "border-dashed p-4 text-sm text-[#A9BBCD]")}>
                   <div className="font-semibold text-[#F5F8FC]">Guest filing limit reached</div>
                   <div className="mt-1">Create or sign in to an RSF account to save plans, keep filing, and receive provider updates.</div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Button asChild size="sm">
-                      <Link href={withReturnTo("/register", getCurrentReturnTo())}>Create account</Link>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => showAccountRequirementPrompt("file_flight_plan", "file")}
+                    >
+                      Create account
                     </Button>
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={withReturnTo("/login", getCurrentReturnTo())}>Sign in</Link>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => showAccountRequirementPrompt("file_flight_plan", "file")}
+                    >
+                      Sign in
                     </Button>
                   </div>
                 </div>
@@ -10798,9 +10959,15 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => runWithAuth("save_flight_plan", async () => {
-                    await saveCurrentPlan();
-                  })}
+                  onClick={() => {
+                    if (isGuest) {
+                      showAccountRequirementPrompt("save_flight_plan", "file");
+                      return;
+                    }
+                    runWithAuth("save_flight_plan", async () => {
+                      await saveCurrentPlan();
+                    });
+                  }}
                   disabled={createPlanMutation.isPending || updatePlanMutation.isPending}
                 >
                   {editingPlan ? "Save Changes" : "Save Draft"}
@@ -10943,6 +11110,8 @@ export default function FlightPlanner() {
               onClick={() => {
                 if (isGuest) {
                   trackEvent("cta_click", { label: "planner_save_requires_auth", target: "/register" });
+                  showAccountRequirementPrompt("save_flight_plan", activeTab);
+                  return;
                 }
                 runWithAuth("save_flight_plan", async () => {
                   await saveCurrentPlan();
@@ -11355,6 +11524,8 @@ export default function FlightPlanner() {
             onClick={() => {
               if (isGuest) {
                 trackEvent("cta_click", { label: "planner_logbook_requires_auth", target: "/register" });
+                showAccountRequirementPrompt("sync_logbook_entry", "file");
+                return;
               } else if (isFree) {
                 trackEvent("cta_click", { label: "planner_logbook_upgrade_interest", target: "/logbook/pro" });
               }
@@ -12417,6 +12588,21 @@ export default function FlightPlanner() {
         </div>
       )}
     </PageShell>
+    <FlightPlannerAccountRequirementDialog
+      open={Boolean(accountRequirementPrompt)}
+      sourceAction={accountRequirementPrompt?.action ?? "account_explanation"}
+      activeStep={accountRequirementPrompt?.restoreStep ?? activeTab}
+      environment={effectiveFlightServiceEnvironment.environment}
+      showLabDisclosure={showAccountRequirementLabDisclosure}
+      onOpenChange={(open) => {
+        if (!open) {
+          setAccountRequirementPrompt(null);
+        }
+      }}
+      onCreateAccount={() => handleAccountRequirementChoice("create_account")}
+      onSignIn={() => handleAccountRequirementChoice("sign_in")}
+      onContinueExploring={() => handleAccountRequirementChoice("continue_exploring")}
+    />
     <Dialog
       open={testAcknowledgementOpen}
       onOpenChange={(open) => {

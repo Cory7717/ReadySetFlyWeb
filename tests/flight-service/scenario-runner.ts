@@ -106,6 +106,12 @@ const clonePlan = (plan: FlightPlan): FlightPlan => ({
 }) as FlightPlan;
 
 const scenarioPlan = (scenario: FlightServiceScenario) => filingPlan({
+  plannedDepartureAt: new Date("2026-08-15T15:00:00.000Z"),
+  plannedArrivalAt: new Date("2026-08-15T16:00:00.000Z"),
+  plannerState: {
+    departureTimeZone: "America/Chicago",
+    userDisplayDepartureTimeLocal: "2026-08-15T10:00",
+  },
   ...scenario.initialPlan,
   ...scenario.savedPlan,
 }) as FlightPlan;

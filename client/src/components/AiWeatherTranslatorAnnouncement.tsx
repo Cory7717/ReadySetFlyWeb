@@ -118,7 +118,7 @@ export function AiWeatherTranslatorAnnouncement() {
             AI-assisted translation is now available for METAR, TAF, and NOTAM briefings
           </DialogTitle>
           <DialogDescription className="text-sm leading-relaxed">
-            RSF now offers a professional plain-English assist layer inside Current Conditions and Airport Briefing.
+            RSF now offers a professional plain-English assist layer inside Current Conditions and airport weather context.
             Use it to translate raw METARs, TAFs, and NOTAMs faster, then verify with official sources before flight.
           </DialogDescription>
         </DialogHeader>

@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
+import { getCurrentReturnTo, withReturnTo } from "@/lib/returnTo";
 import { pixelEvent } from "@/lib/pixel";
 import { resolveImageUrl } from "@/lib/images";
 import { Link } from "wouter";
@@ -1002,7 +1003,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
         <AlertDialogFooter>
           <AlertDialogCancel className={marketplaceSecondaryButtonClass} data-testid="button-cancel-login">Continue Browsing</AlertDialogCancel>
           <AlertDialogAction
-            onClick={() => window.location.href = apiUrl('/api/auth/google')}
+            onClick={() => window.location.href = apiUrl(withReturnTo("/api/auth/google", getCurrentReturnTo()))}
             data-testid="button-go-login"
           >
             Sign In / Create Account

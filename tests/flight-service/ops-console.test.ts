@@ -36,6 +36,8 @@ test("Super admin search projection supports tail and provider plan review field
     tailNumber: "N987RS",
     filingProviderPlanId: "339842058_322259_285",
     filingStatus: "filed",
+    plannedDepartureAt: new Date("2026-08-15T15:00:00.000Z"),
+    plannedArrivalAt: new Date("2026-08-15T16:00:00.000Z"),
     filingLastProviderSyncAt: new Date("2026-07-09T14:00:00.000Z"),
   });
 

@@ -45,6 +45,7 @@ interface LandingCurrentConditionsProps {
   notamsError: boolean;
   conditionsTitle: string;
   weatherUpdatedAt: string | null;
+  weatherAvailabilityMessage?: string | null;
   flightCategory: { category: string; color: string };
   runwayInUseDisplay: string | null;
   atisInfo: string | null;
@@ -80,6 +81,7 @@ export function LandingCurrentConditions({
   notamsError,
   conditionsTitle,
   weatherUpdatedAt,
+  weatherAvailabilityMessage,
   flightCategory,
   runwayInUseDisplay,
   atisInfo,
@@ -238,6 +240,14 @@ export function LandingCurrentConditions({
                     : "No additional precipitation, convective, or runway-surface hazards are currently flagged from the METAR/TAF/NOTAM summary."}
                 </AlertDescription>
               </Alert>
+              {weatherAvailabilityMessage && (
+                <Alert className="border-[#365478] bg-[#10253b]">
+                  <AlertTriangle className="h-4 w-4 text-[#8FC7FF]" />
+                  <AlertDescription className="text-xs text-[#D9E8F8] sm:text-sm">
+                    {weatherAvailabilityMessage}
+                  </AlertDescription>
+                </Alert>
+              )}
               {weather?.metar ? (
                 <div>
                   <Label className="text-sm font-semibold text-[#DCE6F2]">METAR</Label>
@@ -305,8 +315,8 @@ export function LandingCurrentConditions({
 
           <Card id="airport-briefing" className="border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(15,23,35,0.96))] text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.76)]">
             <CardHeader>
-              <CardTitle className="text-[#F1F5FA]">Airport Briefing</CardTitle>
-              <CardDescription className="text-[#7A9BB8]">Runway guidance and live NOTAMs for {searchIcao}</CardDescription>
+              <CardTitle className="text-[#F1F5FA]">Airport Weather & NOTAM Context</CardTitle>
+              <CardDescription className="text-[#7A9BB8]">Runway guidance and current NOTAM context for {searchIcao}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">

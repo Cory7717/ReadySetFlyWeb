@@ -17,6 +17,7 @@ import { ThemeToggle } from "./theme-toggle";
 import { useAuth } from "@/hooks/useAuth";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { getCurrentReturnTo, withReturnTo } from "@/lib/returnTo";
 import { RSF_TOOLS } from "@/lib/tool-registry";
 import { WORKFLOW_NAV_GROUPS, findWorkflowGroupForPath, type WorkflowNavItem } from "@/lib/workflow-nav";
 import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
@@ -282,7 +283,7 @@ export function Header() {
             </Button>
 
             {!user ? (
-              <Link href="/login">
+              <Link href={withReturnTo("/login", getCurrentReturnTo())}>
                 <Button variant="outline" data-testid="button-login">Sign In</Button>
               </Link>
             ) : (

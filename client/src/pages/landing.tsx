@@ -35,6 +35,15 @@ interface WeatherData {
   taf: any;
   timestamp: number;
   cached: boolean;
+  weatherSource?: "requested_airport" | "nearby_station";
+  requestedIcao?: string;
+  reportingStation?: {
+    icao: string;
+    name?: string | null;
+    distanceNm?: number | null;
+  } | null;
+  unavailable?: boolean;
+  message?: string;
 }
 
 interface AirportSearchResult {
@@ -357,6 +366,13 @@ export default function Landing() {
     : null;
   const metarDisplay = weather?.metar?.rawOb ?? "METAR feed pending";
   const tafDisplay = weather?.taf?.rawTAF ?? "No TAF forecast available";
+  const weatherAvailabilityMessage = weather?.message || (
+    weather?.unavailable
+      ? `No METAR or TAF is currently available for ${searchIcao}.`
+      : weather?.weatherSource === "nearby_station" && weather.reportingStation?.icao
+        ? `No direct METAR/TAF is currently available for ${searchIcao}. Showing nearby reporting station ${weather.reportingStation.icao}${weather.reportingStation.distanceNm != null ? ` (${weather.reportingStation.distanceNm} NM away)` : ""}.`
+        : null
+  );
   const runwayHeadline = runwayBriefing?.advisory?.runway || runwayInUseDisplay || "--";
   const weatherStatusTone =
     flightCategory.category === "VFR"
@@ -1045,6 +1061,14 @@ export default function Landing() {
                 </Badge>
               ))}
             </div>
+            {weatherAvailabilityMessage && (
+              <Alert className="border-[#5c74a3]/40 bg-[#141b28] text-[#cfe0f7]">
+                <AlertTriangle className="h-4 w-4 text-[#9fc0ff]" />
+                <AlertDescription className="text-xs text-[#cfe0f7]">
+                  {weatherAvailabilityMessage}
+                </AlertDescription>
+              </Alert>
+            )}
 
             {weather?.metar ? (
               <div>
@@ -2468,7 +2492,7 @@ export default function Landing() {
           {
             id: "conditions",
             title: "Current Conditions",
-            description: "Weather, runway guidance, and NOTAM briefing",
+            description: "Weather, runway guidance, and NOTAM context",
           },
           {
             id: "cfi",
@@ -2511,6 +2535,7 @@ export default function Landing() {
         notamsError={notamsError}
         conditionsTitle={conditionsTitle}
         weatherUpdatedAt={weatherUpdatedAt}
+        weatherAvailabilityMessage={weatherAvailabilityMessage}
         flightCategory={flightCategory}
         runwayInUseDisplay={runwayInUseDisplay}
         atisInfo={atisInfo}

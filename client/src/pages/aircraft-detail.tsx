@@ -29,6 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { getCurrentReturnTo, withReturnTo } from "@/lib/returnTo";
 
 export default function AircraftDetail() {
   const [, params] = useRoute("/aircraft/:id");
@@ -554,7 +555,7 @@ export default function AircraftDetail() {
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-login">Continue Browsing</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => window.location.href = apiUrl('/api/auth/google')}
+              onClick={() => window.location.href = apiUrl(withReturnTo("/api/auth/google", getCurrentReturnTo()))}
               data-testid="button-go-login"
             >
               Sign In / Create Account

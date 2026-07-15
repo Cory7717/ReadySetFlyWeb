@@ -27,6 +27,15 @@ interface WeatherData {
   taf: any;
   timestamp: number;
   cached: boolean;
+  weatherSource?: "requested_airport" | "nearby_station";
+  requestedIcao?: string;
+  reportingStation?: {
+    icao: string;
+    name?: string | null;
+    distanceNm?: number | null;
+  } | null;
+  unavailable?: boolean;
+  message?: string;
 }
 
 interface AirportSearchResult {
@@ -418,6 +427,13 @@ export default function PilotTools() {
   const conditionsTitle = `${airportTitleBase}${
     airportDescriptor ? ` - ${airportDescriptor}` : ""
   } - Current Conditions`;
+  const weatherAvailabilityMessage = weather?.message || (
+    weather?.unavailable
+      ? `No METAR or TAF is currently available for ${searchIcao}.`
+      : weather?.weatherSource === "nearby_station" && weather.reportingStation?.icao
+        ? `No direct METAR/TAF is currently available for ${searchIcao}. Showing nearby reporting station ${weather.reportingStation.icao}${weather.reportingStation.distanceNm != null ? ` (${weather.reportingStation.distanceNm} NM away)` : ""}.`
+        : null
+  );
   const weatherHazards = useMemo(
     () => parseWeatherHazards(weather?.metar, weather?.taf, notams?.notams ?? []),
     [weather?.metar, weather?.taf, notams?.notams]
@@ -652,13 +668,13 @@ export default function PilotTools() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
-              Airport Briefing (NOTAMs + Runway)
+              Airport Weather & NOTAM Context
             </CardTitle>
-            <CardDescription>Live NOTAMs and runway advisory for any airport.</CardDescription>
+            <CardDescription>Current NOTAM context and runway advisory for any airport.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
             <Button asChild className="rsf-metal-button-primary">
-              <a href="#airport-briefing">Open Airport Briefing</a>
+              <a href="#airport-briefing">Open Airport Context</a>
             </Button>
             <Badge variant="outline">FAA SWIM</Badge>
           </CardContent>
@@ -1194,6 +1210,14 @@ export default function PilotTools() {
                       : "No additional precipitation, convective, gust, or runway-surface hazards are currently flagged from the METAR/TAF/NOTAM summary."}
                   </AlertDescription>
                 </Alert>
+                {weatherAvailabilityMessage && (
+                  <Alert className="border-[#35516e]/40 bg-[#102236] text-[#8FC7FF]">
+                    <AlertTriangle className="h-4 w-4 text-[#8FC7FF]" />
+                    <AlertDescription className="text-xs text-[#CFE4FA]">
+                      {weatherAvailabilityMessage}
+                    </AlertDescription>
+                  </Alert>
+                )}
                 {weather.metar ? (
                   <>
                     <div>
@@ -1265,13 +1289,13 @@ export default function PilotTools() {
             <PressDemoSpotlight
               active={pressDemo.isActive("airport-briefing")}
               stepNumber={(pressDemo.getStep("airport-briefing")?.index ?? 0) + 1}
-              title={pressDemo.getStep("airport-briefing")?.title ?? "Airport Briefing"}
+              title={pressDemo.getStep("airport-briefing")?.title ?? "Airport Context"}
               body={pressDemo.getStep("airport-briefing")?.body ?? ""}
             >
             <Card id="airport-briefing" className="rsf-card-shell">
               <CardHeader>
-                <CardTitle>Airport Briefing</CardTitle>
-                <CardDescription>Runway guidance and live NOTAMs for {weather.icao}</CardDescription>
+                <CardTitle>Airport Weather & NOTAM Context</CardTitle>
+                <CardDescription>Runway guidance and current NOTAM context for {weather.icao}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">

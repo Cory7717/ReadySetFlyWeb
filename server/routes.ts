@@ -3677,6 +3677,97 @@ function buildIcaoCandidates(value: string) {
   return [normalized];
 }
 
+type AviationWeatherPayload = {
+  icao: string;
+  metar: any;
+  taf: any;
+  timestamp: number;
+  cached: boolean;
+  weatherSource?: "requested_airport" | "nearby_station";
+  requestedIcao?: string;
+  reportingStation?: {
+    icao: string;
+    name: string | null;
+    distanceNm: number | null;
+  } | null;
+  unavailable?: boolean;
+  message?: string;
+};
+
+async function fetchAviationWeatherCandidate(candidate: string, timeoutMs = 6000) {
+  const metarUrl = `https://aviationweather.gov/api/data/metar?ids=${candidate}&format=json`;
+  const tafUrl = `https://aviationweather.gov/api/data/taf?ids=${candidate}&format=json`;
+
+  const [metarRes, tafRes] = await Promise.all([
+    fetchWithTimeout(metarUrl, { headers: { "User-Agent": "ReadySetFly/1.0" } }, timeoutMs).catch(
+      () => null
+    ),
+    fetchWithTimeout(tafUrl, { headers: { "User-Agent": "ReadySetFly/1.0" } }, timeoutMs).catch(
+      () => null
+    ),
+  ]);
+
+  const parseWeatherPayload = async (response: Response | null, label: string) => {
+    if (!response) {
+      return { data: null, error: `${label} timeout` };
+    }
+    if (!response.ok) {
+      return { data: null, error: `${label} unavailable (${response.status})` };
+    }
+    const body = await response.text();
+    const trimmed = body.trim();
+    if (!trimmed) {
+      return { data: null, error: `${label} empty response` };
+    }
+    if (trimmed.startsWith("<")) {
+      return { data: null, error: `${label} unexpected response` };
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      const data = Array.isArray(parsed) ? parsed[0] ?? null : parsed ?? null;
+      return { data, error: null };
+    } catch (e) {
+      logDebug(`${label} parse error for ${candidate}:`, e);
+      return { data: null, error: `Failed to parse ${label} response` };
+    }
+  };
+
+  const metarPayload = await parseWeatherPayload(metarRes, "METAR");
+  const tafPayload = await parseWeatherPayload(tafRes, "TAF");
+  return {
+    metar: metarPayload.data,
+    taf: tafPayload.data,
+    metarError: metarPayload.error,
+    tafError: tafPayload.error,
+  };
+}
+
+async function findNearbyWeatherStations(requestedIcao: string, candidates: string[]) {
+  const stations = await loadStationCache().catch(() => [] as AirportSearchResult[]);
+  const referenceMap = await loadAirportReferenceCache().catch(() => null);
+  const airportReference =
+    candidates
+      .map((candidate) => stations.find((station) => station.icao === candidate) || referenceMap?.get(candidate))
+      .find(Boolean) || null;
+  const lat = Number(airportReference?.lat);
+  const lon = Number(airportReference?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+
+  const excluded = new Set([requestedIcao, ...candidates]);
+  return stations
+    .map((station) => ({
+      ...station,
+      distanceNm: haversineNm(lat, lon, Number(station.lat), Number(station.lon)),
+    }))
+    .filter((station) =>
+      !excluded.has(station.icao) &&
+      Number.isFinite(station.distanceNm) &&
+      station.distanceNm <= 40
+    )
+    .sort((a, b) => a.distanceNm - b.distanceNm)
+    .slice(0, 3);
+}
+
 function normalizeSearch(value: string) {
   return value.trim().toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -16476,66 +16567,27 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           return res.json({ ...cached.data, cached: true });
         }
 
-        // Fetch METAR and TAF from Aviation Weather Center API
-        const metarUrl = `https://aviationweather.gov/api/data/metar?ids=${candidate}&format=json`;
-        const tafUrl = `https://aviationweather.gov/api/data/taf?ids=${candidate}&format=json`;
-
-        const [metarRes, tafRes] = await Promise.all([
-          fetchWithTimeout(metarUrl, { headers: { "User-Agent": "ReadySetFly/1.0" } }, 6000).catch(
-            () => null
-          ),
-          fetchWithTimeout(tafUrl, { headers: { "User-Agent": "ReadySetFly/1.0" } }, 6000).catch(
-            () => null
-          ),
-        ]);
-
-        let metar = null;
-        let taf = null;
-        let metarError = null;
-        let tafError = null;
-
-        const parseWeatherPayload = async (response: Response | null, label: string) => {
-          if (!response) {
-            return { data: null, error: `${label} timeout` };
-          }
-          if (!response.ok) {
-            return { data: null, error: `${label} unavailable (${response.status})` };
-          }
-          const body = await response.text();
-          const trimmed = body.trim();
-          if (!trimmed) {
-            return { data: null, error: `${label} empty response` };
-          }
-          if (trimmed.startsWith("<")) {
-            return { data: null, error: `${label} unexpected response` };
-          }
-          try {
-            const parsed = JSON.parse(trimmed);
-            const data = Array.isArray(parsed) ? parsed[0] ?? null : parsed ?? null;
-            return { data, error: null };
-          } catch (e) {
-            logDebug(`${label} parse error for ${candidate}:`, e);
-            return { data: null, error: `Failed to parse ${label} response` };
-          }
-        };
-
-        const metarPayload = await parseWeatherPayload(metarRes, "METAR");
-        const tafPayload = await parseWeatherPayload(tafRes, "TAF");
-        metar = metarPayload.data;
-        taf = tafPayload.data;
-        metarError = metarPayload.error;
-        tafError = tafPayload.error;
+        const { metar, taf, metarError, tafError } = await fetchAviationWeatherCandidate(candidate);
 
         if (!metar && !taf && metarError && tafError) {
           continue;
         }
 
-        const responseData = {
+        const responseData: AviationWeatherPayload = {
           icao: candidate,
           metar,
           taf,
           timestamp: now,
-          cached: false
+          cached: false,
+          weatherSource: "requested_airport",
+          requestedIcao,
+          reportingStation: candidate === requestedIcao
+            ? null
+            : {
+                icao: candidate,
+                name: null,
+                distanceNm: null,
+              },
         };
 
         weatherCache.set(candidate, { data: responseData, timestamp: now });
@@ -16553,15 +16605,66 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.json(responseData);
       }
 
+      const nearbyStations = await findNearbyWeatherStations(requestedIcao, candidates);
+      const nearbyAttempts = await Promise.all(
+        nearbyStations.map(async (station) => {
+          const cached = weatherCache.get(station.icao);
+          if (cached && (now - cached.timestamp) < WEATHER_CACHE_TTL) {
+            return { station, stationData: cached.data as AviationWeatherPayload, cached: true };
+          }
+
+          const { metar, taf, metarError, tafError } = await fetchAviationWeatherCandidate(station.icao, 4500);
+          if (!metar && !taf && metarError && tafError) {
+            return null;
+          }
+
+          const stationData: AviationWeatherPayload = {
+            icao: station.icao,
+            metar,
+            taf,
+            timestamp: now,
+            cached: false,
+            weatherSource: "requested_airport",
+            requestedIcao: station.icao,
+            reportingStation: null,
+          };
+          weatherCache.set(station.icao, { data: stationData, timestamp: now });
+          return { station, stationData, cached: false };
+        })
+      );
+
+      for (const attempt of nearbyAttempts) {
+        if (!attempt) continue;
+        const { station, stationData, cached } = attempt;
+        const fallbackData: AviationWeatherPayload = {
+          ...stationData,
+          icao: requestedIcao,
+          cached,
+          weatherSource: "nearby_station",
+          requestedIcao,
+          reportingStation: {
+            icao: station.icao,
+            name: station.name || null,
+            distanceNm: Number(station.distanceNm.toFixed(1)),
+          },
+          message: `No direct METAR/TAF was available for ${requestedIcao}. Showing nearby reporting station ${station.icao}.`,
+        };
+        weatherCache.set(requestedIcao, { data: fallbackData, timestamp: now });
+        return res.json(fallbackData);
+      }
+
       return res.json({
         icao: requestedIcao,
         metar: null,
         taf: null,
         timestamp: now,
         cached: false,
+        weatherSource: "requested_airport",
+        requestedIcao,
+        reportingStation: null,
         unavailable: true,
-        message: `No weather data available for ${requestedIcao}. This airport may not report METAR/TAF data.`,
-      });
+        message: `No weather data available for ${requestedIcao}. This airport may not report METAR/TAF data, and no nearby reporting station responded.`,
+      } satisfies AviationWeatherPayload);
     } catch (error) {
       console.error("Aviation weather fetch error:", error);
       res.status(500).json({ error: "Failed to fetch aviation weather data" });

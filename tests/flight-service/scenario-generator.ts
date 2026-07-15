@@ -181,15 +181,15 @@ export const seanRegressionScenarios: FlightServiceScenario[] = [
     name: "Sean - Changed date is used immediately",
     description: "Changed visible date is used immediately.",
     savedPlan: {
-      plannedDepartureAt: new Date("2026-07-15T15:00:00.000Z"),
-      plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-15T10:00" },
+      plannedDepartureAt: new Date("2026-08-15T15:00:00.000Z"),
+      plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-08-15T10:00" },
     },
     visibleForm: {
-      plannedDepartureAt: new Date("2026-07-16T15:00:00.000Z"),
-      plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-07-16T10:00" },
+      plannedDepartureAt: new Date("2026-08-16T15:00:00.000Z"),
+      plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-08-16T10:00" },
     },
     userActions: ["edit", "file"],
-    expectedPayload: { departureInstant: "2026-07-16T15:00:00.000Z" },
+    expectedPayload: { departureInstant: "2026-08-16T15:00:00.000Z" },
     providerCallShouldBeBlocked: false,
     expectedValidationResult: "valid",
     seanFeedbackId: "SF-09",
@@ -292,7 +292,7 @@ export const coreCertificationScenarios: FlightServiceScenario[] = [
       filingAlternateName: "Rutherford Ranch Airport",
       plannerState: {
         departureTimeZone: "America/Chicago",
-        userDisplayDepartureTimeLocal: "2026-07-02T10:00",
+        userDisplayDepartureTimeLocal: "2026-08-15T10:00",
         planningReferenceAlternateAirport: "KSDL",
         actualAlternateLocationMode: "identifier",
         actualAlternateLocation: "85TX",
@@ -312,7 +312,7 @@ export const coreCertificationScenarios: FlightServiceScenario[] = [
       filingDepartureName: "Rutherford Ranch Airport",
       plannerState: {
         departureTimeZone: "America/Chicago",
-        userDisplayDepartureTimeLocal: "2026-07-02T10:00",
+        userDisplayDepartureTimeLocal: "2026-08-15T10:00",
         planningReferenceDepartureAirport: "KDWH",
         actualDepartureLocationMode: "identifier",
         actualDepartureLocation: "85TX",
@@ -332,7 +332,7 @@ export const coreCertificationScenarios: FlightServiceScenario[] = [
       filingDestinationName: "Rutherford Ranch Airport",
       plannerState: {
         departureTimeZone: "America/Chicago",
-        userDisplayDepartureTimeLocal: "2026-07-02T10:00",
+        userDisplayDepartureTimeLocal: "2026-08-15T10:00",
         planningReferenceDestinationAirport: "KSDL",
         actualDestinationLocationMode: "identifier",
         actualDestinationLocation: "85TX",
@@ -412,7 +412,7 @@ export const generateRandomScenarios = ({ seed = 20260701, count = 50 }: Scenari
         filingRemarks: rng() < 0.5 ? "CERTIFICATION TEST" : "SUPPLEMENTAL TEST",
         plannerState: {
           departureTimeZone: scenarioDepartureTimeZone,
-          userDisplayDepartureTimeLocal: "2026-07-02T10:00",
+          userDisplayDepartureTimeLocal: "2026-08-15T10:00",
           ...zzzzPlannerState,
         },
         ...zzzzNames,

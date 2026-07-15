@@ -8360,6 +8360,11 @@ export default function FlightPlanner() {
               <p className="text-xs text-muted-foreground">
                 Optional planning aids only. Add ICAO codes separated by space or comma, or use the helper suggestions below and edit as needed.
               </p>
+              {!isAuthenticated && planningDepartureCode && planningDestinationCode && (
+                <div className={cn("rounded-md border border-[#35516e]/40 bg-[#102236] px-3 py-2 text-xs text-[#CFE4FA]")}>
+                  Sign in to calculate RSF route-assist waypoints for this city pair. You can still type a custom filed route below or choose Direct.
+                </div>
+              )}
               {autoSuggestedIntermediates.length > 0 && (
                 <p className="text-xs text-muted-foreground">
                   RSF is previewing the helper route on the map and in ETE until you enter custom waypoints, planned stops, or a filed airport route.
@@ -8724,6 +8729,19 @@ export default function FlightPlanner() {
                 className="min-h-[88px]"
                 readOnly={routeMode === "direct"}
               />
+              {routeMode === "direct" && (
+                <div className={cn("flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#35516e]/40 bg-[#102236] px-3 py-2 text-xs text-[#CFE4FA]")}>
+                  <span>Direct mode files this route as DCT, so the route text box is locked.</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setRouteMode("manual")}
+                  >
+                    Switch to Route Builder
+                  </Button>
+                </div>
+              )}
               <div className={cn(plannerSubpanelMutedClass, "border-dashed px-3 py-2 text-xs")}>
                 Planning preview only: <span className="font-medium text-[#F5F8FC]">{routePreviewFull || "-"}</span>
               </div>

@@ -81,10 +81,11 @@ test("provider route removes endpoint airports and orphaned DCT only", () => {
   }
 });
 
-test("malformed route input does not count as valid", () => {
+test("direct route validates after duplicate DCT normalization", () => {
   const normalized = normalizeRouteForProvider("DCT DCT");
   assert.equal(normalized.normalizedRoute, "DCT");
-  assert.equal(normalized.hasValidToken, false);
+  assert.equal(normalized.hasValidToken, true);
+  assert.equal(normalized.notes.some((note) => note.includes("Route must contain")), false);
 });
 
 test("provider route change diff is detected", () => {

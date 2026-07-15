@@ -845,3 +845,43 @@ test("flight planner keeps schedule fields above airports and alternate below ru
   assert.match(source, /xl:grid-cols-5/);
   assert.match(source, /Override winds/);
 });
+
+test("flight planner gates downstream alternate weather on resolved airport identity", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /const \[alternateResolved, setAlternateResolved\] = useState\(""\)/);
+  assert.match(source, /airportSearchResultMatchesIdentifier/);
+  assert.match(source, /const planningAlternateCode = filedAlternateCode === "ZZZZ"[\s\S]*: alternateResolved\.trim\(\)\.toUpperCase\(\)/);
+  assert.match(source, /planner_airport_identifier_resolution[\s\S]*field: "alternate"/);
+});
+
+test("flight planner exposes route options with preview before apply", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /IFR Route Options/);
+  assert.match(source, /Provider Recommended Route/);
+  assert.match(source, /not a current ATC clearance/);
+  assert.match(source, /const \[routeOptionPreview, setRouteOptionPreview\]/);
+  assert.match(source, /Route option preview/);
+  assert.match(source, /Apply previewed route/);
+  assert.match(source, /setRouteOptionPreview\(route\)/);
+});
+
+test("flight planner shows honest procedure availability and alternate fuel breakdown", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /Departure Procedure \(SID\) \/ Arrival Procedure \(STAR\)/);
+  assert.match(source, /Structured SID\/STAR selection is not available/);
+  assert.match(source, /Destination to alternate/);
+  assert.match(source, /Alternate fuel unavailable/);
+  assert.match(source, /totalFuelIncludesAlternate/);
+  assert.match(source, /Awaiting alternate/);
+  assert.match(source, /Planning estimate only/);
+});
+
+test("flight planner weather briefing labels route roles and partial data honestly", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /weatherRoleLabel/);
+  assert.match(source, /Departure weather/);
+  assert.match(source, /Destination weather/);
+  assert.match(source, /Alternate weather/);
+  assert.match(source, /Advisory planning context, not a complete official briefing/);
+  assert.match(source, /Missing METAR\/TAF data is shown as unavailable, not assumed VFR/);
+});

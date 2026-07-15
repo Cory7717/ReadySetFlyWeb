@@ -302,7 +302,8 @@ export const normalizeRouteForProviderWithContext = (
     !(token.token === "DCT" && arr[index - 1]?.token === "DCT")
   );
   const providerRoute = normalizeRouteText(routeTokens.map((token) => token.token).join(" ")) || null;
-  const hasValidToken = rawTokens.some((token) => hasMeaningfulRouteToken(token.kind));
+  const isDirectOnlyRoute = rawTokens.length > 0 && rawTokens.every((token) => token.kind === "direct");
+  const hasValidToken = isDirectOnlyRoute || rawTokens.some((token) => hasMeaningfulRouteToken(token.kind));
   if (!hasValidToken) {
     notes.push("Route must contain at least one recognized airport, fix, navaid, airway, or procedure token.");
   }

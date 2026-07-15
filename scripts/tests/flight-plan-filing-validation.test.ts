@@ -267,6 +267,31 @@ test("airport timezone resolver covers required filing timezones", () => {
   }
 });
 
+test("airport timezone resolver uses coordinates for recognized airports without explicit timezone metadata", () => {
+  const resolution = resolveDepartureAirportTimezone({
+    departureAirport: {
+      icao: "KUGN",
+      lat: 42.4222,
+      lon: -87.8679,
+    },
+  });
+  assert.equal(resolution.timezone, "America/Chicago");
+  assert.equal(resolution.source, "coordinates");
+  assert.equal(zonedLocalDateTimeToUtcIso("2026-07-15T10:00", resolution.timezone), "2026-07-15T15:00:00.000Z");
+});
+
+test("airport timezone resolver uses standard-time UTC conversion from coordinates", () => {
+  const resolution = resolveDepartureAirportTimezone({
+    departureAirport: {
+      icao: "KUGN",
+      lat: 42.4222,
+      lon: -87.8679,
+    },
+  });
+  assert.equal(resolution.timezone, "America/Chicago");
+  assert.equal(zonedLocalDateTimeToUtcIso("2026-01-15T10:00", resolution.timezone), "2026-01-15T16:00:00.000Z");
+});
+
 test("KPBI and KLAS ignore stale saved Chicago timezone in reopened plans", () => {
   const cases = [
     ["KPBI", "2026-07-15T10:00", "2026-07-15T14:00:00.000Z"],
@@ -438,7 +463,7 @@ test("filing validation rejects normal airports whose timezone cannot be resolve
 
   assert.equal(result.ready, false);
   assert.equal(getProviderDepartureInstantForPlan(plan), null);
-  assert.ok(result.errors.includes("Departure airport timezone could not be determined from airport metadata. Confirm the departure airport or select a planning-reference airport for ZZZZ before filing."));
+  assert.ok(result.errors.includes("Departure airport timezone could not be determined from airport metadata. Confirm the departure airport selection before filing."));
 });
 
 test("ZZZZ airports require actual FAA identifiers or lat/long locations", () => {

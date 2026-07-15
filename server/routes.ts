@@ -24273,7 +24273,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!packet.equipment) {
         addWarning("Aircraft Profile", "equipmentCode", "Equipment code is blank. Verify equipment capability before filing.");
       }
-      if (packet.route && String(packet.route).trim().toUpperCase() !== "DCT" && !routeNormalization.hasValidToken) {
+      if (packet.route && String(routeNormalization.normalizedRoute || "").trim().toUpperCase() !== "DCT" && !routeNormalization.hasValidToken) {
         addError("Flight Plan", "route", "Route must contain at least one valid airport, fix, navaid, airway, or procedure token.");
       }
       if (errors.length > 0) {

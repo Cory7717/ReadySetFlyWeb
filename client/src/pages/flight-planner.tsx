@@ -196,6 +196,20 @@ const buildPlannerIcaoCandidates = (value: string) => {
   return Array.from(new Set(candidates.filter(Boolean)));
 };
 
+const airportSearchResultMatchesIdentifier = (airport: any, value: string) => {
+  const candidates = new Set(buildPlannerIcaoCandidates(value));
+  return [
+    airport?.icao,
+    airport?.displayIdentifier,
+    airport?.ident,
+    airport?.gpsCode,
+    airport?.localCode,
+    airport?.iataCode,
+  ]
+    .map((entry) => String(entry || "").trim().toUpperCase())
+    .some((entry) => candidates.has(entry));
+};
+
 const isConfirmedAirportRoutePoint = (point: { ident?: string | null; kind?: string | null } | null | undefined) =>
   String(point?.kind || "").toLowerCase() === "airport" && ICAO_REGEX.test(String(point?.ident || "").trim().toUpperCase());
 
@@ -2069,6 +2083,7 @@ export default function FlightPlanner() {
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
   const [routeMode, setRouteMode] = useState<"auto" | "direct" | "manual">("direct");
+  const [routeOptionPreview, setRouteOptionPreview] = useState<string | null>(null);
   const [mapStyle, setMapStyle] = useState<RsfPlannerMapStyle>("sectional");
   const [mapRenderVersion, setMapRenderVersion] = useState(0);
   const [airportLabelMode, setAirportLabelMode] = useState<"icao" | "full" | "markers">("icao");
@@ -2179,11 +2194,13 @@ export default function FlightPlanner() {
   const [destinationSearchActive, setDestinationSearchActive] = useState(false);
   const [departureResolved, setDepartureResolved] = useState("");
   const [destinationResolved, setDestinationResolved] = useState("");
+  const [alternateResolved, setAlternateResolved] = useState("");
   const [tfrCorridorNm, setTfrCorridorNm] = useState("10");
   const [showTfrOverlay, setShowTfrOverlay] = useState(true);
   const [selectedTfrFeature, setSelectedTfrFeature] = useState<any | null>(null);
   const departureLookupRef = useRef<{ value: string; ok: boolean } | null>(null);
   const destinationLookupRef = useRef<{ value: string; ok: boolean } | null>(null);
+  const alternateLookupRef = useRef<{ value: string; ok: boolean } | null>(null);
   const departureSelectedRef = useRef<string | null>(null);
   const destinationSelectedRef = useRef<string | null>(null);
   const departureRunwayAutoAirportRef = useRef<string | null>(null);
@@ -2436,7 +2453,7 @@ export default function FlightPlanner() {
     if (departureSelectedRef.current && departureSelectedRef.current !== value) {
       departureSelectedRef.current = null;
     }
-    const exact = departureSuggestions.find((airport) => airport.icao?.toUpperCase() === value);
+    const exact = departureSuggestions.find((airport) => airportSearchResultMatchesIdentifier(airport, value));
     if (exact) {
       setDepartureResolved(exact.icao.toUpperCase());
       return;
@@ -2465,7 +2482,7 @@ export default function FlightPlanner() {
         });
         if (!active) return;
         const data = res.ok ? await res.json().catch(() => []) : [];
-        const ok = Array.isArray(data) && data.some((airport) => airport?.icao?.toUpperCase() === value);
+        const ok = Array.isArray(data) && data.some((airport) => airportSearchResultMatchesIdentifier(airport, value));
         departureLookupRef.current = { value, ok };
         if (ok) {
           setDepartureResolved(value);
@@ -2518,7 +2535,7 @@ export default function FlightPlanner() {
     if (destinationSelectedRef.current && destinationSelectedRef.current !== value) {
       destinationSelectedRef.current = null;
     }
-    const exact = destinationSuggestions.find((airport) => airport.icao?.toUpperCase() === value);
+    const exact = destinationSuggestions.find((airport) => airportSearchResultMatchesIdentifier(airport, value));
     if (exact) {
       setDestinationResolved(exact.icao.toUpperCase());
       return;
@@ -2547,7 +2564,7 @@ export default function FlightPlanner() {
         });
         if (!active) return;
         const data = res.ok ? await res.json().catch(() => []) : [];
-        const ok = Array.isArray(data) && data.some((airport) => airport?.icao?.toUpperCase() === value);
+        const ok = Array.isArray(data) && data.some((airport) => airportSearchResultMatchesIdentifier(airport, value));
         destinationLookupRef.current = { value, ok };
         if (ok) {
           setDestinationResolved(value);
@@ -2566,6 +2583,56 @@ export default function FlightPlanner() {
       controller.abort();
     };
   }, [form.destination]);
+
+  useEffect(() => {
+    const value = form.alternate.trim().toUpperCase();
+    if (!value) {
+      setAlternateResolved("");
+      alternateLookupRef.current = null;
+      return;
+    }
+    if (value === "ZZZZ") {
+      setAlternateResolved("ZZZZ");
+      return;
+    }
+    if (!/^[A-Z0-9]{3,4}$/.test(value)) {
+      setAlternateResolved("");
+      return;
+    }
+    const cached = alternateLookupRef.current;
+    if (cached?.value === value) {
+      setAlternateResolved(cached.ok ? value : "");
+      return;
+    }
+    let active = true;
+    const controller = new AbortController();
+    const runLookup = async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(value)}`), {
+          signal: controller.signal,
+        });
+        if (!active) return;
+        const data = res.ok ? await res.json().catch(() => []) : [];
+        const ok = Array.isArray(data) && data.some((airport) => airportSearchResultMatchesIdentifier(airport, value));
+        alternateLookupRef.current = { value, ok };
+        setAlternateResolved(ok ? value : "");
+        trackEvent("planner_airport_identifier_resolution", {
+          field: "alternate",
+          result: ok ? "resolved" : "not_found",
+          identifier_length: value.length,
+        });
+      } catch (error: any) {
+        if (!active || error?.name === "AbortError") return;
+        alternateLookupRef.current = { value, ok: false };
+        setAlternateResolved("");
+      }
+    };
+    runLookup();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [form.alternate]);
 
   const { data: flightServiceEnvironment } = useQuery<FlightServiceEnvironmentConfig>({
     queryKey: ["/api/flight-service/environment"],
@@ -3009,7 +3076,7 @@ export default function FlightPlanner() {
     : destinationResolved.trim().toUpperCase();
   const planningAlternateCode = filedAlternateCode === "ZZZZ"
     ? planningReferenceAlternateAirport
-    : filedAlternateCode;
+    : alternateResolved.trim().toUpperCase();
   const hasZzzzLocation = filedDepartureCode === "ZZZZ" || filedDestinationCode === "ZZZZ" || filedAlternateCode === "ZZZZ";
   const zzzzPlanningReferenceError = [
     filedDepartureCode === "ZZZZ" && (!planningReferenceDepartureAirport || !ICAO_REGEX.test(planningReferenceDepartureAirport) || !isValidZzzzActualLocation(actualDepartureLocation)),
@@ -3290,11 +3357,7 @@ export default function FlightPlanner() {
         });
         if (!searchRes.ok) throw new Error("Failed to search airport data");
         const matches = (await searchRes.json()) as any[];
-        const candidates = new Set(buildPlannerIcaoCandidates(icao));
-        const exactMatch = matches.find((match) => {
-          const matchIcao = String(match?.icao || "").trim().toUpperCase();
-          return candidates.has(matchIcao);
-        });
+        const exactMatch = matches.find((match) => airportSearchResultMatchesIdentifier(match, icao));
         if (!exactMatch) return null;
 
         const detailIcao = String(exactMatch.icao || icao).trim().toUpperCase();
@@ -3871,7 +3934,54 @@ export default function FlightPlanner() {
   }), [authoritativeEteMinutes, eteHours, planningBurn, reserveMinutes]);
   const reserveFuel = fuelRequiredSummary.reserveFuelGallons;
   const tripFuel = fuelRequiredSummary.tripFuelGallons;
-  const totalFuel = fuelRequiredSummary.totalRequiredFuelGallons;
+  const alternateFuelLeg = useMemo(() => {
+    if (!planningAlternateCode) {
+      return {
+        status: filedAlternateCode && filedAlternateCode !== "ZZZZ" ? "unresolved" as const : "not-applicable" as const,
+        distanceNm: null,
+        eteMinutes: null,
+        fuelGallons: null,
+      };
+    }
+    const destinationAirport = airportMap.get(planningDestinationCode);
+    const alternateAirport = airportMap.get(planningAlternateCode);
+    if (
+      !destinationAirport ||
+      !alternateAirport ||
+      !Number.isFinite(destinationAirport.lat) ||
+      !Number.isFinite(destinationAirport.lon) ||
+      !Number.isFinite(alternateAirport.lat) ||
+      !Number.isFinite(alternateAirport.lon) ||
+      !groundspeed ||
+      groundspeed <= 0 ||
+      !planningBurn ||
+      planningBurn <= 0
+    ) {
+      return {
+        status: "unavailable" as const,
+        distanceNm: null,
+        eteMinutes: null,
+        fuelGallons: null,
+      };
+    }
+    const distance = distanceNm(
+      { icao: planningDestinationCode, lat: Number(destinationAirport.lat), lon: Number(destinationAirport.lon) },
+      { icao: planningAlternateCode, lat: Number(alternateAirport.lat), lon: Number(alternateAirport.lon) },
+    );
+    const minutes = Math.max(1, Math.round((distance / groundspeed) * 60));
+    const gallons = (minutes / 60) * planningBurn;
+    return {
+      status: "available" as const,
+      distanceNm: distance,
+      eteMinutes: minutes,
+      fuelGallons: gallons,
+    };
+  }, [airportMap, filedAlternateCode, groundspeed, planningAlternateCode, planningBurn, planningDestinationCode]);
+  const alternateFuel = alternateFuelLeg.status === "available" && alternateFuelLeg.fuelGallons != null
+    ? alternateFuelLeg.fuelGallons
+    : 0;
+  const totalFuel = tripFuel + alternateFuel + reserveFuel;
+  const totalFuelIncludesAlternate = alternateFuelLeg.status === "available" || alternateFuelLeg.status === "not-applicable";
   const canAutoArrival = Boolean(form.plannedDepartureAt && totalDistance > 0 && groundspeed > 0);
   const generatedRouteCore = useMemo(
     () =>
@@ -4019,14 +4129,14 @@ export default function FlightPlanner() {
     const endingFuelGallons = legNavRows.length > 0
       ? legNavRows[legNavRows.length - 1].fuelAfterUplift
       : fuelAvailableGallons;
-    const reserveBalanceGallons = endingFuelGallons - reserveFuel;
+    const reserveBalanceGallons = endingFuelGallons - reserveFuel - alternateFuel;
     return {
       overCapacityStops,
       firstUnreachableLeg,
       endingFuelGallons,
       reserveBalanceGallons,
     };
-  }, [fuelAvailableGallons, legNavRows, reserveFuel]);
+  }, [alternateFuel, fuelAvailableGallons, legNavRows, reserveFuel]);
   const fuelSurplus = fuelPlanSummary.reserveBalanceGallons;
   const surplusMinutes = planningBurn > 0 ? (fuelSurplus / planningBurn) * 60 : 0;
   const planningAnalysisMissingInputs = useMemo(() => {
@@ -4878,6 +4988,14 @@ export default function FlightPlanner() {
   const weatherData = weatherQueries
     .map((query, index) => ({ icao: weatherIcaos[index], data: query.data as WeatherResponse | undefined }))
     .filter((item) => item.icao);
+
+  const weatherRoleLabel = useCallback((icao: string) => {
+    const code = String(icao || "").trim().toUpperCase();
+    if (code === planningDepartureCode) return "Departure weather";
+    if (code === planningDestinationCode) return "Destination weather";
+    if (planningAlternateCode && code === planningAlternateCode) return "Alternate weather";
+    return "Enroute weather";
+  }, [planningAlternateCode, planningDepartureCode, planningDestinationCode]);
 
   const weatherFindings = useMemo(() => {
     return weatherData.map(({ icao, data }) => ({
@@ -8531,11 +8649,17 @@ export default function FlightPlanner() {
               )}
               {filingDraft.flightRules === "IFR" && (
                 <div className={cn("space-y-3", plannerSubpanelClass)}>
+                  <div className={cn("rounded-md border border-[#5d6f85]/24 bg-[#101820] px-3 py-2 text-xs text-[#D9E4F0]")}>
+                    <div className="font-semibold text-[#F5F8FC]">Departure Procedure (SID) / Arrival Procedure (STAR)</div>
+                    <div className="mt-1 text-[#A9BBCD]">
+                      Structured SID/STAR selection is not available from RSF's current verified procedure data. Use coded departure routes below when returned, or enter published procedure tokens manually in Route Builder. ATC may assign a different clearance.
+                    </div>
+                  </div>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <div className="text-sm font-semibold">Route Assist</div>
+                      <div className="text-sm font-semibold">IFR Route Options</div>
                       <div className="text-xs text-muted-foreground">
-                        Optional IFR routing help from the filing provider. Use it as a starting point, but review and edit the filed route yourself before filing.
+                        Optional source-specific routes from the filing provider. These are planning options, not a current ATC clearance.
                       </div>
                     </div>
                     {leidosRouteQuery.data?.environment && (
@@ -8561,16 +8685,37 @@ export default function FlightPlanner() {
                     {routeAssistRecommendedRoute && (
                       <div className={cn("space-y-2", plannerSubpanelSuccessClass)}>
                         <div className="text-xs font-medium uppercase tracking-wide text-[#9ccfbe]">
-                          System Recommended Assist
+                          Provider Recommended Route
                         </div>
                         <div className="font-mono text-sm break-words text-[#F5F8FC]">{routeAssistRecommendedRoute}</div>
                         <div>
                           <Button
                             type="button"
                             size="sm"
-                            onClick={() => applyFiledRouteToPlanner(routeAssistRecommendedRoute)}
+                            onClick={() => setRouteOptionPreview(routeAssistRecommendedRoute)}
                           >
-                            Use recommended route
+                            Preview route
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {routeOptionPreview && (
+                      <div className={cn("space-y-2 rounded-[0.95rem] border border-[#4d8d7d]/40 bg-[#10211d] px-3 py-2 text-[#d7efe7]")}>
+                        <div className="text-xs font-medium uppercase tracking-wide">Route option preview</div>
+                        <div className="font-mono text-xs break-words text-[#F5F8FC]">{routeOptionPreview}</div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              applyFiledRouteToPlanner(routeOptionPreview);
+                              setRouteOptionPreview(null);
+                            }}
+                          >
+                            Apply previewed route
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => setRouteOptionPreview(null)}>
+                            Dismiss preview
                           </Button>
                         </div>
                       </div>
@@ -8587,9 +8732,9 @@ export default function FlightPlanner() {
                                   type="button"
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => applyFiledRouteToPlanner(route)}
+                                  onClick={() => setRouteOptionPreview(route)}
                                 >
-                                  Use route
+                                  Preview
                                 </Button>
                               </div>
                             ))}
@@ -9299,12 +9444,48 @@ export default function FlightPlanner() {
               </div>
             </div>
             <div className={plannerMetricClass}>
-              <div className="text-xs text-[#A9BBCD]">Trip Fuel</div>
+              <div className="text-xs text-[#A9BBCD]">Trip Fuel to Destination</div>
               <div className="text-lg font-semibold text-[#F5F8FC]">{tripFuel ? tripFuel.toFixed(1) : "-"} gal</div>
             </div>
             <div className={plannerMetricClass}>
               <div className="text-xs text-[#A9BBCD]">Total Required Fuel</div>
-              <div className="text-lg font-semibold text-[#F5F8FC]">{totalFuel ? totalFuel.toFixed(1) : "-"} gal</div>
+              <div className="text-lg font-semibold text-[#F5F8FC]">
+                {totalFuelIncludesAlternate ? (totalFuel ? `${totalFuel.toFixed(1)} gal` : "-") : "Incomplete"}
+              </div>
+            </div>
+          </div>
+          <div className={cn("grid gap-3 rounded-[1rem] border border-[#5d6f85]/20 bg-[#101820] p-3 text-sm text-[#D9E4F0] md:grid-cols-4")}>
+            <div>
+              <div className="text-xs text-[#A9BBCD]">Destination trip fuel</div>
+              <div className="font-semibold text-[#F5F8FC]">{tripFuel ? `${tripFuel.toFixed(1)} gal` : "-"}</div>
+            </div>
+            <div>
+              <div className="text-xs text-[#A9BBCD]">Destination to alternate</div>
+              <div className="font-semibold text-[#F5F8FC]">
+                {alternateFuelLeg.status === "available" && alternateFuelLeg.fuelGallons != null
+                  ? `${alternateFuelLeg.fuelGallons.toFixed(1)} gal`
+                  : alternateFuelLeg.status === "not-applicable"
+                    ? "Not applicable"
+                    : "Alternate fuel unavailable"}
+              </div>
+              {alternateFuelLeg.status === "available" && (
+                <div className="text-xs text-[#A9BBCD]">
+                  {alternateFuelLeg.distanceNm?.toFixed(1)} NM / {alternateFuelLeg.eteMinutes} min
+                </div>
+              )}
+            </div>
+            <div>
+              <div className="text-xs text-[#A9BBCD]">Reserve fuel</div>
+              <div className="font-semibold text-[#F5F8FC]">{reserveFuel ? `${reserveFuel.toFixed(1)} gal` : "-"}</div>
+            </div>
+            <div>
+              <div className="text-xs text-[#A9BBCD]">Projected margin</div>
+              <div className={cn("font-semibold", fuelSurplus >= 0 ? "text-[#8fd0bf]" : "text-[#f09aa8]")}>
+                {totalFuelIncludesAlternate && totalFuel ? `${fuelSurplus >= 0 ? "+" : ""}${fuelSurplus.toFixed(1)} gal` : "Awaiting alternate"}
+              </div>
+            </div>
+            <div className="text-xs text-[#A9BBCD] md:col-span-4">
+              Planning estimate only. Verify fuel, reserve, winds, alternate requirements, and POH/AFM performance before flight.
             </div>
           </div>
           {planningAnalysisIncomplete && (
@@ -9920,8 +10101,17 @@ export default function FlightPlanner() {
               </Card>
             )}
             {weatherData.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Enter airports to load weather summaries.</div>
+              <div className="rounded-lg border border-[#5d6f85]/30 bg-[#121820] px-4 py-3 text-sm text-[#D9E4F0]">
+                Enter resolved departure and destination airports to load route weather. RSF waits for confirmed airport records before requesting METAR/TAF, nearby-weather fallback, runway, and route-dependent data.
+              </div>
             ) : (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-[#5d6f85]/30 bg-[#121820] px-4 py-3 text-sm text-[#D9E4F0]">
+                  <div className="font-semibold text-[#F5F8FC]">Route weather briefing</div>
+                  <div className="mt-1 text-xs text-[#A9BBCD]">
+                    Advisory planning context, not a complete official briefing. Review official sources before departure. Missing METAR/TAF data is shown as unavailable, not assumed VFR.
+                  </div>
+                </div>
               <div className="grid gap-3 md:grid-cols-3">
                 {weatherData.map(({ icao, data }) => {
                   const hasMetar = Boolean(data?.metar?.rawOb);
@@ -9931,6 +10121,9 @@ export default function FlightPlanner() {
                   const reportingStation = data?.weatherSource === "nearby_station" ? data.reportingStation?.icao : null;
                   return (
                     <div key={icao} className="rounded-lg border p-3">
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#8FC7FF]">
+                        {weatherRoleLabel(icao)}
+                      </div>
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="font-semibold">{reportingStation || icao}</div>
@@ -9966,6 +10159,11 @@ export default function FlightPlanner() {
                           ))}
                         </div>
                       )}
+                      {(data?.unavailable || (!hasMetar && !hasTaf)) && (
+                        <div className="mt-2 rounded-md border border-[#5d6f85]/30 bg-[#121820] px-2 py-1 text-xs text-[#D9E4F0]">
+                          Weather data partial or unavailable for this airport. Use nearby reporting stations and official sources before flight.
+                        </div>
+                      )}
                       <div className="text-xs text-muted-foreground mt-2 line-clamp-3">
                         {hasMetar ? data?.metar?.rawOb : "No METAR data"}
                       </div>
@@ -9980,6 +10178,7 @@ export default function FlightPlanner() {
                     </div>
                   );
                 })}
+              </div>
               </div>
             )}
             {routeVariationNotes.length > 0 ? (

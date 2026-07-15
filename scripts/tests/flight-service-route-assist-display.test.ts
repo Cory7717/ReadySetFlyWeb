@@ -35,7 +35,9 @@ test("Route Assist panel renders normalized route strings instead of raw objects
   assert.match(plannerSource, /const routeAssistRecommendedRoute = useMemo/);
   assert.match(plannerSource, /const routeAssistGroups = useMemo/);
   assert.match(plannerSource, /routeAssistGroups\.map\(\(group\) =>/);
-  assert.match(plannerSource, /applyFiledRouteToPlanner\(routeAssistRecommendedRoute\)/);
+  assert.match(plannerSource, /setRouteOptionPreview\(routeAssistRecommendedRoute\)/);
+  assert.match(plannerSource, /Apply previewed route/);
+  assert.match(plannerSource, /applyFiledRouteToPlanner\(routeOptionPreview\)/);
   assert.match(plannerSource, /No Route Assist suggestions came back for this city pair yet/);
   assert.doesNotMatch(plannerSource, /\{leidosRouteQuery\.data\.route\}/);
   assert.doesNotMatch(plannerSource, /\{leidosRouteQuery\.data\.message\}/);

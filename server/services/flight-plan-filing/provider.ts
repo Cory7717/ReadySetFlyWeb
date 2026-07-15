@@ -2511,14 +2511,14 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     if (String(plan.departure || "").trim().toUpperCase() === "ZZZZ" && !getPlannerStateString(plan, "planningReferenceDepartureAirport")) {
       errors.push("Departure timezone is required when using ZZZZ without a planning reference airport.");
     } else {
-      errors.push("Departure airport timezone could not be determined from airport metadata. Confirm the departure airport or select a planning-reference airport for ZZZZ before filing.");
+      errors.push("Departure airport timezone could not be determined from airport metadata. Confirm the departure airport selection before filing.");
     }
   }
 
   if (rules === "IFR" && !routeNormalization.normalizedRoute) {
     errors.push("IFR flight plans require a route before staging.");
   }
-  if ((action === "file" || action === "amend") && plan.route && String(plan.route).trim().toUpperCase() !== "DCT" && !routeNormalization.hasValidToken) {
+  if ((action === "file" || action === "amend") && plan.route && String(routeNormalization.normalizedRoute || "").trim().toUpperCase() !== "DCT" && !routeNormalization.hasValidToken) {
     errors.push("Route must contain at least one valid airport, fix, navaid, airway, or procedure token before filing.");
   }
 

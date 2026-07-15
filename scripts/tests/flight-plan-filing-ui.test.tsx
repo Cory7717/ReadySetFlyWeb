@@ -255,6 +255,31 @@ test("flight planner resets restored scroll position on page entry", () => {
   assert.match(source, /window\.history\.scrollRestoration = previousScrollRestoration/);
 });
 
+test("flight planner route-structure badges use explicit planner-safe contrast colors", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /plannerSafeBadgeClass = ".*!border-\[#60758C\].*!bg-\[#18212B\].*!text-\[#E3EDF7\]/);
+  assert.match(source, /\[--card:213_24%_11%\]/);
+  assert.match(source, /\[--foreground:210_40%_94%\]/);
+  assert.match(source, /\[--muted-foreground:211_28%_78%\]/);
+  assert.match(source, /\[--badge-outline:#60758C\]/);
+  assert.match(source, /Procedure-aware route structure/);
+  assert.match(source, /<Badge variant="outline" className=\{cn\("uppercase tracking-\[0\.14em\]", plannerSafeBadgeClass\)\}/);
+  assert.doesNotMatch(source, /<Badge variant="outline" className="border-\[#5d6f85\]\/30 text-\[#B8CBDD\]"/);
+
+  const luminance = (hex: string) => {
+    const channels = hex.match(/[0-9a-f]{2}/gi)?.map((part) => parseInt(part, 16) / 255) || [];
+    const linear = channels.map((value) => value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+  };
+  const contrast = (a: string, b: string) => {
+    const [lighter, darker] = [luminance(a), luminance(b)].sort((left, right) => right - left);
+    return (lighter + 0.05) / (darker + 0.05);
+  };
+
+  assert.ok(contrast("#E3EDF7", "#18212B") >= 4.5, "badge text contrast should meet WCAG AA");
+  assert.ok(contrast("#60758C", "#18212B") >= 3, "badge border contrast should identify the chip boundary");
+});
+
 test("rendered lifecycle actions show saved unfiled plan filing controls", () => {
   const html = renderLifecycleActions(lifecyclePlan({
     filingStatus: "draft",

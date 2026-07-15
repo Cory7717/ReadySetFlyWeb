@@ -7562,6 +7562,7 @@ export default function FlightPlanner() {
   const plannerSubpanelDangerClass = "rounded-[1rem] border border-[#7a3440]/38 bg-[linear-gradient(180deg,rgba(34,15,19,0.98),rgba(17,10,12,0.98))] p-3 text-[#F4CDD3] shadow-[0_18px_38px_-28px_rgba(0,0,0,0.9)]";
   const plannerSelectContentClass = "border-[#5d6f85]/30 bg-[#11161d] text-[#E8EDF4] shadow-[0_22px_44px_-30px_rgba(0,0,0,0.9)]";
   const plannerInsetActionClass = "border-[#5d6f85]/30 bg-[#141b24] text-[#E8EDF4] hover:bg-[#1a2430]";
+  const plannerSafeBadgeClass = "!border-[#60758C] !bg-[#18212B] !text-[#E3EDF7] hover:!bg-[#1d2a36]";
   const workflowStepCopy: Record<FlightPlannerTab, { step: number; label: string }> = {
     route: { step: 1, label: "Route & Aircraft" },
     weather: { step: 2, label: "Briefing" },
@@ -7654,7 +7655,7 @@ export default function FlightPlanner() {
       }
       canopyClassName="rsf-metal-hero border-b border-white/10"
       contentClassName={cn(
-        "rsf-planner-theme max-w-[1400px] space-y-6 overflow-x-clip p-4 sm:p-6",
+        "rsf-planner-theme max-w-[1400px] space-y-6 overflow-x-clip p-4 sm:p-6 [--badge-outline:#60758C] [--border:211_23%_40%] [--card:213_24%_11%] [--foreground:210_40%_94%] [--muted-foreground:211_28%_78%] [--muted:214_28%_16%]",
         isMobile && "space-y-4 p-3 pb-24 text-[#E8EDF4]"
       )}
     >
@@ -8578,7 +8579,7 @@ export default function FlightPlanner() {
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="font-medium">{segment.label}</div>
-                              <Badge variant="outline" className="border-[#5d6f85]/30 text-[#B8CBDD]">
+                              <Badge variant="outline" className={cn("uppercase tracking-[0.14em]", plannerSafeBadgeClass)}>
                                 {segment.kind === "departure-procedure"
                                   ? "Departure procedure"
                                   : segment.kind === "arrival-procedure"
@@ -10189,9 +10190,9 @@ export default function FlightPlanner() {
                       </div>
                     ))}
                   </div>
-                  <div className="rounded-md border bg-background/40 p-3 text-xs">
-                    <div className="mb-1 font-semibold text-foreground">ICAO Item 18 Preview</div>
-                    <div className="break-words font-mono text-muted-foreground">{filingDraft.otherInfo.trim() || "-"}</div>
+                  <div className="rounded-md border border-[#5d6f85]/30 bg-[#101720] p-3 text-xs text-[#E8EDF4]">
+                    <div className="mb-1 font-semibold text-[#F5F8FC]">ICAO Item 18 Preview</div>
+                    <div className="break-words font-mono text-[#B8CBDD]">{filingDraft.otherInfo.trim() || "-"}</div>
                   </div>
                   {(icaoEquipmentWarnings.missingR || icaoEquipmentWarnings.missingZ || icaoEquipmentWarnings.missingPbn) && (
                     <Alert className="border-amber-300 bg-amber-900/20 text-amber-100">
@@ -10206,9 +10207,9 @@ export default function FlightPlanner() {
                 </div>
                 <div id="planner-field-fuel-endurance" className="space-y-2">
                   <Label>Estimated Time En Route</Label>
-                  <div className="rounded-md border bg-background/40 p-3 text-sm">
-                    <div className="font-semibold text-foreground">{authoritativeEteMinutes ? `${authoritativeEteMinutes} min (${formatFilingDurationLabel(authoritativeEteMinutes)})` : "-"}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">Calculated from the current route distance and groundspeed. This is the filed flight duration.</div>
+                  <div className="rounded-md border border-[#5d6f85]/30 bg-[#101720] p-3 text-sm text-[#E8EDF4]">
+                    <div className="font-semibold text-[#F5F8FC]">{authoritativeEteMinutes ? `${authoritativeEteMinutes} min (${formatFilingDurationLabel(authoritativeEteMinutes)})` : "-"}</div>
+                    <div className="mt-1 text-xs text-[#B8CBDD]">Calculated from the current route distance and groundspeed. This is the filed flight duration.</div>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -10532,11 +10533,12 @@ export default function FlightPlanner() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="font-medium text-[#F5F8FC]">{summary.category}</div>
                       <Badge variant="outline" className={cn(
+                        plannerSafeBadgeClass,
                         hasRequired
-                          ? "border-amber-300/40 text-amber-100"
+                          ? "!border-amber-300/60 !bg-[#2a1f0b] !text-amber-100"
                           : hasRecommended
-                            ? "border-blue-300/30 text-blue-100"
-                            : "border-emerald-300/35 text-emerald-100"
+                            ? "!border-blue-300/50 !bg-[#122030] !text-blue-100"
+                            : "!border-emerald-300/55 !bg-[#10231d] !text-emerald-100"
                       )}>
                         {hasRequired ? `${summary.required.length} Required` : hasRecommended ? "Recommended" : "Complete"}
                       </Badge>
@@ -10552,7 +10554,12 @@ export default function FlightPlanner() {
                                 <span className={issue.severity === "required" ? "font-semibold text-amber-100" : "font-semibold text-blue-100"}>
                                   {issue.label}
                                 </span>
-                                <Badge variant="outline" className={issue.severity === "required" ? "border-amber-300/35 text-amber-100" : "border-blue-300/30 text-blue-100"}>
+                                <Badge variant="outline" className={cn(
+                                  plannerSafeBadgeClass,
+                                  issue.severity === "required"
+                                    ? "!border-amber-300/55 !bg-[#2a1f0b] !text-amber-100"
+                                    : "!border-blue-300/50 !bg-[#122030] !text-blue-100"
+                                )}>
                                   {issue.severity === "required" ? "Required" : "Recommended"}
                                 </Badge>
                               </div>
@@ -10619,7 +10626,7 @@ export default function FlightPlanner() {
                   One primary action is shown for the current plan state. RSF saves current edits before sending a file or amend request when needed.
                 </div>
               </div>
-              <Badge variant="outline">{filingReadiness.ready ? "Ready" : "Needs attention"}</Badge>
+              <Badge variant="outline" className={plannerSafeBadgeClass}>{filingReadiness.ready ? "Ready" : "Needs attention"}</Badge>
             </div>
             {hasBlockingFilingReadinessIssue && (
               <div className="rounded-md border border-amber-300/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
@@ -10747,7 +10754,7 @@ export default function FlightPlanner() {
                     Editing <span className="font-medium text-foreground">{currentSavedPlan?.title || `${currentSavedPlan?.departure} to ${currentSavedPlan?.destination}`}</span>. Use these actions for the active plan instead of hunting through the saved list below.
                   </div>
                 </div>
-                <Badge variant="outline">{currentSavedPlanStatus}</Badge>
+                <Badge variant="outline" className={plannerSafeBadgeClass}>{currentSavedPlanStatus}</Badge>
               </div>
               <FlightPlanLifecycleActions
                 plan={currentSavedPlan!}
@@ -10965,12 +10972,19 @@ export default function FlightPlanner() {
                     )}
                     <Badge
                       variant={statusChip.tone === "past" ? "secondary" : statusChip.tone === "review" ? "default" : "outline"}
-                      className={cn(statusChip.tone === "past" && "opacity-75")}
+                      className={cn(
+                        statusChip.tone === "review"
+                          ? "!border-blue-300/50 !bg-[#12304a] !text-blue-100"
+                          : plannerSafeBadgeClass,
+                        statusChip.tone === "past" && "opacity-80"
+                      )}
                     >
                       {statusChip.label}
                     </Badge>
                     {plan.filingPendingAction && (
-                      <Badge variant="secondary">Pending {plan.filingPendingAction}</Badge>
+                      <Badge variant="secondary" className="!border-[#60758C] !bg-[#18212B] !text-[#E3EDF7]">
+                        Pending {plan.filingPendingAction}
+                      </Badge>
                     )}
                     <Button
                       size="sm"

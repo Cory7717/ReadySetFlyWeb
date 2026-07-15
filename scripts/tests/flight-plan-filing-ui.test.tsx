@@ -885,3 +885,26 @@ test("flight planner weather briefing labels route roles and partial data honest
   assert.match(source, /Advisory planning context, not a complete official briefing/);
   assert.match(source, /Missing METAR\/TAF data is shown as unavailable, not assumed VFR/);
 });
+
+test("flight planner shows cruise altitude practicality as a non-blocking advisory", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /assessCruiseAltitudePracticality/);
+  assert.match(source, /Cruise altitude practicality/);
+  assert.match(source, /View estimate/);
+  assert.match(source, /Unable to assess/);
+  assert.match(source, /This advisory is not a filing blocker/);
+  assert.match(source, /does not change ETE, fuel endurance, filing readiness, or the filed altitude/);
+  assert.match(source, /planner_cruise_altitude_practicality/);
+  assert.doesNotMatch(source, /addIssue\([^)]*cruiseAltitudePracticality/);
+  assert.doesNotMatch(source, /filingPacket[\s\S]{0,500}cruiseAltitudePracticality/);
+});
+
+test("flight planner keeps lifecycle action labels present after altitude advisory addition", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /Save Changes/);
+  assert.match(source, /action: "activate"/);
+  assert.match(source, /action: "close"/);
+  assert.match(source, /action: "cancel"/);
+  assert.match(source, /submitProviderSync/);
+  assert.match(source, /acceptProviderReviewMutation/);
+});

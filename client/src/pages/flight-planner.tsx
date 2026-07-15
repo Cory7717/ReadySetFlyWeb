@@ -75,6 +75,12 @@ import {
 } from "@shared/flight-plan-route";
 import { extractFilingVersionStamp } from "@shared/flight-plan-filing";
 import { buildFuelEnduranceState, calculateFuelEnduranceMinutes, calculateFuelRequiredGallons, formatFuelDurationClock, resolveAuthoritativeEteMinutes } from "@shared/flight-plan-fuel";
+import {
+  assessCruiseAltitudePracticality,
+  cruiseAltitudeBand,
+  routeDistanceBand,
+  type CruiseAltitudePerformanceSource,
+} from "@shared/flight-plan-altitude-practicality";
 import { composePlanningGeometryRoute } from "@shared/flight-plan-planning-route";
 import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
 import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
@@ -209,6 +215,19 @@ const airportSearchResultMatchesIdentifier = (airport: any, value: string) => {
     .map((entry) => String(entry || "").trim().toUpperCase())
     .some((entry) => candidates.has(entry));
 };
+
+const plannerPositiveNumber = (value: unknown) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+};
+
+const plannerFiniteNumber = (value: unknown) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const getPlannerAirportElevationFt = (airport: any) =>
+  plannerFiniteNumber(airport?.elevationFt ?? airport?.elevation_ft ?? airport?.elevation);
 
 const isConfirmedAirportRoutePoint = (point: { ident?: string | null; kind?: string | null } | null | undefined) =>
   String(point?.kind || "").toLowerCase() === "airport" && ICAO_REGEX.test(String(point?.ident || "").trim().toUpperCase());
@@ -1151,6 +1170,11 @@ type AircraftProfile = {
   fuel_burn_gph_effective?: number | null;
   usable_fuel_gal_effective?: number | null;
   max_gross_weight_lb_effective?: number | null;
+  serviceCeilingFt?: number | null;
+  climbRateFpm?: number | null;
+  climbSpeedKt?: number | null;
+  descentRateFpm?: number | null;
+  descentSpeedKt?: number | null;
   fuelBurnOverrideGph?: number | null;
   filingEquipmentDefault?: string | null;
   filingSoulsOnBoardDefault?: string | null;
@@ -1180,6 +1204,11 @@ type AircraftType = {
   fuel_burn_performance_gph_effective?: number | null;
   usable_fuel_gal_effective?: number | null;
   max_gross_weight_lb_effective?: number | null;
+  serviceCeilingFt?: number | null;
+  climbRateFpm?: number | null;
+  climbSpeedKt?: number | null;
+  descentRateFpm?: number | null;
+  descentSpeedKt?: number | null;
   isVerified?: boolean | null;
   sourceNote?: string | null;
   verificationSource?: string | null;
@@ -3920,6 +3949,102 @@ export default function FlightPlanner() {
         ? "partial winds aloft"
         : "winds unavailable";
   const groundspeed = Math.max(40, planningCruise - selectedWindComponentKt);
+  const altitudePerformanceInputs = useMemo(() => {
+    const profileClimbRate = plannerPositiveNumber((selectedProfile as any)?.climbRateFpm);
+    const profileClimbSpeed = plannerPositiveNumber((selectedProfile as any)?.climbSpeedKt);
+    const profileDescentRate = plannerPositiveNumber((selectedProfile as any)?.descentRateFpm);
+    const profileDescentSpeed = plannerPositiveNumber((selectedProfile as any)?.descentSpeedKt);
+    if (profileClimbRate && profileClimbSpeed && profileDescentRate && profileDescentSpeed) {
+      return {
+        climbRateFpm: profileClimbRate,
+        climbSpeedKt: profileClimbSpeed,
+        descentRateFpm: profileDescentRate,
+        descentSpeedKt: profileDescentSpeed,
+        source: "saved_profile" as CruiseAltitudePerformanceSource,
+      };
+    }
+    const typeClimbRate = plannerPositiveNumber((selectedType as any)?.climbRateFpm);
+    const typeClimbSpeed = plannerPositiveNumber((selectedType as any)?.climbSpeedKt);
+    const typeDescentRate = plannerPositiveNumber((selectedType as any)?.descentRateFpm);
+    const typeDescentSpeed = plannerPositiveNumber((selectedType as any)?.descentSpeedKt);
+    if (typeClimbRate && typeClimbSpeed && typeDescentRate && typeDescentSpeed) {
+      return {
+        climbRateFpm: typeClimbRate,
+        climbSpeedKt: typeClimbSpeed,
+        descentRateFpm: typeDescentRate,
+        descentSpeedKt: typeDescentSpeed,
+        source: selectedType.isVerified ? "aircraft_library_verified" as CruiseAltitudePerformanceSource : "aircraft_library_estimate" as CruiseAltitudePerformanceSource,
+      };
+    }
+    return {
+      climbRateFpm: null,
+      climbSpeedKt: null,
+      descentRateFpm: null,
+      descentSpeedKt: null,
+      source: "unavailable" as CruiseAltitudePerformanceSource,
+    };
+  }, [selectedProfile, selectedType]);
+  const altitudePracticalityDepartureElevationFt = useMemo(
+    () => getPlannerAirportElevationFt(airportMap.get(planningDepartureCode)),
+    [airportMap, planningDepartureCode],
+  );
+  const altitudePracticalityDestinationElevationFt = useMemo(
+    () => getPlannerAirportElevationFt(airportMap.get(planningDestinationCode)),
+    [airportMap, planningDestinationCode],
+  );
+  const altitudePracticalityServiceCeilingFt = useMemo(
+    () => plannerPositiveNumber((selectedProfile as any)?.serviceCeilingFt ?? (selectedType as any)?.serviceCeilingFt),
+    [selectedProfile, selectedType],
+  );
+  const cruiseAltitudePracticality = useMemo(() => assessCruiseAltitudePracticality({
+    routeDistanceNm: totalDistance,
+    plannedAltitudeFt: plannedAltitudeValue ?? null,
+    departureElevationFt: altitudePracticalityDepartureElevationFt,
+    destinationElevationFt: altitudePracticalityDestinationElevationFt,
+    climbRateFpm: altitudePerformanceInputs.climbRateFpm,
+    climbSpeedKt: altitudePerformanceInputs.climbSpeedKt,
+    descentRateFpm: altitudePerformanceInputs.descentRateFpm,
+    descentSpeedKt: altitudePerformanceInputs.descentSpeedKt,
+    serviceCeilingFt: altitudePracticalityServiceCeilingFt,
+    performanceSource: altitudePerformanceInputs.source,
+    windComponentKt: manualWindOverrideEnabled || calculatedRouteWind.status === "calculated" || calculatedRouteWind.status === "partial"
+      ? selectedWindComponentKt
+      : null,
+    windSource: manualWindOverrideEnabled
+      ? "manual"
+      : calculatedRouteWind.status === "calculated" || calculatedRouteWind.status === "partial"
+        ? calculatedRouteWind.status
+        : "unavailable",
+  }), [
+    altitudePerformanceInputs,
+    altitudePracticalityDepartureElevationFt,
+    altitudePracticalityDestinationElevationFt,
+    altitudePracticalityServiceCeilingFt,
+    calculatedRouteWind.status,
+    manualWindOverrideEnabled,
+    plannedAltitudeValue,
+    selectedWindComponentKt,
+    totalDistance,
+  ]);
+  const altitudePracticalityAnalyticsKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const key = [
+      cruiseAltitudePracticality.classification,
+      routeDistanceBand(totalDistance),
+      cruiseAltitudeBand(plannedAltitudeValue),
+      cruiseAltitudePracticality.performanceSource,
+      cruiseAltitudePracticality.missingInputs.join("|"),
+    ].join(":");
+    if (altitudePracticalityAnalyticsKeyRef.current === key) return;
+    altitudePracticalityAnalyticsKeyRef.current = key;
+    trackEvent("planner_cruise_altitude_practicality", {
+      classification: cruiseAltitudePracticality.classification,
+      route_distance_band: routeDistanceBand(totalDistance),
+      selected_altitude_band: cruiseAltitudeBand(plannedAltitudeValue),
+      performance_data_source: cruiseAltitudePracticality.performanceSource,
+      missing_input_categories: cruiseAltitudePracticality.missingInputs,
+    });
+  }, [cruiseAltitudePracticality, plannedAltitudeValue, totalDistance]);
   const eteHours = totalDistance ? totalDistance / groundspeed : 0;
   const eteMinutes = totalDistance > 0 && Number.isFinite(eteHours)
     ? Math.max(1, Math.round(eteHours * 60))
@@ -9248,6 +9373,52 @@ export default function FlightPlanner() {
               <p className="text-xs text-muted-foreground">
                 Required for route analysis, terrain awareness, winds aloft, and filing readiness.
               </p>
+              <div
+                className={cn(
+                  "rounded-[0.9rem] border px-3 py-2 text-xs",
+                  cruiseAltitudePracticality.classification === "impractical"
+                    ? "border-[#c77b7b]/45 bg-[#2a1518] text-[#ffd8dc]"
+                    : cruiseAltitudePracticality.classification === "marginal"
+                      ? "border-[#d6b76b]/45 bg-[#2a2415] text-[#fff1c7]"
+                      : cruiseAltitudePracticality.classification === "practical"
+                        ? "border-[#5ca889]/45 bg-[#10211d] text-[#d7efe7]"
+                        : "border-[#5d6f85]/30 bg-[#101820] text-[#D9E4F0]",
+                )}
+              >
+                <div className="flex items-start gap-2">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <div className="font-semibold text-[#F5F8FC]">
+                      Cruise altitude practicality: {cruiseAltitudePracticality.classification === "unable" ? "Unable to assess" : cruiseAltitudePracticality.classification[0].toUpperCase() + cruiseAltitudePracticality.classification.slice(1)}
+                    </div>
+                    <div className="mt-1">{cruiseAltitudePracticality.message}</div>
+                    {cruiseAltitudePracticality.classification !== "practical" && cruiseAltitudePracticality.classification !== "unable" && (
+                      <div className="mt-1 font-medium">Consider reviewing a lower cruise altitude.</div>
+                    )}
+                    <details className="mt-2">
+                      <summary className="cursor-pointer font-semibold text-[#BBD8F2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8FC7FF]">
+                        View estimate
+                      </summary>
+                      <div className="mt-2 grid gap-1 text-[#D9E4F0]">
+                        <div>Departure elevation: {cruiseAltitudePracticality.departureElevationFt != null ? `${Math.round(cruiseAltitudePracticality.departureElevationFt).toLocaleString()} ft` : "Unavailable"}</div>
+                        <div>Selected altitude: {cruiseAltitudePracticality.plannedAltitudeFt != null ? `${Math.round(cruiseAltitudePracticality.plannedAltitudeFt).toLocaleString()} ft` : "Unavailable"}</div>
+                        <div>Destination elevation: {cruiseAltitudePracticality.destinationElevationFt != null ? `${Math.round(cruiseAltitudePracticality.destinationElevationFt).toLocaleString()} ft` : "Unavailable"}</div>
+                        <div>Climb estimate: {cruiseAltitudePracticality.climbTimeMinutes != null && cruiseAltitudePracticality.climbDistanceNm != null ? `${cruiseAltitudePracticality.climbTimeMinutes.toFixed(1)} min / ${cruiseAltitudePracticality.climbDistanceNm.toFixed(1)} NM` : "Unavailable"}</div>
+                        <div>Descent estimate: {cruiseAltitudePracticality.descentTimeMinutes != null && cruiseAltitudePracticality.descentDistanceNm != null ? `${cruiseAltitudePracticality.descentTimeMinutes.toFixed(1)} min / ${cruiseAltitudePracticality.descentDistanceNm.toFixed(1)} NM` : "Unavailable"}</div>
+                        <div>Remaining cruise distance: {cruiseAltitudePracticality.remainingCruiseDistanceNm != null ? `${cruiseAltitudePracticality.remainingCruiseDistanceNm.toFixed(1)} NM` : "Unavailable"}</div>
+                        <div>Performance source: {cruiseAltitudePracticality.performanceSource.replace(/_/g, " ")}</div>
+                        {cruiseAltitudePracticality.missingInputs.length > 0 && (
+                          <div>Missing inputs: {cruiseAltitudePracticality.missingInputs.join(", ")}</div>
+                        )}
+                        {cruiseAltitudePracticality.assumptions.map((assumption) => (
+                          <div key={assumption}>Assumption: {assumption}</div>
+                        ))}
+                        <div>This advisory is not a filing blocker and does not assess terrain clearance, MEA/MOCA, oxygen, icing, density altitude, or ATC altitude requirements.</div>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Fuel On Board (gal) - Required</Label>
@@ -9451,6 +9622,19 @@ export default function FlightPlanner() {
               <div className="text-xs text-[#A9BBCD]">Total Required Fuel</div>
               <div className="text-lg font-semibold text-[#F5F8FC]">
                 {totalFuelIncludesAlternate ? (totalFuel ? `${totalFuel.toFixed(1)} gal` : "-") : "Incomplete"}
+              </div>
+            </div>
+          </div>
+          <div className={cn("rounded-[1rem] border border-[#5d6f85]/20 bg-[#101820] p-3 text-sm text-[#D9E4F0]")}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs text-[#A9BBCD]">Cruise altitude practicality</div>
+                <div className="font-semibold text-[#F5F8FC]">
+                  {cruiseAltitudePracticality.classification === "unable" ? "Unable to assess" : cruiseAltitudePracticality.classification[0].toUpperCase() + cruiseAltitudePracticality.classification.slice(1)}
+                </div>
+              </div>
+              <div className="max-w-3xl text-xs text-[#A9BBCD]">
+                {cruiseAltitudePracticality.message} This advisory does not change ETE, fuel endurance, filing readiness, or the filed altitude.
               </div>
             </div>
           </div>

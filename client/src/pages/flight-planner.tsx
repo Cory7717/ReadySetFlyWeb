@@ -3847,6 +3847,7 @@ export default function FlightPlanner() {
   }, [resolvedRouteAssistAnalysis?.routePoints]);
 
   const suggestedWaypoint = useMemo(() => {
+    if (routeMode !== "auto") return null;
     if (routeSuggestion !== "midpoint") return null;
     if (routeIntermediates.length > 0) return null;
     if (airportPoints.length < 2) return null;
@@ -3870,13 +3871,16 @@ export default function FlightPlanner() {
       lon: (lon3 * 180) / Math.PI,
     };
     return midpoint;
-  }, [airportPoints, routeSuggestion, routeIntermediates.length]);
+  }, [airportPoints, routeMode, routeSuggestion, routeIntermediates.length]);
 
   const routePoints: PlannerPoint[] = useMemo(() => {
+    if (routeMode === "direct") {
+      return airportPoints;
+    }
     if (routeMode === "manual" && hasCanonicalRouteEndpoints && filedRouteResolvedPoints.length >= 2) {
       return filedRouteResolvedPoints;
     }
-    if (routeMode !== "manual" && waypoints.length > 0 && routeAssistResolvedPoints.length >= 2) {
+    if (routeMode === "auto" && waypoints.length > 0 && routeAssistResolvedPoints.length >= 2) {
       return routeAssistResolvedPoints;
     }
     if (!suggestedWaypoint) return airportPoints;
@@ -4140,6 +4144,24 @@ export default function FlightPlanner() {
     () => buildRoutePreview(form.departure, activeFiledRoute, form.destination),
     [form.departure, activeFiledRoute, form.destination]
   );
+  useEffect(() => {
+    if (routeMode !== "direct") return;
+    const hasSyntheticMidpoint = routePoints.some((point) => String(point.icao || "").toUpperCase() === "MID");
+    const invalidIntermediateCount = Math.max(0, routePoints.length - 2);
+    const filedRouteIsDirect = String(leidosFiledRoute || "").trim().toUpperCase() === "DCT";
+    if (hasSyntheticMidpoint || invalidIntermediateCount > 0 || !filedRouteIsDirect) {
+      console.warn(JSON.stringify({
+        event: "flight_planner_direct_geometry_invariant_failed",
+        mode: "direct",
+        visiblePointCount: routePoints.length,
+        visibleIntermediateCount: invalidIntermediateCount,
+        hasSyntheticMidpoint,
+        filedRouteIsDirect,
+        hasDepartureEndpoint: Boolean(planningDepartureCode),
+        hasDestinationEndpoint: Boolean(planningDestinationCode),
+      }));
+    }
+  }, [leidosFiledRoute, planningDepartureCode, planningDestinationCode, routeMode, routePoints]);
   useEffect(() => {
     if (routePoints.length < 2) return;
     const firstPolylinePoint = routePoints[0];

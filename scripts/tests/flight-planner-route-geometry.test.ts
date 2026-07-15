@@ -64,3 +64,12 @@ test("Flight Planner route-analysis query uses planning geometry route, not prov
   assert.match(flightPlannerSource, /route:\s*planningGeometryRouteInput/);
   assert.match(flightPlannerSource, /event:\s*"flight_planner_route_geometry_debug"/);
 });
+
+test("Flight Planner Direct mode route points are endpoint-only and ignore stale helpers", () => {
+  assert.match(flightPlannerSource, /const suggestedWaypoint = useMemo\(\(\) => \{\s*if \(routeMode !== "auto"\) return null;/);
+  assert.match(flightPlannerSource, /const routePoints: PlannerPoint\[\] = useMemo\(\(\) => \{\s*if \(routeMode === "direct"\) \{\s*return airportPoints;\s*\}/);
+  assert.match(flightPlannerSource, /if \(routeMode === "auto" && waypoints\.length > 0 && routeAssistResolvedPoints\.length >= 2\)/);
+  assert.doesNotMatch(flightPlannerSource, /routeMode !== "manual" && waypoints\.length > 0 && routeAssistResolvedPoints\.length >= 2/);
+  assert.match(flightPlannerSource, /flight_planner_direct_geometry_invariant_failed/);
+  assert.match(flightPlannerSource, /filedRouteIsDirect/);
+});

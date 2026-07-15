@@ -7922,6 +7922,12 @@ export default function FlightPlanner() {
     file: { id: "file", ...workflowStepCopy.file },
   };
   const plannerWorkflowOrder: FlightPlannerTab[] = ["route", "weather", "navlog", "analysis", "file"];
+  const getMobileWorkflowButtonClass = (tab: FlightPlannerTab) => cn(
+    "min-h-[3.75rem] justify-start rounded-[1rem] border px-3 py-2 text-left text-xs leading-tight",
+    activeTab === tab
+      ? "border-[#8FC7FF]/70 bg-[#1d3550] text-[#F5F8FC] shadow-[0_14px_28px_-22px_rgba(143,199,255,0.8)]"
+      : "border-[#5d6f85]/28 bg-[#141b24] text-[#D9E4F0] hover:bg-[#1a2430]",
+  );
   const getWorkflowStatus = (tab: FlightPlannerTab) => {
     if (tab === "route") {
       const required = filingReadiness.issues.filter((issue: FilingReadinessIssue) => issue.actionTab === "route" && issue.severity === "required").length;
@@ -8263,17 +8269,56 @@ export default function FlightPlanner() {
       {isMobile && (
         <Card className={plannerPanelClass}>
           <CardContent className="space-y-3 p-3">
-            <div className="text-sm font-semibold text-[#F5F8FC]">Phone Quick Planner</div>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-[#F5F8FC]">Mobile workflow</div>
+                <div className="mt-1 text-xs text-[#A9BBCD]">
+                  Same five-step flow as desktop, sized for one-handed planning.
+                </div>
+              </div>
+              <Badge className={plannerSafeBadgeClass}>
+                {activeWorkflowStep.step}/5
+              </Badge>
+            </div>
+            <div className="grid gap-2">
+              {plannerWorkflowOrder.map((tab) => {
+                const step = plannerWorkflowSteps[tab];
+                return (
+                  <Button
+                    key={`mobile-workflow-${tab}`}
+                    type="button"
+                    variant="outline"
+                    className={getMobileWorkflowButtonClass(tab)}
+                    onClick={() => {
+                      if (tab === activeTab) {
+                        scrollToPlannerWorkflowTop();
+                        return;
+                      }
+                      const currentIndex = plannerWorkflowOrder.indexOf(activeTab);
+                      const nextIndex = plannerWorkflowOrder.indexOf(tab);
+                      navigatePlannerWorkflowStep(tab, nextIndex > currentIndex ? "forward" : "back");
+                    }}
+                    aria-current={activeTab === tab ? "step" : undefined}
+                  >
+                    <span className="mr-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#60758C]/65 bg-[#0f1720] text-[11px] font-semibold text-[#E3EDF7]">
+                      {step.step}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block font-semibold">{step.label}</span>
+                      <span className="mt-0.5 block text-[11px] font-normal text-[#A9BBCD]">{getWorkflowStatus(tab)}</span>
+                    </span>
+                  </Button>
+                );
+              })}
+            </div>
             <div className="text-xs text-[#A9BBCD]">
-              Use quick jumps for the dense planner sections. Full planning stays available; this just keeps the phone workflow navigable.
+              Route step shortcuts
             </div>
             <div className="grid grid-cols-2 gap-2">
               <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => handleRouteSummaryAction("quick_jump")}>Route</Button>
               <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToPlannerSection("planner-distance-performance", "route")}>Performance</Button>
-              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => setActiveTab("weather")}>Weather</Button>
-              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => setActiveTab("analysis")}>Analysis</Button>
               <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToPlannerSection("planner-route-map", "route")}>Map</Button>
-              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => setActiveTab("file")}>Review & File</Button>
+              <Button type="button" size="sm" variant="outline" className={plannerInsetActionClass} onClick={() => jumpToPlannerSection("planner-aircraft-setup", "route")}>Aircraft</Button>
             </div>
           </CardContent>
         </Card>
@@ -8287,8 +8332,8 @@ export default function FlightPlanner() {
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
         <TabsList
           className={cn(
-            "grid h-auto w-full grid-cols-2 gap-2 rounded-[1.2rem] border p-1.5 md:grid-cols-5",
-            isMobile && "p-1.5"
+            "grid h-auto w-full gap-2 rounded-[1.2rem] border p-1.5 md:grid-cols-5",
+            isMobile ? "grid-flow-col auto-cols-[minmax(8rem,1fr)] overflow-x-auto overscroll-x-contain" : "grid-cols-2"
           )}
         >
           <TabsTrigger value="route" className="h-10 rounded-[0.95rem]">Route</TabsTrigger>

@@ -361,6 +361,19 @@ test("flight planner workflow footer wiring is navigation-only and preserves pla
   assert.doesNotMatch(navigationBlock, /save|fileFlightPlan|amend|cancel|activate|close|sync|invalidate|resetForm|setForm|setEditingPlan|setDraftPlanId/i);
 });
 
+test("flight planner mobile workflow mirrors desktop five-step flow", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /Mobile workflow/);
+  assert.match(source, /Same five-step flow as desktop/);
+  assert.match(source, /plannerWorkflowOrder\.map\(\(tab\) =>/);
+  assert.match(source, /aria-current=\{activeTab === tab \? "step" : undefined\}/);
+  assert.match(source, /grid-flow-col auto-cols-\[minmax\(8rem,1fr\)\] overflow-x-auto/);
+  assert.match(source, /Route step shortcuts/);
+  assert.match(source, /planner-aircraft-setup/);
+  assert.doesNotMatch(source, /Phone Quick Planner/);
+  assert.doesNotMatch(source, /Use quick jumps for the dense planner sections/);
+});
+
 test("rendered lifecycle actions show saved unfiled plan filing controls", () => {
   const html = renderLifecycleActions(lifecyclePlan({
     filingStatus: "draft",

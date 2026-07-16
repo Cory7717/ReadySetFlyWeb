@@ -30,7 +30,7 @@ test("TFMS panel renders alerts placeholder for Premium", () => {
   const html = renderToStaticMarkup(
     <OperationalIntelligencePanelView
       {...baseProps}
-      tier="pro_plus"
+      tier="premium"
     />
   );
   assert.ok(html.includes("No active TFMS advisories detected"));
@@ -40,7 +40,7 @@ test("TFMS panel renders overlay toggle for Premium", () => {
   const html = renderToStaticMarkup(
     <OperationalIntelligencePanelView
       {...baseProps}
-      tier="pro_plus"
+      tier="premium"
     />
   );
   assert.ok(html.includes("Congestion Overlay"));

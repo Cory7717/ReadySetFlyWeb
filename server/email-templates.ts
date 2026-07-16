@@ -1,4 +1,5 @@
 import type { CrmSalesEmailTemplateType, LeadCategory } from "@shared/schema";
+import { PREMIUM_MONTHLY_PRICE } from "@shared/membership-plans";
 
 export function getListingReminderEmailHtml(userName: string, aircraftCount: number, marketplaceCount: number): string {
   const totalListings = aircraftCount + marketplaceCount;
@@ -1435,7 +1436,7 @@ export function getLogbookProAlertEmailHtml(data: {
   <div class="container">
     <div class="card">
       <div class="header">
-        <h2 style="margin:0;">RSF Pro Alert</h2>
+        <h2 style="margin:0;">RSF Premium Alert</h2>
       </div>
       <p style="margin-top: 20px;">Hi ${data.firstName},</p>
       <p><strong>${data.title}</strong></p>
@@ -1443,10 +1444,10 @@ export function getLogbookProAlertEmailHtml(data: {
       <p class="muted">Due date: ${dueDate}</p>
       <div style="margin-top: 20px;">
         <a class="cta" href="${process.env.FRONTEND_BASE_URL || "https://readysetfly.us"}/logbook">
-          Review in RSF Pro
+          Review in RSF Premium
         </a>
       </div>
-      <p class="muted" style="margin-top: 20px;">You’re receiving this email because RSF Pro alerts are enabled on your account.</p>
+      <p class="muted" style="margin-top: 20px;">You’re receiving this email because RSF Premium alerts are enabled on your account.</p>
     </div>
   </div>
 </body>
@@ -1462,7 +1463,7 @@ export function getLogbookProAlertEmailText(data: {
 }): string {
   const dueDate = data.dueDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   return `
-RSF Pro Alert
+RSF Premium Alert
 
 Hi ${data.firstName},
 
@@ -1471,9 +1472,9 @@ ${data.message}
 
 Due date: ${dueDate}
 
-Review in RSF Pro: ${(process.env.FRONTEND_BASE_URL || "https://readysetfly.us")}/logbook
+Review in RSF Premium: ${(process.env.FRONTEND_BASE_URL || "https://readysetfly.us")}/logbook
 
-You’re receiving this email because RSF Pro alerts are enabled on your account.
+You’re receiving this email because RSF Premium alerts are enabled on your account.
   `.trim();
 }
 
@@ -1602,11 +1603,11 @@ export function getProTrialOfferEmailHtml(data: {
   <div class="container">
     <div class="card">
       <div class="header">
-        <div class="pill">14-day Pro trial</div>
-        <h2 style="margin: 12px 0 0 0;">Try RSF Pro free for 14 days</h2>
+        <div class="pill">14-day Premium trial</div>
+        <h2 style="margin: 12px 0 0 0;">Try RSF Premium free for 14 days</h2>
       </div>
       <p style="margin-top: 20px;">Hi ${data.firstName},</p>
-      <p>Ready Set Fly now includes a 14-day free trial on the monthly RSF Pro plan. If you have been browsing the marketplace, planning flights, or using the training tools, this is the easiest way to try the full workflow.</p>
+      <p>Ready Set Fly now includes a 14-day free trial on RSF Premium. If you have been browsing the marketplace, planning flights, or using the training tools, this is the easiest way to try the full workflow.</p>
       <ul class="list">
         <li>Save flight plans and aircraft profiles.</li>
         <li>Keep your digital logbook, endorsements, and training history in one place.</li>
@@ -1617,7 +1618,7 @@ export function getProTrialOfferEmailHtml(data: {
         <a class="cta" href="${appUrl}/logbook-pro">Start your 14-day trial</a>
       </div>
       <p class="note">
-        Monthly plans start at $5.99 after the free trial. Cancel any time before renewal.
+        Monthly plans start at $${PREMIUM_MONTHLY_PRICE.toFixed(2)} after the free trial. Cancel any time before renewal.
         <a href="${data.unsubscribeUrl}">Unsubscribe</a>.
       </p>
     </div>
@@ -1633,11 +1634,11 @@ export function getProTrialOfferEmailText(data: {
 }): string {
   const appUrl = process.env.FRONTEND_BASE_URL || process.env.APP_BASE_URL || process.env.WEB_BASE_URL || "https://readysetfly.us";
   return `
-Try RSF Pro free for 14 days
+Try RSF Premium free for 14 days
 
 Hi ${data.firstName},
 
-Ready Set Fly now includes a 14-day free trial on the monthly RSF Pro plan.
+Ready Set Fly now includes a 14-day free trial on RSF Premium.
 
 Try the full workflow:
 - Save flight plans and aircraft profiles
@@ -1646,7 +1647,7 @@ Try the full workflow:
 
 Start your trial: ${appUrl}/logbook-pro
 
-Monthly plans start at $5.99 after the free trial. Cancel any time before renewal.
+Monthly plans start at $${PREMIUM_MONTHLY_PRICE.toFixed(2)} after the free trial. Cancel any time before renewal.
 Unsubscribe: ${data.unsubscribeUrl}
   `.trim();
 }

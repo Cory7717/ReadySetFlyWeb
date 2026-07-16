@@ -10,7 +10,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 
-export type TfmsTier = "free" | "pro_core" | "pro_plus";
+export type TfmsTier = "free" | "premium";
 
 type TfmsAlert = {
   type: string;
@@ -182,18 +182,7 @@ export function OperationalIntelligencePanelView({
               </div>
             )}
 
-            {tier === "pro_core" && (
-              <div className={`${plannerSubpanelClass} p-3 text-xs ${plannerMutedClass}`}>
-                Congestion overlay and risk score are available in RSF Premium.
-                <div className="mt-2">
-                  <Button asChild size="sm" variant="outline" className={plannerSelectActionClass}>
-                    <a href="/logbook/pro">Upgrade to Premium</a>
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {tier === "pro_plus" && (
+            {tier === "premium" && (
               <div className="space-y-3">
                 <div className={`${plannerSubpanelClass} flex flex-wrap items-center justify-between gap-2 p-3`}>
                   <div>
@@ -262,7 +251,7 @@ export default function OperationalIntelligencePanel({
 }: OperationalIntelligencePanelProps) {
   const hasRoute = /^[A-Z0-9]{3,4}$/.test(dep) && /^[A-Z0-9]{3,4}$/.test(dest);
   const canFetch = tier !== "free" && hasRoute;
-  const canFetchRisk = tier === "pro_plus" && hasRoute;
+  const canFetchRisk = tier === "premium" && hasRoute;
   const lastRiskGeneratedAt = useRef<string | null>(null);
 
   const statusQuery = useQuery<TfmsStatusResponse>({

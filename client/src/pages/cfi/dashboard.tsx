@@ -188,7 +188,7 @@ export default function CfiDashboard() {
       <PageShell
         kicker="CFI Dashboard"
         title="Become a CFI on Ready Set Fly"
-        description="Unlock the instructor profile, booking workflow, and scheduling workspace with the CFI trial or RSF Pro."
+        description="Unlock the instructor profile, booking workflow, and scheduling workspace with the CFI trial or RSF Premium."
         className="rsf-community-theme"
         canopyClassName="rsf-metal-hero border-b border-white/10"
         contentClassName="max-w-3xl space-y-6"
@@ -202,14 +202,14 @@ export default function CfiDashboard() {
             <CardHeader>
               <CardTitle>30-Day CFI Trial</CardTitle>
               <CardDescription>
-                One-time trial access for instructors. You can upgrade to RSF Pro anytime.
+                One-time trial access for instructors. You can upgrade to RSF Premium anytime.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {trialRedeemed ? (
                 <Alert variant="destructive">
                   <AlertDescription>
-                    Your one-time CFI trial has already been used. Upgrade to RSF Pro for continued access.
+                    Your one-time CFI trial has already been used. Upgrade to RSF Premium for continued access.
                   </AlertDescription>
                 </Alert>
               ) : (
@@ -222,7 +222,7 @@ export default function CfiDashboard() {
                 </Button>
               )}
               <Button asChild variant="outline">
-                <Link href="/logbook/pro">View RSF Pro plans</Link>
+                <Link href="/logbook/pro">View RSF Premium plans</Link>
               </Button>
             </CardContent>
           </Card>

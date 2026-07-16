@@ -397,7 +397,7 @@ export default function RadioCommsTrainer() {
 
   const gateText = isGuest
     ? "Create a free RSF account to keep practicing full scenarios."
-    : "Upgrade to RSF Pro for unlimited scenarios and scoring history.";
+    : "Upgrade to RSF Premium for unlimited scenarios and scoring history.";
 
   useEffect(() => {
     if (!sessionStartRef.current) {
@@ -856,7 +856,7 @@ export default function RadioCommsTrainer() {
         <Card>
           <CardHeader>
             <CardTitle>Practice history</CardTitle>
-            <CardDescription>Saved RSF Pro sessions and scores.</CardDescription>
+            <CardDescription>Saved RSF Premium sessions and scores.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {sessions.length === 0 ? (
@@ -888,7 +888,7 @@ export default function RadioCommsTrainer() {
         <CardHeader>
           <CardTitle>Sample radio calls</CardTitle>
           <CardDescription>
-            Hear and read example calls. Available in full with RSF Pro.
+            Hear and read example calls. Available in full with RSF Premium.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -916,7 +916,7 @@ export default function RadioCommsTrainer() {
           {!isPro && (
             <Alert>
               <AlertDescription>
-                Upgrade to RSF Pro or Pro+ once you want full scenario examples, saved scoring, and a repeatable training record instead of one-off practice.
+                Upgrade to RSF Premium once you want full scenario examples, saved scoring, and a repeatable training record instead of one-off practice.
               </AlertDescription>
             </Alert>
           )}

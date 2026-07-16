@@ -443,11 +443,11 @@ export default function StudentVorTrainer() {
   const gate = canUseGuided
     ? undefined
     : {
-        title: isAuthenticated ? "Upgrade to RSF Pro" : "Create a free account",
+        title: isAuthenticated ? "Upgrade to RSF Premium" : "Create a free account",
         message: isAuthenticated
-          ? "Guided VOR scenarios and checkrides unlock with RSF Pro."
+          ? "Guided VOR scenarios and checkrides unlock with RSF Premium."
           : "Create a free RSF account to unlock guided VOR scenarios.",
-        ctaLabel: isAuthenticated ? "Upgrade to RSF Pro" : "Create free account",
+        ctaLabel: isAuthenticated ? "Upgrade to RSF Premium" : "Create free account",
         ctaHref: isAuthenticated ? "/logbook/pro" : "/register",
       };
 
@@ -565,11 +565,11 @@ export default function StudentVorTrainer() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Quiz mode unlocks with RSF Pro to help you master TO/FROM logic and intercepts.
+              Quiz mode unlocks with RSF Premium to help you master TO/FROM logic and intercepts.
             </p>
             <Button asChild>
               <Link href={isAuthenticated ? "/logbook/pro" : "/register"}>
-                {isAuthenticated ? "Upgrade to RSF Pro" : "Create free account"}
+                {isAuthenticated ? "Upgrade to RSF Premium" : "Create free account"}
               </Link>
             </Button>
           </CardContent>

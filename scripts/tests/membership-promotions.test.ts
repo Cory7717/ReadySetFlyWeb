@@ -93,6 +93,9 @@ test("membership plan selector uses explicit dark-panel contrast colors", () => 
   assert.match(logbookProSource, /bg-\[#18263a\]/);
   assert.match(logbookProSource, /text-\[#F5F8FC\]/);
   assert.match(logbookProSource, /text-\[#A9BBCD\]/);
+  assert.match(logbookProSource, /PREMIUM_MONTHLY_PRICE/);
+  assert.match(logbookProSource, /PREMIUM_ANNUAL_PRICE/);
+  assert.doesNotMatch(logbookProSource, /\$7\.99/);
   assert.doesNotMatch(logbookProSource, /bg-white\/7[02]/);
   assert.doesNotMatch(logbookProSource, /text-slate-900/);
   assert.doesNotMatch(logbookProSource, /text-slate-700/);

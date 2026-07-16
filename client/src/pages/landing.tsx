@@ -22,6 +22,7 @@ import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
 import { useAuth } from "@/hooks/useAuth";
+import { PREMIUM_ANNUAL_PRICE, PREMIUM_MONTHLY_PRICE } from "@shared/membership-plans";
 import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
 import { AppDownloadBadges } from "@/components/GooglePlayBadge";
 import { clearResumeFlow, getPrimaryResumeFlow, saveResumeFlow, type ResumeFlowRecord } from "@/lib/firstSessionFlow";
@@ -394,8 +395,8 @@ export default function Landing() {
   const membershipCtaDescription = hasProCore && !hasProPlus
     ? "Move into the training stack, advanced sims, and higher-end pilot workflow tools."
     : isPaidUser
-      ? "Open your RSF Pro page to manage plan details, trials, and membership settings."
-      : "Open the dedicated RSF Pro page for plan details, feature breakdowns, and subscription links.";
+      ? "Open your RSF Premium page to manage plan details, trials, and membership settings."
+      : "Open the dedicated RSF Premium page for plan details, feature breakdowns, and subscription links.";
   const metallicPrimaryButtonClass = "rsf-metal-button-primary";
   const metallicSecondaryButtonClass = "rsf-metal-button-secondary";
   const metallicPanelClass = "rsf-metal-panel";
@@ -743,7 +744,7 @@ export default function Landing() {
                 : "border-[#29415e] bg-[#102236] text-[#9FC6EA] hover:bg-[#15304b]"
             }`}
           >
-            {({ weather: "Weather", find: "Explore", plan: "Planner", log: "Logbook", pricing: "RSF Pro" } as Record<MobileTab, string>)[tab.id] ?? tab.label}
+            {({ weather: "Weather", find: "Explore", plan: "Planner", log: "Logbook", pricing: "Premium" } as Record<MobileTab, string>)[tab.id] ?? tab.label}
           </button>
         ))}
       </div>
@@ -924,7 +925,7 @@ export default function Landing() {
                 New flat rate
               </Badge>
               <div className="text-sm font-semibold text-[#F5F8FC]">
-                Full RSF Premium access for $7.99/month.
+                Full RSF Premium access for ${PREMIUM_MONTHLY_PRICE.toFixed(2)}/month or ${PREMIUM_ANNUAL_PRICE.toFixed(2)}/year.
               </div>
               <div className="text-xs text-[#A9BBCD]">
                 Unlimited active flight plans, AI tools, logbook, training, and advanced aviation features.
@@ -1333,7 +1334,7 @@ export default function Landing() {
                   href="/logbook/pro"
                   onClick={() => trackEvent("cta_click", { label: "mobile_log_tab_start_trial", target: "/logbook/pro" })}
                 >
-                  Start 14-day Pro trial
+                  Start 14-day Premium trial
                 </Link>
               </Button>
             </>
@@ -1345,7 +1346,7 @@ export default function Landing() {
           <Card className={`${metallicPanelClass} text-[#E8EDF4]`}>
             <CardHeader className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <span className="rsf-kicker">RSF Pro</span>
+                <span className="rsf-kicker">RSF Premium</span>
                 <Badge variant="outline" className="border-[#5b6e87]/35 bg-[#131923] text-[#9db8d8]">
                   Plans moved off this page
                 </Badge>
@@ -1367,7 +1368,7 @@ export default function Landing() {
                 </Link>
               </Button>
               <p className="text-xs text-[#91a8c3]">
-                The RSF Pro page now carries the full plan details, trial language, and subscribe flows.
+                The RSF Premium page now carries the full plan details, trial language, and subscribe flows.
               </p>
             </CardContent>
           </Card>
@@ -2363,7 +2364,7 @@ export default function Landing() {
                   Save searches, log flights, and unlock every RSF tool.
                 </p>
                 <p className="text-xs text-[#A1B5CC]">
-                  Free account — no credit card. Upgrade to Pro anytime with a 14-day trial.
+                  Free account, no credit card. Upgrade to RSF Premium anytime with a 14-day trial.
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
@@ -2437,7 +2438,7 @@ export default function Landing() {
                 <Card id="landing-membership-section" className={`${metallicPanelClass} sticky top-24 overflow-hidden text-[#E8EDF4]`}>
                   <div className="rsf-metal-divider bg-[linear-gradient(135deg,rgba(22,28,36,0.96),rgba(19,34,61,0.92),rgba(13,19,28,0.98))] px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="rsf-kicker text-[#d4e1f7]">RSF Pro</span>
+                      <span className="rsf-kicker text-[#d4e1f7]">RSF Premium</span>
                       <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff]">
                         Membership status
                       </Badge>
@@ -2815,6 +2816,7 @@ export default function Landing() {
     </div>
   );
 }
+
 
 
 

@@ -84,8 +84,8 @@ export function NotamTranslator({
       {remainingUses !== null && !isLoading && (
         <div className="text-xs text-muted-foreground">
           {remainingUses > 0
-            ? `${remainingUses} free AI use${remainingUses === 1 ? "" : "s"} remaining before Pro Core is required.`
-            : "Free AI usage limit reached. Pro Core is required for additional AI use."}
+            ? `${remainingUses} free AI use${remainingUses === 1 ? "" : "s"} remaining before RSF Premium is required.`
+            : "Free AI usage limit reached. RSF Premium is required for additional AI use."}
         </div>
       )}
 
@@ -132,9 +132,9 @@ export function NotamTranslator({
         </div>
       )}
 
-      {(remainingUses === 0 || error?.includes("Pro Core")) && (
+      {(remainingUses === 0 || error?.includes("RSF Premium")) && (
         <Button asChild size="sm" className="w-full sm:w-auto">
-          <Link href="/logbook/pro">Upgrade to Pro Core</Link>
+          <Link href="/logbook/pro">Upgrade to RSF Premium</Link>
         </Button>
       )}
     </div>

@@ -176,7 +176,7 @@ export default function RegisterPage() {
               Save your work, keep your place, and come back to the same tools later.
             </CardDescription>
             <p className="text-xs text-muted-foreground">
-              Free account first. Upgrade only if RSF Pro becomes worth it for your workflow.
+              RSF Basic account first. Upgrade only if RSF Premium becomes worth it for your workflow.
             </p>
           </CardHeader>
           <CardContent className="space-y-5">

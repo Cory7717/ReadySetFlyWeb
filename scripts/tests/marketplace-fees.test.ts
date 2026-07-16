@@ -5,7 +5,7 @@ import {
   getBasePrice,
 } from "../../shared/config/listingPricing";
 
-test("marketplace listing fee discounts apply to Pro tiers", () => {
+test("marketplace listing fee discounts apply to Premium and legacy paid tiers", () => {
   const base = getBasePrice("aircraft-sale", "basic");
 
   const freeBreakdown = calculateMarketplaceListingFee({
@@ -20,27 +20,29 @@ test("marketplace listing fee discounts apply to Pro tiers", () => {
   assert.equal(freeBreakdown.membershipDiscountAmount, 0);
   assert.equal(freeBreakdown.finalListingFee, base);
 
-  const proBreakdown = calculateMarketplaceListingFee({
+  const premiumBreakdown = calculateMarketplaceListingFee({
     category: "aircraft-sale",
     tier: "basic",
-    membershipTier: "pro",
+    membershipTier: "premium",
     isTraditionalMarketplace: true,
   });
 
-  assert.equal(proBreakdown.membershipDiscountPct, 10);
-  assert.equal(proBreakdown.membershipDiscountAmount, 2.5);
-  assert.equal(proBreakdown.finalListingFee, 22.5);
+  assert.equal(premiumBreakdown.membershipDiscountPct, 20);
+  assert.equal(premiumBreakdown.membershipDiscountAmount, 5);
+  assert.equal(premiumBreakdown.finalListingFee, 20);
+  assert.equal(premiumBreakdown.membershipTierApplied, "premium");
 
-  const proPlusBreakdown = calculateMarketplaceListingFee({
+  const legacyProPlusBreakdown = calculateMarketplaceListingFee({
     category: "aircraft-sale",
     tier: "basic",
     membershipTier: "pro_plus",
     isTraditionalMarketplace: true,
   });
 
-  assert.equal(proPlusBreakdown.membershipDiscountPct, 20);
-  assert.equal(proPlusBreakdown.membershipDiscountAmount, 5);
-  assert.equal(proPlusBreakdown.finalListingFee, 20);
+  assert.equal(legacyProPlusBreakdown.membershipDiscountPct, 20);
+  assert.equal(legacyProPlusBreakdown.membershipDiscountAmount, 5);
+  assert.equal(legacyProPlusBreakdown.finalListingFee, 20);
+  assert.equal(legacyProPlusBreakdown.membershipTierApplied, "premium");
 });
 
 test("membership discounts are disabled for non-traditional listings", () => {

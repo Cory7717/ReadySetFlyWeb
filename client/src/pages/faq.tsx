@@ -12,7 +12,7 @@ const FAQS = [
     id: "trial",
     question: "Do you offer a free trial?",
     answer:
-      "Yes. RSF Pro monthly plans start with a 14-day free trial so you can test the full workflow before billing starts.",
+      "Yes. RSF Premium starts with a 14-day free trial so you can test the full workflow before billing starts.",
   },
   {
     id: "what-included",

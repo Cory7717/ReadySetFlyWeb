@@ -249,10 +249,10 @@ export default function ToolHub() {
         <div className="rsf-card-shell">
           <div className="grid gap-4 p-6 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#D9A441]">Why RSF Pro Exists</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#D9A441]">Why RSF Premium Exists</div>
               <h2 className="text-2xl font-semibold text-[#F1F5FA]">Pilots do not pay for "advanced features." They pay to stop redoing work.</h2>
               <p className="max-w-3xl text-sm leading-6 text-[#7A9BB8]">
-                RSF Pro becomes useful when you want saved plans, saved aircraft assumptions, practice history, logbook continuity, and reminders that keep repeat flying easier.
+                RSF Premium becomes useful when you want saved plans, saved aircraft assumptions, practice history, logbook continuity, and reminders that keep repeat flying easier.
               </p>
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rsf-metal-subpanel px-4 py-3">
@@ -264,7 +264,7 @@ export default function ToolHub() {
                   <div className="mt-1 text-xs text-[#7A9BB8]">Save repeat workflows, keep history, and reduce planning/admin friction.</div>
                 </div>
                 <div className="rsf-metal-subpanel px-4 py-3">
-                  <div className="text-sm font-semibold text-[#F1F5FA]">Pro+</div>
+                  <div className="text-sm font-semibold text-[#F1F5FA]">Premium</div>
                   <div className="mt-1 text-xs text-[#7A9BB8]">Layer on deeper planning context and power-user tools as they ship.</div>
                 </div>
               </div>
@@ -286,7 +286,7 @@ export default function ToolHub() {
                   className="rsf-metal-button-secondary"
                   onClick={() => trackEvent("subscription_cta_click", { source_page: "/tool-hub", target: "/logbook/pro", context: "tool_hub_value_panel" })}
                 >
-                  <Link href={withSourceParam("/logbook/pro", "/tool-hub")}>See Pro plans</Link>
+                  <Link href={withSourceParam("/logbook/pro", "/tool-hub")}>See Premium plans</Link>
                 </Button>
               </div>
             </div>

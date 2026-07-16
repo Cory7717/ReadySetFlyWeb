@@ -169,7 +169,7 @@ export default function LoginPage() {
             {[
               "Saved plans, aircraft profiles, and logbook entries stay tied to your account.",
               "Free account value remains available even if you never upgrade.",
-              "RSF Pro matters once repeat workflow and time savings matter to you.",
+              "RSF Premium matters once repeat workflow and time savings matter to you.",
               "Google sign-in is the fastest route back to the page you came from.",
             ].map((item) => (
               <div

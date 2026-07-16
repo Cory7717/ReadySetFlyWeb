@@ -230,7 +230,7 @@ export const users = pgTable("users", {
   paypalSubscriptionId: text("paypal_subscription_id"),
   paypalPlanId: text("paypal_plan_id"),
 
-  // CFI Trial / Support Access (does not grant full RSF Pro)
+  // CFI Trial / Support Access (does not grant full RSF Premium)
   cfiTrialStartedAt: timestamp("cfi_trial_started_at"),
   cfiTrialEndsAt: timestamp("cfi_trial_ends_at"),
   cfiTrialRedeemed: boolean("cfi_trial_redeemed").default(false),
@@ -3887,7 +3887,7 @@ export const insertMembershipPartnerOfferSchema = createInsertSchema(membershipP
     .max(120)
     .regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers, and hyphens only"),
   description: z.string().max(500).optional(),
-  tier: z.enum(["premium", "pro", "pro_plus"]),
+  tier: z.literal("premium").default("premium"),
   durationDays: z.number().int().min(1).max(365),
   isActive: z.boolean().default(true),
   createdBy: z.string().optional(),

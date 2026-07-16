@@ -39,14 +39,14 @@ export default function LogbookProSuccess() {
   return (
     <PageShell
       kicker="Membership"
-      title="RSF Pro Activated"
+      title="RSF Premium Activated"
       description="Membership confirmation is complete. Your upgraded logbook workflow is ready."
       canopyClassName="rsf-metal-hero border-b border-white/10"
       contentClassName="rsf-logbook-theme space-y-6"
     >
       <Card className="rsf-metal-panel max-w-2xl text-[#E8EDF4]">
         <CardHeader>
-          <CardTitle>RSF Pro Activated</CardTitle>
+          <CardTitle>RSF Premium Activated</CardTitle>
           <CardDescription>Thanks for upgrading!</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

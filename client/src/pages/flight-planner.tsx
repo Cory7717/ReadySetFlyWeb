@@ -1906,15 +1906,9 @@ export default function FlightPlanner() {
   const pressDemo = usePressDemo(FLIGHT_PLANNER_PRESS_STEPS);
   const entitlements = (user as any)?.entitlements;
   const hasPlannerPersistence = entitlements?.canPersist ?? isAuthenticated;
-  const hasPremiumAccess = entitlements?.tier === "premium" || entitlements?.tier === "pro" || entitlements?.tier === "pro_plus" || user?.logbookProStatus === "active";
+  const hasPremiumAccess = entitlements?.tier === "premium" || user?.logbookProStatus === "active";
   const isPro = isAuthenticated || hasPlannerPersistence;
-  const tfmsTier: TfmsTier = entitlements?.tier === "premium"
-    ? "pro_plus"
-    : entitlements?.tier === "pro_plus"
-    ? "pro_plus"
-    : entitlements?.tier === "pro"
-      ? "pro_core"
-      : "free";
+  const tfmsTier: TfmsTier = hasPremiumAccess ? "premium" : "free";
   const isGuest = !isAuthenticated;
   const isFree = isAuthenticated && !hasPremiumAccess;
   const isStudent = Boolean(
@@ -2264,7 +2258,7 @@ export default function FlightPlanner() {
   }, [draftPlanId]);
 
   useEffect(() => {
-    if (tfmsTier !== "pro_plus" && tfmsOverlayEnabled) {
+    if (tfmsTier !== "premium" && tfmsOverlayEnabled) {
       setTfmsOverlayEnabled(false);
     }
   }, [tfmsTier, tfmsOverlayEnabled]);
@@ -12302,7 +12296,7 @@ export default function FlightPlanner() {
                     plannedAltitudeFt={plannedAltitudeValue}
                     terrainSegments={terrainCueSegments}
                     terrainHotSpots={terrainMapHotSpots}
-                    tfmsOverlayEnabled={tfmsTier === "pro_plus" && tfmsOverlayEnabled}
+                    tfmsOverlayEnabled={tfmsTier === "premium" && tfmsOverlayEnabled}
                   />
                 </Suspense>
               ) : (

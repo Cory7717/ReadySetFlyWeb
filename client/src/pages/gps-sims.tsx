@@ -22,7 +22,7 @@ export default function GpsSimsHub() {
       <section className="bg-muted py-10">
         <div className="container mx-auto px-4 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">RSF Pro</Badge>
+            <Badge variant="secondary">RSF Premium</Badge>
             <Badge variant="outline">{canPreviewInternal ? "Internal Preview" : "Active development"}</Badge>
           </div>
           <h1 className="font-display text-3xl sm:text-4xl font-bold">
@@ -30,7 +30,7 @@ export default function GpsSimsHub() {
           </h1>
           <p className="text-muted-foreground max-w-3xl">
             Interactive GPS trainers built for IFR pilot workflows - flight plan entry, direct-to, procedure loading, and
-            checkride-ready scoring. Shipping with RSF Pro.
+            checkride-ready scoring. Shipping with RSF Premium.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="outline">
@@ -76,10 +76,10 @@ export default function GpsSimsHub() {
                     />
                   </svg>
                 </div>
-                <Badge variant="secondary">Coming with RSF Pro</Badge>
+                <Badge variant="secondary">Coming with RSF Premium</Badge>
                 <Button asChild size="sm">
                   <Link href={isAuthenticated ? "/logbook/pro" : "/register"}>
-                    {isAuthenticated ? "Upgrade to Pro" : "Create Free Account"}
+                    {isAuthenticated ? "Upgrade to Premium" : "Create Free Account"}
                   </Link>
                 </Button>
               </div>

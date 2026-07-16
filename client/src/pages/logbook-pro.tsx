@@ -10,7 +10,16 @@ import { Label } from "@/components/ui/label";
 import { PageShell } from "@/components/layout/PageShell";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { membershipPlanOptions, membershipTierInfo, type MembershipInterval, type MembershipTier } from "@shared/membership-plans";
+import {
+  PREMIUM_ANNUAL_PRICE,
+  PREMIUM_ANNUAL_SAVINGS,
+  PREMIUM_ANNUAL_SAVINGS_PERCENT,
+  PREMIUM_MONTHLY_PRICE,
+  membershipPlanOptions,
+  membershipTierInfo,
+  type MembershipInterval,
+  type MembershipTier,
+} from "@shared/membership-plans";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
 import { getSourceFromWindow, withReturnTo } from "@/lib/returnTo";
@@ -183,7 +192,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
   const isTrialing = membershipStatus === "trialing";
 
   const currentTierLabel =
-    membershipTier === "free" ? "Free" : membershipTierInfo.premium.title;
+    membershipTier === "free" ? "RSF Basic" : membershipTierInfo.premium.title;
 
   const planOptions = membershipPlanOptions[selectedTier];
   const selectedPlan = useMemo(
@@ -206,7 +215,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
       pixelEvent("StartTrial", {
         content_name: "RSF Premium",
         currency: "USD",
-        value: 7.99,
+        value: selectedPlan.price,
       });
       const res = await apiRequest("POST", "/api/paypal/membership/subscribe", {
         tier: selectedTier,
@@ -247,10 +256,11 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
     <PageShell
       kicker="Membership"
       title="Simple plans for Ready Set Fly."
-      description="Free includes RSF Flight Planner Basic. RSF Premium unlocks the complete aviation ecosystem for $7.99/month."
+      description={`RSF Basic includes Flight Planner Basic. RSF Premium unlocks the complete aviation ecosystem for $${PREMIUM_MONTHLY_PRICE.toFixed(2)}/month or $${PREMIUM_ANNUAL_PRICE.toFixed(2)}/year.`}
       actions={
         <>
-          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">$7.99/month</Badge>
+          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">${PREMIUM_MONTHLY_PRICE.toFixed(2)}/month</Badge>
+          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">${PREMIUM_ANNUAL_PRICE.toFixed(2)}/year</Badge>
           <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">PayPal Business/Commerce</Badge>
         </>
       }
@@ -286,7 +296,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
                 <div className={`${logbookSubpanelClass} p-4`}>
                   <div className="text-sm font-semibold text-[#F5F8FC]">Repeat routes start piling up</div>
                   <div className="mt-2 text-xs leading-5 text-[#A9BBCD]">
-                    Pro pays off when you are rebuilding the same planning setup, notes, and aircraft assumptions more than once.
+                    Premium pays off when you are rebuilding the same planning setup, notes, and aircraft assumptions more than once.
                   </div>
                 </div>
                 <div className={`${logbookSubpanelClass} p-4`}>
@@ -461,12 +471,12 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
               <div className="rounded-[1rem] border border-[#5d6f85]/28 bg-[#121923] px-4 py-3 text-left">
                 <div className="text-sm font-semibold text-[#F5F8FC]">Free</div>
                 <div className="text-xs text-[#A9BBCD]">Plan and file flights with RSF Flight Planner Basic.</div>
-                <div className="mt-2 text-xs font-medium text-[#C9D6E4]">$0/month</div>
+                <div className="mt-2 text-xs font-medium text-[#C9D6E4]">Free</div>
               </div>
               <div className="rounded-[1rem] border border-[#4f7cff]/55 bg-[#18263a] px-4 py-3 text-left shadow-[0_12px_24px_rgba(4,11,22,0.24)]">
                 <div className="text-sm font-semibold text-[#F5F8FC]">{membershipTierInfo.premium.title}</div>
                 <div className="text-xs text-[#C7D7EA]">{membershipTierInfo.premium.subtitle}</div>
-                <div className="mt-2 text-xs font-medium text-[#D9E4F0]">$7.99/month</div>
+                <div className="mt-2 text-xs font-medium text-[#D9E4F0]">${PREMIUM_MONTHLY_PRICE.toFixed(2)}/month or ${PREMIUM_ANNUAL_PRICE.toFixed(2)}/year</div>
               </div>
             </div>
 
@@ -490,7 +500,11 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
                           {plan.badge ? <Badge variant="outline">{plan.badge}</Badge> : null}
                         </div>
                         <div className="mt-2 text-2xl font-semibold text-[#F5F8FC]">${plan.price.toFixed(2)}</div>
-                        <div className="text-xs text-[#A9BBCD]">{membershipTierInfo.premium.subtitle}</div>
+                        <div className="text-xs text-[#A9BBCD]">
+                          {plan.interval === "annual"
+                            ? `Save $${PREMIUM_ANNUAL_SAVINGS.toFixed(2)} per year, about ${PREMIUM_ANNUAL_SAVINGS_PERCENT}% off monthly billing.`
+                            : membershipTierInfo.premium.subtitle}
+                        </div>
                       </button>
                     );
                   })}
@@ -518,7 +532,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
                   {loading ? "Redirecting..." : "Upgrade to Premium"}
                 </Button>
                 <p className="text-xs text-[#A9BBCD]">
-                  Recurring billing is $7.99/month until cancelled.
+                  Recurring billing is ${selectedPlan.interval === "annual" ? `$${PREMIUM_ANNUAL_PRICE.toFixed(2)}/year` : `$${PREMIUM_MONTHLY_PRICE.toFixed(2)}/month`} until cancelled.
                 </p>
               </>
             )}

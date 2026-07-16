@@ -584,11 +584,11 @@ export default function GpsSimsUnit() {
     resolvedUnit?.panel.hotspots[0];
 
   const showGate = !hasFullAccess;
-  const gateTitle = isAuthenticated ? "Upgrade to RSF Pro" : "Create a free account";
+  const gateTitle = isAuthenticated ? "Upgrade to RSF Premium" : "Create a free account";
   const gateMessage = isAuthenticated
-    ? "GPS sims unlock with RSF Pro for full workflows, checkrides, and saved training progress."
-    : "Create a free RSF account to unlock RSF Pro GPS simulator training.";
-  const gateCtaLabel = isAuthenticated ? "Upgrade to RSF Pro" : "Create free account";
+    ? "GPS sims unlock with RSF Premium for full workflows, checkrides, and saved training progress."
+    : "Create a free RSF account to unlock RSF Premium GPS simulator training.";
+  const gateCtaLabel = isAuthenticated ? "Upgrade to RSF Premium" : "Create free account";
   const gateCtaHref = isAuthenticated ? "/logbook/pro" : "/register";
 
   const completedCount = progress.filter(Boolean).length;
@@ -1027,7 +1027,7 @@ export default function GpsSimsUnit() {
                 />
               </div>
               <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
-                <div className="text-xs font-semibold text-foreground mb-2">RSF Pro unlocks</div>
+                <div className="text-xs font-semibold text-foreground mb-2">RSF Premium unlocks</div>
                 <ul className="list-disc pl-5 space-y-1">
                   <li>Checkride mode with scoring + realism guardrails.</li>
                   <li>Instructor-ready session reports and progress history.</li>
@@ -1112,7 +1112,7 @@ export default function GpsSimsUnit() {
             <Badge variant="outline">
               {canPreviewInternal && !isPro
                 ? "Internal preview includes progress + instructor reports"
-                : "Progress + instructor reports save with RSF Pro"}
+                : "Progress + instructor reports save with RSF Premium"}
             </Badge>
           </CardContent>
         </Card>
@@ -1526,7 +1526,7 @@ export default function GpsSimsUnit() {
                     ? "Saved progress and training history are enabled."
                     : canPreviewInternal
                       ? "Internal preview access is enabled for this account."
-                      : "Upgrade to RSF Pro or Pro+ to save progress and training history."}
+                      : "Upgrade to RSF Premium to save progress and training history."}
                 </span>
                 <Button
                   type="button"
@@ -1621,7 +1621,7 @@ export default function GpsSimsUnit() {
               )}
               {!canPersist && (
                 <div className="text-xs text-muted-foreground">
-                  Instructor reports save with RSF Pro. Upgrade to unlock report history and sharing.
+                  Instructor reports save with RSF Premium. Upgrade to unlock report history and sharing.
                 </div>
               )}
             </div>

@@ -24,7 +24,7 @@ export function MobilePillNav({
           { id: "find" as LandingMobileTab, label: "Explore" },
           { id: "plan" as LandingMobileTab, label: "Planner" },
           ...(isAuthenticated ? [{ id: "log" as LandingMobileTab, label: "Logbook" }] : []),
-          ...(!isPaidUser ? [{ id: "pricing" as LandingMobileTab, label: "RSF Pro" }] : []),
+          ...(!isPaidUser ? [{ id: "pricing" as LandingMobileTab, label: "Premium" }] : []),
         ].map((tab) => (
           <button
             key={tab.id}
@@ -94,7 +94,7 @@ export function MobileBottomNav({
             ? [
                 {
                   key: "pricing",
-                  label: "Pro",
+                  label: "Premium",
                   icon: DollarSign,
                   onClick: () => onSelectTab("pricing"),
                   active: activeTab === "pricing",

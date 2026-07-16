@@ -65,7 +65,7 @@ const tools: IfrTool[] = [
   },
   {
     title: "Synthetic Vision Lab",
-    description: "RSF Pro synthetic attitude/terrain trainer with compact live traffic panel.",
+    description: "RSF Premium synthetic attitude/terrain trainer with compact live traffic panel.",
     href: "/synthetic-vision",
     cta: "Open demo",
   },

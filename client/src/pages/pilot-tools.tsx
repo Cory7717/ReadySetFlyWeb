@@ -474,7 +474,7 @@ export default function PilotTools() {
           <CardContent className="grid gap-4 p-5 lg:grid-cols-[1.15fr_0.85fr]">
             <div className="space-y-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#D9A441]">Subscription Value</div>
-              <h2 className="text-2xl font-semibold text-[#F1F5FA]">RSF Pro is about reducing repeat work, not collecting "advanced features."</h2>
+              <h2 className="text-2xl font-semibold text-[#F1F5FA]">RSF Premium is about reducing repeat work, not collecting "advanced features."</h2>
               <p className="max-w-3xl text-sm leading-6 text-[#A9BBCD]">
                 Use the free tools to plan, calculate, and browse. Upgrade when you want saved plans, saved aircraft assumptions, practice history, and a cleaner pilot workflow across sessions.
               </p>
@@ -510,7 +510,7 @@ export default function PilotTools() {
                   className="rsf-metal-button-secondary"
                   onClick={() => trackEvent("subscription_cta_click", { source_page: "/pilot-tools", target: "/logbook/pro", context: "pilot_tools_value_panel" })}
                 >
-                  <Link href={withSourceParam("/logbook/pro", "/pilot-tools")}>See Pro plans</Link>
+                  <Link href={withSourceParam("/logbook/pro", "/pilot-tools")}>See Premium plans</Link>
                 </Button>
               </div>
             </div>
@@ -572,7 +572,7 @@ export default function PilotTools() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Plane className="h-5 w-5" />
-              Flight Planner (RSF Pro)
+              Flight Planner (RSF Premium)
             </CardTitle>
             <CardDescription>Preview the planner free. Pro becomes valuable when you want saved routes, saved aircraft assumptions, and faster repeat planning.</CardDescription>
           </CardHeader>
@@ -590,7 +590,7 @@ export default function PilotTools() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Radio className="h-5 w-5" />
-              Radio Comms Trainer (RSF Pro)
+              Radio Comms Trainer (RSF Premium)
             </CardTitle>
             <CardDescription>Try guided scenarios free. Pro unlocks full practice history, scoring, and repeat training continuity.</CardDescription>
           </CardHeader>

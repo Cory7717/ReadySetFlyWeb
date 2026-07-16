@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { trackEvent } from "@/lib/analytics";
 import { withSourceParam } from "@/lib/returnTo";
-import { membershipTierInfo } from "@shared/membership-plans";
+import { PREMIUM_ANNUAL_PRICE, PREMIUM_MONTHLY_PRICE, membershipTierInfo } from "@shared/membership-plans";
 
 const defaultFreeFeatures = [
   "Create, save, file, amend, activate, close, and cancel flight plans.",
@@ -68,7 +68,7 @@ export function UpgradePromptDialog({
 
           <Card className="border-primary/40">
             <CardHeader className="space-y-1">
-              <Badge className="w-fit">$7.99/month</Badge>
+              <Badge className="w-fit">${PREMIUM_MONTHLY_PRICE.toFixed(2)}/month or ${PREMIUM_ANNUAL_PRICE.toFixed(2)}/year</Badge>
               <CardTitle className="text-base">{membershipTierInfo.premium.title}</CardTitle>
               <p className="text-xs text-muted-foreground">{membershipTierInfo.premium.subtitle}</p>
             </CardHeader>
@@ -94,7 +94,7 @@ export function UpgradePromptDialog({
             <Button variant="ghost">Continue with Free</Button>
           </DialogClose>
           <div className="text-xs text-muted-foreground">
-            RSF Premium is $7.99/month.
+            RSF Premium is ${PREMIUM_MONTHLY_PRICE.toFixed(2)}/month or ${PREMIUM_ANNUAL_PRICE.toFixed(2)}/year.
           </div>
         </DialogFooter>
       </DialogContent>

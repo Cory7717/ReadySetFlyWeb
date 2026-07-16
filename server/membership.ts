@@ -33,54 +33,44 @@ function addStoreProduct(productId: string | undefined, tier: MembershipTier, in
   STORE_PRODUCT_ENV_MAP[productId] = { tier, interval };
 }
 
-// RSF Premium plans
+// RSF Premium plans. Existing legacy env names remain supported for deployed PayPal plans.
 addPlan(process.env.PAYPAL_PLAN_PREMIUM_MONTHLY, "premium", "monthly");
 
 // Legacy paid plan IDs now grant RSF Premium.
-addPlan(process.env.PAYPAL_PLAN_PRO_MONTHLY, "pro", "monthly");
-addPlan(process.env.PAYPAL_PLAN_PRO_BIANNUAL, "pro", "biannual");
-addPlan(process.env.PAYPAL_PLAN_PRO_ANNUAL, "pro", "annual");
+addPlan(process.env.PAYPAL_PLAN_PRO_MONTHLY, "premium", "monthly");
+addPlan(process.env.PAYPAL_PLAN_PRO_BIANNUAL, "premium", "biannual");
+addPlan(process.env.PAYPAL_PLAN_PRO_ANNUAL, "premium", "annual");
 
 // Legacy higher-tier paid plan IDs now grant RSF Premium.
-addPlan(process.env.PAYPAL_PLAN_PROPLUS_MONTHLY, "pro_plus", "monthly");
-addPlan(process.env.PAYPAL_PLAN_PROPLUS_BIANNUAL, "pro_plus", "biannual");
-addPlan(process.env.PAYPAL_PLAN_PROPLUS_ANNUAL, "pro_plus", "annual");
+addPlan(process.env.PAYPAL_PLAN_PROPLUS_MONTHLY, "premium", "monthly");
+addPlan(process.env.PAYPAL_PLAN_PROPLUS_BIANNUAL, "premium", "biannual");
+addPlan(process.env.PAYPAL_PLAN_PROPLUS_ANNUAL, "premium", "annual");
 
 // Legacy logbook plan IDs now grant RSF Premium.
-addPlan(process.env.PAYPAL_LOGBOOK_PLAN_MONTHLY_ID, "pro", "monthly");
-addPlan(process.env.PAYPAL_LOGBOOK_PLAN_BIANNUAL_ID, "pro", "biannual");
-addPlan(process.env.PAYPAL_LOGBOOK_PLAN_YEARLY_ID, "pro", "annual");
+addPlan(process.env.PAYPAL_LOGBOOK_PLAN_MONTHLY_ID, "premium", "monthly");
+addPlan(process.env.PAYPAL_LOGBOOK_PLAN_BIANNUAL_ID, "premium", "biannual");
+addPlan(process.env.PAYPAL_LOGBOOK_PLAN_YEARLY_ID, "premium", "annual");
 
 // RevenueCat / native store products
-addStoreProduct(process.env.REVENUECAT_PRO_MONTHLY_PRODUCT_ID, "pro", "monthly");
-addStoreProduct(process.env.REVENUECAT_PRO_BIANNUAL_PRODUCT_ID, "pro", "biannual");
-addStoreProduct(process.env.REVENUECAT_PRO_ANNUAL_PRODUCT_ID, "pro", "annual");
-addStoreProduct(process.env.REVENUECAT_PROPLUS_MONTHLY_PRODUCT_ID, "pro_plus", "monthly");
-addStoreProduct(process.env.REVENUECAT_PROPLUS_BIANNUAL_PRODUCT_ID, "pro_plus", "biannual");
-addStoreProduct(process.env.REVENUECAT_PROPLUS_ANNUAL_PRODUCT_ID, "pro_plus", "annual");
+addStoreProduct(process.env.REVENUECAT_PRO_MONTHLY_PRODUCT_ID, "premium", "monthly");
+addStoreProduct(process.env.REVENUECAT_PRO_BIANNUAL_PRODUCT_ID, "premium", "biannual");
+addStoreProduct(process.env.REVENUECAT_PRO_ANNUAL_PRODUCT_ID, "premium", "annual");
+addStoreProduct(process.env.REVENUECAT_PROPLUS_MONTHLY_PRODUCT_ID, "premium", "monthly");
+addStoreProduct(process.env.REVENUECAT_PROPLUS_BIANNUAL_PRODUCT_ID, "premium", "biannual");
+addStoreProduct(process.env.REVENUECAT_PROPLUS_ANNUAL_PRODUCT_ID, "premium", "annual");
 addStoreProduct(process.env.REVENUECAT_PREMIUM_MONTHLY_PRODUCT_ID, "premium", "monthly");
 
 export function resolvePayPalPlanId(tier: "premium" | "pro" | "pro_plus", interval: BillingInterval): string {
-  const normalizedTier = normalizeMembershipTier(tier) === "premium" ? "premium" : tier;
-  const mapping: Record<"premium" | "pro" | "pro_plus", Record<BillingInterval, string | undefined>> = {
+  const normalizedTier = normalizeMembershipTier(tier);
+  const mapping: Record<"premium", Record<BillingInterval, string | undefined>> = {
     premium: {
       monthly: process.env.PAYPAL_PLAN_PREMIUM_MONTHLY || process.env.PAYPAL_PLAN_PROPLUS_MONTHLY || process.env.PAYPAL_PLAN_PRO_MONTHLY,
       biannual: undefined,
-      annual: undefined,
-    },
-    pro: {
-      monthly: process.env.PAYPAL_PLAN_PRO_MONTHLY,
-      biannual: process.env.PAYPAL_PLAN_PRO_BIANNUAL,
-      annual: process.env.PAYPAL_PLAN_PRO_ANNUAL,
-    },
-    pro_plus: {
-      monthly: process.env.PAYPAL_PLAN_PROPLUS_MONTHLY,
-      biannual: process.env.PAYPAL_PLAN_PROPLUS_BIANNUAL,
-      annual: process.env.PAYPAL_PLAN_PROPLUS_ANNUAL,
+      annual: process.env.PAYPAL_PLAN_PROPLUS_ANNUAL || process.env.PAYPAL_PLAN_PRO_ANNUAL || process.env.PAYPAL_LOGBOOK_PLAN_YEARLY_ID,
     },
   };
 
-  const planId = mapping[normalizedTier]?.[interval];
+  const planId = normalizedTier === "premium" ? mapping.premium[interval] : undefined;
   if (!planId) {
     throw new Error("Missing PayPal plan ID for selected tier and interval");
   }
@@ -96,10 +86,11 @@ function inferMembershipFromIdentifier(identifier: string): MembershipPlanInfo |
   const normalized = identifier.trim().toLowerCase();
   if (!normalized) return null;
 
-  const tier: MembershipTier | null = normalized.includes("pro_plus") || normalized.includes("proplus")
-    ? "pro_plus"
-    : normalized.includes("pro")
-      ? "pro"
+  const tier: MembershipTier | null = normalized.includes("premium") ||
+    normalized.includes("pro_plus") ||
+    normalized.includes("proplus") ||
+    normalized.includes("pro")
+    ? "premium"
       : null;
   if (!tier) return null;
 
@@ -134,8 +125,7 @@ export function resolveMembershipFromStoreSignals(args: {
 
   let best: MembershipPlanInfo | null = null;
   const rank = (info: MembershipPlanInfo) =>
-    (info.tier === "pro_plus" ? 10 : 0) +
-    (info.interval === "annual" ? 3 : info.interval === "biannual" ? 2 : 1);
+    info.interval === "annual" ? 3 : info.interval === "biannual" ? 2 : 1;
 
   for (const identifier of identifiers) {
     const inferred = inferMembershipFromIdentifier(identifier);
@@ -240,8 +230,10 @@ export function getEffectiveMembership(user?: User | null) {
     }
   }
 
+  const normalizedTier = normalizeMembershipTier(tier);
+
   return {
-    tier,
+    tier: normalizedTier,
     status,
     endsAt,
     trialEndsAt,

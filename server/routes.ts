@@ -5847,13 +5847,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       throw new Error("User not found");
     }
 
-    const planId = resolvePayPalPlanId(tier, interval);
+    const normalizedTier = "premium";
+    const planId = resolvePayPalPlanId(normalizedTier, interval);
     const { return_url, cancel_url } = buildSubscriptionReturnUrls();
     const subscription = await paypalRequest("/v1/billing/subscriptions", {
       method: "POST",
       body: JSON.stringify({
         plan_id: planId,
-        custom_id: `user:${userId}|tier:${tier}|interval:${interval}|purpose:membership`,
+        custom_id: `user:${userId}|tier:${normalizedTier}|interval:${interval}|purpose:membership`,
         subscriber: user.email ? { email_address: user.email } : undefined,
         application_context: {
           brand_name: "Ready Set Fly",
@@ -5869,7 +5870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       subscription?.links?.[0]?.href;
 
       await storage.updateUser(userId, {
-        membershipTier: tier,
+        membershipTier: normalizedTier,
         membershipStatus: "inactive",
         membershipProvider: "paypal",
         membershipInterval: interval,
@@ -5961,9 +5962,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/paypal/membership/subscribe", isAuthenticated, async (req: any, res) => {
     try {
       const requesterId = req.user.claims.sub;
-      const tier = req.body?.tier === "premium" ? "premium" : req.body?.tier === "pro_plus" ? "pro_plus" : req.body?.tier === "pro" ? "pro" : null;
+      const tier = req.body?.tier === "premium" || req.body?.tier === "pro_plus" || req.body?.tier === "pro" ? "premium" : null;
       const interval = parseBillingInterval(req.body?.interval);
-      if (!tier || !interval) {
+      if (!tier || !interval || interval === "biannual") {
         return res.status(400).json({ error: "Invalid membership tier or interval" });
       }
       const { subscription, approveUrl } = await createMembershipSubscription(requesterId, tier, interval);
@@ -6003,7 +6004,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Legacy Logbook Pro endpoints (mapped to RSF Pro core monthly)
+  // Legacy Logbook Pro endpoints (mapped to RSF Premium monthly)
   app.post("/api/paypal/logbook/subscribe", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
@@ -8887,7 +8888,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await client.emails.send({
           from: fromEmail,
           to: testEmail,
-          subject: "Try RSF Pro free for 14 days",
+          subject: "Try RSF Premium free for 14 days",
           html: getProTrialOfferEmailHtml({ firstName: "Pilot", unsubscribeUrl }),
           text: getProTrialOfferEmailText({ firstName: "Pilot", unsubscribeUrl }),
         });
@@ -8928,7 +8929,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await client.emails.send({
             from: fromEmail,
             to: user.email!,
-            subject: "Try RSF Pro free for 14 days",
+            subject: "Try RSF Premium free for 14 days",
             html: getProTrialOfferEmailHtml({ firstName, unsubscribeUrl }),
             text: getProTrialOfferEmailText({ firstName, unsubscribeUrl }),
           });
@@ -18865,7 +18866,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         }
         const entitlements = getEntitlementsForUser(user);
         if (entitlements.tier === "free") {
-          return res.status(403).json({ error: "RSF Pro membership required" });
+          return res.status(403).json({ error: "RSF Premium membership required" });
         }
         req.membershipUser = user;
         next();
@@ -18887,7 +18888,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         }
         const entitlements = getEntitlementsForUser(user);
         if (!entitlements.canUseCfi) {
-          return res.status(403).json({ error: "CFI trial or RSF Pro membership required" });
+          return res.status(403).json({ error: "CFI trial or RSF Premium membership required" });
         }
         req.cfiAccessUser = user;
         next();
@@ -18909,12 +18910,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         }
         const entitlements = getEntitlementsForUser(user);
         if (!entitlements.canUseLogbook) {
-          return res.status(403).json({ error: "RSF Pro membership required" });
+          return res.status(403).json({ error: "RSF Premium membership required" });
         }
         req.logbookProUser = user;
         next();
       } catch (error) {
-        console.error("RSF Pro guard error:", error);
+        console.error("RSF Premium guard error:", error);
         res.status(500).json({ error: "Failed to validate subscription" });
       }
     }
@@ -18978,7 +18979,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const entitlements = getEntitlementsForUser(user);
       if (entitlements.tier !== "free") {
-        return res.status(409).json({ error: "RSF Pro membership already active" });
+        return res.status(409).json({ error: "RSF Premium membership already active" });
       }
 
       if (user.cfiTrialRedeemed) {
@@ -19005,7 +19006,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  // CFI dashboard (trial or RSF Pro)
+  // CFI dashboard (trial or RSF Premium)
   app.get("/api/cfi/profile", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
@@ -25925,7 +25926,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             {
               type: "medical_expiration",
               title: "Medical certificate expiring",
-              message: "Your medical certificate expires soon. Update your RSF Pro settings.",
+              message: "Your medical certificate expires soon. Update your RSF Premium settings.",
               dueAt: settings?.medicalExpiresAt ? new Date(settings.medicalExpiresAt) : null,
             },
             {
@@ -25971,7 +25972,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
                     await client.emails.send({
                       from: fromEmail,
                       to: user.email!,
-                      subject: "RSF Pro: Logbook check-in",
+                      subject: "RSF Premium: Logbook check-in",
                       html,
                       text,
                     });
@@ -26055,7 +26056,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
                 await client.emails.send({
                   from: fromEmail,
                   to: user.email!,
-                  subject: `RSF Pro Alert: ${candidate.title}`,
+                  subject: `RSF Premium Alert: ${candidate.title}`,
                   html,
                   text,
                 });
@@ -26076,7 +26077,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
                     body: JSON.stringify(
                       tokens.map((token) => ({
                         to: token.token,
-                        title: "RSF Pro Alert",
+                        title: "RSF Premium Alert",
                         body: candidate.title,
                         data: { type: candidate.type, dueAt: dueDate.toISOString() },
                       }))

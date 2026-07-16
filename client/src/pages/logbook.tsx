@@ -782,13 +782,13 @@ export default function Logbook() {
       const res = await apiRequest("PUT", "/api/logbook/pro/settings", payload);
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to update RSF Pro settings");
+        throw new Error(data.error || "Failed to update RSF Premium settings");
       }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/logbook/pro/summary"] });
-      toast({ title: "RSF Pro updated", description: "Your currency settings were saved." });
+      toast({ title: "RSF Premium updated", description: "Your currency settings were saved." });
     },
     onError: (error: any) => {
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
@@ -968,7 +968,7 @@ export default function Logbook() {
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold text-[#F5F8FC]">Keep flights, endorsements, and totals in one working logbook.</h2>
               <p className="max-w-3xl text-sm leading-6 text-[#A9BBCD]">
-                Add entries as you fly, export records anytime, and move into RSF Pro only when you want alerts, endorsements, or deeper currency tracking.
+                Add entries as you fly, export records anytime, and move into RSF Premium only when you want alerts, endorsements, or deeper currency tracking.
               </p>
             </div>
             {entries.some((e) => !e.isLocked) && (
@@ -1017,7 +1017,7 @@ export default function Logbook() {
                         trackEvent("subscription_cta_click", { source_page: "/logbook", target: "/logbook/pro", context: "logbook_trial_banner" });
                       }}
                     >
-                      Start 14-day Pro trial
+                      Start 14-day Premium trial
                     </Link>
                   </Button>
                 </div>
@@ -1472,7 +1472,7 @@ export default function Logbook() {
           </CardHeader>
           <CardContent>
             <Button className={logbookPrimaryButtonClass} asChild>
-              <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
+              <Link href="/logbook/pro">Upgrade to RSF Premium</Link>
             </Button>
           </CardContent>
         </Card>
@@ -1483,7 +1483,7 @@ export default function Logbook() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-primary" />
-              RSF Pro Dashboard
+              RSF Premium Dashboard
             </CardTitle>
             <CardDescription>Currency tracking, expirations, and quick actions.</CardDescription>
           </CardHeader>
@@ -1491,7 +1491,7 @@ export default function Logbook() {
             {proSummaryLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading RSF Pro summary...
+                Loading RSF Premium summary...
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-3">
@@ -1549,7 +1549,7 @@ export default function Logbook() {
                 </Button>
               </div>
               <div className="space-y-3">
-                <div className="text-sm font-semibold">Update RSF Pro dates</div>
+                <div className="text-sm font-semibold">Update RSF Premium dates</div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label>Medical Class</Label>
@@ -1597,7 +1597,7 @@ export default function Logbook() {
                   onClick={() => saveProSettingsMutation.mutate()}
                   disabled={saveProSettingsMutation.isPending}
                 >
-                  {saveProSettingsMutation.isPending ? "Saving..." : "Save RSF Pro Settings"}
+                  {saveProSettingsMutation.isPending ? "Saving..." : "Save RSF Premium Settings"}
                 </Button>
               </div>
             </div>
@@ -1612,7 +1612,7 @@ export default function Logbook() {
               <Bell className="h-5 w-5 text-primary" />
               Alert Preferences
             </CardTitle>
-            <CardDescription>Choose how you receive RSF Pro alerts (30 days before due).</CardDescription>
+            <CardDescription>Choose how you receive RSF Premium alerts (30 days before due).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -1758,12 +1758,12 @@ export default function Logbook() {
         </Card>
       )}
 
-      {/* RSF Pro CTA */}
+      {/* RSF Premium CTA */}
       <Card className={`${logbookPanelClass} mt-6`}>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Award className="h-5 w-5 text-primary" />
-            Upgrade to RSF Pro
+            Upgrade to RSF Premium
           </CardTitle>
           <CardDescription>
             Keep the free digital logbook forever. Upgrade when you want currency automation, endorsements, and deeper workflow intelligence.
@@ -1817,7 +1817,7 @@ export default function Logbook() {
           <Separator className="my-4" />
           <div className="flex flex-col items-center gap-3">
             {isPro && (
-              <Badge variant="default">RSF Pro Active</Badge>
+              <Badge variant="default">RSF Premium Active</Badge>
             )}
             <p className="text-xs text-muted-foreground text-center">
               Tip: <strong>Your logbook data stays free and exportable.</strong> Pro adds saved workflow value through currency tracking, reminders, and instructor-ready records.
@@ -1827,7 +1827,7 @@ export default function Logbook() {
                 href={withSourceParam("/logbook/pro", "/logbook")}
                 onClick={() => trackEvent("subscription_cta_click", { source_page: "/logbook", target: "/logbook/pro", context: "logbook_footer_cta" })}
               >
-                {isPro ? "Manage Membership" : "Upgrade to RSF Pro"}
+                {isPro ? "Manage Membership" : "Upgrade to RSF Premium"}
               </Link>
             </Button>
             <p className="text-[11px] text-muted-foreground text-center">

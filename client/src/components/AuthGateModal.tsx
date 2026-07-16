@@ -21,8 +21,8 @@ const authGateMessages: Record<string, { title: string; description: string; cta
     description: "Keep your aircraft details attached to future planning sessions without re-entering them.",
   },
   sync_logbook_entry: {
-    title: "Sign in to continue to Pro sync",
-    description: "RSF Pro connects planner workflow to your digital logbook, currency, and training history.",
+    title: "Sign in to continue to Premium sync",
+    description: "RSF Premium connects planner workflow to your digital logbook, currency, and training history.",
   },
   file_flight_plan: {
     title: "Create or sign in to your RSF account to file flight plans.",

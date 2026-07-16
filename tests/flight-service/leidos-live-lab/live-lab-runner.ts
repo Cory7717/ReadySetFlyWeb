@@ -95,7 +95,7 @@ const numberArg = (name: string, fallback: string) => {
 };
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const stamp = () => new Date().toISOString().replace(/[:.]/g, "-");
-const CERTIFICATION_SUITE_VERSION = "2026.07.04-post-run-audit";
+const CERTIFICATION_SUITE_VERSION = "2026.07.16-post-run-cleanup-evidence";
 const FLIGHT_SERVICE_MODULE_VERSION = "flight-service-filing-v1";
 const LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES = 15;
 const FILE_DYNAMIC_TIME_BASE_OFFSET_MINUTES = 60;
@@ -544,7 +544,7 @@ export const buildCases = (context: DedicatedTestContext, runId: string): LiveLa
     { seed: 5, name: "ZZZZ alternate destination", testType: "Positive", actions: ["file"], buildPlan: () => plan(5, "ZZZZ Alternate", { alternate: "ZZZZ", filingAlternateName: "PRIVATE STRIP", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: getDeterministicCaseDeparture(5).local, planningReferenceAlternateAirport: "KACT", actualAlternateLocationMode: "identifier", actualAlternateLocation: "85TX" } }) },
     { seed: 6, name: "Other Info RMK retained", testType: "Positive", actions: ["file"], buildPlan: () => plan(6, "RMK Retained", { filingOtherInfo: `DOF/260715 ${providerSafeRmk(6, "RMK")}` }) },
     { seed: 7, name: "VFR file activate close", testType: "Lifecycle", actions: ["file", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(7, "VFR Close", { destination: "KACT", alternate: "KDAL", filingCloseLocation: "KACT" } as any) },
-    { seed: 8, name: "IFR file then amend", testType: "Lifecycle", actions: ["file", "amend"], expectedFinalState: "filed", buildPlan: () => plan(8, "IFR Amend", { filingFlightRules: "IFR", route: "DCT KDWH DCT", filingPlannedAltitudeFt: 7000 }) },
+    { seed: 8, name: "IFR file then amend", testType: "Lifecycle", actions: ["file", "amend"], expectedFinalState: "filed after AMEND, then cancelled during immediate cleanup", buildPlan: () => plan(8, "IFR Amend", { filingFlightRules: "IFR", route: "DCT KDWH DCT", filingPlannedAltitudeFt: 7000 }) },
     { seed: 9, name: "Provider round-trip integrity lifecycle", testType: "Round Trip", actions: ["file", "amend", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(9, "Round Trip", { route: "DCT KDWH DCT", filingCloseLocation: "KDAL" } as any) },
     { seed: 10, name: "Negative - Equipment R with no PBN", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add the correct PBN/ capabilities or remove R if not PBN approved.", buildPlan: () => plan(10, "R Without PBN", { filingEquipment: "SR", filingOtherInfo: providerSafeRmk(10, "NO PBN") }) },
     { seed: 11, name: "Negative - PBN present without Equipment R", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Add R only if approved, otherwise remove PBN/.", buildPlan: () => plan(11, "PBN Without R", { filingEquipment: "S", filingOtherInfo: `PBN/A1 ${providerSafeRmk(11, "NO R")}` }) },
@@ -601,6 +601,60 @@ export const assertNoLiveLabDuplicateRisk = (
     checkedCaseSeeds: submitted.map(({ testCase }) => testCase.seed),
     uniqueSignatureCount: seen.size,
   };
+};
+
+export const amendMutationForCase = (testCase: LiveLabCase): Partial<FlightPlan> | null => {
+  if (!testCase.actions.includes("amend")) return null;
+  if (testCase.seed === 8) {
+    return {
+      route: "DCT ACT DCT",
+      filingPlannedAltitudeFt: 9000,
+      alternate: "KACT",
+      filingOtherInfo: `PBN/A1 ${providerSafeRmk(8, "AMENDED ROUTE ALT")}`,
+      filingRemarks: "RSF LAB TEST SEED 8 AMENDED",
+    } as Partial<FlightPlan>;
+  }
+  if (testCase.seed === 9) {
+    return {
+      route: "DCT ACT DCT",
+      filingPlannedAltitudeFt: 6500,
+      alternate: "KACT",
+      filingOtherInfo: `PBN/A1 ${providerSafeRmk(9, "AMENDED INTEGRITY")}`,
+      filingRemarks: "RSF LAB TEST SEED 9 AMENDED",
+    } as Partial<FlightPlan>;
+  }
+  return null;
+};
+
+const applyAmendMutationIfNeeded = async (
+  plan: FlightPlan,
+  testCase: LiveLabCase,
+  action: CaseAction,
+  dryRun: boolean,
+) => {
+  if (action !== "amend") return { plan, mutation: null };
+  const mutation = amendMutationForCase(testCase);
+  if (!mutation) return { plan, mutation: null };
+  const plannerState = getPlannerStateRecord(plan);
+  const nextPlan = await updateCertificationPlan(plan, {
+    ...mutation,
+    plannerState: {
+      ...plannerState,
+      liveLabAmendMutationAppliedAt: new Date().toISOString(),
+      liveLabAmendMutationFields: Object.keys(mutation),
+    },
+  } as any, dryRun);
+  console.info(JSON.stringify({
+    event: "leidos_live_lab_amend_mutation_applied",
+    certificationCaseId: plan.certificationCaseId,
+    planId: plan.id,
+    seed: testCase.seed,
+    fields: Object.keys(mutation),
+    route: mutation.route || null,
+    filingPlannedAltitudeFt: mutation.filingPlannedAltitudeFt || null,
+    alternate: mutation.alternate || null,
+  }));
+  return { plan: nextPlan, mutation };
 };
 
 const parseOnlyCaseSeeds = (value: string) =>
@@ -791,6 +845,8 @@ const meaningfulIntegrityFields = new Set([
 
 const routeValueKeys = [
   "providerRoute",
+  "routeProvider",
+  "providerReturnedRoute",
   "route",
   "routeText",
   "routeString",
@@ -844,6 +900,8 @@ const summarizeRouteObject = (value: unknown) => {
     expectedRoute: extractRouteString(record.expectedRoute),
     currentRoute: extractRouteString(record.currentRoute),
     providerRoute: extractRouteString(record.providerRoute),
+    routeProvider: extractRouteString(record.routeProvider),
+    providerReturnedRoute: extractRouteString(record.providerReturnedRoute),
   };
 };
 
@@ -852,6 +910,22 @@ const providerValue = (snapshot: unknown, keys: string[]) => {
   for (const key of keys) {
     const value = source[key];
     if (value !== undefined && value !== null && String(value).trim()) return value;
+  }
+  return null;
+};
+
+const providerReturnedRouteValue = (snapshot: Record<string, any>, routeSnapshot: Record<string, any>) => {
+  const explicitRouteCandidates = [
+    routeSnapshot.providerRoute,
+    routeSnapshot.routeProvider,
+    routeSnapshot.providerReturnedRoute,
+    snapshot.providerRoute,
+    snapshot.routeProvider,
+    snapshot.providerReturnedRoute,
+  ];
+  for (const candidate of explicitRouteCandidates) {
+    const route = extractRouteString(candidate);
+    if (route) return route;
   }
   return null;
 };
@@ -868,11 +942,7 @@ export const compareGeneratedSentReturned = (
     : {};
   const raw = plan.filingRaw && typeof plan.filingRaw === "object" ? plan.filingRaw as Record<string, any> : {};
   const routeSnapshot = snapshot.route && typeof snapshot.route === "object" ? snapshot.route as Record<string, any> : {};
-  const providerRoute =
-    extractRouteString(routeSnapshot.providerRoute) ||
-    extractRouteString((snapshot as any).route) ||
-    extractRouteString(providerValue(snapshot, ["route"])) ||
-    null;
+  const providerRoute = providerReturnedRouteValue(snapshot, routeSnapshot);
   const localEnteredRoute = extractRouteString(routeSnapshot.localEnteredRoute) || String(plan.route || "").trim() || null;
   const normalizedTransmittedRoute =
     extractRouteString(routeSnapshot.normalizedTransmittedRoute) ||
@@ -1329,16 +1399,37 @@ export const buildCleanupVerification = (cleanupResults: any[], results: any[]) 
 
 export const buildCleanupSummary = (cleanupResults: any[], results: any[]) => {
   const actions = results.flatMap((item) => item.actions || []);
+  const immediate = cleanupResults.filter((item) => item.cleanupPhase === "immediate_case_cleanup");
+  const finalSweep = cleanupResults.filter((item) => item.cleanupPhase === "final_sweep");
+  const unresolved = cleanupResults.filter((item) => item.pass === false);
   return {
     providerPlansStaged: actions.filter((action: any) => action.responseStatus === "provider_submission_disabled_by_configuration" || action.responseStatus === "staged").length,
     providerPlansSubmitted: actions.filter((action: any) => action.action === "file" && ["accepted", "dry_run"].includes(String(action.responseStatus))).length,
     providerPlansCreated: actions.filter((action: any) => action.action === "file" && action.providerPlanId && ["accepted", "dry_run"].includes(String(action.responseStatus))).length,
     providerPlansBlockedBeforeSubmission: actions.filter((action: any) => action.blockedBeforeLeidos).length,
+    immediateCleanupTotal: immediate.length,
+    immediateCleanupCancelled: immediate.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
+    immediateCleanupErrors: immediate.filter((item) => item.pass === false).length,
+    finalSweepTotal: finalSweep.length,
+    finalSweepCancelled: finalSweep.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
+    finalSweepClosed: finalSweep.filter((item) => item.action === "close" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
     cancelled: cleanupResults.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
     closed: cleanupResults.filter((item) => item.action === "close" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
     alreadyTerminal: cleanupResults.filter((item) => item.responseStatus === "already_terminal").length,
     cleanupNotRequired: cleanupResults.filter((item) => ["not_required", "staged_only_not_submitted"].includes(String(item.responseStatus))).length,
     cleanupErrors: cleanupResults.filter((item) => item.pass === false).length,
+    unresolvedPlans: unresolved.map((item) => ({
+      certificationCaseId: item.certificationCaseId || null,
+      planId: item.planId || null,
+      providerPlanId: item.providerPlanId || null,
+      flightRules: item.flightRules || null,
+      departureTime: item.departureTime || null,
+      currentLifecycle: item.priorStatus || null,
+      cleanupActionAttempted: item.action || null,
+      providerRejection: Array.isArray(item.errors) ? item.errors.join(" | ") : item.errors || null,
+      recommendedHandling: item.recommendedHandling || "Review provider state, sync the plan, then run cleanup-only for this certification run.",
+      automaticProviderClosureExpected: Boolean(item.automaticProviderClosureExpected),
+    })),
   };
 };
 
@@ -1727,11 +1818,10 @@ export const buildValidationSummary = (results: any[], cases: LiveLabCase[]) => 
   const skipped = results.filter((item) => item.skipped).length;
   const blocked = results.flatMap((item) => item.actions || []).filter((action) => action.blockedBeforeLeidos).length;
   const testDesignFailures = results.reduce((sum, item) => sum + (Array.isArray(item.testDesignFailures) ? item.testDesignFailures.length : 0), 0);
-  const payloadValidationFailures = results.flatMap((item) => item.actions || []).filter((action: any) =>
-    action.validationStatus === "BLOCKED" &&
-    action.responseStatus !== "test_setup_activation_window_failed" &&
-    action.blockedReason !== "activation_window_test_setup_failure"
-  ).length;
+  const blockedActions = results.flatMap((item) => (item.actions || []).map((action: any) => ({ action, result: item }))).filter((item) => item.action.blockedBeforeLeidos);
+  const expectedValidationBlocks = blockedActions.filter((item) => caseBySeed.get(item.result.seed)?.expectedBlockedBeforeLeidos).length;
+  const unexpectedValidationFailures = blockedActions.filter((item) => !caseBySeed.get(item.result.seed)?.expectedBlockedBeforeLeidos).length;
+  const payloadValidationFailures = unexpectedValidationFailures;
   return {
     executed,
     passed,
@@ -1740,6 +1830,8 @@ export const buildValidationSummary = (results: any[], cases: LiveLabCase[]) => 
     skipped,
     testDesignFailures,
     payloadValidationFailures,
+    expectedValidationBlocks,
+    unexpectedValidationFailures,
     positiveTestsPassed: results.filter((item) => {
       const testCase = caseBySeed.get(item.seed);
       return (testCase ? isNonNegativeCase(testCase) : item.testType !== "Negative") && item.pass;
@@ -1769,8 +1861,8 @@ export const buildReadinessAssessment = (validationSummary: any, cleanupSummary:
   const criticalFailures = validationSummary.failed + cleanupSummary.cleanupErrors + providerRoundTrip.failed;
   const warnings = providerRoundTrip.cases.reduce((sum: number, item: any) => sum + (item.comparisonFailures?.length || 0), 0);
   const overallStatus = criticalFailures === 0
-    ? "READY FOR LEIDOS LAB EXECUTION"
-    : "NOT READY FOR LEIDOS LAB EXECUTION";
+    ? "LAB EXECUTION COMPLETED - READY FOR LEIDOS REVIEW"
+    : "LAB EXECUTION COMPLETED - REMEDIATION REQUIRED";
   return {
     title: "LEIDOS CERTIFICATION READINESS",
     environment: "LAB",
@@ -1994,7 +2086,7 @@ export const isCleanupBlockingError = (error: unknown) => {
   return /auth|authorized|rate.?limit|too many|server|environment|production|not lab|html instead|redirected/.test(message);
 };
 
-export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boolean) => {
+export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boolean, cleanupPhase = "final_sweep") => {
   const cleanupResults: any[] = [];
   for (const plan of plans) {
     const started = Date.now();
@@ -2014,7 +2106,11 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
       providerPlanId: providerPlanId || null,
       versionStamp,
       priorStatus: plan.filingStatus,
+      flightRules: plan.filingFlightRules || null,
+      departureTime: plan.plannedDepartureAt ? new Date(plan.plannedDepartureAt).toISOString() : null,
       action: cleanupAction,
+      cleanupPhase,
+      automaticProviderClosureExpected: String(plan.filingFlightRules || "").toUpperCase() === "IFR" && cleanupAction === "cancel",
     };
 
     if (cleanupAction === "none" || cleanupAction === "verify") {
@@ -2064,6 +2160,42 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
     }
   }
   return cleanupResults;
+};
+
+export const shouldCleanupImmediatelyAfterCase = (testCase: LiveLabCase, caseResult: any, plan: FlightPlan) => {
+  if (!caseResult.pass || testCase.expectedBlockedBeforeLeidos) return false;
+  if (!testCase.actions.includes("file")) return false;
+  if (testCase.actions.some((action) => action === "activate" || action === "close" || action === "cancel")) return false;
+  const status = String(plan.filingStatus || "").trim().toLowerCase();
+  if (["closed", "cancelled", "canceled"].includes(status)) return false;
+  return Boolean(plan.filingProviderPlanId);
+};
+
+const applyImmediateCaseCleanup = async (
+  plan: FlightPlan,
+  testCase: LiveLabCase,
+  caseResult: any,
+  dryRun: boolean,
+) => {
+  if (!shouldCleanupImmediatelyAfterCase(testCase, caseResult, plan)) return { plan, results: [] as any[] };
+  console.info(JSON.stringify({
+    event: "leidos_live_lab_immediate_cleanup_started",
+    certificationCaseId: caseResult.certificationCaseId,
+    planId: plan.id,
+    providerPlanId: plan.filingProviderPlanId || null,
+    status: plan.filingStatus || null,
+    reason: "cleanup_positive_nonterminal_case_before_next_delay",
+  }));
+  const results = await cleanupCertificationPlans([plan], dryRun, "immediate_case_cleanup");
+  const failed = results.some((item) => item.pass === false);
+  if (failed) {
+    caseResult.pass = false;
+    caseResult.errors.push(`Immediate cleanup failed for ${caseResult.certificationCaseId}.`);
+  } else {
+    caseResult.warnings.push("Immediate cleanup completed before continuing to the next certification case.");
+  }
+  const refreshed = !dryRun ? await storage.getFlightPlanById(plan.id) : undefined;
+  return { plan: (refreshed || plan) as FlightPlan, results };
 };
 
 const countdown = async (minutes: number, nextName: string) => {
@@ -2176,6 +2308,7 @@ const run = async () => {
   let providerSubmissionDisabled = false;
   const delayApplications: Array<Record<string, unknown>> = [];
   const dbPersistenceRecords: Array<Record<string, unknown>> = [];
+  const immediateCleanupResults: any[] = [];
   for (const [index, testCase] of cases.entries()) {
     if (!dryRun && index > 0) {
       const startedDelayAt = new Date();
@@ -2230,6 +2363,8 @@ const run = async () => {
     }
     for (const action of testCase.actions) {
       const started = Date.now();
+      const amendMutation = await applyAmendMutationIfNeeded(plan, testCase, action, dryRun);
+      plan = amendMutation.plan;
       let validation = validateFlightPlanForAction(plan, action);
       const generatedPayload = summarizePayload(plan, action) as Record<string, any> | null;
       if ((action === "file" || action === "amend") && generatedPayload?.otherInfo) {
@@ -2517,6 +2652,11 @@ const run = async () => {
         caseResult.errors.push(`Round trip comparison found ${comparisonFailures.length} meaningful integrity mismatch(es).`);
       }
     }
+    const immediateCleanup = !skipCleanup
+      ? await applyImmediateCaseCleanup(plan, testCase, caseResult, dryRun)
+      : { plan, results: [] as any[] };
+    plan = immediateCleanup.plan;
+    immediateCleanupResults.push(...immediateCleanup.results);
     results.push(caseResult);
     const createdIndex = createdPlans.findIndex((item) => item.id === plan.id);
     if (createdIndex >= 0) createdPlans[createdIndex] = plan;
@@ -2532,9 +2672,9 @@ const run = async () => {
     }
   }
 
-  let cleanupResults: any[] = [];
+  let finalCleanupResults: any[] = [];
   if (skipCleanup) {
-    cleanupResults = createdPlans.map((plan) => ({
+    finalCleanupResults = createdPlans.map((plan) => ({
       planId: plan.id,
       certificationRunId: runId,
       certificationCaseId: plan.certificationCaseId,
@@ -2542,11 +2682,13 @@ const run = async () => {
       versionStamp: getVersionStamp(plan),
       priorStatus: plan.filingStatus,
       responseStatus: "skipped_by_flag",
+      cleanupPhase: "final_sweep",
       pass: true,
     }));
   } else {
-    cleanupResults = await cleanupCertificationPlans(createdPlans, dryRun);
+    finalCleanupResults = await cleanupCertificationPlans(createdPlans, dryRun, "final_sweep");
   }
+  const cleanupResults = [...immediateCleanupResults, ...finalCleanupResults];
 
   const openAfterCleanup = cleanupResults.filter((item) =>
     item.pass === false ||
@@ -2684,6 +2826,8 @@ const run = async () => {
       failed: validationSummary.failed,
       skipped: validationSummary.skipped,
       payloadValidationFailures: validationSummary.payloadValidationFailures,
+      expectedValidationBlocks: validationSummary.expectedValidationBlocks,
+      unexpectedValidationFailures: validationSummary.unexpectedValidationFailures,
       testDesignFailures: validationSummary.testDesignFailures,
       testCount: results.length,
       cleanupTotal: cleanupResults.length,
@@ -2740,11 +2884,12 @@ const run = async () => {
   console.log(`  Activation Window Check Passed: ${output.lifecycleTiming.activationWindowCheckPassed}`);
   console.log("Validation Summary");
   console.log(`  Executed: ${validationSummary.executed}`);
-  console.log(`  Passed: ${validationSummary.passed}`);
-  console.log(`  Blocked: ${validationSummary.blocked}`);
+  console.log(`  Cases Passed: ${validationSummary.passed}`);
+  console.log(`  Blocked Before Submission: ${validationSummary.blocked}`);
   console.log(`  Failed: ${validationSummary.failed}`);
   console.log(`  Skipped: ${validationSummary.skipped}`);
-  console.log(`  Payload Validation Failures: ${validationSummary.payloadValidationFailures}`);
+  console.log(`  Expected Validation Blocks: ${validationSummary.expectedValidationBlocks}`);
+  console.log(`  Unexpected Validation Failures: ${validationSummary.unexpectedValidationFailures}`);
   console.log(`  Test Design Failures: ${validationSummary.testDesignFailures}`);
   console.log("Positive Tests");
   console.log(`  Passed: ${output.positiveTestsPassed}`);
@@ -2756,7 +2901,7 @@ const run = async () => {
   console.log(`Expected Amend: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "amend")).length}`);
   console.log(`Expected Activate: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "activate")).length}`);
   console.log(`Expected Close: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "close")).length}`);
-  console.log(`Expected Cancel: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "cancel")).length}`);
+  console.log(`Expected Case Lifecycle Cancel: ${results.filter((item) => (item.actions || []).some((action: any) => action.action === "cancel")).length}`);
   console.log("Provider Round Trip");
   console.log(`  Status: ${providerRoundTrip.failed === 0 ? "PASS" : "FAIL"}`);
   console.log(`  Cases: ${providerRoundTrip.total}`);
@@ -2774,8 +2919,11 @@ const run = async () => {
   console.log(`  Provider Plans Submitted: ${cleanupSummary.providerPlansSubmitted}`);
   console.log(`  Provider Plans Created: ${cleanupSummary.providerPlansCreated}`);
   console.log(`  Provider Plans Blocked Before Submission: ${cleanupSummary.providerPlansBlockedBeforeSubmission}`);
-  console.log(`  Cancelled: ${cleanupSummary.cancelled}`);
-  console.log(`  Closed: ${cleanupSummary.closed}`);
+  console.log(`  Immediate Cleanup Total: ${cleanupSummary.immediateCleanupTotal}`);
+  console.log(`  Immediate Cleanup Cancelled: ${cleanupSummary.immediateCleanupCancelled}`);
+  console.log(`  Final Sweep Total: ${cleanupSummary.finalSweepTotal}`);
+  console.log(`  Automated Cleanup Cancelled: ${cleanupSummary.cancelled}`);
+  console.log(`  Automated Cleanup Closed: ${cleanupSummary.closed}`);
   console.log(`  Already Terminal: ${cleanupSummary.alreadyTerminal}`);
   console.log(`  Cleanup Not Required: ${cleanupSummary.cleanupNotRequired}`);
   console.log(`  Cleanup Errors: ${cleanupSummary.cleanupErrors}`);

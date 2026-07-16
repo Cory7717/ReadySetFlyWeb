@@ -22469,6 +22469,85 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const appendPlanProviderMessages = (existingMessages: unknown, incomingMessages: FilingProviderMessage[] | undefined) =>
     mergeProviderMessages(existingMessages, incomingMessages || []);
 
+  const getCertificationProviderCreationEvidence = (plan: any) => {
+    const raw = asRecord(plan?.filingRaw);
+    const snapshot = asRecord(plan?.filingProviderSnapshot);
+    const history = Array.isArray(plan?.filingActionHistory) ? plan.filingActionHistory : [];
+    const acceptedFileHistory = history.some((entry: any) =>
+      String(entry?.action || "").toLowerCase() === "file" &&
+      (entry?.live === true || String(entry?.responseStatus || "").toLowerCase() === "accepted" || Boolean(entry?.providerPlanId))
+    );
+    return {
+      providerPlanIdPresent: Boolean(String(plan?.filingProviderPlanId || raw.providerPlanId || snapshot.providerPlanId || "").trim()),
+      versionStampPresent: Boolean(String(raw.versionStamp || snapshot.versionStamp || "").trim()),
+      acceptedFileHistory,
+      providerSubmissionOutcome: acceptedFileHistory || plan?.filingIsLive === true ? "provider_creation_possible_or_confirmed" : "no_provider_creation_evidence",
+      providerCreationEvidence: {
+        filingIsLive: plan?.filingIsLive === true,
+        filingStatus: plan?.filingStatus || null,
+        providerPlanId: Boolean(String(plan?.filingProviderPlanId || raw.providerPlanId || snapshot.providerPlanId || "").trim()),
+        rawProviderPlanId: Boolean(String(raw.providerPlanId || "").trim()),
+        snapshotProviderPlanId: Boolean(String(snapshot.providerPlanId || "").trim()),
+        acceptedFileHistory,
+      },
+    };
+  };
+
+  const logProviderTerminalActionCompletion = (input: {
+    plan: any;
+    runtimeMode: ReturnType<typeof getFlightServiceRuntimeMode>;
+    action: FlightPlanFilingAction;
+    requestSource: string;
+    certificationPlan: boolean;
+    providerResult?: any;
+    updated?: any;
+    previousLocalLifecycle?: string | null;
+    error?: unknown;
+    failureStage?: string;
+    localPersistenceCompleted?: boolean;
+  }) => {
+    if (input.action !== "cancel" && input.action !== "close") return;
+    const raw = asRecord(input.providerResult?.raw);
+    const response = asRecord(raw.response);
+    const responseMessages = Array.isArray(raw.responseMessages)
+      ? raw.responseMessages.map((entry) => String(entry)).filter(Boolean)
+      : [];
+    const errorMessage = input.error instanceof Error
+      ? input.error.message
+      : input.error != null
+        ? String(input.error)
+        : "";
+    const providerRejected = /Leidos returned an unsuccessful|Webservice\.Cannot|could not be cancelled|could not be closed|not in the PROPOSED state/i.test(errorMessage);
+    const retryable = /timeout|timed out|fetch failed|socket hang up|provider-outcome-unknown/i.test(errorMessage);
+    console.info(JSON.stringify({
+      event: "flight_service_provider_terminal_action_completed",
+      planId: input.plan?.id || null,
+      providerPlanId: input.providerResult?.providerPlanId || input.plan?.filingProviderPlanId || null,
+      environment: input.runtimeMode.environment,
+      certificationPlan: input.certificationPlan,
+      requestSource: input.requestSource,
+      action: input.action,
+      versionStampSent: getStoredProviderVersionStamp(input.plan) || null,
+      httpStatus: raw.httpStatus ?? null,
+      providerResponseClassification: input.providerResult?.live
+        ? "accepted"
+        : providerRejected
+          ? "rejected"
+          : input.error
+            ? "failed"
+            : "not_dispatched",
+      providerErrorCode: providerRejected ? "PROVIDER_REJECTED" : retryable ? "RETRYABLE_PROVIDER_FAILURE" : null,
+      providerMessage: responseMessages[0] || sanitizeNotificationMessage(errorMessage).slice(0, 300) || null,
+      returnedVersionStamp: raw.versionStamp || asRecord(input.providerResult?.providerSnapshot).versionStamp || null,
+      previousLocalLifecycle: input.previousLocalLifecycle || null,
+      resultingLocalLifecycle: input.updated?.filingStatus || input.plan?.filingStatus || null,
+      cancellationAccepted: input.action === "cancel" ? Boolean(input.providerResult?.live && input.providerResult?.nextStatus === "cancelled") : null,
+      localPersistenceCompleted: Boolean(input.localPersistenceCompleted),
+      retryable,
+      failureStage: input.failureStage || (input.error ? "provider_action_or_persistence" : null),
+    }));
+  };
+
   const activeLeidosWebhookEvents = new Set<string>();
 
   const buildLeidosWebhookFingerprint = ({
@@ -24592,6 +24671,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   app.post("/api/flight-plans/:id/filing-action", isAuthenticated, flightFilingRateLimiter, async (req: any, res) => {
     let planForErrorSync: any = null;
     let providerActionAttempt: any = null;
+    let actionForCompletionLog: FlightPlanFilingAction | null = null;
+    let requestSourceForCompletionLog = "user";
+    let certificationPlanForCompletionLog = false;
+    let runtimeModeForCompletionLog: ReturnType<typeof getFlightServiceRuntimeMode> | null = null;
+    let previousLocalLifecycleForCompletionLog: string | null = null;
     try {
       const mergePreservedFilingRaw = (existingRaw: unknown, incomingRaw: unknown) => {
         const existingRecord =
@@ -24633,14 +24717,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(400).json({ error: parsed.error.format() });
       }
       const action = parsed.data.action as FlightPlanFilingAction;
+      actionForCompletionLog = action;
       const idempotencyKey = getFlightServiceIdempotencyKey(req);
       const closeLocation = parsed.data.closeLocation || null;
       const requestSource = parsed.data.requestSource || "user";
+      requestSourceForCompletionLog = requestSource;
       const runtimeMode = getFlightServiceRuntimeMode();
+      runtimeModeForCompletionLog = runtimeMode;
       const testerEmails = getConfiguredFlightServiceTesterEmails();
       const { userEmail, normalizedUserEmail } = resolveFlightServiceUserEmail(req, user);
       const testerEmailMatch = Boolean(normalizedUserEmail && testerEmails.has(normalizedUserEmail));
       const certificationPlan = Boolean((plan as any).isCertificationTest || String((plan as any).source || "") === "leidos-certification");
+      certificationPlanForCompletionLog = certificationPlan;
       const acknowledgementAccepted = !runtimeMode.acknowledgementRequired ||
         hasFlightServiceTestAcknowledgement(req.body, runtimeMode.environment);
       const labRuntime = isFlightServiceLabRuntime(runtimeMode);
@@ -24810,14 +24898,76 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       const actionProviderSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
       const providerLifecycle = getProviderLifecycleStatus(actionProviderSnapshot);
+      previousLocalLifecycleForCompletionLog = providerLifecycle || plan.filingStatus || null;
       const providerAlreadyTerminal = ["cancelled", "canceled", "closed"].includes(providerLifecycle);
       const providerVersionStamp = getStoredProviderVersionStamp(plan);
       if (certificationPlan && ["cancel", "close"].includes(action) && (providerAlreadyTerminal || !providerVersionStamp)) {
+        const providerCreationEvidence = getCertificationProviderCreationEvidence(plan);
+        const localCleanupAllowed = providerAlreadyTerminal || (
+          !providerCreationEvidence.providerPlanIdPresent &&
+          !providerCreationEvidence.versionStampPresent &&
+          providerCreationEvidence.providerSubmissionOutcome === "no_provider_creation_evidence"
+        );
+        const unresolvedProviderCleanup = !localCleanupAllowed;
+        const cleanupDecisionReason = providerAlreadyTerminal
+          ? "already_terminal_provider_state"
+          : localCleanupAllowed
+            ? "no_provider_creation_evidence"
+            : providerCreationEvidence.providerPlanIdPresent
+              ? "provider_plan_id_present_missing_version_stamp"
+              : "possible_provider_creation_missing_identifiers";
+        console.info(JSON.stringify({
+          event: "flight_service_certification_cleanup_decision",
+          planId: plan.id,
+          certificationCaseId: (plan as any).certificationCaseId || null,
+          certificationCaseName: (plan as any).certificationCaseName || plan.title || null,
+          action,
+          requestSource,
+          providerPlanIdPresent: providerCreationEvidence.providerPlanIdPresent,
+          versionStampPresent: providerCreationEvidence.versionStampPresent,
+          providerCreationEvidence: providerCreationEvidence.providerCreationEvidence,
+          providerSubmissionOutcome: providerCreationEvidence.providerSubmissionOutcome,
+          localCleanupAllowed,
+          unresolvedProviderCleanup,
+          decisionReason: cleanupDecisionReason,
+          resultingLocalLifecycle: localCleanupAllowed
+            ? action === "close" || providerLifecycle === "closed" ? "closed" : "cancelled"
+            : providerLifecycle || plan.filingStatus || null,
+        }));
+        if (!localCleanupAllowed) {
+          console.warn(JSON.stringify({
+            event: "flight_service_certification_cleanup_blocked",
+            flight_service_environment: runtimeMode.environment,
+            flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
+            action,
+            requestSource,
+            certificationPlan,
+            planId: plan.id,
+            userId,
+            userEmail: userEmail || null,
+            providerLifecycleStatus: providerLifecycle || null,
+            providerPlanIdPresent: providerCreationEvidence.providerPlanIdPresent,
+            versionStampPresent: providerCreationEvidence.versionStampPresent,
+            providerSubmissionOutcome: providerCreationEvidence.providerSubmissionOutcome,
+            blockedReason: cleanupDecisionReason,
+          }));
+          return res.status(409).json({
+            error: providerCreationEvidence.providerPlanIdPresent
+              ? "This LAB certification plan has a provider plan ID but no usable version stamp. Refresh provider sync or investigate provider cleanup before marking it locally terminal."
+              : "This LAB certification plan may have reached the provider, but RSF lacks enough provider identifiers to clean it up automatically.",
+            code: "FLIGHT_SERVICE_CERTIFICATION_CLEANUP_UNRESOLVED",
+            cleanupReason: cleanupDecisionReason,
+            unresolvedProviderCleanup: true,
+            providerPlanId: plan.filingProviderPlanId || null,
+            providerLifecycleStatus: providerLifecycle || null,
+            plan,
+          });
+        }
         const now = new Date();
         const nextStatus = action === "close" || providerLifecycle === "closed" ? "closed" : "cancelled";
         const cleanupReason = providerAlreadyTerminal
           ? "already-terminal provider state"
-          : "missing provider versionStamp";
+          : "no provider creation evidence";
         console.info(JSON.stringify({
           event: "flight_service_certification_cleanup_local_terminal",
           flight_service_environment: runtimeMode.environment,
@@ -24830,7 +24980,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           userEmail: userEmail || null,
           providerLifecycleStatus: providerLifecycle || null,
           providerVersionStamp: providerVersionStamp || null,
-          cleanupReason: providerAlreadyTerminal ? "already_terminal_provider_state" : "missing_provider_version_stamp",
+          providerPlanIdPresent: providerCreationEvidence.providerPlanIdPresent,
+          versionStampPresent: providerCreationEvidence.versionStampPresent,
+          providerCreationEvidence: providerCreationEvidence.providerCreationEvidence,
+          providerSubmissionOutcome: providerCreationEvidence.providerSubmissionOutcome,
+          localCleanupAllowed: true,
+          unresolvedProviderCleanup: false,
+          decisionReason: cleanupDecisionReason,
+          cleanupReason: providerAlreadyTerminal ? "already_terminal_provider_state" : "no_provider_creation_evidence",
+          resultingLocalLifecycle: nextStatus,
         }));
         const cleanupMessage: FilingProviderMessage = {
           id: buildFilingEventId("rsf", plan.id, "certification_cleanup", cleanupReason, now.toISOString()),
@@ -25188,6 +25346,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         }
       }
 
+      logProviderTerminalActionCompletion({
+        plan,
+        runtimeMode,
+        action,
+        requestSource,
+        certificationPlan,
+        providerResult,
+        updated,
+        previousLocalLifecycle: previousLocalLifecycleForCompletionLog,
+        localPersistenceCompleted: true,
+      });
+
       if (providerActionAttempt?.id) {
         const attemptStatus = providerOutcomeUnknown
           ? "provider-outcome-unknown"
@@ -25309,6 +25479,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         } catch (syncError: any) {
           console.warn("Leidos mismatch sync failed:", syncError?.message || syncError);
         }
+      }
+      if (planForErrorSync && actionForCompletionLog && runtimeModeForCompletionLog) {
+        logProviderTerminalActionCompletion({
+          plan: planForErrorSync,
+          runtimeMode: runtimeModeForCompletionLog,
+          action: actionForCompletionLog,
+          requestSource: requestSourceForCompletionLog,
+          certificationPlan: certificationPlanForCompletionLog,
+          updated: syncedPlan || planForErrorSync,
+          previousLocalLifecycle: previousLocalLifecycleForCompletionLog,
+          error,
+          failureStage: providerActionAttempt?.id ? "provider_action_after_dispatch" : "before_provider_dispatch",
+          localPersistenceCompleted: Boolean(syncedPlan),
+        });
       }
       res.status(isTimeout ? 504 : isProviderStateRejected ? 409 : (isProviderValidationError || isProviderRejected) ? 400 : 500).json({
         error: dispatchedAttemptHasUnknownOutcome

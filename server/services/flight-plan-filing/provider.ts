@@ -2946,6 +2946,9 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       providerMessages,
       raw: {
         requestUrl,
+        httpStatus: response.status,
+        returnStatus: providerReturnStatus,
+        responseMessages,
         providerPlanId,
         versionStamp,
         metadataResponse,

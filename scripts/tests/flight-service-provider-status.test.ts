@@ -121,3 +121,33 @@ test("provider review acceptance is idempotent for the current provider version"
   assert.match(panel, /collapseDuplicateProviderMessages/);
   assert.match(panel, /provider changes accepted/);
 });
+
+test("provider terminal cancel and close attempts produce conclusive structured completion logs", () => {
+  const routes = readFileSync("server/routes.ts", "utf8");
+  const provider = readFileSync("server/services/flight-plan-filing/provider.ts", "utf8");
+
+  assert.match(routes, /flight_service_provider_terminal_action_completed/);
+  assert.match(routes, /versionStampSent/);
+  assert.match(routes, /httpStatus/);
+  assert.match(routes, /providerResponseClassification/);
+  assert.match(routes, /cancellationAccepted/);
+  assert.match(routes, /localPersistenceCompleted/);
+  assert.match(routes, /failureStage/);
+  assert.match(provider, /httpStatus: response\.status/);
+  assert.match(provider, /returnStatus: providerReturnStatus/);
+  assert.match(provider, /responseMessages/);
+});
+
+test("certification cleanup blocks local terminal state when provider creation may exist without versionStamp", () => {
+  const routes = readFileSync("server/routes.ts", "utf8");
+
+  assert.match(routes, /flight_service_certification_cleanup_decision/);
+  assert.match(routes, /provider_plan_id_present_missing_version_stamp/);
+  assert.match(routes, /possible_provider_creation_missing_identifiers/);
+  assert.match(routes, /no_provider_creation_evidence/);
+  assert.match(routes, /FLIGHT_SERVICE_CERTIFICATION_CLEANUP_UNRESOLVED/);
+  assert.match(routes, /unresolvedProviderCleanup: true/);
+  assert.match(routes, /providerPlanIdPresent/);
+  assert.match(routes, /versionStampPresent/);
+  assert.match(routes, /providerSubmissionOutcome/);
+});

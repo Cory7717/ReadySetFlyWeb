@@ -22206,6 +22206,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  app.patch("/api/notifications/mark-all-read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const updatedCount = await storage.markAllUserNotificationsRead(userId);
+      res.json({ updatedCount, count: 0 });
+    } catch (error) {
+      console.error("Failed to mark all notifications read:", error);
+      res.status(500).json({ error: "Failed to update notifications" });
+    }
+  });
+
   app.patch("/api/notifications/:id/read", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;

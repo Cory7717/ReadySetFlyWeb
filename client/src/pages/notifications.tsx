@@ -48,6 +48,7 @@ export default function NotificationsPage() {
     refetchInterval: 15_000,
     refetchOnWindowFocus: true,
   });
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
 
   const markReadMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -60,15 +61,47 @@ export default function NotificationsPage() {
     },
   });
 
+  const markAllReadMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", "/api/notifications/mark-all-read", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.setQueryData<{ count: number }>(["/api/notifications/unread"], { count: 0 });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
+    },
+  });
+
   return (
     <div className="container mx-auto px-4 py-10 max-w-5xl space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl flex items-center gap-2">
-            <Bell className="h-5 w-5 text-primary" />
-            Notifications
-          </CardTitle>
-          <CardDescription>Flight updates, provider changes, and account alerts.</CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Bell className="h-5 w-5 text-primary" />
+                Notifications
+              </CardTitle>
+              <CardDescription>
+                Flight updates, provider changes, and account alerts.
+                {!isLoading && unreadCount > 0 ? ` ${unreadCount} unread.` : ""}
+              </CardDescription>
+            </div>
+            {!isLoading && unreadCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => markAllReadMutation.mutate()}
+                disabled={markAllReadMutation.isPending}
+                data-testid="button-mark-all-notifications-read"
+              >
+                <CheckCircle2 className="h-4 w-4 mr-1" />
+                {markAllReadMutation.isPending ? "Marking..." : "Mark all as read"}
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (

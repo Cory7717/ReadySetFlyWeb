@@ -766,6 +766,7 @@ export interface IStorage {
   createUserNotification(notification: InsertUserNotification & { userId: string }): Promise<UserNotification>;
   upsertUserNotification(notification: InsertUserNotification & { userId: string }): Promise<UserNotification>;
   markUserNotificationRead(id: string, userId: string): Promise<UserNotification | undefined>;
+  markAllUserNotificationsRead(userId: string): Promise<number>;
 
   // Push Tokens
   upsertPushToken(userId: string, token: InsertPushToken): Promise<PushToken>;
@@ -4616,6 +4617,15 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(userNotifications.id, id), eq(userNotifications.userId, userId)))
       .returning();
     return updated;
+  }
+
+  async markAllUserNotificationsRead(userId: string): Promise<number> {
+    const updated = await db
+      .update(userNotifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(and(eq(userNotifications.userId, userId), eq(userNotifications.isRead, false)))
+      .returning({ id: userNotifications.id });
+    return updated.length;
   }
 
   // Push Tokens

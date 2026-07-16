@@ -2053,6 +2053,8 @@ function getSampleMarketplaceListings(filters?: any) {
 }
 
 const GPS_PANEL_KEYS = new Set(gpsTrainerUnits.map((unit) => unit.panel.imageKey));
+const DEFAULT_SIX_PACK_PANEL_KEY = "6pack-instrument-panel.png";
+const DEFAULT_SIX_PACK_PANEL_PUBLIC_BASE = "https://readysetfly-images.s3.us-east-2.amazonaws.com";
 
 function buildGpsPanelObjectKeys(imageKey: string): string[] {
   const normalizedKey = imageKey.replace(/\.png$/i, "");
@@ -2074,6 +2076,51 @@ function buildGpsPanelObjectKeys(imageKey: string): string[] {
   }
 
   return Array.from(candidates);
+}
+
+function isS3CredentialOrAccessError(error: any): boolean {
+  const code = String(error?.Code || error?.code || error?.name || "");
+  const statusCode = error?.$metadata?.httpStatusCode;
+  return statusCode === 403 || [
+    "InvalidAccessKeyId",
+    "SignatureDoesNotMatch",
+    "AccessDenied",
+    "ExpiredToken",
+    "InvalidToken",
+  ].includes(code);
+}
+
+function sanitizeS3Error(error: any) {
+  return {
+    name: error?.name || error?.Code || "S3Error",
+    code: error?.Code || error?.code || null,
+    httpStatusCode: error?.$metadata?.httpStatusCode || null,
+    requestId: error?.$metadata?.requestId || error?.RequestId || null,
+  };
+}
+
+function buildPublicObjectUrl(key: string): string {
+  const configuredBase = process.env.S3_PUBLIC_BASE_URL || process.env.VITE_S3_PUBLIC_BASE_URL;
+  const bucket = process.env.AWS_S3_BUCKET;
+  const region = process.env.AWS_REGION || "us-east-1";
+  const base = (configuredBase || (bucket ? `https://${bucket}.s3.${region}.amazonaws.com` : DEFAULT_SIX_PACK_PANEL_PUBLIC_BASE)).replace(/\/+$/, "");
+  return `${base}/${key.split("/").map((part) => encodeURIComponent(part)).join("/")}`;
+}
+
+function getSixPackPanelPublicUrl(rawKeys: string[] = [DEFAULT_SIX_PACK_PANEL_KEY]): string {
+  const explicitUrl = process.env.SIX_PACK_PANEL_PUBLIC_URL || process.env.VITE_SIX_PACK_PANEL_URL;
+  if (explicitUrl && /^https?:\/\//i.test(explicitUrl)) return explicitUrl;
+  const firstRawKey = rawKeys[0] || DEFAULT_SIX_PACK_PANEL_KEY;
+  const key = firstRawKey.startsWith("http")
+    ? (() => {
+        try {
+          return new URL(firstRawKey).pathname.replace(/^\/+/, "") || DEFAULT_SIX_PACK_PANEL_KEY;
+        } catch {
+          return DEFAULT_SIX_PACK_PANEL_KEY;
+        }
+      })()
+    : firstRawKey.replace(/^\/+/, "");
+  return buildPublicObjectUrl(key || DEFAULT_SIX_PACK_PANEL_KEY);
 }
 
 const AVIATION_EVENT_CATEGORIES = [
@@ -5291,14 +5338,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Serve six-pack trainer panel image from S3 (private buckets supported)
   app.get('/api/six-pack/panel', async (req, res) => {
-    if (!process.env.AWS_S3_BUCKET) {
-      return res.status(404).json({ error: "Panel image not available" });
-    }
-
-    const rawKeys = (process.env.SIX_PACK_PANEL_KEY || "6pack-instrument-panel.png")
+    const rawKeys = (process.env.SIX_PACK_PANEL_KEY || DEFAULT_SIX_PACK_PANEL_KEY)
       .split(",")
       .map((key) => key.trim())
       .filter(Boolean);
+    const publicFallbackUrl = getSixPackPanelPublicUrl(rawKeys);
+
+    if (!process.env.AWS_S3_BUCKET) {
+      return res.redirect(302, publicFallbackUrl);
+    }
+
     const bucketName = process.env.AWS_S3_BUCKET;
 
     const normalizePanelKey = (value: string) => {
@@ -5352,17 +5401,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (error?.name === "NoSuchKey" || statusCode === 404) {
             continue;
           }
+          if (isS3CredentialOrAccessError(error)) {
+            console.warn("six_pack_panel_s3_unavailable", {
+              ...sanitizeS3Error(error),
+              fallback: "public_url",
+            });
+            return res.redirect(302, publicFallbackUrl);
+          }
           throw error;
         }
       }
 
-      return res.status(404).json({ error: "Panel image not found" });
+      return res.redirect(302, publicFallbackUrl);
     } catch (error: any) {
       const statusCode = error?.$metadata?.httpStatusCode;
       if (error?.name === "NoSuchKey" || statusCode === 404) {
-        return res.status(404).json({ error: "Panel image not found" });
+        return res.redirect(302, publicFallbackUrl);
       }
-      console.error("Error streaming six-pack panel image:", error);
+      if (isS3CredentialOrAccessError(error)) {
+        console.warn("six_pack_panel_s3_unavailable", {
+          ...sanitizeS3Error(error),
+          fallback: "public_url",
+        });
+        if (res.headersSent) {
+          res.end();
+          return;
+        }
+        return res.redirect(302, publicFallbackUrl);
+      }
+      console.error("Error streaming six-pack panel image:", sanitizeS3Error(error));
       if (res.headersSent) {
         res.end();
         return;

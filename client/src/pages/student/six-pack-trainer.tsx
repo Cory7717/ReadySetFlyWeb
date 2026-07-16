@@ -1242,7 +1242,7 @@ export default function StudentSixPackTrainer() {
             <div className="space-y-3 max-w-sm">
               <div className="text-lg font-semibold">Panel image failed to load</div>
               <p className="text-sm text-white/80">
-                Verify the S3 object is public and the URL is correct.
+                Try opening the panel image directly, or refresh the trainer and RSF will retry the fallback image source.
               </p>
               <Button asChild variant="secondary">
                 <a href={panelSrc} target="_blank" rel="noopener noreferrer">

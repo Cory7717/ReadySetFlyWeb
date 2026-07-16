@@ -25636,15 +25636,32 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const now = new Date();
       const currentSnapshot = getProviderSnapshotRecord((currentPlan as Record<string, unknown>).filingProviderSnapshot);
+      const currentRaw = getProviderSnapshotRecord((currentPlan as Record<string, unknown>).filingRaw);
+      const acceptedVersionStamp = String(
+        currentSnapshot.versionStamp ||
+        currentRaw.versionStamp ||
+        currentPlan.filingProviderPlanId ||
+        currentPlan.id
+      ).trim();
+      const acceptanceEventId = buildFilingEventId("rsf", currentPlan.id, "provider_review_accepted", acceptedVersionStamp);
+      if (currentSnapshot.providerPendingReview !== true) {
+        return res.json({
+          ok: true,
+          alreadyAccepted: true,
+          message: "Provider changes were already accepted for the current provider version.",
+          plan: currentPlan,
+        });
+      }
       const acceptedSnapshot = {
         ...currentSnapshot,
         providerPendingReview: false,
         providerModifiedBySpecialist: false,
+        providerReviewAcceptedVersionStamp: acceptedVersionStamp,
         providerReviewAcceptedAt: now.toISOString(),
         providerReviewAcceptedBy: userId,
       };
       const acceptanceMessage: FilingProviderMessage = {
-        id: buildFilingEventId("rsf", currentPlan.id, "provider_review_accepted", now.toISOString()),
+        id: acceptanceEventId,
         timestamp: now.toISOString(),
         severity: "success",
         title: "Provider changes accepted",

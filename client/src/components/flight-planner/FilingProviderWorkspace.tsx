@@ -57,8 +57,24 @@ export const readProviderMessages = (plan: FlightPlan): ProviderMessage[] =>
     ? (plan as Record<string, unknown>).filingProviderMessages as ProviderMessage[]
     : [];
 
+export const collapseDuplicateProviderMessages = (messages: ProviderMessage[]) => {
+  const seen = new Set<string>();
+  return messages.filter((message) => {
+    const title = String(message.title || "").trim().toLowerCase();
+    if (title !== "provider changes accepted") return true;
+    const key = [
+      title,
+      String(message.providerPlanId || "").trim().toLowerCase(),
+      String(message.details || "").trim().toLowerCase(),
+    ].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 export const summarizeProviderUpdates = (plan: FlightPlan) => {
-  const messages = readProviderMessages(plan);
+  const messages = collapseDuplicateProviderMessages(readProviderMessages(plan));
   const latest = messages[0] || null;
   return {
     count: messages.length,
@@ -245,7 +261,7 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
 }
 
 export function FilingProviderUpdatesList({ plan }: { plan: FlightPlan }) {
-  const messages = readProviderMessages(plan);
+  const messages = collapseDuplicateProviderMessages(readProviderMessages(plan));
 
   if (messages.length === 0) {
     return <div className="text-sm text-muted-foreground">No provider updates recorded for this plan yet.</div>;

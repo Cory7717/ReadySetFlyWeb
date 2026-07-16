@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { formatArtccInfo, formatProviderNotificationValue, sanitizeNotificationMessage, summarizeProviderChangeDetails } from "../../shared/provider-notification-format";
+import { buildFilingEventId, mergeProviderMessages, type FilingProviderMessage } from "../../shared/flight-plan-filing-workflow";
 
 test("formatArtccInfo handles null and empty object", () => {
   assert.equal(formatArtccInfo(null), "");
@@ -49,4 +50,28 @@ test("provider change summary suppresses whitespace-only changes", () => {
     "Flight Service changed this plan: Other Information changed from PBN/A1  RMK/TEST to PBN/A1 RMK/TEST.",
   );
   assert.equal(summary, null);
+});
+
+test("provider review acceptance messages de-dupe by stable provider version id", () => {
+  const id = buildFilingEventId("rsf", "plan-1", "provider_review_accepted", "version-1");
+  const first: FilingProviderMessage = {
+    id,
+    timestamp: "2026-07-16T22:00:00.000Z",
+    severity: "success",
+    title: "Provider changes accepted",
+    details: "Pilot reviewed and accepted the current provider version in RSF.",
+    source: "rsf",
+    action: null,
+    provider: "Leidos Flight Service",
+    providerPlanId: "provider-1",
+  };
+  const retry: FilingProviderMessage = {
+    ...first,
+    timestamp: "2026-07-16T22:01:00.000Z",
+  };
+
+  const merged = mergeProviderMessages([first], [retry]);
+
+  assert.equal(merged.filter((message) => message.id === id).length, 1);
+  assert.equal(merged.filter((message) => message.title === "Provider changes accepted").length, 1);
 });

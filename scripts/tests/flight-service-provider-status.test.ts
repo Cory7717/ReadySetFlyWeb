@@ -107,3 +107,17 @@ test("webhook lifecycle updates local status while IFR close remains blocked", (
   assert.match(client, /String\(plan\.filingFlightRules \|\| "VFR"\)\.toUpperCase\(\) === "VFR"[\s\S]{0,220}normalizedClientFilingStatus\(plan\) === "activated"[\s\S]{0,220}getProviderActionAvailability\(plan\)\.close/);
   assert.match(provider, /if \(\(action === "activate" \|\| action === "close"\) && rules !== "VFR"\)/);
 });
+
+test("provider review acceptance is idempotent for the current provider version", () => {
+  const routes = readFileSync("server/routes.ts", "utf8");
+  const acceptRoute = routes.slice(routes.indexOf('app.post("/api/flight-plans/:id/provider-review/accept"'));
+  const panel = readFileSync("client/src/components/flight-planner/FilingProviderWorkspace.tsx", "utf8");
+
+  assert.match(acceptRoute, /acceptedVersionStamp/);
+  assert.match(acceptRoute, /providerReviewAcceptedVersionStamp/);
+  assert.match(acceptRoute, /provider_review_accepted", acceptedVersionStamp/);
+  assert.match(acceptRoute, /providerPendingReview !== true/);
+  assert.match(acceptRoute, /alreadyAccepted: true/);
+  assert.match(panel, /collapseDuplicateProviderMessages/);
+  assert.match(panel, /provider changes accepted/);
+});

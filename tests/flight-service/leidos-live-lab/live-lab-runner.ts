@@ -101,6 +101,8 @@ const LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES = 15;
 const FILE_DYNAMIC_TIME_BASE_OFFSET_MINUTES = 60;
 const CASE_DYNAMIC_TIME_SPACING_MINUTES = 10;
 const ACTIVATION_WINDOW_MINUTES = 30;
+const DEFAULT_TERMINAL_EVIDENCE_POLL_TIMEOUT_MS = 45_000;
+const DEFAULT_TERMINAL_EVIDENCE_POLL_INTERVAL_MS = 3_000;
 
 const pad2 = (value: string | number) => String(value).padStart(2, "0");
 
@@ -157,6 +159,69 @@ const isTerminalProviderStatus = (value: unknown, action: CaseAction) => {
   if (action === "close") return status === "closed" || status === "close";
   if (action === "cancel") return status === "cancelled" || status === "canceled" || status === "cancel";
   return false;
+};
+
+type LifecycleEvidenceKind =
+  | "explicit_provider_webhook"
+  | "explicit_provider_retrieve"
+  | "accepted_provider_action"
+  | "local_derived_state"
+  | "missing_provider_state"
+  | "conflicting_provider_evidence";
+
+const explicitProviderLifecycleSources = new Set(["leidos_webhook", "provider_retrieve", "provider_response"]);
+
+export const classifyLifecycleEvidence = (
+  snapshotInput: unknown,
+  expectedTerminalStatus?: string | null,
+) => {
+  const snapshot = snapshotInput && typeof snapshotInput === "object" && !Array.isArray(snapshotInput)
+    ? snapshotInput as Record<string, any>
+    : {};
+  const lifecycle = String(snapshot.providerLifecycleStatus || "").trim().toLowerCase() || null;
+  const source = String(snapshot.providerLifecycleSource || "").trim() || null;
+  const reason = String(snapshot.providerLifecycleReason || "").trim() || null;
+  const rawProviderState = String(snapshot.providerFlightState || snapshot.providerStatus || "").trim() || null;
+  const hasExplicitProviderEvidence = Boolean(
+    lifecycle &&
+    lifecycle !== "unknown" &&
+    explicitProviderLifecycleSources.has(source || "") &&
+    (rawProviderState || (reason && /^explicit_provider_/.test(reason)))
+  );
+  const expected = String(expectedTerminalStatus || "").trim().toLowerCase();
+  const conflictsWithExpected = Boolean(hasExplicitProviderEvidence && expected && lifecycle !== expected);
+  const kind: LifecycleEvidenceKind = conflictsWithExpected
+    ? "conflicting_provider_evidence"
+    : hasExplicitProviderEvidence && source === "leidos_webhook"
+      ? "explicit_provider_webhook"
+      : hasExplicitProviderEvidence && source === "provider_retrieve"
+        ? "explicit_provider_retrieve"
+        : hasExplicitProviderEvidence
+          ? "accepted_provider_action"
+          : lifecycle && lifecycle !== "unknown"
+            ? "local_derived_state"
+            : "missing_provider_state";
+
+  return {
+    kind,
+    lifecycle,
+    source,
+    reason,
+    rawProviderState,
+    explicitLifecycleValue: hasExplicitProviderEvidence ? lifecycle : null,
+    hasExplicitProviderEvidence,
+    conflictsWithExpected,
+    providerEventTimestamp: String(snapshot.providerEventTimestamp || snapshot.messageDateTime || "").trim() || null,
+    rsfReceiptTimestamp: String(snapshot.rsfReceiptTimestamp || snapshot.lastProviderUpdateAt || "").trim() || null,
+    webhookProcessingTimestamp: String(snapshot.webhookProcessingTimestamp || snapshot.lastProviderUpdateAt || "").trim() || null,
+    evidenceTime: String(snapshot.lastProviderUpdateAt || snapshot.lastProviderDataAt || snapshot.lastProviderRetrieveAt || snapshot.syncedAt || "").trim() || null,
+    latestRetrieveIncludedLifecycle: Boolean(
+      source === "provider_retrieve" &&
+      lifecycle &&
+      lifecycle !== "unknown" &&
+      (rawProviderState || (reason && /^explicit_provider_/.test(reason)))
+    ),
+  };
 };
 
 type LifecycleDynamicTimingMetadata = {
@@ -1314,6 +1379,108 @@ export const buildTerminalVerificationSummary = (results: any[]) => {
   };
 };
 
+const getTerminalEvidencePollingConfig = () => ({
+  timeoutMs: Math.max(0, Number(process.env.LEIDOS_LAB_TERMINAL_EVIDENCE_TIMEOUT_MS || DEFAULT_TERMINAL_EVIDENCE_POLL_TIMEOUT_MS)),
+  intervalMs: Math.max(250, Number(process.env.LEIDOS_LAB_TERMINAL_EVIDENCE_POLL_INTERVAL_MS || DEFAULT_TERMINAL_EVIDENCE_POLL_INTERVAL_MS)),
+});
+
+const waitForPersistedTerminalLifecycleEvidence = async ({
+  planId,
+  providerPlanId,
+  expectedStatus,
+  dryRun,
+}: {
+  planId: string;
+  providerPlanId: string | null;
+  expectedStatus: string | null;
+  dryRun: boolean;
+}) => {
+  const config = getTerminalEvidencePollingConfig();
+  const startedAtMs = Date.now();
+  const startedAt = new Date(startedAtMs).toISOString();
+  let polls = 0;
+  let lastPlan: FlightPlan | undefined;
+  let lastEvidence = classifyLifecycleEvidence(null, expectedStatus);
+  console.info(JSON.stringify({
+    event: "leidos_terminal_evidence_poll_started",
+    planId,
+    providerPlanId,
+    expectedStatus,
+    timeoutMs: config.timeoutMs,
+    intervalMs: config.intervalMs,
+    dryRun,
+  }));
+
+  if (dryRun || !planId || config.timeoutMs <= 0) {
+    return {
+      startedAt,
+      completedAt: new Date().toISOString(),
+      timeoutMs: config.timeoutMs,
+      intervalMs: config.intervalMs,
+      polls,
+      timedOut: false,
+      matched: false,
+      plan: lastPlan,
+      evidence: lastEvidence,
+    };
+  }
+
+  while (Date.now() - startedAtMs <= config.timeoutMs) {
+    polls += 1;
+    lastPlan = await storage.getFlightPlanById(planId);
+    const snapshot = lastPlan?.filingProviderSnapshot;
+    lastEvidence = classifyLifecycleEvidence(snapshot, expectedStatus);
+    const persistedProviderPlanId = String((snapshot as any)?.providerPlanId || lastPlan?.filingProviderPlanId || "").trim();
+    const providerPlanMatches = !providerPlanId || persistedProviderPlanId === providerPlanId;
+    if (providerPlanMatches && lastEvidence.hasExplicitProviderEvidence) {
+      console.info(JSON.stringify({
+        event: "leidos_terminal_evidence_poll_matched",
+        planId,
+        providerPlanId,
+        expectedStatus,
+        polls,
+        evidenceKind: lastEvidence.kind,
+        effectiveLifecycle: lastEvidence.lifecycle,
+        evidenceSource: lastEvidence.source,
+      }));
+      return {
+        startedAt,
+        completedAt: new Date().toISOString(),
+        timeoutMs: config.timeoutMs,
+        intervalMs: config.intervalMs,
+        polls,
+        timedOut: false,
+        matched: true,
+        plan: lastPlan,
+        evidence: lastEvidence,
+      };
+    }
+    await sleep(Math.min(config.intervalMs, Math.max(0, config.timeoutMs - (Date.now() - startedAtMs))));
+  }
+
+  console.info(JSON.stringify({
+    event: "leidos_terminal_evidence_poll_completed",
+    planId,
+    providerPlanId,
+    expectedStatus,
+    polls,
+    timedOut: true,
+    lastEvidenceKind: lastEvidence.kind,
+    lastLifecycle: lastEvidence.lifecycle,
+  }));
+  return {
+    startedAt,
+    completedAt: new Date().toISOString(),
+    timeoutMs: config.timeoutMs,
+    intervalMs: config.intervalMs,
+    polls,
+    timedOut: true,
+    matched: false,
+    plan: lastPlan,
+    evidence: lastEvidence,
+  };
+};
+
 const verifyTerminalActionState = async (
   plan: FlightPlan,
   action: CaseAction,
@@ -1338,13 +1505,17 @@ const verifyTerminalActionState = async (
   let providerVersionStamp: string | null = null;
   let providerRetrieveMessage: string | null = null;
   let providerRetrieveError: string | null = null;
+  let retrieveSnapshot: Record<string, any> | null = null;
 
   if (!dryRun && providerPlanId) {
     try {
       const sync = await syncLeidosPlanMetadata(plan);
       providerVersionStamp = sync.versionStamp || null;
-      providerLifecycleStatus = String((sync.providerSnapshot as any)?.providerLifecycleStatus || "").trim() || null;
-      providerStatus = String((sync.providerSnapshot as any)?.providerStatus || "").trim() || null;
+      retrieveSnapshot = sync.providerSnapshot && typeof sync.providerSnapshot === "object" && !Array.isArray(sync.providerSnapshot)
+        ? sync.providerSnapshot as Record<string, any>
+        : null;
+      providerLifecycleStatus = String(retrieveSnapshot?.providerLifecycleStatus || "").trim() || null;
+      providerStatus = String(retrieveSnapshot?.providerStatus || "").trim() || null;
       providerRetrieveMessage = sync.message || null;
     } catch (error) {
       providerRetrieveStatus = "error";
@@ -1352,27 +1523,68 @@ const verifyTerminalActionState = async (
     }
   }
 
-  const providerTerminalLifecycle = isTerminalProviderStatus(providerLifecycleStatus, action);
+  const retrieveEvidence = classifyLifecycleEvidence(retrieveSnapshot, expectedStatus);
+  const retrieveIncludedLifecycle = Boolean(retrieveEvidence.hasExplicitProviderEvidence);
+  const pollResult = !dryRun && providerPlanId && expectedStatus && returnStatus !== false
+    ? await waitForPersistedTerminalLifecycleEvidence({
+      planId: plan.id,
+      providerPlanId,
+      expectedStatus,
+      dryRun,
+    })
+    : null;
+  const persistedEvidence = pollResult?.evidence || classifyLifecycleEvidence((plan.filingProviderSnapshot as any) || null, expectedStatus);
+  const effectiveEvidence = retrieveEvidence.hasExplicitProviderEvidence
+    ? retrieveEvidence
+    : persistedEvidence.hasExplicitProviderEvidence
+      ? persistedEvidence
+      : persistedEvidence;
+  const providerTerminalLifecycle = isTerminalProviderStatus(effectiveEvidence.lifecycle, action);
   const providerTerminalStatus = isTerminalProviderStatus(providerStatus, action);
-  const providerTerminalStateConfirmed =
-    providerTerminalLifecycle === true ||
-    providerTerminalStatus === true ||
-    (providerRetrieveStatus === "success" && !providerLifecycleStatus && !providerStatus && returnStatus !== false);
+  const providerTerminalStateConfirmed = Boolean(
+    effectiveEvidence.hasExplicitProviderEvidence &&
+    providerTerminalLifecycle === true
+  );
+  const terminalActionAccepted = returnStatus !== false && response.live;
+  const verificationReason = !terminalActionAccepted
+    ? "Provider terminal action was not accepted."
+    : !localTerminalStateConfirmed
+      ? "Local plan state did not match the expected terminal lifecycle."
+      : effectiveEvidence.conflictsWithExpected
+        ? "Explicit provider lifecycle conflicts with the expected terminal state."
+        : providerTerminalStateConfirmed
+          ? retrieveEvidence.hasExplicitProviderEvidence
+            ? `${action.toUpperCase()} was accepted by Leidos and the direct retrieve response explicitly reported ${String(effectiveEvidence.lifecycle || "").toUpperCase()}.`
+            : `${action.toUpperCase()} was accepted by Leidos. The immediate retrieve response omitted flight state. A validated Leidos webhook subsequently reported ${String(effectiveEvidence.lifecycle || "").toUpperCase()}, satisfying terminal verification.`
+          : `${action.toUpperCase()} was accepted and RSF transitioned locally to ${String(expectedStatus || "").toUpperCase()}, but no explicit provider lifecycle was received before the certification timeout.`;
   const status = !localTerminalStateConfirmed
     ? "FAIL"
-    : providerRetrieveStatus === "error" || providerTerminalLifecycle === false || providerTerminalStatus === false
-      ? "REVIEW"
-      : "PASS";
+    : !terminalActionAccepted || effectiveEvidence.conflictsWithExpected || providerTerminalStatus === false
+      ? "FAIL"
+      : providerTerminalStateConfirmed
+        ? "PASS"
+        : "REVIEW";
 
   const verification = {
     action,
     expectedLocalStatus: expectedStatus,
+    expectedTerminalLifecycle: expectedStatus,
     localStatus,
     localTerminalStateConfirmed,
     providerPlanId: providerPlanId || null,
     providerRetrieveStatus,
     providerLifecycleStatus,
     providerStatus,
+    explicitLifecycleValue: effectiveEvidence.explicitLifecycleValue,
+    effectiveLifecycle: effectiveEvidence.lifecycle || localStatus || null,
+    evidenceKind: effectiveEvidence.kind,
+    evidenceSource: effectiveEvidence.source,
+    evidenceReason: effectiveEvidence.reason,
+    evidenceTime: effectiveEvidence.evidenceTime,
+    providerEventTimestamp: effectiveEvidence.providerEventTimestamp,
+    rsfReceiptTimestamp: effectiveEvidence.rsfReceiptTimestamp,
+    webhookProcessingTimestamp: effectiveEvidence.webhookProcessingTimestamp,
+    retrieveIncludedLifecycle,
     providerTerminalStateConfirmed,
     providerVersionStamp,
     providerVersionStampExpected: false,
@@ -1381,8 +1593,28 @@ const verifyTerminalActionState = async (
     responseMessages,
     providerRetrieveMessage,
     providerRetrieveError,
+    polling: pollResult
+      ? {
+        startedAt: pollResult.startedAt,
+        completedAt: pollResult.completedAt,
+        timeoutMs: pollResult.timeoutMs,
+        intervalMs: pollResult.intervalMs,
+        pollCount: pollResult.polls,
+        timedOut: pollResult.timedOut,
+        matched: pollResult.matched,
+      }
+      : {
+        startedAt: null,
+        completedAt: null,
+        timeoutMs: getTerminalEvidencePollingConfig().timeoutMs,
+        intervalMs: getTerminalEvidencePollingConfig().intervalMs,
+        pollCount: 0,
+        timedOut: false,
+        matched: false,
+      },
     cleanupCancellationAttempted: false,
     cleanupActionExpected: localTerminalStateConfirmed ? "verify" : "review",
+    reason: verificationReason,
     status,
   };
 
@@ -1400,6 +1632,12 @@ const verifyTerminalActionState = async (
     providerLifecycleStatus,
     providerStatus,
     providerRetrieveStatus,
+    retrieveIncludedLifecycle,
+    effectiveLifecycle: verification.effectiveLifecycle,
+    evidenceKind: verification.evidenceKind,
+    evidenceSource: verification.evidenceSource,
+    reason: verificationReason,
+    polling: verification.polling,
     cleanupCancellationAttempted: false,
     status,
   }));

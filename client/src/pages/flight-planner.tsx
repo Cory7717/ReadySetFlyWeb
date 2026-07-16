@@ -504,6 +504,65 @@ const getProviderSnapshot = (plan: FlightPlan | null | undefined) => {
     : {};
 };
 
+const formatProviderLifecycleSourceForPilot = (source?: string | null) => {
+  switch (String(source || "").trim()) {
+    case "leidos_webhook":
+      return "provider webhook";
+    case "provider_retrieve":
+      return "provider retrieval";
+    case "provider_response":
+      return "provider action response";
+    case "local_reconciliation":
+    case "user_action":
+    case "admin_action":
+      return "RSF local record";
+    default:
+      return "provider evidence";
+  }
+};
+
+const buildProviderLifecycleEvidenceSummary = (plan: FlightPlan | null | undefined) => {
+  const snapshot = getProviderSnapshot(plan);
+  const lifecycle = String(snapshot.providerLifecycleStatus || "").trim();
+  const source = String(snapshot.providerLifecycleSource || "").trim();
+  const evidenceTime = String(
+    snapshot.lastProviderUpdateAt ||
+    snapshot.lastProviderDataAt ||
+    snapshot.lastProviderRetrieveAt ||
+    snapshot.syncedAt ||
+    "",
+  ).trim();
+  const retrieveAt = String(snapshot.lastProviderRetrieveAt || "").trim();
+  const retrieveIncludedLifecycle = Boolean(
+    source === "provider_retrieve" &&
+    lifecycle &&
+    lifecycle.toLowerCase() !== "unknown" &&
+    (snapshot.providerFlightState || snapshot.providerStatus || /^explicit_provider_/.test(String(snapshot.providerLifecycleReason || "")))
+  );
+  const latestRetrieveOmittedLifecycle = Boolean(
+    retrieveAt &&
+    source !== "provider_retrieve" &&
+    lifecycle &&
+    lifecycle.toLowerCase() !== "unknown"
+  );
+  return {
+    lifecycle: lifecycle || "Unknown",
+    confirmedBy: lifecycle && lifecycle.toLowerCase() !== "unknown"
+      ? formatProviderLifecycleSourceForPilot(source)
+      : "Not confirmed yet",
+    evidenceTime,
+    latestRetrieve: retrieveAt
+      ? latestRetrieveOmittedLifecycle
+        ? "Successful - lifecycle not included in latest response"
+        : retrieveIncludedLifecycle
+          ? "Successful - lifecycle included"
+          : "Successful"
+      : "Not run yet",
+    providerFlightState: snapshot.providerFlightState || snapshot.providerStatus || null,
+    latestRetrieveOmittedLifecycle,
+  };
+};
+
 const hasPendingProviderReview = (plan: FlightPlan | null | undefined) =>
   getProviderSnapshot(plan).providerPendingReview === true;
 
@@ -6156,6 +6215,7 @@ export default function FlightPlanner() {
     const providerSnapshot = ((plan as Record<string, unknown>).filingProviderSnapshot && typeof (plan as Record<string, unknown>).filingProviderSnapshot === "object")
       ? (plan as Record<string, unknown>).filingProviderSnapshot as Record<string, any>
       : null;
+    const lifecycleEvidence = buildProviderLifecycleEvidenceSummary(plan);
     const payloadRoute = payload?.route && typeof payload.route === "object" ? payload.route as Record<string, any> : null;
     const providerRoute = providerSnapshot?.route && typeof providerSnapshot.route === "object" ? providerSnapshot.route as Record<string, any> : null;
     const formatDateTime = (value?: string | Date | null) => {
@@ -6324,8 +6384,11 @@ export default function FlightPlanner() {
             <div class="cell"><div class="label">ICAO DOF</div><div class="value">${escapeHtml(String(payload?.dof || "�"))}</div></div>
             <div class="cell"><div class="label">Local Other Info</div><div class="value">${escapeHtml(plan.filingOtherInfo || "�")}</div></div>
             <div class="cell"><div class="label">Transmitted Other Info</div><div class="value">${escapeHtml(String(payload?.otherInfo || "�"))}</div></div>
-            <div class="cell"><div class="label">Provider Lifecycle</div><div class="value">${escapeHtml(String(providerSnapshot?.providerLifecycleStatus || "Unknown"))}</div></div>
-            <div class="cell"><div class="label">Provider Flight State</div><div class="value">${escapeHtml(String(providerSnapshot?.providerFlightState || providerSnapshot?.providerStatus || "Not returned"))}</div></div>
+            <div class="cell"><div class="label">Effective Provider Lifecycle</div><div class="value">${escapeHtml(lifecycleEvidence.lifecycle)}</div></div>
+            <div class="cell"><div class="label">Lifecycle Confirmed By</div><div class="value">${escapeHtml(lifecycleEvidence.confirmedBy)}</div></div>
+            <div class="cell"><div class="label">Lifecycle Evidence Time</div><div class="value">${escapeHtml(lifecycleEvidence.evidenceTime ? formatDateTime(lifecycleEvidence.evidenceTime) : "Not available")}</div></div>
+            <div class="cell"><div class="label">Latest Provider Retrieval</div><div class="value">${escapeHtml(lifecycleEvidence.latestRetrieve)}</div></div>
+            <div class="cell"><div class="label">Provider Flight State From Latest Evidence</div><div class="value">${escapeHtml(String(lifecycleEvidence.providerFlightState || "Not returned"))}</div></div>
             <div class="cell"><div class="label">Last Known ARTCC State</div><div class="value">${escapeHtml(String(providerSnapshot?.lastKnownArtccState || providerSnapshot?.artccState || "Not returned"))}</div></div>
             <div class="cell"><div class="label">Internal Remarks</div><div class="value">${escapeHtml(plan.filingRemarks || plan.notes || "�")}</div></div>
           </div>
@@ -11676,6 +11739,7 @@ export default function FlightPlanner() {
                     const syncTime = formatPlanLocalZulu(plan.filingLastProviderSyncAt, getPlanTimeZone(plan, "departureTimeZone", departureTimeZone));
                     const beaconCode = getPlanBeaconCode(plan);
                     const providerLifecycleMessage = getProviderLifecycleAvailabilityMessage(plan);
+                    const providerLifecycleEvidence = buildProviderLifecycleEvidenceSummary(plan);
                     const deletable = canDeleteLocalDraftPlan(plan);
                     const statusChip = getSavedPlanStatusChip(plan);
                     const certificationPlan = isCertificationFlightPlan(plan);
@@ -11815,6 +11879,29 @@ export default function FlightPlanner() {
                 {beaconCode && (
                   <div className={cn("p-3 text-sm", plannerSubpanelSuccessClass)}>
                     Assigned Beacon Code: <span className="font-mono font-semibold">{beaconCode}</span>
+                  </div>
+                )}
+                {plan.filingProviderPlanId && (
+                  <div className="rounded-lg border border-[#5d6f85]/25 bg-[#0f141a]/75 p-3 text-sm text-[#E8EDF4]">
+                    <div className="mb-2 font-semibold text-[#F5F8FC]">Provider Lifecycle Evidence</div>
+                    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      <div>
+                        <div className="text-xs text-[#A9BBCD]">Effective lifecycle</div>
+                        <div>{providerLifecycleEvidence.lifecycle}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-[#A9BBCD]">Confirmed by</div>
+                        <div>{providerLifecycleEvidence.confirmedBy}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-[#A9BBCD]">Confirmed at</div>
+                        <div>{providerLifecycleEvidence.evidenceTime ? formatPlanLocalZulu(providerLifecycleEvidence.evidenceTime, getPlanTimeZone(plan, "departureTimeZone", departureTimeZone)).local : "Not available"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-[#A9BBCD]">Latest provider retrieval</div>
+                        <div>{providerLifecycleEvidence.latestRetrieve}</div>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {zzzzSummary.length > 0 && (

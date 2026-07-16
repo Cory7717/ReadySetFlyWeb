@@ -22389,8 +22389,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       incomingLifecycle !== "unknown" &&
       (
         String(incoming.providerFlightState || incoming.providerStatus || "").trim() ||
-        /^explicit_/.test(incomingReason) ||
-        ["user_action", "admin_action"].includes(String(incoming.providerLifecycleSource || ""))
+        /^explicit_provider_/.test(incomingReason)
       )
     );
     const preserveLifecycle = Boolean(
@@ -24041,6 +24040,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           providerPendingReview: hasExplicitProviderChange,
           providerLastPushTitle: notificationTitle,
           providerLastPushMessage: providerMessageDetails,
+          providerEventTimestamp: String(parsedWebhook.messageDateTime || payload.messageDateTime || payload.eventTime || payload.notificationTimestamp || "").trim() || null,
+          rsfReceiptTimestamp: pushReceivedAt,
+          webhookProcessingTimestamp: new Date().toISOString(),
           lastProviderUpdateAt: new Date().toISOString(),
         };
 

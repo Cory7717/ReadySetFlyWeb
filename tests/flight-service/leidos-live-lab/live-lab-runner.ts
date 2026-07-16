@@ -68,6 +68,7 @@ const KNOWN_FLAGS = new Set([
   "start-case",
   "end-case",
   "only-cases",
+  "static-departure-time",
   "skip-cleanup",
   "cleanup-only",
   "replay",
@@ -97,6 +98,8 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, "-");
 const CERTIFICATION_SUITE_VERSION = "2026.07.04-post-run-audit";
 const FLIGHT_SERVICE_MODULE_VERSION = "flight-service-filing-v1";
 const LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES = 15;
+const FILE_DYNAMIC_TIME_BASE_OFFSET_MINUTES = 60;
+const CASE_DYNAMIC_TIME_SPACING_MINUTES = 10;
 const ACTIVATION_WINDOW_MINUTES = 30;
 
 const pad2 = (value: string | number) => String(value).padStart(2, "0");
@@ -113,7 +116,8 @@ const formatLocalDateTimeForZone = (date: Date, timeZone: string) => {
     hourCycle: "h23",
   }).formatToParts(date);
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value || "";
-  return `${part("year")}-${pad2(part("month"))}-${pad2(part("day"))}T${pad2(part("hour"))}:${pad2(part("minute"))}`;
+  const hour = part("hour") === "24" ? "00" : part("hour");
+  return `${part("year")}-${pad2(part("month"))}-${pad2(part("day"))}T${pad2(hour)}:${pad2(part("minute"))}`;
 };
 
 const formatProviderZulu = (date: Date) =>
@@ -159,8 +163,11 @@ type LifecycleDynamicTimingMetadata = {
   lifecycleDynamicTimeEnabled: boolean;
   lifecycleDepartureTimeStrategy: string;
   activationWindowCheckPassed: boolean | null;
+  effectiveTimeGeneratedAt?: string;
+  offsetMinutes?: number;
   originalPlannedLocalTime?: string | null;
   dynamicLifecycleLocalTime?: string | null;
+  effectiveDepartureLocalTime?: string | null;
   departureTimeZone?: string;
   departureInstantUtc?: string;
   expectedProviderZulu?: string;
@@ -168,23 +175,49 @@ type LifecycleDynamicTimingMetadata = {
   activationWindowProviderRejected?: boolean;
 };
 
-const applyLifecycleDynamicDepartureTime = (plan: FlightPlan, testCase: LiveLabCase) => {
-  if (!lifecycleUsesActivationWindow(testCase)) {
+const dynamicDepartureOffsetMinutesForCase = (testCase: LiveLabCase) =>
+  lifecycleUsesActivationWindow(testCase)
+    ? LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES
+    : FILE_DYNAMIC_TIME_BASE_OFFSET_MINUTES + (Math.max(1, testCase.seed) - 1) * CASE_DYNAMIC_TIME_SPACING_MINUTES;
+
+export const applyLiveLabEffectiveDepartureTime = (
+  plan: FlightPlan,
+  testCase: LiveLabCase,
+  options: { dynamicTimingEnabled?: boolean; now?: Date | number | string } = {},
+) => {
+  const now = options.now instanceof Date
+    ? options.now
+    : options.now !== undefined
+      ? new Date(options.now)
+      : new Date();
+  const originalInstant = plan.plannedDepartureAt ? new Date(plan.plannedDepartureAt) : null;
+  const departureTimeZone = getDepartureTimeZone(plan);
+  const originalLocal = originalInstant ? formatLocalDateTimeForZone(originalInstant, departureTimeZone) : null;
+
+  if (!options.dynamicTimingEnabled) {
+    const staticInstant = originalInstant && Number.isFinite(originalInstant.getTime()) ? originalInstant : null;
+    const staticLocal = staticInstant ? formatLocalDateTimeForZone(staticInstant, departureTimeZone) : null;
     return {
       plan,
       metadata: {
         lifecycleDynamicTimeEnabled: false,
-        lifecycleDepartureTimeStrategy: "fixed deterministic departure time",
+        lifecycleDepartureTimeStrategy: "static deterministic seed time",
         activationWindowCheckPassed: null,
+        effectiveTimeGeneratedAt: now.toISOString(),
+        offsetMinutes: 0,
+        originalPlannedLocalTime: originalLocal,
+        dynamicLifecycleLocalTime: null,
+        effectiveDepartureLocalTime: staticLocal,
+        departureTimeZone,
+        departureInstantUtc: staticInstant?.toISOString(),
+        expectedProviderZulu: staticInstant ? formatProviderZulu(staticInstant) : undefined,
       } satisfies LifecycleDynamicTimingMetadata,
     };
   }
 
-  const originalInstant = plan.plannedDepartureAt ? new Date(plan.plannedDepartureAt) : null;
-  const departureTimeZone = getDepartureTimeZone(plan);
-  const dynamicInstant = new Date(Date.now() + LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES * 60_000);
+  const offsetMinutes = dynamicDepartureOffsetMinutesForCase(testCase);
+  const dynamicInstant = new Date(now.getTime() + offsetMinutes * 60_000);
   const dynamicLocal = formatLocalDateTimeForZone(dynamicInstant, departureTimeZone);
-  const originalLocal = originalInstant ? formatLocalDateTimeForZone(originalInstant, departureTimeZone) : null;
   const plannerState = getPlannerStateRecord(plan);
   const nextPlan = {
     ...plan,
@@ -195,27 +228,48 @@ const applyLifecycleDynamicDepartureTime = (plan: FlightPlan, testCase: LiveLabC
       departureTimeZone,
       userDisplayDepartureTimeLocal: dynamicLocal,
       lifecycleDynamicTimeEnabled: true,
-      lifecycleDepartureTimeStrategy: `current time + ${LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES} minutes`,
+      lifecycleDepartureTimeStrategy: `just-in-time current time + ${offsetMinutes} minutes`,
       lifecycleOriginalDepartureTimeLocal: originalLocal,
     },
   } as FlightPlan;
   const metadata: LifecycleDynamicTimingMetadata = {
     lifecycleDynamicTimeEnabled: true,
-    lifecycleDepartureTimeStrategy: `current time + ${LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES} minutes`,
+    lifecycleDepartureTimeStrategy: `just-in-time current time + ${offsetMinutes} minutes`,
+    effectiveTimeGeneratedAt: now.toISOString(),
+    offsetMinutes,
     originalPlannedLocalTime: originalLocal,
     dynamicLifecycleLocalTime: dynamicLocal,
+    effectiveDepartureLocalTime: dynamicLocal,
     departureTimeZone,
     departureInstantUtc: dynamicInstant.toISOString(),
     expectedProviderZulu: formatProviderZulu(dynamicInstant),
-    activationWindowCheckPassed: Math.abs(dynamicInstant.getTime() - Date.now()) <= ACTIVATION_WINDOW_MINUTES * 60_000,
+    activationWindowCheckPassed: lifecycleUsesActivationWindow(testCase)
+      ? Math.abs(dynamicInstant.getTime() - now.getTime()) <= ACTIVATION_WINDOW_MINUTES * 60_000
+      : null,
   };
   console.info(JSON.stringify({
-    event: "leidos_live_lab_lifecycle_time_override",
+    event: "leidos_live_lab_effective_departure_time",
     caseSeed: testCase.seed,
     caseName: testCase.name,
     ...metadata,
   }));
   return { plan: nextPlan, metadata };
+};
+
+export const assertEffectiveDepartureTimeNotStale = (
+  timing: ReturnType<typeof applyLiveLabEffectiveDepartureTime>,
+  testCase: LiveLabCase,
+  nowInput: Date | number | string = new Date(),
+) => {
+  const now = nowInput instanceof Date ? nowInput : new Date(nowInput);
+  const departure = timing.plan.plannedDepartureAt ? new Date(timing.plan.plannedDepartureAt) : null;
+  if (!departure || !Number.isFinite(departure.getTime()) || departure.getTime() < now.getTime() - 60_000) {
+    throw new Error(
+      `Refusing certification case ${testCase.seed}: effective departure time is stale or invalid. ` +
+      `strategy=${timing.metadata.lifecycleDepartureTimeStrategy}; ` +
+      `departureInstantUtc=${timing.metadata.departureInstantUtc || "-"}; now=${now.toISOString()}.`,
+    );
+  }
 };
 
 const isActivationWindowError = (message: string) =>
@@ -1789,6 +1843,7 @@ const run = async () => {
   const delayMinutes = Math.max(0, numberArg("delay-minutes", process.env.LEIDOS_LAB_DELAY_MINUTES || "3"));
   const replay = arg("replay", "");
   const skipCleanup = hasFlag("skip-cleanup");
+  const useStaticDepartureTime = hasFlag("static-departure-time");
   const cleanupOnlyRunId = arg("cleanup-only", "");
   const runId = `leidos-live-lab-${stamp()}`;
 
@@ -1835,8 +1890,22 @@ const run = async () => {
   const caseSelection = selectRequestedCases(allCases, replay ? 1 : limit, replay);
   const cases = caseSelection.cases;
   if (cases.length === 0) throw new Error(`No live LAB test case matched replay=${replay}.`);
+  const dynamicTimingEnabled = !useStaticDepartureTime;
+  const preflightTimingNow = new Date();
+  const preflightEffectiveCases = cases.map((testCase) => ({
+    testCase,
+    ...applyLiveLabEffectiveDepartureTime(testCase.buildPlan(), testCase, {
+      dynamicTimingEnabled,
+      now: preflightTimingNow,
+    }),
+  }));
+  if (!dryRun) {
+    for (const item of preflightEffectiveCases) {
+      assertEffectiveDepartureTimeNotStale(item, item.testCase, preflightTimingNow);
+    }
+  }
   const duplicateRiskPreflight = assertNoLiveLabDuplicateRisk(
-    cases.map((testCase) => ({ testCase, plan: testCase.buildPlan() })),
+    preflightEffectiveCases.map(({ testCase, plan }) => ({ testCase, plan })),
   );
   const previouslyPassedSeeds = loadPreviouslyPassedCaseSeeds();
   const previouslyPassedRequestedSeeds = cases
@@ -1856,6 +1925,7 @@ const run = async () => {
   console.log(`Case selection: ${JSON.stringify(caseSelection.request)}`);
   console.log(`Skipped by selection: ${caseSelection.skippedBySelection.map((item) => item.seed).join(", ") || "-"}`);
   console.log(`Duplicate-risk preflight: PASS (${duplicateRiskPreflight.uniqueSignatureCount} unique provider-submitted FILE signatures)`);
+  console.log(`Departure timing: ${dynamicTimingEnabled ? "just-in-time dynamic before each case" : "static deterministic seed time (--static-departure-time)"}`);
   console.log(`Delay requested: ${delayMinutes} minute(s)`);
   console.log("Delay policy: applied before each certification case after the first during confirmed non-dry runs.");
   console.log(`RSF DB history persistence: ${dryRun ? "disabled for dry-run" : "enabled; certification plans are saved under the configured test user"}`);
@@ -1881,7 +1951,11 @@ const run = async () => {
         applied: true,
       });
     }
-    const lifecycleTiming = applyLifecycleDynamicDepartureTime(testCase.buildPlan(), testCase);
+    const lifecycleTiming = applyLiveLabEffectiveDepartureTime(testCase.buildPlan(), testCase, {
+      dynamicTimingEnabled,
+      now: new Date(),
+    });
+    if (!dryRun) assertEffectiveDepartureTimeNotStale(lifecycleTiming, testCase);
     let plan = await persistCertificationPlan(lifecycleTiming.plan, runId, testCase, dryRun);
     createdPlans.push(plan);
     dbPersistenceRecords.push({
@@ -1944,7 +2018,7 @@ const run = async () => {
       if (action === "activate") {
         const activationWindowCheckPassed = checkActivationWindow(plan);
         caseResult.lifecycleTiming = {
-          ...(caseResult.lifecycleTiming || {}),
+          ...(caseResult.lifecycleTiming as LifecycleDynamicTimingMetadata),
           activationWindowCheckPassed,
           activationWindowCheckedAt: new Date().toISOString(),
         };
@@ -2065,7 +2139,7 @@ const run = async () => {
         if (activationWindowSetupFailure) {
           caseResult.testDesignFailures.push(classifiedMessage);
           caseResult.lifecycleTiming = {
-            ...(caseResult.lifecycleTiming || {}),
+            ...(caseResult.lifecycleTiming as LifecycleDynamicTimingMetadata),
             activationWindowCheckPassed: false,
             activationWindowProviderRejected: true,
             activationWindowCheckedAt: new Date().toISOString(),
@@ -2260,7 +2334,7 @@ const run = async () => {
   const requestedCaseSeeds = cases.map((item) => item.seed);
   const skippedBySelectionSeeds = caseSelection.skippedBySelection.map((item) => item.seed);
   const lifecycleTimingResults = results
-    .filter((item) => item.lifecycleTiming?.lifecycleDynamicTimeEnabled)
+    .filter((item) => item.lifecycleTiming)
     .map((item) => ({
       seed: item.seed,
       certificationCaseId: item.certificationCaseId,
@@ -2284,6 +2358,8 @@ const run = async () => {
       dryRun,
       delayMinutes,
       limit,
+      dynamicTimingEnabled,
+      staticDepartureTimeRequested: useStaticDepartureTime,
     },
     operator: {
       email: context.user.email || process.env.LEIDOS_TEST_USER_EMAIL,
@@ -2316,8 +2392,10 @@ const run = async () => {
       ...duplicateRiskPreflight,
     },
     lifecycleTiming: {
-      lifecycleDynamicTimeEnabled: lifecycleTimingResults.length > 0,
-      lifecycleDepartureTimeStrategy: `current time + ${LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES} minutes`,
+      lifecycleDynamicTimeEnabled: dynamicTimingEnabled,
+      lifecycleDepartureTimeStrategy: dynamicTimingEnabled
+        ? `just-in-time per case: activation-window cases current time + ${LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES} minutes; other cases current time + ${FILE_DYNAMIC_TIME_BASE_OFFSET_MINUTES} minutes plus ${CASE_DYNAMIC_TIME_SPACING_MINUTES} minutes per case seed`
+        : "static deterministic seed time (--static-departure-time)",
       activationWindowCheckPassed,
       cases: lifecycleTimingResults,
     },

@@ -87,6 +87,17 @@ test("ABS 2 month partner offer is seeded and surfaced through the partner flow"
   assert.match(appSource, /path="\/logbook\/pro" component=\{\(\) => <LogbookPro \/>\}/);
 });
 
+test("membership plan selector uses explicit dark-panel contrast colors", () => {
+  assert.match(logbookProSource, /Choose Free or RSF Premium/);
+  assert.match(logbookProSource, /bg-\[#121923\]/);
+  assert.match(logbookProSource, /bg-\[#18263a\]/);
+  assert.match(logbookProSource, /text-\[#F5F8FC\]/);
+  assert.match(logbookProSource, /text-\[#A9BBCD\]/);
+  assert.doesNotMatch(logbookProSource, /bg-white\/7[02]/);
+  assert.doesNotMatch(logbookProSource, /text-slate-900/);
+  assert.doesNotMatch(logbookProSource, /text-slate-700/);
+});
+
 test("ABS flexible member identifiers are persisted before redemption to prevent reuse", () => {
   assert.match(routesSource, /FLEXIBLE_PARTNER_IDENTIFIER_SLUGS = new Set\(\["abs-2mo-pro-plus"\]\)/);
   assert.match(routesSource, /buildFlexiblePartnerIdentifier\(selfAttestedValue \|\| normalizedMemberNumber\)/);

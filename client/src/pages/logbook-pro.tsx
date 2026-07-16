@@ -308,8 +308,8 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <span className="rsf-kicker">Your current plan</span>
-                  <h2 className="mt-2 text-2xl font-semibold text-slate-900">{currentTierLabel}</h2>
-                  <p className="mt-2 text-sm text-muted-foreground">
+                  <h2 className="mt-2 text-2xl font-semibold text-[#F5F8FC]">{currentTierLabel}</h2>
+                  <p className="mt-2 text-sm text-[#A9BBCD]">
                     {hasAccess
                       ? isTrialing
                         ? "Your trial is active now."
@@ -329,7 +329,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
 
               <div className={`${logbookSubpanelClass} mt-4 p-4`}>
                 <div className="text-sm font-semibold">What {membershipTierInfo.premium.title} changes in daily use</div>
-                <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+                <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-[#A9BBCD]">
                   {membershipTierInfo.premium.features.map((feature) => (
                     <li key={feature}>{feature}</li>
                   ))}
@@ -339,7 +339,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
               {hasAccess ? (
                 <div className="mt-4 space-y-2">
                   {isTrialing && membershipTrialEndsAt ? (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-[#A9BBCD]">
                       Trial ends {new Date(membershipTrialEndsAt).toLocaleDateString()}.
                     </p>
                   ) : null}
@@ -369,19 +369,19 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
                     </div>
 
                     <div className="grid gap-3 md:grid-cols-3">
-                      <div className="rounded-[1rem] border border-primary/12 bg-white/70 p-4">
-                        <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Tier</div>
-                        <div className="mt-2 text-sm font-semibold text-slate-900">
+                      <div className="rounded-[1rem] border border-[#5d6f85]/28 bg-[#121923] p-4">
+                        <div className="text-xs uppercase tracking-[0.16em] text-[#8FA6C0]">Tier</div>
+                        <div className="mt-2 text-sm font-semibold text-[#F5F8FC]">
                           RSF Premium
                         </div>
                       </div>
-                      <div className="rounded-[1rem] border border-primary/12 bg-white/70 p-4">
-                        <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Length</div>
-                        <div className="mt-2 text-sm font-semibold text-slate-900">{partnerOffer.durationDays} days</div>
+                      <div className="rounded-[1rem] border border-[#5d6f85]/28 bg-[#121923] p-4">
+                        <div className="text-xs uppercase tracking-[0.16em] text-[#8FA6C0]">Length</div>
+                        <div className="mt-2 text-sm font-semibold text-[#F5F8FC]">{partnerOffer.durationDays} days</div>
                       </div>
-                      <div className="rounded-[1rem] border border-primary/12 bg-white/70 p-4">
-                        <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Redemption</div>
-                        <div className="mt-2 text-sm font-semibold text-slate-900">
+                      <div className="rounded-[1rem] border border-[#5d6f85]/28 bg-[#121923] p-4">
+                        <div className="text-xs uppercase tracking-[0.16em] text-[#8FA6C0]">Redemption</div>
+                        <div className="mt-2 text-sm font-semibold text-[#F5F8FC]">
                           {partnerOffer.acceptsFlexibleIdentifier ? "Member number or email accepted" : "One member number per account"}
                         </div>
                       </div>
@@ -444,7 +444,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3 text-sm text-muted-foreground">
+                  <div className="mt-3 text-sm text-[#A9BBCD]">
                     This partner offer link is not active right now. Contact support if you expected access.
                   </div>
                 )}
@@ -458,15 +458,15 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
               <h3 className="mt-2 text-2xl font-semibold text-[#F5F8FC]">Choose Free or RSF Premium.</h3>
             </div>
             <div className="grid gap-3">
-              <div className="rounded-[1rem] border border-primary/14 bg-white/70 px-4 py-3 text-left">
-                <div className="text-sm font-semibold text-slate-900">Free</div>
-                <div className="text-xs text-muted-foreground">Plan and file flights with RSF Flight Planner Basic.</div>
-                <div className="mt-2 text-xs text-muted-foreground">$0/month</div>
+              <div className="rounded-[1rem] border border-[#5d6f85]/28 bg-[#121923] px-4 py-3 text-left">
+                <div className="text-sm font-semibold text-[#F5F8FC]">Free</div>
+                <div className="text-xs text-[#A9BBCD]">Plan and file flights with RSF Flight Planner Basic.</div>
+                <div className="mt-2 text-xs font-medium text-[#C9D6E4]">$0/month</div>
               </div>
-              <div className="rounded-[1rem] border border-primary/50 bg-primary/10 px-4 py-3 text-left shadow-[0_12px_24px_rgba(15,23,42,0.10)]">
-                <div className="text-sm font-semibold text-slate-900">{membershipTierInfo.premium.title}</div>
-                <div className="text-xs text-muted-foreground">{membershipTierInfo.premium.subtitle}</div>
-                <div className="mt-2 text-xs text-muted-foreground">$7.99/month</div>
+              <div className="rounded-[1rem] border border-[#4f7cff]/55 bg-[#18263a] px-4 py-3 text-left shadow-[0_12px_24px_rgba(4,11,22,0.24)]">
+                <div className="text-sm font-semibold text-[#F5F8FC]">{membershipTierInfo.premium.title}</div>
+                <div className="text-xs text-[#C7D7EA]">{membershipTierInfo.premium.subtitle}</div>
+                <div className="mt-2 text-xs font-medium text-[#D9E4F0]">$7.99/month</div>
               </div>
             </div>
 
@@ -480,17 +480,17 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
                         key={plan.interval}
                         className={`rounded-[1rem] border p-4 text-left transition-all ${
                           isSelected
-                            ? "border-primary/50 bg-primary/10 shadow-[0_12px_24px_rgba(15,23,42,0.10)]"
-                            : "border-primary/14 bg-white/72"
+                            ? "border-[#4f7cff]/60 bg-[#18263a] shadow-[0_12px_24px_rgba(4,11,22,0.24)]"
+                            : "border-[#5d6f85]/28 bg-[#121923]"
                         }`}
                         onClick={() => setSelectedInterval(plan.interval)}
                       >
                         <div className="flex items-center justify-between">
-                          <div className="text-sm font-medium text-slate-700">{plan.label}</div>
+                          <div className="text-sm font-medium text-[#C7D7EA]">{plan.label}</div>
                           {plan.badge ? <Badge variant="outline">{plan.badge}</Badge> : null}
                         </div>
-                        <div className="mt-2 text-2xl font-semibold text-slate-900">${plan.price.toFixed(2)}</div>
-                        <div className="text-xs text-muted-foreground">{membershipTierInfo.premium.subtitle}</div>
+                        <div className="mt-2 text-2xl font-semibold text-[#F5F8FC]">${plan.price.toFixed(2)}</div>
+                        <div className="text-xs text-[#A9BBCD]">{membershipTierInfo.premium.subtitle}</div>
                       </button>
                     );
                   })}
@@ -500,24 +500,24 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
 
                 <div className="flex items-center justify-between text-sm">
                   <div>
-                    <div className="text-muted-foreground">Selected plan</div>
-                    <div className="font-medium">{selectedPlan.label}</div>
+                    <div className="text-[#A9BBCD]">Selected plan</div>
+                    <div className="font-medium text-[#F5F8FC]">{selectedPlan.label}</div>
                     {hasTrial ? (
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-[#A9BBCD]">
                         {selectedPlan.trialDays}-day free trial — cancel before day {selectedPlan.trialDays}
                       </div>
                     ) : null}
                   </div>
                   <div className="text-right">
-                    <div className="text-muted-foreground">Total today</div>
-                    <div className="font-semibold">${selectedPlanTotal.toFixed(2)}</div>
+                    <div className="text-[#A9BBCD]">Total today</div>
+                    <div className="font-semibold text-[#F5F8FC]">${selectedPlanTotal.toFixed(2)}</div>
                   </div>
                 </div>
 
                 <Button className={logbookPrimaryButtonClass} onClick={handleSubscribe} disabled={loading}>
                   {loading ? "Redirecting..." : "Upgrade to Premium"}
                 </Button>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-[#A9BBCD]">
                   Recurring billing is $7.99/month until cancelled.
                 </p>
               </>

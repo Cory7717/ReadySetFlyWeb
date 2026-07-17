@@ -123,6 +123,14 @@ const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 const FLIGHT_SERVICE_TEST_ACK_KEY = "rsf.flightServiceTestAcknowledgement.v1";
 const FLIGHT_SERVICE_TEST_ACK_TTL_MS = 24 * 60 * 60 * 1000;
 const ROUTE_ASSIST_UNAVAILABLE_MESSAGE = "Route Assist could not retrieve a suggested route. You can continue with a custom route or try again.";
+const LAB_ACKNOWLEDGEMENT_REQUIRED_CODES = new Set(["LAB_ACKNOWLEDGEMENT_REQUIRED", "FLIGHT_SERVICE_TEST_ACK_REQUIRED"]);
+const isLabAcknowledgementRequiredError = (error: unknown) => {
+  const record = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  return record.status === 428 ||
+    LAB_ACKNOWLEDGEMENT_REQUIRED_CODES.has(String(record.code || "")) ||
+    String(record.reason || "") === "missing_lab_acknowledgement" ||
+    /missing_lab_acknowledgement|LAB acknowledgement|test acknowledgement/i.test(String((error as any)?.message || ""));
+};
 type FlightServiceEnvironmentMode = "LAB" | "TEST" | "VALIDATION" | "PRODUCTION";
 type FlightServiceEnvironmentConfig = {
   environment: FlightServiceEnvironmentMode;
@@ -141,6 +149,13 @@ type TestAcknowledgementRecord = {
   action?: string | null;
 };
 type FilingSyncRequestSource = "user" | "background" | "certification-runner";
+type LabAcknowledgementBlockedSync = {
+  planId: string;
+  environment: FlightServiceEnvironmentMode;
+  acknowledgementGeneration: string;
+  blockedAt: string;
+  reason: "missing_lab_acknowledgement";
+};
 type ZzzzActualLocationMode = "identifier" | "latlong";
 const inferZzzzActualLocationMode = (value?: string | null): ZzzzActualLocationMode =>
   /^\s*\d/.test(String(value || "")) ? "latlong" : "identifier";
@@ -2017,6 +2032,8 @@ export default function FlightPlanner() {
   const [expandedPlanIds, setExpandedPlanIds] = useState<Record<string, boolean>>({});
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [providerUpdatesPlan, setProviderUpdatesPlan] = useState<FlightPlan | null>(null);
+  const [labAcknowledgementBlockedSync, setLabAcknowledgementBlockedSync] = useState<Record<string, LabAcknowledgementBlockedSync>>({});
+  const backgroundSyncInFlightRef = useRef<Set<string>>(new Set());
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
   const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string; focusId?: string } | null>(null);
   useEffect(() => {
@@ -2966,16 +2983,22 @@ export default function FlightPlanner() {
         storedTestAcknowledgement = null;
       }
     }
+    const acknowledgementGeneration = storedTestAcknowledgement
+      ? `${storedTestAcknowledgement.environment}:${storedTestAcknowledgement.acknowledgedAt}`
+      : `${effectiveFlightServiceEnvironment.environment}:missing`;
     const visibleProviderPlans = savedPlansView.filter((plan) =>
       plan.filingProviderPlanId &&
       !["cancelled", "closed"].includes(normalizedClientFilingStatus(plan)) &&
       !isCertificationFlightPlan(plan) &&
-      (!isFlightServiceTestMode || Boolean(storedTestAcknowledgement))
+      (!isFlightServiceTestMode || Boolean(storedTestAcknowledgement)) &&
+      labAcknowledgementBlockedSync[plan.id]?.acknowledgementGeneration !== acknowledgementGeneration
     );
     if (visibleProviderPlans.length === 0) return;
     let cancelled = false;
     const poll = async () => {
       for (const plan of visibleProviderPlans.slice(0, 5)) {
+        if (backgroundSyncInFlightRef.current.has(plan.id)) continue;
+        backgroundSyncInFlightRef.current.add(plan.id);
         try {
           const body: Record<string, unknown> = { requestSource: "background" };
           if (storedTestAcknowledgement) body.testAcknowledgement = storedTestAcknowledgement;
@@ -2990,8 +3013,22 @@ export default function FlightPlanner() {
           if (nextProviderState !== previousProviderState) {
             toast({ title: "Provider update received", description: `${result.plan.departure} to ${result.plan.destination} refreshed from provider sync.` });
           }
-        } catch {
+        } catch (error) {
+          if (isLabAcknowledgementRequiredError(error)) {
+            setLabAcknowledgementBlockedSync((current) => ({
+              ...current,
+              [plan.id]: {
+                planId: plan.id,
+                environment: effectiveFlightServiceEnvironment.environment,
+                acknowledgementGeneration,
+                blockedAt: new Date().toISOString(),
+                reason: "missing_lab_acknowledgement",
+              },
+            }));
+          }
           // Background sync should not interrupt planner work.
+        } finally {
+          backgroundSyncInFlightRef.current.delete(plan.id);
         }
       }
     };
@@ -3000,7 +3037,7 @@ export default function FlightPlanner() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeTab, effectiveFlightServiceEnvironment.environment, isAuthenticated, isFlightServiceTestMode, mergePlanIntoList, queryClient, savedPlansView, toast]);
+  }, [activeTab, effectiveFlightServiceEnvironment.environment, isAuthenticated, isFlightServiceTestMode, labAcknowledgementBlockedSync, mergePlanIntoList, queryClient, savedPlansView, toast]);
 
   useEffect(() => {
     if (editingPlan || !draftPlanId || savedPlans.length === 0) return;
@@ -6930,6 +6967,8 @@ export default function FlightPlanner() {
   const currentSavedPlan = activeEditingPlan || savedPlans.find((plan) => plan.id === draftPlanId) || null;
   const currentSavedPlanStatus = filingStatusLabel(currentSavedPlan?.filingStatus);
   const currentSavedPlanCanAmend = canSubmitAmendForPlan(currentSavedPlan);
+  const currentSavedPlanLabAcknowledgementBlocked = currentSavedPlan ? labAcknowledgementBlockedSync[currentSavedPlan.id] || null : null;
+  const labAcknowledgementBlockedMessage = "Flight Service LAB acknowledgement has expired. Provider actions and manual synchronization are paused until the LAB acknowledgement is renewed.";
   const currentProviderLifecycleMessage = getProviderLifecycleAvailabilityMessage(currentSavedPlan);
   const hasCurrentSavedPlan = Boolean(currentSavedPlan?.id);
   const filingReadiness = useMemo(() => {
@@ -7369,6 +7408,10 @@ export default function FlightPlanner() {
     if (!stored) return null;
     return { ...stored, action: action || stored.action || null };
   }, [getStoredTestAcknowledgement, isFlightServiceTestMode]);
+  const getTestAcknowledgementGeneration = useCallback((acknowledgement: TestAcknowledgementRecord | null) =>
+    acknowledgement ? `${acknowledgement.environment}:${acknowledgement.acknowledgedAt}` : `${effectiveFlightServiceEnvironment.environment}:missing`,
+    [effectiveFlightServiceEnvironment.environment],
+  );
   const persistTestAcknowledgement = useCallback((action?: string | null) => {
     const record: TestAcknowledgementRecord = {
       accepted: true,
@@ -7379,6 +7422,7 @@ export default function FlightPlanner() {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(FLIGHT_SERVICE_TEST_ACK_KEY, JSON.stringify(record));
     }
+    setLabAcknowledgementBlockedSync({});
     return record;
   }, [effectiveFlightServiceEnvironment.environment]);
   const requireFlightServiceTestAcknowledgement = useCallback((actionLabel: string, callback: () => void) => {
@@ -7473,10 +7517,38 @@ export default function FlightPlanner() {
         description: testMode ? testModeMessage : result?.message || (live ? "The provider accepted your request." : "The request was staged and will be sent when provider is ready."),
       });
     },
-    onError: (error: any) => {
+    onError: (error: any, variables) => {
       setPendingFilingActionAfterSave(null);
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
+      if (isLabAcknowledgementRequiredError(error)) {
+        const planId = String((variables as any)?.planId || "");
+        const acknowledgement = getStoredTestAcknowledgement();
+        if (planId) {
+          setLabAcknowledgementBlockedSync((current) => ({
+            ...current,
+            [planId]: {
+              planId,
+              environment: effectiveFlightServiceEnvironment.environment,
+              acknowledgementGeneration: getTestAcknowledgementGeneration(acknowledgement),
+              blockedAt: new Date().toISOString(),
+              reason: "missing_lab_acknowledgement",
+            },
+          }));
+        }
+        const message = "Flight Service LAB acknowledgement has expired. Provider actions and manual synchronization are paused until the LAB acknowledgement is renewed.";
+        setFilingActionFeedback({
+          tone: "warning",
+          title: "LAB acknowledgement required",
+          message,
+        });
+        toast({
+          title: "LAB acknowledgement required",
+          description: message,
+          variant: "destructive",
+        });
+        return;
+      }
       if (isPlanAccessDeniedError(error)) {
         clearActiveSavedPlanIdentity();
         const message = "That saved plan is not available to the current user. Save this draft again before filing.";
@@ -7518,6 +7590,12 @@ export default function FlightPlanner() {
     },
     onSuccess: (result: any) => {
       if (result?.plan) {
+        setLabAcknowledgementBlockedSync((current) => {
+          if (!current[result.plan.id]) return current;
+          const next = { ...current };
+          delete next[result.plan.id];
+          return next;
+        });
         queryClient.setQueryData<FlightPlan[]>(["/api/flight-plans"], (current = []) =>
           mergePlanIntoList(current, result.plan)
         );
@@ -7579,7 +7657,29 @@ export default function FlightPlanner() {
         description: result?.message || "You can submit an amendment from the current provider version.",
       });
     },
-    onError: (error: any) => {
+    onError: (error: any, variables) => {
+      if (isLabAcknowledgementRequiredError(error)) {
+        const planId = String((variables as any)?.planId || "");
+        const acknowledgement = getStoredTestAcknowledgement();
+        if (planId) {
+          setLabAcknowledgementBlockedSync((current) => ({
+            ...current,
+            [planId]: {
+              planId,
+              environment: effectiveFlightServiceEnvironment.environment,
+              acknowledgementGeneration: getTestAcknowledgementGeneration(acknowledgement),
+              blockedAt: new Date().toISOString(),
+              reason: "missing_lab_acknowledgement",
+            },
+          }));
+        }
+        toast({
+          title: "LAB acknowledgement required",
+          description: "Flight Service LAB acknowledgement has expired. Provider actions and manual synchronization are paused until the LAB acknowledgement is renewed.",
+          variant: "destructive",
+        });
+        return;
+      }
       if (isPlanAccessDeniedError(error)) {
         clearActiveSavedPlanIdentity();
         toast({
@@ -7598,6 +7698,23 @@ export default function FlightPlanner() {
   });
 
   const submitFilingAction = useCallback((params: { planId: string; action: FilingActionName; closeLocation?: string | null }) => {
+    const acknowledgement = getStoredTestAcknowledgement();
+    const blocked = labAcknowledgementBlockedSync[params.planId];
+    if (isFlightServiceTestMode && blocked && !acknowledgement) {
+      toast({
+        title: "LAB acknowledgement required",
+        description: "Provider actions remain paused until the LAB acknowledgement is renewed.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (blocked && acknowledgement) {
+      setLabAcknowledgementBlockedSync((current) => {
+        const next = { ...current };
+        delete next[params.planId];
+        return next;
+      });
+    }
     if ((params.action === "file" || params.action === "amend") && hasBlockingFilingReadinessIssue) {
       logFilingReadinessFailure(params.action);
       toast({
@@ -7617,13 +7734,30 @@ export default function FlightPlanner() {
             ? "test cancel a flight plan"
             : "test close a flight plan";
     requireFlightServiceTestAcknowledgement(label, () => filingActionMutation.mutate(params));
-  }, [filingActionMutation, filingReadiness.blockingIssues, hasBlockingFilingReadinessIssue, logFilingReadinessFailure, requireFlightServiceTestAcknowledgement, toast]);
+  }, [filingActionMutation, filingReadiness.blockingIssues, getStoredTestAcknowledgement, hasBlockingFilingReadinessIssue, isFlightServiceTestMode, labAcknowledgementBlockedSync, logFilingReadinessFailure, requireFlightServiceTestAcknowledgement, toast]);
 
   const submitProviderSync = useCallback((planId: string) => {
+    const acknowledgement = getStoredTestAcknowledgement();
+    const blocked = labAcknowledgementBlockedSync[planId];
+    if (isFlightServiceTestMode && blocked && !acknowledgement) {
+      toast({
+        title: "LAB acknowledgement required",
+        description: "Provider synchronization remains paused until the LAB acknowledgement is renewed.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (blocked && acknowledgement) {
+      setLabAcknowledgementBlockedSync((current) => {
+        const next = { ...current };
+        delete next[planId];
+        return next;
+      });
+    }
     requireFlightServiceTestAcknowledgement("refresh provider sync in the validation environment", () => {
       filingSyncMutation.mutate({ planId, requestSource: "user" });
     });
-  }, [filingSyncMutation, requireFlightServiceTestAcknowledgement]);
+  }, [filingSyncMutation, getStoredTestAcknowledgement, isFlightServiceTestMode, labAcknowledgementBlockedSync, requireFlightServiceTestAcknowledgement, toast]);
 
   const requestSaveCurrentPlanWithFilingAction = useCallback((action: "file" | "amend", planId: string | null = null) => {
     if (hasBlockingFilingReadinessIssue) {
@@ -11569,6 +11703,36 @@ export default function FlightPlanner() {
                 </div>
                 <Badge variant="outline" className={plannerSafeBadgeClass}>{currentSavedPlanStatus}</Badge>
               </div>
+              {currentSavedPlanLabAcknowledgementBlocked && (
+                <Alert className="border-amber-300/50 bg-amber-400/10 text-amber-50">
+                  <AlertDescription className="space-y-3">
+                    <div>
+                      <div className="font-semibold">LAB acknowledgement required</div>
+                      <div className="mt-1">
+                        {labAcknowledgementBlockedMessage} Last known provider lifecycle and provider details remain visible below.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="border-amber-200/60 text-amber-50 hover:bg-amber-300/15"
+                        onClick={() => requireFlightServiceTestAcknowledgement("renew LAB acknowledgement and refresh provider sync", () => {
+                          setLabAcknowledgementBlockedSync((current) => {
+                            const next = { ...current };
+                            delete next[currentSavedPlan!.id];
+                            return next;
+                          });
+                          filingSyncMutation.mutate({ planId: currentSavedPlan!.id, requestSource: "user" });
+                        })}
+                      >
+                        Renew acknowledgement and refresh status
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
               <FlightPlanLifecycleActions
                 plan={currentSavedPlan!}
                 labels={filingActionLabels}
@@ -11582,6 +11746,7 @@ export default function FlightPlanner() {
                 hasBlockingReadinessIssue={hasBlockingFilingReadinessIssue}
                 amendUnavailableReason={currentDraftCanAmend ? null : draftAmendAvailabilityMessage || getAmendAvailabilityMessage(currentSavedPlan)}
                 fileUnavailableReason={getFileAvailabilityMessage(currentSavedPlan)}
+                providerActionsPausedReason={currentSavedPlanLabAcknowledgementBlocked ? labAcknowledgementBlockedMessage : null}
                 certificationPlan={isCertificationFlightPlan(currentSavedPlan)}
                 syncLabel={filingSyncMutation.isPending ? "Refreshing sync..." : filingActionLabels.sync}
                 onFile={() => requestSaveCurrentPlanWithFilingAction("file")}
@@ -11940,6 +12105,7 @@ export default function FlightPlanner() {
                 {(() => {
                   const isCurrentEditingPlan =
                     editingPlanRef.current?.id === plan.id || draftPlanIdRef.current === plan.id;
+                  const planLabAcknowledgementBlocked = labAcknowledgementBlockedSync[plan.id] || null;
                   const draftMessage = getDraftAmendAvailabilityMessage({
                     plan,
                     flightRules: filingDraft.flightRules,
@@ -11950,54 +12116,62 @@ export default function FlightPlanner() {
                     plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
                   });
                   return (
-                    <FlightPlanLifecycleActions
-                      plan={plan}
-                      labels={filingActionLabels}
-                      pending={{
-                        filingAction: filingActionMutation.isPending,
-                        updatePlan: updatePlanMutation.isPending,
-                        createPlan: createPlanMutation.isPending,
-                        sync: filingSyncMutation.isPending,
-                        acceptProviderReview: acceptProviderReviewMutation.isPending,
-                      }}
-                      amendUnavailableReason={draftMessage}
-                      fileUnavailableReason={getFileAvailabilityMessage(plan)}
-                      certificationPlan={certificationPlan}
-                      syncLabel={filingSyncMutation.isPending ? "Refreshing sync..." : filingActionLabels.sync}
-                      onFile={() => {
-                        if (isCurrentEditingPlan) {
-                          requestSaveCurrentPlanWithFilingAction("file");
-                          return;
-                        }
-                        submitFilingAction({ planId: plan.id, action: "file" });
-                      }}
-                      onAmend={() => {
-                        if (isCurrentEditingPlan) {
-                          setActiveTab("file");
-                          requestSaveCurrentPlanWithFilingAction("amend", plan.id);
-                          return;
-                        }
-                        beginAmendWorkflow(plan);
-                      }}
-                      onSync={() => submitProviderSync(plan.id)}
-                      onAcceptProviderChanges={() => acceptProviderReviewMutation.mutate(plan.id)}
-                      onProviderUpdates={() => setProviderUpdatesPlan(plan)}
-                      onActivate={() => submitFilingAction({ planId: plan.id, action: "activate" })}
-                      onClose={() => {
-                        if (isPlanOverdueForClose(plan)) {
-                          setOverdueClosePlan(plan);
-                          setOverdueCloseLocation("");
-                        } else {
-                          submitFilingAction({ planId: plan.id, action: "close" });
-                        }
-                      }}
-                      onCancel={() => submitFilingAction({ planId: plan.id, action: "cancel" })}
-                      onCertificationCleanup={() => submitFilingAction({
-                        planId: plan.id,
-                        action: getCertificationCleanupAction(plan),
-                      })}
-                      onDownloadSummary={() => downloadFilingSummary(plan)}
-                    />
+                    <div className="space-y-3">
+                      {planLabAcknowledgementBlocked && (
+                        <Alert className="border-amber-300/50 bg-amber-400/10 text-amber-50">
+                          <AlertDescription>{labAcknowledgementBlockedMessage}</AlertDescription>
+                        </Alert>
+                      )}
+                      <FlightPlanLifecycleActions
+                        plan={plan}
+                        labels={filingActionLabels}
+                        pending={{
+                          filingAction: filingActionMutation.isPending,
+                          updatePlan: updatePlanMutation.isPending,
+                          createPlan: createPlanMutation.isPending,
+                          sync: filingSyncMutation.isPending,
+                          acceptProviderReview: acceptProviderReviewMutation.isPending,
+                        }}
+                        amendUnavailableReason={draftMessage}
+                        fileUnavailableReason={getFileAvailabilityMessage(plan)}
+                        providerActionsPausedReason={planLabAcknowledgementBlocked ? labAcknowledgementBlockedMessage : null}
+                        certificationPlan={certificationPlan}
+                        syncLabel={filingSyncMutation.isPending ? "Refreshing sync..." : filingActionLabels.sync}
+                        onFile={() => {
+                          if (isCurrentEditingPlan) {
+                            requestSaveCurrentPlanWithFilingAction("file");
+                            return;
+                          }
+                          submitFilingAction({ planId: plan.id, action: "file" });
+                        }}
+                        onAmend={() => {
+                          if (isCurrentEditingPlan) {
+                            setActiveTab("file");
+                            requestSaveCurrentPlanWithFilingAction("amend", plan.id);
+                            return;
+                          }
+                          beginAmendWorkflow(plan);
+                        }}
+                        onSync={() => submitProviderSync(plan.id)}
+                        onAcceptProviderChanges={() => acceptProviderReviewMutation.mutate(plan.id)}
+                        onProviderUpdates={() => setProviderUpdatesPlan(plan)}
+                        onActivate={() => submitFilingAction({ planId: plan.id, action: "activate" })}
+                        onClose={() => {
+                          if (isPlanOverdueForClose(plan)) {
+                            setOverdueClosePlan(plan);
+                            setOverdueCloseLocation("");
+                          } else {
+                            submitFilingAction({ planId: plan.id, action: "close" });
+                          }
+                        }}
+                        onCancel={() => submitFilingAction({ planId: plan.id, action: "cancel" })}
+                        onCertificationCleanup={() => submitFilingAction({
+                          planId: plan.id,
+                          action: getCertificationCleanupAction(plan),
+                        })}
+                        onDownloadSummary={() => downloadFilingSummary(plan)}
+                      />
+                    </div>
                   );
                 })()}
                 <div className="text-xs text-muted-foreground">

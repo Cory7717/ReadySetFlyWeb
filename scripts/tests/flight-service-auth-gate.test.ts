@@ -37,7 +37,10 @@ test("Flight Service filing gate returns specific rejection codes", () => {
   assert.match(routesSource, /AUTHENTICATION_REQUIRED/);
   assert.match(routesSource, /FLIGHT_SERVICE_LAB_RESTRICTED/);
   assert.match(routesSource, /FLIGHT_SERVICE_LAB_PROVIDER_DISABLED/);
-  assert.match(routesSource, /FLIGHT_SERVICE_TEST_ACK_REQUIRED/);
+  assert.match(routesSource, /LAB_ACKNOWLEDGEMENT_REQUIRED/);
+  assert.match(routesSource, /reason: "missing_lab_acknowledgement"/);
+  assert.match(routesSource, /retryable: false/);
+  assert.match(routesSource, /operatorActionRequired: true/);
   assert.match(routesSource, /FLIGHT_SERVICE_PRODUCTION_DISABLED/);
   assert.match(routesSource, /FLIGHT_PLAN_LIMIT_EXCEEDED/);
   assert.match(routesSource, /FLIGHT_PLAN_READINESS_FAILED/);

@@ -23352,6 +23352,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }));
   };
 
+  const sendFlightServiceLabAcknowledgementRequired = (res: any, environment: string) =>
+    res.status(428).json({
+      error: "Flight Service LAB acknowledgement has expired. Provider actions and synchronization are paused until the LAB acknowledgement is renewed.",
+      code: "LAB_ACKNOWLEDGEMENT_REQUIRED",
+      reason: "missing_lab_acknowledgement",
+      retryable: false,
+      operatorActionRequired: true,
+      flightServiceEnvironment: environment,
+    });
+
   app.get("/api/flight-service/environment", (_req, res) => {
     const mode = getFlightServiceRuntimeMode();
     res.json({
@@ -24809,41 +24819,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
                 : "FLIGHT_SERVICE_LAB_PROVIDER_DISABLED",
         });
       }
-      await logFlightServiceLabAuthorization({
-        req,
-        user,
-        userId,
-        planId: plan.id,
-        action,
-        requestSource,
-        certificationPlan,
-        runtimeMode,
-        testerEmails,
-        testerEmailMatch,
-        acknowledgementAccepted,
-        authorized: true,
-        authorizationReason: runtimeMode.operationalFilingEnabled
-          ? "production_operational_enabled"
-          : labRuntime
-            ? restrictedTesterMode
-              ? "restricted_lab_user"
-              : "authenticated_lab_user"
-            : "certification_cleanup",
-      });
-      console.info(JSON.stringify({
-        event: "flight_service_environment",
-        flight_service_environment: runtimeMode.environment,
-        flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
-        testAcknowledgementRequired: runtimeMode.acknowledgementRequired,
-        testAcknowledgementAccepted: acknowledgementAccepted,
-        action,
-        requestSource,
-        certificationPlan,
-        planId: plan.id,
-        userId,
-        userEmail: userEmail || null,
-        blockedBecausePublicOperationalDisabled: false,
-      }));
       if (!acknowledgementAccepted) {
         await logFlightServiceLabAuthorization({
           req,
@@ -24890,12 +24865,43 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             blockedReason: "missing_lab_acknowledgement",
           }));
         }
-        return res.status(428).json({
-          error: "Flight Service test acknowledgement is required before submitting a LAB filing.",
-          code: "FLIGHT_SERVICE_TEST_ACK_REQUIRED",
-          flightServiceEnvironment: runtimeMode.environment,
-        });
+        return sendFlightServiceLabAcknowledgementRequired(res, runtimeMode.environment);
       }
+      await logFlightServiceLabAuthorization({
+        req,
+        user,
+        userId,
+        planId: plan.id,
+        action,
+        requestSource,
+        certificationPlan,
+        runtimeMode,
+        testerEmails,
+        testerEmailMatch,
+        acknowledgementAccepted,
+        authorized: true,
+        authorizationReason: runtimeMode.operationalFilingEnabled
+          ? "production_operational_enabled"
+          : labRuntime
+            ? restrictedTesterMode
+              ? "restricted_lab_user"
+              : "authenticated_lab_user"
+            : "certification_cleanup",
+      });
+      console.info(JSON.stringify({
+        event: "flight_service_environment",
+        flight_service_environment: runtimeMode.environment,
+        flight_filing_operational_enabled: runtimeMode.operationalFilingEnabled,
+        testAcknowledgementRequired: runtimeMode.acknowledgementRequired,
+        testAcknowledgementAccepted: acknowledgementAccepted,
+        action,
+        requestSource,
+        certificationPlan,
+        planId: plan.id,
+        userId,
+        userEmail: userEmail || null,
+        blockedBecausePublicOperationalDisabled: false,
+      }));
       const actionProviderSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
       const providerLifecycle = getProviderLifecycleStatus(actionProviderSnapshot);
       previousLocalLifecycleForCompletionLog = providerLifecycle || plan.filingStatus || null;
@@ -25632,6 +25638,38 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
                 : "FLIGHT_SERVICE_LAB_PROVIDER_DISABLED",
         });
       }
+      if (!acknowledgementAccepted) {
+        await logFlightServiceLabAuthorization({
+          req,
+          user,
+          userId,
+          planId: plan.id,
+          action: "sync",
+          requestSource,
+          certificationPlan,
+          runtimeMode,
+          testerEmails,
+          testerEmailMatch,
+          acknowledgementAccepted,
+          authorized: false,
+          authorizationReason: "missing_lab_acknowledgement",
+        });
+        await logFlightServiceAuthGateDebug({
+          req,
+          user,
+          userId,
+          planId: plan.id,
+          action: "sync",
+          requestSource,
+          certificationPlan,
+          runtimeMode,
+          testerEmails,
+          testerEmailMatch,
+          acknowledgementAccepted,
+          rejectionReason: "missing_lab_acknowledgement",
+        });
+        return sendFlightServiceLabAcknowledgementRequired(res, runtimeMode.environment);
+      }
       await logFlightServiceLabAuthorization({
         req,
         user,
@@ -25667,42 +25705,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         userEmail: userEmail || null,
         blockedBecausePublicOperationalDisabled: false,
       }));
-      if (!acknowledgementAccepted) {
-        await logFlightServiceLabAuthorization({
-          req,
-          user,
-          userId,
-          planId: plan.id,
-          action: "sync",
-          requestSource,
-          certificationPlan,
-          runtimeMode,
-          testerEmails,
-          testerEmailMatch,
-          acknowledgementAccepted,
-          authorized: false,
-          authorizationReason: "missing_lab_acknowledgement",
-        });
-        await logFlightServiceAuthGateDebug({
-          req,
-          user,
-          userId,
-          planId: plan.id,
-          action: "sync",
-          requestSource,
-          certificationPlan,
-          runtimeMode,
-          testerEmails,
-          testerEmailMatch,
-          acknowledgementAccepted,
-          rejectionReason: "missing_lab_acknowledgement",
-        });
-        return res.status(428).json({
-          error: "Flight Service test acknowledgement is required before submitting a LAB filing.",
-          code: "FLIGHT_SERVICE_TEST_ACK_REQUIRED",
-          flightServiceEnvironment: runtimeMode.environment,
-        });
-      }
 
       const syncResult = await syncLeidosPlanMetadata(plan as any);
       const updated = await persistLeidosProviderSync(plan as any, syncResult);

@@ -254,6 +254,7 @@ type FlightPlanLifecycleActionsProps = {
   hasBlockingReadinessIssue?: boolean;
   amendUnavailableReason?: string | null;
   fileUnavailableReason?: string | null;
+  providerActionsPausedReason?: string | null;
   certificationPlan?: boolean;
   syncLabel?: string;
   onFile: () => void;
@@ -275,6 +276,7 @@ export function FlightPlanLifecycleActions({
   hasBlockingReadinessIssue = false,
   amendUnavailableReason,
   fileUnavailableReason,
+  providerActionsPausedReason,
   certificationPlan,
   syncLabel,
   onFile,
@@ -298,14 +300,15 @@ export function FlightPlanLifecycleActions({
   const updatePending = Boolean(pending?.updatePlan);
   const createPending = Boolean(pending?.createPlan);
   const acceptPending = Boolean(pending?.acceptProviderReview);
+  const providerActionsPaused = Boolean(providerActionsPausedReason);
   const amendBlockedReason =
-    hasBlockingReadinessIssue ? "Resolve readiness check issues before amending." : amendUnavailableReason || null;
+    providerActionsPausedReason || (hasBlockingReadinessIssue ? "Resolve readiness check issues before amending." : amendUnavailableReason || null);
   const amendDisabled = actionPending || updatePending || syncPending || Boolean(amendBlockedReason);
   const fileBlockedReason =
-    hasBlockingReadinessIssue ? "Resolve readiness check issues before filing." : fileUnavailableReason || getFileAvailabilityMessage(plan);
-  const activateDisabledReason = getLifecycleActionDisabledReason(plan, "activate");
-  const cancelDisabledReason = getLifecycleActionDisabledReason(plan, "cancel");
-  const closeDisabledReason = getLifecycleActionDisabledReason(plan, "close");
+    providerActionsPausedReason || (hasBlockingReadinessIssue ? "Resolve readiness check issues before filing." : fileUnavailableReason || getFileAvailabilityMessage(plan));
+  const activateDisabledReason = providerActionsPausedReason || getLifecycleActionDisabledReason(plan, "activate");
+  const cancelDisabledReason = providerActionsPausedReason || getLifecycleActionDisabledReason(plan, "cancel");
+  const closeDisabledReason = providerActionsPausedReason || getLifecycleActionDisabledReason(plan, "close");
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -314,7 +317,7 @@ export function FlightPlanLifecycleActions({
           size="sm"
           variant="outline"
           onClick={onFile}
-          disabled={actionPending || updatePending || createPending || syncPending || hasBlockingReadinessIssue}
+            disabled={actionPending || updatePending || createPending || syncPending || hasBlockingReadinessIssue || providerActionsPaused}
           title={fileBlockedReason}
         >
           {labels.file}
@@ -335,7 +338,8 @@ export function FlightPlanLifecycleActions({
             size="sm"
             variant="outline"
             onClick={onSync}
-            disabled={actionPending || syncPending}
+            disabled={actionPending || syncPending || providerActionsPaused}
+            title={providerActionsPausedReason || "Refresh this plan from the filing provider."}
           >
             {syncLabel || labels.sync}
           </Button>
@@ -346,7 +350,8 @@ export function FlightPlanLifecycleActions({
           size="sm"
           variant="default"
           onClick={onAcceptProviderChanges}
-          disabled={actionPending || syncPending || acceptPending}
+          disabled={actionPending || syncPending || acceptPending || providerActionsPaused}
+          title={providerActionsPausedReason || "Accept the provider changes shown in RSF."}
         >
           {acceptPending ? "Accepting..." : "Accept provider changes"}
         </Button>
@@ -379,7 +384,7 @@ export function FlightPlanLifecycleActions({
             size="sm"
             variant="outline"
             onClick={onActivate}
-            disabled={actionPending || syncPending || !canActivatePlan(plan)}
+            disabled={actionPending || syncPending || providerActionsPaused || !canActivatePlan(plan)}
             title={activateDisabledReason || "Activate this VFR provider flight plan."}
           >
             {labels.activate}
@@ -388,7 +393,7 @@ export function FlightPlanLifecycleActions({
             size="sm"
             variant="outline"
             onClick={onClose}
-            disabled={actionPending || syncPending || !canClosePlan(plan)}
+            disabled={actionPending || syncPending || providerActionsPaused || !canClosePlan(plan)}
             title={closeDisabledReason || "Close this active VFR provider flight plan."}
           >
             {labels.close}
@@ -400,7 +405,7 @@ export function FlightPlanLifecycleActions({
           size="sm"
           variant="outline"
           onClick={onCancel}
-          disabled={actionPending || syncPending || !canCancelPlan(plan)}
+          disabled={actionPending || syncPending || providerActionsPaused || !canCancelPlan(plan)}
           title={cancelDisabledReason || "Cancel this proposed provider flight plan."}
         >
           {labels.cancel}
@@ -411,8 +416,8 @@ export function FlightPlanLifecycleActions({
           size="sm"
           variant="destructive"
           onClick={onCertificationCleanup}
-          disabled={actionPending || syncPending}
-          title="Requires LAB acknowledgement. If the provider plan is already terminal, RSF will close the local certification plan without another provider call."
+          disabled={actionPending || syncPending || providerActionsPaused}
+          title={providerActionsPausedReason || "Requires LAB acknowledgement. If the provider plan is already terminal, RSF will close the local certification plan without another provider call."}
         >
           Cleanup test plan
         </Button>

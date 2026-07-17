@@ -57,11 +57,28 @@ async function throwIfResNotOk(res: Response) {
             : validationMessages.length > 0
               ? validationMessages.join(" ")
               : JSON.stringify(payload);
-        throw new Error(message || res.statusText);
+        const error = new Error(message || res.statusText) as Error & {
+          status?: number;
+          code?: unknown;
+          reason?: unknown;
+          retryable?: unknown;
+          operatorActionRequired?: unknown;
+        };
+        error.status = res.status;
+        if (payload && typeof payload === "object") {
+          const record = payload as Record<string, unknown>;
+          error.code = record.code;
+          error.reason = record.reason;
+          error.retryable = record.retryable;
+          error.operatorActionRequired = record.operatorActionRequired;
+        }
+        throw error;
       }
     }
 
-    throw new Error(text);
+    const error = new Error(text) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
   }
 }
 

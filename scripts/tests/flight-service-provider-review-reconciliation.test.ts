@@ -87,6 +87,41 @@ test("new operational alert with unchanged effective plan does not reopen review
   assert.equal(decision.reason, "accepted_effective_plan_unchanged");
 });
 
+test("accepted provider-effective baseline survives durable JSON reload before alert reconciliation", () => {
+  const acceptedCanonical = buildProviderEffectivePlanSnapshot(basePlan, enrichedSnapshot);
+  const acceptedHash = hashProviderEffectivePlanSnapshot(acceptedCanonical);
+  const persistedJsonbValue = JSON.parse(JSON.stringify({
+    ...enrichedSnapshot,
+    providerPendingReview: false,
+    providerModifiedBySpecialist: false,
+    providerEffectivePlanHash: acceptedHash,
+    providerEffectivePlanSnapshot: acceptedCanonical,
+    providerReviewAcceptedVersionStamp: "20260717201622780",
+    providerReviewAcceptedEffectivePlanHash: acceptedHash,
+    providerReviewAcceptedEffectivePlanSnapshot: acceptedCanonical,
+    providerReviewAcceptedAt: "2026-07-17T20:30:00.000Z",
+    providerReviewAcceptedBy: "user-1",
+    providerReviewAcceptedSource: "provider_review_accept",
+  }));
+  const reloadedPlan = JSON.parse(JSON.stringify(basePlan));
+  const alertSnapshot = JSON.parse(JSON.stringify({
+    ...enrichedSnapshot,
+    providerOperationalAlertType: "CONVECTION_SIGMET",
+    providerLastPushTitle: "Flight Alert: CONVECTION_SIGMET",
+  }));
+
+  const decision = buildProviderReviewDecision({
+    plan: reloadedPlan,
+    previousSnapshot: persistedJsonbValue,
+    nextSnapshot: alertSnapshot,
+  });
+
+  assert.equal(decision.effectiveHash, acceptedHash);
+  assert.equal(decision.acceptedEffectiveHash, acceptedHash);
+  assert.equal(decision.reviewPending, false);
+  assert.equal(decision.reason, "accepted_effective_plan_unchanged");
+});
+
 test("new version stamp with unchanged effective plan updates metadata without review", () => {
   const acceptedCanonical = buildProviderEffectivePlanSnapshot(basePlan, enrichedSnapshot);
   const acceptedHash = hashProviderEffectivePlanSnapshot(acceptedCanonical);
@@ -164,3 +199,21 @@ test("route webhook does not set pending review directly from alert/change prese
   assert.match(routes, /normalizedAlertType/);
 });
 
+test("provider-review accept persists all accepted baseline fields in one guarded flight-plan update", () => {
+  const routes = readFileSync("server/routes.ts", "utf8");
+  const acceptRoute = routes.slice(routes.indexOf('app.post("/api/flight-plans/:id/provider-review/accept"'));
+  const updateIndex = acceptRoute.indexOf("const [updated] = await db");
+  const responseIndex = acceptRoute.indexOf("res.json({", updateIndex);
+  assert.ok(updateIndex > 0, "accept endpoint should persist through a guarded database update");
+  assert.ok(responseIndex > updateIndex, "response should be sent after the update");
+  const updateBlock = acceptRoute.slice(updateIndex, responseIndex);
+  assert.match(acceptRoute, /const acceptanceGuard = currentPlan\.updatedAt/);
+  assert.match(updateBlock, /\.where\(acceptanceGuard\)/);
+  assert.match(acceptRoute, /PROVIDER_REVIEW_STALE_ACCEPTANCE/);
+  assert.match(acceptRoute, /filingProviderSnapshot:\s*acceptedSnapshot/);
+  assert.match(acceptRoute, /providerReviewAcceptedVersionStamp:\s*acceptedVersionStamp/);
+  assert.match(acceptRoute, /providerReviewAcceptedEffectivePlanHash:\s*acceptedEffectivePlanHash/);
+  assert.match(acceptRoute, /providerReviewAcceptedEffectivePlanSnapshot:\s*acceptedEffectivePlanSnapshot/);
+  assert.match(acceptRoute, /providerReviewAcceptedAt:\s*now\.toISOString\(\)/);
+  assert.match(acceptRoute, /providerPendingReview:\s*false/);
+});

@@ -26002,14 +26002,31 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         provider: "Leidos Flight Service",
         providerPlanId: currentPlan.filingProviderPlanId || null,
       };
-      const updated = await storage.updateFlightPlan(currentPlan.id, {
+      const acceptanceUpdates = {
         filingProviderSnapshot: acceptedSnapshot as any,
         filingProviderMessages: appendPlanProviderMessages(
           (currentPlan as Record<string, unknown>).filingProviderMessages,
           [acceptanceMessage],
         ) as any,
         filingLastProviderSyncAt: now,
-      } as any);
+        updatedAt: now,
+      } as any;
+      const acceptanceGuard = currentPlan.updatedAt
+        ? and(eq(flightPlans.id, currentPlan.id), eq(flightPlans.updatedAt, currentPlan.updatedAt))
+        : eq(flightPlans.id, currentPlan.id);
+      const [updated] = await db
+        .update(flightPlans)
+        .set(acceptanceUpdates)
+        .where(acceptanceGuard)
+        .returning();
+      if (!updated) {
+        const latestPlan = await storage.getFlightPlanById(currentPlan.id);
+        return res.status(409).json({
+          error: "Provider changes changed while acceptance was being saved. Refresh provider updates and review the latest provider state.",
+          code: "PROVIDER_REVIEW_STALE_ACCEPTANCE",
+          plan: latestPlan || currentPlan,
+        });
+      }
 
       res.json({
         ok: true,

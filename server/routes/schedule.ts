@@ -508,14 +508,10 @@ function resolveShiftTypeFromRole(role: string, shiftTypeByLabel: Map<string, an
 
 function resolveShiftTypeForAssignment(assignment: any, shiftTypeById: Map<any, any>, shiftTypeByLabel: Map<string, any>) {
   const direct = shiftTypeById.get(assignment?.shiftTypeId);
+  if (direct) return direct;
   const role = String(assignment?.roleWorked || "").trim().toUpperCase();
   const roleResolved = resolveShiftTypeFromRole(role, shiftTypeByLabel);
-  if (roleResolved) {
-    const roleDepartment = normalizeDepartment(roleResolved.departmentHint || roleResolved.label);
-    const directDepartment = normalizeDepartment(direct?.departmentHint || direct?.label);
-    if (!direct || (roleDepartment && roleDepartment !== directDepartment)) return roleResolved;
-  }
-  return direct || roleResolved;
+  return roleResolved || null;
 }
 
 function assignmentRenderDepartment(assignment: any, employee: any, shiftType: any) {
@@ -523,7 +519,7 @@ function assignmentRenderDepartment(assignment: any, employee: any, shiftType: a
   if (isNonWorkingShiftLabel(assignment.roleWorked) || isNonWorkingShiftLabel(shiftType?.label)) {
     return primaryOperationalDepartment(employee);
   }
-  const resolved = normalizeDepartment(assignment.roleWorked || shiftType?.departmentHint || shiftType?.label || employee?.department);
+  const resolved = normalizeDepartment(shiftType?.departmentHint || shiftType?.label || assignment.roleWorked || employee?.department);
   const managerDepartment = operationalManagerDepartment(employee);
   return resolved === "Managers" && managerDepartment ? managerDepartment : resolved;
 }
@@ -1573,7 +1569,7 @@ async function buildSchedulePayload(scheduleId: string) {
   );
   const actualHousekeepingHours = actualHours.reduce((sum, row) => {
     const employee = employeeById.get(row.employeeId);
-    if (!employee) return sum;
+    if (!employee || employee.active === false) return sum;
     const assignment = assignmentByEmployeeDay.get(`${row.employeeId}:${row.workDate}`);
     const shiftType = assignment?.shiftTypeId ? shiftTypeById.get(assignment.shiftTypeId) : null;
     const department = assignment
@@ -1584,6 +1580,7 @@ async function buildSchedulePayload(scheduleId: string) {
   const scheduledHousekeepingHours = assignments.reduce((sum, assignment) => {
     if (assignment.isOpenShift) return sum;
     const employee = assignment.employeeId ? employeeById.get(assignment.employeeId) : null;
+    if (assignment.employeeId && employee?.active === false) return sum;
     const shiftType = assignment.shiftTypeId ? shiftTypeById.get(assignment.shiftTypeId) : null;
     const department = assignmentRenderDepartment(assignment, employee, shiftType);
     return department === "Housekeeping" ? sum + hoursForShift(assignment, shiftType) : sum;
@@ -1887,6 +1884,7 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   for (const assignment of assignments) {
     const shiftType = resolveShiftTypeForAssignment(assignment, shiftTypeById, shiftTypeByLabel);
     const employee = assignment.employeeId ? employeeById.get(assignment.employeeId) : null;
+    if (assignment.employeeId && employee?.active === false) continue;
     const department = assignmentRenderDepartment(assignment, employee, shiftType);
     const hours = hoursForShift(assignment, shiftType);
     const isSalaried = employee ? isSalariedScheduleManager(employee) : false;
@@ -3351,6 +3349,7 @@ export function registerScheduleRoutes(app: Express) {
       const isSuperAdmin = publicScheduleUser(req.scheduleUser).isSuperAdmin;
       const [existingEmployee] = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.id, req.params.id)).limit(1);
       if (!existingEmployee) return res.status(404).json({ error: "Employee not found" });
+      const activeChanged = Object.prototype.hasOwnProperty.call(parsed.data, "active") && Boolean(parsed.data.active) !== Boolean(existingEmployee.active);
       const nextEmployeePreview = { ...existingEmployee, ...parsed.data };
       const effectiveDepartment = parsed.data.department ? normalizeDepartment(parsed.data.department) : existingEmployee.department;
       const effectivePosition = Object.prototype.hasOwnProperty.call(parsed.data, "position") ? parsed.data.position : existingEmployee.position;
@@ -3385,7 +3384,9 @@ export function registerScheduleRoutes(app: Express) {
       const [employee] = await db.update(scheduleEmployees).set(updateValues).where(eq(scheduleEmployees.id, req.params.id)).returning();
       if (!employee) return res.status(404).json({ error: "Employee not found" });
       await syncPlaceholderCourtyardUserEmail(employee);
-      await audit(null, req.scheduleUser.id, "employee_updated", { employeeId: employee.id });
+      await audit(null, req.scheduleUser.id, activeChanged
+        ? employee.active ? "employee_restored_to_schedule" : "employee_removed_from_schedule"
+        : "employee_updated", { employeeId: employee.id });
       res.json({ employee: stripPrivateEmployeeRates([employee], req.scheduleUser)[0] });
     } catch (error) {
       next(error);

@@ -119,6 +119,9 @@ const ES: Record<string, string> = {
   "Importing payroll...": "Importando nomina...",
   Deactivate: "Desactivar",
   Activate: "Activar",
+  "Show removed employees": "Mostrar empleados removidos",
+  "Remove from schedule": "Remover del horario",
+  "Restore to schedule": "Restaurar al horario",
   "No position": "Sin puesto",
   "Schedule requests": "Solicitudes de horario",
   "Requests inside 14 days are outside hotel policy and subject to manager approval.": "Las solicitudes dentro de 14 dias estan fuera de la politica del hotel y estan sujetas a aprobacion del gerente.",
@@ -702,7 +705,7 @@ function assignmentDepartment(assignment: ShiftAssignment | undefined, employee:
       .map((value) => normalizeDepartment(value));
     return departments.find((department) => department !== "Managers") || departments[0] || "Front Desk";
   }
-  const resolved = roleDepartment(assignment?.roleWorked || shiftType?.departmentHint || employee.department);
+  const resolved = roleDepartment(shiftType?.departmentHint || shiftType?.label || assignment?.roleWorked || employee.department);
   const managerDepartment = operationalManagerDepartment(employee);
   return resolved === "Managers" && managerDepartment ? managerDepartment : resolved;
 }
@@ -2534,6 +2537,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
   const [expanded, setExpanded] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("All");
+  const [showRemovedEmployees, setShowRemovedEmployees] = useState(false);
   const [editing, setEditing] = useState<Record<string, any>>({});
   const t = (value: string) => tr(spanish, value);
   const toggleRole = (role: string) => setForm((current) => {
@@ -2616,8 +2620,10 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
     });
   };
   const sortedEmployees = [...employees].sort((a, b) => normalizeDepartment(a.department).localeCompare(normalizeDepartment(b.department)) || Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.displayName.localeCompare(b.displayName));
+  const removedEmployeeCount = employees.filter((employee) => !employee.active).length;
   const query = employeeSearch.trim().toLowerCase();
   const filteredEmployees = sortedEmployees.filter((employee) => {
+    if (!showRemovedEmployees && !employee.active) return false;
     const draft = employeePatch(employee);
     const department = normalizeDepartment(draft.department);
     if (departmentFilter !== "All" && department !== departmentFilter) return false;
@@ -2638,6 +2644,15 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
     department,
     employees: filteredEmployees.filter((employee) => normalizeDepartment(employeePatch(employee).department) === department),
   })).filter((group) => group.employees.length > 0);
+  const removeEmployeeFromSchedule = (employee: ScheduleEmployee) => {
+    if (!employee.active) {
+      onUpdate(employee.id, { active: true });
+      return;
+    }
+    if (window.confirm(`Remove ${employee.displayName} from active scheduling? Their historical shifts, payroll rates, and actual hours stay saved, but they will no longer appear on schedule grids or future schedule emails.`)) {
+      onUpdate(employee.id, { active: false });
+    }
+  };
   return (
     <Card className={C.shell} data-tour="employees">
       <CardHeader>
@@ -2733,7 +2748,21 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Button variant="outline" className={C.outline} onClick={() => setExpanded((value) => !value)}>{expanded ? "Hide employee list" : "Show employee list"}</Button>
-          {expanded && <Badge variant="outline" className="border-[#d6c8b5] bg-white text-[#5f5247]">{filteredEmployees.length} of {employees.length} associates</Badge>}
+          {expanded && (
+            <div className="flex flex-wrap items-center gap-2">
+              {removedEmployeeCount > 0 && (
+                <label className="flex items-center gap-2 rounded-full border border-[#d6c8b5] bg-white px-3 py-1 text-sm text-[#5f5247]">
+                  <input
+                    type="checkbox"
+                    checked={showRemovedEmployees}
+                    onChange={(event) => setShowRemovedEmployees(event.target.checked)}
+                  />
+                  {t("Show removed employees")} ({removedEmployeeCount})
+                </label>
+              )}
+              <Badge variant="outline" className="border-[#d6c8b5] bg-white text-[#5f5247]">{filteredEmployees.length} of {employees.length} associates</Badge>
+            </div>
+          )}
         </div>
         {expanded && <div className="space-y-4">
           <div className="grid gap-3 rounded-xl border border-[#e0d3c1] bg-[#fbf6ee] p-3 md:grid-cols-[1fr_240px]">
@@ -2855,7 +2884,10 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
                     )}
                   </>
                 )}
-                {(!draft.phone || !draft.email) && <Badge variant="outline" className="mt-2 border-amber-300 bg-amber-50 text-amber-900">Missing phone/email</Badge>}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(!draft.phone || !draft.email) && <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">Missing phone/email</Badge>}
+                  {!employee.active && <Badge variant="outline" className="border-slate-300 bg-slate-200 text-slate-800">Removed from active schedule</Badge>}
+                </div>
                 <div className="mt-3">
                   <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#5f5247]">Approved roles / cross-department access</div>
                   <div className="flex flex-wrap gap-1">
@@ -2879,7 +2911,14 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
               </Select>
               <div className="flex flex-col gap-2">
                 <Button className={C.green} onClick={() => saveEmployee(employee)}>Save</Button>
-                <Button variant="outline" className={C.outline} onClick={() => onUpdate(employee.id, { active: !employee.active })}>{employee.active ? t("Deactivate") : t("Activate")}</Button>
+                <Button
+                  variant="outline"
+                  className={employee.active ? "!border-red-200 !bg-red-50 !text-red-800 hover:!bg-red-100" : C.outline}
+                  onClick={() => removeEmployeeFromSchedule(employee)}
+                >
+                  {employee.active ? <X className="mr-2 h-4 w-4" /> : null}
+                  {employee.active ? t("Remove from schedule") : t("Restore to schedule")}
+                </Button>
               </div>
             </div>
           );})}

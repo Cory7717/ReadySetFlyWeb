@@ -22,11 +22,16 @@ import {
 
 export type CaseAction = FlightPlanFilingAction;
 export type LiveLabTestType = "Positive" | "Negative" | "Lifecycle" | "Cleanup" | "Round Trip";
+export type LiveLabSuiteDesignation = "core" | "extended";
+export type LiveLabCaseClassification = "positive" | "negative" | "lifecycle" | "time" | "zzzz" | "resilience" | "round-trip";
 
 export type LiveLabCase = {
   seed: number;
+  stableId?: string;
   name: string;
   testType: LiveLabTestType;
+  suite?: LiveLabSuiteDesignation;
+  classification?: LiveLabCaseClassification;
   actions: CaseAction[];
   buildPlan: () => FlightPlan;
   expectedBlockedBeforeLeidos?: boolean;
@@ -36,6 +41,8 @@ export type LiveLabCase = {
 };
 
 export const MAX_CASES = 15;
+export const CORE_CERTIFICATION_SUITE_VERSION = "core-15";
+export const EXTENDED_EDGE_PACK_VERSION = "extended-edge-pack-2026-07";
 const EXPECTED_TEST_ACCOUNT_EMAIL = "generalmanager.atx@gmail.com";
 const CERT_REMARK = "RSF LEIDOS LAB CERTIFICATION TEST - DO NOT TREAT AS LIVE OPERATIONAL FLIGHT";
 const providerSafeRmk = (seed: number, suffix = "") => `RMK/RSF LAB TEST SEED ${seed}${suffix ? ` ${suffix}` : ""}`;
@@ -72,6 +79,7 @@ const KNOWN_FLAGS = new Set([
   "skip-cleanup",
   "cleanup-only",
   "replay",
+  "suite",
 ]);
 
 const validateCliArgs = () => {
@@ -534,6 +542,37 @@ const createBasePlanFactory = (context: DedicatedTestContext, runId: string) => 
   } as FlightPlan;
 };
 
+const withCaseMetadata = (testCase: LiveLabCase, suite: LiveLabSuiteDesignation): LiveLabCase => ({
+  ...testCase,
+  stableId: testCase.stableId || `case-${String(testCase.seed).padStart(2, "0")}`,
+  suite,
+  classification: testCase.classification || (
+    testCase.expectedBlockedBeforeLeidos ? "negative" :
+    testCase.testType === "Lifecycle" ? "lifecycle" :
+    testCase.testType === "Round Trip" ? "round-trip" :
+    /ZZZZ/i.test(testCase.name) ? "zzzz" :
+    "positive"
+  ),
+});
+
+export const buildCoreCaseMappingAudit = () => [
+  { seed: 1, stableId: "case-01", name: "Normal VFR ICAO file", currentCoverage: "Baseline positive VFR ICAO FILE payload and cleanup.", disposition: "retained", reason: "Leidos-required baseline positive VFR filing coverage." },
+  { seed: 2, stableId: "case-02", name: "Normal IFR ICAO file", currentCoverage: "Baseline positive IFR ICAO FILE payload and cleanup.", disposition: "retained", reason: "Leidos-required baseline positive IFR filing coverage and duplicate-risk anchor for Case 8." },
+  { seed: 3, stableId: "case-03", name: "ZZZZ destination lat/long description", currentCoverage: "Destination ZZZZ with DEST/ location support.", disposition: "retained", reason: "Unique ZZZZ destination coverage." },
+  { seed: 4, stableId: "case-04", name: "ZZZZ departure lat/long description", currentCoverage: "Departure ZZZZ with DEP/ location support and planning-reference timezone.", disposition: "retained", reason: "Unique ZZZZ departure coverage." },
+  { seed: 5, stableId: "case-05", name: "ZZZZ alternate destination", currentCoverage: "Alternate ZZZZ with ALTN/ private field identifier.", disposition: "retained", reason: "Unique ZZZZ alternate coverage." },
+  { seed: 6, stableId: "case-06", name: "Other Info RMK retained", currentCoverage: "Other Info/RMK normalization and DOF preservation.", disposition: "retained", reason: "Unique Field 18/RMK positive normalization coverage." },
+  { seed: 7, stableId: "case-07", name: "VFR file activate close", currentCoverage: "VFR FILE -> ACTIVATE -> CLOSE lifecycle and terminal verification.", disposition: "retained", reason: "Lifecycle-critical case." },
+  { seed: 8, stableId: "case-08", name: "IFR file then amend", currentCoverage: "IFR FILE -> AMEND with material mutation and cleanup.", disposition: "retained", reason: "Unique AMEND and version-stamp continuity coverage." },
+  { seed: 9, stableId: "case-09", name: "Provider round-trip integrity lifecycle", currentCoverage: "Round-trip payload/route integrity through lifecycle.", disposition: "retained", reason: "Unique route-integrity and terminal comparison coverage." },
+  { seed: 10, stableId: "case-10", name: "Negative - Equipment R with no PBN", currentCoverage: "Blocks Equipment R without PBN/ before provider submission.", disposition: "retained", reason: "Required negative PBN control." },
+  { seed: 11, stableId: "case-11", name: "Negative - PBN present without Equipment R", currentCoverage: "Blocks PBN/ without Equipment R before provider submission.", disposition: "retained", reason: "Required reciprocal PBN/equipment validation." },
+  { seed: 12, stableId: "case-12", name: "Negative - Invalid surveillance B2", currentCoverage: "Blocks unsupported compact surveillance value.", disposition: "retained", reason: "Unique surveillance validation coverage." },
+  { seed: 13, stableId: "case-13", name: "Negative - Duplicate equipment codes", currentCoverage: "Blocks duplicate equipment codes with actionable copy.", disposition: "retained", reason: "Unique duplicate equipment validation coverage." },
+  { seed: 14, stableId: "case-14", name: "Negative - Missing phone and home base", currentCoverage: "Blocks missing pilot phone/home base.", disposition: "retained", reason: "Unique required-contact validation coverage." },
+  { seed: 15, stableId: "case-15", name: "Negative - Invalid Other Info", currentCoverage: "Blocks provider-unsafe Other Info text.", disposition: "retained", reason: "Required invalid Field 18 validation; explicitly preserved." },
+];
+
 export const buildCases = (context: DedicatedTestContext, runId: string): LiveLabCase[] => {
   const plan = createBasePlanFactory(context, runId);
   return [
@@ -552,7 +591,37 @@ export const buildCases = (context: DedicatedTestContext, runId: string): LiveLa
     { seed: 13, name: "Negative - Duplicate equipment codes", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Remove duplicate ICAO equipment codes.", buildPlan: () => plan(13, "Duplicate Equipment", { filingEquipment: "SRR", filingOtherInfo: `PBN/A1 ${providerSafeRmk(13, "DUP EQ")}` }) },
     { seed: 14, name: "Negative - Missing phone and home base", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Complete pilot phone and aircraft home base before filing.", buildPlan: () => plan(14, "Missing Contact", { filingPilotPhone: "", filingAircraftHomeBase: "" }) },
     { seed: 15, name: "Negative - Invalid Other Info", testType: "Negative", actions: ["file"], expectedBlockedBeforeLeidos: true, expectedFinalState: "blocked", recommendedFix: "Use short ICAO subfields with letters, numbers, spaces, and slash separators only.", buildPlan: () => plan(15, "Invalid Other Info", { filingOtherInfo: `DOF/260715 RMK/${CERT_REMARK} LEIDOS-LIVE-LAB-${runId} SEED 15` }) },
-  ];
+  ].map((testCase) => withCaseMetadata(testCase, "core"));
+};
+
+export const buildExtendedEdgeCases = (context: DedicatedTestContext, runId: string): LiveLabCase[] => {
+  const plan = createBasePlanFactory(context, runId);
+  return [
+    { seed: 16, stableId: "edge-16", name: "IFR proposed cancellation", testType: "Lifecycle", classification: "lifecycle", actions: ["file", "cancel"], expectedFinalState: "cancelled", buildPlan: () => plan(16, "IFR Cancel", { filingFlightRules: "IFR", route: "DCT ACT DCT", filingPlannedAltitudeFt: 8000, destination: "KDTO", alternate: "KACT" }) },
+    { seed: 17, stableId: "edge-17", name: "IFR amend then cancel with newest version stamp", testType: "Lifecycle", classification: "lifecycle", actions: ["file", "amend", "cancel"], expectedFinalState: "cancelled", buildPlan: () => plan(17, "IFR Amend Cancel", { filingFlightRules: "IFR", route: "DCT CWK DCT", filingPlannedAltitudeFt: 7000, destination: "KDTO", alternate: "KACT" }) },
+    { seed: 18, stableId: "edge-18", name: "Positive - Equipment R with valid PBN", testType: "Positive", classification: "positive", actions: ["file"], expectedFinalState: "filed, then cleanup cancel", buildPlan: () => plan(18, "R With PBN", { filingEquipment: "SR", filingOtherInfo: `PBN/A1 ${providerSafeRmk(18, "VALID PBN")}` }) },
+    { seed: 19, stableId: "edge-19", name: "KLAS date-boundary timezone payload", testType: "Positive", classification: "time", actions: ["file"], expectedFinalState: "filed, then cleanup cancel", buildPlan: () => {
+      const local = "2026-07-17T23:30";
+      return plan(19, "KLAS Date Boundary", {
+        departure: "KLAS",
+        destination: "KDFW",
+        route: "DCT DRK DCT",
+        plannedDepartureAt: new Date("2026-07-18T06:30:00.000Z"),
+        plannedArrivalAt: new Date("2026-07-18T09:30:00.000Z"),
+        plannerState: { departureTimeZone: "America/Los_Angeles", userDisplayDepartureTimeLocal: local },
+      });
+    } },
+    { seed: 20, stableId: "edge-20", name: "ZZZZ aircraft type with TYP", testType: "Positive", classification: "zzzz", actions: ["file", "amend"], expectedFinalState: "filed after AMEND, then cleanup cancel", buildPlan: () => plan(20, "ZZZZ Aircraft Type", { aircraftType: "ZZZZ", filingOtherInfo: `PBN/A1 TYP/TBM9 ${providerSafeRmk(20, "ZZZZ TYP")}`, plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: getDeterministicCaseDeparture(20).local, actualAircraftType: "TBM9" } as any }) },
+    { seed: 21, stableId: "edge-21", name: "VFR full lifecycle extended", testType: "Lifecycle", classification: "lifecycle", actions: ["file", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(21, "VFR Full Lifecycle", { destination: "KACT", alternate: "KDAL", route: "DCT ACT DCT", filingCloseLocation: "KACT" } as any) },
+    { seed: 22, stableId: "edge-22", name: "Future-date DOF positive control", testType: "Positive", classification: "time", actions: ["file"], expectedFinalState: "filed, then cleanup cancel", buildPlan: () => plan(22, "Future DOF", { plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-12-31T23:40" }, plannedDepartureAt: new Date("2027-01-01T05:40:00.000Z"), plannedArrivalAt: new Date("2027-01-01T07:10:00.000Z"), filingOtherInfo: `PBN/A1 ${providerSafeRmk(22, "YEAR ROLLOVER DOF")}` }) },
+  ].map((testCase) => withCaseMetadata(testCase, "extended"));
+};
+
+export const buildCasesForSuite = (context: DedicatedTestContext, runId: string, suite: string): LiveLabCase[] => {
+  const normalized = String(suite || "core").trim().toLowerCase();
+  if (normalized === "extended" || normalized === "edge" || normalized === "edge-pack") return buildExtendedEdgeCases(context, runId);
+  if (normalized === "all") return [...buildCases(context, runId), ...buildExtendedEdgeCases(context, runId)];
+  return buildCases(context, runId);
 };
 
 export const buildLiveLabDuplicateRiskSignature = (plan: FlightPlan) => {
@@ -623,6 +692,24 @@ export const amendMutationForCase = (testCase: LiveLabCase): Partial<FlightPlan>
       filingRemarks: "RSF LAB TEST SEED 9 AMENDED",
     } as Partial<FlightPlan>;
   }
+  if (testCase.seed === 17) {
+    return {
+      route: "DCT ACT DCT SAT DCT",
+      filingPlannedAltitudeFt: 9000,
+      alternate: "KAUS",
+      filingOtherInfo: `PBN/A1 ${providerSafeRmk(17, "AMENDED BEFORE CANCEL")}`,
+      filingRemarks: "RSF LAB TEST SEED 17 AMENDED BEFORE CANCEL",
+    } as Partial<FlightPlan>;
+  }
+  if (testCase.seed === 20) {
+    return {
+      route: "DCT CWK DCT",
+      filingPlannedAltitudeFt: 8500,
+      alternate: "KAUS",
+      filingOtherInfo: `PBN/A1 TYP/TBM9 ${providerSafeRmk(20, "ZZZZ TYP AMENDED")}`,
+      filingRemarks: "RSF LAB TEST SEED 20 ZZZZ TYP AMENDED",
+    } as Partial<FlightPlan>;
+  }
   return null;
 };
 
@@ -678,7 +765,8 @@ const selectRequestedCases = (allCases: LiveLabCase[], limit: number, replay: st
 
   const onlyCasesRaw = arg("only-cases", "");
   const startCase = Math.max(1, Math.floor(numberArg("start-case", "1") || 1));
-  const endCase = Math.min(MAX_CASES, Math.floor(numberArg("end-case", String(MAX_CASES)) || MAX_CASES));
+  const maxSeed = Math.max(...allCases.map((item) => item.seed), MAX_CASES);
+  const endCase = Math.min(maxSeed, Math.floor(numberArg("end-case", String(maxSeed)) || maxSeed));
   const onlySeeds = onlyCasesRaw ? parseOnlyCaseSeeds(onlyCasesRaw) : null;
   const selected = allCases.filter((item) => {
     if (onlySeeds) return onlySeeds.has(item.seed);
@@ -2209,7 +2297,7 @@ const countdown = async (minutes: number, nextName: string) => {
 const run = async () => {
   validateCliArgs();
   const dryRun = hasFlag("dry-run") || !hasFlag("confirm-leidos-lab");
-  const limit = Math.min(MAX_CASES, Math.max(1, numberArg("limit", "15") || 15));
+  const suite = arg("suite", "core").trim().toLowerCase() || "core";
   const delayMinutes = Math.max(0, numberArg("delay-minutes", process.env.LEIDOS_LAB_DELAY_MINUTES || "3"));
   const replay = arg("replay", "");
   const skipCleanup = hasFlag("skip-cleanup");
@@ -2256,7 +2344,9 @@ const run = async () => {
   }
 
   const context = await loadDedicatedTestContext();
-  const allCases = buildCases(context, runId);
+  const allCases = buildCasesForSuite(context, runId, suite);
+  const defaultLimit = suite === "core" ? String(MAX_CASES) : String(allCases.length);
+  const limit = Math.min(allCases.length, Math.max(1, numberArg("limit", defaultLimit) || Number(defaultLimit)));
   const caseSelection = selectRequestedCases(allCases, replay ? 1 : limit, replay);
   const cases = caseSelection.cases;
   if (cases.length === 0) throw new Error(`No live LAB test case matched replay=${replay}.`);
@@ -2291,7 +2381,8 @@ const run = async () => {
   console.log(`Leidos live LAB certification ${runModeLabel}`);
   console.log(`Endpoint: ${diagnostics.baseUrl}`);
   console.log("Test user: [verified LAB test account]");
-  console.log(`Cases: ${cases.length}/${MAX_CASES}`);
+  console.log(`Suite: ${suite}`);
+  console.log(`Cases: ${cases.length}/${allCases.length}`);
   console.log(`Case selection: ${JSON.stringify(caseSelection.request)}`);
   console.log(`Skipped by selection: ${caseSelection.skippedBySelection.map((item) => item.seed).join(", ") || "-"}`);
   console.log(`Duplicate-risk preflight: PASS (${duplicateRiskPreflight.uniqueSignatureCount} unique provider-submitted FILE signatures)`);
@@ -2341,9 +2432,12 @@ const run = async () => {
     const caseResult = {
       certificationRunId: runId,
       certificationCaseId: `case-${String(testCase.seed).padStart(2, "0")}`,
+      stableCaseId: testCase.stableId || `case-${String(testCase.seed).padStart(2, "0")}`,
       planId: plan.id,
       testName: testCase.name,
       testType: testCase.testType,
+      suite: testCase.suite || "core",
+      classification: testCase.classification || null,
       seed: testCase.seed,
       actions: [] as any[],
       comparisons: [] as any[],
@@ -2735,6 +2829,8 @@ const run = async () => {
     environmentDetails: {
       name: diagnostics.environment,
       endpoint: diagnostics.baseUrl,
+      suite,
+      suiteVersion: suite === "extended" || suite === "edge" || suite === "edge-pack" ? EXTENDED_EDGE_PACK_VERSION : CORE_CERTIFICATION_SUITE_VERSION,
       dryRun,
       delayMinutes,
       limit,
@@ -2758,6 +2854,8 @@ const run = async () => {
     delayMinutes,
     skipCleanup,
     suiteSelection: {
+      suite,
+      suiteVersion: suite === "extended" || suite === "edge" || suite === "edge-pack" ? EXTENDED_EDGE_PACK_VERSION : CORE_CERTIFICATION_SUITE_VERSION,
       totalCasesInSuite: allCases.length,
       casesRequested: requestedCaseSeeds,
       casesExecuted: executedCaseSeeds,
@@ -2765,6 +2863,17 @@ const run = async () => {
       casesPassedInCurrentRun: results.filter((item) => item.pass).map((item) => item.seed),
       casesPreviouslyPassedIfKnown: Array.from(previouslyPassedSeeds).sort((a, b) => a - b),
       requestedCasesPreviouslyPassedIfKnown: previouslyPassedRequestedSeeds,
+      coreCaseMappingAudit: buildCoreCaseMappingAudit(),
+      requestedCaseMapping: cases.map((testCase) => ({
+        seed: testCase.seed,
+        stableId: testCase.stableId,
+        suite: testCase.suite,
+        name: testCase.name,
+        testType: testCase.testType,
+        classification: testCase.classification,
+        actions: testCase.actions,
+        expectedBlockedBeforeLeidos: Boolean(testCase.expectedBlockedBeforeLeidos),
+      })),
       request: caseSelection.request,
     },
     duplicateRiskPreflight: {

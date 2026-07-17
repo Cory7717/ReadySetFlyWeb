@@ -28,7 +28,7 @@ test("readiness blockers provide edit targets and required/recommended severity"
   assert.match(plannerSource, /actionTab: fileTab/);
   assert.match(plannerSource, /severity: "required"/);
   assert.match(plannerSource, /severity: "recommended"/);
-  assert.match(plannerSource, /Required items must be completed before filing/);
+  assert.match(plannerSource, /Required items must be completed before submission/);
 });
 
 test("readiness validates resolved aircraft data, not saved profile source", () => {

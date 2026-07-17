@@ -6,6 +6,9 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FlightPlanLifecycleActions } from "../../client/src/components/flight-planner/FlightPlanLifecycleActions";
 import {
+  canCancelPlan,
+  getCanonicalPlanDepartureInstant,
+  getLifecycleActionDisabledReason,
   getPastDepartureLifecycleMessage,
   shouldApplyPastDepartureReadinessBlock,
 } from "../../client/src/components/flight-planner/FlightPlanLifecycleActions";
@@ -591,6 +594,143 @@ test("filed IFR lifecycle actions never render activate or close after departure
   assertButtonVisible(html, lifecycleLabels.sync, { disabled: false });
   assertButtonAbsent(html, lifecycleLabels.activate);
   assertButtonAbsent(html, lifecycleLabels.close);
+});
+
+test("cancel eligibility uses canonical UTC departure instant instead of browser-local display time", () => {
+  const planForRender = lifecyclePlan({
+    id: "7406aa3f-fa7e-47c4-b19b-28fe4f9342e8",
+    departure: "KLAS",
+    destination: "KDFW",
+    filingStatus: "filed",
+    filingFlightRules: "IFR",
+    plannedDepartureAt: new Date("2026-07-17T22:30:00.000Z"),
+    filingPayload: {
+      departureInstant: "2026-07-17T22:30:00.000Z",
+    },
+    plannerState: {
+      departureTimeZone: "America/Los_Angeles",
+      userDisplayDepartureTimeLocal: "2026-07-17T15:30",
+    },
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "proposed",
+      providerLifecycleSource: "provider_retrieve",
+      artccState: "ROGERED",
+      versionStamp: "20260717201622780",
+    },
+  });
+
+  assert.equal(getCanonicalPlanDepartureInstant(planForRender)?.toISOString(), "2026-07-17T22:30:00.000Z");
+  assert.equal(canCancelPlan(planForRender), true);
+  assert.equal(getLifecycleActionDisabledReason(planForRender, "cancel"), null);
+
+  const html = renderLifecycleActions(planForRender);
+  assertButtonVisible(html, lifecycleLabels.cancel, { disabled: false });
+  assertButtonAbsent(html, lifecycleLabels.activate);
+  assertButtonAbsent(html, lifecycleLabels.close);
+});
+
+test("cancel eligibility is stable when browser timezone differs or changes", () => {
+  const basePlan = lifecyclePlan({
+    departure: "KLAS",
+    filingStatus: "filed",
+    filingFlightRules: "IFR",
+    plannedDepartureAt: new Date("2026-07-17T22:30:00.000Z"),
+    plannerState: {
+      departureTimeZone: "America/Los_Angeles",
+      userDisplayDepartureTimeLocal: "2026-07-17T15:30",
+    },
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "proposed",
+      lastKnownArtccState: "ROGERED",
+      versionStamp: "20260717201622780",
+    },
+  });
+  const chicagoDevicePlan = lifecyclePlan({
+    ...basePlan,
+    plannerState: {
+      departureTimeZone: "America/Los_Angeles",
+      browserTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-07-17T15:30",
+    },
+  } as Partial<FlightPlan>);
+  const newYorkDevicePlan = lifecyclePlan({
+    ...basePlan,
+    plannerState: {
+      departureTimeZone: "America/Los_Angeles",
+      browserTimeZone: "America/New_York",
+      userDisplayDepartureTimeLocal: "2026-07-17T15:30",
+    },
+  } as Partial<FlightPlan>);
+
+  assert.equal(canCancelPlan(basePlan), true);
+  assert.equal(canCancelPlan(chicagoDevicePlan), true);
+  assert.equal(canCancelPlan(newYorkDevicePlan), true);
+  assert.equal(getCanonicalPlanDepartureInstant(chicagoDevicePlan)?.toISOString(), "2026-07-17T22:30:00.000Z");
+  assert.equal(getCanonicalPlanDepartureInstant(newYorkDevicePlan)?.toISOString(), "2026-07-17T22:30:00.000Z");
+});
+
+test("timezone-less display strings are not canonical lifecycle-action instants", () => {
+  const sameTimezonePlan = lifecyclePlan({
+    departure: "KEDC",
+    filingStatus: "filed",
+    filingFlightRules: "IFR",
+    plannedDepartureAt: new Date("2026-07-17T20:30:00.000Z"),
+    plannerState: {
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-07-17T15:30",
+    },
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "proposed",
+      providerLifecycleSource: "local_reconciliation",
+    },
+  });
+  const dateBoundaryPlan = lifecyclePlan({
+    departure: "KLAS",
+    filingStatus: "filed",
+    filingFlightRules: "IFR",
+    plannedDepartureAt: new Date("2026-07-18T06:30:00.000Z"),
+    plannerState: {
+      departureTimeZone: "America/Los_Angeles",
+      browserTimeZone: "America/New_York",
+      userDisplayDepartureTimeLocal: "2026-07-17T23:30",
+    },
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "proposed",
+      providerLifecycleSource: "local_reconciliation",
+    },
+  });
+
+  assert.equal(getCanonicalPlanDepartureInstant(sameTimezonePlan)?.toISOString(), "2026-07-17T20:30:00.000Z");
+  assert.equal(getCanonicalPlanDepartureInstant(dateBoundaryPlan)?.toISOString(), "2026-07-18T06:30:00.000Z");
+  assert.equal(canCancelPlan(sameTimezonePlan), true);
+  assert.equal(canCancelPlan(dateBoundaryPlan), true);
+});
+
+test("cancel remains disabled for active and terminal provider states", () => {
+  const activePlan = lifecyclePlan({
+    filingStatus: "activated",
+    filingFlightRules: "VFR",
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "activated",
+      providerLifecycleSource: "provider_retrieve",
+      versionStamp: "20260717201622780",
+      providerActionAvailability: { cancel: false, close: true },
+    },
+  });
+  const closedPlan = lifecyclePlan({
+    filingStatus: "closed",
+    filingFlightRules: "IFR",
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "closed",
+      providerLifecycleSource: "provider_retrieve",
+      versionStamp: "20260717201622780",
+    },
+  });
+
+  assert.equal(canCancelPlan(activePlan), false);
+  assert.match(getLifecycleActionDisabledReason(activePlan, "cancel") || "", /Cancellation is only available/);
+  assert.equal(canCancelPlan(closedPlan), false);
+  assert.match(getLifecycleActionDisabledReason(closedPlan, "cancel") || "", /already closed or cancelled/);
 });
 
 test("flight planner readiness edit actions target stable planner fields", () => {

@@ -29,20 +29,46 @@ export const getProviderActionAvailability = (plan: FlightPlan | null | undefine
   const snapshot = getProviderSnapshot(plan);
   const availability = snapshot.providerActionAvailability;
   const lifecycle = String(snapshot.providerLifecycleStatus || "").toLowerCase();
+  const versionStamp = snapshot.versionStamp || extractFilingVersionStamp(plan);
   const providerStatusKnown = Boolean(
     lifecycle &&
     lifecycle !== "unknown" &&
-    (snapshot.providerStatus || snapshot.artccState || snapshot.versionStamp || snapshot.cancellationIndicator || snapshot.closureIndicator)
+    (
+      snapshot.providerStatus ||
+      snapshot.providerFlightState ||
+      snapshot.artccState ||
+      snapshot.lastKnownArtccState ||
+      versionStamp ||
+      snapshot.cancellationIndicator ||
+      snapshot.closureIndicator ||
+      snapshot.providerLifecycleSource === "local_reconciliation"
+    )
   );
   return {
     lifecycle: lifecycle || "unknown",
     providerStatusKnown,
-    amend: Boolean(availability?.amend),
-    activate: Boolean(availability?.activate),
-    cancel: Boolean(availability?.cancel),
-    close: Boolean(availability?.close),
+    amend: availability?.amend == null ? ["proposed", "filed", "activated", "active"].includes(lifecycle) : Boolean(availability.amend),
+    activate: availability?.activate == null ? lifecycle === "proposed" || lifecycle === "filed" : Boolean(availability.activate),
+    cancel: availability?.cancel == null ? lifecycle === "proposed" : Boolean(availability.cancel),
+    close: availability?.close == null ? lifecycle === "activated" || lifecycle === "active" : Boolean(availability.close),
     reason: String(availability?.reason || ""),
   };
+};
+
+export const getCanonicalPlanDepartureInstant = (plan: FlightPlan | null | undefined) => {
+  const payload = plan && (plan as Record<string, unknown>).filingPayload && typeof (plan as Record<string, unknown>).filingPayload === "object"
+    ? (plan as Record<string, unknown>).filingPayload as Record<string, unknown>
+    : {};
+  const candidates = [
+    plan?.plannedDepartureAt,
+    typeof payload.departureInstant === "string" ? payload.departureInstant : null,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = candidate instanceof Date ? candidate : new Date(candidate);
+    if (Number.isFinite(parsed.getTime())) return parsed;
+  }
+  return null;
 };
 
 const normalizedClientFilingStatus = (plan: FlightPlan | null | undefined) =>
@@ -92,6 +118,33 @@ export const canCancelPlan = (plan: FlightPlan | null | undefined) =>
     getProviderActionAvailability(plan).cancel &&
     hasLiveProviderPlan(plan),
   );
+
+export const getLifecycleActionDisabledReason = (plan: FlightPlan | null | undefined, action: "activate" | "cancel" | "close") => {
+  if (!plan) return "Save this plan before using filing provider lifecycle actions.";
+  if (!hasLiveProviderPlan(plan)) return "This plan does not have a live provider filing reference yet.";
+  if (isTerminalFilingPlan(plan)) return "This plan is already closed or cancelled.";
+  const provider = getProviderActionAvailability(plan);
+  if (!provider.providerStatusKnown) {
+    return provider.reason || "Refresh provider sync before taking filing provider lifecycle actions. RSF could not determine the current provider state.";
+  }
+  const status = normalizedClientFilingStatus(plan);
+  const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
+  if (action === "cancel") {
+    if (status !== "filed") return "Cancellation is only available while the provider plan is proposed/filed.";
+    if (!provider.cancel) return `Cancellation unavailable because the provider lifecycle is ${provider.lifecycle}.`;
+  }
+  if (action === "activate") {
+    if (rules !== "VFR") return "Activation is only available for VFR flight plans.";
+    if (status !== "filed") return "Activation is only available while a VFR provider plan is proposed/filed.";
+    if (!provider.activate) return `Activation unavailable because the provider lifecycle is ${provider.lifecycle}.`;
+  }
+  if (action === "close") {
+    if (rules !== "VFR") return "Close is only available for VFR flight plans.";
+    if (status !== "activated") return "Close is only available for active VFR flight plans.";
+    if (!provider.close) return `Close unavailable because the provider lifecycle is ${provider.lifecycle}.`;
+  }
+  return null;
+};
 
 export const canFilePlan = (plan: FlightPlan | null | undefined) => {
   if (!plan) return true;
@@ -250,6 +303,9 @@ export function FlightPlanLifecycleActions({
   const amendDisabled = actionPending || updatePending || syncPending || Boolean(amendBlockedReason);
   const fileBlockedReason =
     hasBlockingReadinessIssue ? "Resolve readiness check issues before filing." : fileUnavailableReason || getFileAvailabilityMessage(plan);
+  const activateDisabledReason = getLifecycleActionDisabledReason(plan, "activate");
+  const cancelDisabledReason = getLifecycleActionDisabledReason(plan, "cancel");
+  const closeDisabledReason = getLifecycleActionDisabledReason(plan, "close");
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -324,6 +380,7 @@ export function FlightPlanLifecycleActions({
             variant="outline"
             onClick={onActivate}
             disabled={actionPending || syncPending || !canActivatePlan(plan)}
+            title={activateDisabledReason || "Activate this VFR provider flight plan."}
           >
             {labels.activate}
           </Button>
@@ -332,6 +389,7 @@ export function FlightPlanLifecycleActions({
             variant="outline"
             onClick={onClose}
             disabled={actionPending || syncPending || !canClosePlan(plan)}
+            title={closeDisabledReason || "Close this active VFR provider flight plan."}
           >
             {labels.close}
           </Button>
@@ -343,6 +401,7 @@ export function FlightPlanLifecycleActions({
           variant="outline"
           onClick={onCancel}
           disabled={actionPending || syncPending || !canCancelPlan(plan)}
+          title={cancelDisabledReason || "Cancel this proposed provider flight plan."}
         >
           {labels.cancel}
         </Button>

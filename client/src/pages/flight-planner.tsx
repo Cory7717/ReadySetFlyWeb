@@ -570,18 +570,28 @@ const getProviderActionAvailability = (plan: FlightPlan | null | undefined) => {
   const snapshot = getProviderSnapshot(plan);
   const availability = snapshot.providerActionAvailability;
   const lifecycle = String(snapshot.providerLifecycleStatus || "").toLowerCase();
+  const versionStamp = snapshot.versionStamp || extractClientVersionStamp(plan);
   const providerStatusKnown = Boolean(
     lifecycle &&
     lifecycle !== "unknown" &&
-    (snapshot.providerStatus || snapshot.artccState || snapshot.versionStamp || snapshot.cancellationIndicator || snapshot.closureIndicator)
+    (
+      snapshot.providerStatus ||
+      snapshot.providerFlightState ||
+      snapshot.artccState ||
+      snapshot.lastKnownArtccState ||
+      versionStamp ||
+      snapshot.cancellationIndicator ||
+      snapshot.closureIndicator ||
+      snapshot.providerLifecycleSource === "local_reconciliation"
+    )
   );
   return {
     lifecycle: lifecycle || "unknown",
     providerStatusKnown,
-    amend: Boolean(availability?.amend),
-    activate: Boolean(availability?.activate),
-    cancel: Boolean(availability?.cancel),
-    close: Boolean(availability?.close),
+    amend: availability?.amend == null ? ["proposed", "filed", "activated", "active"].includes(lifecycle) : Boolean(availability.amend),
+    activate: availability?.activate == null ? lifecycle === "proposed" || lifecycle === "filed" : Boolean(availability.activate),
+    cancel: availability?.cancel == null ? lifecycle === "proposed" : Boolean(availability.cancel),
+    close: availability?.close == null ? lifecycle === "activated" || lifecycle === "active" : Boolean(availability.close),
     reason: String(availability?.reason || ""),
   };
 };
@@ -793,6 +803,7 @@ const getDraftAmendAvailabilityMessage = ({
   flightRules,
   route,
   plannedDepartureAt,
+  plannedDepartureInstantUtc,
   trueAirspeedKtas,
   plannedAltitudeFt,
 }: {
@@ -800,6 +811,7 @@ const getDraftAmendAvailabilityMessage = ({
   flightRules: string;
   route: string | null | undefined;
   plannedDepartureAt: string | null | undefined;
+  plannedDepartureInstantUtc?: string | Date | null | undefined;
   trueAirspeedKtas: number | null | undefined;
   plannedAltitudeFt: number | null | undefined;
 }) => {
@@ -820,8 +832,8 @@ const getDraftAmendAvailabilityMessage = ({
   if (!plannedDepartureAt) {
     return "Planned departure time is required before RSF can send this amend request.";
   }
-  const plannedDepartureDate = new Date(plannedDepartureAt);
-  if (Number.isFinite(plannedDepartureDate.getTime()) && plannedDepartureDate.getTime() < Date.now() - 60_000) {
+  const plannedDepartureDate = plannedDepartureInstantUtc ? new Date(plannedDepartureInstantUtc) : null;
+  if (plannedDepartureDate && Number.isFinite(plannedDepartureDate.getTime()) && plannedDepartureDate.getTime() < Date.now() - 60_000) {
     return "This plan's departure time has passed. Synchronize with Flight Service to confirm its current lifecycle before amending.";
   }
 
@@ -7396,6 +7408,7 @@ export default function FlightPlanner() {
         flightRules: filingDraft.flightRules,
         route: leidosFiledRoute || null,
         plannedDepartureAt: form.plannedDepartureAt || null,
+        plannedDepartureInstantUtc: form.plannedDepartureAt ? toUtcIso(form.plannedDepartureAt, departureTimeZone) : null,
         trueAirspeedKtas: Math.round(planningCruise) || null,
         plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
       }),
@@ -7404,6 +7417,7 @@ export default function FlightPlanner() {
       filingDraft.flightRules,
       leidosFiledRoute,
       form.plannedDepartureAt,
+      departureTimeZone,
       planningCruise,
       plannedAltitude,
     ],
@@ -11931,6 +11945,7 @@ export default function FlightPlanner() {
                     flightRules: filingDraft.flightRules,
                     route: leidosFiledRoute || null,
                     plannedDepartureAt: form.plannedDepartureAt || null,
+                    plannedDepartureInstantUtc: form.plannedDepartureAt ? toUtcIso(form.plannedDepartureAt, departureTimeZone) : null,
                     trueAirspeedKtas: Math.round(planningCruise) || null,
                     plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
                   });

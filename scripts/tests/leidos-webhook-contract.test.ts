@@ -236,11 +236,12 @@ test("unknown incoming state remains unknown and does not normalize over known l
 test("no-op webhook route path does not create pending provider review or notification", () => {
   const routes = readFileSync("server/routes.ts", "utf8");
   const noopIndex = routes.indexOf("leidos_webhook_noop_processed");
-  const pendingReviewIndex = routes.indexOf("providerPendingReview: hasExplicitProviderChange");
+  const reviewDecisionIndex = routes.indexOf("applyProviderEffectiveReviewDecision");
   const notificationIndex = routes.indexOf("providerPushNotification = await storage.createUserNotification");
 
   assert.ok(noopIndex > 0, "no-op webhook branch should be present");
-  assert.ok(pendingReviewIndex > noopIndex, "pending-review snapshot should be after the no-op branch");
+  assert.ok(reviewDecisionIndex > 0, "provider review should be controlled by effective-plan reconciliation");
+  assert.doesNotMatch(routes, /providerPendingReview:\s*hasExplicitProviderChange/);
   assert.ok(notificationIndex > noopIndex, "notification creation should be after the no-op branch");
   assert.match(routes, /const hasExplicitProviderChange = hasMeaningfulProviderChange/);
 });

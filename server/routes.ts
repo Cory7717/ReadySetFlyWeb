@@ -113,6 +113,11 @@ import { insertMembershipPromotionSchema, membershipPromotions, membershipPromot
 import { normalizeMembershipPromoCode, redeemMembershipPromotion } from "./services/membershipPromotions";
 import { formatArtccInfo, formatProviderNotificationValue, sanitizeNotificationMessage } from "@shared/provider-notification-format";
 import {
+  buildProviderEffectivePlanSnapshot,
+  buildProviderReviewDecision,
+  hashProviderEffectivePlanSnapshot,
+} from "@shared/provider-effective-review";
+import {
   buildFilingEventId,
   buildOtherInfoWithDof,
   mergeProviderMessages,
@@ -22867,6 +22872,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     const next = nextSnapshot || {};
     const previousRoute = getProviderSnapshotRecord(previous.route);
     const nextRoute = getProviderSnapshotRecord(next.route);
+    const includeEffectivePlanChanges = next.providerPendingReview === true;
     const previousLifecycle = normalizeNotificationValue(previous.providerLifecycleStatus || previous.providerStatus);
     const nextLifecycle = normalizeNotificationValue(next.providerLifecycleStatus || next.providerStatus);
     if (nextLifecycle && previousLifecycle && nextLifecycle !== previousLifecycle) {
@@ -22892,17 +22898,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     const providerRoute = normalizeNotificationValue(nextRoute.providerRoute);
     const previousProviderRoute = normalizeNotificationValue(previousRoute.providerRoute);
     const transmittedRoute = normalizeNotificationValue(nextRoute.normalizedTransmittedRoute);
-    if (providerRoute && previousProviderRoute && providerRoute !== previousProviderRoute) {
+    if (includeEffectivePlanChanges && providerRoute && previousProviderRoute && providerRoute !== previousProviderRoute) {
       addUniqueNotificationLine(lines, `Provider route changed from ${previousProviderRoute} to ${providerRoute}.`);
-    } else if (providerRoute && Boolean(nextRoute.changedByProvider)) {
+    } else if (includeEffectivePlanChanges && providerRoute && Boolean(nextRoute.changedByProvider)) {
       addUniqueNotificationLine(lines, `Provider route differs from RSF filing: ${transmittedRoute || "filed route"} -> ${providerRoute}.`);
     }
 
     const fieldDiffs = Array.isArray(next.fieldDiffs) ? next.fieldDiffs as FilingFieldDiff[] : [];
-    for (const diff of fieldDiffs) {
-      if (!diff?.changedByProvider || diff.field === "route") continue;
-      const label = diff.field === "otherInfo" ? "Other Information" : diff.field;
-      addUniqueNotificationLine(lines, `${label} changed by provider from ${diff.transmittedValue || "blank"} to ${diff.providerValue || "blank"}.`);
+    if (includeEffectivePlanChanges) {
+      for (const diff of fieldDiffs) {
+        if (!diff?.changedByProvider || diff.field === "route") continue;
+        const label = diff.field === "otherInfo" ? "Other Information" : diff.field;
+        addUniqueNotificationLine(lines, `${label} changed by provider from ${diff.transmittedValue || "blank"} to ${diff.providerValue || "blank"}.`);
+      }
     }
 
     const previousNotices = new Set((Array.isArray(previous.notices) ? previous.notices : []).map((notice) => String(notice)));
@@ -22928,6 +22936,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     const next = nextSnapshot || {};
     const previousRoute = getProviderSnapshotRecord(previous.route);
     const nextRoute = getProviderSnapshotRecord(next.route);
+    const includeEffectivePlanChanges = next.providerPendingReview === true;
     const addLine = (line: string | null | undefined) => addUniqueNotificationLine(lines, line);
     const formatArrow = (before: unknown, after: unknown) => {
       const from = normalizeNotificationValue(before) || "blank";
@@ -22937,9 +22946,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
     const previousRouteText = normalizeNotificationValue(previousRoute.providerRoute);
     const nextRouteText = normalizeNotificationValue(nextRoute.providerRoute);
-    if (nextRouteText && previousRouteText && nextRouteText !== previousRouteText) {
+    if (includeEffectivePlanChanges && nextRouteText && previousRouteText && nextRouteText !== previousRouteText) {
       addLine(`The filing provider changed route: ${previousRouteText} -> ${nextRouteText}`);
-    } else if (nextRouteText && Boolean(nextRoute.changedByProvider)) {
+    } else if (includeEffectivePlanChanges && nextRouteText && Boolean(nextRoute.changedByProvider)) {
       addLine(`The filing provider returned a modified route: ${formatArrow(nextRoute.normalizedTransmittedRoute, nextRouteText)}`);
     }
 
@@ -23092,6 +23101,76 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     };
   };
 
+  const applyProviderEffectiveReviewDecision = (
+    plan: any,
+    previousSnapshot: Record<string, unknown>,
+    nextSnapshot: Record<string, unknown>,
+    source: string,
+  ) => {
+    const decision = buildProviderReviewDecision({
+      plan: plan as Record<string, unknown>,
+      previousSnapshot,
+      nextSnapshot,
+    });
+    const reviewReopened = decision.reviewPending && nextSnapshot.providerPendingReview !== true;
+    const acceptedFields = decision.acceptedEffectiveHash
+      ? {
+        providerReviewAcceptedEffectivePlanHash: decision.acceptedEffectiveHash,
+        providerReviewAcceptedEffectivePlanSnapshot:
+          nextSnapshot.providerReviewAcceptedEffectivePlanSnapshot ||
+          previousSnapshot.providerReviewAcceptedEffectivePlanSnapshot ||
+          (decision.hashMatchesAccepted ? decision.canonical : null),
+      }
+      : {};
+    const reconciled = {
+      ...nextSnapshot,
+      ...acceptedFields,
+      providerEffectivePlanHash: decision.effectiveHash,
+      providerEffectivePlanSnapshot: decision.canonical,
+      providerEffectivePlanChangedFields: decision.changedFields,
+      providerReviewDecisionReason: decision.reason,
+      providerPendingReview: decision.reviewPending,
+      providerModifiedBySpecialist: decision.reviewPending,
+      providerReviewReopenedAt: reviewReopened ? new Date().toISOString() : nextSnapshot.providerReviewReopenedAt || null,
+    };
+    const nextVersion = String(nextSnapshot.versionStamp || "").trim();
+    const acceptedVersion = String(previousSnapshot.providerReviewAcceptedVersionStamp || nextSnapshot.providerReviewAcceptedVersionStamp || "").trim();
+    if (
+      decision.reviewPending &&
+      decision.acceptedEffectiveHash &&
+      decision.acceptedEffectiveHash !== decision.effectiveHash &&
+      acceptedVersion &&
+      nextVersion &&
+      acceptedVersion === nextVersion
+    ) {
+      console.warn(JSON.stringify({
+        event: "flight_service_provider_review_reopened_same_version",
+        planId: plan?.id || null,
+        providerPlanId: plan?.filingProviderPlanId || nextSnapshot.providerPlanId || null,
+        versionStamp: nextVersion,
+        effectivePlanHash: decision.effectiveHash,
+        acceptedEffectivePlanHash: decision.acceptedEffectiveHash,
+        changedFields: decision.changedFields,
+        reviewDecisionReason: decision.reason,
+        source,
+      }));
+    } else {
+      console.info(JSON.stringify({
+        event: "flight_service_provider_review_reconciled",
+        planId: plan?.id || null,
+        providerPlanId: plan?.filingProviderPlanId || nextSnapshot.providerPlanId || null,
+        versionStamp: nextVersion || null,
+        effectivePlanHash: decision.effectiveHash,
+        acceptedEffectivePlanHash: decision.acceptedEffectiveHash || null,
+        changedFields: decision.changedFields,
+        providerPendingReview: decision.reviewPending,
+        reviewDecisionReason: decision.reason,
+        source,
+      }));
+    }
+    return reconciled;
+  };
+
   const persistLeidosProviderSync = async (
     plan: any,
     syncResult: Awaited<ReturnType<typeof syncLeidosPlanMetadata>>,
@@ -23117,7 +23196,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       })
       : asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
     const reconciledSnapshotBase = applyLocalFilingLifecycleBaseline(plan, mergedSnapshotBase);
-    const nextProviderSnapshot = addProviderStateMismatchNotice(
+    const nextProviderSnapshotBase = addProviderStateMismatchNotice(
       plan,
       reconciledSnapshotBase,
       options.forceExternalNotice
@@ -23125,6 +23204,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         : null,
     );
     const previousProviderSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+    const nextProviderSnapshot = applyProviderEffectiveReviewDecision(
+      plan,
+      previousProviderSnapshot,
+      nextProviderSnapshotBase,
+      "provider_retrieve",
+    );
     if (!options.suppressTransitionLog) {
       logProviderLifecycleTransition({
         plan,
@@ -23795,6 +23880,34 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         payload.flightAlert && typeof payload.flightAlert === "object" && !Array.isArray(payload.flightAlert)
           ? payload.flightAlert
           : payload;
+      const extractProviderAlertClassification = () => {
+        const candidates: Array<[string, unknown]> = [
+          ["flightAlert.alertType", (alert as Record<string, unknown>).alertType],
+          ["flightAlert.alert", (alert as Record<string, unknown>).alert],
+          ["flightAlert.advisoryType", (alert as Record<string, unknown>).advisoryType],
+          ["flightAlert.hazardType", (alert as Record<string, unknown>).hazardType],
+          ["payload.alertType", (payload as Record<string, unknown>).alertType],
+          ["payload.alert", (payload as Record<string, unknown>).alert],
+          ["payload.advisoryType", (payload as Record<string, unknown>).advisoryType],
+          ["parsedWebhook.alertType", parsedWebhook.alertType],
+        ];
+        for (const [path, value] of candidates) {
+          const raw = normalizeNotificationValue(value);
+          if (raw) {
+            return {
+              rawAlertType: raw,
+              normalizedAlertType: raw.toUpperCase().replace(/[\s-]+/g, "_"),
+              alertExtractionPath: path,
+            };
+          }
+        }
+        return {
+          rawAlertType: null,
+          normalizedAlertType: null,
+          alertExtractionPath: null,
+        };
+      };
+      const alertClassification = extractProviderAlertClassification();
 
       // Determine notification type (FLIGHT_CHANGE or FLIGHT_ALERT).
       const notificationType: string =
@@ -23805,6 +23918,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         payload.type ??
         payload.eventType ??
         parsedWebhook.notificationType ??
+        alertClassification.normalizedAlertType ??
         "";
 
       // Defensive extraction — Leidos lab payload field names may vary.
@@ -23868,6 +23982,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         processingStart: processingStartedAt.toISOString(),
         userAgent: req.headers["user-agent"] || null,
         notificationType,
+        rawAlertType: alertClassification.rawAlertType,
+        normalizedAlertType: alertClassification.normalizedAlertType,
+        alertExtractionPath: alertClassification.alertExtractionPath,
         flightIdentifier,
         providerPlanId: flightIdentifier,
         versionStamp: flightVersionStamp,
@@ -23893,6 +24010,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         payload.alertType ??
         payload.alert ??
         parsedWebhook.alertType ??
+        alertClassification.normalizedAlertType ??
         null;
 
       const extractedMessage: string =
@@ -23969,13 +24087,13 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           return res.status(200).json(LEIDOS_WEBHOOK_SUCCESS_RESPONSE);
         }
 
-        const isAlert = notificationType.toUpperCase().includes("ALERT");
+        const isAlert = Boolean(alertClassification.normalizedAlertType) || notificationType.toUpperCase().includes("ALERT");
         const inAppType = isAlert ? "flight_alert" : "flight_change";
         const pushTitle = isAlert ? "Flight Alert" : "Flight Plan Update";
         const hasExplicitProviderChange = hasMeaningfulProviderChange;
         const notificationTitle = hasExplicitProviderChange
           ? isAlert
-            ? `Flight Alert${alertType ? `: ${alertType}` : ""}`
+            ? `Flight Alert${alertClassification.normalizedAlertType || alertType ? `: ${alertClassification.normalizedAlertType || alertType}` : ""}`
             : `Flight Plan Change${changeType ? `: ${changeType}` : ""}`
           : "Provider push received";
         const previousProviderSnapshot = getProviderSnapshotRecord((matchedPlan as Record<string, unknown>).filingProviderSnapshot);
@@ -23992,6 +24110,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             versionStamp: flightVersionStamp,
             rawFlightState: normalizeNotificationValue(flightState),
             rawArtccState: normalizeNotificationValue(artccState),
+            normalizedAlertType: alertClassification.normalizedAlertType,
             messageDateTime,
             providerMessageId,
             eventHash,
@@ -24125,8 +24244,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           providerRetrievalState: previousProviderSnapshot.providerRetrievalState || "not_attempted",
           lastKnownProviderFlightState: flightState || previousProviderSnapshot.lastKnownProviderFlightState || previousProviderSnapshot.providerFlightState || previousProviderSnapshot.providerStatus || null,
           lastKnownArtccState: artccState || previousProviderSnapshot.lastKnownArtccState || previousProviderSnapshot.artccState || null,
-          providerModifiedBySpecialist: hasExplicitProviderChange,
-          providerPendingReview: hasExplicitProviderChange,
           providerLastPushTitle: notificationTitle,
           providerLastPushMessage: providerMessageDetails,
           providerEventTimestamp: String(parsedWebhook.messageDateTime || payload.messageDateTime || payload.eventTime || payload.notificationTimestamp || "").trim() || null,
@@ -24168,7 +24285,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               raw: {
                 notificationType,
                 changeType,
-                alertType,
+                alertType: alertClassification.normalizedAlertType || alertType,
                 versionStamp: providerHistoryVersion || null,
               },
             }
@@ -24198,7 +24315,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
                 changedFields: syncedNotificationChanges,
                 notificationType,
                 changeType,
-                alertType,
+                alertType: alertClassification.normalizedAlertType || alertType,
               },
             }
             : null;
@@ -25719,7 +25836,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         notices: Array.isArray(nextSnapshot.notices) ? nextSnapshot.notices : [],
       }));
 
-      const routeChangedByProvider = Boolean(syncResult.providerSnapshot?.route?.changedByProvider);
+      const routeChangedByProvider = Boolean(syncResult.providerSnapshot?.route?.changedByProvider && nextSnapshot.providerPendingReview === true);
       const hasProviderMessages = syncResult.providerMessages.length > 0 || Boolean(nextSnapshot.externalChangeDetected);
       if (routeChangedByProvider || hasProviderMessages) {
         const planLabel = plan.title || `${plan.departure} to ${plan.destination}`;
@@ -25829,22 +25946,50 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         currentPlan.filingProviderPlanId ||
         currentPlan.id
       ).trim();
+      const acceptedEffectivePlanSnapshot = buildProviderEffectivePlanSnapshot(currentPlan as Record<string, unknown>, currentSnapshot);
+      const acceptedEffectivePlanHash = hashProviderEffectivePlanSnapshot(acceptedEffectivePlanSnapshot);
       const acceptanceEventId = buildFilingEventId("rsf", currentPlan.id, "provider_review_accepted", acceptedVersionStamp);
       if (currentSnapshot.providerPendingReview !== true) {
+        const alreadyAcceptedSnapshot = {
+          ...currentSnapshot,
+          providerPendingReview: false,
+          providerModifiedBySpecialist: false,
+          providerEffectivePlanHash: currentSnapshot.providerEffectivePlanHash || acceptedEffectivePlanHash,
+          providerEffectivePlanSnapshot: currentSnapshot.providerEffectivePlanSnapshot || acceptedEffectivePlanSnapshot,
+          providerReviewAcceptedVersionStamp: currentSnapshot.providerReviewAcceptedVersionStamp || acceptedVersionStamp,
+          providerReviewAcceptedEffectivePlanHash: currentSnapshot.providerReviewAcceptedEffectivePlanHash || acceptedEffectivePlanHash,
+          providerReviewAcceptedEffectivePlanSnapshot: currentSnapshot.providerReviewAcceptedEffectivePlanSnapshot || acceptedEffectivePlanSnapshot,
+          providerReviewDecisionReason: currentSnapshot.providerReviewDecisionReason || "already_accepted_effective_plan",
+        };
+        const alreadyUpdated = currentSnapshot.providerReviewAcceptedEffectivePlanHash
+          ? currentPlan
+          : await storage.updateFlightPlan(currentPlan.id, {
+            filingProviderSnapshot: alreadyAcceptedSnapshot as any,
+            filingLastProviderSyncAt: now,
+          } as any);
         return res.json({
           ok: true,
           alreadyAccepted: true,
           message: "Provider changes were already accepted for the current provider version.",
-          plan: currentPlan,
+          acceptedVersionStamp,
+          acceptedEffectivePlanHash,
+          providerPendingReview: false,
+          plan: alreadyUpdated,
         });
       }
       const acceptedSnapshot = {
         ...currentSnapshot,
         providerPendingReview: false,
         providerModifiedBySpecialist: false,
+        providerEffectivePlanHash: acceptedEffectivePlanHash,
+        providerEffectivePlanSnapshot: acceptedEffectivePlanSnapshot,
         providerReviewAcceptedVersionStamp: acceptedVersionStamp,
+        providerReviewAcceptedEffectivePlanHash: acceptedEffectivePlanHash,
+        providerReviewAcceptedEffectivePlanSnapshot: acceptedEffectivePlanSnapshot,
+        providerReviewAcceptedSource: "provider_review_accept",
         providerReviewAcceptedAt: now.toISOString(),
         providerReviewAcceptedBy: userId,
+        providerReviewDecisionReason: "provider_effective_plan_accepted",
       };
       const acceptanceMessage: FilingProviderMessage = {
         id: acceptanceEventId,
@@ -25869,6 +26014,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       res.json({
         ok: true,
         message: "Provider changes accepted. You can submit an amendment from the current provider version.",
+        acceptedVersionStamp,
+        acceptedEffectivePlanHash,
+        providerPendingReview: false,
         plan: updated,
       });
     } catch (error: any) {

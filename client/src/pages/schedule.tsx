@@ -489,6 +489,8 @@ type LaborMetrics = {
     laborDollars: number;
     roomRevenue: number;
     actualRoomRevenue: number;
+    effectiveRoomRevenue?: number;
+    roomRevenueSource?: "actual" | "forecast";
     hpor: number;
     housekeepingHours: number;
     roomAttendantHours?: number;
@@ -3811,7 +3813,9 @@ export default function SchedulePage() {
                     <div className="text-3xl font-semibold">${payload.totals.totalWeeklyLaborDollarsIncludingSalary || "0.00"}</div>
                     <div className="mt-1 text-xs text-[#5f5247]">Hourly only: ${payload.totals.totalWeeklyLaborDollars || "0.00"}</div>
                     <div className="text-xs text-[#5f5247]">Salaried only: ${payload.totals.totalWeeklySalariedLaborDollars || "0.00"}</div>
-                    <div className="text-xs font-semibold text-[#5f5247]">Labor % room rev: {payload.totals.totalWeeklyLaborPercentOfRoomRevenueIncludingSalary || "0.0"}%</div>
+                    <div className="text-xs font-semibold text-[#5f5247]">
+                      Labor % {payload.totals.laborMetrics?.weekly.roomRevenueSource === "actual" ? "actual" : "forecast"} room rev: {payload.totals.totalWeeklyLaborPercentOfRoomRevenueIncludingSalary || "0.0"}%
+                    </div>
                   </div>
                 ) : (
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
@@ -3970,8 +3974,13 @@ export default function SchedulePage() {
                     </div>
                   </div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
-                    <div className="text-sm text-[#5f5247]">Room revenue</div>
-                    <div className="text-2xl font-semibold">${payload.totals.laborMetrics.weekly.roomRevenue || 0}</div>
+                    <div className="text-sm text-[#5f5247]">
+                      {payload.totals.laborMetrics.weekly.roomRevenueSource === "actual" ? "Actual room revenue" : "Forecast room revenue"}
+                    </div>
+                    <div className="text-2xl font-semibold">${payload.totals.laborMetrics.weekly.effectiveRoomRevenue ?? payload.totals.laborMetrics.weekly.roomRevenue ?? 0}</div>
+                    {payload.totals.laborMetrics.weekly.roomRevenueSource === "actual" && (
+                      <div className="text-xs text-[#5f5247]">Forecast was ${payload.totals.laborMetrics.weekly.roomRevenue || 0}</div>
+                    )}
                   </div>
                   <div className="rounded-xl border border-[#e0d3c1] bg-white p-4">
                     <div className="text-sm text-[#5f5247]">Actual pickup</div>

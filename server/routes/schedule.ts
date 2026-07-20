@@ -1143,6 +1143,25 @@ function parseReportNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizedReportHeader(value: unknown) {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function reportValue(row: Record<string, unknown>, aliases: string[]) {
+  for (const alias of aliases) {
+    if (row[alias] !== undefined) return row[alias];
+  }
+  const normalizedAliases = new Set(aliases.map(normalizedReportHeader));
+  for (const [key, value] of Object.entries(row)) {
+    if (normalizedAliases.has(normalizedReportHeader(key))) return value;
+  }
+  return undefined;
+}
+
+function reportNumber(row: Record<string, unknown>, aliases: string[]) {
+  return parseReportNumber(reportValue(row, aliases));
+}
+
 function forecastAdrForDay(day: any) {
   const explicitAdr = Number(day?.forecastAdr || 0);
   if (explicitAdr > 0) return explicitAdr;
@@ -1191,10 +1210,10 @@ function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
     if (String(row.Date || "").trim().toUpperCase() === "TOTAL") continue;
     const forecastDate = parseReportDate(String(row.Date || ""));
     if (!forecastDate || !scheduleDays.includes(forecastDate)) continue;
-    const roomsSoldOtb = parseReportNumber(row["Rms Sold"]);
-    const occOtb = parseReportNumber(row["Occ %"]);
-    const activeRooms = parseReportNumber(row["Rms Active"]);
-    const outOfOrder = parseReportNumber(row.OOO);
+    const roomsSoldOtb = reportNumber(row, ["Rms Sold", "Rooms Sold", "Room Sold"]);
+    const occOtb = reportNumber(row, ["Occ %", "Occupancy %", "Occupancy"]);
+    const activeRooms = reportNumber(row, ["Rms Active", "Rooms Active", "Active Rooms"]);
+    const outOfOrder = reportNumber(row, ["OOO", "Out of Order", "Out Of Order Rooms"]);
     const capacity = Math.max(1, activeRooms - outOfOrder);
     const leadDays = Math.max(0, daysBetween(today, forecastDate));
     const occupancyPercent = occOtb || Number(((roomsSoldOtb / capacity) * 100).toFixed(1));
@@ -1203,10 +1222,10 @@ function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
     const targetRooms = Math.ceil(capacity * (targetOccupancyPercent / 100));
     const suggestedForecastRooms = Math.min(capacity, Math.min(targetRooms, roomsSoldOtb + pickupRooms));
     const suggestedPickup = Math.max(0, suggestedForecastRooms - roomsSoldOtb);
-    const arrivals = parseReportNumber(row.Arr);
-    const departures = parseReportNumber(row.Dept);
+    const arrivals = reportNumber(row, ["Arr", "Arrivals", "Arrival"]);
+    const departures = reportNumber(row, ["Dept", "Departures", "Departure"]);
     const stayovers = Math.max(0, roomsSoldOtb - arrivals);
-    const roomRevenueOtb = parseReportNumber(row["Rm Rev ($)"]);
+    const roomRevenueOtb = reportNumber(row, ["Rm Rev ($)", "Rm Rev", "Room Revenue", "Room Rev", "Room Revenue ($)", "Actual Room Revenue", "Revenue"]);
     const forecastAdr = roomsSoldOtb > 0 ? roomRevenueOtb / roomsSoldOtb : 0;
 
     forecastByDate.set(forecastDate, {
@@ -1218,8 +1237,8 @@ function forecastFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
       stayovers,
       otbRoomsSold: roomsSoldOtb,
       otbOccupancyPercent: occOtb,
-      otbArrivals: parseReportNumber(row.Arr),
-      otbDepartures: parseReportNumber(row.Dept),
+      otbArrivals: reportNumber(row, ["Arr", "Arrivals", "Arrival"]),
+      otbDepartures: reportNumber(row, ["Dept", "Departures", "Departure"]),
       otbRoomRevenue: roomRevenueOtb,
       forecastAdr: forecastAdr > 0 ? Number(forecastAdr.toFixed(2)) : null,
       roomRevenue: roomRevenueOtb,
@@ -1313,11 +1332,11 @@ function actualizedFromOnTheBooksCsv(text: string, scheduleDays: string[]) {
     if (!forecastDate || !scheduleDays.includes(forecastDate)) continue;
     actualByDate.set(forecastDate, {
       forecastDate,
-      actualRoomsSold: parseReportNumber(row["Rms Sold"]),
-      actualOccupancyPercent: parseReportNumber(row["Occ %"]),
-      actualArrivals: parseReportNumber(row.Arr),
-      actualDepartures: parseReportNumber(row.Dept),
-      actualRoomRevenue: parseReportNumber(row["Rm Rev ($)"]),
+      actualRoomsSold: reportNumber(row, ["Rms Sold", "Rooms Sold", "Room Sold"]),
+      actualOccupancyPercent: reportNumber(row, ["Occ %", "Occupancy %", "Occupancy"]),
+      actualArrivals: reportNumber(row, ["Arr", "Arrivals", "Arrival"]),
+      actualDepartures: reportNumber(row, ["Dept", "Departures", "Departure"]),
+      actualRoomRevenue: reportNumber(row, ["Rm Rev ($)", "Rm Rev", "Room Revenue", "Room Rev", "Room Revenue ($)", "Actual Room Revenue", "Revenue"]),
     });
   }
   return scheduleDays.map((day) => actualByDate.get(day)).filter(Boolean);
@@ -1952,7 +1971,7 @@ function calculateTotals(days: string[], employees: any[], shiftTypes: any[], fo
   const totalWeeklyLaborDollars = Object.values(dailyLaborDollars).reduce((sum, value) => sum + value, 0);
   const totalWeeklyLaborDollarsIncludingSalary = Object.values(dailyLaborDollarsIncludingSalary).reduce((sum, value) => sum + value, 0);
   const totalWeeklySalariedLaborDollars = Object.values(dailySalariedLaborDollars).reduce((sum, value) => sum + value, 0);
-  const weeklyRoomRevenue = Number(laborMetrics.weekly.roomRevenue || 0);
+  const weeklyRoomRevenue = Number((laborMetrics.weekly as any).effectiveRoomRevenue ?? laborMetrics.weekly.roomRevenue ?? 0);
   const laborPercentOfRoomRevenue = weeklyRoomRevenue > 0 ? (totalWeeklyLaborDollars / weeklyRoomRevenue) * 100 : 0;
   const laborPercentOfRoomRevenueIncludingSalary = weeklyRoomRevenue > 0 ? (totalWeeklyLaborDollarsIncludingSalary / weeklyRoomRevenue) * 100 : 0;
   if (bistroLabor.status === "under") warnings.push(`Bistro scheduled hours ${bistroLabor.scheduledHours} are below ${bistroLabor.model} target ${bistroLabor.targetMinHours}-${bistroLabor.targetMaxHours}.`);
@@ -2038,7 +2057,9 @@ function calculateLaborMetrics(
     const hpor = roomsSold > 0 ? laborHours / roomsSold : 0;
     const hkMpor = roomCredits > 0 ? (roomAttendantHours * 60) / roomCredits : 0;
     const roomRevenue = Number(forecastDay.roomRevenue || 0);
-    const actualRoomRevenue = Number(forecastDay.actualRoomRevenue || 0);
+    const hasActualRoomRevenue = forecastDay.actualRoomRevenue !== null && forecastDay.actualRoomRevenue !== undefined && String(forecastDay.actualRoomRevenue).trim() !== "";
+    const actualRoomRevenue = hasActualRoomRevenue ? Number(forecastDay.actualRoomRevenue || 0) : null;
+    const effectiveRoomRevenue = hasActualRoomRevenue ? Number(actualRoomRevenue || 0) : roomRevenue;
     daily[day] = {
       roomsSold,
       pickupRooms: forecastDay.actualRoomsSold != null && forecastDay.otbRoomsSold != null ? Number(forecastDay.actualRoomsSold || 0) - Number(forecastDay.otbRoomsSold || 0) : null,
@@ -2059,6 +2080,10 @@ function calculateLaborMetrics(
       targetLaundryHours,
       targetHousepersonHours,
       targetTotalHousekeepingOperatingHours: Number((targetRoomAttendantHours + targetLaundryHours + targetHousepersonHours).toFixed(2)),
+      roomRevenue: Number(roomRevenue.toFixed(2)),
+      actualRoomRevenue: actualRoomRevenue == null ? null : Number(actualRoomRevenue.toFixed(2)),
+      effectiveRoomRevenue: Number(effectiveRoomRevenue.toFixed(2)),
+      roomRevenueSource: hasActualRoomRevenue ? "actual" : "forecast",
     };
     weeklyLaborHours += laborHours;
     weeklyLaborDollars += laborDollars;
@@ -2068,7 +2093,7 @@ function calculateLaborMetrics(
     weeklyHkHours += hkHours;
     weeklyRoomAttendantHours += roomAttendantHours;
     weeklyRoomRevenue += roomRevenue;
-    weeklyActualRoomRevenue += actualRoomRevenue;
+    weeklyActualRoomRevenue += actualRoomRevenue ?? 0;
   }
 
   return {
@@ -2080,6 +2105,8 @@ function calculateLaborMetrics(
       laborDollars: Number(weeklyLaborDollars.toFixed(2)),
       roomRevenue: Number(weeklyRoomRevenue.toFixed(2)),
       actualRoomRevenue: Number(weeklyActualRoomRevenue.toFixed(2)),
+      effectiveRoomRevenue: Number(Object.values(daily).reduce((sum: number, metrics: any) => sum + Number(metrics.effectiveRoomRevenue || 0), 0).toFixed(2)),
+      roomRevenueSource: Object.values(daily).some((metrics: any) => metrics.roomRevenueSource === "actual") ? "actual" : "forecast",
       hpor: Number((weeklyRooms > 0 ? weeklyLaborHours / weeklyRooms : 0).toFixed(2)),
       housekeepingHours: Number(weeklyHkHours.toFixed(2)),
       roomAttendantHours: Number(weeklyRoomAttendantHours.toFixed(2)),

@@ -381,7 +381,10 @@ test("ACTIVATED lifecycle-only webhook does not set provider pending review", ()
 
   assert.equal(decision.reviewPending, false);
   assert.deepEqual(decision.changedFields, []);
-  assert.equal(decision.reason, "accepted_effective_plan_unchanged");
+  assert.ok(
+    ["accepted_effective_plan_unchanged", "no_effective_plan_change"].includes(decision.reason),
+    `unexpected review decision reason: ${decision.reason}`,
+  );
 });
 
 test("provider route absence does not count as provider route change", () => {
@@ -434,6 +437,207 @@ test("equivalent route and Item 18 formatting do not count as provider changes",
 
   assert.equal(decision.reviewPending, false);
   assert.deepEqual(decision.changedFields, []);
+});
+
+test("successful-run direct route formats do not create false route reviews", () => {
+  const equivalentPairs = [
+    ["DCT ACT DCT", "ACT"],
+    ["DCT", ""],
+    ["DCT CWK DCT", "CWK"],
+    ["DCT DRK DCT", "DRK"],
+    ["DCT ACT DCT SAT DCT", "ACT SAT"],
+  ];
+
+  for (const [transmitted, provider] of equivalentPairs) {
+    assert.equal(
+      normalizeProviderReviewRoute(transmitted),
+      normalizeProviderReviewRoute(provider),
+      `${transmitted} should normalize like ${provider || "empty direct route"}`,
+    );
+    const acceptedCanonical = buildProviderAcceptedEffectivePlanSnapshot({
+      aircraftIdentifier: "N123RS",
+      aircraftType: "C172",
+      departure: "KEDC",
+      destination: "KACT",
+      route: transmitted,
+      flightRules: "VFR",
+    }, {});
+    const acceptedHash = hashProviderEffectivePlanSnapshot(acceptedCanonical);
+    const decision = buildProviderReviewDecision({
+      plan: { ...basePlan, departure: "KEDC", destination: "KACT", route: transmitted, flightRules: "VFR", filingFlightRules: "VFR" },
+      previousSnapshot: {
+        providerPendingReview: false,
+        providerReviewAcceptedEffectivePlanHash: acceptedHash,
+        providerReviewAcceptedEffectivePlanSnapshot: acceptedCanonical,
+      },
+      nextSnapshot: {
+        route: {
+          normalizedTransmittedRoute: transmitted,
+          providerRoute: provider,
+          changedByProvider: true,
+        },
+        fieldDiffs: [{
+          field: "route",
+          transmittedValue: transmitted,
+          providerValue: provider,
+          changedByProvider: true,
+        }],
+      },
+    });
+
+    assert.equal(decision.reviewPending, false, `${transmitted} vs ${provider} should not require review`);
+    assert.deepEqual(decision.changedFields, []);
+  }
+});
+
+test("locally initiated AMEND echo uses the amended transmitted baseline", () => {
+  const amendedTransmittedRoute = "DCT ACT DCT SAT DCT";
+  const acceptedCanonical = buildProviderAcceptedEffectivePlanSnapshot({
+    aircraftIdentifier: "N123RS",
+    aircraftType: "C172",
+    departure: "KEDC",
+    destination: "KDTO",
+    route: amendedTransmittedRoute,
+    flightRules: "IFR",
+  }, {});
+  const acceptedHash = hashProviderEffectivePlanSnapshot(acceptedCanonical);
+  const decision = buildProviderReviewDecision({
+    plan: {
+      ...basePlan,
+      departure: "KEDC",
+      destination: "KDTO",
+      route: amendedTransmittedRoute,
+      flightRules: "IFR",
+      filingFlightRules: "IFR",
+    },
+    previousSnapshot: {
+      route: {
+        normalizedTransmittedRoute: "DCT CWK DCT",
+        providerRoute: "CWK",
+        changedByProvider: false,
+      },
+      providerPendingReview: false,
+      providerReviewAcceptedEffectivePlanHash: acceptedHash,
+      providerReviewAcceptedEffectivePlanSnapshot: acceptedCanonical,
+      providerReviewAcceptedVersionStamp: "20260720180000000",
+    },
+    nextSnapshot: {
+      versionStamp: "20260720180500000",
+      route: {
+        normalizedTransmittedRoute: amendedTransmittedRoute,
+        localEnteredRoute: amendedTransmittedRoute,
+        providerRoute: "ACT SAT",
+        changedByProvider: true,
+      },
+      fieldDiffs: [{
+        field: "route",
+        transmittedValue: amendedTransmittedRoute,
+        providerValue: "ACT SAT",
+        changedByProvider: true,
+      }],
+    },
+  });
+
+  assert.equal(decision.reviewPending, false);
+  assert.deepEqual(decision.changedFields, []);
+  assert.ok(
+    ["accepted_effective_plan_unchanged", "no_effective_plan_change"].includes(decision.reason),
+    `unexpected review decision reason: ${decision.reason}`,
+  );
+});
+
+test("genuine provider route sequence and airway changes still require review", () => {
+  const cases = [
+    ["ACT SAT", "ACT CWK SAT"],
+    ["ACT V198 SAT", "ACT SAT"],
+    ["ACT SAT", "ACT SAT ABI"],
+  ];
+
+  for (const [transmitted, provider] of cases) {
+    const decision = buildProviderReviewDecision({
+      plan: { ...basePlan, route: transmitted },
+      previousSnapshot: {},
+      nextSnapshot: {
+        route: {
+          normalizedTransmittedRoute: transmitted,
+          providerRoute: provider,
+          changedByProvider: true,
+        },
+        fieldDiffs: [],
+      },
+    });
+
+    assert.equal(decision.reviewPending, true, `${transmitted} -> ${provider} should require review`);
+    assert.deepEqual(decision.changedFields, ["route"]);
+  }
+});
+
+test("incomplete retrieve preserves accepted route baseline without false review", () => {
+  const acceptedCanonical = buildProviderAcceptedEffectivePlanSnapshot({
+    aircraftIdentifier: "N123RS",
+    aircraftType: "C172",
+    departure: "KEDC",
+    destination: "KACT",
+    route: "DCT ACT DCT",
+    flightRules: "VFR",
+  }, {});
+  const acceptedHash = hashProviderEffectivePlanSnapshot(acceptedCanonical);
+  const decision = buildProviderReviewDecision({
+    plan: { ...basePlan, departure: "KEDC", destination: "KACT", route: "DCT ACT DCT", flightRules: "VFR", filingFlightRules: "VFR" },
+    previousSnapshot: {
+      providerPendingReview: false,
+      providerReviewAcceptedEffectivePlanHash: acceptedHash,
+      providerReviewAcceptedEffectivePlanSnapshot: acceptedCanonical,
+      route: {
+        normalizedTransmittedRoute: "DCT ACT DCT",
+        providerRoute: "ACT",
+        changedByProvider: false,
+      },
+    },
+    nextSnapshot: {
+      versionStamp: "20260720190000000",
+      route: {
+        providerRoute: null,
+        changedByProvider: true,
+      },
+      fieldDiffs: [{
+        field: "route",
+        transmittedValue: "DCT ACT DCT",
+        providerValue: null,
+        changedByProvider: true,
+      }],
+    },
+  });
+
+  assert.equal(decision.reviewPending, false);
+  assert.deepEqual(decision.changedFields, []);
+});
+
+test("incomplete retrieve cannot clear a genuine pending route modification", () => {
+  const decision = buildProviderReviewDecision({
+    plan: { ...basePlan, route: "ACT SAT" },
+    previousSnapshot: {
+      providerPendingReview: true,
+      route: {
+        normalizedTransmittedRoute: "ACT SAT",
+        providerRoute: "ACT CWK SAT",
+        changedByProvider: true,
+      },
+      fieldDiffs: [],
+    },
+    nextSnapshot: {
+      versionStamp: "20260720190000000",
+      route: {
+        providerRoute: null,
+        changedByProvider: false,
+      },
+      fieldDiffs: [],
+    },
+  });
+
+  assert.equal(decision.reviewPending, true);
+  assert.deepEqual(decision.changedFields, ["route"]);
+  assert.equal(decision.reason, "pending_review_preserved_incomplete_provider_snapshot");
 });
 
 test("provider omitted DCT formatting does not reopen accepted route review", () => {

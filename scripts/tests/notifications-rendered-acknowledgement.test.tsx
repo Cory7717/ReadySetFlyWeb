@@ -75,12 +75,14 @@ test("rendered notification acknowledgement is one-click, disables while pending
   let markReadCalls = 0;
   let notificationGetCalls = 0;
   let unreadGetCalls = 0;
+  const requests: Array<{ method: string; url: string; body?: BodyInit | null }> = [];
   const acknowledgement = deferred<Response>();
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = String(init?.method || "GET").toUpperCase();
+    requests.push({ method, url, body: init?.body });
     if (method === "GET" && url.endsWith("/api/notifications")) {
       notificationGetCalls += 1;
       return Response.json(notificationGetCalls === 1 ? [notification] : [staleNotification]);
@@ -109,8 +111,8 @@ test("rendered notification acknowledgement is one-click, disables while pending
     await flush();
 
     assert.match(textContent(renderer!.toJSON()), /1 unread/);
-    const markReadButton = findButtonByText(renderer!, "Mark read");
-    assert.ok(markReadButton, "expected rendered Mark read button");
+    const markReadButton = findButtonByText(renderer!, "Acknowledge");
+    assert.ok(markReadButton, "expected rendered Acknowledge button");
 
     await act(async () => {
       markReadButton.props.onClick();
@@ -119,7 +121,13 @@ test("rendered notification acknowledgement is one-click, disables while pending
     await flush();
 
     assert.equal(markReadCalls, 1);
-    assert.equal(findButtonByText(renderer!, "Mark read")?.props.disabled, true);
+    assert.equal(findButtonByText(renderer!, "Acknowledging")?.props.disabled, true);
+    assert.ok(requests.some((request) =>
+      request.method === "PATCH" &&
+      request.url.endsWith("/api/notifications/notification-a/read") &&
+      request.body === "{}"
+    ));
+    assert.equal(requests.some((request) => /provider-sync|\/sync|provider-review/.test(request.url) && request.method !== "GET"), false);
 
     await act(async () => {
       acknowledgement.resolve(Response.json({
@@ -144,7 +152,7 @@ test("rendered notification acknowledgement is one-click, disables while pending
 
     assert.equal(markReadCalls, 1);
     assert.doesNotMatch(textContent(renderer!.toJSON()), /1 unread/);
-    assert.equal(findButtonByText(renderer!, "Mark read"), undefined);
+    assert.equal(findButtonByText(renderer!, "Acknowledged")?.props.disabled, true);
 
     await act(async () => {
       await queryClient.refetchQueries({ queryKey: ["/api/notifications"] });
@@ -154,7 +162,7 @@ test("rendered notification acknowledgement is one-click, disables while pending
 
     assert.equal(markReadCalls, 1);
     assert.doesNotMatch(textContent(renderer!.toJSON()), /1 unread/);
-    assert.equal(findButtonByText(renderer!, "Mark read"), undefined);
+    assert.equal(findButtonByText(renderer!, "Acknowledged")?.props.disabled, true);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -193,12 +201,12 @@ test("acknowledgement failure reenables the rendered button and shows retry copy
     });
     await flush();
 
-    const markReadButton = findButtonByText(renderer!, "Mark read");
+    const markReadButton = findButtonByText(renderer!, "Acknowledge");
     await act(async () => {
       markReadButton.props.onClick();
     });
     await flush();
-    assert.equal(findButtonByText(renderer!, "Mark read")?.props.disabled, true);
+    assert.equal(findButtonByText(renderer!, "Acknowledging")?.props.disabled, true);
 
     await act(async () => {
       acknowledgement.resolve(new Response(JSON.stringify({ error: "failed" }), {
@@ -209,7 +217,7 @@ test("acknowledgement failure reenables the rendered button and shows retry copy
     });
     await flush();
 
-    assert.equal(findButtonByText(renderer!, "Mark read")?.props.disabled, false);
+    assert.equal(findButtonByText(renderer!, "Retry Acknowledge")?.props.disabled, false);
     assert.match(textContent(renderer!.toJSON()), /Notification could not be marked read/);
   } finally {
     globalThis.fetch = originalFetch;
@@ -253,7 +261,7 @@ test("remount after accepted acknowledgement remains resolved from server state"
     });
     await flush();
     await act(async () => {
-      findButtonByText(renderer!, "Mark read").props.onClick();
+      findButtonByText(renderer!, "Acknowledge").props.onClick();
     });
     await flush();
     renderer!.unmount();
@@ -269,7 +277,7 @@ test("remount after accepted acknowledgement remains resolved from server state"
     await flush();
 
     assert.doesNotMatch(textContent(renderer!.toJSON()), /1 unread/);
-    assert.equal(findButtonByText(renderer!, "Mark read"), undefined);
+    assert.equal(findButtonByText(renderer!, "Acknowledge"), undefined);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -340,17 +348,80 @@ test("older acknowledgement response does not hide a newer provider-review notif
     });
     await flush();
 
+    const olderAcknowledgeButton = renderer!.root.findByProps({
+      "data-testid": "button-acknowledge-notification-notification-old",
+    });
     await act(async () => {
-      findButtonByText(renderer!, "Mark read").props.onClick();
+      olderAcknowledgeButton.props.onClick();
     });
     await flush();
 
     assert.match(textContent(renderer!.toJSON()), /Newer provider change/);
-    assert.equal(findButtonByText(renderer!, "Mark read")?.props.disabled, false);
+    assert.equal(renderer!.root.findByProps({
+      "data-testid": "button-acknowledge-notification-notification-new",
+    }).props.disabled, false);
     assert.equal(
       (queryClient.getQueryData<any[]>(["/api/flight-plans"]) || [])[0]?.filingProviderSnapshot?.providerPendingReview,
       true,
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("pending acknowledgement disables only the clicked notification", async () => {
+  const first: NotificationRecord = {
+    id: "notification-first",
+    title: "Provider changes detected",
+    message: "First provider change.",
+    type: "flight_alert",
+    isRead: false,
+    createdAt: "2026-07-16T22:31:17.000Z",
+    readAt: null,
+  };
+  const second: NotificationRecord = {
+    id: "notification-second",
+    title: "Provider changes detected",
+    message: "Second provider change.",
+    type: "flight_alert",
+    isRead: false,
+    createdAt: "2026-07-16T22:31:18.000Z",
+    readAt: null,
+  };
+  const acknowledgement = deferred<Response>();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = String(init?.method || "GET").toUpperCase();
+    if (method === "GET" && url.endsWith("/api/notifications")) return Response.json([first, second]);
+    if (method === "GET" && url.endsWith("/api/notifications/unread")) return Response.json({ count: 2 });
+    if (method === "PATCH" && url.endsWith("/api/notifications/notification-first/read")) return acknowledgement.promise;
+    throw new Error(`Unexpected request in test: ${method} ${url}`);
+  }) as typeof fetch;
+
+  try {
+    const queryClient = makeQueryClient();
+    let renderer: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <QueryClientProvider client={queryClient}>
+          <NotificationsPage />
+        </QueryClientProvider>,
+      );
+    });
+    await flush();
+
+    const buttons = renderer!.root.findAll((node) => node.type === "button" && instanceText(node).includes("Acknowledge"));
+    assert.equal(buttons.length, 2);
+    await act(async () => {
+      buttons[0].props.onClick();
+    });
+    await flush();
+
+    const pendingButton = findButtonByText(renderer!, "Acknowledging");
+    const idleButton = findButtonByText(renderer!, "Acknowledge");
+    assert.equal(pendingButton.props.disabled, true);
+    assert.equal(idleButton.props.disabled, false);
   } finally {
     globalThis.fetch = originalFetch;
   }

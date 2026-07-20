@@ -40,7 +40,7 @@ export const normalizeProviderReviewRoute = (value: unknown): string | null => {
   if (!text) return null;
   const tokens = text.split(/\s+/).filter(Boolean);
   const collapsed = tokens.filter((token, index) => !(token === "DCT" && tokens[index - 1] === "DCT"));
-  if (collapsed.length === 1 && collapsed[0] === "DCT") return "DCT";
+  if (collapsed.length === 1 && collapsed[0] === "DCT") return null;
   while (collapsed.length > 1 && collapsed[0] === "DCT") collapsed.shift();
   while (collapsed.length > 1 && collapsed[collapsed.length - 1] === "DCT") collapsed.pop();
   const withoutDirectFormatting = collapsed.filter((token) => token !== "DCT");
@@ -96,9 +96,20 @@ const hasChangedProviderField = (snapshot: JsonRecord, field: string): boolean =
 const changedFieldsFromSnapshot = (snapshot: JsonRecord): string[] => {
   const fields = new Set<string>();
   const route = asRecord(snapshot.route);
+  const routeCandidateValues = [
+    route.normalizedTransmittedRoute,
+    route.localEnteredRoute,
+    route.transmittedRoute,
+    route.acceptedRoute,
+  ];
+  const providerRoute = normalizeProviderReviewRoute(route.providerRoute ?? route.routeProvider ?? route.providerReturnedRoute);
+  const routeMatchesAnyCandidate = routeCandidateValues.some(
+    (value) => normalizeProviderReviewRoute(value) === providerRoute,
+  );
   if (
     route.changedByProvider === true &&
-    normalizeProviderReviewRoute(route.providerRoute) !== normalizeProviderReviewRoute(route.normalizedTransmittedRoute ?? route.localEnteredRoute)
+    providerRoute &&
+    !routeMatchesAnyCandidate
   ) {
     fields.add("route");
   }
@@ -106,8 +117,16 @@ const changedFieldsFromSnapshot = (snapshot: JsonRecord): string[] => {
     const diff = asRecord(entry);
     if (diff.changedByProvider === true) {
       const field = compact(diff.field);
-      if (field === "route" && normalizeProviderReviewRoute(diff.providerValue) === normalizeProviderReviewRoute(diff.transmittedValue ?? diff.localValue)) {
-        continue;
+      if (field === "route") {
+        const normalizedProvider = normalizeProviderReviewRoute(diff.providerValue);
+        const matchesTransmitted = [
+          diff.transmittedValue,
+          diff.localValue,
+          diff.acceptedValue,
+        ].some((value) => normalizeProviderReviewRoute(value) === normalizedProvider);
+        if (!normalizedProvider || matchesTransmitted) {
+          continue;
+        }
       }
       if (field === "otherInfo" && normalizeProviderReviewOtherInfo(diff.providerValue) === normalizeProviderReviewOtherInfo(diff.transmittedValue ?? diff.localValue)) {
         continue;
@@ -125,8 +144,9 @@ export const buildProviderEffectivePlanSnapshot = (
   const snapshot = asRecord(snapshotInput);
   const route = asRecord(snapshot.route);
   const planRecord = asRecord(plan);
-  const routeValue = route.changedByProvider === true
-    ? route.providerRoute
+  const normalizedProviderRoute = normalizeProviderReviewRoute(route.providerRoute ?? route.routeProvider ?? route.providerReturnedRoute);
+  const routeValue = route.changedByProvider === true && normalizedProviderRoute
+    ? route.providerRoute ?? route.routeProvider ?? route.providerReturnedRoute
     : route.normalizedTransmittedRoute ?? route.localEnteredRoute ?? route.providerRoute ?? planRecord.route;
   const otherInfoValue = hasChangedProviderField(snapshot, "otherInfo")
     ? getChangedProviderValue(snapshot, "otherInfo")

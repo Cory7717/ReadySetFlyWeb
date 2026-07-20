@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ type UserNotification = {
   createdAt?: string | null;
   readAt?: string | null;
 };
+
+type AcknowledgementState = "idle" | "pending" | "resolved" | "failed";
 
 function formatDisplayDate(value?: string | null) {
   if (!value) return "—";
@@ -46,7 +48,7 @@ export default function NotificationsPage() {
   const queryClient = useQueryClient();
   const [acknowledgedNotificationIds, setAcknowledgedNotificationIds] = useState<Set<string>>(() => new Set());
   const pendingAcknowledgementIds = useRef<Set<string>>(new Set());
-  const [pendingNotificationIds, setPendingNotificationIds] = useState<Set<string>>(() => new Set());
+  const [acknowledgementStates, setAcknowledgementStates] = useState<Record<string, AcknowledgementState>>({});
   const [acknowledgementError, setAcknowledgementError] = useState<string | null>(null);
 
   const { data: notifications = [], isLoading } = useQuery<UserNotification[]>({
@@ -65,6 +67,18 @@ export default function NotificationsPage() {
   );
   const unreadCount = displayNotifications.filter((notification) => !notification.isRead).length;
 
+  useEffect(() => {
+    const authoritativeIds = new Set(notifications.map((notification) => notification.id));
+    setAcknowledgedNotificationIds((current) => {
+      const next = new Set(Array.from(current).filter((id) => authoritativeIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+    setAcknowledgementStates((current) => {
+      const next = Object.fromEntries(Object.entries(current).filter(([id]) => authoritativeIds.has(id)));
+      return Object.keys(next).length === Object.keys(current).length ? current : next;
+    });
+  }, [notifications]);
+
   const markReadMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiRequest("PATCH", `/api/notifications/${id}/read`, {});
@@ -73,6 +87,7 @@ export default function NotificationsPage() {
     onSuccess: (result: any, id) => {
       setAcknowledgementError(null);
       setAcknowledgedNotificationIds((current) => new Set(current).add(id));
+      setAcknowledgementStates((current) => ({ ...current, [id]: "resolved" }));
       queryClient.setQueryData<UserNotification[]>(["/api/notifications"], (current = []) =>
         current.map((notification) =>
           notification.id === id
@@ -99,18 +114,17 @@ export default function NotificationsPage() {
     onSettled: (_result, _error, id) => {
       if (!id) return;
       pendingAcknowledgementIds.current.delete(id);
-      setPendingNotificationIds((current) => {
-        const next = new Set(current);
-        next.delete(id);
-        return next;
-      });
+      if (_error) {
+        setAcknowledgementStates((current) => ({ ...current, [id]: "failed" }));
+      }
     },
   });
 
   const handleMarkRead = (id: string) => {
-    if (pendingAcknowledgementIds.current.has(id) || markReadMutation.isPending) return;
+    const state = acknowledgementStates[id] || "idle";
+    if (pendingAcknowledgementIds.current.has(id) || state === "pending" || state === "resolved") return;
     pendingAcknowledgementIds.current.add(id);
-    setPendingNotificationIds((current) => new Set(current).add(id));
+    setAcknowledgementStates((current) => ({ ...current, [id]: "pending" }));
     markReadMutation.mutate(id);
   };
 
@@ -187,18 +201,32 @@ export default function NotificationsPage() {
                     {!isFlightPlanNotification(notification.type) && notification.referenceDate && (
                       <div>Due: {formatDisplayDate(notification.referenceDate)}</div>
                     )}
-                    {!notification.isRead && (
+                    {(() => {
+                      const acknowledgementState = acknowledgementStates[notification.id] || (acknowledgedNotificationIds.has(notification.id) ? "resolved" : "idle");
+                      const showAcknowledgementButton = !notification.isRead || acknowledgementState === "pending" || acknowledgementState === "resolved" || acknowledgementState === "failed";
+                      const acknowledgementLabel =
+                        acknowledgementState === "pending"
+                          ? "Acknowledging..."
+                          : acknowledgementState === "resolved"
+                            ? "Acknowledged"
+                            : acknowledgementState === "failed"
+                              ? "Retry Acknowledge"
+                              : "Acknowledge";
+                      const acknowledgementDisabled = acknowledgementState === "pending" || acknowledgementState === "resolved";
+                      return showAcknowledgementButton ? (
                       <Button
                         size="sm"
                         variant="ghost"
                         className="ml-auto"
                         onClick={() => handleMarkRead(notification.id)}
-                        disabled={markReadMutation.isPending || pendingNotificationIds.has(notification.id)}
+                        disabled={acknowledgementDisabled}
+                        data-testid={`button-acknowledge-notification-${notification.id}`}
                       >
                         <CheckCircle2 className="h-4 w-4 mr-1" />
-                        Mark read
+                        {acknowledgementLabel}
                       </Button>
-                    )}
+                      ) : null;
+                    })()}
                   </div>
                   <Separator />
                 </div>

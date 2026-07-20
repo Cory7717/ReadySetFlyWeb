@@ -5,6 +5,8 @@ import {
   assertEffectiveDepartureTimeNotStale,
   assertNoLiveLabDuplicateRisk,
   buildCases,
+  buildCasesForSuite,
+  getLiveLabTestDesignFailure,
 } from "./leidos-live-lab/live-lab-runner";
 import { validateFlightPlanForAction } from "../../server/services/flight-plan-filing/provider";
 
@@ -94,6 +96,43 @@ test("midnight and UTC-date rollover use the departure airport timezone", () => 
   assert.equal(timing.metadata.effectiveDepartureLocalTime, "2026-07-17T00:30");
   assert.equal(timing.metadata.departureInstantUtc, "2026-07-17T05:30:00.000Z");
   assert.equal(timing.metadata.expectedProviderZulu, "0530Z");
+});
+
+test("extended Case 19 always produces a real KLAS local-to-UTC date boundary", () => {
+  const testCase = buildCasesForSuite(context, "case-19-date-boundary", "extended").find((item) => item.seed === 19)!;
+  const timing = applyLiveLabEffectiveDepartureTime(testCase.buildPlan(), testCase, {
+    dynamicTimingEnabled: true,
+    now: "2026-07-20T17:00:00.000Z",
+  });
+
+  assert.equal(timing.metadata.departureTimeZone, "America/Los_Angeles");
+  assert.equal(timing.metadata.departureTimeLocal, "23:30");
+  assert.notEqual(timing.metadata.localCalendarDate, timing.metadata.utcCalendarDate);
+  assert.equal(timing.metadata.dateBoundaryExpected, true);
+  assert.equal(timing.metadata.dateBoundaryObserved, true);
+  assert.equal(timing.metadata.dateBoundaryCheckPassed, true);
+  assert.equal(getLiveLabTestDesignFailure(timing, testCase), null);
+  assert.doesNotThrow(() => assertEffectiveDepartureTimeNotStale(timing, testCase, "2026-07-20T17:00:00.000Z"));
+});
+
+test("extended Case 19 fails test-design preflight if date-boundary assertion is false", () => {
+  const testCase = buildCasesForSuite(context, "case-19-date-boundary-failure", "extended").find((item) => item.seed === 19)!;
+  const timing = applyLiveLabEffectiveDepartureTime(testCase.buildPlan(), testCase, {
+    dynamicTimingEnabled: true,
+    now: "2026-07-20T17:00:00.000Z",
+  });
+  const badTiming = {
+    ...timing,
+    metadata: {
+      ...timing.metadata,
+      localCalendarDate: "2026-07-20",
+      utcCalendarDate: "2026-07-20",
+      dateBoundaryObserved: false,
+      dateBoundaryCheckPassed: false,
+    },
+  };
+
+  assert.match(String(getLiveLabTestDesignFailure(badTiming, testCase)), /Test design failure: Case 19/);
 });
 
 test("America/Chicago daylight-saving conversion is reflected in local time", () => {

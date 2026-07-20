@@ -18,6 +18,7 @@ import {
   syncLeidosPlanMetadata,
   validateLeidosOtherInfoForTransmission,
   validateFlightPlanForAction,
+  zonedLocalDateTimeToUtcIso,
 } from "../../../server/services/flight-plan-filing/provider";
 
 export type CaseAction = FlightPlanFilingAction;
@@ -246,12 +247,59 @@ type LifecycleDynamicTimingMetadata = {
   expectedProviderZulu?: string;
   activationWindowCheckedAt?: string;
   activationWindowProviderRejected?: boolean;
+  departureDateLocal?: string;
+  departureTimeLocal?: string;
+  localCalendarDate?: string;
+  utcCalendarDate?: string;
+  dateBoundaryExpected?: boolean;
+  dateBoundaryObserved?: boolean;
+  dateBoundaryCheckPassed?: boolean | null;
 };
 
 const dynamicDepartureOffsetMinutesForCase = (testCase: LiveLabCase) =>
   lifecycleUsesActivationWindow(testCase)
     ? LIFECYCLE_DYNAMIC_TIME_OFFSET_MINUTES
     : FILE_DYNAMIC_TIME_BASE_OFFSET_MINUTES + (Math.max(1, testCase.seed) - 1) * CASE_DYNAMIC_TIME_SPACING_MINUTES;
+
+const buildDateBoundaryMetadata = (localDateTime: string, departureInstantUtc: string) => {
+  const departureDateLocal = localDateTime.slice(0, 10);
+  const departureTimeLocal = localDateTime.slice(11, 16);
+  const utcCalendarDate = departureInstantUtc.slice(0, 10);
+  const dateBoundaryObserved = departureDateLocal !== utcCalendarDate;
+  return {
+    departureDateLocal,
+    departureTimeLocal,
+    localCalendarDate: departureDateLocal,
+    utcCalendarDate,
+    dateBoundaryExpected: true,
+    dateBoundaryObserved,
+    dateBoundaryCheckPassed: dateBoundaryObserved,
+  };
+};
+
+const nextFutureLocalDateTimeAt = ({
+  now,
+  timeZone,
+  localTime,
+  minimumLeadMinutes,
+}: {
+  now: Date;
+  timeZone: string;
+  localTime: string;
+  minimumLeadMinutes: number;
+}) => {
+  for (let dayOffset = 0; dayOffset <= 10; dayOffset += 1) {
+    const candidateDateProbe = new Date(now.getTime() + dayOffset * 24 * 60 * 60_000);
+    const localDate = formatLocalDateTimeForZone(candidateDateProbe, timeZone).slice(0, 10);
+    const candidateLocal = `${localDate}T${localTime}`;
+    const candidateUtc = zonedLocalDateTimeToUtcIso(candidateLocal, timeZone);
+    const candidateInstant = new Date(candidateUtc);
+    if (candidateInstant.getTime() >= now.getTime() + minimumLeadMinutes * 60_000) {
+      return { candidateLocal, candidateInstant };
+    }
+  }
+  throw new Error(`Unable to calculate a future ${localTime} departure for ${timeZone}.`);
+};
 
 export const applyLiveLabEffectiveDepartureTime = (
   plan: FlightPlan,
@@ -288,6 +336,51 @@ export const applyLiveLabEffectiveDepartureTime = (
     };
   }
 
+  if (testCase.seed === 19) {
+    const { candidateLocal, candidateInstant } = nextFutureLocalDateTimeAt({
+      now,
+      timeZone: departureTimeZone,
+      localTime: "23:30",
+      minimumLeadMinutes: FILE_DYNAMIC_TIME_BASE_OFFSET_MINUTES,
+    });
+    const plannerState = getPlannerStateRecord(plan);
+    const dateBoundaryMetadata = buildDateBoundaryMetadata(candidateLocal, candidateInstant.toISOString());
+    const nextPlan = {
+      ...plan,
+      plannedDepartureAt: candidateInstant,
+      plannedArrivalAt: new Date(candidateInstant.getTime() + 3 * 60 * 60_000),
+      plannerState: {
+        ...plannerState,
+        departureTimeZone,
+        userDisplayDepartureTimeLocal: candidateLocal,
+        lifecycleDynamicTimeEnabled: true,
+        lifecycleDepartureTimeStrategy: "case-19 next future KLAS-local 23:30 date-boundary",
+        lifecycleOriginalDepartureTimeLocal: originalLocal,
+      },
+    } as FlightPlan;
+    const metadata: LifecycleDynamicTimingMetadata = {
+      lifecycleDynamicTimeEnabled: true,
+      lifecycleDepartureTimeStrategy: "case-19 next future KLAS-local 23:30 date-boundary",
+      effectiveTimeGeneratedAt: now.toISOString(),
+      offsetMinutes: Math.round((candidateInstant.getTime() - now.getTime()) / 60_000),
+      originalPlannedLocalTime: originalLocal,
+      dynamicLifecycleLocalTime: candidateLocal,
+      effectiveDepartureLocalTime: candidateLocal,
+      departureTimeZone,
+      departureInstantUtc: candidateInstant.toISOString(),
+      expectedProviderZulu: formatProviderZulu(candidateInstant),
+      activationWindowCheckPassed: null,
+      ...dateBoundaryMetadata,
+    };
+    console.info(JSON.stringify({
+      event: "leidos_live_lab_effective_departure_time",
+      caseSeed: testCase.seed,
+      caseName: testCase.name,
+      ...metadata,
+    }));
+    return { plan: nextPlan, metadata };
+  }
+
   const offsetMinutes = dynamicDepartureOffsetMinutesForCase(testCase);
   const dynamicInstant = new Date(now.getTime() + offsetMinutes * 60_000);
   const dynamicLocal = formatLocalDateTimeForZone(dynamicInstant, departureTimeZone);
@@ -316,6 +409,13 @@ export const applyLiveLabEffectiveDepartureTime = (
     departureTimeZone,
     departureInstantUtc: dynamicInstant.toISOString(),
     expectedProviderZulu: formatProviderZulu(dynamicInstant),
+    departureDateLocal: dynamicLocal.slice(0, 10),
+    departureTimeLocal: dynamicLocal.slice(11, 16),
+    localCalendarDate: dynamicLocal.slice(0, 10),
+    utcCalendarDate: dynamicInstant.toISOString().slice(0, 10),
+    dateBoundaryExpected: testCase.seed === 19,
+    dateBoundaryObserved: testCase.seed === 19 ? dynamicLocal.slice(0, 10) !== dynamicInstant.toISOString().slice(0, 10) : undefined,
+    dateBoundaryCheckPassed: testCase.seed === 19 ? dynamicLocal.slice(0, 10) !== dynamicInstant.toISOString().slice(0, 10) : null,
     activationWindowCheckPassed: lifecycleUsesActivationWindow(testCase)
       ? Math.abs(dynamicInstant.getTime() - now.getTime()) <= ACTIVATION_WINDOW_MINUTES * 60_000
       : null,
@@ -343,6 +443,26 @@ export const assertEffectiveDepartureTimeNotStale = (
       `departureInstantUtc=${timing.metadata.departureInstantUtc || "-"}; now=${now.toISOString()}.`,
     );
   }
+};
+
+export const getLiveLabTestDesignFailure = (
+  timing: ReturnType<typeof applyLiveLabEffectiveDepartureTime>,
+  testCase: LiveLabCase,
+) => {
+  if (testCase.seed === 19 && timing.metadata.dateBoundaryCheckPassed !== true) {
+    return `Test design failure: Case 19 must produce a KLAS local-to-UTC calendar date boundary. Local date ${timing.metadata.localCalendarDate || "-"} UTC date ${timing.metadata.utcCalendarDate || "-"}.`;
+  }
+  return null;
+};
+
+const isInternalFixtureValidationFailure = (plan: FlightPlan, validation: ReturnType<typeof validateFlightPlanForAction>) => {
+  const equipment = String(plan.filingEquipment || "").trim().toUpperCase();
+  const otherInfo = String(plan.filingOtherInfo || "").trim().toUpperCase();
+  return Boolean(
+    /\bPBN\//.test(otherInfo) &&
+    !equipment.includes("R") &&
+    validation.errors.some((error) => /PBN|equipment.*R|R.*PBN/i.test(error)),
+  );
 };
 
 const isActivationWindowError = (message: string) =>
@@ -611,7 +731,7 @@ export const buildExtendedEdgeCases = (context: DedicatedTestContext, runId: str
         plannerState: { departureTimeZone: "America/Los_Angeles", userDisplayDepartureTimeLocal: local },
       });
     } },
-    { seed: 20, stableId: "edge-20", name: "ZZZZ aircraft type with TYP", testType: "Positive", classification: "zzzz", actions: ["file", "amend"], expectedFinalState: "filed after AMEND, then cleanup cancel", buildPlan: () => plan(20, "ZZZZ Aircraft Type", { aircraftType: "ZZZZ", filingOtherInfo: `PBN/A1 TYP/TBM9 ${providerSafeRmk(20, "ZZZZ TYP")}`, plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: getDeterministicCaseDeparture(20).local, actualAircraftType: "TBM9" } as any }) },
+    { seed: 20, stableId: "edge-20", name: "ZZZZ aircraft type with TYP", testType: "Positive", classification: "zzzz", actions: ["file", "amend"], expectedFinalState: "filed after AMEND, then cleanup cancel", buildPlan: () => plan(20, "ZZZZ Aircraft Type", { aircraftType: "ZZZZ", filingEquipment: "SC", filingOtherInfo: `TYP/TBM9 ${providerSafeRmk(20, "ZZZZ TYP")}`, plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: getDeterministicCaseDeparture(20).local, actualAircraftType: "TBM9" } as any }) },
     { seed: 21, stableId: "edge-21", name: "VFR full lifecycle extended", testType: "Lifecycle", classification: "lifecycle", actions: ["file", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(21, "VFR Full Lifecycle", { destination: "KACT", alternate: "KDAL", route: "DCT ACT DCT", filingCloseLocation: "KACT" } as any) },
     { seed: 22, stableId: "edge-22", name: "Future-date DOF positive control", testType: "Positive", classification: "time", actions: ["file"], expectedFinalState: "filed, then cleanup cancel", buildPlan: () => plan(22, "Future DOF", { plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-12-31T23:40" }, plannedDepartureAt: new Date("2027-01-01T05:40:00.000Z"), plannedArrivalAt: new Date("2027-01-01T07:10:00.000Z"), filingOtherInfo: `PBN/A1 ${providerSafeRmk(22, "YEAR ROLLOVER DOF")}` }) },
   ].map((testCase) => withCaseMetadata(testCase, "extended"));
@@ -706,7 +826,7 @@ export const amendMutationForCase = (testCase: LiveLabCase): Partial<FlightPlan>
       route: "DCT CWK DCT",
       filingPlannedAltitudeFt: 8500,
       alternate: "KAUS",
-      filingOtherInfo: `PBN/A1 TYP/TBM9 ${providerSafeRmk(20, "ZZZZ TYP AMENDED")}`,
+      filingOtherInfo: `TYP/TBM9 ${providerSafeRmk(20, "ZZZZ TYP AMENDED")}`,
       filingRemarks: "RSF LAB TEST SEED 20 ZZZZ TYP AMENDED",
     } as Partial<FlightPlan>;
   }
@@ -1476,12 +1596,14 @@ export const buildRoundTripComparisonSummary = (results: any[]) => {
 export const buildCleanupVerification = (cleanupResults: any[], results: any[]) => {
   const openFailures = cleanupResults.filter((item) => item.pass === false);
   const blockedCases = results.filter((item) => (item.actions || []).some((action: any) => action.blockedBeforeLeidos));
+  const acceptedUnverified = cleanupResults.filter((item) => item.finalCleanupDisposition === "accepted_unverified");
   return {
-    status: openFailures.length === 0 ? "PASS" : "FAIL",
+    status: openFailures.length === 0 ? (acceptedUnverified.length > 0 ? "REVIEW" : "PASS") : "FAIL",
     noActiveCertificationFlightRemains: openFailures.length === 0,
     terminalOrBlockedCount: cleanupResults.filter((item) => item.pass !== false).length + blockedCases.length,
     blockedBeforeSubmissionCount: blockedCases.length,
     failures: openFailures,
+    acceptedButTerminalEvidenceUnavailable: acceptedUnverified,
   };
 };
 
@@ -1490,22 +1612,33 @@ export const buildCleanupSummary = (cleanupResults: any[], results: any[]) => {
   const immediate = cleanupResults.filter((item) => item.cleanupPhase === "immediate_case_cleanup");
   const finalSweep = cleanupResults.filter((item) => item.cleanupPhase === "final_sweep");
   const unresolved = cleanupResults.filter((item) => item.pass === false);
+  const cancelAccepted = cleanupResults.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus)));
+  const explicitlyVerified = cleanupResults.filter((item) => item.terminalVerificationMatched === true);
+  const acceptedUnverified = cleanupResults.filter((item) => item.finalCleanupDisposition === "accepted_unverified");
   return {
     providerPlansStaged: actions.filter((action: any) => action.responseStatus === "provider_submission_disabled_by_configuration" || action.responseStatus === "staged").length,
     providerPlansSubmitted: actions.filter((action: any) => action.action === "file" && ["accepted", "dry_run"].includes(String(action.responseStatus))).length,
     providerPlansCreated: actions.filter((action: any) => action.action === "file" && action.providerPlanId && ["accepted", "dry_run"].includes(String(action.responseStatus))).length,
     providerPlansBlockedBeforeSubmission: actions.filter((action: any) => action.blockedBeforeLeidos).length,
     immediateCleanupTotal: immediate.length,
+    immediateCleanupAttempted: immediate.filter((item) => item.cancelAttempted || item.action === "close").length,
     immediateCleanupCancelled: immediate.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
+    immediateCleanupCancelAccepted: immediate.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
+    immediateCleanupTerminalStateExplicitlyVerified: immediate.filter((item) => item.terminalVerificationMatched === true).length,
+    immediateCleanupAcceptedButTerminalEvidenceUnavailable: immediate.filter((item) => item.finalCleanupDisposition === "accepted_unverified").length,
     immediateCleanupErrors: immediate.filter((item) => item.pass === false).length,
     finalSweepTotal: finalSweep.length,
     finalSweepCancelled: finalSweep.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
     finalSweepClosed: finalSweep.filter((item) => item.action === "close" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
-    cancelled: cleanupResults.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
+    cancelAccepted: cancelAccepted.length,
+    terminalStateExplicitlyVerified: explicitlyVerified.length,
+    acceptedButTerminalEvidenceUnavailable: acceptedUnverified.length,
+    cancelled: cancelAccepted.length,
     closed: cleanupResults.filter((item) => item.action === "close" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
     alreadyTerminal: cleanupResults.filter((item) => item.responseStatus === "already_terminal").length,
     cleanupNotRequired: cleanupResults.filter((item) => ["not_required", "staged_only_not_submitted"].includes(String(item.responseStatus))).length,
     cleanupErrors: cleanupResults.filter((item) => item.pass === false).length,
+    unresolvedProviderPlans: unresolved.length,
     unresolvedPlans: unresolved.map((item) => ({
       certificationCaseId: item.certificationCaseId || null,
       planId: item.planId || null,
@@ -2202,10 +2335,38 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
     };
 
     if (cleanupAction === "none" || cleanupAction === "verify") {
+      const expectedStatus = cleanupAction === "verify" ? status : null;
+      const terminalRecheck = cleanupAction === "verify" && providerPlanId && expectedStatus && !dryRun
+        ? await waitForPersistedTerminalLifecycleEvidence({
+          planId: plan.id,
+          providerPlanId,
+          expectedStatus,
+          dryRun,
+        })
+        : null;
+      const terminalEvidence = terminalRecheck?.evidence || classifyLifecycleEvidence((plan.filingProviderSnapshot as any) || null, expectedStatus);
+      const terminalVerificationMatched = cleanupAction === "verify"
+        ? Boolean(terminalEvidence.hasExplicitProviderEvidence && terminalEvidence.lifecycle === expectedStatus)
+        : false;
       cleanupResults.push({
         ...base,
         responseStatus: cleanupAction === "verify" ? "already_terminal" : (status === "staged" ? "staged_only_not_submitted" : "not_required"),
         pass: true,
+        cancelAttempted: false,
+        cancelAccepted: false,
+        cancelReturnMessages: [],
+        terminalVerificationAttempted: cleanupAction === "verify",
+        terminalVerificationMatched,
+        terminalEvidenceKind: cleanupAction === "verify" ? terminalEvidence.kind || "local_terminal_state" : "not_required",
+        terminalEvidenceSource: cleanupAction === "verify" ? terminalEvidence.source || "local_plan_status" : null,
+        effectiveLifecycle: cleanupAction === "verify" ? status : null,
+        pollCount: terminalRecheck?.polls || 0,
+        timedOut: Boolean(terminalRecheck?.timedOut),
+        finalCleanupDisposition: cleanupAction === "verify"
+          ? terminalVerificationMatched
+            ? "explicitly_verified_terminal"
+            : "already_terminal_local"
+          : "not_required",
         cleanupCancellationAttempted: false,
         elapsedMs: Date.now() - started,
       });
@@ -2220,7 +2381,23 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
     }
 
     if (dryRun) {
-      const result = { ...base, responseStatus: "dry_run", pass: true, elapsedMs: Date.now() - started };
+      const result = {
+        ...base,
+        responseStatus: "dry_run",
+        pass: true,
+        cancelAttempted: cleanupAction === "cancel",
+        cancelAccepted: cleanupAction === "cancel",
+        cancelReturnMessages: [],
+        terminalVerificationAttempted: false,
+        terminalVerificationMatched: false,
+        terminalEvidenceKind: "dry_run",
+        terminalEvidenceSource: "dry_run",
+        effectiveLifecycle: cleanupAction === "cancel" ? "cancelled" : cleanupAction === "close" ? "closed" : null,
+        pollCount: 0,
+        timedOut: false,
+        finalCleanupDisposition: "dry_run",
+        elapsedMs: Date.now() - started,
+      };
       cleanupResults.push(result);
       continue;
     }
@@ -2237,7 +2414,38 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
         cancelledAt: cleanupAction === "cancel" ? new Date() : plan.cancelledAt,
         closedAt: cleanupAction === "close" ? new Date() : plan.closedAt,
       } as any, dryRun);
-      const result = { ...base, responseStatus: response.live ? "accepted" : "staged", pass: response.live, warnings: response.warnings || [], errors: response.live ? [] : [response.message], elapsedMs: Date.now() - started };
+      const terminalVerification = response.live
+        ? await verifyTerminalActionState(updated, cleanupAction, response, dryRun)
+        : null;
+      const terminalVerificationMatched = terminalVerification?.status === "PASS";
+      const finalCleanupDisposition = response.live
+        ? terminalVerificationMatched
+          ? "explicitly_verified_terminal"
+          : "accepted_unverified"
+        : "staged_not_submitted";
+      const cancelReturnMessages = Array.isArray(response.providerMessages)
+        ? response.providerMessages.map((message: any) => message?.message || message?.text || message?.summary).filter(Boolean)
+        : [];
+      const result = {
+        ...base,
+        responseStatus: response.live ? "accepted" : "staged",
+        pass: response.live,
+        cancelAttempted: cleanupAction === "cancel",
+        cancelAccepted: response.live && cleanupAction === "cancel",
+        cancelReturnMessages,
+        terminalVerificationAttempted: response.live,
+        terminalVerificationMatched,
+        terminalEvidenceKind: terminalVerification?.evidenceKind || null,
+        terminalEvidenceSource: terminalVerification?.evidenceSource || null,
+        effectiveLifecycle: terminalVerification?.effectiveLifecycle || response.nextStatus || null,
+        pollCount: terminalVerification?.polling?.pollCount || 0,
+        timedOut: Boolean(terminalVerification?.polling?.timedOut),
+        finalCleanupDisposition,
+        terminalVerification,
+        warnings: response.warnings || [],
+        errors: response.live ? [] : [response.message],
+        elapsedMs: Date.now() - started,
+      };
       cleanupResults.push(result);
       await appendCertificationAudit(updated, "cleanup", result, dryRun);
     } catch (error) {
@@ -2455,6 +2663,39 @@ const run = async () => {
       results.push(caseResult);
       continue;
     }
+    const preflightTestDesignFailure = getLiveLabTestDesignFailure(lifecycleTiming, testCase);
+    if (preflightTestDesignFailure) {
+      caseResult.pass = false;
+      caseResult.testDesignFailures.push(preflightTestDesignFailure);
+      caseResult.errors.push(preflightTestDesignFailure);
+      const actionResult = {
+        action: "preflight",
+        generatedPayload: null,
+        providerPayload: null,
+        storedPayload: null,
+        payloadSentToLeidos: null,
+        leidosResponse: null,
+        testType: testCase.testType,
+        validationStatus: "BLOCKED",
+        validationResult: "test_design_failure",
+        blockedBeforeLeidos: true,
+        blockedReason: "test_design_failure",
+        routeReview: null,
+        recommendedFix: "Repair the certification fixture timing before provider submission.",
+        comparison: null,
+        comparisonResult: "TEST_DESIGN_FAILURE",
+        fieldComparisons: [],
+        providerLifecycle: null,
+        responseStatus: "test_design_failure",
+        warnings: [],
+        errors: [preflightTestDesignFailure],
+        elapsedMs: 0,
+      };
+      caseResult.actions.push(actionResult);
+      plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
+      results.push(caseResult);
+      continue;
+    }
     for (const action of testCase.actions) {
       const started = Date.now();
       const amendMutation = await applyAmendMutationIfNeeded(plan, testCase, action, dryRun);
@@ -2524,8 +2765,16 @@ const run = async () => {
       }
       if (!validation.ready) {
         const expectedBlock = Boolean(testCase.expectedBlockedBeforeLeidos);
+        const internalFixtureFailure = !expectedBlock && isInternalFixtureValidationFailure(plan, validation);
         caseResult.pass = expectedBlock;
-        if (!expectedBlock) caseResult.errors.push(`Validation failed before ${action}: ${validation.errors.join(" | ")}`);
+        if (!expectedBlock) {
+          const validationMessage = `Validation failed before ${action}: ${validation.errors.join(" | ")}`;
+          const classifiedMessage = internalFixtureFailure
+            ? `Test design failure: certification fixture is internally inconsistent before ${action}. ${validation.errors.join(" | ")}`
+            : validationMessage;
+          caseResult.errors.push(classifiedMessage);
+          if (internalFixtureFailure) caseResult.testDesignFailures.push(classifiedMessage);
+        }
         const actionResult = {
           action,
           generatedPayload,
@@ -2537,14 +2786,14 @@ const run = async () => {
           validationStatus: "BLOCKED",
           validationResult: "invalid",
           blockedBeforeLeidos: true,
-          blockedReason: validation.errors.join(" | "),
+          blockedReason: internalFixtureFailure ? "test_design_fixture_inconsistent" : validation.errors.join(" | "),
           routeReview,
           recommendedFix: testCase.recommendedFix || validation.warnings.join(" | ") || null,
           comparison: null,
-          comparisonResult: "BLOCKED",
+          comparisonResult: internalFixtureFailure ? "TEST_DESIGN_FAILURE" : "BLOCKED",
           fieldComparisons: [],
           providerLifecycle: null,
-          responseStatus: expectedBlock ? "blocked_before_leidos_expected" : "validation_failed",
+          responseStatus: expectedBlock ? "blocked_before_leidos_expected" : internalFixtureFailure ? "test_design_validation_failed" : "validation_failed",
           warnings: validation.warnings,
           errors: validation.errors,
           elapsedMs: Date.now() - started,
@@ -3029,13 +3278,19 @@ const run = async () => {
   console.log(`  Provider Plans Created: ${cleanupSummary.providerPlansCreated}`);
   console.log(`  Provider Plans Blocked Before Submission: ${cleanupSummary.providerPlansBlockedBeforeSubmission}`);
   console.log(`  Immediate Cleanup Total: ${cleanupSummary.immediateCleanupTotal}`);
-  console.log(`  Immediate Cleanup Cancelled: ${cleanupSummary.immediateCleanupCancelled}`);
+  console.log(`  Immediate Cleanup Attempted: ${cleanupSummary.immediateCleanupAttempted}`);
+  console.log(`  Immediate Cleanup Cancel Accepted: ${cleanupSummary.immediateCleanupCancelAccepted}`);
+  console.log(`  Immediate Cleanup Terminal Explicitly Verified: ${cleanupSummary.immediateCleanupTerminalStateExplicitlyVerified}`);
+  console.log(`  Immediate Cleanup Accepted But Terminal Evidence Unavailable: ${cleanupSummary.immediateCleanupAcceptedButTerminalEvidenceUnavailable}`);
   console.log(`  Final Sweep Total: ${cleanupSummary.finalSweepTotal}`);
-  console.log(`  Automated Cleanup Cancelled: ${cleanupSummary.cancelled}`);
+  console.log(`  Automated Cleanup Cancel Accepted: ${cleanupSummary.cancelAccepted}`);
+  console.log(`  Cleanup Terminal Explicitly Verified: ${cleanupSummary.terminalStateExplicitlyVerified}`);
+  console.log(`  Cleanup Accepted But Terminal Evidence Unavailable: ${cleanupSummary.acceptedButTerminalEvidenceUnavailable}`);
   console.log(`  Automated Cleanup Closed: ${cleanupSummary.closed}`);
   console.log(`  Already Terminal: ${cleanupSummary.alreadyTerminal}`);
   console.log(`  Cleanup Not Required: ${cleanupSummary.cleanupNotRequired}`);
   console.log(`  Cleanup Errors: ${cleanupSummary.cleanupErrors}`);
+  console.log(`  Unresolved Provider Plans: ${cleanupSummary.unresolvedProviderPlans}`);
   console.log(`  Cleanup Verification: ${cleanupVerification.status}`);
   console.log("Certification Version");
   console.log(`  RSF Build Version: ${certificationVersion.rsfBuildVersion}`);

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   amendMutationForCase,
   buildCases,
+  buildCleanupVerification,
   buildCleanupSummary,
   buildValidationSummary,
   compareGeneratedSentReturned,
@@ -138,8 +139,8 @@ test("immediate cleanup applies only to successful nonterminal provider-created 
 
 test("cleanup summary separates immediate cleanup from final sweep and unresolved plans", () => {
   const summary = buildCleanupSummary([
-    { cleanupPhase: "immediate_case_cleanup", action: "cancel", responseStatus: "accepted", pass: true },
-    { cleanupPhase: "final_sweep", action: "cancel", responseStatus: "accepted", pass: true },
+    { cleanupPhase: "immediate_case_cleanup", action: "cancel", responseStatus: "accepted", pass: true, cancelAttempted: true, cancelAccepted: true, terminalVerificationMatched: true, finalCleanupDisposition: "explicitly_verified_terminal" },
+    { cleanupPhase: "final_sweep", action: "cancel", responseStatus: "accepted", pass: true, cancelAttempted: true, cancelAccepted: true, terminalVerificationMatched: false, finalCleanupDisposition: "accepted_unverified" },
     {
       cleanupPhase: "final_sweep",
       action: "cancel",
@@ -158,10 +159,42 @@ test("cleanup summary separates immediate cleanup from final sweep and unresolve
 
   assert.equal(summary.immediateCleanupTotal, 1);
   assert.equal(summary.immediateCleanupCancelled, 1);
+  assert.equal(summary.immediateCleanupAttempted, 1);
+  assert.equal(summary.immediateCleanupCancelAccepted, 1);
+  assert.equal(summary.immediateCleanupTerminalStateExplicitlyVerified, 1);
+  assert.equal(summary.terminalStateExplicitlyVerified, 1);
+  assert.equal(summary.acceptedButTerminalEvidenceUnavailable, 1);
   assert.equal(summary.finalSweepTotal, 2);
   assert.equal(summary.cleanupErrors, 1);
+  assert.equal(summary.unresolvedProviderPlans, 1);
   assert.equal(summary.unresolvedPlans[0].providerPlanId, "provider-8");
   assert.equal(summary.unresolvedPlans[0].automaticProviderClosureExpected, true);
+});
+
+test("cleanup verification reports REVIEW when cancel accepted but terminal evidence is unavailable", () => {
+  const cleanupResults = [
+    {
+      cleanupPhase: "immediate_case_cleanup",
+      action: "cancel",
+      responseStatus: "accepted",
+      pass: true,
+      cancelAttempted: true,
+      cancelAccepted: true,
+      terminalVerificationAttempted: true,
+      terminalVerificationMatched: false,
+      terminalEvidenceKind: "local_status_only",
+      terminalEvidenceSource: "local_plan_status",
+      finalCleanupDisposition: "accepted_unverified",
+      providerPlanId: "provider-19",
+    },
+  ];
+  const verification = buildCleanupVerification(cleanupResults, []);
+  const summary = buildCleanupSummary(cleanupResults, []);
+
+  assert.equal(verification.status, "REVIEW");
+  assert.equal(verification.acceptedButTerminalEvidenceUnavailable.length, 1);
+  assert.equal(summary.acceptedButTerminalEvidenceUnavailable, 1);
+  assert.equal(summary.terminalStateExplicitlyVerified, 0);
 });
 
 test("validation summary separates expected local blocks from unexpected validation failures", () => {
@@ -185,4 +218,26 @@ test("validation summary separates expected local blocks from unexpected validat
   assert.equal(summary.expectedValidationBlocks, 1);
   assert.equal(summary.unexpectedValidationFailures, 1);
   assert.equal(summary.payloadValidationFailures, 1);
+});
+
+test("validation summary counts internally contradictory positive fixtures as test-design failures", () => {
+  const cases = buildCases(context, "test-design-summary");
+  const summary = buildValidationSummary([
+    {
+      seed: 20,
+      pass: false,
+      testType: "Positive",
+      testDesignFailures: ["Test design failure: certification fixture is internally inconsistent before amend."],
+      actions: [{
+        action: "amend",
+        blockedBeforeLeidos: true,
+        validationStatus: "BLOCKED",
+        responseStatus: "test_design_validation_failed",
+      }],
+    },
+  ], [...cases, { seed: 20, testType: "Positive", expectedBlockedBeforeLeidos: false } as any]);
+
+  assert.equal(summary.testDesignFailures, 1);
+  assert.equal(summary.expectedValidationBlocks, 0);
+  assert.equal(summary.unexpectedValidationFailures, 1);
 });

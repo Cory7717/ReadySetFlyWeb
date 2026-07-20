@@ -115,7 +115,7 @@ test("extended amend cases mutate before the next provider action and preserve r
     route: "DCT CWK DCT",
     filingPlannedAltitudeFt: 8500,
     alternate: "KAUS",
-    filingOtherInfo: "PBN/A1 TYP/TBM9 RMK/RSF LAB TEST SEED 20 ZZZZ TYP AMENDED",
+    filingOtherInfo: "TYP/TBM9 RMK/RSF LAB TEST SEED 20 ZZZZ TYP AMENDED",
     filingRemarks: "RSF LAB TEST SEED 20 ZZZZ TYP AMENDED",
   });
 });
@@ -153,6 +153,34 @@ test("case 18 remains the dedicated positive Equipment R plus PBN edge case", ()
   assert.match(String(plan.filingEquipment), /R/);
   assert.match(String(plan.filingOtherInfo), /\bPBN\/A1\b/);
   assert.equal(validateFlightPlanForAction(plan, "file").ready, true);
+});
+
+test("case 20 isolates ZZZZ TYP behavior without unrelated PBN validation", () => {
+  const case20 = buildExtendedEdgeCases(context, "case-20-zzzz-typ-validation").find((item) => item.seed === 20)!;
+  const filePlan = {
+    ...case20.buildPlan(),
+    plannedDepartureAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  } as any;
+  const mutation = amendMutationForCase(case20)!;
+  const amendPlan = {
+    ...filePlan,
+    ...mutation,
+    filingStatus: "filed",
+    filingProviderPlanId: "provider-case-20",
+    plannedDepartureAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  } as any;
+
+  assert.equal(filePlan.aircraftType, "ZZZZ");
+  assert.match(String(filePlan.filingOtherInfo), /\bTYP\/TBM9\b/);
+  assert.doesNotMatch(String(filePlan.filingOtherInfo), /\bPBN\//);
+  assert.doesNotMatch(String(amendPlan.filingOtherInfo), /\bPBN\//);
+  assert.equal(String(filePlan.filingEquipment).includes("R"), false);
+  assert.equal(validateFlightPlanForAction(filePlan, "file").ready, true);
+  assert.equal(validateFlightPlanForAction(amendPlan, "amend").ready, true);
+  assert.deepEqual(case20.actions, ["file", "amend"]);
+  assert.equal(mutation.route, "DCT CWK DCT");
+  assert.equal(mutation.filingPlannedAltitudeFt, 8500);
+  assert.equal(mutation.alternate, "KAUS");
 });
 
 test("extended edge pack fails locally if provider-submitted cases collide", () => {

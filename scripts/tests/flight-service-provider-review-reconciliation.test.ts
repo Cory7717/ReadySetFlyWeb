@@ -175,6 +175,59 @@ test("same version stamp with materially changed route reopens review", () => {
   assert.equal(decision.reason, "effective_plan_changed_after_acceptance");
 });
 
+test("expected FILE provider echo does not create pending provider review", () => {
+  const fileSnapshot = {
+    providerPlanId: "658167349_806440_6464",
+    versionStamp: "20260720150000000",
+    route: {
+      localEnteredRoute: "KSBP",
+      normalizedTransmittedRoute: "KSBP",
+      providerRoute: "KSBP",
+      changedByProvider: false,
+    },
+    fieldDiffs: [],
+  };
+  const decision = buildProviderReviewDecision({
+    plan: basePlan,
+    previousSnapshot: {},
+    nextSnapshot: fileSnapshot,
+  });
+
+  assert.equal(decision.reviewPending, false);
+  assert.deepEqual(decision.changedFields, []);
+  assert.equal(decision.reason, "no_effective_plan_change");
+});
+
+test("expected AMEND provider echo compares against the amended accepted route", () => {
+  const amendedPlan = {
+    ...basePlan,
+    route: "KSBP DCT ZIGIE",
+    plannedAltitudeFt: "16000",
+    alternate: "KSMX",
+    otherInfo: "RMK/AMENDED ROUTE ALT",
+  };
+  const amendSnapshot = {
+    providerPlanId: "658167349_806440_6464",
+    versionStamp: "20260720153000000",
+    route: {
+      localEnteredRoute: "KSBP DCT ZIGIE",
+      normalizedTransmittedRoute: "KSBP DCT ZIGIE",
+      providerRoute: "KSBP DCT ZIGIE",
+      changedByProvider: false,
+    },
+    fieldDiffs: [],
+  };
+  const decision = buildProviderReviewDecision({
+    plan: amendedPlan,
+    previousSnapshot: {},
+    nextSnapshot: amendSnapshot,
+  });
+
+  assert.equal(decision.reviewPending, false);
+  assert.deepEqual(decision.changedFields, []);
+  assert.equal(decision.canonical.route, "KSBP DCT ZIGIE");
+});
+
 test("legacy accepted same version establishes accepted baseline without reopening", () => {
   const decision = buildProviderReviewDecision({
     plan: basePlan,

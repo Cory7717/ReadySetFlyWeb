@@ -183,6 +183,21 @@ test("case 20 isolates ZZZZ TYP behavior without unrelated PBN validation", () =
   assert.equal(mutation.alternate, "KAUS");
 });
 
+test("case 22 isolates future-date DOF behavior without unrelated PBN validation", () => {
+  const case22 = buildExtendedEdgeCases(context, "case-22-future-dof-validation").find((item) => item.seed === 22)!;
+  const filePlan = {
+    ...case22.buildPlan(),
+    plannedDepartureAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  } as any;
+  const payload = summarizePayload(filePlan, "file") as any;
+
+  assert.equal(filePlan.filingEquipment, "SC");
+  assert.doesNotMatch(String(filePlan.filingOtherInfo), /\bPBN\//);
+  assert.doesNotMatch(String(payload.otherInfo), /\bPBN\//);
+  assert.match(String(payload.otherInfo), /\bDOF\/\d{6}\b/);
+  assert.equal(validateFlightPlanForAction(filePlan, "file").ready, true);
+});
+
 test("extended edge pack fails locally if provider-submitted cases collide", () => {
   const cases = buildExtendedEdgeCases(context, "duplicate-safe-edge-pack");
 

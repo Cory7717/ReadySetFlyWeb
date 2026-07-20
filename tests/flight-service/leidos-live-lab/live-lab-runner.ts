@@ -254,6 +254,15 @@ type LifecycleDynamicTimingMetadata = {
   dateBoundaryExpected?: boolean;
   dateBoundaryObserved?: boolean;
   dateBoundaryCheckPassed?: boolean | null;
+  currentDateAtDepartureAirport?: string;
+  futureDateExpected?: boolean;
+  futureDateObserved?: boolean;
+  futureDateCheckPassed?: boolean | null;
+  dofExpected?: string | null;
+  dofInjected?: boolean;
+  dofTransmitted?: string | null;
+  dofEntryCount?: number;
+  dofCheckPassed?: boolean | null;
 };
 
 const dynamicDepartureOffsetMinutesForCase = (testCase: LiveLabCase) =>
@@ -299,6 +308,46 @@ const nextFutureLocalDateTimeAt = ({
     }
   }
   throw new Error(`Unable to calculate a future ${localTime} departure for ${timeZone}.`);
+};
+
+const addCalendarDays = (localDate: string, days: number) => {
+  const date = new Date(`${localDate}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
+const buildDofForLocalDate = (localDate: string) =>
+  localDate.replace(/-/g, "").slice(2);
+
+const buildCase22DofEvidence = (
+  plan: FlightPlan,
+  localDateTime: string,
+  departureTimeZone: string,
+  now: Date,
+) => {
+  const payloadContext = buildLeidosActionPayload(plan, "file", { otherInfo: null } as any);
+  const transmittedOtherInfo = String(payloadContext.payloadSnapshot?.otherInfo || payloadContext.payloadSnapshot?.transmittedFields?.otherInfo || "").trim();
+  const dofEntries = transmittedOtherInfo.match(/\bDOF\/\d{6}\b/g) || [];
+  const departureDateLocal = localDateTime.slice(0, 10);
+  const currentDateAtDepartureAirport = formatLocalDateTimeForZone(now, departureTimeZone).slice(0, 10);
+  const dofExpected = buildDofForLocalDate(departureDateLocal);
+  const dofTransmitted = dofEntries[0]?.replace(/^DOF\//, "") || null;
+  const futureDateObserved = departureDateLocal > currentDateAtDepartureAirport;
+  return {
+    currentDateAtDepartureAirport,
+    futureDateExpected: true,
+    futureDateObserved,
+    futureDateCheckPassed: futureDateObserved,
+    dofExpected,
+    dofInjected: Boolean(payloadContext.payloadSnapshot?.dofInjected),
+    dofTransmitted,
+    dofEntryCount: dofEntries.length,
+    dofCheckPassed: Boolean(
+      payloadContext.payloadSnapshot?.dofInjected &&
+      dofEntries.length === 1 &&
+      dofTransmitted === dofExpected
+    ),
+  };
 };
 
 export const applyLiveLabEffectiveDepartureTime = (
@@ -381,6 +430,55 @@ export const applyLiveLabEffectiveDepartureTime = (
     return { plan: nextPlan, metadata };
   }
 
+  if (testCase.seed === 22) {
+    const currentDateAtDepartureAirport = formatLocalDateTimeForZone(now, departureTimeZone).slice(0, 10);
+    const futureLocalDate = addCalendarDays(currentDateAtDepartureAirport, 1);
+    const dynamicLocal = `${futureLocalDate}T13:40`;
+    const dynamicInstant = new Date(zonedLocalDateTimeToUtcIso(dynamicLocal, departureTimeZone));
+    const plannerState = getPlannerStateRecord(plan);
+    const nextPlan = {
+      ...plan,
+      plannedDepartureAt: dynamicInstant,
+      plannedArrivalAt: new Date(dynamicInstant.getTime() + 2 * 60 * 60_000),
+      plannerState: {
+        ...plannerState,
+        departureTimeZone,
+        userDisplayDepartureTimeLocal: dynamicLocal,
+        lifecycleDynamicTimeEnabled: true,
+        lifecycleDepartureTimeStrategy: "case-22 next-day airport-local 13:40 future-date DOF",
+        lifecycleOriginalDepartureTimeLocal: originalLocal,
+      },
+    } as FlightPlan;
+    const dofEvidence = buildCase22DofEvidence(nextPlan, dynamicLocal, departureTimeZone, now);
+    const metadata: LifecycleDynamicTimingMetadata = {
+      lifecycleDynamicTimeEnabled: true,
+      lifecycleDepartureTimeStrategy: "case-22 next-day airport-local 13:40 future-date DOF",
+      effectiveTimeGeneratedAt: now.toISOString(),
+      offsetMinutes: Math.round((dynamicInstant.getTime() - now.getTime()) / 60_000),
+      originalPlannedLocalTime: originalLocal,
+      dynamicLifecycleLocalTime: dynamicLocal,
+      effectiveDepartureLocalTime: dynamicLocal,
+      departureTimeZone,
+      departureInstantUtc: dynamicInstant.toISOString(),
+      expectedProviderZulu: formatProviderZulu(dynamicInstant),
+      activationWindowCheckPassed: null,
+      departureDateLocal: dynamicLocal.slice(0, 10),
+      departureTimeLocal: dynamicLocal.slice(11, 16),
+      localCalendarDate: dynamicLocal.slice(0, 10),
+      utcCalendarDate: dynamicInstant.toISOString().slice(0, 10),
+      dateBoundaryExpected: false,
+      dateBoundaryCheckPassed: null,
+      ...dofEvidence,
+    };
+    console.info(JSON.stringify({
+      event: "leidos_live_lab_effective_departure_time",
+      caseSeed: testCase.seed,
+      caseName: testCase.name,
+      ...metadata,
+    }));
+    return { plan: nextPlan, metadata };
+  }
+
   const offsetMinutes = dynamicDepartureOffsetMinutesForCase(testCase);
   const dynamicInstant = new Date(now.getTime() + offsetMinutes * 60_000);
   const dynamicLocal = formatLocalDateTimeForZone(dynamicInstant, departureTimeZone);
@@ -451,6 +549,16 @@ export const getLiveLabTestDesignFailure = (
 ) => {
   if (testCase.seed === 19 && timing.metadata.dateBoundaryCheckPassed !== true) {
     return `Test design failure: Case 19 must produce a KLAS local-to-UTC calendar date boundary. Local date ${timing.metadata.localCalendarDate || "-"} UTC date ${timing.metadata.utcCalendarDate || "-"}.`;
+  }
+  if (testCase.seed === 22) {
+    const failures = [
+      timing.metadata.futureDateCheckPassed === true ? null : "futureDateCheckPassed=false",
+      timing.metadata.dofInjected === true ? null : "dofInjected=false",
+      timing.metadata.dofCheckPassed === true ? null : `dofCheckPassed=false expected=${timing.metadata.dofExpected || "-"} transmitted=${timing.metadata.dofTransmitted || "-"} count=${timing.metadata.dofEntryCount ?? "-"}`,
+    ].filter(Boolean);
+    if (failures.length) {
+      return `Test design failure: Case 22 must prove future-date DOF injection before provider submission. ${failures.join("; ")}.`;
+    }
   }
   return null;
 };
@@ -733,7 +841,7 @@ export const buildExtendedEdgeCases = (context: DedicatedTestContext, runId: str
     } },
     { seed: 20, stableId: "edge-20", name: "ZZZZ aircraft type with TYP", testType: "Positive", classification: "zzzz", actions: ["file", "amend"], expectedFinalState: "filed after AMEND, then cleanup cancel", buildPlan: () => plan(20, "ZZZZ Aircraft Type", { aircraftType: "ZZZZ", filingEquipment: "SC", filingOtherInfo: `TYP/TBM9 ${providerSafeRmk(20, "ZZZZ TYP")}`, plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: getDeterministicCaseDeparture(20).local, actualAircraftType: "TBM9" } as any }) },
     { seed: 21, stableId: "edge-21", name: "VFR full lifecycle extended", testType: "Lifecycle", classification: "lifecycle", actions: ["file", "activate", "close"], expectedFinalState: "closed", buildPlan: () => plan(21, "VFR Full Lifecycle", { destination: "KACT", alternate: "KDAL", route: "DCT ACT DCT", filingCloseLocation: "KACT" } as any) },
-    { seed: 22, stableId: "edge-22", name: "Future-date DOF positive control", testType: "Positive", classification: "time", actions: ["file"], expectedFinalState: "filed, then cleanup cancel", buildPlan: () => plan(22, "Future DOF", { plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-12-31T23:40" }, plannedDepartureAt: new Date("2027-01-01T05:40:00.000Z"), plannedArrivalAt: new Date("2027-01-01T07:10:00.000Z"), filingOtherInfo: `PBN/A1 ${providerSafeRmk(22, "YEAR ROLLOVER DOF")}` }) },
+    { seed: 22, stableId: "edge-22", name: "Future-date DOF positive control", testType: "Positive", classification: "time", actions: ["file"], expectedFinalState: "filed, then cleanup cancel", buildPlan: () => plan(22, "Future DOF", { filingEquipment: "SC", plannerState: { departureTimeZone: "America/Chicago", userDisplayDepartureTimeLocal: "2026-12-31T23:40" }, plannedDepartureAt: new Date("2027-01-01T05:40:00.000Z"), plannedArrivalAt: new Date("2027-01-01T07:10:00.000Z"), filingOtherInfo: providerSafeRmk(22, "YEAR ROLLOVER DOF") }) },
   ].map((testCase) => withCaseMetadata(testCase, "extended"));
 };
 
@@ -923,7 +1031,8 @@ const loadPreviouslyPassedCaseSeeds = () => {
 
 export const summarizePayload = (plan: FlightPlan, action: FlightPlanFilingAction) => {
   if (action !== "file" && action !== "amend") return null;
-  const payload = Object.fromEntries(buildLeidosActionPayload(plan, action, { otherInfo: null } as any).params.entries());
+  const payloadContext = buildLeidosActionPayload(plan, action, { otherInfo: null } as any);
+  const payload = Object.fromEntries(payloadContext.params.entries());
   return {
     aircraft: `${payload.aircraftIdentifier || plan.tailNumber || "-"} / ${payload.aircraftType || plan.aircraftType || "-"}`,
     aircraftIdentifier: payload.aircraftIdentifier,
@@ -940,6 +1049,8 @@ export const summarizePayload = (plan: FlightPlan, action: FlightPlanFilingActio
     phone: payload.pilotPhone,
     homeBase: payload.aircraftHomeBase,
     otherInfo: payload.otherInfo,
+    dof: payloadContext.payloadSnapshot?.dof || null,
+    dofInjected: Boolean(payloadContext.payloadSnapshot?.dofInjected),
     departureInstant: payload.departureInstant,
   };
 };
@@ -1597,13 +1708,16 @@ export const buildCleanupVerification = (cleanupResults: any[], results: any[]) 
   const openFailures = cleanupResults.filter((item) => item.pass === false);
   const blockedCases = results.filter((item) => (item.actions || []).some((action: any) => action.blockedBeforeLeidos));
   const acceptedUnverified = cleanupResults.filter((item) => item.finalCleanupDisposition === "accepted_unverified");
+  const summary = buildCleanupSummary(cleanupResults, results);
+  const consistencyFailures = summary.consistencyChecks.filter((item: any) => item.pass === false);
   return {
-    status: openFailures.length === 0 ? (acceptedUnverified.length > 0 ? "REVIEW" : "PASS") : "FAIL",
-    noActiveCertificationFlightRemains: openFailures.length === 0,
+    status: openFailures.length === 0 && consistencyFailures.length === 0 ? (acceptedUnverified.length > 0 ? "REVIEW" : "PASS") : "FAIL",
+    noActiveCertificationFlightRemains: openFailures.length === 0 && consistencyFailures.length === 0,
     terminalOrBlockedCount: cleanupResults.filter((item) => item.pass !== false).length + blockedCases.length,
     blockedBeforeSubmissionCount: blockedCases.length,
     failures: openFailures,
     acceptedButTerminalEvidenceUnavailable: acceptedUnverified,
+    consistencyFailures,
   };
 };
 
@@ -1615,30 +1729,120 @@ export const buildCleanupSummary = (cleanupResults: any[], results: any[]) => {
   const cancelAccepted = cleanupResults.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus)));
   const explicitlyVerified = cleanupResults.filter((item) => item.terminalVerificationMatched === true);
   const acceptedUnverified = cleanupResults.filter((item) => item.finalCleanupDisposition === "accepted_unverified");
+  const providerPlanIdsCreated = Array.from(new Set(actions
+    .filter((action: any) => action.action === "file" && action.providerPlanId && ["accepted", "dry_run"].includes(String(action.responseStatus)))
+    .map((action: any) => String(action.providerPlanId))));
+  const providerPlanIdForCleanup = (item: any) => String(item.providerPlanId || "").trim();
+  const explicitPlanIds = new Set(explicitlyVerified.map(providerPlanIdForCleanup).filter(Boolean));
+  const immediateExplicitPlanIds = new Set(immediate.filter((item) => item.terminalVerificationMatched === true).map(providerPlanIdForCleanup).filter(Boolean));
+  const finalExplicitPlanIds = new Set(finalSweep.filter((item) => item.terminalVerificationMatched === true).map(providerPlanIdForCleanup).filter(Boolean));
+  const finalSweepNewlyVerifiedPlanIds = Array.from(finalExplicitPlanIds).filter((providerPlanId) => !immediateExplicitPlanIds.has(providerPlanId));
+  const finalSweepReconfirmedPlanIds = Array.from(finalExplicitPlanIds).filter((providerPlanId) => immediateExplicitPlanIds.has(providerPlanId));
+  const cleanupEventsByProviderPlan = new Map<string, any[]>();
+  for (const result of cleanupResults) {
+    const providerPlanId = providerPlanIdForCleanup(result);
+    if (!providerPlanId) continue;
+    const events = cleanupEventsByProviderPlan.get(providerPlanId) || [];
+    events.push(result);
+    cleanupEventsByProviderPlan.set(providerPlanId, events);
+  }
+  const finalDispositions = providerPlanIdsCreated.map((providerPlanId) => {
+    const events = cleanupEventsByProviderPlan.get(providerPlanId) || [];
+    const disposition = events.some((event) => event.pass === false)
+      ? "cleanup_failed"
+      : events.some((event) => event.terminalVerificationMatched === true)
+        ? "explicitly_terminal"
+        : events.some((event) => event.finalCleanupDisposition === "accepted_unverified")
+          ? "cancel_accepted_evidence_unavailable"
+          : events.some((event) => ["not_required", "staged_only_not_submitted", "already_terminal", "dry_run"].includes(String(event.responseStatus)))
+            ? "cleanup_not_required"
+            : "unresolved";
+    return {
+      providerPlanId,
+      disposition,
+      verificationAttempts: events.filter((event) => event.terminalVerificationAttempted).length,
+      cleanupEvents: events.length,
+    };
+  });
+  const uniqueProviderPlansRequiringCleanup = finalDispositions.filter((item) => item.disposition !== "cleanup_not_required").length;
+  const unresolvedProviderPlans = finalDispositions.filter((item) => ["cleanup_failed", "unresolved"].includes(item.disposition)).length;
+  const consistencyChecks = [
+    {
+      name: "unique_terminal_verified_not_greater_than_provider_plans_created",
+      pass: explicitPlanIds.size <= providerPlanIdsCreated.length,
+      details: { uniqueVerified: explicitPlanIds.size, providerPlansCreated: providerPlanIdsCreated.length },
+    },
+    {
+      name: "unique_terminal_verified_belongs_to_current_run",
+      pass: Array.from(explicitPlanIds).every((providerPlanId) => providerPlanIdsCreated.includes(providerPlanId)),
+      details: {
+        verifiedProviderPlanIds: Array.from(explicitPlanIds),
+        providerPlanIdsCreated,
+      },
+    },
+    {
+      name: "unresolved_provider_plans_not_negative",
+      pass: unresolvedProviderPlans >= 0,
+      details: { unresolvedProviderPlans },
+    },
+    {
+      name: "every_provider_created_plan_has_one_final_disposition",
+      pass: finalDispositions.length === providerPlanIdsCreated.length &&
+        new Set(finalDispositions.map((item) => item.providerPlanId)).size === providerPlanIdsCreated.length,
+      details: { finalDispositionCount: finalDispositions.length, providerPlansCreated: providerPlanIdsCreated.length },
+    },
+    {
+      name: "verification_attempts_may_exceed_unique_plans",
+      pass: true,
+      details: {
+        cleanupVerificationAttempts: cleanupResults.filter((item) => item.terminalVerificationAttempted).length,
+        uniqueVerified: explicitPlanIds.size,
+      },
+    },
+    {
+      name: "all_provider_created_plans_have_allowed_final_disposition",
+      pass: finalDispositions.every((item) => [
+        "explicitly_terminal",
+        "cleanup_not_required",
+        "cancel_accepted_evidence_unavailable",
+        "cleanup_failed",
+        "unresolved",
+      ].includes(item.disposition)),
+      details: { finalDispositions },
+    },
+  ];
   return {
     providerPlansStaged: actions.filter((action: any) => action.responseStatus === "provider_submission_disabled_by_configuration" || action.responseStatus === "staged").length,
     providerPlansSubmitted: actions.filter((action: any) => action.action === "file" && ["accepted", "dry_run"].includes(String(action.responseStatus))).length,
-    providerPlansCreated: actions.filter((action: any) => action.action === "file" && action.providerPlanId && ["accepted", "dry_run"].includes(String(action.responseStatus))).length,
+    providerPlansCreated: providerPlanIdsCreated.length,
+    providerPlanIdsCreated,
+    uniqueProviderPlansRequiringCleanup,
+    cleanupVerificationAttempts: cleanupResults.filter((item) => item.terminalVerificationAttempted).length,
+    uniquePlansExplicitlyTerminalVerified: explicitPlanIds.size,
     providerPlansBlockedBeforeSubmission: actions.filter((action: any) => action.blockedBeforeLeidos).length,
     immediateCleanupTotal: immediate.length,
     immediateCleanupAttempted: immediate.filter((item) => item.cancelAttempted || item.action === "close").length,
     immediateCleanupCancelled: immediate.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
     immediateCleanupCancelAccepted: immediate.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
-    immediateCleanupTerminalStateExplicitlyVerified: immediate.filter((item) => item.terminalVerificationMatched === true).length,
+    immediateCleanupTerminalStateExplicitlyVerified: immediateExplicitPlanIds.size,
     immediateCleanupAcceptedButTerminalEvidenceUnavailable: immediate.filter((item) => item.finalCleanupDisposition === "accepted_unverified").length,
     immediateCleanupErrors: immediate.filter((item) => item.pass === false).length,
     finalSweepTotal: finalSweep.length,
     finalSweepCancelled: finalSweep.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
     finalSweepClosed: finalSweep.filter((item) => item.action === "close" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
+    finalSweepNewlyVerified: finalSweepNewlyVerifiedPlanIds.length,
+    finalSweepReconfirmedAlreadyVerified: finalSweepReconfirmedPlanIds.length,
     cancelAccepted: cancelAccepted.length,
-    terminalStateExplicitlyVerified: explicitlyVerified.length,
+    terminalStateExplicitlyVerified: explicitPlanIds.size,
     acceptedButTerminalEvidenceUnavailable: acceptedUnverified.length,
     cancelled: cancelAccepted.length,
     closed: cleanupResults.filter((item) => item.action === "close" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
     alreadyTerminal: cleanupResults.filter((item) => item.responseStatus === "already_terminal").length,
     cleanupNotRequired: cleanupResults.filter((item) => ["not_required", "staged_only_not_submitted"].includes(String(item.responseStatus))).length,
     cleanupErrors: cleanupResults.filter((item) => item.pass === false).length,
-    unresolvedProviderPlans: unresolved.length,
+    unresolvedProviderPlans,
+    cleanupFinalDispositions: finalDispositions,
+    consistencyChecks,
     unresolvedPlans: unresolved.map((item) => ({
       certificationCaseId: item.certificationCaseId || null,
       planId: item.planId || null,
@@ -1688,6 +1892,37 @@ export const buildTerminalVerificationSummary = (results: any[]) => {
       versionStampMissingClassification: item.action.versionStampMissingClassification,
       terminalVerification: item.action.terminalVerification || null,
     })),
+  };
+};
+
+export const buildLifecycleEvidenceSummary = (results: any[]) => {
+  const lifecycleCases = results.filter((item) => (item.actions || []).some((action: any) => action.action === "activate" || action.action === "close"));
+  return {
+    cases: lifecycleCases.map((item) => {
+      const activateAction = (item.actions || []).find((action: any) => action.action === "activate") || {};
+      const closeAction = (item.actions || []).find((action: any) => action.action === "close") || {};
+      const activationVerification = activateAction.activationVerification || {};
+      const closeVerification = closeAction.terminalVerification || {};
+      return {
+        certificationCaseId: item.certificationCaseId,
+        seed: item.seed,
+        testName: item.testName,
+        activateAccepted: Boolean(activateAction.activateAccepted),
+        activationVerificationAttempted: Boolean(activateAction.activationVerificationAttempted),
+        activationVerificationMatched: Boolean(activateAction.activationVerificationMatched),
+        activationEvidenceKind: activateAction.activationEvidenceKind || activationVerification.activationEvidenceKind || null,
+        activationEvidenceSource: activateAction.activationEvidenceSource || activationVerification.activationEvidenceSource || null,
+        activationPollCount: activateAction.activationPollCount ?? activationVerification.activationPollCount ?? null,
+        activationTimedOut: Boolean(activateAction.activationTimedOut),
+        activatedAt: activateAction.activatedAt || activationVerification.activatedAt || null,
+        closeAccepted: Boolean(closeAction.closeAccepted),
+        closeVerificationMatched: Boolean(closeAction.closeVerificationMatched),
+        closeEvidenceKind: closeAction.closeEvidenceKind || closeVerification.evidenceKind || null,
+        closeEvidenceSource: closeAction.closeEvidenceSource || closeVerification.evidenceSource || null,
+        closedAt: closeAction.closedAt || null,
+        lifecycleEvidenceComplete: Boolean(activateAction.activationVerificationMatched && closeAction.closeVerificationMatched),
+      };
+    }),
   };
 };
 
@@ -1957,6 +2192,81 @@ const verifyTerminalActionState = async (
   return verification;
 };
 
+export const verifyActivationActionState = async (
+  plan: FlightPlan,
+  response: Awaited<ReturnType<typeof flightPlanFilingProvider.stageAction>>,
+  dryRun: boolean,
+) => {
+  const expectedStatus = "activated";
+  const localStatus = String(plan.filingStatus || "").trim().toLowerCase();
+  const localActivatedStateConfirmed = localStatus === expectedStatus;
+  const providerPlanId = String(plan.filingProviderPlanId || response.providerPlanId || "").trim();
+  const rawResponse = response.raw?.response && typeof response.raw.response === "object"
+    ? response.raw.response as Record<string, any>
+    : {};
+  const returnStatus = typeof rawResponse.returnStatus === "boolean" ? rawResponse.returnStatus : null;
+  const activationAccepted = returnStatus !== false && response.live;
+  const pollResult = !dryRun && providerPlanId && activationAccepted
+    ? await waitForPersistedTerminalLifecycleEvidence({
+      planId: plan.id,
+      providerPlanId,
+      expectedStatus,
+      dryRun,
+    })
+    : null;
+  const evidence = pollResult?.evidence || classifyLifecycleEvidence((plan.filingProviderSnapshot as any) || null, expectedStatus);
+  const activationVerificationMatched = Boolean(
+    evidence.hasExplicitProviderEvidence &&
+    evidence.lifecycle === expectedStatus
+  );
+  const status = !activationAccepted || evidence.conflictsWithExpected
+    ? "FAIL"
+    : activationVerificationMatched
+      ? "PASS"
+      : "REVIEW";
+  const verification = {
+    action: "activate",
+    activateAccepted: activationAccepted,
+    activationVerificationAttempted: Boolean(!dryRun && providerPlanId && activationAccepted),
+    activationVerificationMatched,
+    activationEvidenceKind: evidence.kind,
+    activationEvidenceSource: evidence.source,
+    activationEvidenceReason: evidence.reason,
+    activationPollCount: pollResult?.polls || 0,
+    activationTimedOut: Boolean(pollResult?.timedOut),
+    activatedAt: activationVerificationMatched ? evidence.evidenceTime || evidence.webhookProcessingTimestamp || new Date().toISOString() : null,
+    expectedLifecycle: expectedStatus,
+    localStatus,
+    localActivatedStateConfirmed,
+    providerPlanId: providerPlanId || null,
+    explicitLifecycleValue: evidence.explicitLifecycleValue,
+    effectiveLifecycle: evidence.lifecycle || localStatus || null,
+    hasExplicitProviderEvidence: evidence.hasExplicitProviderEvidence,
+    status,
+    reason: activationVerificationMatched
+      ? "ACTIVATE was accepted and explicit provider lifecycle evidence reported ACTIVATED."
+      : activationAccepted
+        ? "ACTIVATE was accepted, but explicit provider ACTIVATED lifecycle evidence was not received before the certification timeout."
+        : "ACTIVATE was not accepted by the provider.",
+  };
+  console.info(JSON.stringify({
+    event: "leidos_activation_action_verification",
+    action: "activate",
+    providerPlanId: providerPlanId || null,
+    activateAccepted: verification.activateAccepted,
+    activationVerificationAttempted: verification.activationVerificationAttempted,
+    activationVerificationMatched,
+    activationEvidenceKind: verification.activationEvidenceKind,
+    activationEvidenceSource: verification.activationEvidenceSource,
+    activationPollCount: verification.activationPollCount,
+    activationTimedOut: verification.activationTimedOut,
+    localStatus,
+    effectiveLifecycle: verification.effectiveLifecycle,
+    status,
+  }));
+  return verification;
+};
+
 const safeExec = (command: string) => {
   try {
     return execSync(command, { cwd: process.cwd(), stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
@@ -2181,6 +2491,7 @@ export const buildCertificationHtml = (report: any) => {
   <section><h2>Provider Round Trip</h2><pre>${escapeHtml(JSON.stringify(report.providerRoundTrip || {}, null, 2))}</pre></section>
   <section><h2>Round Trip Comparison</h2><pre>${escapeHtml(JSON.stringify(report.roundTripComparison || {}, null, 2))}</pre></section>
   <section><h2>Field Comparisons</h2><table><thead><tr><th>Test</th><th>Field</th><th>Result</th><th>Values</th></tr></thead><tbody>${fieldRows || "<tr><td colspan=\"4\">No field comparison differences.</td></tr>"}</tbody></table></section>
+  <section><h2>Lifecycle Evidence</h2><pre>${escapeHtml(JSON.stringify(report.lifecycleEvidence || {}, null, 2))}</pre></section>
   <section><h2>Terminal Verification</h2><pre>${escapeHtml(JSON.stringify(report.terminalVerification || {}, null, 2))}</pre></section>
   <section><h2>Cleanup Summary</h2><pre>${escapeHtml(JSON.stringify(report.cleanupSummary || {}, null, 2))}</pre></section>
   <section><h2>Execution Timing</h2><pre>${escapeHtml(JSON.stringify(report.executionTiming || {}, null, 2))}</pre></section>
@@ -2228,6 +2539,8 @@ export const writeCertificationPdf = async (report: any, filePath: string) => {
   draw(JSON.stringify(report.validationSummary || {}, null, 2));
   draw("Cleanup", { bold: true, size: 13 });
   draw(JSON.stringify(report.cleanupSummary || {}, null, 2));
+  draw("Lifecycle Evidence", { bold: true, size: 13 });
+  draw(JSON.stringify(report.lifecycleEvidence || {}, null, 2));
   draw("Terminal Verification", { bold: true, size: 13 });
   draw(JSON.stringify(report.terminalVerification || {}, null, 2));
   draw("Execution Timing", { bold: true, size: 13 });
@@ -2902,6 +3215,9 @@ const run = async () => {
       const terminalVerification = response.live && terminalAction
         ? await verifyTerminalActionState(plan, action, response, dryRun)
         : null;
+      const activationVerification = response.live && action === "activate"
+        ? await verifyActivationActionState(plan, response, dryRun)
+        : null;
       const versionStampMissingClassification = versionStamp
         ? "present"
         : terminalAction
@@ -2932,6 +3248,20 @@ const run = async () => {
         versionStampMissingClassification,
         terminalAction,
         terminalVerification,
+        activationVerification,
+        activateAccepted: action === "activate" ? Boolean(response.live && providerReturnStatus !== false) : undefined,
+        activationVerificationAttempted: activationVerification?.activationVerificationAttempted,
+        activationVerificationMatched: activationVerification?.activationVerificationMatched,
+        activationEvidenceKind: activationVerification?.activationEvidenceKind,
+        activationEvidenceSource: activationVerification?.activationEvidenceSource,
+        activationPollCount: activationVerification?.activationPollCount,
+        activationTimedOut: activationVerification?.activationTimedOut,
+        activatedAt: activationVerification?.activatedAt,
+        closeAccepted: action === "close" ? Boolean(response.live && providerReturnStatus !== false) : undefined,
+        closeVerificationMatched: action === "close" ? terminalVerification?.providerTerminalStateConfirmed : undefined,
+        closeEvidenceKind: action === "close" ? terminalVerification?.evidenceKind : undefined,
+        closeEvidenceSource: action === "close" ? terminalVerification?.evidenceSource : undefined,
+        closedAt: action === "close" && terminalVerification?.status === "PASS" ? terminalVerification.evidenceTime || terminalVerification.webhookProcessingTimestamp || new Date().toISOString() : undefined,
         warnings: response.warnings || [],
         errors: response.live ? [] : providerSubmissionDisabledForAction ? [] : [response.message],
         instructions: providerSubmissionDisabledForAction
@@ -2956,6 +3286,13 @@ const run = async () => {
         caseResult.errors.push(`Terminal verification failed after ${action.toUpperCase()}: local status is ${terminalVerification.localStatus || "-"}, expected ${terminalVerification.expectedLocalStatus || "-"}.`);
       } else if (terminalVerification?.status === "REVIEW") {
         caseResult.warnings.push(`Terminal verification needs review after ${action.toUpperCase()}: provider retrieval/status was inconclusive, but local terminal state was recorded.`);
+      }
+      if (activationVerification?.status === "FAIL") {
+        caseResult.pass = false;
+        caseResult.errors.push(`Activation verification failed after ACTIVATE: explicit provider lifecycle was ${activationVerification.effectiveLifecycle || "-"}, expected ACTIVATED.`);
+      } else if (activationVerification?.status === "REVIEW") {
+        caseResult.pass = false;
+        caseResult.warnings.push("Activation verification needs review after ACTIVATE: provider accepted the action, but explicit ACTIVATED lifecycle evidence was not received before CLOSE.");
       }
       if (!response.live) {
         if (providerSubmissionDisabledForAction) {
@@ -3043,6 +3380,7 @@ const run = async () => {
   const providerRoundTrip = buildRoundTripSummary(results);
   const roundTripComparison = buildRoundTripComparisonSummary(results);
   const terminalVerification = buildTerminalVerificationSummary(results);
+  const lifecycleEvidence = buildLifecycleEvidenceSummary(results);
   const certificationVersion = buildCertificationVersion(diagnostics, context);
   const baseReadinessAssessment = buildReadinessAssessment(validationSummary, cleanupSummary, cleanupVerification, providerRoundTrip);
   const readinessAssessment = providerSubmissionDisabled
@@ -3153,6 +3491,7 @@ const run = async () => {
     cleanupSummary,
     cleanupVerification,
     terminalVerification,
+    lifecycleEvidence,
     validationSummary,
     certificationVersion,
     readinessAssessment,
@@ -3272,10 +3611,17 @@ const run = async () => {
   console.log(`  Passed: ${terminalVerification.passed}`);
   console.log(`  Review: ${terminalVerification.review}`);
   console.log(`  Failed: ${terminalVerification.failed}`);
+  console.log("Lifecycle Evidence");
+  for (const item of lifecycleEvidence.cases) {
+    console.log(`  Case ${item.seed}: activateAccepted=${item.activateAccepted} activationVerified=${item.activationVerificationMatched} closeAccepted=${item.closeAccepted} closeVerified=${item.closeVerificationMatched} complete=${item.lifecycleEvidenceComplete}`);
+  }
   console.log("Cleanup Summary");
   console.log(`  Provider Plans Staged: ${cleanupSummary.providerPlansStaged}`);
   console.log(`  Provider Plans Submitted: ${cleanupSummary.providerPlansSubmitted}`);
   console.log(`  Provider Plans Created: ${cleanupSummary.providerPlansCreated}`);
+  console.log(`  Unique Provider Plans Requiring Cleanup: ${cleanupSummary.uniqueProviderPlansRequiringCleanup}`);
+  console.log(`  Cleanup Verification Attempts: ${cleanupSummary.cleanupVerificationAttempts}`);
+  console.log(`  Unique Plans Explicitly Terminal Verified: ${cleanupSummary.uniquePlansExplicitlyTerminalVerified}`);
   console.log(`  Provider Plans Blocked Before Submission: ${cleanupSummary.providerPlansBlockedBeforeSubmission}`);
   console.log(`  Immediate Cleanup Total: ${cleanupSummary.immediateCleanupTotal}`);
   console.log(`  Immediate Cleanup Attempted: ${cleanupSummary.immediateCleanupAttempted}`);
@@ -3283,6 +3629,8 @@ const run = async () => {
   console.log(`  Immediate Cleanup Terminal Explicitly Verified: ${cleanupSummary.immediateCleanupTerminalStateExplicitlyVerified}`);
   console.log(`  Immediate Cleanup Accepted But Terminal Evidence Unavailable: ${cleanupSummary.immediateCleanupAcceptedButTerminalEvidenceUnavailable}`);
   console.log(`  Final Sweep Total: ${cleanupSummary.finalSweepTotal}`);
+  console.log(`  Final Sweep Newly Verified: ${cleanupSummary.finalSweepNewlyVerified}`);
+  console.log(`  Final Sweep Reconfirmed Already Verified: ${cleanupSummary.finalSweepReconfirmedAlreadyVerified}`);
   console.log(`  Automated Cleanup Cancel Accepted: ${cleanupSummary.cancelAccepted}`);
   console.log(`  Cleanup Terminal Explicitly Verified: ${cleanupSummary.terminalStateExplicitlyVerified}`);
   console.log(`  Cleanup Accepted But Terminal Evidence Unavailable: ${cleanupSummary.acceptedButTerminalEvidenceUnavailable}`);

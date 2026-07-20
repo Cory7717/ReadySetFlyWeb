@@ -5,9 +5,11 @@ import {
   buildCases,
   buildCleanupVerification,
   buildCleanupSummary,
+  buildLifecycleEvidenceSummary,
   buildValidationSummary,
   compareGeneratedSentReturned,
   shouldCleanupImmediatelyAfterCase,
+  verifyActivationActionState,
 } from "./leidos-live-lab/live-lab-runner";
 
 const context = {
@@ -139,8 +141,9 @@ test("immediate cleanup applies only to successful nonterminal provider-created 
 
 test("cleanup summary separates immediate cleanup from final sweep and unresolved plans", () => {
   const summary = buildCleanupSummary([
-    { cleanupPhase: "immediate_case_cleanup", action: "cancel", responseStatus: "accepted", pass: true, cancelAttempted: true, cancelAccepted: true, terminalVerificationMatched: true, finalCleanupDisposition: "explicitly_verified_terminal" },
-    { cleanupPhase: "final_sweep", action: "cancel", responseStatus: "accepted", pass: true, cancelAttempted: true, cancelAccepted: true, terminalVerificationMatched: false, finalCleanupDisposition: "accepted_unverified" },
+    { cleanupPhase: "immediate_case_cleanup", action: "cancel", responseStatus: "accepted", pass: true, providerPlanId: "provider-2", cancelAttempted: true, cancelAccepted: true, terminalVerificationAttempted: true, terminalVerificationMatched: true, finalCleanupDisposition: "explicitly_verified_terminal" },
+    { cleanupPhase: "final_sweep", action: "cancel", responseStatus: "accepted", pass: true, providerPlanId: "provider-2", cancelAttempted: false, cancelAccepted: false, terminalVerificationAttempted: true, terminalVerificationMatched: true, finalCleanupDisposition: "explicitly_verified_terminal" },
+    { cleanupPhase: "final_sweep", action: "cancel", responseStatus: "accepted", pass: true, providerPlanId: "provider-3", cancelAttempted: true, cancelAccepted: true, terminalVerificationAttempted: true, terminalVerificationMatched: false, finalCleanupDisposition: "accepted_unverified" },
     {
       cleanupPhase: "final_sweep",
       action: "cancel",
@@ -155,7 +158,13 @@ test("cleanup summary separates immediate cleanup from final sweep and unresolve
       errors: ["provider rejected cleanup"],
       automaticProviderClosureExpected: true,
     },
-  ], []);
+  ], [{
+    actions: [
+      { action: "file", providerPlanId: "provider-2", responseStatus: "accepted" },
+      { action: "file", providerPlanId: "provider-3", responseStatus: "accepted" },
+      { action: "file", providerPlanId: "provider-8", responseStatus: "accepted" },
+    ],
+  }]);
 
   assert.equal(summary.immediateCleanupTotal, 1);
   assert.equal(summary.immediateCleanupCancelled, 1);
@@ -163,12 +172,30 @@ test("cleanup summary separates immediate cleanup from final sweep and unresolve
   assert.equal(summary.immediateCleanupCancelAccepted, 1);
   assert.equal(summary.immediateCleanupTerminalStateExplicitlyVerified, 1);
   assert.equal(summary.terminalStateExplicitlyVerified, 1);
+  assert.equal(summary.uniquePlansExplicitlyTerminalVerified, 1);
+  assert.equal(summary.cleanupVerificationAttempts, 3);
+  assert.equal(summary.finalSweepNewlyVerified, 0);
+  assert.equal(summary.finalSweepReconfirmedAlreadyVerified, 1);
   assert.equal(summary.acceptedButTerminalEvidenceUnavailable, 1);
-  assert.equal(summary.finalSweepTotal, 2);
+  assert.equal(summary.finalSweepTotal, 3);
   assert.equal(summary.cleanupErrors, 1);
   assert.equal(summary.unresolvedProviderPlans, 1);
   assert.equal(summary.unresolvedPlans[0].providerPlanId, "provider-8");
   assert.equal(summary.unresolvedPlans[0].automaticProviderClosureExpected, true);
+});
+
+test("cleanup summary consistency checks catch impossible unique verification counts", () => {
+  const summary = buildCleanupSummary([
+    { cleanupPhase: "final_sweep", providerPlanId: "provider-not-created", terminalVerificationAttempted: true, terminalVerificationMatched: true, pass: true },
+  ], [{
+    actions: [{ action: "file", providerPlanId: "provider-created", responseStatus: "accepted" }],
+  }]);
+
+  assert.equal(summary.uniquePlansExplicitlyTerminalVerified, 1);
+  assert.equal(summary.providerPlansCreated, 1);
+  assert.equal(summary.consistencyChecks.some((item: any) => item.name === "unique_terminal_verified_belongs_to_current_run" && item.pass === false), true);
+  assert.equal(summary.cleanupFinalDispositions[0].disposition, "unresolved");
+  assert.equal(summary.unresolvedProviderPlans, 1);
 });
 
 test("cleanup verification reports REVIEW when cancel accepted but terminal evidence is unavailable", () => {
@@ -240,4 +267,103 @@ test("validation summary counts internally contradictory positive fixtures as te
   assert.equal(summary.testDesignFailures, 1);
   assert.equal(summary.expectedValidationBlocks, 0);
   assert.equal(summary.unexpectedValidationFailures, 1);
+});
+
+test("local activated status alone is not explicit provider activation evidence", async () => {
+  const response = {
+    live: true,
+    providerPlanId: "provider-21",
+    raw: { response: { returnStatus: true } },
+  } as any;
+  const verification = await verifyActivationActionState(basePlan({
+    id: "plan-21",
+    filingStatus: "activated",
+    filingProviderPlanId: "provider-21",
+    filingProviderSnapshot: {
+      providerPlanId: "provider-21",
+      providerLifecycleStatus: "activated",
+      providerLifecycleSource: "local_action",
+      providerLifecycleReason: "local_status_after_action",
+    },
+  }), response, true);
+
+  assert.equal(verification.activateAccepted, true);
+  assert.equal(verification.localActivatedStateConfirmed, true);
+  assert.equal(verification.activationVerificationMatched, false);
+  assert.equal(verification.activationEvidenceKind, "local_derived_state");
+  assert.equal(verification.status, "REVIEW");
+});
+
+test("Case 21 lifecycle evidence summary requires explicit ACTIVATED and CLOSED evidence", () => {
+  const summary = buildLifecycleEvidenceSummary([
+    {
+      seed: 21,
+      certificationCaseId: "edge-21",
+      testName: "VFR full lifecycle extended",
+      actions: [
+        {
+          action: "activate",
+          activateAccepted: true,
+          activationVerificationAttempted: true,
+          activationVerificationMatched: true,
+          activationEvidenceKind: "explicit_provider_webhook",
+          activationEvidenceSource: "leidos_webhook",
+          activationPollCount: 2,
+          activationTimedOut: false,
+          activatedAt: "2026-07-20T18:00:00.000Z",
+        },
+        {
+          action: "close",
+          closeAccepted: true,
+          closeVerificationMatched: true,
+          closeEvidenceKind: "explicit_provider_webhook",
+          closeEvidenceSource: "leidos_webhook",
+          closedAt: "2026-07-20T18:10:00.000Z",
+          terminalVerification: {
+            status: "PASS",
+            evidenceKind: "explicit_provider_webhook",
+            evidenceSource: "leidos_webhook",
+          },
+        },
+      ],
+    },
+  ]);
+
+  assert.equal(summary.cases[0].activateAccepted, true);
+  assert.equal(summary.cases[0].activationVerificationMatched, true);
+  assert.equal(summary.cases[0].closeVerificationMatched, true);
+  assert.equal(summary.cases[0].lifecycleEvidenceComplete, true);
+});
+
+test("Case 21 cannot report complete lifecycle evidence without explicit activation", () => {
+  const summary = buildLifecycleEvidenceSummary([
+    {
+      seed: 21,
+      certificationCaseId: "edge-21",
+      testName: "VFR full lifecycle extended",
+      actions: [
+        {
+          action: "activate",
+          activateAccepted: true,
+          activationVerificationAttempted: true,
+          activationVerificationMatched: false,
+          activationEvidenceKind: "local_derived_state",
+          activationEvidenceSource: "local_action",
+          activationTimedOut: true,
+        },
+        {
+          action: "close",
+          closeAccepted: true,
+          closeVerificationMatched: true,
+          closeEvidenceKind: "explicit_provider_webhook",
+          closeEvidenceSource: "leidos_webhook",
+        },
+      ],
+    },
+  ]);
+
+  assert.equal(summary.cases[0].activateAccepted, true);
+  assert.equal(summary.cases[0].activationVerificationMatched, false);
+  assert.equal(summary.cases[0].closeVerificationMatched, true);
+  assert.equal(summary.cases[0].lifecycleEvidenceComplete, false);
 });

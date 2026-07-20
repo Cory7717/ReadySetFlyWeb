@@ -135,6 +135,61 @@ test("extended Case 19 fails test-design preflight if date-boundary assertion is
   assert.match(String(getLiveLabTestDesignFailure(badTiming, testCase)), /Test design failure: Case 19/);
 });
 
+test("extended Case 22 always uses a future airport-local date and injects one DOF", () => {
+  const testCase = buildCasesForSuite(context, "case-22-future-dof", "extended").find((item) => item.seed === 22)!;
+  const timing = applyLiveLabEffectiveDepartureTime(testCase.buildPlan(), testCase, {
+    dynamicTimingEnabled: true,
+    now: "2026-07-20T17:00:00.000Z",
+  });
+
+  assert.equal(timing.metadata.departureTimeZone, "America/Chicago");
+  assert.equal(timing.metadata.departureDateLocal, "2026-07-21");
+  assert.equal(timing.metadata.departureTimeLocal, "13:40");
+  assert.equal(timing.metadata.currentDateAtDepartureAirport, "2026-07-20");
+  assert.equal(timing.metadata.futureDateExpected, true);
+  assert.equal(timing.metadata.futureDateObserved, true);
+  assert.equal(timing.metadata.futureDateCheckPassed, true);
+  assert.equal(timing.metadata.dofExpected, "260721");
+  assert.equal(timing.metadata.dofInjected, true);
+  assert.equal(timing.metadata.dofTransmitted, "260721");
+  assert.equal(timing.metadata.dofEntryCount, 1);
+  assert.equal(timing.metadata.dofCheckPassed, true);
+  assert.equal(getLiveLabTestDesignFailure(timing, testCase), null);
+});
+
+test("extended Case 22 fails test-design preflight if future-date or DOF evidence is false", () => {
+  const testCase = buildCasesForSuite(context, "case-22-future-dof-failure", "extended").find((item) => item.seed === 22)!;
+  const timing = applyLiveLabEffectiveDepartureTime(testCase.buildPlan(), testCase, {
+    dynamicTimingEnabled: true,
+    now: "2026-07-20T17:00:00.000Z",
+  });
+  const badTiming = {
+    ...timing,
+    metadata: {
+      ...timing.metadata,
+      futureDateCheckPassed: false,
+      dofInjected: false,
+      dofCheckPassed: false,
+      dofTransmitted: null,
+    },
+  };
+
+  assert.match(String(getLiveLabTestDesignFailure(badTiming, testCase)), /Case 22 must prove future-date DOF injection/);
+});
+
+test("generic dynamic timing cannot overwrite Case 22 future-date DOF strategy", () => {
+  const case1 = caseBySeed(1);
+  const case22 = buildCasesForSuite(context, "case-22-not-generic", "extended").find((item) => item.seed === 22)!;
+  const now = "2026-07-20T17:00:00.000Z";
+  const generic = applyLiveLabEffectiveDepartureTime(case1.buildPlan(), case1, { dynamicTimingEnabled: true, now });
+  const futureDof = applyLiveLabEffectiveDepartureTime(case22.buildPlan(), case22, { dynamicTimingEnabled: true, now });
+
+  assert.match(futureDof.metadata.lifecycleDepartureTimeStrategy, /case-22/);
+  assert.notEqual(futureDof.metadata.departureDateLocal, generic.metadata.departureDateLocal);
+  assert.equal(futureDof.metadata.futureDateCheckPassed, true);
+  assert.equal(futureDof.metadata.dofCheckPassed, true);
+});
+
 test("America/Chicago daylight-saving conversion is reflected in local time", () => {
   const testCase = caseBySeed(1);
   const timing = applyLiveLabEffectiveDepartureTime(testCase.buildPlan(), testCase, {

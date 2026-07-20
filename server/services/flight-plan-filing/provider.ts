@@ -17,6 +17,7 @@ import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
 import { normalizeIcaoEquipmentCodes, validateFlightServiceAircraftEquipmentCodes } from "@shared/icao-equipment-codes";
 import { validateIcaoEquipmentReadiness } from "@shared/icao-readiness";
 import { ICAO_OTHER_INFO_PREFIXES, getIcaoOtherInfoEquipmentWarnings, hasOnlyFlightServiceSurveillanceCodes, hasOnlyKnownIcaoSurveillanceCodes } from "@shared/icao-filing";
+import { normalizeProviderReviewRoute } from "@shared/provider-effective-review";
 import { normalizeZzzzActualLocation } from "@shared/zzzz-location";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
 import { getFlightServiceRuntimeMode } from "../flightServiceRuntimeMode";
@@ -1493,7 +1494,7 @@ const buildProviderSnapshot = ({
     changedByProvider: Boolean(
       providerRoute &&
       payloadSnapshot?.route.normalizedTransmittedRoute &&
-      providerRoute !== payloadSnapshot.route.normalizedTransmittedRoute
+      normalizeProviderReviewRoute(providerRoute) !== normalizeProviderReviewRoute(payloadSnapshot.route.normalizedTransmittedRoute)
     ),
     normalizationNotes: payloadSnapshot?.route.normalizationNotes || [],
   };

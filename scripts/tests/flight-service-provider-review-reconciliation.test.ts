@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  buildProviderAcceptedEffectivePlanSnapshot,
   buildProviderEffectivePlanSnapshot,
   buildProviderReviewDecision,
   hashProviderEffectivePlanSnapshot,
+  normalizeProviderReviewOtherInfo,
+  normalizeProviderReviewRoute,
 } from "../../shared/provider-effective-review";
 
 const basePlan = {
@@ -57,7 +60,7 @@ test("provider enrichment opens review once and accepted effective baseline pers
   const acceptedCanonical = buildProviderEffectivePlanSnapshot(basePlan, enrichedSnapshot);
   const acceptedHash = hashProviderEffectivePlanSnapshot(acceptedCanonical);
   assert.equal(decision.effectiveHash, acceptedHash);
-  assert.equal(acceptedCanonical.otherInfo, "PBN/A1 EET/KZAK0056 PHZH0449 RMK/VEGAS TO HAWAII IFR TEST PLAN");
+  assert.equal(acceptedCanonical.otherInfo, "EET/KZAK0056 PHZH0449 PBN/A1 RMK/VEGAS TO HAWAII IFR TEST PLAN");
 });
 
 test("new operational alert with unchanged effective plan does not reopen review", () => {
@@ -226,6 +229,207 @@ test("expected AMEND provider echo compares against the amended accepted route",
   assert.equal(decision.reviewPending, false);
   assert.deepEqual(decision.changedFields, []);
   assert.equal(decision.canonical.route, "KSBP DCT ZIGIE");
+});
+
+test("successful FILE accepted transmitted snapshot matches equivalent provider echo", () => {
+  const transmittedFields = {
+    aircraftIdentifier: "N123RS",
+    aircraftType: "C421",
+    aircraftEquipment: "S",
+    surveillanceEquipment: "C",
+    flightRules: "VFR",
+    departure: "KEDC",
+    destination: "KACT",
+    altDestination1: "KDAL",
+    departureInstant: "2026-07-21T18:40:00.000Z",
+    flightDuration: "PT1H",
+    fuelOnBoard: "PT7H30M",
+    route: "DCT ACT DCT",
+    remarks: "RSF LAB TEST SEED 21",
+    otherInfo: "RMK/RSF LAB TEST SEED 21",
+    peopleOnBoardExtended: "2",
+  };
+  const acceptedSnapshot = buildProviderAcceptedEffectivePlanSnapshot(transmittedFields, {});
+  const acceptedHash = hashProviderEffectivePlanSnapshot(acceptedSnapshot);
+  const decision = buildProviderReviewDecision({
+    plan: {
+      tailNumber: "N123RS",
+      aircraftType: "C421",
+      filingEquipment: "S",
+      filingSurveillanceEquipment: "C",
+      filingFlightRules: "VFR",
+      departure: "KEDC",
+      destination: "KACT",
+      alternate: "KDAL",
+      plannedDepartureAt: new Date("2026-07-21T18:40:00.000Z"),
+      filingEstimatedEnrouteMinutes: 60,
+      filingEnduranceMinutes: 450,
+      route: "DCT ACT",
+      filingRemarks: "RSF LAB TEST SEED 21",
+      filingOtherInfo: "RMK/RSF LAB TEST SEED 21",
+      filingSoulsOnBoard: "2",
+    },
+    previousSnapshot: {
+      providerReviewAcceptedEffectivePlanHash: acceptedHash,
+      providerReviewAcceptedEffectivePlanSnapshot: acceptedSnapshot,
+    },
+    nextSnapshot: {
+      route: {
+        normalizedTransmittedRoute: "DCT ACT DCT",
+        providerRoute: "DCT ACT",
+        changedByProvider: true,
+      },
+      fieldDiffs: [],
+    },
+  });
+
+  assert.equal(decision.reviewPending, false);
+  assert.equal(decision.hashMatchesAccepted, true);
+  assert.deepEqual(decision.changedFields, []);
+});
+
+test("ACTIVATED lifecycle-only webhook does not set provider pending review", () => {
+  const acceptedSnapshot = buildProviderAcceptedEffectivePlanSnapshot({
+    aircraftIdentifier: "N123RS",
+    aircraftType: "C172",
+    departure: "KEDC",
+    destination: "KACT",
+    route: "DCT ACT DCT",
+    flightRules: "VFR",
+  }, {});
+  const acceptedHash = hashProviderEffectivePlanSnapshot(acceptedSnapshot);
+  const decision = buildProviderReviewDecision({
+    plan: {
+      tailNumber: "N123RS",
+      aircraftType: "C172",
+      departure: "KEDC",
+      destination: "KACT",
+      route: "DCT ACT DCT",
+      filingFlightRules: "VFR",
+    },
+    previousSnapshot: {
+      providerReviewAcceptedEffectivePlanHash: acceptedHash,
+      providerReviewAcceptedEffectivePlanSnapshot: acceptedSnapshot,
+    },
+    nextSnapshot: {
+      providerLifecycleStatus: "activated",
+      providerLifecycleSource: "leidos_webhook",
+      providerLifecycleReason: "explicit_provider_active",
+      providerFlightState: "ACTIVATED",
+      fieldDiffs: [],
+    },
+  });
+
+  assert.equal(decision.reviewPending, false);
+  assert.deepEqual(decision.changedFields, []);
+  assert.equal(decision.reason, "accepted_effective_plan_unchanged");
+});
+
+test("provider route absence does not count as provider route change", () => {
+  const decision = buildProviderReviewDecision({
+    plan: basePlan,
+    previousSnapshot: {},
+    nextSnapshot: {
+      route: {
+        normalizedTransmittedRoute: "DCT ACT DCT",
+        providerRoute: null,
+        changedByProvider: false,
+      },
+      fieldDiffs: [],
+    },
+  });
+
+  assert.equal(decision.reviewPending, false);
+  assert.deepEqual(decision.changedFields, []);
+});
+
+test("equivalent route and Item 18 formatting do not count as provider changes", () => {
+  assert.equal(normalizeProviderReviewRoute("DCT ACT DCT"), normalizeProviderReviewRoute("DCT ACT"));
+  assert.equal(
+    normalizeProviderReviewOtherInfo("RMK/RSF   LAB TEST   TYP/TBM9"),
+    normalizeProviderReviewOtherInfo("TYP/TBM9 RMK/RSF LAB TEST"),
+  );
+  const decision = buildProviderReviewDecision({
+    plan: {
+      ...basePlan,
+      route: "DCT ACT DCT",
+      otherInfo: "RMK/RSF LAB TEST TYP/TBM9",
+    },
+    previousSnapshot: {},
+    nextSnapshot: {
+      route: {
+        normalizedTransmittedRoute: "DCT ACT DCT",
+        providerRoute: "DCT ACT",
+        changedByProvider: true,
+      },
+      fieldDiffs: [{
+        field: "otherInfo",
+        transmittedValue: "RMK/RSF LAB TEST TYP/TBM9",
+        providerValue: "TYP/TBM9 RMK/RSF LAB TEST",
+        changedByProvider: true,
+      }],
+    },
+  });
+
+  assert.equal(decision.reviewPending, false);
+  assert.deepEqual(decision.changedFields, []);
+});
+
+test("genuinely different provider route sets provider pending review", () => {
+  const decision = buildProviderReviewDecision({
+    plan: { ...basePlan, route: "DCT ACT DCT" },
+    previousSnapshot: {},
+    nextSnapshot: {
+      route: {
+        normalizedTransmittedRoute: "DCT ACT DCT",
+        providerRoute: "DCT CWK DCT",
+        changedByProvider: true,
+      },
+      fieldDiffs: [],
+    },
+  });
+
+  assert.equal(decision.reviewPending, true);
+  assert.deepEqual(decision.changedFields, ["route"]);
+});
+
+test("genuinely different altitude or alternate sets provider pending review", () => {
+  const decision = buildProviderReviewDecision({
+    plan: basePlan,
+    previousSnapshot: {},
+    nextSnapshot: {
+      fieldDiffs: [
+        { field: "plannedAltitudeFt", transmittedValue: "14000", providerValue: "16000", changedByProvider: true },
+        { field: "alternate", transmittedValue: "KDAL", providerValue: "KACT", changedByProvider: true },
+      ],
+    },
+  });
+
+  assert.equal(decision.reviewPending, true);
+  assert.deepEqual(decision.changedFields, ["alternate", "plannedAltitudeFt"]);
+});
+
+test("incomplete retrieve does not erase a genuine pending provider review", () => {
+  const decision = buildProviderReviewDecision({
+    plan: { ...basePlan, route: "DCT ACT DCT" },
+    previousSnapshot: {
+      providerPendingReview: true,
+      route: {
+        normalizedTransmittedRoute: "DCT ACT DCT",
+        providerRoute: "DCT CWK DCT",
+        changedByProvider: true,
+      },
+      fieldDiffs: [],
+    },
+    nextSnapshot: {
+      versionStamp: "20260717201622780",
+      fieldDiffs: [],
+    },
+  });
+
+  assert.equal(decision.reviewPending, true);
+  assert.deepEqual(decision.changedFields, ["route"]);
+  assert.equal(decision.reason, "pending_review_preserved_incomplete_provider_snapshot");
 });
 
 test("legacy accepted same version establishes accepted baseline without reopening", () => {

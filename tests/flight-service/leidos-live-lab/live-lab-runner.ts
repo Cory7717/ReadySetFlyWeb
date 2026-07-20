@@ -3145,10 +3145,23 @@ const run = async () => {
         plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
         break;
       }
+      const providerSnapshotBeforeAction = plan.filingProviderSnapshot && typeof plan.filingProviderSnapshot === "object"
+        ? plan.filingProviderSnapshot as Record<string, any>
+        : {};
+      const acceptedSnapshotAvailable = Boolean(providerSnapshotBeforeAction.providerReviewAcceptedEffectivePlanSnapshot);
+      const acceptedSnapshotVersionStamp = providerSnapshotBeforeAction.providerReviewAcceptedVersionStamp || null;
+      const providerSnapshotAvailable = Object.keys(providerSnapshotBeforeAction).length > 0;
+      const providerChangedFields = Array.isArray(providerSnapshotBeforeAction.providerEffectivePlanChangedFields)
+        ? providerSnapshotBeforeAction.providerEffectivePlanChangedFields
+        : [];
+      const providerReviewDecisionReason = providerSnapshotBeforeAction.providerReviewDecisionReason || null;
+      const providerPendingReviewBeforeClose = action === "close"
+        ? Boolean(providerSnapshotBeforeAction.providerPendingReview)
+        : undefined;
       if (dryRun) {
         const simulated = simulateDryRunProviderState(plan, action, testCase.seed);
         const comparison = compareGeneratedSentReturned(generatedPayload, generatedPayload, simulated, { action, terminalAction: isTerminalAction(action) });
-        const actionResult = { action, generatedPayload, providerPayload: generatedPayload, storedPayload: comparison.stored, payloadSentToLeidos: generatedPayload, leidosResponse: { dryRun: true }, testType: testCase.testType, validationStatus: "PASS", validationResult: "valid", blockedBeforeLeidos: false, blockedReason: null, routeReview, recommendedFix: null, responseStatus: "dry_run", providerPlanId: simulated.filingProviderPlanId || null, versionStamp: getVersionStamp(simulated), warnings: validation.warnings, errors: [], comparison, comparisonResult: comparison.pass ? "MATCH" : "DIFFERENCE", fieldComparisons: comparison.fieldComparisons, providerLifecycle: (simulated.filingProviderSnapshot as any)?.providerLifecycleStatus || simulated.filingStatus, elapsedMs: Date.now() - started };
+        const actionResult = { action, generatedPayload, providerPayload: generatedPayload, storedPayload: comparison.stored, payloadSentToLeidos: generatedPayload, leidosResponse: { dryRun: true }, testType: testCase.testType, validationStatus: "PASS", validationResult: "valid", blockedBeforeLeidos: false, blockedReason: null, routeReview, recommendedFix: null, responseStatus: "dry_run", providerPlanId: simulated.filingProviderPlanId || null, versionStamp: getVersionStamp(simulated), acceptedSnapshotAvailable, acceptedSnapshotVersionStamp, providerSnapshotAvailable, providerChangedFields, providerPendingReviewBeforeClose, providerReviewDecisionReason, primaryCloseAttempted: action === "close", warnings: validation.warnings, errors: [], comparison, comparisonResult: comparison.pass ? "MATCH" : "DIFFERENCE", fieldComparisons: comparison.fieldComparisons, providerLifecycle: (simulated.filingProviderSnapshot as any)?.providerLifecycleStatus || simulated.filingStatus, elapsedMs: Date.now() - started };
         caseResult.actions.push(actionResult);
         caseResult.comparisons.push(comparison);
         plan = await appendCertificationAudit(simulated, "action", actionResult, dryRun);
@@ -3174,7 +3187,7 @@ const run = async () => {
             activationWindowCheckedAt: new Date().toISOString(),
           };
         }
-        const actionResult = { action, generatedPayload, providerPayload: null, storedPayload: null, payloadSentToLeidos: null, leidosResponse: null, testType: testCase.testType, validationStatus: "PASS", validationResult: "valid", blockedBeforeLeidos: false, blockedReason: activationWindowSetupFailure ? "activation_window_test_setup_failure" : null, routeReview, comparison: null, comparisonResult: activationWindowSetupFailure ? "TEST_SETUP_FAILURE" : "ERROR", fieldComparisons: [], providerLifecycle: null, responseStatus: activationWindowSetupFailure ? "test_setup_activation_window_failed" : "error", warnings: validation.warnings, errors: [classifiedMessage], elapsedMs: Date.now() - started };
+        const actionResult = { action, generatedPayload, providerPayload: null, storedPayload: null, payloadSentToLeidos: null, leidosResponse: null, testType: testCase.testType, validationStatus: "PASS", validationResult: "valid", blockedBeforeLeidos: false, blockedReason: activationWindowSetupFailure ? "activation_window_test_setup_failure" : null, routeReview, acceptedSnapshotAvailable, acceptedSnapshotVersionStamp, providerSnapshotAvailable, providerChangedFields, providerPendingReviewBeforeClose, providerReviewDecisionReason, primaryCloseAttempted: action === "close", primaryCloseAccepted: false, primaryCloseVerified: false, comparison: null, comparisonResult: activationWindowSetupFailure ? "TEST_SETUP_FAILURE" : "ERROR", fieldComparisons: [], providerLifecycle: null, responseStatus: activationWindowSetupFailure ? "test_setup_activation_window_failed" : "error", warnings: validation.warnings, errors: [classifiedMessage], elapsedMs: Date.now() - started };
         caseResult.actions.push(actionResult);
         plan = await appendCertificationAudit(plan, "action", actionResult, dryRun);
         if (isCleanupBlockingError(error)) stoppedEarly = true;
@@ -3243,6 +3256,18 @@ const run = async () => {
         providerReturnStatus,
         providerPlanId: response.providerPlanId || null,
         versionStamp,
+        acceptedSnapshotAvailable,
+        acceptedSnapshotVersionStamp,
+        providerSnapshotAvailable,
+        providerChangedFields,
+        providerPendingReviewBeforeClose,
+        providerReviewDecisionReason,
+        primaryCloseAttempted: action === "close",
+        primaryCloseAccepted: action === "close" ? Boolean(response.live && providerReturnStatus !== false) : undefined,
+        primaryCloseVerified: action === "close" ? terminalVerification?.providerTerminalStateConfirmed === true : undefined,
+        cleanupCloseAttempted: false,
+        cleanupCloseAccepted: false,
+        cleanupCloseVerified: false,
         versionStampRequired: !terminalAction,
         versionStampExpectedAfterAction: !terminalAction,
         versionStampMissingClassification,
@@ -3293,6 +3318,12 @@ const run = async () => {
       } else if (activationVerification?.status === "REVIEW") {
         caseResult.pass = false;
         caseResult.warnings.push("Activation verification needs review after ACTIVATE: provider accepted the action, but explicit ACTIVATED lifecycle evidence was not received before CLOSE.");
+      }
+      if (action === "activate" && activationVerification?.activationVerificationMatched && !dryRun) {
+        const latestActivatedPlan = await storage.getFlightPlanById(plan.id);
+        if (latestActivatedPlan) {
+          plan = latestActivatedPlan as FlightPlan;
+        }
       }
       if (!response.live) {
         if (providerSubmissionDisabledForAction) {

@@ -113,6 +113,7 @@ import { insertMembershipPromotionSchema, membershipPromotions, membershipPromot
 import { normalizeMembershipPromoCode, redeemMembershipPromotion } from "./services/membershipPromotions";
 import { formatArtccInfo, formatProviderNotificationValue, sanitizeNotificationMessage } from "@shared/provider-notification-format";
 import {
+  buildProviderAcceptedEffectivePlanSnapshot,
   buildProviderEffectivePlanSnapshot,
   buildProviderReviewDecision,
   hashProviderEffectivePlanSnapshot,
@@ -25420,7 +25421,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         ? providerResult.providerPlanId || plan.filingProviderPlanId
         : providerResult.providerPlanId;
       const nextFilingPayload = providerResult.payloadSnapshot ?? asRecord((plan as Record<string, unknown>).filingPayload);
-      const nextProviderSnapshot = providerOutcomeUnknown
+      let nextProviderSnapshot = providerOutcomeUnknown
         ? {
           ...asRecord((plan as Record<string, unknown>).filingProviderSnapshot),
           providerOutcomeUnknown: true,
@@ -25435,6 +25436,27 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           source: providerResult.action || "provider_action",
         })
         : asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+      if ((action === "file" || action === "amend") && providerResult.payloadSnapshot?.transmittedFields) {
+        const acceptedEffectivePlanSnapshot = buildProviderAcceptedEffectivePlanSnapshot(
+          providerResult.payloadSnapshot.transmittedFields as Record<string, unknown>,
+          plan as Record<string, unknown>,
+        );
+        const acceptedEffectivePlanHash = hashProviderEffectivePlanSnapshot(acceptedEffectivePlanSnapshot);
+        nextProviderSnapshot = {
+          ...nextProviderSnapshot,
+          providerPendingReview: false,
+          providerModifiedBySpecialist: false,
+          providerEffectivePlanHash: acceptedEffectivePlanHash,
+          providerEffectivePlanSnapshot: acceptedEffectivePlanSnapshot,
+          providerEffectivePlanChangedFields: [],
+          providerReviewAcceptedVersionStamp: String((nextProviderSnapshot as any).versionStamp || providerResult.raw?.versionStamp || "").trim() || null,
+          providerReviewAcceptedEffectivePlanHash: acceptedEffectivePlanHash,
+          providerReviewAcceptedEffectivePlanSnapshot: acceptedEffectivePlanSnapshot,
+          providerReviewAcceptedSource: `provider_${action}_accepted_transmitted_snapshot`,
+          providerReviewAcceptedAt: now.toISOString(),
+          providerReviewDecisionReason: "accepted_transmitted_snapshot_persisted",
+        };
+      }
       const reconciledProviderSnapshot = applyLocalFilingLifecycleBaseline(
         { ...plan, filingStatus: nextFilingStatus, filingProviderPlanId: nextProviderPlanId },
         nextProviderSnapshot,

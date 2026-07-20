@@ -228,7 +228,7 @@ test("expected AMEND provider echo compares against the amended accepted route",
 
   assert.equal(decision.reviewPending, false);
   assert.deepEqual(decision.changedFields, []);
-  assert.equal(decision.canonical.route, "KSBP DCT ZIGIE");
+  assert.equal(decision.canonical.route, "KSBP ZIGIE");
 });
 
 test("successful FILE accepted transmitted snapshot matches equivalent provider echo", () => {
@@ -345,6 +345,8 @@ test("provider route absence does not count as provider route change", () => {
 
 test("equivalent route and Item 18 formatting do not count as provider changes", () => {
   assert.equal(normalizeProviderReviewRoute("DCT ACT DCT"), normalizeProviderReviewRoute("DCT ACT"));
+  assert.equal(normalizeProviderReviewRoute("KJSO DCT KELD"), normalizeProviderReviewRoute("KJSO KELD"));
+  assert.equal(normalizeProviderReviewRoute("kjsO\nDCT   keld"), normalizeProviderReviewRoute("KJSO KELD"));
   assert.equal(
     normalizeProviderReviewOtherInfo("RMK/RSF   LAB TEST   TYP/TBM9"),
     normalizeProviderReviewOtherInfo("TYP/TBM9 RMK/RSF LAB TEST"),
@@ -373,6 +375,45 @@ test("equivalent route and Item 18 formatting do not count as provider changes",
 
   assert.equal(decision.reviewPending, false);
   assert.deepEqual(decision.changedFields, []);
+});
+
+test("provider omitted DCT formatting does not reopen accepted route review", () => {
+  const acceptedCanonical = buildProviderAcceptedEffectivePlanSnapshot({
+    aircraftIdentifier: "N123RS",
+    aircraftType: "C421",
+    departure: "KLAS",
+    destination: "PHNL",
+    route: "KJSO DCT KELD",
+    flightRules: "IFR",
+  }, {});
+  const acceptedHash = hashProviderEffectivePlanSnapshot(acceptedCanonical);
+  const decision = buildProviderReviewDecision({
+    plan: { ...basePlan, route: "KJSO DCT KELD" },
+    previousSnapshot: {
+      providerPendingReview: false,
+      providerReviewAcceptedEffectivePlanHash: acceptedHash,
+      providerReviewAcceptedEffectivePlanSnapshot: acceptedCanonical,
+      providerReviewAcceptedVersionStamp: "20260720180000000",
+    },
+    nextSnapshot: {
+      versionStamp: "20260720180100000",
+      route: {
+        normalizedTransmittedRoute: "KJSO DCT KELD",
+        providerRoute: "KJSO KELD",
+        changedByProvider: true,
+      },
+      fieldDiffs: [{
+        field: "route",
+        transmittedValue: "KJSO DCT KELD",
+        providerValue: "KJSO KELD",
+        changedByProvider: true,
+      }],
+    },
+  });
+
+  assert.equal(decision.reviewPending, false);
+  assert.deepEqual(decision.changedFields, []);
+  assert.equal(decision.reason, "no_effective_plan_change");
 });
 
 test("genuinely different provider route sets provider pending review", () => {
@@ -430,6 +471,39 @@ test("incomplete retrieve does not erase a genuine pending provider review", () 
   assert.equal(decision.reviewPending, true);
   assert.deepEqual(decision.changedFields, ["route"]);
   assert.equal(decision.reason, "pending_review_preserved_incomplete_provider_snapshot");
+});
+
+test("incomplete retrieve cannot restore an already accepted route review", () => {
+  const acceptedCanonical = buildProviderAcceptedEffectivePlanSnapshot({
+    aircraftIdentifier: "N123RS",
+    aircraftType: "C421",
+    departure: "KLAS",
+    destination: "PHNL",
+    route: "KJSO DCT KELD",
+    flightRules: "IFR",
+  }, {});
+  const acceptedHash = hashProviderEffectivePlanSnapshot(acceptedCanonical);
+  const decision = buildProviderReviewDecision({
+    plan: { ...basePlan, route: "KJSO DCT KELD" },
+    previousSnapshot: {
+      providerPendingReview: false,
+      providerReviewAcceptedEffectivePlanHash: acceptedHash,
+      providerReviewAcceptedEffectivePlanSnapshot: acceptedCanonical,
+      providerReviewAcceptedVersionStamp: "20260720180000000",
+      route: {
+        normalizedTransmittedRoute: "KJSO DCT KELD",
+        providerRoute: "KJSO KELD",
+        changedByProvider: true,
+      },
+    },
+    nextSnapshot: {
+      versionStamp: "20260720180100000",
+      fieldDiffs: [],
+    },
+  });
+
+  assert.equal(decision.reviewPending, false);
+  assert.deepEqual(decision.changedFields, []);
 });
 
 test("legacy accepted same version establishes accepted baseline without reopening", () => {

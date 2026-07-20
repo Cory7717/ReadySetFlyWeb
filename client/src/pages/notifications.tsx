@@ -16,6 +16,7 @@ type UserNotification = {
   referenceDate?: string | null;
   isRead?: boolean | null;
   createdAt?: string | null;
+  readAt?: string | null;
 };
 
 function formatDisplayDate(value?: string | null) {
@@ -55,7 +56,23 @@ export default function NotificationsPage() {
       const res = await apiRequest("PATCH", `/api/notifications/${id}/read`, {});
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (result: any, id) => {
+      queryClient.setQueryData<UserNotification[]>(["/api/notifications"], (current = []) =>
+        current.map((notification) =>
+          notification.id === id
+            ? { ...notification, ...result, isRead: true, readAt: result?.readAt || new Date().toISOString() }
+            : notification
+        )
+      );
+      queryClient.setQueryData<{ count: number }>(["/api/notifications/unread"], (current) => ({
+        count: Math.max(0, (current?.count ?? unreadCount) - 1),
+      }));
+      if (result?.plan) {
+        queryClient.setQueryData<any[]>(["/api/flight-plans"], (current = []) =>
+          current.map((plan) => plan.id === result.plan.id ? result.plan : plan)
+        );
+        queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
     },

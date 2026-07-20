@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   amendMutationForCase,
   buildCases,
+  buildCasesForSuite,
   buildCleanupVerification,
   buildCleanupSummary,
   buildLifecycleEvidenceSummary,
@@ -489,6 +490,12 @@ test("Case 21 mocked FILE ACTIVATE webhook CLOSE chain stays review-clean and co
     expectedFinalState: "closed",
     buildPlan: () => closeEligiblePlan,
   } as any, { pass: true }, { ...closeEligiblePlan, filingStatus: "closed" } as any), false);
+
+  const extendedCases = buildCasesForSuite(context, "case-21-chain-run", "extended");
+  const case21Index = extendedCases.findIndex((item) => item.seed === 21);
+  const case22Index = extendedCases.findIndex((item) => item.seed === 22);
+  assert.ok(case21Index >= 0, "Case 21 should be present in the executable suite");
+  assert.ok(case22Index > case21Index, "Case 22 should remain reachable after Case 21");
 });
 
 test("Case 21 cannot report complete lifecycle evidence without explicit activation", () => {

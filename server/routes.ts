@@ -22310,13 +22310,142 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const updated = await storage.markUserNotificationRead(req.params.id, userId);
-      if (!updated) {
+      const notificationId = req.params.id;
+      const [notification] = await db
+        .select()
+        .from(userNotifications)
+        .where(and(eq(userNotifications.id, notificationId), eq(userNotifications.userId, userId)))
+        .limit(1);
+      if (!notification) {
         return res.status(404).json({ error: "Notification not found" });
       }
-      res.json(updated);
+      const notificationMeta = getProviderSnapshotRecord((notification as Record<string, unknown>).meta);
+      const planId = String(notificationMeta.flightPlanId || notificationMeta.planId || "").trim();
+      const providerPlanId = String(notificationMeta.providerPlanId || "").trim();
+      const isProviderFlightNotification = /^(flight_alert|flight_change|provider_sync|flight_plan_)/.test(String(notification.type || ""));
+      const startedPreviousUnread = notification.isRead !== true;
+      let updatedPlan: any = null;
+      let contentReviewRequired = false;
+      let previousProviderPendingReview: boolean | null = null;
+      let resultingProviderPendingReview: boolean | null = null;
+      let idempotentRetry = false;
+      let supersededNotifications = 0;
+      console.info(JSON.stringify({
+        event: "flight_service_notification_acknowledge_started",
+        notificationId,
+        planId: planId || null,
+        providerPlanId: providerPlanId || null,
+        previousUnread: startedPreviousUnread,
+      }));
+      const [updated] = await db.transaction(async (tx) => {
+        const now = new Date();
+        let notificationUpdate = await tx
+          .update(userNotifications)
+          .set({ isRead: true, readAt: notification.readAt || now, updatedAt: now })
+          .where(and(eq(userNotifications.id, notificationId), eq(userNotifications.userId, userId)))
+          .returning();
+
+        if (isProviderFlightNotification && planId) {
+          const [plan] = await tx
+            .select()
+            .from(flightPlans)
+            .where(and(eq(flightPlans.id, planId), eq(flightPlans.userId, userId)))
+            .limit(1);
+          if (plan) {
+            const snapshot = getProviderSnapshotRecord((plan as Record<string, unknown>).filingProviderSnapshot);
+            previousProviderPendingReview = snapshot.providerPendingReview === true;
+            contentReviewRequired = previousProviderPendingReview;
+            const raw = getProviderSnapshotRecord((plan as Record<string, unknown>).filingRaw);
+            const acceptedVersionStamp = String(
+              snapshot.versionStamp ||
+              raw.versionStamp ||
+              providerPlanId ||
+              plan.filingProviderPlanId ||
+              plan.id
+            ).trim();
+            const acceptedEffectivePlanSnapshot = buildProviderEffectivePlanSnapshot(plan as Record<string, unknown>, snapshot);
+            const acceptedEffectivePlanHash = hashProviderEffectivePlanSnapshot(acceptedEffectivePlanSnapshot);
+            const acceptedSnapshot = {
+              ...snapshot,
+              providerPendingReview: false,
+              providerModifiedBySpecialist: false,
+              providerEffectivePlanHash: snapshot.providerEffectivePlanHash || acceptedEffectivePlanHash,
+              providerEffectivePlanSnapshot: snapshot.providerEffectivePlanSnapshot || acceptedEffectivePlanSnapshot,
+              providerEffectivePlanChangedFields: [],
+              providerReviewAcceptedVersionStamp: acceptedVersionStamp,
+              providerReviewAcceptedEffectivePlanHash: acceptedEffectivePlanHash,
+              providerReviewAcceptedEffectivePlanSnapshot: acceptedEffectivePlanSnapshot,
+              providerReviewAcceptedSource: previousProviderPendingReview ? "notification_acknowledgement" : snapshot.providerReviewAcceptedSource || "notification_acknowledgement_idempotent",
+              providerReviewAcceptedAt: snapshot.providerReviewAcceptedAt || now.toISOString(),
+              providerReviewAcceptedBy: snapshot.providerReviewAcceptedBy || userId,
+              providerReviewDecisionReason: previousProviderPendingReview ? "provider_effective_plan_accepted_by_notification_acknowledgement" : snapshot.providerReviewDecisionReason || "already_accepted_effective_plan",
+            };
+            if (previousProviderPendingReview || !snapshot.providerReviewAcceptedEffectivePlanHash) {
+              const [planUpdate] = await tx
+                .update(flightPlans)
+                .set({
+                  filingProviderSnapshot: acceptedSnapshot as any,
+                  filingLastProviderSyncAt: now,
+                  updatedAt: now,
+                } as any)
+                .where(and(eq(flightPlans.id, plan.id), eq(flightPlans.userId, userId)))
+                .returning();
+              updatedPlan = planUpdate || plan;
+            } else {
+              idempotentRetry = true;
+              updatedPlan = plan;
+            }
+            resultingProviderPendingReview = false;
+
+            if (providerPlanId && /closed|cancelled|canceled/i.test(`${notification.title} ${notification.message}`)) {
+              const superseded = await tx
+                .update(userNotifications)
+                .set({ isRead: true, readAt: now, updatedAt: now })
+                .where(and(
+                  eq(userNotifications.userId, userId),
+                  eq(userNotifications.isRead, false),
+                  or(eq(userNotifications.type, "flight_alert"), eq(userNotifications.type, "flight_change"), eq(userNotifications.type, "provider_sync")),
+                  or(
+                    sql`${userNotifications.meta}->>'providerPlanId' = ${providerPlanId}`,
+                    sql`${userNotifications.meta}->>'flightPlanId' = ${planId}`,
+                    sql`${userNotifications.meta}->>'planId' = ${planId}`,
+                  ),
+                ))
+                .returning({ id: userNotifications.id });
+              supersededNotifications = superseded.length;
+            }
+          }
+        }
+
+        return notificationUpdate;
+      });
+      console.info(JSON.stringify({
+        event: idempotentRetry ? "flight_service_notification_acknowledge_idempotent" : "flight_service_notification_acknowledge_completed",
+        notificationId,
+        planId: updatedPlan?.id || planId || null,
+        providerPlanId: updatedPlan?.filingProviderPlanId || providerPlanId || null,
+        previousUnread: startedPreviousUnread,
+        previousProviderPendingReview,
+        resultingProviderPendingReview,
+        contentReviewRequired,
+        superseded: supersededNotifications > 0,
+        supersededNotifications,
+        idempotentRetry,
+      }));
+      res.json({
+        ...updated,
+        ok: true,
+        plan: updatedPlan,
+        providerPendingReview: resultingProviderPendingReview,
+        idempotentRetry,
+      });
     } catch (error) {
       console.error("Failed to mark notification read:", error);
+      console.warn(JSON.stringify({
+        event: "flight_service_notification_acknowledge_failed",
+        notificationId: req.params.id,
+        failureReason: error instanceof Error ? error.message : String(error),
+      }));
       res.status(500).json({ error: "Failed to update notification" });
     }
   });

@@ -985,11 +985,25 @@ test("provider push review blocks filing actions until acknowledged", () => {
     } as any,
   });
 
-  for (const action of ["amend", "activate", "cancel", "close"] as const) {
+  for (const action of ["amend", "activate", "cancel"] as const) {
     const result = validateFlightPlanForAction(pendingReview, action);
     assert.equal(result.ready, false);
     assert.ok(result.errors.some((error) => /filing provider has updated/i.test(error)));
   }
+
+  const pendingReviewActiveVfr = filingPlan({
+    ...pendingReview,
+    filingStatus: "activated",
+    filingFlightRules: "VFR",
+    plannedArrivalAt: new Date(Date.now() + 60 * 60 * 1000),
+    filingProviderSnapshot: {
+      providerPendingReview: true,
+      providerLifecycleStatus: "activated",
+    } as any,
+  });
+  const closeResult = validateFlightPlanForAction(pendingReviewActiveVfr, "close");
+  assert.equal(closeResult.ready, true);
+  assert.ok(!closeResult.errors.some((error) => /filing provider has updated/i.test(error)));
 
   const accepted = filingPlan({
     ...pendingReview,

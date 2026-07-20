@@ -43,7 +43,8 @@ export const normalizeProviderReviewRoute = (value: unknown): string | null => {
   if (collapsed.length === 1 && collapsed[0] === "DCT") return "DCT";
   while (collapsed.length > 1 && collapsed[0] === "DCT") collapsed.shift();
   while (collapsed.length > 1 && collapsed[collapsed.length - 1] === "DCT") collapsed.pop();
-  return collapsed.join(" ") || null;
+  const withoutDirectFormatting = collapsed.filter((token) => token !== "DCT");
+  return (withoutDirectFormatting.length > 0 ? withoutDirectFormatting : collapsed).join(" ") || null;
 };
 
 export const normalizeProviderReviewOtherInfo = (value: unknown): string | null => {

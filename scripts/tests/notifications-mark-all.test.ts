@@ -31,3 +31,25 @@ test("notifications page exposes mark all as read and clears unread badge cache"
   assert.match(notificationsPageSource, /invalidateQueries\(\{ queryKey: \["\/api\/notifications"\] \}\)/);
   assert.match(notificationsPageSource, /invalidateQueries\(\{ queryKey: \["\/api\/notifications\/unread"\] \}\)/);
 });
+
+test("provider notification read endpoint resolves review and notification atomically", () => {
+  const singleReadRoute = routesSource.slice(routesSource.indexOf('app.patch("/api/notifications/:id/read"'));
+  assert.match(singleReadRoute, /db\.transaction\(async \(tx\)/);
+  assert.match(singleReadRoute, /eq\(userNotifications\.id, notificationId\)/);
+  assert.match(singleReadRoute, /eq\(userNotifications\.userId, userId\)/);
+  assert.match(singleReadRoute, /providerPendingReview:\s*false/);
+  assert.match(singleReadRoute, /providerReviewAcceptedEffectivePlanHash/);
+  assert.match(singleReadRoute, /flight_service_notification_acknowledge_started/);
+  assert.match(singleReadRoute, /flight_service_notification_acknowledge_completed/);
+  assert.match(singleReadRoute, /flight_service_notification_acknowledge_idempotent/);
+  assert.match(singleReadRoute, /flight_service_notification_acknowledge_failed/);
+});
+
+test("notification acknowledgement updates unread and flight-plan caches after one click", () => {
+  assert.match(notificationsPageSource, /setQueryData<UserNotification\[\]>\(\["\/api\/notifications"\]/);
+  assert.match(notificationsPageSource, /notification\.id === id[\s\S]*isRead: true/);
+  assert.match(notificationsPageSource, /setQueryData<\{ count: number \}>\(\["\/api\/notifications\/unread"\]/);
+  assert.match(notificationsPageSource, /Math\.max\(0, \(current\?\.count \?\? unreadCount\) - 1\)/);
+  assert.match(notificationsPageSource, /setQueryData<any\[\]>\(\["\/api\/flight-plans"\]/);
+  assert.match(notificationsPageSource, /invalidateQueries\(\{ queryKey: \["\/api\/flight-plans"\] \}\)/);
+});

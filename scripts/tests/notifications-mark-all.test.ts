@@ -29,7 +29,7 @@ test("notifications page exposes mark all as read and clears unread badge cache"
   assert.match(notificationsPageSource, /button-mark-all-notifications-read/);
   assert.match(notificationsPageSource, /setQueryData<\{ count: number \}>\(\["\/api\/notifications\/unread"\], \{ count: 0 \}\)/);
   assert.match(notificationsPageSource, /invalidateQueries\(\{ queryKey: \["\/api\/notifications"\] \}\)/);
-  assert.match(notificationsPageSource, /invalidateQueries\(\{ queryKey: \["\/api\/notifications\/unread"\] \}\)/);
+  assert.doesNotMatch(notificationsPageSource, /invalidateQueries\(\{ queryKey: \["\/api\/notifications\/unread"\] \}\)/);
 });
 
 test("provider notification read endpoint resolves review and notification atomically", () => {
@@ -49,7 +49,24 @@ test("notification acknowledgement updates unread and flight-plan caches after o
   assert.match(notificationsPageSource, /setQueryData<UserNotification\[\]>\(\["\/api\/notifications"\]/);
   assert.match(notificationsPageSource, /notification\.id === id[\s\S]*isRead: true/);
   assert.match(notificationsPageSource, /setQueryData<\{ count: number \}>\(\["\/api\/notifications\/unread"\]/);
+  assert.match(notificationsPageSource, /result\?\.unreadCount === "number"/);
   assert.match(notificationsPageSource, /Math\.max\(0, \(current\?\.count \?\? unreadCount\) - 1\)/);
   assert.match(notificationsPageSource, /setQueryData<any\[\]>\(\["\/api\/flight-plans"\]/);
   assert.match(notificationsPageSource, /invalidateQueries\(\{ queryKey: \["\/api\/flight-plans"\] \}\)/);
+});
+
+test("mark all read does not accept provider changes", () => {
+  const markAllRoute = routesSource.slice(routesSource.indexOf('app.patch("/api/notifications/mark-all-read"'), routesSource.indexOf('app.patch("/api/notifications/:id/read"'));
+  assert.match(markAllRoute, /markAllUserNotificationsRead\(userId\)/);
+  assert.doesNotMatch(markAllRoute, /providerPendingReview:\s*false/);
+  assert.doesNotMatch(markAllRoute, /providerReviewAcceptedEffectivePlanHash/);
+});
+
+test("single notification acknowledgement requires current provider-review identity before clearing review", () => {
+  const singleReadRoute = routesSource.slice(routesSource.indexOf('app.patch("/api/notifications/:id/read"'));
+  assert.match(singleReadRoute, /providerReviewNotificationMatchesCurrentReview/);
+  assert.match(singleReadRoute, /notificationEffectivePlanHash/);
+  assert.match(singleReadRoute, /notificationVersionStamp/);
+  assert.match(singleReadRoute, /stale_notification_acknowledged_newer_review_preserved/);
+  assert.match(singleReadRoute, /newerReviewPreserved/);
 });

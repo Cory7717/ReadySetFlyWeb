@@ -1,3 +1,4 @@
+import React, { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,13 +44,26 @@ function NotificationMessage({ notification }: { notification: UserNotification 
 
 export default function NotificationsPage() {
   const queryClient = useQueryClient();
+  const [acknowledgedNotificationIds, setAcknowledgedNotificationIds] = useState<Set<string>>(() => new Set());
+  const pendingAcknowledgementIds = useRef<Set<string>>(new Set());
+  const [pendingNotificationIds, setPendingNotificationIds] = useState<Set<string>>(() => new Set());
+  const [acknowledgementError, setAcknowledgementError] = useState<string | null>(null);
 
   const { data: notifications = [], isLoading } = useQuery<UserNotification[]>({
     queryKey: ["/api/notifications"],
     refetchInterval: 15_000,
     refetchOnWindowFocus: true,
   });
-  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
+  const displayNotifications = useMemo(
+    () =>
+      notifications.map((notification) =>
+        acknowledgedNotificationIds.has(notification.id)
+          ? { ...notification, isRead: true, readAt: notification.readAt || new Date(0).toISOString() }
+          : notification,
+      ),
+    [acknowledgedNotificationIds, notifications],
+  );
+  const unreadCount = displayNotifications.filter((notification) => !notification.isRead).length;
 
   const markReadMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -57,6 +71,8 @@ export default function NotificationsPage() {
       return res.json();
     },
     onSuccess: (result: any, id) => {
+      setAcknowledgementError(null);
+      setAcknowledgedNotificationIds((current) => new Set(current).add(id));
       queryClient.setQueryData<UserNotification[]>(["/api/notifications"], (current = []) =>
         current.map((notification) =>
           notification.id === id
@@ -65,7 +81,9 @@ export default function NotificationsPage() {
         )
       );
       queryClient.setQueryData<{ count: number }>(["/api/notifications/unread"], (current) => ({
-        count: Math.max(0, (current?.count ?? unreadCount) - 1),
+        count: typeof result?.unreadCount === "number"
+          ? result.unreadCount
+          : Math.max(0, (current?.count ?? unreadCount) - 1),
       }));
       if (result?.plan) {
         queryClient.setQueryData<any[]>(["/api/flight-plans"], (current = []) =>
@@ -74,9 +92,27 @@ export default function NotificationsPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
+    },
+    onError: () => {
+      setAcknowledgementError("Notification could not be marked read. Try again.");
+    },
+    onSettled: (_result, _error, id) => {
+      if (!id) return;
+      pendingAcknowledgementIds.current.delete(id);
+      setPendingNotificationIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
     },
   });
+
+  const handleMarkRead = (id: string) => {
+    if (pendingAcknowledgementIds.current.has(id) || markReadMutation.isPending) return;
+    pendingAcknowledgementIds.current.add(id);
+    setPendingNotificationIds((current) => new Set(current).add(id));
+    markReadMutation.mutate(id);
+  };
 
   const markAllReadMutation = useMutation({
     mutationFn: async () => {
@@ -84,9 +120,9 @@ export default function NotificationsPage() {
       return res.json();
     },
     onSuccess: () => {
+      setAcknowledgedNotificationIds(new Set(notifications.map((notification) => notification.id)));
       queryClient.setQueryData<{ count: number }>(["/api/notifications/unread"], { count: 0 });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread"] });
     },
   });
 
@@ -121,13 +157,18 @@ export default function NotificationsPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {acknowledgementError && (
+            <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {acknowledgementError}
+            </div>
+          )}
           {isLoading ? (
             <div className="text-sm text-muted-foreground">Loading notifications…</div>
-          ) : notifications.length === 0 ? (
+          ) : displayNotifications.length === 0 ? (
             <div className="text-sm text-muted-foreground">You’re all caught up.</div>
           ) : (
             <div className="space-y-4">
-              {notifications.map((notification) => (
+              {displayNotifications.map((notification) => (
                 <div
                   key={notification.id}
                   className={`rounded-lg border p-4 space-y-2 ${notification.isRead ? "bg-background" : "bg-primary/5 border-primary/40"}`}
@@ -151,8 +192,8 @@ export default function NotificationsPage() {
                         size="sm"
                         variant="ghost"
                         className="ml-auto"
-                        onClick={() => markReadMutation.mutate(notification.id)}
-                        disabled={markReadMutation.isPending}
+                        onClick={() => handleMarkRead(notification.id)}
+                        disabled={markReadMutation.isPending || pendingNotificationIds.has(notification.id)}
                       >
                         <CheckCircle2 className="h-4 w-4 mr-1" />
                         Mark read

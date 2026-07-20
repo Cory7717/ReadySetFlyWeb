@@ -161,6 +161,42 @@ export const buildProviderEffectivePlanSnapshot = (
 export const hashProviderEffectivePlanSnapshot = (canonical: JsonRecord): string =>
   hashCanonical(canonical);
 
+export const providerReviewNotificationMatchesCurrentReview = ({
+  providerPendingReview,
+  notificationProviderPlanId,
+  notificationVersionStamp,
+  notificationEffectivePlanHash,
+  currentProviderPlanId,
+  currentVersionStamp,
+  currentEffectivePlanHash,
+}: {
+  providerPendingReview: boolean;
+  notificationProviderPlanId?: unknown;
+  notificationVersionStamp?: unknown;
+  notificationEffectivePlanHash?: unknown;
+  currentProviderPlanId?: unknown;
+  currentVersionStamp?: unknown;
+  currentEffectivePlanHash?: unknown;
+}): boolean => {
+  if (!providerPendingReview) return true;
+
+  const notificationPlanId = compact(notificationProviderPlanId);
+  const currentPlanId = compact(currentProviderPlanId);
+  if (notificationPlanId && currentPlanId && notificationPlanId !== currentPlanId) {
+    return false;
+  }
+
+  const notificationVersion = compact(notificationVersionStamp);
+  const currentVersion = compact(currentVersionStamp);
+  const notificationHash = compact(notificationEffectivePlanHash);
+  const currentHash = compact(currentEffectivePlanHash);
+
+  if (!notificationVersion && !notificationHash) return false;
+  if (notificationHash && currentHash && notificationHash === currentHash) return true;
+  if (notificationVersion && currentVersion && notificationVersion === currentVersion) return true;
+  return false;
+};
+
 export const buildProviderAcceptedEffectivePlanSnapshot = (
   payloadInput: JsonRecord | null | undefined,
   fallbackPlan?: JsonRecord | null | undefined,

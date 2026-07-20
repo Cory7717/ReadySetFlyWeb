@@ -118,6 +118,7 @@ import {
   buildProviderEffectivePlanSnapshot,
   buildProviderReviewDecision,
   hashProviderEffectivePlanSnapshot,
+  providerReviewNotificationMatchesCurrentReview,
 } from "@shared/provider-effective-review";
 import {
   buildFilingEventId,
@@ -22322,6 +22323,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const notificationMeta = getProviderSnapshotRecord((notification as Record<string, unknown>).meta);
       const planId = String(notificationMeta.flightPlanId || notificationMeta.planId || "").trim();
       const providerPlanId = String(notificationMeta.providerPlanId || "").trim();
+      const notificationEventHash = String(notificationMeta.providerEventHash || notificationMeta.eventHash || "").trim();
+      const notificationVersionStamp = String(notificationMeta.providerVersionStamp || notificationMeta.versionStamp || "").trim();
+      const notificationEffectivePlanHash = String(notificationMeta.providerEffectivePlanHash || notificationMeta.effectivePlanHash || "").trim();
       const isProviderFlightNotification = /^(flight_alert|flight_change|provider_sync|flight_plan_)/.test(String(notification.type || ""));
       const startedPreviousUnread = notification.isRead !== true;
       let updatedPlan: any = null;
@@ -22330,11 +22334,21 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       let resultingProviderPendingReview: boolean | null = null;
       let idempotentRetry = false;
       let supersededNotifications = 0;
+      let notificationMatchedCurrentReview: boolean | null = null;
+      let providerReviewCleared = false;
+      let newerReviewPreserved = false;
+      let resultReason = "notification_read";
+      let currentPendingReviewEventHash: string | null = null;
+      let currentPendingReviewVersionStamp: string | null = null;
+      let currentPendingReviewEffectivePlanHash: string | null = null;
       console.info(JSON.stringify({
         event: "flight_service_notification_acknowledge_started",
         notificationId,
         planId: planId || null,
         providerPlanId: providerPlanId || null,
+        notificationEventHash: notificationEventHash || null,
+        notificationVersionStamp: notificationVersionStamp || null,
+        notificationEffectivePlanHash: notificationEffectivePlanHash || null,
         previousUnread: startedPreviousUnread,
       }));
       const [updated] = await db.transaction(async (tx) => {
@@ -22355,6 +22369,22 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             const snapshot = getProviderSnapshotRecord((plan as Record<string, unknown>).filingProviderSnapshot);
             previousProviderPendingReview = snapshot.providerPendingReview === true;
             contentReviewRequired = previousProviderPendingReview;
+            const currentPendingVersionStamp = String(snapshot.versionStamp || snapshot.providerReviewPendingVersionStamp || "").trim();
+            const currentPendingEffectivePlanHash = String(snapshot.providerEffectivePlanHash || "").trim();
+            const currentPendingEventHash = String(snapshot.providerReviewPendingEventHash || snapshot.providerEventHash || snapshot.eventHash || "").trim();
+            currentPendingReviewEventHash = currentPendingEventHash || null;
+            currentPendingReviewVersionStamp = currentPendingVersionStamp || null;
+            currentPendingReviewEffectivePlanHash = currentPendingEffectivePlanHash || null;
+            const currentProviderPlanId = String(plan.filingProviderPlanId || snapshot.providerPlanId || "").trim();
+            notificationMatchedCurrentReview = providerReviewNotificationMatchesCurrentReview({
+              providerPendingReview: previousProviderPendingReview,
+              notificationProviderPlanId: providerPlanId,
+              notificationVersionStamp,
+              notificationEffectivePlanHash,
+              currentProviderPlanId,
+              currentVersionStamp: currentPendingVersionStamp,
+              currentEffectivePlanHash: currentPendingEffectivePlanHash,
+            });
             const raw = getProviderSnapshotRecord((plan as Record<string, unknown>).filingRaw);
             const acceptedVersionStamp = String(
               snapshot.versionStamp ||
@@ -22380,7 +22410,57 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               providerReviewAcceptedBy: snapshot.providerReviewAcceptedBy || userId,
               providerReviewDecisionReason: previousProviderPendingReview ? "provider_effective_plan_accepted_by_notification_acknowledgement" : snapshot.providerReviewDecisionReason || "already_accepted_effective_plan",
             };
-            if (previousProviderPendingReview || !snapshot.providerReviewAcceptedEffectivePlanHash) {
+            if (previousProviderPendingReview && notificationMatchedCurrentReview) {
+              const pendingReviewGuard: any[] = [
+                eq(flightPlans.id, plan.id),
+                eq(flightPlans.userId, userId),
+                sql`${flightPlans.filingProviderSnapshot}->>'providerPendingReview' = 'true'`,
+              ];
+              if (currentProviderPlanId) {
+                pendingReviewGuard.push(or(
+                  eq(flightPlans.filingProviderPlanId, currentProviderPlanId),
+                  sql`${flightPlans.filingProviderSnapshot}->>'providerPlanId' = ${currentProviderPlanId}`,
+                ));
+              }
+              if (currentPendingEffectivePlanHash) {
+                pendingReviewGuard.push(sql`${flightPlans.filingProviderSnapshot}->>'providerEffectivePlanHash' = ${currentPendingEffectivePlanHash}`);
+              } else if (currentPendingVersionStamp) {
+                pendingReviewGuard.push(or(
+                  sql`${flightPlans.filingProviderSnapshot}->>'versionStamp' = ${currentPendingVersionStamp}`,
+                  sql`${flightPlans.filingProviderSnapshot}->>'providerReviewPendingVersionStamp' = ${currentPendingVersionStamp}`,
+                ));
+              }
+              const [planUpdate] = await tx
+                .update(flightPlans)
+                .set({
+                  filingProviderSnapshot: acceptedSnapshot as any,
+                  filingLastProviderSyncAt: now,
+                  updatedAt: now,
+                } as any)
+                .where(and(...pendingReviewGuard))
+                .returning();
+              if (planUpdate) {
+                updatedPlan = planUpdate;
+                providerReviewCleared = true;
+                resultReason = "current_provider_review_accepted";
+              } else {
+                const [latestPlan] = await tx
+                  .select()
+                  .from(flightPlans)
+                  .where(and(eq(flightPlans.id, plan.id), eq(flightPlans.userId, userId)))
+                  .limit(1);
+                updatedPlan = latestPlan || plan;
+                providerReviewCleared = false;
+                newerReviewPreserved = true;
+                resultingProviderPendingReview = true;
+                resultReason = "concurrent_newer_review_preserved";
+              }
+            } else if (previousProviderPendingReview && !notificationMatchedCurrentReview) {
+              updatedPlan = plan;
+              newerReviewPreserved = true;
+              resultingProviderPendingReview = true;
+              resultReason = "stale_notification_acknowledged_newer_review_preserved";
+            } else if (!snapshot.providerReviewAcceptedEffectivePlanHash) {
               const [planUpdate] = await tx
                 .update(flightPlans)
                 .set({
@@ -22391,13 +22471,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
                 .where(and(eq(flightPlans.id, plan.id), eq(flightPlans.userId, userId)))
                 .returning();
               updatedPlan = planUpdate || plan;
+              resultReason = "informational_notification_acknowledged_baseline_recorded";
             } else {
               idempotentRetry = true;
               updatedPlan = plan;
+              resultReason = "already_acknowledged_current_review";
             }
-            resultingProviderPendingReview = false;
+            if (resultingProviderPendingReview !== true) resultingProviderPendingReview = false;
 
-            if (providerPlanId && /closed|cancelled|canceled/i.test(`${notification.title} ${notification.message}`)) {
+            if (providerPlanId && !previousProviderPendingReview && /closed|cancelled|canceled/i.test(`${notification.title} ${notification.message}`)) {
               const superseded = await tx
                 .update(userNotifications)
                 .set({ isRead: true, readAt: now, updatedAt: now })
@@ -22425,19 +22507,35 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         planId: updatedPlan?.id || planId || null,
         providerPlanId: updatedPlan?.filingProviderPlanId || providerPlanId || null,
         previousUnread: startedPreviousUnread,
+        notificationEventHash: notificationEventHash || null,
+        notificationVersionStamp: notificationVersionStamp || null,
+        notificationEffectivePlanHash: notificationEffectivePlanHash || null,
+        currentPendingReviewEventHash,
+        currentPendingReviewVersionStamp,
+        currentPendingReviewEffectivePlanHash,
         previousProviderPendingReview,
         resultingProviderPendingReview,
         contentReviewRequired,
+        notificationMatchedCurrentReview,
+        providerReviewCleared,
+        newerReviewPreserved,
         superseded: supersededNotifications > 0,
         supersededNotifications,
         idempotentRetry,
+        resultReason,
       }));
+      const unreadAfterAcknowledgement = await storage.getUnreadUserNotifications(userId);
       res.json({
         ...updated,
         ok: true,
         plan: updatedPlan,
+        unreadCount: unreadAfterAcknowledgement.length,
         providerPendingReview: resultingProviderPendingReview,
+        notificationMatchedCurrentReview,
+        providerReviewCleared,
+        newerReviewPreserved,
         idempotentRetry,
+        resultReason,
       });
     } catch (error) {
       console.error("Failed to mark notification read:", error);
@@ -24395,6 +24493,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
         let syncedNotificationMessage = providerMessageDetails;
         let syncedNotificationChanges: string[] = [];
+        let notificationProviderVersionStamp = String(providerReviewSnapshot.versionStamp || flightVersionStamp || "").trim() || null;
+        let notificationProviderEffectivePlanHash: string | null = null;
+        let notificationProviderPendingReview = false;
         const syncResult = await syncLeidosPlanMetadata(matchedPlan as any).catch(() => null);
         if (syncResult) {
           const syncedPlan = await persistLeidosProviderSync(matchedPlan as any, syncResult, { extraMessages: [providerMessage], suppressTransitionLog: true });
@@ -24411,6 +24512,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             nextSnapshot: syncedSnapshot,
           });
           const providerHistoryVersion = String(syncedSnapshot.versionStamp || providerReviewSnapshot.versionStamp || flightVersionStamp || "").trim();
+          notificationProviderVersionStamp = providerHistoryVersion || notificationProviderVersionStamp;
+          notificationProviderEffectivePlanHash = String(syncedNotificationChanges.length > 0 ? syncedSnapshot.providerEffectivePlanHash || "" : "").trim() || null;
+          notificationProviderPendingReview = syncedSnapshot.providerPendingReview === true;
           const providerHistoryEntry = providerHistoryChanges.length > 0
             ? {
               id: buildFilingEventId("webhook-history", flightIdentifier, "provider_changes_detected", providerHistoryVersion || pushReceivedAt),
@@ -24538,6 +24642,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           meta: {
             flightPlanId: matchedPlan.id,
             providerPlanId: flightIdentifier,
+            providerEventHash: eventHash,
+            providerVersionStamp: notificationProviderVersionStamp,
+            providerEffectivePlanHash: notificationProviderEffectivePlanHash,
+            providerPendingReview: notificationProviderPendingReview,
             changedFields: syncedNotificationChanges,
             payloadSummary: safeWebhookPayloadSummary,
           } as any,
@@ -26059,6 +26167,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             planId: plan.id,
             planTitle: plan.title,
             providerPlanId: syncResult.providerPlanId,
+            providerVersionStamp: String(nextSnapshot.versionStamp || syncResult.versionStamp || "").trim() || null,
+            providerEffectivePlanHash: String(nextSnapshot.providerPendingReview === true ? nextSnapshot.providerEffectivePlanHash || "" : "").trim() || null,
+            providerPendingReview: nextSnapshot.providerPendingReview === true,
             changedByProvider: routeChangedByProvider,
             changedFields,
             providerRoute,

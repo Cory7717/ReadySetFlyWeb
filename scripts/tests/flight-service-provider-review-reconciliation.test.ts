@@ -8,6 +8,7 @@ import {
   hashProviderEffectivePlanSnapshot,
   normalizeProviderReviewOtherInfo,
   normalizeProviderReviewRoute,
+  providerReviewNotificationMatchesCurrentReview,
 } from "../../shared/provider-effective-review";
 
 const basePlan = {
@@ -61,6 +62,64 @@ test("provider enrichment opens review once and accepted effective baseline pers
   const acceptedHash = hashProviderEffectivePlanSnapshot(acceptedCanonical);
   assert.equal(decision.effectiveHash, acceptedHash);
   assert.equal(acceptedCanonical.otherInfo, "EET/KZAK0056 PHZH0449 PBN/A1 RMK/VEGAS TO HAWAII IFR TEST PLAN");
+});
+
+test("stale provider notification acknowledgement cannot clear a newer pending review", () => {
+  assert.equal(providerReviewNotificationMatchesCurrentReview({
+    providerPendingReview: true,
+    notificationProviderPlanId: "658167349_806440_6464",
+    notificationVersionStamp: "20260716173117000",
+    notificationEffectivePlanHash: "hash-a",
+    currentProviderPlanId: "658167349_806440_6464",
+    currentVersionStamp: "20260716173119000",
+    currentEffectivePlanHash: "hash-b",
+  }), false);
+});
+
+test("current provider notification acknowledgement clears the matching pending review", () => {
+  assert.equal(providerReviewNotificationMatchesCurrentReview({
+    providerPendingReview: true,
+    notificationProviderPlanId: "658167349_806440_6464",
+    notificationVersionStamp: "20260716173119000",
+    notificationEffectivePlanHash: "hash-b",
+    currentProviderPlanId: "658167349_806440_6464",
+    currentVersionStamp: "20260716173119000",
+    currentEffectivePlanHash: "hash-b",
+  }), true);
+});
+
+test("provider notification acknowledgement is idempotent after review is already cleared", () => {
+  assert.equal(providerReviewNotificationMatchesCurrentReview({
+    providerPendingReview: false,
+    notificationProviderPlanId: "658167349_806440_6464",
+    notificationVersionStamp: "20260716173119000",
+    notificationEffectivePlanHash: "hash-b",
+    currentProviderPlanId: "658167349_806440_6464",
+    currentVersionStamp: "20260716173119000",
+    currentEffectivePlanHash: "hash-b",
+  }), true);
+});
+
+test("notification without provider-review identity cannot clear a pending review by plan id alone", () => {
+  assert.equal(providerReviewNotificationMatchesCurrentReview({
+    providerPendingReview: true,
+    notificationProviderPlanId: "658167349_806440_6464",
+    currentProviderPlanId: "658167349_806440_6464",
+    currentVersionStamp: "20260716173119000",
+    currentEffectivePlanHash: "hash-b",
+  }), false);
+});
+
+test("out-of-order notification from a different provider plan cannot clear review", () => {
+  assert.equal(providerReviewNotificationMatchesCurrentReview({
+    providerPendingReview: true,
+    notificationProviderPlanId: "old-provider-plan",
+    notificationVersionStamp: "20260716173119000",
+    notificationEffectivePlanHash: "hash-b",
+    currentProviderPlanId: "new-provider-plan",
+    currentVersionStamp: "20260716173119000",
+    currentEffectivePlanHash: "hash-b",
+  }), false);
 });
 
 test("new operational alert with unchanged effective plan does not reopen review", () => {

@@ -11,6 +11,7 @@ import {
   EXTENDED_EDGE_PACK_VERSION,
   summarizePayload,
 } from "./leidos-live-lab/live-lab-runner";
+import { validateFlightPlanForAction } from "../../server/services/flight-plan-filing/provider";
 
 const context = {
   user: { id: "test-user", email: "test@example.invalid" },
@@ -107,7 +108,7 @@ test("extended amend cases mutate before the next provider action and preserve r
     route: "DCT ACT DCT SAT DCT",
     filingPlannedAltitudeFt: 9000,
     alternate: "KAUS",
-    filingOtherInfo: "PBN/A1 RMK/RSF LAB TEST SEED 17 AMENDED BEFORE CANCEL",
+    filingOtherInfo: "RMK/RSF LAB TEST SEED 17 AMENDED BEFORE CANCEL",
     filingRemarks: "RSF LAB TEST SEED 17 AMENDED BEFORE CANCEL",
   });
   assert.deepEqual(amendMutationForCase(case20), {
@@ -117,6 +118,41 @@ test("extended amend cases mutate before the next provider action and preserve r
     filingOtherInfo: "PBN/A1 TYP/TBM9 RMK/RSF LAB TEST SEED 20 ZZZZ TYP AMENDED",
     filingRemarks: "RSF LAB TEST SEED 20 ZZZZ TYP AMENDED",
   });
+});
+
+test("case 17 amend remains valid with SC equipment and does not introduce PBN without R", () => {
+  const cases = buildExtendedEdgeCases(context, "case-17-amend-validation");
+  const case17 = cases.find((item) => item.seed === 17)!;
+  const filePlan = {
+    ...case17.buildPlan(),
+    plannedDepartureAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  } as any;
+  const mutation = amendMutationForCase(case17)!;
+  const amendPlan = {
+    ...filePlan,
+    ...mutation,
+    filingStatus: "filed",
+    filingProviderPlanId: "provider-case-17",
+    plannedDepartureAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  } as any;
+
+  assert.equal(filePlan.filingEquipment, "SC");
+  assert.equal(validateFlightPlanForAction(filePlan, "file").ready, true);
+  assert.equal(amendPlan.filingEquipment, "SC");
+  assert.doesNotMatch(String(amendPlan.filingOtherInfo), /\bPBN\//);
+  assert.equal(validateFlightPlanForAction(amendPlan, "amend").ready, true);
+});
+
+test("case 18 remains the dedicated positive Equipment R plus PBN edge case", () => {
+  const case18 = buildExtendedEdgeCases(context, "case-18-pbn-validation").find((item) => item.seed === 18)!;
+  const plan = {
+    ...case18.buildPlan(),
+    plannedDepartureAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  } as any;
+
+  assert.match(String(plan.filingEquipment), /R/);
+  assert.match(String(plan.filingOtherInfo), /\bPBN\/A1\b/);
+  assert.equal(validateFlightPlanForAction(plan, "file").ready, true);
 });
 
 test("extended edge pack fails locally if provider-submitted cases collide", () => {

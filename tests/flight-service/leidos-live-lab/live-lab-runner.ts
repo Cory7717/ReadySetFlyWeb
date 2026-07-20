@@ -598,7 +598,7 @@ export const buildExtendedEdgeCases = (context: DedicatedTestContext, runId: str
   const plan = createBasePlanFactory(context, runId);
   return [
     { seed: 16, stableId: "edge-16", name: "IFR proposed cancellation", testType: "Lifecycle", classification: "lifecycle", actions: ["file", "cancel"], expectedFinalState: "cancelled", buildPlan: () => plan(16, "IFR Cancel", { filingFlightRules: "IFR", route: "DCT ACT DCT", filingPlannedAltitudeFt: 8000, destination: "KDTO", alternate: "KACT" }) },
-    { seed: 17, stableId: "edge-17", name: "IFR amend then cancel with newest version stamp", testType: "Lifecycle", classification: "lifecycle", actions: ["file", "amend", "cancel"], expectedFinalState: "cancelled", buildPlan: () => plan(17, "IFR Amend Cancel", { filingFlightRules: "IFR", route: "DCT CWK DCT", filingPlannedAltitudeFt: 7000, destination: "KDTO", alternate: "KACT" }) },
+    { seed: 17, stableId: "edge-17", name: "IFR amend then cancel with newest version stamp", testType: "Lifecycle", classification: "lifecycle", actions: ["file", "amend", "cancel"], expectedFinalState: "cancelled", buildPlan: () => plan(17, "IFR Amend Cancel", { filingFlightRules: "IFR", filingEquipment: "SC", route: "DCT CWK DCT", filingPlannedAltitudeFt: 7000, destination: "KDTO", alternate: "KACT" }) },
     { seed: 18, stableId: "edge-18", name: "Positive - Equipment R with valid PBN", testType: "Positive", classification: "positive", actions: ["file"], expectedFinalState: "filed, then cleanup cancel", buildPlan: () => plan(18, "R With PBN", { filingEquipment: "SR", filingOtherInfo: `PBN/A1 ${providerSafeRmk(18, "VALID PBN")}` }) },
     { seed: 19, stableId: "edge-19", name: "KLAS date-boundary timezone payload", testType: "Positive", classification: "time", actions: ["file"], expectedFinalState: "filed, then cleanup cancel", buildPlan: () => {
       const local = "2026-07-17T23:30";
@@ -697,7 +697,7 @@ export const amendMutationForCase = (testCase: LiveLabCase): Partial<FlightPlan>
       route: "DCT ACT DCT SAT DCT",
       filingPlannedAltitudeFt: 9000,
       alternate: "KAUS",
-      filingOtherInfo: `PBN/A1 ${providerSafeRmk(17, "AMENDED BEFORE CANCEL")}`,
+      filingOtherInfo: providerSafeRmk(17, "AMENDED BEFORE CANCEL"),
       filingRemarks: "RSF LAB TEST SEED 17 AMENDED BEFORE CANCEL",
     } as Partial<FlightPlan>;
   }

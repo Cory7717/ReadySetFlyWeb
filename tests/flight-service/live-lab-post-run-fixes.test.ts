@@ -11,6 +11,12 @@ import {
   shouldCleanupImmediatelyAfterCase,
   verifyActivationActionState,
 } from "./leidos-live-lab/live-lab-runner";
+import { extractLeidosWebhookFields } from "../../server/services/leidosWebhook";
+import {
+  buildProviderAcceptedEffectivePlanSnapshot,
+  buildProviderReviewDecision,
+  hashProviderEffectivePlanSnapshot,
+} from "../../shared/provider-effective-review";
 
 const context = {
   user: { id: "test-user", email: "test@example.invalid" },
@@ -333,6 +339,156 @@ test("Case 21 lifecycle evidence summary requires explicit ACTIVATED and CLOSED 
   assert.equal(summary.cases[0].activationVerificationMatched, true);
   assert.equal(summary.cases[0].closeVerificationMatched, true);
   assert.equal(summary.cases[0].lifecycleEvidenceComplete, true);
+});
+
+test("Case 21 mocked FILE ACTIVATE webhook CLOSE chain stays review-clean and complete", () => {
+  const acceptedSnapshot = buildProviderAcceptedEffectivePlanSnapshot({
+    aircraftIdentifier: "N123RS",
+    aircraftType: "C172",
+    departure: "KEDC",
+    destination: "KACT",
+    route: "DCT ACT DCT",
+    flightRules: "VFR",
+    plannedAltitudeFt: "6500",
+    alternate: "KDAL",
+    departureInstant: "2026-07-20T18:00:00.000Z",
+  }, {});
+  const acceptedHash = hashProviderEffectivePlanSnapshot(acceptedSnapshot);
+  const filedPlan = basePlan({
+    id: "case-21-plan",
+    destination: "KACT",
+    route: "DCT ACT DCT",
+    filingFlightRules: "VFR",
+    plannedAltitudeFt: "6500",
+    alternate: "KDAL",
+    filingProviderPlanId: "658167349_806440_0021",
+    filingStatus: "filed",
+    filingProviderSnapshot: {
+      providerPlanId: "658167349_806440_0021",
+      versionStamp: "20260720180000000",
+      providerPendingReview: false,
+      providerReviewAcceptedEffectivePlanHash: acceptedHash,
+      providerReviewAcceptedEffectivePlanSnapshot: acceptedSnapshot,
+    },
+  });
+
+  const activatedWebhook = {
+    notificationType: "FLIGHT_ALERT",
+    flightAlert: {
+      flightIdentifier: "658167349_806440_0021",
+      flightVersionStamp: "20260720180100000",
+      flightState: "ACTIVATED",
+      artccState: "ROGERED",
+      messageDateTime: "2026-07-20T18:01:00.000Z",
+    },
+  };
+  const activatedFields = extractLeidosWebhookFields(activatedWebhook);
+  assert.equal(activatedFields.normalizedLifecycle, "activated");
+
+  const reviewDecision = buildProviderReviewDecision({
+    plan: filedPlan,
+    previousSnapshot: filedPlan.filingProviderSnapshot,
+    nextSnapshot: {
+      providerLifecycleStatus: activatedFields.normalizedLifecycle,
+      providerLifecycleSource: "leidos_webhook",
+      providerLifecycleReason: "explicit_provider_active",
+      providerFlightState: activatedFields.flightState,
+      fieldDiffs: [],
+    },
+  });
+  assert.equal(reviewDecision.reviewPending, false);
+  assert.deepEqual(reviewDecision.changedFields, []);
+
+  const closeEligiblePlan = {
+    ...filedPlan,
+    filingStatus: "activated",
+    filingProviderSnapshot: {
+      ...filedPlan.filingProviderSnapshot,
+      providerLifecycleStatus: "activated",
+      providerFlightState: "ACTIVATED",
+      providerPendingReview: reviewDecision.reviewPending,
+      providerActionAvailability: {
+        amend: true,
+        activate: false,
+        cancel: false,
+        close: true,
+      },
+    },
+  };
+  assert.equal(closeEligiblePlan.filingProviderSnapshot.providerPendingReview, false);
+  assert.equal(closeEligiblePlan.filingProviderSnapshot.providerActionAvailability.close, true);
+
+  const closedWebhook = {
+    notificationType: "FLIGHT_ALERT",
+    flightAlert: {
+      flightIdentifier: "658167349_806440_0021",
+      flightVersionStamp: "20260720181500000",
+      flightState: "CLOSED",
+      artccState: "ROGERED",
+      messageDateTime: "2026-07-20T18:15:00.000Z",
+    },
+  };
+  const closedFields = extractLeidosWebhookFields(closedWebhook);
+  assert.equal(closedFields.normalizedLifecycle, "closed");
+
+  const summary = buildLifecycleEvidenceSummary([
+    {
+      seed: 21,
+      certificationCaseId: "edge-21",
+      testName: "VFR full lifecycle extended",
+      pass: true,
+      actions: [
+        {
+          action: "file",
+          responseStatus: "accepted",
+          providerPlanId: "658167349_806440_0021",
+          acceptedSnapshotAvailable: true,
+          providerReviewDecisionReason: "accepted_transmitted_snapshot_persisted",
+        },
+        {
+          action: "activate",
+          activateAccepted: true,
+          activationVerificationAttempted: true,
+          activationVerificationMatched: true,
+          activationEvidenceKind: "explicit_provider_webhook",
+          activationEvidenceSource: "leidos_webhook",
+          activatedAt: activatedFields.messageDateTime,
+        },
+        {
+          action: "close",
+          primaryCloseAttempted: true,
+          primaryCloseAccepted: true,
+          primaryCloseVerified: true,
+          providerPendingReviewBeforeClose: false,
+          closeAccepted: true,
+          closeVerificationMatched: true,
+          closeEvidenceKind: "explicit_provider_webhook",
+          closeEvidenceSource: "leidos_webhook",
+          closedAt: closedFields.messageDateTime,
+          terminalVerification: {
+            status: "PASS",
+            evidenceKind: "explicit_provider_webhook",
+            evidenceSource: "leidos_webhook",
+          },
+        },
+      ],
+    },
+  ]);
+
+  assert.equal(summary.cases[0].activateAccepted, true);
+  assert.equal(summary.cases[0].activationVerificationMatched, true);
+  assert.equal(summary.cases[0].closeVerificationMatched, true);
+  assert.equal(summary.cases[0].lifecycleEvidenceComplete, true);
+  assert.equal(shouldCleanupImmediatelyAfterCase({
+    seed: 21,
+    stableId: "edge-21",
+    name: "VFR full lifecycle extended",
+    testType: "Lifecycle",
+    classification: "lifecycle",
+    actions: ["file", "activate", "close"],
+    expectedFinalState: "closed",
+    buildPlan: () => closeEligiblePlan,
+  } as any, { pass: true }, { ...closeEligiblePlan, filingStatus: "closed" } as any), false);
 });
 
 test("Case 21 cannot report complete lifecycle evidence without explicit activation", () => {

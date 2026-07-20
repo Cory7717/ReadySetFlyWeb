@@ -3,7 +3,9 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import {
   buildTerminalVerificationSummary,
+  captureTerminalActionEvidenceBaseline,
   classifyLifecycleEvidence,
+  evaluateTerminalEvidenceObservation,
 } from "./leidos-live-lab/live-lab-runner";
 
 test("explicit provider retrieve lifecycle is provider evidence", () => {
@@ -78,6 +80,188 @@ test("conflicting explicit provider lifecycle is surfaced", () => {
   assert.equal(evidence.conflictsWithExpected, true);
 });
 
+test("case 17 stale PROPOSED evidence after CANCEL is transitional, not terminal failure", () => {
+  const baseline = {
+    providerPlanId: "658167349_806440_10299",
+    versionStamp: "20260720190000000",
+    lifecycle: "proposed",
+    eventHash: "proposed-event",
+    evidenceTime: "2026-07-20T19:00:00.000Z",
+    evidenceSource: "leidos_webhook",
+    actionStartedAt: "2026-07-20T19:05:00.000Z",
+  };
+  const proposedEvidence = classifyLifecycleEvidence({
+    providerPlanId: "658167349_806440_10299",
+    versionStamp: "20260720190000000",
+    providerLifecycleStatus: "proposed",
+    providerLifecycleSource: "leidos_webhook",
+    providerLifecycleReason: "explicit_provider_flight_state",
+    providerFlightState: "PROPOSED",
+    providerEventHash: "proposed-event",
+    lastProviderUpdateAt: "2026-07-20T19:00:00.000Z",
+  }, "cancelled");
+
+  const observation = evaluateTerminalEvidenceObservation({
+    evidence: proposedEvidence,
+    expectedStatus: "cancelled",
+    baseline,
+  });
+
+  assert.equal(proposedEvidence.kind, "conflicting_provider_evidence");
+  assert.equal(observation.decision, "pre_action_evidence_ignored");
+  assert.equal(observation.transitional, true);
+  assert.equal(observation.isContradictoryTerminal, false);
+});
+
+test("later CANCELLED webhook after Case 17 cancel is matching terminal evidence", () => {
+  const baseline = {
+    providerPlanId: "658167349_806440_10299",
+    versionStamp: "20260720190000000",
+    lifecycle: "proposed",
+    eventHash: "proposed-event",
+    evidenceTime: "2026-07-20T19:00:00.000Z",
+    evidenceSource: "leidos_webhook",
+    actionStartedAt: "2026-07-20T19:05:00.000Z",
+  };
+  const cancelledEvidence = classifyLifecycleEvidence({
+    providerPlanId: "658167349_806440_10299",
+    versionStamp: "20260720190530000",
+    providerLifecycleStatus: "cancelled",
+    providerLifecycleSource: "leidos_webhook",
+    providerLifecycleReason: "explicit_provider_cancellation",
+    providerFlightState: "CANCELLED",
+    providerEventHash: "cancelled-event",
+    lastProviderUpdateAt: "2026-07-20T19:05:30.000Z",
+  }, "cancelled");
+
+  const observation = evaluateTerminalEvidenceObservation({
+    evidence: cancelledEvidence,
+    expectedStatus: "cancelled",
+    baseline,
+  });
+
+  assert.equal(observation.decision, "matching_terminal_evidence");
+  assert.equal(observation.isMatchingTerminal, true);
+});
+
+test("persistent PROPOSED evidence during terminal verification remains transitional until timeout", () => {
+  const baseline = {
+    providerPlanId: "provider-1",
+    versionStamp: "20260720190000000",
+    lifecycle: "proposed",
+    eventHash: "proposed-event",
+    evidenceTime: "2026-07-20T19:00:00.000Z",
+    evidenceSource: "leidos_webhook",
+    actionStartedAt: "2026-07-20T19:05:00.000Z",
+  };
+  const proposedEvidence = classifyLifecycleEvidence({
+    providerPlanId: "provider-1",
+    versionStamp: "20260720190000000",
+    providerLifecycleStatus: "proposed",
+    providerLifecycleSource: "leidos_webhook",
+    providerLifecycleReason: "explicit_provider_flight_state",
+    providerFlightState: "PROPOSED",
+    providerEventHash: "proposed-event",
+  }, "cancelled");
+
+  const observation = evaluateTerminalEvidenceObservation({
+    evidence: proposedEvidence,
+    expectedStatus: "cancelled",
+    baseline,
+  });
+
+  assert.notEqual(observation.decision, "contradictory_terminal_evidence");
+  assert.equal(observation.isMatchingTerminal, false);
+});
+
+test("new contradictory terminal evidence fails terminal verification", () => {
+  const baseline = {
+    providerPlanId: "provider-1",
+    versionStamp: "20260720190000000",
+    lifecycle: "activated",
+    eventHash: "activated-event",
+    evidenceTime: "2026-07-20T19:00:00.000Z",
+    evidenceSource: "leidos_webhook",
+    actionStartedAt: "2026-07-20T19:05:00.000Z",
+  };
+  const cancelledEvidence = classifyLifecycleEvidence({
+    providerPlanId: "provider-1",
+    versionStamp: "20260720190530000",
+    providerLifecycleStatus: "cancelled",
+    providerLifecycleSource: "leidos_webhook",
+    providerLifecycleReason: "explicit_provider_cancellation",
+    providerFlightState: "CANCELLED",
+    providerEventHash: "cancelled-event",
+  }, "closed");
+
+  const observation = evaluateTerminalEvidenceObservation({
+    evidence: cancelledEvidence,
+    expectedStatus: "closed",
+    baseline,
+  });
+
+  assert.equal(observation.decision, "contradictory_terminal_evidence");
+  assert.equal(observation.isContradictoryTerminal, true);
+});
+
+test("same event hash and same version do not count as new terminal evidence", () => {
+  const baseline = {
+    providerPlanId: "provider-1",
+    versionStamp: "20260720190000000",
+    lifecycle: "proposed",
+    eventHash: "same-event",
+    evidenceTime: "2026-07-20T19:00:00.000Z",
+    evidenceSource: "leidos_webhook",
+    actionStartedAt: "2026-07-20T19:05:00.000Z",
+  };
+  const evidence = classifyLifecycleEvidence({
+    providerPlanId: "provider-1",
+    versionStamp: "20260720190000000",
+    providerLifecycleStatus: "cancelled",
+    providerLifecycleSource: "leidos_webhook",
+    providerLifecycleReason: "explicit_provider_cancellation",
+    providerFlightState: "CANCELLED",
+    providerEventHash: "same-event",
+  }, "cancelled");
+
+  const observation = evaluateTerminalEvidenceObservation({
+    evidence,
+    expectedStatus: "cancelled",
+    baseline,
+  });
+
+  assert.equal(observation.sameEvent, true);
+  assert.notEqual(observation.decision, "matching_terminal_evidence");
+});
+
+test("terminal action baseline captures provider identifiers without payload details", () => {
+  const baseline = captureTerminalActionEvidenceBaseline({
+    id: "plan-1",
+    filingProviderPlanId: "provider-1",
+    filingRaw: { versionStamp: "20260720190000000" },
+    filingProviderSnapshot: {
+      providerPlanId: "provider-1",
+      versionStamp: "20260720190000000",
+      providerLifecycleStatus: "proposed",
+      providerLifecycleSource: "leidos_webhook",
+      providerLifecycleReason: "explicit_provider_flight_state",
+      providerFlightState: "PROPOSED",
+      providerEventHash: "event-1",
+      lastProviderUpdateAt: "2026-07-20T19:00:00.000Z",
+    },
+  } as any, "2026-07-20T19:05:00.000Z");
+
+  assert.deepEqual(baseline, {
+    providerPlanId: "provider-1",
+    versionStamp: "20260720190000000",
+    lifecycle: "proposed",
+    eventHash: "event-1",
+    evidenceTime: "2026-07-20T19:00:00.000Z",
+    evidenceSource: "leidos_webhook",
+    actionStartedAt: "2026-07-20T19:05:00.000Z",
+  });
+});
+
 test("terminal summary carries evidence classification and versionStamp optionality", () => {
   const summary = buildTerminalVerificationSummary([{
     certificationCaseId: "case-07",
@@ -128,4 +312,3 @@ test("UI and reports expose source-transparent lifecycle wording", () => {
   assert.match(routes, /webhookProcessingTimestamp/);
   assert.doesNotMatch(routes, /\["user_action", "admin_action"\]\.includes\(String\(incoming\.providerLifecycleSource/);
 });
-

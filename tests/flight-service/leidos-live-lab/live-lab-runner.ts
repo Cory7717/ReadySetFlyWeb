@@ -162,6 +162,12 @@ const isTerminalAction = (action: CaseAction) => action === "cancel" || action =
 const expectedTerminalStatusForAction = (action: CaseAction) =>
   action === "close" ? "closed" : action === "cancel" ? "cancelled" : null;
 
+export const isAmbiguousProviderTerminalRejection = (action: CaseAction | FlightPlanFilingAction | "verify" | "none", value: unknown) => {
+  const text = String(value || "").trim();
+  if (!text || !["cancel", "close"].includes(String(action))) return false;
+  return /Webservice\.Cannot|CannotCancel|CannotClose|not in the PROPOSED state|could not be cancelled|could not be closed/i.test(text);
+};
+
 const isTerminalProviderStatus = (value: unknown, action: CaseAction) => {
   const status = String(value || "").trim().toLowerCase();
   if (!status) return null;
@@ -179,6 +185,26 @@ type LifecycleEvidenceKind =
   | "conflicting_provider_evidence";
 
 const explicitProviderLifecycleSources = new Set(["leidos_webhook", "provider_retrieve", "provider_response"]);
+const terminalLifecycleStatuses = new Set(["cancelled", "canceled", "closed"]);
+const nonterminalLifecycleStatuses = new Set(["unknown", "proposed", "filed", "active", "activated", "amended"]);
+
+const normalizeLifecycleStatus = (value: unknown) => {
+  const status = String(value || "").trim().toLowerCase();
+  if (status === "canceled") return "cancelled";
+  if (status === "active") return "activated";
+  return status || null;
+};
+
+const compareVersionStamp = (left: unknown, right: unknown) => {
+  const a = String(left || "").trim();
+  const b = String(right || "").trim();
+  if (!a || !b) return 0;
+  if (/^\d+$/.test(a) && /^\d+$/.test(b)) {
+    if (a.length !== b.length) return a.length > b.length ? 1 : -1;
+    return a === b ? 0 : a > b ? 1 : -1;
+  }
+  return a.localeCompare(b);
+};
 
 export const classifyLifecycleEvidence = (
   snapshotInput: unknown,
@@ -213,13 +239,15 @@ export const classifyLifecycleEvidence = (
 
   return {
     kind,
-    lifecycle,
+    lifecycle: normalizeLifecycleStatus(lifecycle),
     source,
     reason,
     rawProviderState,
-    explicitLifecycleValue: hasExplicitProviderEvidence ? lifecycle : null,
+    explicitLifecycleValue: hasExplicitProviderEvidence ? normalizeLifecycleStatus(lifecycle) : null,
     hasExplicitProviderEvidence,
     conflictsWithExpected,
+    versionStamp: String(snapshot.versionStamp || snapshot.providerVersionStamp || "").trim() || null,
+    eventHash: String(snapshot.providerEventHash || snapshot.eventHash || snapshot.lastWebhookEventHash || "").trim() || null,
     providerEventTimestamp: String(snapshot.providerEventTimestamp || snapshot.messageDateTime || "").trim() || null,
     rsfReceiptTimestamp: String(snapshot.rsfReceiptTimestamp || snapshot.lastProviderUpdateAt || "").trim() || null,
     webhookProcessingTimestamp: String(snapshot.webhookProcessingTimestamp || snapshot.lastProviderUpdateAt || "").trim() || null,
@@ -230,6 +258,101 @@ export const classifyLifecycleEvidence = (
       lifecycle !== "unknown" &&
       (rawProviderState || (reason && /^explicit_provider_/.test(reason)))
     ),
+  };
+};
+
+export type TerminalActionEvidenceBaseline = {
+  providerPlanId: string | null;
+  versionStamp: string | null;
+  lifecycle: string | null;
+  eventHash: string | null;
+  evidenceTime: string | null;
+  evidenceSource: string | null;
+  actionStartedAt: string;
+};
+
+export const captureTerminalActionEvidenceBaseline = (
+  plan: FlightPlan,
+  actionStartedAt = new Date().toISOString(),
+): TerminalActionEvidenceBaseline => {
+  const snapshot = plan.filingProviderSnapshot && typeof plan.filingProviderSnapshot === "object" && !Array.isArray(plan.filingProviderSnapshot)
+    ? plan.filingProviderSnapshot as Record<string, any>
+    : {};
+  const evidence = classifyLifecycleEvidence(snapshot, null);
+  return {
+    providerPlanId: String(snapshot.providerPlanId || plan.filingProviderPlanId || "").trim() || null,
+    versionStamp: String(snapshot.versionStamp || getVersionStamp(plan) || "").trim() || null,
+    lifecycle: normalizeLifecycleStatus(evidence.lifecycle),
+    eventHash: String(evidence.eventHash || "").trim() || null,
+    evidenceTime: evidence.evidenceTime || evidence.webhookProcessingTimestamp || evidence.rsfReceiptTimestamp || evidence.providerEventTimestamp || null,
+    evidenceSource: evidence.source || null,
+    actionStartedAt,
+  };
+};
+
+export const evaluateTerminalEvidenceObservation = ({
+  evidence,
+  expectedStatus,
+  baseline,
+}: {
+  evidence: ReturnType<typeof classifyLifecycleEvidence>;
+  expectedStatus: string | null;
+  baseline?: TerminalActionEvidenceBaseline | null;
+}) => {
+  const expected = normalizeLifecycleStatus(expectedStatus);
+  const lifecycle = normalizeLifecycleStatus(evidence.lifecycle);
+  const isTerminal = Boolean(lifecycle && terminalLifecycleStatuses.has(lifecycle));
+  const isMatchingTerminal = Boolean(expected && lifecycle === expected && evidence.hasExplicitProviderEvidence);
+  const isContradictoryTerminal = Boolean(expected && isTerminal && lifecycle !== expected);
+  const sameEvent = Boolean(baseline?.eventHash && evidence.eventHash && baseline.eventHash === evidence.eventHash);
+  const versionOrder = baseline?.versionStamp && evidence.versionStamp
+    ? compareVersionStamp(evidence.versionStamp, baseline.versionStamp)
+    : 0;
+  const predatesBaselineByVersion = Boolean(baseline?.versionStamp && evidence.versionStamp && versionOrder < 0);
+  const sameBaselineVersion = Boolean(baseline?.versionStamp && evidence.versionStamp && versionOrder === 0);
+  const evidenceTime = Date.parse(String(evidence.evidenceTime || evidence.webhookProcessingTimestamp || evidence.rsfReceiptTimestamp || evidence.providerEventTimestamp || ""));
+  const actionStartTime = Date.parse(String(baseline?.actionStartedAt || ""));
+  const predatesBaselineByTime = Number.isFinite(evidenceTime) && Number.isFinite(actionStartTime) && evidenceTime < actionStartTime;
+  const predatesAction = Boolean(sameEvent || predatesBaselineByVersion || predatesBaselineByTime);
+  const baselineAlreadyTerminal = Boolean(terminalLifecycleStatuses.has(normalizeLifecycleStatus(baseline?.lifecycle) || ""));
+  const matchingEvidenceIsCurrent = Boolean(
+    isMatchingTerminal &&
+    (
+      !sameBaselineVersion ||
+      baselineAlreadyTerminal ||
+      !baseline?.versionStamp ||
+      !evidence.versionStamp
+    )
+  );
+  const transitional = Boolean(
+    !evidence.hasExplicitProviderEvidence ||
+    !isTerminal ||
+    (lifecycle && nonterminalLifecycleStatuses.has(lifecycle))
+  );
+  const decision = !evidence.hasExplicitProviderEvidence
+    ? "missing_provider_state"
+    : predatesAction && !isMatchingTerminal
+      ? "pre_action_evidence_ignored"
+      : matchingEvidenceIsCurrent
+        ? "matching_terminal_evidence"
+        : isContradictoryTerminal && !predatesAction && !sameBaselineVersion
+            ? "contradictory_terminal_evidence"
+            : transitional
+              ? "transitional_nonterminal_evidence"
+              : "missing_provider_state";
+
+  return {
+    decision,
+    lifecycle,
+    expectedStatus: expected,
+    isTerminal,
+    isMatchingTerminal,
+    isContradictoryTerminal,
+    predatesAction,
+    transitional: decision === "transitional_nonterminal_evidence" || decision === "pre_action_evidence_ignored",
+    versionOrder,
+    sameEvent,
+    sameBaselineVersion,
   };
 };
 
@@ -1936,11 +2059,13 @@ const waitForPersistedTerminalLifecycleEvidence = async ({
   providerPlanId,
   expectedStatus,
   dryRun,
+  baseline,
 }: {
   planId: string;
   providerPlanId: string | null;
   expectedStatus: string | null;
   dryRun: boolean;
+  baseline?: TerminalActionEvidenceBaseline | null;
 }) => {
   const config = getTerminalEvidencePollingConfig();
   const startedAtMs = Date.now();
@@ -1948,11 +2073,17 @@ const waitForPersistedTerminalLifecycleEvidence = async ({
   let polls = 0;
   let lastPlan: FlightPlan | undefined;
   let lastEvidence = classifyLifecycleEvidence(null, expectedStatus);
+  let lastObservation = evaluateTerminalEvidenceObservation({ evidence: lastEvidence, expectedStatus, baseline });
+  const observations: any[] = [];
   console.info(JSON.stringify({
     event: "leidos_terminal_evidence_poll_started",
     planId,
     providerPlanId,
     expectedStatus,
+    actionBaselineVersion: baseline?.versionStamp || null,
+    baselineEventHash: baseline?.eventHash || null,
+    baselineLifecycle: baseline?.lifecycle || null,
+    actionStartedAt: baseline?.actionStartedAt || null,
     timeoutMs: config.timeoutMs,
     intervalMs: config.intervalMs,
     dryRun,
@@ -1967,6 +2098,8 @@ const waitForPersistedTerminalLifecycleEvidence = async ({
       polls,
       timedOut: false,
       matched: false,
+      decision: "not_attempted",
+      observations,
       plan: lastPlan,
       evidence: lastEvidence,
     };
@@ -1979,9 +2112,86 @@ const waitForPersistedTerminalLifecycleEvidence = async ({
     lastEvidence = classifyLifecycleEvidence(snapshot, expectedStatus);
     const persistedProviderPlanId = String((snapshot as any)?.providerPlanId || lastPlan?.filingProviderPlanId || "").trim();
     const providerPlanMatches = !providerPlanId || persistedProviderPlanId === providerPlanId;
+    lastObservation = evaluateTerminalEvidenceObservation({ evidence: lastEvidence, expectedStatus, baseline });
+    observations.push({
+      poll: polls,
+      lifecycle: lastEvidence.lifecycle || null,
+      evidenceKind: lastEvidence.kind,
+      evidenceSource: lastEvidence.source,
+      versionStamp: lastEvidence.versionStamp || null,
+      eventHash: lastEvidence.eventHash || null,
+      decision: providerPlanMatches ? lastObservation.decision : "provider_plan_mismatch",
+      predatesAction: lastObservation.predatesAction,
+      transitional: lastObservation.transitional,
+      matchingTerminal: lastObservation.isMatchingTerminal,
+      contradictoryTerminal: lastObservation.isContradictoryTerminal,
+      elapsedMs: Date.now() - startedAtMs,
+    });
     if (providerPlanMatches && lastEvidence.hasExplicitProviderEvidence) {
+      if (lastObservation.decision === "matching_terminal_evidence") {
+        console.info(JSON.stringify({
+          event: "leidos_terminal_evidence_poll_matched",
+          planId,
+          providerPlanId,
+          expectedStatus,
+          polls,
+          evidenceKind: lastEvidence.kind,
+          effectiveLifecycle: lastEvidence.lifecycle,
+          evidenceSource: lastEvidence.source,
+          observedEvidenceVersion: lastEvidence.versionStamp || null,
+          observedEventHash: lastEvidence.eventHash || null,
+          actionBaselineVersion: baseline?.versionStamp || null,
+          baselineEventHash: baseline?.eventHash || null,
+          decision: lastObservation.decision,
+          elapsedMs: Date.now() - startedAtMs,
+        }));
+        return {
+          startedAt,
+          completedAt: new Date().toISOString(),
+          timeoutMs: config.timeoutMs,
+          intervalMs: config.intervalMs,
+          polls,
+          timedOut: false,
+          matched: true,
+          decision: lastObservation.decision,
+          observations,
+          plan: lastPlan,
+          evidence: lastEvidence,
+        };
+      }
+      if (lastObservation.decision === "contradictory_terminal_evidence") {
+        console.info(JSON.stringify({
+          event: "leidos_terminal_evidence_poll_contradicted",
+          planId,
+          providerPlanId,
+          expectedStatus,
+          polls,
+          evidenceKind: lastEvidence.kind,
+          effectiveLifecycle: lastEvidence.lifecycle,
+          evidenceSource: lastEvidence.source,
+          observedEvidenceVersion: lastEvidence.versionStamp || null,
+          observedEventHash: lastEvidence.eventHash || null,
+          actionBaselineVersion: baseline?.versionStamp || null,
+          baselineEventHash: baseline?.eventHash || null,
+          decision: lastObservation.decision,
+          elapsedMs: Date.now() - startedAtMs,
+        }));
+        return {
+          startedAt,
+          completedAt: new Date().toISOString(),
+          timeoutMs: config.timeoutMs,
+          intervalMs: config.intervalMs,
+          polls,
+          timedOut: false,
+          matched: false,
+          decision: lastObservation.decision,
+          observations,
+          plan: lastPlan,
+          evidence: lastEvidence,
+        };
+      }
       console.info(JSON.stringify({
-        event: "leidos_terminal_evidence_poll_matched",
+        event: "leidos_terminal_evidence_poll_observed",
         planId,
         providerPlanId,
         expectedStatus,
@@ -1989,18 +2199,15 @@ const waitForPersistedTerminalLifecycleEvidence = async ({
         evidenceKind: lastEvidence.kind,
         effectiveLifecycle: lastEvidence.lifecycle,
         evidenceSource: lastEvidence.source,
+        observedEvidenceVersion: lastEvidence.versionStamp || null,
+        observedEventHash: lastEvidence.eventHash || null,
+        actionBaselineVersion: baseline?.versionStamp || null,
+        baselineEventHash: baseline?.eventHash || null,
+        predatesAction: lastObservation.predatesAction,
+        transitional: lastObservation.transitional,
+        decision: lastObservation.decision,
+        elapsedMs: Date.now() - startedAtMs,
       }));
-      return {
-        startedAt,
-        completedAt: new Date().toISOString(),
-        timeoutMs: config.timeoutMs,
-        intervalMs: config.intervalMs,
-        polls,
-        timedOut: false,
-        matched: true,
-        plan: lastPlan,
-        evidence: lastEvidence,
-      };
     }
     await sleep(Math.min(config.intervalMs, Math.max(0, config.timeoutMs - (Date.now() - startedAtMs))));
   }
@@ -2014,6 +2221,9 @@ const waitForPersistedTerminalLifecycleEvidence = async ({
     timedOut: true,
     lastEvidenceKind: lastEvidence.kind,
     lastLifecycle: lastEvidence.lifecycle,
+    finalDecisionReason: lastObservation.decision === "transitional_nonterminal_evidence"
+      ? "terminal_verification_timeout_after_transitional_nonterminal_evidence"
+      : "terminal_verification_timeout",
   }));
   return {
     startedAt,
@@ -2023,6 +2233,8 @@ const waitForPersistedTerminalLifecycleEvidence = async ({
     polls,
     timedOut: true,
     matched: false,
+    decision: lastObservation.decision === "contradictory_terminal_evidence" ? "contradictory_terminal_evidence" : "terminal_verification_timeout",
+    observations,
     plan: lastPlan,
     evidence: lastEvidence,
   };
@@ -2033,6 +2245,7 @@ const verifyTerminalActionState = async (
   action: CaseAction,
   response: Awaited<ReturnType<typeof flightPlanFilingProvider.stageAction>>,
   dryRun: boolean,
+  baseline?: TerminalActionEvidenceBaseline | null,
 ) => {
   const expectedStatus = expectedTerminalStatusForAction(action);
   const localStatus = String(plan.filingStatus || "").trim().toLowerCase();
@@ -2078,6 +2291,7 @@ const verifyTerminalActionState = async (
       providerPlanId,
       expectedStatus,
       dryRun,
+      baseline,
     })
     : null;
   const persistedEvidence = pollResult?.evidence || classifyLifecycleEvidence((plan.filingProviderSnapshot as any) || null, expectedStatus);
@@ -2088,6 +2302,7 @@ const verifyTerminalActionState = async (
       : persistedEvidence;
   const providerTerminalLifecycle = isTerminalProviderStatus(effectiveEvidence.lifecycle, action);
   const providerTerminalStatus = isTerminalProviderStatus(providerStatus, action);
+  const pollDecision = String(pollResult?.decision || "").trim() || null;
   const providerTerminalStateConfirmed = Boolean(
     effectiveEvidence.hasExplicitProviderEvidence &&
     providerTerminalLifecycle === true
@@ -2099,14 +2314,16 @@ const verifyTerminalActionState = async (
       ? "Local plan state did not match the expected terminal lifecycle."
       : effectiveEvidence.conflictsWithExpected
         ? "Explicit provider lifecycle conflicts with the expected terminal state."
-        : providerTerminalStateConfirmed
+        : pollDecision === "contradictory_terminal_evidence"
+          ? "Explicit newer terminal provider lifecycle conflicts with the expected terminal state."
+          : providerTerminalStateConfirmed
           ? retrieveEvidence.hasExplicitProviderEvidence
             ? `${action.toUpperCase()} was accepted by Leidos and the direct retrieve response explicitly reported ${String(effectiveEvidence.lifecycle || "").toUpperCase()}.`
             : `${action.toUpperCase()} was accepted by Leidos. The immediate retrieve response omitted flight state. A validated Leidos webhook subsequently reported ${String(effectiveEvidence.lifecycle || "").toUpperCase()}, satisfying terminal verification.`
-          : `${action.toUpperCase()} was accepted and RSF transitioned locally to ${String(expectedStatus || "").toUpperCase()}, but no explicit provider lifecycle was received before the certification timeout.`;
+          : `${action.toUpperCase()} was accepted and RSF transitioned locally to ${String(expectedStatus || "").toUpperCase()}, but no explicit matching provider lifecycle was received before the certification timeout.`;
   const status = !localTerminalStateConfirmed
     ? "FAIL"
-    : !terminalActionAccepted || effectiveEvidence.conflictsWithExpected || providerTerminalStatus === false
+    : !terminalActionAccepted || pollDecision === "contradictory_terminal_evidence" || providerTerminalStatus === false
       ? "FAIL"
       : providerTerminalStateConfirmed
         ? "PASS"
@@ -2149,6 +2366,8 @@ const verifyTerminalActionState = async (
         pollCount: pollResult.polls,
         timedOut: pollResult.timedOut,
         matched: pollResult.matched,
+        decision: pollResult.decision,
+        observations: pollResult.observations,
       }
       : {
         startedAt: null,
@@ -2158,7 +2377,10 @@ const verifyTerminalActionState = async (
         pollCount: 0,
         timedOut: false,
         matched: false,
+        decision: null,
+        observations: [],
       },
+    actionBaseline: baseline || null,
     cleanupCancellationAttempted: false,
     cleanupActionExpected: localTerminalStateConfirmed ? "verify" : "review",
     reason: verificationReason,
@@ -2716,6 +2938,9 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
     }
 
     try {
+      const cleanupActionBaseline = ["cancel", "close"].includes(cleanupAction)
+        ? captureTerminalActionEvidenceBaseline(plan, new Date().toISOString())
+        : null;
       const response = await flightPlanFilingProvider.stageAction(plan, cleanupAction);
       const updated = await updateCertificationPlan(plan, {
         filingStatus: response.nextStatus,
@@ -2728,44 +2953,103 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
         closedAt: cleanupAction === "close" ? new Date() : plan.closedAt,
       } as any, dryRun);
       const terminalVerification = response.live
-        ? await verifyTerminalActionState(updated, cleanupAction, response, dryRun)
+        ? await verifyTerminalActionState(updated, cleanupAction, response, dryRun, cleanupActionBaseline)
+        : null;
+      const cancelReturnMessages = Array.isArray(response.providerMessages)
+        ? response.providerMessages.map((message: any) => message?.message || message?.text || message?.summary).filter(Boolean)
+        : [];
+      const rejectedAmbiguousTerminalAction = !response.live && isAmbiguousProviderTerminalRejection(cleanupAction, `${response.message || ""} ${cancelReturnMessages.join(" ")}`);
+      const ambiguousTerminalRecheck = rejectedAmbiguousTerminalAction && expectedTerminalStatusForAction(cleanupAction as CaseAction)
+        ? await waitForPersistedTerminalLifecycleEvidence({
+          planId: plan.id,
+          providerPlanId,
+          expectedStatus: expectedTerminalStatusForAction(cleanupAction as CaseAction),
+          dryRun,
+          baseline: cleanupActionBaseline,
+        })
         : null;
       const terminalVerificationMatched = terminalVerification?.status === "PASS";
-      const finalCleanupDisposition = response.live
+      const ambiguousCleanupVerified = ambiguousTerminalRecheck?.matched === true;
+      const finalCleanupDisposition = ambiguousCleanupVerified
+        ? "cleanup_rejected_but_terminal_verified"
+        : rejectedAmbiguousTerminalAction
+          ? "cleanup_rejected_terminal_unverified"
+          : response.live
         ? terminalVerificationMatched
           ? "explicitly_verified_terminal"
           : "accepted_unverified"
         : "staged_not_submitted";
-      const cancelReturnMessages = Array.isArray(response.providerMessages)
-        ? response.providerMessages.map((message: any) => message?.message || message?.text || message?.summary).filter(Boolean)
-        : [];
       const result = {
         ...base,
-        responseStatus: response.live ? "accepted" : "staged",
-        pass: response.live,
+        responseStatus: ambiguousCleanupVerified
+          ? "rejected_but_terminal_verified"
+          : rejectedAmbiguousTerminalAction
+            ? "rejected_terminal_unverified"
+            : response.live
+              ? "accepted"
+              : "staged",
+        pass: response.live || ambiguousCleanupVerified,
         cancelAttempted: cleanupAction === "cancel",
         cancelAccepted: response.live && cleanupAction === "cancel",
         cancelReturnMessages,
-        terminalVerificationAttempted: response.live,
-        terminalVerificationMatched,
-        terminalEvidenceKind: terminalVerification?.evidenceKind || null,
-        terminalEvidenceSource: terminalVerification?.evidenceSource || null,
-        effectiveLifecycle: terminalVerification?.effectiveLifecycle || response.nextStatus || null,
-        pollCount: terminalVerification?.polling?.pollCount || 0,
-        timedOut: Boolean(terminalVerification?.polling?.timedOut),
+        terminalVerificationAttempted: response.live || rejectedAmbiguousTerminalAction,
+        terminalVerificationMatched: terminalVerificationMatched || ambiguousCleanupVerified,
+        terminalEvidenceKind: terminalVerification?.evidenceKind || ambiguousTerminalRecheck?.evidence?.kind || null,
+        terminalEvidenceSource: terminalVerification?.evidenceSource || ambiguousTerminalRecheck?.evidence?.source || null,
+        effectiveLifecycle: terminalVerification?.effectiveLifecycle || ambiguousTerminalRecheck?.evidence?.lifecycle || response.nextStatus || null,
+        pollCount: terminalVerification?.polling?.pollCount || ambiguousTerminalRecheck?.polls || 0,
+        timedOut: Boolean(terminalVerification?.polling?.timedOut || ambiguousTerminalRecheck?.timedOut),
         finalCleanupDisposition,
         terminalVerification,
+        ambiguousCleanupRejection: rejectedAmbiguousTerminalAction,
+        ambiguousCleanupVerification: ambiguousTerminalRecheck,
         warnings: response.warnings || [],
-        errors: response.live ? [] : [response.message],
+        errors: response.live || ambiguousCleanupVerified ? [] : [response.message],
         elapsedMs: Date.now() - started,
       };
       cleanupResults.push(result);
       await appendCertificationAudit(updated, "cleanup", result, dryRun);
     } catch (error) {
-      const result = { ...base, responseStatus: "error", pass: false, errors: [String((error as any)?.message || error)], elapsedMs: Date.now() - started };
+      const message = String((error as any)?.message || error);
+      const rejectedAmbiguousTerminalAction = isAmbiguousProviderTerminalRejection(cleanupAction, message);
+      const cleanupActionBaseline = ["cancel", "close"].includes(cleanupAction)
+        ? captureTerminalActionEvidenceBaseline(plan, new Date().toISOString())
+        : null;
+      const expectedStatus = expectedTerminalStatusForAction(cleanupAction as CaseAction);
+      const ambiguousTerminalRecheck = rejectedAmbiguousTerminalAction && expectedStatus
+        ? await waitForPersistedTerminalLifecycleEvidence({
+          planId: plan.id,
+          providerPlanId,
+          expectedStatus,
+          dryRun,
+          baseline: cleanupActionBaseline,
+        })
+        : null;
+      const ambiguousCleanupVerified = ambiguousTerminalRecheck?.matched === true;
+      const result = {
+        ...base,
+        responseStatus: ambiguousCleanupVerified
+          ? "error_but_terminal_verified"
+          : rejectedAmbiguousTerminalAction
+            ? "error_terminal_unverified"
+            : "error",
+        pass: ambiguousCleanupVerified,
+        errors: ambiguousCleanupVerified ? [] : [message],
+        ambiguousCleanupRejection: rejectedAmbiguousTerminalAction,
+        terminalVerificationAttempted: rejectedAmbiguousTerminalAction,
+        terminalVerificationMatched: ambiguousCleanupVerified,
+        terminalEvidenceKind: ambiguousTerminalRecheck?.evidence?.kind || null,
+        terminalEvidenceSource: ambiguousTerminalRecheck?.evidence?.source || null,
+        effectiveLifecycle: ambiguousTerminalRecheck?.evidence?.lifecycle || null,
+        pollCount: ambiguousTerminalRecheck?.polls || 0,
+        timedOut: Boolean(ambiguousTerminalRecheck?.timedOut),
+        finalCleanupDisposition: ambiguousCleanupVerified ? "cleanup_rejected_but_terminal_verified" : "cleanup_failed",
+        ambiguousCleanupVerification: ambiguousTerminalRecheck,
+        elapsedMs: Date.now() - started,
+      };
       cleanupResults.push(result);
       await appendCertificationAudit(plan, "cleanup", result, dryRun);
-      if (isCleanupBlockingError(error)) break;
+      if (!ambiguousCleanupVerified && isCleanupBlockingError(error)) break;
     }
   }
   return cleanupResults;
@@ -3168,6 +3452,9 @@ const run = async () => {
         continue;
       }
       let response: Awaited<ReturnType<typeof flightPlanFilingProvider.stageAction>>;
+      const terminalActionBaseline = isTerminalAction(action)
+        ? captureTerminalActionEvidenceBaseline(plan, new Date().toISOString())
+        : null;
       try {
         response = await flightPlanFilingProvider.stageAction(plan, action);
       } catch (error) {
@@ -3226,7 +3513,7 @@ const run = async () => {
         : {};
       const providerReturnStatus = typeof rawProviderResponse.returnStatus === "boolean" ? rawProviderResponse.returnStatus : null;
       const terminalVerification = response.live && terminalAction
-        ? await verifyTerminalActionState(plan, action, response, dryRun)
+        ? await verifyTerminalActionState(plan, action, response, dryRun, terminalActionBaseline)
         : null;
       const activationVerification = response.live && action === "activate"
         ? await verifyActivationActionState(plan, response, dryRun)

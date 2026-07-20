@@ -9,6 +9,7 @@ import {
   buildLifecycleEvidenceSummary,
   buildValidationSummary,
   compareGeneratedSentReturned,
+  isAmbiguousProviderTerminalRejection,
   shouldCleanupImmediatelyAfterCase,
   verifyActivationActionState,
 } from "./leidos-live-lab/live-lab-runner";
@@ -529,4 +530,52 @@ test("Case 21 cannot report complete lifecycle evidence without explicit activat
   assert.equal(summary.cases[0].activationVerificationMatched, false);
   assert.equal(summary.cases[0].closeVerificationMatched, true);
   assert.equal(summary.cases[0].lifecycleEvidenceComplete, false);
+});
+
+test("cleanup duplicate cancellation rejection is ambiguous and requires terminal evidence", () => {
+  assert.equal(
+    isAmbiguousProviderTerminalRejection(
+      "cancel",
+      "Webservice.CannotCancel: The flight plan could not be cancelled, because it is not in the PROPOSED state.",
+    ),
+    true,
+  );
+  assert.equal(isAmbiguousProviderTerminalRejection("cancel", "FuelEndurance.lessThanETE"), false);
+  assert.equal(isAmbiguousProviderTerminalRejection("file", "Webservice.CannotCancel"), false);
+});
+
+test("cleanup summary distinguishes rejected but verified terminal cleanup from unresolved plans", () => {
+  const cleanupResults = [
+    {
+      cleanupPhase: "final_sweep",
+      action: "cancel",
+      responseStatus: "rejected_but_terminal_verified",
+      providerPlanId: "provider-17",
+      pass: true,
+      terminalVerificationAttempted: true,
+      terminalVerificationMatched: true,
+      finalCleanupDisposition: "cleanup_rejected_but_terminal_verified",
+    },
+    {
+      cleanupPhase: "final_sweep",
+      action: "cancel",
+      responseStatus: "error_terminal_unverified",
+      providerPlanId: "provider-unresolved",
+      pass: false,
+      terminalVerificationAttempted: true,
+      terminalVerificationMatched: false,
+      finalCleanupDisposition: "cleanup_failed",
+    },
+  ];
+  const caseResults = [
+    { actions: [{ action: "file", providerPlanId: "provider-17", responseStatus: "accepted" }] },
+    { actions: [{ action: "file", providerPlanId: "provider-unresolved", responseStatus: "accepted" }] },
+  ];
+  const summary = buildCleanupSummary(cleanupResults, caseResults);
+  const verification = buildCleanupVerification(cleanupResults, caseResults);
+
+  assert.equal(summary.cleanupErrors, 1);
+  assert.equal(summary.unresolvedProviderPlans, 1);
+  assert.equal(summary.uniquePlansExplicitlyTerminalVerified, 1);
+  assert.equal(verification.status, "FAIL");
 });

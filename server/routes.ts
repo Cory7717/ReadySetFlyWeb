@@ -105,6 +105,7 @@ import {
   verifyLeidosWebhookAuthorization,
 } from "./services/flight-plan-filing/provider";
 import { buildLeidosWebhookEventFingerprint, extractLeidosWebhookFields, LEIDOS_WEBHOOK_SUCCESS_RESPONSE, summarizeLeidosWebhookPayload } from "./services/leidosWebhook";
+import { sanitizeProviderDiagnosticRecordForPersistence } from "./services/flight-service-provider-diagnostics";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import { analyzeFiledRoute } from "@shared/flight-plan-route";
 import { ACTIVE_FLIGHT_PLAN_LIMIT_MESSAGE, canCreateAnotherActiveFlightPlan, getActiveFlightPlans } from "@shared/flight-plan-access";
@@ -231,7 +232,7 @@ const compactProviderActionResultForStorage = (providerResult: Record<string, un
   const compact = { ...providerResult };
   delete (compact as any).raw;
   delete (compact as any).payloadSnapshot;
-  return compact;
+  return sanitizeProviderDiagnosticRecordForPersistence(compact);
 };
 
 const reserveFlightServiceProviderActionAttempt = async (params: {
@@ -307,9 +308,19 @@ const markFlightServiceProviderActionAttempt = async (
   attemptId: string,
   updates: Record<string, unknown>,
 ) => {
+  const safeUpdates = { ...updates };
+  if ("responsePlan" in safeUpdates) {
+    safeUpdates.responsePlan = sanitizeProviderDiagnosticRecordForPersistence(safeUpdates.responsePlan);
+  }
+  if ("responseBody" in safeUpdates) {
+    safeUpdates.responseBody = sanitizeProviderDiagnosticRecordForPersistence(safeUpdates.responseBody);
+  }
+  if (typeof safeUpdates.errorMessage === "string") {
+    safeUpdates.errorMessage = String(sanitizeProviderDiagnosticRecordForPersistence({ errorMessage: safeUpdates.errorMessage }).errorMessage || "");
+  }
   const [attempt] = await db
     .update(flightServiceProviderActionAttempts)
-    .set({ ...updates, updatedAt: new Date() } as any)
+    .set({ ...safeUpdates, updatedAt: new Date() } as any)
     .where(eq(flightServiceProviderActionAttempts.id, attemptId))
     .returning();
   return attempt;
@@ -24660,6 +24671,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const altitudeRaw = typeof req.query.altitudeFt === "string" ? Number(req.query.altitudeFt) : null;
       const altitudeFt = Number.isFinite(altitudeRaw) ? altitudeRaw : null;
       const aircraftType = typeof req.query.aircraftType === "string" ? req.query.aircraftType.trim().toUpperCase() : null;
+      const searchOption = typeof req.query.searchOption === "string" ? req.query.searchOption.trim().toUpperCase() : null;
 
       if (!departure || !destination) {
         return res.status(400).json({ error: "Departure and destination are required." });
@@ -24669,7 +24681,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(400).json({ error: "Departure and destination must be valid ICAO/IATA-style identifiers." });
       }
 
-      const payload = await searchLeidosRoute({ departure, destination, altitudeFt, aircraftType });
+      const payload = await searchLeidosRoute({ departure, destination, altitudeFt, aircraftType, searchOption });
       res.json(payload);
     } catch (error: any) {
       const message = String(error?.message || "");
@@ -25384,6 +25396,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         /accepted[\s\S]*did not return|did not return a usable flightIdentifier/i.test(String(providerResult.message || ""));
       const currentHistory = Array.isArray(plan.filingActionHistory) ? plan.filingActionHistory : [];
       const now = new Date();
+      const sanitizedProviderRaw = sanitizeProviderDiagnosticRecordForPersistence(providerResult.raw);
       const historyEntry = {
         action,
         stagedAt: now.toISOString(),
@@ -25392,7 +25405,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         warnings: providerResult.warnings,
         validation,
         providerPlanId: providerResult.providerPlanId,
-        raw: providerResult.raw,
+        raw: sanitizedProviderRaw,
       };
 
       const statusTimestamps: Record<string, Date> = {};
@@ -25415,8 +25428,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         ? plan.filingIsLive
         : providerResult.live;
       const nextFilingRaw = preserveExistingLifecycleState
-        ? mergePreservedFilingRaw(plan.filingRaw, providerResult.raw)
-        : providerResult.raw;
+        ? sanitizeProviderDiagnosticRecordForPersistence(mergePreservedFilingRaw(plan.filingRaw, sanitizedProviderRaw))
+        : sanitizedProviderRaw;
       const nextProviderPlanId = preserveExistingLifecycleState
         ? providerResult.providerPlanId || plan.filingProviderPlanId
         : providerResult.providerPlanId;
@@ -25514,7 +25527,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           statusReason: providerOutcomeUnknown ? "provider_accepted_without_flight_identifier" : providerResult.message || null,
           providerPlanId: nextProviderPlanId || null,
           versionStamp: (reconciledProviderSnapshot as any)?.versionStamp || null,
-          responsePlan: updated as any,
+          responsePlan: sanitizeProviderDiagnosticRecordForPersistence({
+            planId: updated?.id || plan.id,
+            filingStatus: updated?.filingStatus || nextFilingStatus,
+            providerPlanId: nextProviderPlanId || null,
+            versionStamp: (reconciledProviderSnapshot as any)?.versionStamp || null,
+            providerLifecycleStatus: (reconciledProviderSnapshot as any)?.providerLifecycleStatus || null,
+            artccState: (reconciledProviderSnapshot as any)?.artccState || null,
+          }) as any,
           responseBody: compactProviderActionResultForStorage(providerResult as any) as any,
           completedAt: attemptStatus === "provider-outcome-unknown" ? null : new Date(),
         });
@@ -25579,7 +25599,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             status: "provider-outcome-unknown",
             statusReason: isTimeout ? "provider_timeout_after_dispatch" : "provider_transport_or_parse_error_after_dispatch",
             errorCode: isTimeout ? "PROVIDER_TIMEOUT_AFTER_DISPATCH" : "PROVIDER_OUTCOME_UNKNOWN",
-            errorMessage: message,
+            errorMessage: String(sanitizeProviderDiagnosticRecordForPersistence({ errorMessage: message }).errorMessage || ""),
           }).catch(() => undefined);
           if (planForErrorSync?.id) {
             syncedPlan = await storage.updateFlightPlan(planForErrorSync.id, {
@@ -25599,7 +25619,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             status: "rejected",
             statusReason: isProviderStateRejected ? "provider_state_rejected" : "provider_rejected",
             errorCode: isProviderStateRejected ? "PROVIDER_STATE_REJECTED" : "PROVIDER_REJECTED",
-            errorMessage: message,
+            errorMessage: String(sanitizeProviderDiagnosticRecordForPersistence({ errorMessage: message }).errorMessage || ""),
             completedAt: new Date(),
           }).catch(() => undefined);
         }

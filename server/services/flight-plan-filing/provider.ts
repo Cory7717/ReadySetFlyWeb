@@ -21,7 +21,7 @@ import { normalizeProviderReviewRoute } from "@shared/provider-effective-review"
 import { normalizeZzzzActualLocation } from "@shared/zzzz-location";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
 import { getFlightServiceRuntimeMode } from "../flightServiceRuntimeMode";
-import { request as httpRequest } from "node:http";
+import { sanitizeProviderDiagnosticRecordForPersistence } from "../flight-service-provider-diagnostics";
 import { request as httpsRequest } from "node:https";
 
 const LAB_REST_BASE_URL = "https://ffspelabs.leidos.com/Website2/rest/";
@@ -29,13 +29,23 @@ const PRODUCTION_REST_BASE_URL = "https://www.lmfsweb.afss.com/Website/rest/";
 const DEFAULT_USER_AGENT = "ReadySetFly Flight Service Interface";
 const DEFAULT_LEIDOS_REQUEST_TIMEOUT_MS = 25000;
 export const LEIDOS_ROUTE_SEARCH_OPTION_SYSTEM_RECOMMENDED = "SYSTEM_RECOMMENDED" as const;
+export const LEIDOS_ROUTE_SEARCH_OPTION_J_ROUTE = "J_ROUTE" as const;
+export const LEIDOS_ROUTE_SEARCH_OPTION_Q_ROUTE = "Q_ROUTE" as const;
 export const LEIDOS_ROUTE_SEARCH_PATH_OPTION_LOW_ALTITUDE_ONLY = "LOW_ALTITUDE_ONLY" as const;
+export type LeidosRouteSearchOption =
+  | typeof LEIDOS_ROUTE_SEARCH_OPTION_SYSTEM_RECOMMENDED
+  | typeof LEIDOS_ROUTE_SEARCH_OPTION_J_ROUTE
+  | typeof LEIDOS_ROUTE_SEARCH_OPTION_Q_ROUTE;
 export type LeidosRouteSearchPathOption = typeof LEIDOS_ROUTE_SEARCH_PATH_OPTION_LOW_ALTITUDE_ONLY | null;
 const LEIDOS_ROUTE_SEARCH_HIGH_ALTITUDE_FLOOR_FT = 18_000;
 const LEIDOS_ROUTE_ASSIST_OCEANIC_UNAVAILABLE_MESSAGE =
   "Automatic Route Assist is unavailable for this oceanic city pair. You can continue with a custom route or use published oceanic planning resources.";
 const LEIDOS_ROUTE_ASSIST_NO_ROUTE_FOUND_MESSAGE =
   "Leidos could not find a route for the selected altitude and routing type.";
+const LEIDOS_ROUTE_ASSIST_HIGH_ALTITUDE_UNAVAILABLE_MESSAGE =
+  "Automatic Route Assist is unavailable for this high-altitude configuration because a route family has not been selected.";
+const LEIDOS_ROUTE_ASSIST_MISSING_ALTITUDE_UNAVAILABLE_MESSAGE =
+  "Automatic Route Assist needs a valid planned altitude before requesting a provider route.";
 
 type LeidosEnvironment = "lab" | "test" | "validation" | "production";
 
@@ -88,7 +98,7 @@ export type LeidosRouteSearchResult = {
   available: boolean;
   message?: string | null;
   diagnostics?: {
-    searchOption: typeof LEIDOS_ROUTE_SEARCH_OPTION_SYSTEM_RECOMMENDED;
+    searchOption: LeidosRouteSearchOption | null;
     searchPathOption: LeidosRouteSearchPathOption;
     providerEndpoint: string;
     httpStatus: number;
@@ -102,6 +112,65 @@ export const selectLeidosRouteSearchPathOption = (altitudeFt?: number | null): L
   return Number(altitudeFt) < LEIDOS_ROUTE_SEARCH_HIGH_ALTITUDE_FLOOR_FT
     ? LEIDOS_ROUTE_SEARCH_PATH_OPTION_LOW_ALTITUDE_ONLY
     : null;
+};
+
+export const selectLeidosRouteSearchRequest = ({
+  altitudeFt,
+  explicitSearchOption,
+}: {
+  altitudeFt?: number | null;
+  explicitSearchOption?: string | null;
+}): {
+  dispatchable: boolean;
+  searchOption: LeidosRouteSearchOption | null;
+  searchPathOption: LeidosRouteSearchPathOption;
+  reason: "low_altitude_system_recommended" | "explicit_high_altitude_route_family" | "missing_or_invalid_altitude" | "high_altitude_route_family_required" | "unsupported_explicit_route_family";
+  message: string | null;
+} => {
+  const normalizedExplicit = String(explicitSearchOption || "").trim().toUpperCase();
+  if (normalizedExplicit === LEIDOS_ROUTE_SEARCH_OPTION_J_ROUTE || normalizedExplicit === LEIDOS_ROUTE_SEARCH_OPTION_Q_ROUTE) {
+    return {
+      dispatchable: true,
+      searchOption: normalizedExplicit,
+      searchPathOption: null,
+      reason: "explicit_high_altitude_route_family",
+      message: null,
+    };
+  }
+  if (normalizedExplicit && normalizedExplicit !== LEIDOS_ROUTE_SEARCH_OPTION_SYSTEM_RECOMMENDED) {
+    return {
+      dispatchable: false,
+      searchOption: null,
+      searchPathOption: null,
+      reason: "unsupported_explicit_route_family",
+      message: "Automatic Route Assist is unavailable for the selected route-search mode.",
+    };
+  }
+  if (!Number.isFinite(altitudeFt)) {
+    return {
+      dispatchable: false,
+      searchOption: null,
+      searchPathOption: null,
+      reason: "missing_or_invalid_altitude",
+      message: LEIDOS_ROUTE_ASSIST_MISSING_ALTITUDE_UNAVAILABLE_MESSAGE,
+    };
+  }
+  if (Number(altitudeFt) >= LEIDOS_ROUTE_SEARCH_HIGH_ALTITUDE_FLOOR_FT) {
+    return {
+      dispatchable: false,
+      searchOption: null,
+      searchPathOption: null,
+      reason: "high_altitude_route_family_required",
+      message: LEIDOS_ROUTE_ASSIST_HIGH_ALTITUDE_UNAVAILABLE_MESSAGE,
+    };
+  }
+  return {
+    dispatchable: true,
+    searchOption: LEIDOS_ROUTE_SEARCH_OPTION_SYSTEM_RECOMMENDED,
+    searchPathOption: LEIDOS_ROUTE_SEARCH_PATH_OPTION_LOW_ALTITUDE_ONLY,
+    reason: "low_altitude_system_recommended",
+    message: null,
+  };
 };
 
 export const isLikelyUnsupportedOceanicRouteAssistPair = (departure: string, destination: string) => {
@@ -166,6 +235,117 @@ const isLeidosTimeoutLikeError = (error: any) => {
   );
 };
 
+export type LeidosProviderUrlValidationReason =
+  | "non_https_provider_url"
+  | "unexpected_provider_host"
+  | "unexpected_provider_path"
+  | "unexpected_provider_port"
+  | "provider_url_embedded_credentials"
+  | "protocol_relative_provider_url"
+  | "invalid_provider_url";
+
+const LEIDOS_APPROVED_ORIGINS: Record<LeidosEnvironment, Array<{ host: string; pathPrefix: string }>> = {
+  lab: [{ host: "ffspelabs.leidos.com", pathPrefix: "/Website2/rest/" }],
+  test: [{ host: "ffspelabs.leidos.com", pathPrefix: "/Website2/rest/" }],
+  validation: [{ host: "ffspelabs.leidos.com", pathPrefix: "/Website2/rest/" }],
+  production: [
+    { host: "www.lmfsweb.afss.com", pathPrefix: "/Website/rest/" },
+    { host: "lmfsweb.afss.com", pathPrefix: "/Website/rest/" },
+    { host: "www.1800wxbrief.com", pathPrefix: "/Website/rest/" },
+    { host: "1800wxbrief.com", pathPrefix: "/Website/rest/" },
+  ],
+};
+
+const safeProviderEndpointForLog = (urlString: string) => {
+  try {
+    const url = new URL(urlString);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return "[invalid-provider-url]";
+  }
+};
+
+export const validateLeidosProviderUrl = (
+  urlString: string,
+  environment: LeidosEnvironment,
+): { ok: true; url: URL } | { ok: false; reason: LeidosProviderUrlValidationReason; safeUrl: string } => {
+  const raw = String(urlString || "").trim();
+  if (!raw || raw.startsWith("//")) {
+    return { ok: false, reason: raw.startsWith("//") ? "protocol_relative_provider_url" : "invalid_provider_url", safeUrl: "[invalid-provider-url]" };
+  }
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return { ok: false, reason: "invalid_provider_url", safeUrl: "[invalid-provider-url]" };
+  }
+
+  const safeUrl = safeProviderEndpointForLog(url.toString());
+  if (url.username || url.password) {
+    return { ok: false, reason: "provider_url_embedded_credentials", safeUrl };
+  }
+  if (url.protocol !== "https:") {
+    return { ok: false, reason: "non_https_provider_url", safeUrl };
+  }
+  if (url.port && url.port !== "443") {
+    return { ok: false, reason: "unexpected_provider_port", safeUrl };
+  }
+
+  const approved = LEIDOS_APPROVED_ORIGINS[environment] || LEIDOS_APPROVED_ORIGINS.lab;
+  const host = url.hostname.toLowerCase();
+  const origin = approved.find((entry) => entry.host === host);
+  if (!origin) {
+    return { ok: false, reason: "unexpected_provider_host", safeUrl };
+  }
+  const prefixWithoutTrailingSlash = origin.pathPrefix.replace(/\/+$/, "");
+  if (url.pathname !== prefixWithoutTrailingSlash && !url.pathname.startsWith(origin.pathPrefix)) {
+    return { ok: false, reason: "unexpected_provider_path", safeUrl };
+  }
+
+  return { ok: true, url };
+};
+
+const assertValidLeidosProviderUrl = (
+  urlString: string,
+  config: LeidosFlightServiceConfig,
+  context: { operation: string; planId?: string | null; providerPlanId?: string | null },
+) => {
+  const validation = validateLeidosProviderUrl(urlString, config.environment);
+  if (validation.ok) return validation.url.toString();
+  console.warn(JSON.stringify({
+    event: "leidos_provider_url_rejected",
+    reason: validation.reason,
+    operation: context.operation,
+    environment: config.environment,
+    planId: context.planId || null,
+    providerPlanId: context.providerPlanId || null,
+    providerEndpoint: validation.safeUrl,
+  }));
+  throw new Error(`Leidos provider URL rejected before dispatch: ${validation.reason}`);
+};
+
+const assertNoProtocolRelativeProviderPath = (
+  pathValue: string,
+  config: LeidosFlightServiceConfig,
+  context: { operation: string; planId?: string | null; providerPlanId?: string | null },
+) => {
+  if (!String(pathValue || "").trim().startsWith("//")) return;
+  console.warn(JSON.stringify({
+    event: "leidos_provider_url_rejected",
+    reason: "protocol_relative_provider_url",
+    operation: context.operation,
+    environment: config.environment,
+    planId: context.planId || null,
+    providerPlanId: context.providerPlanId || null,
+  }));
+  throw new Error("Leidos provider URL rejected before dispatch: protocol_relative_provider_url");
+};
+
 const fetchLeidosUrl = async (
   urlString: string,
   options: {
@@ -176,6 +356,9 @@ const fetchLeidosUrl = async (
   timeoutMs = getLeidosRequestTimeoutMs(),
 ): Promise<Response> => {
   const url = new URL(urlString);
+  if (url.protocol !== "https:") {
+    throw new Error("Leidos provider URL rejected before dispatch: non_https_provider_url");
+  }
   const bodyBuffer = options.body != null ? Buffer.from(options.body) : null;
   const headers: Record<string, string> = { ...options.headers };
   if (bodyBuffer && !Object.keys(headers).some((key) => key.toLowerCase() === "content-length")) {
@@ -184,8 +367,7 @@ const fetchLeidosUrl = async (
 
   return await new Promise<Response>((resolve, reject) => {
     let settled = false;
-    const transport = url.protocol === "http:" ? httpRequest : httpsRequest;
-    const req = transport(
+    const req = httpsRequest(
       url,
       {
         method: options.method,
@@ -832,6 +1014,35 @@ const resolveActionPath = (baseUrl: string, actionPath: string, plan: FlightPlan
   return resolvedPath.startsWith("http://") || resolvedPath.startsWith("https://")
     ? resolvedPath
     : new URL(resolvedPath, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`).toString();
+};
+
+const resolveValidatedActionPath = (
+  config: LeidosFlightServiceConfig,
+  actionPath: string,
+  plan: FlightPlan,
+  operation: string,
+) => {
+  assertNoProtocolRelativeProviderPath(config.baseUrl, config, {
+    operation,
+    planId: plan.id,
+    providerPlanId: plan.filingProviderPlanId || null,
+  });
+  assertValidLeidosProviderUrl(config.baseUrl, config, {
+    operation,
+    planId: plan.id,
+    providerPlanId: plan.filingProviderPlanId || null,
+  });
+  assertNoProtocolRelativeProviderPath(actionPath, config, {
+    operation,
+    planId: plan.id,
+    providerPlanId: plan.filingProviderPlanId || null,
+  });
+  const requestUrl = resolveActionPath(config.baseUrl, actionPath, plan);
+  return assertValidLeidosProviderUrl(requestUrl, config, {
+    operation,
+    planId: plan.id,
+    providerPlanId: plan.filingProviderPlanId || null,
+  });
 };
 
 const getPlannerStateRecord = (plan: FlightPlan) => {
@@ -1848,6 +2059,18 @@ const retrieveLeidosPlanMetadataByProviderPlanId = async (
   const trimmedProviderPlanId = String(providerPlanId || '').trim();
   if (!trimmedProviderPlanId || !config.username || !config.password || !config.retrievePath) return null;
 
+  assertNoProtocolRelativeProviderPath(config.baseUrl, config, {
+    operation: "retrieve",
+    providerPlanId: trimmedProviderPlanId,
+  });
+  assertValidLeidosProviderUrl(config.baseUrl, config, {
+    operation: "retrieve",
+    providerPlanId: trimmedProviderPlanId,
+  });
+  assertNoProtocolRelativeProviderPath(config.retrievePath, config, {
+    operation: "retrieve",
+    providerPlanId: trimmedProviderPlanId,
+  });
   const resolvedPath = config.retrievePath
     .replaceAll("{flightIdentifier}", encodeURIComponent(trimmedProviderPlanId))
     .replaceAll("{providerPlanId}", encodeURIComponent(trimmedProviderPlanId))
@@ -1856,11 +2079,15 @@ const retrieveLeidosPlanMetadataByProviderPlanId = async (
     ? new URL(resolvedPath)
     : new URL(resolvedPath, config.baseUrl.endsWith("/") ? config.baseUrl : `${config.baseUrl}/`);
   url.searchParams.set('versionRequested', '20240801');
+  const requestUrl = assertValidLeidosProviderUrl(url.toString(), config, {
+    operation: "retrieve",
+    providerPlanId: trimmedProviderPlanId,
+  });
 
   const basic = Buffer.from(`${config.username}:${config.password}`).toString('base64');
   let response: Response;
   try {
-    response = await fetchLeidosUrl(url.toString(), {
+    response = await fetchLeidosUrl(requestUrl, {
       method: 'GET',
       headers: {
         Authorization: `Basic ${basic}`,
@@ -2152,24 +2379,68 @@ export const searchLeidosRoute = async ({
   destination,
   altitudeFt,
   aircraftType,
+  searchOption: explicitSearchOption,
 }: {
   departure: string;
   destination: string;
   altitudeFt?: number | null;
   aircraftType?: string | null;
+  searchOption?: string | null;
 }): Promise<LeidosRouteSearchResult> => {
   const config = getLeidosFlightServiceConfig();
-  if (!config.username || !config.password) {
-    throw new Error("Leidos credentials are not configured.");
-  }
-
+  assertNoProtocolRelativeProviderPath(config.baseUrl, config, {
+    operation: "routeSearch",
+  });
+  assertValidLeidosProviderUrl(config.baseUrl, config, {
+    operation: "routeSearch",
+  });
   const baseUrl = config.baseUrl.endsWith("/") ? config.baseUrl : `${config.baseUrl}/`;
   const url = new URL("util/routeSearch", baseUrl);
   const normalizedDeparture = departure.trim().toUpperCase();
   const normalizedDestination = destination.trim().toUpperCase();
-  const searchOption = LEIDOS_ROUTE_SEARCH_OPTION_SYSTEM_RECOMMENDED;
   const normalizedAltitudeFt = altitudeFt && Number.isFinite(altitudeFt) ? Math.round(altitudeFt) : null;
-  const searchPathOption = selectLeidosRouteSearchPathOption(normalizedAltitudeFt);
+  const requestPlan = selectLeidosRouteSearchRequest({
+    altitudeFt: normalizedAltitudeFt,
+    explicitSearchOption,
+  });
+  const searchOption = requestPlan.searchOption;
+  const searchPathOption = requestPlan.searchPathOption;
+  const providerEndpoint = safeProviderEndpointForLog(url.toString());
+
+  if (!requestPlan.dispatchable) {
+    console.info(JSON.stringify({
+      event: "flight_route_assist_skipped",
+      departure: normalizedDeparture,
+      destination: normalizedDestination,
+      altitudeFt: normalizedAltitudeFt,
+      aircraftType: aircraftType ? String(aircraftType).trim().toUpperCase() : null,
+      searchOption,
+      searchPathOption,
+      providerEndpoint,
+      reason: requestPlan.reason,
+    }));
+    return {
+      provider: "Leidos Flight Service",
+      environment: config.environment,
+      departure: normalizedDeparture,
+      destination: normalizedDestination,
+      route: null,
+      atcRecentIFRRoutes: [],
+      codedDepartureRoutes: [],
+      faaPreferredRoutes: [],
+      warnings: [],
+      available: false,
+      message: requestPlan.message,
+      diagnostics: {
+        searchOption,
+        searchPathOption,
+        providerEndpoint,
+        httpStatus: 0,
+        providerReturnStatus: null,
+        providerResponseMessages: [requestPlan.reason],
+      },
+    };
+  }
 
   if (isLikelyUnsupportedOceanicRouteAssistPair(normalizedDeparture, normalizedDestination)) {
     console.info(JSON.stringify({
@@ -2178,8 +2449,9 @@ export const searchLeidosRoute = async ({
       destination: normalizedDestination,
       altitudeFt: normalizedAltitudeFt,
       aircraftType: aircraftType ? String(aircraftType).trim().toUpperCase() : null,
+      searchOption,
       searchPathOption,
-      providerEndpoint: `${url.origin}${url.pathname}`,
+      providerEndpoint,
       reason: "unsupported_oceanic_route_assist_pair",
     }));
     return {
@@ -2197,7 +2469,7 @@ export const searchLeidosRoute = async ({
       diagnostics: {
         searchOption,
         searchPathOption,
-        providerEndpoint: `${url.origin}${url.pathname}`,
+        providerEndpoint,
         httpStatus: 0,
         providerReturnStatus: null,
         providerResponseMessages: ["unsupported_oceanic_route_assist_pair"],
@@ -2205,17 +2477,27 @@ export const searchLeidosRoute = async ({
     };
   }
 
+  assertValidLeidosProviderUrl(url.toString(), config, {
+    operation: "routeSearch",
+  });
+  if (!config.username || !config.password) {
+    throw new Error("Leidos credentials are not configured.");
+  }
+
   url.searchParams.set("departure", normalizedDeparture);
   url.searchParams.set("destination", normalizedDestination);
-  url.searchParams.set("searchOption", searchOption);
+  url.searchParams.set("searchOption", String(searchOption));
   if (searchPathOption) {
     url.searchParams.set("searchPathOption", searchPathOption);
   }
+  const validatedRequestUrl = assertValidLeidosProviderUrl(url.toString(), config, {
+    operation: "routeSearch",
+  });
 
   const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
   let response: Response;
   try {
-    response = await fetchLeidosUrl(url.toString(), {
+    response = await fetchLeidosUrl(validatedRequestUrl, {
       method: "GET",
       headers: {
         Authorization: `Basic ${basic}`,
@@ -2265,7 +2547,7 @@ export const searchLeidosRoute = async ({
       altitudeFt: normalizedAltitudeFt,
       aircraftType: aircraftType ? String(aircraftType).trim().toUpperCase() : null,
       searchPathOption,
-      providerEndpoint: `${url.origin}${url.pathname}`,
+      providerEndpoint,
       httpStatus: response.status,
       providerReturnStatus: typeof parsed.returnStatus === "boolean" ? parsed.returnStatus : null,
       providerResponseMessages: [
@@ -2296,9 +2578,10 @@ export const searchLeidosRoute = async ({
     departure: normalizedDeparture,
     destination: normalizedDestination,
     altitudeFt: normalizedAltitudeFt,
-    aircraftType: aircraftType ? String(aircraftType).trim().toUpperCase() : null,
-    searchPathOption,
-    providerEndpoint: `${url.origin}${url.pathname}`,
+      aircraftType: aircraftType ? String(aircraftType).trim().toUpperCase() : null,
+      searchOption,
+      searchPathOption,
+      providerEndpoint,
     httpStatus: response.status,
     providerReturnStatus,
     providerResponseMessages,
@@ -2319,7 +2602,7 @@ export const searchLeidosRoute = async ({
     diagnostics: {
       searchOption,
       searchPathOption,
-      providerEndpoint: `${url.origin}${url.pathname}`,
+      providerEndpoint,
       httpStatus: response.status,
       providerReturnStatus,
       providerResponseMessages,
@@ -2339,32 +2622,31 @@ const buildStagedFallbackResult = (
     providerMessages?: FilingProviderMessage[];
     rawExtras?: Record<string, unknown>;
   },
-): FilingServiceResult => ({
-  live: false,
-  provider: "Leidos Flight Service",
-  action,
-  accepted: true,
-  message: `RSF staged the ${action.toUpperCase()} request. ${reason}`,
-  nextStatus: "staged",
-  warnings: validation.warnings,
-  providerUrl: getProviderUrl(),
-  providerPlanId: String(options?.providerPlanId || "").trim() || buildProviderPlanId(plan, action),
-  payloadSnapshot: options?.payloadSnapshot ?? null,
-  providerSnapshot: options?.providerSnapshot ?? null,
-  providerMessages: options?.providerMessages ?? [],
-  raw: {
+): FilingServiceResult => {
+  const raw = sanitizeProviderDiagnosticRecordForPersistence({
     action,
     planId: plan.id,
     filingFlightRules: normalizeFlightRules(plan.filingFlightRules),
-    departure: plan.departure,
-    destination: plan.destination,
-    route: plan.route || null,
-    alternate: plan.alternate || null,
     validation,
     stagedReason: reason,
     ...options?.rawExtras,
-  },
-});
+  });
+  return {
+    live: false,
+    provider: "Leidos Flight Service",
+    action,
+    accepted: true,
+    message: `RSF staged the ${action.toUpperCase()} request. ${reason}`,
+    nextStatus: "staged",
+    warnings: validation.warnings,
+    providerUrl: getProviderUrl(),
+    providerPlanId: String(options?.providerPlanId || "").trim() || buildProviderPlanId(plan, action),
+    payloadSnapshot: options?.payloadSnapshot ?? null,
+    providerSnapshot: options?.providerSnapshot ?? null,
+    providerMessages: options?.providerMessages ?? [],
+    raw,
+  };
+};
 
 export const verifyLeidosWebhookAuthorization = (authorizationHeader?: string | null) => {
   const { webhookUsername, webhookPassword } = getLeidosFlightServiceConfig();
@@ -2763,7 +3045,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       );
     }
 
-    const requestUrl = resolveActionPath(config.baseUrl, actionPath, effectivePlan);
+    const requestUrl = resolveValidatedActionPath(config, actionPath, effectivePlan, action);
     const payloadContext = buildLeidosActionPayload(effectivePlan, action, config);
     const requestBody = payloadContext.params;
     const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
@@ -2853,9 +3135,28 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
     const parsedResponse = await parseProviderResponse(response);
     if (response.status >= 300 && response.status < 400) {
       const redirectLocation = response.headers.get("location");
+      let redirectReason = "provider_redirect_blocked";
+      if (redirectLocation) {
+        try {
+          const redirectedUrl = new URL(redirectLocation, requestUrl);
+          const originalUrl = new URL(requestUrl);
+          if (redirectedUrl.origin !== originalUrl.origin) {
+            redirectReason = "cross_origin_redirect_blocked";
+          }
+        } catch {
+          redirectReason = "invalid_redirect_location_blocked";
+        }
+      }
+      console.warn(JSON.stringify({
+        event: "leidos_provider_url_rejected",
+        reason: redirectReason,
+        operation: action,
+        environment: config.environment,
+        planId: plan.id,
+        providerPlanId: effectivePlan.filingProviderPlanId || null,
+      }));
       throw new Error(
-        `Leidos ${action.toUpperCase()} request was redirected instead of returning a REST response` +
-        `${redirectLocation ? ` (Location: ${redirectLocation})` : ""}. ` +
+        `Leidos ${action.toUpperCase()} request was redirected instead of returning a REST response. ` +
         "This usually means the REST endpoint path or account authorization is not set up correctly."
       );
     }
@@ -3001,6 +3302,17 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       notices: providerSnapshot.notices,
     }));
 
+    const raw = sanitizeProviderDiagnosticRecordForPersistence({
+      requestUrl,
+      httpStatus: response.status,
+      returnStatus: providerReturnStatus,
+      responseMessages,
+      providerPlanId,
+      versionStamp,
+      responseDiagnostics: summarizeObjectKeys(parsedResponse),
+      metadataDiagnostics: summarizeObjectKeys(metadataResponse),
+    });
+
     return {
       live: true,
       provider: "Leidos Flight Service",
@@ -3014,16 +3326,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       payloadSnapshot: payloadContext.payloadSnapshot,
       providerSnapshot,
       providerMessages,
-      raw: {
-        requestUrl,
-        httpStatus: response.status,
-        returnStatus: providerReturnStatus,
-        responseMessages,
-        providerPlanId,
-        versionStamp,
-        metadataResponse,
-        response: parsedResponse,
-      },
+      raw,
     };
   }
 }

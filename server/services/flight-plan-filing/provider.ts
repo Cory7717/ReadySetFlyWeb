@@ -29,6 +29,12 @@ const DEFAULT_USER_AGENT = "ReadySetFly Flight Service Interface";
 const DEFAULT_LEIDOS_REQUEST_TIMEOUT_MS = 25000;
 export const LEIDOS_ROUTE_SEARCH_OPTION_SYSTEM_RECOMMENDED = "SYSTEM_RECOMMENDED" as const;
 export const LEIDOS_ROUTE_SEARCH_PATH_OPTION_LOW_ALTITUDE_ONLY = "LOW_ALTITUDE_ONLY" as const;
+export type LeidosRouteSearchPathOption = typeof LEIDOS_ROUTE_SEARCH_PATH_OPTION_LOW_ALTITUDE_ONLY | null;
+const LEIDOS_ROUTE_SEARCH_HIGH_ALTITUDE_FLOOR_FT = 18_000;
+const LEIDOS_ROUTE_ASSIST_OCEANIC_UNAVAILABLE_MESSAGE =
+  "Automatic Route Assist is unavailable for this oceanic city pair. You can continue with a custom route or use published oceanic planning resources.";
+const LEIDOS_ROUTE_ASSIST_NO_ROUTE_FOUND_MESSAGE =
+  "Leidos could not find a route for the selected altitude and routing type.";
 
 type LeidosEnvironment = "lab" | "test" | "validation" | "production";
 
@@ -82,12 +88,39 @@ export type LeidosRouteSearchResult = {
   message?: string | null;
   diagnostics?: {
     searchOption: typeof LEIDOS_ROUTE_SEARCH_OPTION_SYSTEM_RECOMMENDED;
-    searchPathOption: typeof LEIDOS_ROUTE_SEARCH_PATH_OPTION_LOW_ALTITUDE_ONLY;
+    searchPathOption: LeidosRouteSearchPathOption;
     providerEndpoint: string;
     httpStatus: number;
     providerReturnStatus: boolean | null;
     providerResponseMessages: string[];
   };
+};
+
+export const selectLeidosRouteSearchPathOption = (altitudeFt?: number | null): LeidosRouteSearchPathOption => {
+  if (!Number.isFinite(altitudeFt)) return null;
+  return Number(altitudeFt) < LEIDOS_ROUTE_SEARCH_HIGH_ALTITUDE_FLOOR_FT
+    ? LEIDOS_ROUTE_SEARCH_PATH_OPTION_LOW_ALTITUDE_ONLY
+    : null;
+};
+
+export const isLikelyUnsupportedOceanicRouteAssistPair = (departure: string, destination: string) => {
+  const dep = departure.trim().toUpperCase();
+  const dest = destination.trim().toUpperCase();
+  const hawaiiOrPacific = /^(PH|PG|PJ|PT|PW)/;
+  const conusLike = /^K[A-Z0-9]{3}$/;
+  return (conusLike.test(dep) && hawaiiOrPacific.test(dest)) || (hawaiiOrPacific.test(dep) && conusLike.test(dest));
+};
+
+export const classifyLeidosRouteSearchResult = ({
+  providerReturnStatus,
+  hasSuggestions,
+}: {
+  providerReturnStatus: boolean | null;
+  hasSuggestions: boolean;
+}) => {
+  if (providerReturnStatus === false) return { available: false, message: LEIDOS_ROUTE_ASSIST_NO_ROUTE_FOUND_MESSAGE };
+  if (hasSuggestions) return { available: true, message: null as string | null };
+  return { available: true, message: null as string | null };
 };
 
 export interface FlightPlanFilingProvider {
@@ -2134,11 +2167,49 @@ export const searchLeidosRoute = async ({
   const normalizedDeparture = departure.trim().toUpperCase();
   const normalizedDestination = destination.trim().toUpperCase();
   const searchOption = LEIDOS_ROUTE_SEARCH_OPTION_SYSTEM_RECOMMENDED;
-  const searchPathOption = LEIDOS_ROUTE_SEARCH_PATH_OPTION_LOW_ALTITUDE_ONLY;
+  const normalizedAltitudeFt = altitudeFt && Number.isFinite(altitudeFt) ? Math.round(altitudeFt) : null;
+  const searchPathOption = selectLeidosRouteSearchPathOption(normalizedAltitudeFt);
+
+  if (isLikelyUnsupportedOceanicRouteAssistPair(normalizedDeparture, normalizedDestination)) {
+    console.info(JSON.stringify({
+      event: "flight_route_assist_skipped",
+      departure: normalizedDeparture,
+      destination: normalizedDestination,
+      altitudeFt: normalizedAltitudeFt,
+      aircraftType: aircraftType ? String(aircraftType).trim().toUpperCase() : null,
+      searchPathOption,
+      providerEndpoint: `${url.origin}${url.pathname}`,
+      reason: "unsupported_oceanic_route_assist_pair",
+    }));
+    return {
+      provider: "Leidos Flight Service",
+      environment: config.environment,
+      departure: normalizedDeparture,
+      destination: normalizedDestination,
+      route: null,
+      atcRecentIFRRoutes: [],
+      codedDepartureRoutes: [],
+      faaPreferredRoutes: [],
+      warnings: [],
+      available: false,
+      message: LEIDOS_ROUTE_ASSIST_OCEANIC_UNAVAILABLE_MESSAGE,
+      diagnostics: {
+        searchOption,
+        searchPathOption,
+        providerEndpoint: `${url.origin}${url.pathname}`,
+        httpStatus: 0,
+        providerReturnStatus: null,
+        providerResponseMessages: ["unsupported_oceanic_route_assist_pair"],
+      },
+    };
+  }
+
   url.searchParams.set("departure", normalizedDeparture);
   url.searchParams.set("destination", normalizedDestination);
   url.searchParams.set("searchOption", searchOption);
-  url.searchParams.set("searchPathOption", searchPathOption);
+  if (searchPathOption) {
+    url.searchParams.set("searchPathOption", searchPathOption);
+  }
 
   const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
   let response: Response;
@@ -2190,7 +2261,7 @@ export const searchLeidosRoute = async ({
       event: "flight_route_assist_provider_response",
       departure: normalizedDeparture,
       destination: normalizedDestination,
-      altitudeFt: altitudeFt && Number.isFinite(altitudeFt) ? Math.round(altitudeFt) : null,
+      altitudeFt: normalizedAltitudeFt,
       aircraftType: aircraftType ? String(aircraftType).trim().toUpperCase() : null,
       searchPathOption,
       providerEndpoint: `${url.origin}${url.pathname}`,
@@ -2217,13 +2288,13 @@ export const searchLeidosRoute = async ({
   const codedDepartureRoutes = asRouteStringArray(parsed.codedDepartureRoutes);
   const faaPreferredRoutes = asRouteStringArray(parsed.faaPreferredRoutes);
   const hasSuggestions = Boolean(route || atcRecentIFRRoutes.length || codedDepartureRoutes.length || faaPreferredRoutes.length);
-  const providerAccepted = providerReturnStatus !== false;
+  const routeSearchClassification = classifyLeidosRouteSearchResult({ providerReturnStatus, hasSuggestions });
 
   console.info(JSON.stringify({
     event: "flight_route_assist_provider_response",
     departure: normalizedDeparture,
     destination: normalizedDestination,
-    altitudeFt: altitudeFt && Number.isFinite(altitudeFt) ? Math.round(altitudeFt) : null,
+    altitudeFt: normalizedAltitudeFt,
     aircraftType: aircraftType ? String(aircraftType).trim().toUpperCase() : null,
     searchPathOption,
     providerEndpoint: `${url.origin}${url.pathname}`,
@@ -2241,11 +2312,9 @@ export const searchLeidosRoute = async ({
     atcRecentIFRRoutes,
     codedDepartureRoutes,
     faaPreferredRoutes,
-    warnings: providerAccepted ? providerResponseMessages : [],
-    available: providerAccepted,
-    message: providerAccepted || hasSuggestions
-      ? null
-      : "Route Assist could not retrieve a suggested route. You can continue with a custom route or try again.",
+    warnings: routeSearchClassification.available ? providerResponseMessages : [],
+    available: routeSearchClassification.available,
+    message: routeSearchClassification.message,
     diagnostics: {
       searchOption,
       searchPathOption,

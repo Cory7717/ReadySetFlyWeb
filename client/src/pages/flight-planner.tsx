@@ -1726,6 +1726,14 @@ type LeidosRouteSearchResponse = {
   };
 };
 
+type LeidosRouteSearchInput = {
+  departure: string;
+  destination: string;
+  altitudeFt: number | null;
+  aircraftType: string | null;
+  flightRules: string;
+};
+
 type FiledRouteAnalysisResponse = {
   normalizedRoute: string;
   tokens: FiledRouteToken[];
@@ -3266,39 +3274,93 @@ export default function FlightPlanner() {
     staleTime: 1000 * 60 * 10,
   });
 
+  const leidosRouteSearchInput = useMemo<LeidosRouteSearchInput | null>(() => {
+    const departure = planningDepartureCode.trim().toUpperCase();
+    const destination = planningDestinationCode.trim().toUpperCase();
+    const altitudeFt = plannedAltitudeValue && plannedAltitudeValue > 0 ? Math.round(plannedAltitudeValue) : null;
+    const aircraftType = filingAircraftType ? filingAircraftType.trim().toUpperCase() : null;
+    if (
+      filingDraft.flightRules !== "IFR" ||
+      !ICAO_REGEX.test(departure) ||
+      !ICAO_REGEX.test(destination)
+    ) {
+      return null;
+    }
+    return {
+      departure,
+      destination,
+      altitudeFt,
+      aircraftType,
+      flightRules: filingDraft.flightRules,
+    };
+  }, [filingAircraftType, filingDraft.flightRules, plannedAltitudeValue, planningDepartureCode, planningDestinationCode]);
+  const leidosRouteSearchInputKey = useMemo(
+    () => leidosRouteSearchInput
+      ? [
+        leidosRouteSearchInput.departure,
+        leidosRouteSearchInput.destination,
+        leidosRouteSearchInput.altitudeFt ?? "",
+        leidosRouteSearchInput.aircraftType ?? "",
+        leidosRouteSearchInput.flightRules,
+      ].join("|")
+      : "",
+    [leidosRouteSearchInput],
+  );
+  const [stableLeidosRouteSearchInput, setStableLeidosRouteSearchInput] = useState<LeidosRouteSearchInput | null>(null);
+  useEffect(() => {
+    queryClient.cancelQueries({ queryKey: ["/api/flight-plans/route-search"] });
+    setStableLeidosRouteSearchInput(null);
+    if (!leidosRouteSearchInput) return;
+    const timer = window.setTimeout(() => {
+      setStableLeidosRouteSearchInput(leidosRouteSearchInput);
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [leidosRouteSearchInputKey, queryClient]);
+
   const leidosRouteQuery = useQuery<LeidosRouteSearchResponse>({
     queryKey: [
       "/api/flight-plans/route-search",
-      planningDepartureCode,
-      planningDestinationCode,
-      plannedAltitude,
-      filingAircraftType,
-      filingDraft.flightRules,
+      stableLeidosRouteSearchInput?.departure ?? "",
+      stableLeidosRouteSearchInput?.destination ?? "",
+      stableLeidosRouteSearchInput?.altitudeFt ?? "",
+      stableLeidosRouteSearchInput?.aircraftType ?? "",
+      stableLeidosRouteSearchInput?.flightRules ?? "",
     ],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
+      if (!stableLeidosRouteSearchInput) throw new Error(ROUTE_ASSIST_UNAVAILABLE_MESSAGE);
       const params = new URLSearchParams({
-        departure: planningDepartureCode,
-        destination: planningDestinationCode,
+        departure: stableLeidosRouteSearchInput.departure,
+        destination: stableLeidosRouteSearchInput.destination,
       });
-      if (plannedAltitude) {
-        params.set("altitudeFt", plannedAltitude);
+      if (stableLeidosRouteSearchInput.altitudeFt) {
+        params.set("altitudeFt", String(stableLeidosRouteSearchInput.altitudeFt));
       }
-      if (filingAircraftType) {
-        params.set("aircraftType", filingAircraftType);
+      if (stableLeidosRouteSearchInput.aircraftType) {
+        params.set("aircraftType", stableLeidosRouteSearchInput.aircraftType);
       }
       const res = await fetch(apiUrl(`/api/flight-plans/route-search?${params.toString()}`), {
         credentials: "include",
+        signal,
       });
       if (!res.ok) {
         throw new Error(ROUTE_ASSIST_UNAVAILABLE_MESSAGE);
       }
-      return res.json();
+      const data = await res.json() as LeidosRouteSearchResponse;
+      const responseDeparture = String(data.departure || "").trim().toUpperCase();
+      const responseDestination = String(data.destination || "").trim().toUpperCase();
+      if (
+        responseDeparture &&
+        responseDestination &&
+        (
+          responseDeparture !== stableLeidosRouteSearchInput.departure ||
+          responseDestination !== stableLeidosRouteSearchInput.destination
+        )
+      ) {
+        throw new Error(ROUTE_ASSIST_UNAVAILABLE_MESSAGE);
+      }
+      return data;
     },
-    enabled:
-      filingDraft.flightRules === "IFR" &&
-      Boolean(planningDepartureCode && planningDestinationCode) &&
-      ICAO_REGEX.test(planningDepartureCode) &&
-      ICAO_REGEX.test(planningDestinationCode),
+    enabled: Boolean(stableLeidosRouteSearchInput),
     staleTime: 1000 * 60 * 10,
     retry: false,
   });
@@ -3309,7 +3371,7 @@ export default function FlightPlanner() {
   );
   const routeAssistUnavailableMessage = useMemo(
     () => leidosRouteQuery.data?.available === false
-      ? ROUTE_ASSIST_UNAVAILABLE_MESSAGE
+      ? normalizeRouteAssistMessage(leidosRouteQuery.data?.message) || ROUTE_ASSIST_UNAVAILABLE_MESSAGE
       : normalizeRouteAssistMessage(leidosRouteQuery.data?.message),
     [leidosRouteQuery.data?.available, leidosRouteQuery.data?.message],
   );

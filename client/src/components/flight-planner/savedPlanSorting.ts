@@ -18,6 +18,8 @@ const asRecord = (value: unknown) =>
 const normalizeStatus = (plan: FlightPlan | null | undefined) =>
   String(plan?.filingStatus || "draft").trim().toLowerCase();
 
+const terminalStatuses = new Set(["closed", "cancelled", "canceled", "expired", "completed", "inactive"]);
+
 const dateMs = (value: unknown) => {
   if (!value) return 0;
   const ms = new Date(String(value)).getTime();
@@ -35,12 +37,13 @@ const latestHistoryMs = (plan: FlightPlan) => {
 };
 
 export const savedPlanNeedsProviderReview = (plan: FlightPlan | null | undefined) =>
+  !terminalStatuses.has(normalizeStatus(plan)) &&
   asRecord((plan as Record<string, unknown> | null | undefined)?.filingProviderSnapshot).providerPendingReview === true;
 
 const isPastSavedPlan = (plan: FlightPlan) => {
   if (savedPlanNeedsProviderReview(plan)) return false;
   const status = normalizeStatus(plan);
-  return ["closed", "cancelled", "canceled", "expired", "completed", "inactive"].includes(status);
+  return terminalStatuses.has(status);
 };
 
 const currentPriority = (plan: FlightPlan) => {

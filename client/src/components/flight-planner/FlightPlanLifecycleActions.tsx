@@ -23,6 +23,7 @@ export const isCertificationFlightPlan = (plan: FlightPlan | null | undefined) =
   Boolean((plan as any)?.isCertificationTest || String((plan as any)?.source || "") === "leidos-certification");
 
 export const hasPendingProviderReview = (plan: FlightPlan | null | undefined) =>
+  !isTerminalFilingPlan(plan) &&
   getProviderSnapshot(plan).providerPendingReview === true;
 
 export const getProviderActionAvailability = (plan: FlightPlan | null | undefined) => {

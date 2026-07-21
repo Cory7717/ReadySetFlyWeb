@@ -594,6 +594,7 @@ const buildProviderLifecycleEvidenceSummary = (plan: FlightPlan | null | undefin
 };
 
 const hasPendingProviderReview = (plan: FlightPlan | null | undefined) =>
+  !["cancelled", "closed"].includes(normalizedClientFilingStatus(plan)) &&
   getProviderSnapshot(plan).providerPendingReview === true;
 
 const getProviderActionAvailability = (plan: FlightPlan | null | undefined) => {

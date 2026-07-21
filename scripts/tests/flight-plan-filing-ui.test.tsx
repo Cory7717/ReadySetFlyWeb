@@ -562,6 +562,22 @@ test("rendered lifecycle actions suppress mutation controls for terminal plans",
   }
 });
 
+test("rendered lifecycle actions ignore stale provider review flags on terminal plans", () => {
+  const html = renderLifecycleActions(lifecyclePlan({
+    filingStatus: "closed",
+    closedAt: new Date("2026-07-16T20:00:00.000Z"),
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "closed",
+      providerPendingReview: true,
+    },
+  }));
+
+  assertButtonAbsent(html, "Mark update reviewed");
+  assertButtonAbsent(html, lifecycleLabels.amend);
+  assertButtonAbsent(html, lifecycleLabels.cancel);
+  assertButtonAbsent(html, lifecycleLabels.close);
+});
+
 test("rendered lifecycle actions keep amend visible but disabled when an amend prerequisite is missing", () => {
   const reason = "This filed record is still waiting on the provider amend token. Refresh provider sync in a few minutes, then try amend again.";
   const html = renderLifecycleActions(lifecyclePlan(), { amendUnavailableReason: reason });

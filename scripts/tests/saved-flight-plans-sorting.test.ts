@@ -87,11 +87,24 @@ test("cancelled plan appears in Past Flight Plans", () => {
   assert.equal(getSavedPlanStatusChip(grouped.pastPlans[0]).label, "Cancelled");
 });
 
-test("provider-review-needed plan remains current even if status is ambiguous", () => {
+test("terminal plan with stale provider-review flag remains past and terminal", () => {
   const grouped = groupSavedFlightPlans([
     plan({
       id: "review",
       filingStatus: "closed",
+      filingProviderSnapshot: { providerPendingReview: true },
+    }),
+  ]);
+  assert.equal(grouped.currentPlans.length, 0);
+  assert.deepEqual(grouped.pastPlans.map((entry) => entry.id), ["review"]);
+  assert.equal(getSavedPlanStatusChip(grouped.pastPlans[0]).label, "Closed");
+});
+
+test("provider-review-needed filed plan remains current", () => {
+  const grouped = groupSavedFlightPlans([
+    plan({
+      id: "review",
+      filingStatus: "filed",
       filingProviderSnapshot: { providerPendingReview: true },
     }),
   ]);

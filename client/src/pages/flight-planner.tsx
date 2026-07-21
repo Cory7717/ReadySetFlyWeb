@@ -4365,8 +4365,8 @@ export default function FlightPlanner() {
   const fuelAvailableGallons = useMemo(() => {
     const onboard = Number(form.fuelOnBoard);
     if (Number.isFinite(onboard) && onboard > 0) return onboard;
-    return planningFuel;
-  }, [form.fuelOnBoard, planningFuel]);
+    return null;
+  }, [form.fuelOnBoard]);
   const fuelOnBoardCapacityWarning = useMemo(() => {
     const onboard = Number(form.fuelOnBoard);
     if (!Number.isFinite(onboard) || onboard <= 0) return null;
@@ -4406,7 +4406,7 @@ export default function FlightPlanner() {
   const legNavRows = useMemo(() => {
     let cumulativeNm = 0;
     let cumulativeMinutes = 0;
-    let fuelRemainingGallons = fuelAvailableGallons;
+    let fuelRemainingGallons = fuelAvailableGallons ?? 0;
     return legs.map((leg) => {
       cumulativeNm += leg.distanceNm;
       const course = Math.round(bearingDeg(leg.from, leg.to));
@@ -4457,7 +4457,7 @@ export default function FlightPlanner() {
     const firstUnreachableLeg = legNavRows.find((leg) => leg.fuelAfterLeg < 0);
     const endingFuelGallons = legNavRows.length > 0
       ? legNavRows[legNavRows.length - 1].fuelAfterUplift
-      : fuelAvailableGallons;
+      : fuelAvailableGallons ?? 0;
     const reserveBalanceGallons = endingFuelGallons - reserveFuel - alternateFuel;
     return {
       overCapacityStops,
@@ -4551,7 +4551,7 @@ export default function FlightPlanner() {
     calculatedEteMinutes: filingEstimatedEnrouteMinutes || null,
     displayedFuelEnduranceMinutes: fuelEnduranceComparison.displayedEnduranceMinutes,
     transmittedFuelEnduranceMinutes: fuelEnduranceComparison.transmittedEnduranceMinutes,
-    usableFuelGallons: Number.isFinite(fuelAvailableGallons) ? Number(fuelAvailableGallons.toFixed(1)) : null,
+    usableFuelGallons: fuelAvailableGallons != null && Number.isFinite(fuelAvailableGallons) ? Number(fuelAvailableGallons.toFixed(1)) : null,
     burnRateGph: Number.isFinite(planningBurn) ? Number(planningBurn.toFixed(2)) : null,
     calculatedEnduranceMinutes,
     reserveMinutes: Number(reserveMinutes) || null,
@@ -4970,7 +4970,7 @@ export default function FlightPlanner() {
         }));
       const optionLegs = optionPoints.length >= 2 ? buildLegs(optionPoints) : [];
       const fuelStopSet = new Set(option.stopIcaos);
-      let fuelRemainingGallons = fuelAvailableGallons;
+      let fuelRemainingGallons = fuelAvailableGallons ?? 0;
       let tripFuelGallons = 0;
       let firstUnreachableLeg: { from: string; to: string; shortageGallons: number } | null = null;
 
@@ -4996,7 +4996,7 @@ export default function FlightPlanner() {
       });
 
       const reserveBalanceGallons =
-        optionLegs.length > 0 ? fuelRemainingGallons - reserveFuel : fuelAvailableGallons - reserveFuel;
+        optionLegs.length > 0 ? fuelRemainingGallons - reserveFuel : (fuelAvailableGallons ?? 0) - reserveFuel;
       const longestLegNm = optionLegs.reduce(
         (maxValue, leg) => Math.max(maxValue, leg.distanceNm),
         0,
@@ -5574,7 +5574,7 @@ export default function FlightPlanner() {
             label: `Insert stop before ${firstFuelShortLeg.to}`,
             from: firstFuelShortLeg.from,
             to: firstFuelShortLeg.to,
-            fuelOnBoardGallons: Math.max(0, firstFuelShortLeg.fuelBeforeLeg),
+            fuelOnBoardGallons: Math.max(0, firstFuelShortLeg.fuelBeforeLeg ?? 0),
           },
         });
       } else {
@@ -5586,7 +5586,7 @@ export default function FlightPlanner() {
             label: `Insert stop between ${firstFuelShortLeg.from} and ${firstFuelShortLeg.to}`,
             from: firstFuelShortLeg.from,
             to: firstFuelShortLeg.to,
-            fuelOnBoardGallons: Math.max(0, firstFuelShortLeg.fuelBeforeLeg),
+            fuelOnBoardGallons: Math.max(0, firstFuelShortLeg.fuelBeforeLeg ?? 0),
           },
         });
       }
@@ -5625,7 +5625,7 @@ export default function FlightPlanner() {
           label: `Insert comfort stop between ${tightLegWithoutStop.from} and ${tightLegWithoutStop.to}`,
           from: tightLegWithoutStop.from,
           to: tightLegWithoutStop.to,
-          fuelOnBoardGallons: Math.max(0, tightLegWithoutStop.fuelBeforeLeg),
+          fuelOnBoardGallons: Math.max(0, tightLegWithoutStop.fuelBeforeLeg ?? 0),
         },
       });
     }
@@ -8296,7 +8296,7 @@ export default function FlightPlanner() {
     destination: { tab: "route", sectionId: "planner-route-setup", focusId: "planner-field-destination" },
     zzzzDetails: { tab: "file", sectionId: "planner-zzzz-details" },
     route: { tab: "route", sectionId: "planner-field-route" },
-    departureTime: { tab: "route", sectionId: "planner-distance-performance", focusId: "planner-field-departure-time" },
+    departureTime: { tab: "route", sectionId: "planner-route-setup", focusId: "planner-field-departure-time" },
     departureTimezone: { tab: "route", sectionId: "planner-route-setup", focusId: "planner-field-departure" },
     plannedAltitude: { tab: "route", sectionId: "planner-distance-performance", focusId: "planner-field-planned-altitude" },
     estimatedEnrouteTime: { tab: "file", sectionId: "planner-filing-details" },
@@ -11443,7 +11443,9 @@ export default function FlightPlanner() {
                 </div>
                 <div className={plannerMetricClass}>
                   <div className="text-xs text-[#A9BBCD]">Fuel aboard / endurance</div>
-                  <div className="font-semibold text-[#F5F8FC]">{fuelAvailableGallons.toFixed(1)} gal / {filingEnduranceMinutes ? formatMinutesLabel(filingEnduranceMinutes) : "-"}</div>
+                  <div className="font-semibold text-[#F5F8FC]">
+                    {fuelAvailableGallons != null ? `${fuelAvailableGallons.toFixed(1)} gal` : "-"} / {filingEnduranceMinutes ? formatMinutesLabel(filingEnduranceMinutes) : "-"}
+                  </div>
                   <div className={cn("mt-1 text-xs", fuelEnduranceComparison.isDeficient ? "text-red-200" : "text-[#A9BBCD]")}>
                     Filed ICAO endurance {formatFilingDurationLabel(filingEnduranceMinutes)}
                     {filingEnduranceSource === "manual_icao_endurance" ? " from manual override" : filingEnduranceSource === "calculated_from_fuel_and_burn" ? " from fuel and burn rate" : ""}

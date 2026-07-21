@@ -1425,7 +1425,7 @@ export const buildOtherInfoWithRemarks = (otherInfo: string | null, remarks?: st
   const source = String(otherInfo || "").trim();
   const existingRmkMatch = source.match(/(?:^|\s)RMK\/.*?(?=\s+[A-Z]{2,5}\/|$)/i);
   const existingRmkText = normalizeLeidosRemarksText(existingRmkMatch?.[0]?.replace(/^\s*RMK\//i, ""));
-  const remarksText = normalizeLeidosRemarksText(remarks) || existingRmkText;
+  const remarksText = existingRmkText || normalizeLeidosRemarksText(remarks);
   const base = source
     .replace(/(?:^|\s)RMK\/.*?(?=\s+[A-Z]{2,5}\/|$)/gi, " ")
     .replace(/\s+/g, " ")

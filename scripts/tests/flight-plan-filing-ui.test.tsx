@@ -701,6 +701,26 @@ test("cancel eligibility is stable when browser timezone differs or changes", ()
   assert.equal(getCanonicalPlanDepartureInstant(newYorkDevicePlan)?.toISOString(), "2026-07-17T22:30:00.000Z");
 });
 
+test("planner filing readiness edit target sends departure time fixes to Route Setup", () => {
+  const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(
+    source,
+    /departureTime:\s*\{\s*tab:\s*"route",\s*sectionId:\s*"planner-route-setup",\s*focusId:\s*"planner-field-departure-time"\s*\}/,
+  );
+  assert.doesNotMatch(
+    source,
+    /departureTime:\s*\{\s*tab:\s*"route",\s*sectionId:\s*"planner-distance-performance"/,
+  );
+});
+
+test("blank Fuel On Board is not treated as full usable fuel capacity", () => {
+  const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /const fuelAvailableGallons = useMemo\(\(\) => \{/);
+  assert.match(source, /if \(Number\.isFinite\(onboard\) && onboard > 0\) return onboard;/);
+  assert.match(source, /return null;\s*\}, \[form\.fuelOnBoard\]\);/);
+  assert.doesNotMatch(source, /return planningFuel;\s*\}, \[form\.fuelOnBoard, planningFuel\]\);/);
+});
+
 test("timezone-less display strings are not canonical lifecycle-action instants", () => {
   const sameTimezonePlan = lifecyclePlan({
     departure: "KEDC",

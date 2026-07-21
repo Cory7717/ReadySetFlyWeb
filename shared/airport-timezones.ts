@@ -38,6 +38,8 @@ const KNOWN_AIRPORT_TIMEZONES: Record<string, string> = {
   KDFW: "America/Chicago",
   KHOU: "America/Chicago",
   KORD: "America/Chicago",
+  KMSP: "America/Chicago",
+  KJVL: "America/Chicago",
   KJFK: "America/New_York",
   KLGA: "America/New_York",
   KEWR: "America/New_York",

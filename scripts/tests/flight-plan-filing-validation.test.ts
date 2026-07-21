@@ -342,6 +342,8 @@ test("airport timezone resolver covers required filing timezones", () => {
     ["KPHX", "2026-06-24T10:45", "America/Phoenix", "2026-06-24T17:45:00.000Z"],
     ["KFFZ", "2026-06-23T09:30", "America/Phoenix", "2026-06-23T16:30:00.000Z"],
     ["KEDC", "2026-06-24T10:45", "America/Chicago", "2026-06-24T15:45:00.000Z"],
+    ["KMSP", "2026-07-21T10:00", "America/Chicago", "2026-07-21T15:00:00.000Z"],
+    ["KJVL", "2026-07-21T10:00", "America/Chicago", "2026-07-21T15:00:00.000Z"],
     ["KDEN", "2026-06-24T10:45", "America/Denver", "2026-06-24T16:45:00.000Z"],
     ["KLAX", "2026-06-24T10:45", "America/Los_Angeles", "2026-06-24T17:45:00.000Z"],
     ["PHNL", "2026-06-24T10:45", "Pacific/Honolulu", "2026-06-24T20:45:00.000Z"],
@@ -745,12 +747,23 @@ test("Flight Service otherInfo transmission preserves ICAO RMK remarks", () => {
   );
   assert.equal(
     normalizeLeidosOtherInfoForTransmission(buildOtherInfoWithRemarks("DOF/260623 RMK/OLD MESSAGE", "RMK/TEST MESSAGE")),
-    "DOF/260623 RMK/TEST MESSAGE",
+    "DOF/260623 RMK/OLD MESSAGE",
   );
   assert.equal(
     normalizeLeidosOtherInfoForTransmission(buildOtherInfoWithRemarks("PBN/A1 RMK/TEST MESSAGE DOF/260623", null)),
     "PBN/A1 DOF/260623 RMK/TEST MESSAGE",
   );
+});
+
+test("Field 18 RMK entered in Other ICAO Information is not overwritten by filing remarks", () => {
+  const payload = buildLeidosActionPayload(filingPlan({
+    filingRemarks: "THIS IS A TEST",
+    filingOtherInfo: "PBN/A1 RMK/FIELD 18 USER REMARK",
+  }), "file", { otherInfo: null } as any);
+  const fields = Object.fromEntries(payload.params.entries());
+
+  assert.equal(fields.remarks, "THIS IS A TEST");
+  assert.equal(fields.otherInfo, `PBN/A1 DOF/${testDof} RMK/FIELD 18 USER REMARK`);
 });
 
 test("Flight Service payload puts normal filing remarks in Field 18 RMK and keeps supplemental remarks empty", () => {

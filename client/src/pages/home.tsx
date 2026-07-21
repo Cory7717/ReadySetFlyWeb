@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Search, MapPin, Calendar, Shield, X } from "lucide-react";
@@ -23,7 +23,6 @@ import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignup
 import { PageShell } from "@/components/layout/PageShell";
 import { PressDemoBanner, PressDemoSpotlight, type PressDemoStep, usePressDemo } from "@/components/press/PressDemo";
 import { useAuth } from "@/hooks/useAuth";
-import wingtipImage from "@assets/wingtip_featured_1761494838973.jpg";
 import { trackEvent } from "@/lib/analytics";
 import { apiUrl } from "@/lib/api";
 import { getCurrentReturnTo } from "@/lib/returnTo";
@@ -37,6 +36,10 @@ const quickFilters = [
 const RENTALS_META_TITLE = "Find Aircraft Rentals Near You | ReadySetFly";
 const RENTALS_META_DESCRIPTION =
   "Search verified aircraft rentals from flight schools, flying clubs, and independent operators near you and across the U.S. Compare aircraft types and rates nationwide.";
+const RENTAL_LISTING_AD_INTERVAL = 15;
+
+export const shouldShowRentalAdAfterListing = (listingIndex: number) =>
+  listingIndex >= 0 && (listingIndex + 1) % RENTAL_LISTING_AD_INTERVAL === 0;
 
 const RENTALS_PRESS_STEPS: PressDemoStep[] = [
   {
@@ -236,15 +239,14 @@ export default function Home() {
   const verificationHref = !isAuthenticated ? "/register" : "/verify-identity";
   const rentalsPanelClass = "rsf-metal-panel text-[#E8EDF4]";
   const rentalsSubpanelClass = "rsf-rentals-subpanel rounded-[1rem] text-[#DCE6F2]";
-  const rentalsMetricClass = "rsf-rentals-metric px-4 py-4";
   const rentalsPrimaryButtonClass = "rsf-metal-button-primary";
   const rentalsSecondaryButtonClass = "rsf-metal-button-secondary";
 
   return (
     <PageShell
       kicker="Rentals"
-      title="Find rental aircraft without leaving the rest of your planning behind."
-      description="Browse available aircraft, compare access options, then use the planner, conditions, and TFR tools in the same workflow."
+      title="Search rentals"
+      description="Find aircraft by type, location, access requirements, and availability."
       actions={
         <>
           <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">Verified listings</Badge>
@@ -257,7 +259,7 @@ export default function Home() {
         </>
       }
       canopyClassName="rsf-metal-hero border-b border-white/10"
-      contentClassName="rsf-rentals-theme space-y-8"
+      contentClassName="rsf-rentals-theme space-y-6"
     >
       {pressDemo.enabled && (
         <PressDemoBanner
@@ -313,28 +315,6 @@ export default function Home() {
         body={pressDemo.getStep("search-rentals")?.body ?? ""}
       >
       <section className={`${rentalsPanelClass} rounded-[1.6rem] p-5 sm:p-6`}>
-        <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-5">
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Aircraft access</Badge>
-              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Training friendly</Badge>
-              <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Plan in RSF</Badge>
-            </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className={rentalsMetricClass}>
-                <div className="text-xs font-medium uppercase tracking-[0.16em] text-[#8FA6C0]">1. Search by mission</div>
-                <div className="mt-2 text-sm text-[#DCE6F2]">Filter by aircraft type, location, and training needs before you compare listings.</div>
-              </div>
-              <div className={rentalsMetricClass}>
-                <div className="text-xs font-medium uppercase tracking-[0.16em] text-[#8FA6C0]">2. Check the aircraft</div>
-                <div className="mt-2 text-sm text-[#DCE6F2]">Review rates, avionics, insurance, and location before you request access.</div>
-              </div>
-              <div className={rentalsMetricClass}>
-                <div className="text-xs font-medium uppercase tracking-[0.16em] text-[#8FA6C0]">3. Plan the trip</div>
-                <div className="mt-2 text-sm text-[#DCE6F2]">Move into route planning, airport conditions, and airspace review once you know what you want to fly.</div>
-              </div>
-            </div>
-
             <div className={`${rentalsSubpanelClass} p-4 sm:p-5`}>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
@@ -427,89 +407,8 @@ export default function Home() {
                 </Button>
               </div>
             </div>
-          </div>
-
-          <div className={`${rentalsPanelClass} overflow-hidden rounded-[1.4rem]`}>
-            <img
-              src={wingtipImage}
-              alt="Wingtip view from a rental aircraft"
-              className="h-64 w-full object-cover xl:h-full"
-            />
-            <div className="space-y-2 p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8FA6C0]">Rental access</div>
-              <h3 className="text-xl font-semibold text-[#F5F8FC]">Find the aircraft first, then use the rest of RSF around it.</h3>
-              <p className="text-sm leading-6 text-[#A9BBCD]">
-                Compare aircraft, then move into route planning, current conditions, and TFR review without starting from scratch on another site.
-              </p>
-            </div>
-          </div>
-        </div>
       </section>
       </PressDemoSpotlight>
-
-      <section className="container mx-auto px-4">
-        <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-          <PressDemoSpotlight
-            active={pressDemo.isActive("owner-listing")}
-            stepNumber={(pressDemo.getStep("owner-listing")?.index ?? 0) + 1}
-            title={pressDemo.getStep("owner-listing")?.title ?? "Owner listing"}
-            body={pressDemo.getStep("owner-listing")?.body ?? ""}
-          >
-          <Card className={rentalsPanelClass}>
-            <CardContent className="space-y-4 p-5 sm:p-6">
-              <div>
-                <div className="text-sm font-semibold text-[#F5F8FC]">List your aircraft on RSF rentals</div>
-                <p className="mt-1 text-sm text-[#A9BBCD]">
-                  Owners need an RSF account and verification before publishing live rental listings.
-                </p>
-              </div>
-              <div className={`${rentalsSubpanelClass} px-4 py-3 text-xs text-[#A9BBCD]`}>
-                {!isAuthenticated
-                  ? "Create your free account first, then complete owner verification and publish your listing."
-                  : isVerifiedOwner
-                    ? "Your account is verified. You can create a rental listing now."
-                    : "Finish verification first so your rental listing can be approved and shown to pilots."}
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={() => trackEvent("cta_click", { label: "rentals_create_listing", target: listAircraftHref })}
-                  asChild
-                  className={rentalsPrimaryButtonClass}
-                >
-                  <Link href={listAircraftHref}>Create rental listing</Link>
-                </Button>
-                {!isVerifiedOwner && (
-                  <Button
-                    variant="outline"
-                    className={rentalsSecondaryButtonClass}
-                    onClick={() => trackEvent("cta_click", { label: "rentals_verify_owner", target: verificationHref })}
-                    asChild
-                  >
-                    <Link href={verificationHref}>{isAuthenticated ? "Complete verification" : "Create account"}</Link>
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-          </PressDemoSpotlight>
-
-          {!pressDemo.enabled ? (
-          <div className="space-y-3">
-            <div className={`${rentalsSubpanelClass} flex flex-wrap items-center justify-between gap-3 rounded-xl border-dashed px-4 py-3 text-sm`}>
-              <div className="text-[#A9BBCD]">
-                Want information on becoming a sponsored business?
-              </div>
-              <Button asChild size="sm" className={rentalsSecondaryButtonClass} data-testid="button-banner-ad-info-rentals">
-                <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
-                  Click here
-                </a>
-              </Button>
-            </div>
-            <BannerAdRotation placement="rentals" variant="compact" showLeadIn={false} />
-          </div>
-          ) : null}
-        </div>
-      </section>
 
       <PressDemoSpotlight
         active={pressDemo.isActive("browse-results")}
@@ -517,8 +416,8 @@ export default function Home() {
         title={pressDemo.getStep("browse-results")?.title ?? "Browse aircraft"}
         body={pressDemo.getStep("browse-results")?.body ?? ""}
       >
-      <section className="container mx-auto px-4 py-12">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <section className="container mx-auto px-4 py-6">
+        <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex-1">
             <span className="rsf-kicker">Available aircraft</span>
             <h2 className="mt-2 font-display text-2xl font-bold sm:text-3xl" data-testid="text-results-title">
@@ -578,34 +477,58 @@ export default function Home() {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {filteredAircraft.map((listing) => (
-                  <AircraftCard
-                    key={listing.id}
-                    id={listing.id}
-                    make={listing.make}
-                    model={listing.model}
-                    year={listing.year}
-                    hourlyRate={listing.hourlyRate}
-                    image={listing.images[0] || "https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=800"}
-                    location={`${listing.location}${listing.airportCode ? ` (${listing.airportCode})` : ""}`}
-                    certifications={listing.requiredCertifications}
-                    totalTime={listing.totalTime}
-                    avionics={listing.avionicsSuite || "N/A"}
-                    insuranceIncluded={listing.insuranceIncluded || false}
-                    responseTime={listing.responseTime || 24}
-                    acceptanceRate={listing.acceptanceRate || 95}
-                    viewCount={listing.viewCount || 0}
-                    isExample={(listing as any).isExample || false}
-                    onCardClick={() => {
-                      trackEvent("select_item", {
-                        item_id: listing.id,
-                        item_name: `${listing.make} ${listing.model}`,
-                        item_category: "rental_aircraft",
-                        location: listing.location,
-                      });
-                      setSelectedAircraftId(listing.id);
-                    }}
-                  />
+                {filteredAircraft.map((listing, index) => (
+                  <Fragment key={listing.id}>
+                    <AircraftCard
+                      id={listing.id}
+                      make={listing.make}
+                      model={listing.model}
+                      year={listing.year}
+                      hourlyRate={listing.hourlyRate}
+                      image={listing.images[0] || "https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=800"}
+                      location={`${listing.location}${listing.airportCode ? ` (${listing.airportCode})` : ""}`}
+                      certifications={listing.requiredCertifications}
+                      totalTime={listing.totalTime}
+                      avionics={listing.avionicsSuite || "N/A"}
+                      insuranceIncluded={listing.insuranceIncluded || false}
+                      responseTime={listing.responseTime || 24}
+                      acceptanceRate={listing.acceptanceRate || 95}
+                      viewCount={listing.viewCount || 0}
+                      isExample={(listing as any).isExample || false}
+                      onCardClick={() => {
+                        trackEvent("select_item", {
+                          item_id: listing.id,
+                          item_name: `${listing.make} ${listing.model}`,
+                          item_category: "rental_aircraft",
+                          location: listing.location,
+                        });
+                        setSelectedAircraftId(listing.id);
+                      }}
+                    />
+                    {!pressDemo.enabled && shouldShowRentalAdAfterListing(index) ? (
+                      <div
+                        className="md:col-span-2 lg:col-span-3"
+                        data-testid={`rental-listing-ad-slot-${Math.floor(index / RENTAL_LISTING_AD_INTERVAL) + 1}`}
+                      >
+                        <div className={`${rentalsSubpanelClass} mb-3 flex flex-wrap items-center justify-between gap-3 border-dashed px-4 py-3 text-sm`}>
+                          <div className="text-[#A9BBCD]">
+                            Sponsored aviation partners for pilots browsing rentals.
+                          </div>
+                          <Button asChild size="sm" className={rentalsSecondaryButtonClass} data-testid="button-banner-ad-info-rentals-inline">
+                            <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
+                              Advertise here
+                            </a>
+                          </Button>
+                        </div>
+                        <BannerAdRotation
+                          placement="rentals"
+                          variant="compact"
+                          showLeadIn={false}
+                          className="rounded-[1.4rem]"
+                        />
+                      </div>
+                    ) : null}
+                  </Fragment>
                 ))}
               </div>
             )}
@@ -613,6 +536,52 @@ export default function Home() {
         </div>
       </section>
       </PressDemoSpotlight>
+
+      <section className="container mx-auto px-4">
+        <PressDemoSpotlight
+          active={pressDemo.isActive("owner-listing")}
+          stepNumber={(pressDemo.getStep("owner-listing")?.index ?? 0) + 1}
+          title={pressDemo.getStep("owner-listing")?.title ?? "Owner listing"}
+          body={pressDemo.getStep("owner-listing")?.body ?? ""}
+        >
+          <Card className={rentalsPanelClass}>
+            <CardContent className="space-y-4 p-5 sm:p-6">
+              <div>
+                <div className="text-sm font-semibold text-[#F5F8FC]">List your aircraft on RSF rentals</div>
+                <p className="mt-1 text-sm text-[#A9BBCD]">
+                  Owners need an RSF account and verification before publishing live rental listings.
+                </p>
+              </div>
+              <div className={`${rentalsSubpanelClass} px-4 py-3 text-xs text-[#A9BBCD]`}>
+                {!isAuthenticated
+                  ? "Create your free account first, then complete owner verification and publish your listing."
+                  : isVerifiedOwner
+                    ? "Your account is verified. You can create a rental listing now."
+                    : "Finish verification first so your rental listing can be approved and shown to pilots."}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={() => trackEvent("cta_click", { label: "rentals_create_listing", target: listAircraftHref })}
+                  asChild
+                  className={rentalsPrimaryButtonClass}
+                >
+                  <Link href={listAircraftHref}>Create rental listing</Link>
+                </Button>
+                {!isVerifiedOwner && (
+                  <Button
+                    variant="outline"
+                    className={rentalsSecondaryButtonClass}
+                    onClick={() => trackEvent("cta_click", { label: "rentals_verify_owner", target: verificationHref })}
+                    asChild
+                  >
+                    <Link href={verificationHref}>{isAuthenticated ? "Complete verification" : "Create account"}</Link>
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </PressDemoSpotlight>
+      </section>
 
       <section className="rsf-metal-section py-16">
         <div className="container mx-auto px-4">

@@ -387,6 +387,21 @@ test("ACTIVATED lifecycle-only webhook does not set provider pending review", ()
   );
 });
 
+test("terminal provider lifecycle clears pending review while retaining changed-field evidence", () => {
+  const routes = readFileSync("server/routes.ts", "utf8");
+  const applyBlock = routes.slice(
+    routes.indexOf("const applyProviderEffectiveReviewDecision = ("),
+    routes.indexOf("const getProviderDiffValue = ("),
+  );
+
+  assert.match(applyBlock, /providerTerminalLifecycle = \["closed", "cancelled", "canceled"\]\.includes\(providerLifecycle\)/);
+  assert.match(applyBlock, /const reviewPending = providerTerminalLifecycle \? false : decision\.reviewPending/);
+  assert.match(applyBlock, /providerEffectivePlanChangedFields:\s*decision\.changedFields/);
+  assert.match(applyBlock, /providerReviewDecisionReason:\s*providerTerminalLifecycle[\s\S]*terminal_provider_lifecycle_auto_reconciled/);
+  assert.match(applyBlock, /providerPendingReview:\s*reviewPending/);
+  assert.match(applyBlock, /providerModifiedBySpecialist:\s*reviewPending/);
+});
+
 test("provider route absence does not count as provider route change", () => {
   const decision = buildProviderReviewDecision({
     plan: basePlan,

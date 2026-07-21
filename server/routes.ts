@@ -23366,7 +23366,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       previousSnapshot,
       nextSnapshot,
     });
-    const reviewReopened = decision.reviewPending && nextSnapshot.providerPendingReview !== true;
+    const providerLifecycle = String(nextSnapshot.providerLifecycleStatus || "").trim().toLowerCase();
+    const providerTerminalLifecycle = ["closed", "cancelled", "canceled"].includes(providerLifecycle);
+    const reviewPending = providerTerminalLifecycle ? false : decision.reviewPending;
+    const reviewReopened = reviewPending && nextSnapshot.providerPendingReview !== true;
     const acceptedFields = decision.acceptedEffectiveHash
       ? {
         providerReviewAcceptedEffectivePlanHash: decision.acceptedEffectiveHash,
@@ -23382,15 +23385,17 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       providerEffectivePlanHash: decision.effectiveHash,
       providerEffectivePlanSnapshot: decision.canonical,
       providerEffectivePlanChangedFields: decision.changedFields,
-      providerReviewDecisionReason: decision.reason,
-      providerPendingReview: decision.reviewPending,
-      providerModifiedBySpecialist: decision.reviewPending,
+      providerReviewDecisionReason: providerTerminalLifecycle
+        ? "terminal_provider_lifecycle_auto_reconciled"
+        : decision.reason,
+      providerPendingReview: reviewPending,
+      providerModifiedBySpecialist: reviewPending,
       providerReviewReopenedAt: reviewReopened ? new Date().toISOString() : nextSnapshot.providerReviewReopenedAt || null,
     };
     const nextVersion = String(nextSnapshot.versionStamp || "").trim();
     const acceptedVersion = String(previousSnapshot.providerReviewAcceptedVersionStamp || nextSnapshot.providerReviewAcceptedVersionStamp || "").trim();
     if (
-      decision.reviewPending &&
+      reviewPending &&
       decision.acceptedEffectiveHash &&
       decision.acceptedEffectiveHash !== decision.effectiveHash &&
       acceptedVersion &&
@@ -23417,8 +23422,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         effectivePlanHash: decision.effectiveHash,
         acceptedEffectivePlanHash: decision.acceptedEffectiveHash || null,
         changedFields: decision.changedFields,
-        providerPendingReview: decision.reviewPending,
-        reviewDecisionReason: decision.reason,
+        providerPendingReview: reviewPending,
+        reviewDecisionReason: providerTerminalLifecycle ? "terminal_provider_lifecycle_auto_reconciled" : decision.reason,
         source,
       }));
     }

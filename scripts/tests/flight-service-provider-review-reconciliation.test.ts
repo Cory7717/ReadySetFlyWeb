@@ -811,3 +811,20 @@ test("provider-review accept persists all accepted baseline fields in one guarde
   assert.match(acceptRoute, /providerReviewAcceptedAt:\s*now\.toISOString\(\)/);
   assert.match(acceptRoute, /providerPendingReview:\s*false/);
 });
+
+test("provider sync applies provider-authored effective changes to visible plan fields", () => {
+  const routes = readFileSync("server/routes.ts", "utf8");
+  const syncBlock = routes.slice(routes.indexOf("const persistLeidosProviderSync = async"));
+  assert.match(routes, /const buildProviderAuthoredPlanUpdates = \(snapshot: Record<string, unknown>\) =>/);
+  assert.match(routes, /providerEffectivePlanChangedFields/);
+  assert.match(routes, /changedFields\.has\("route"\)/);
+  assert.match(routes, /updates\.route = providerRoute/);
+  assert.match(routes, /changedFields\.has\("otherInfo"\)/);
+  assert.match(routes, /updates\.filingOtherInfo = providerOtherInfo/);
+  assert.match(routes, /changedFields\.has\("plannedAltitudeFt"\)/);
+  assert.match(routes, /updates\.filingPlannedAltitudeFt = Math\.round\(providerAltitude\)/);
+  assert.match(routes, /changedFields\.has\("alternate"\)/);
+  assert.match(routes, /updates\.alternate = providerAlternate\.toUpperCase\(\)/);
+  assert.match(syncBlock, /const providerAuthoredPlanUpdates = buildProviderAuthoredPlanUpdates\(nextProviderSnapshot\)/);
+  assert.match(syncBlock, /\.\.\.providerAuthoredPlanUpdates/);
+});

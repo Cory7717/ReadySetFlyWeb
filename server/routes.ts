@@ -23425,6 +23425,42 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     return reconciled;
   };
 
+  const getProviderDiffValue = (snapshot: Record<string, unknown>, field: string) => {
+    const diffs = Array.isArray(snapshot.fieldDiffs) ? snapshot.fieldDiffs as Array<Record<string, unknown>> : [];
+    const match = diffs.find((diff) => String(diff?.field || "") === field && diff?.changedByProvider === true);
+    const value = match?.providerValue;
+    return value === null || value === undefined ? null : String(value).replace(/\s+/g, " ").trim();
+  };
+
+  const buildProviderAuthoredPlanUpdates = (snapshot: Record<string, unknown>) => {
+    const changedFields = new Set(
+      (Array.isArray(snapshot.providerEffectivePlanChangedFields) ? snapshot.providerEffectivePlanChangedFields : [])
+        .map((field) => String(field || "").trim())
+        .filter(Boolean),
+    );
+    if (changedFields.size === 0) return {};
+
+    const routeSnapshot = getProviderSnapshotRecord(snapshot.route);
+    const updates: Record<string, unknown> = {};
+    if (changedFields.has("route")) {
+      const providerRoute = normalizeNotificationValue(routeSnapshot.providerRoute || routeSnapshot.routeProvider || routeSnapshot.providerReturnedRoute);
+      if (providerRoute) updates.route = providerRoute;
+    }
+    if (changedFields.has("otherInfo")) {
+      const providerOtherInfo = getProviderDiffValue(snapshot, "otherInfo");
+      if (providerOtherInfo) updates.filingOtherInfo = providerOtherInfo;
+    }
+    if (changedFields.has("plannedAltitudeFt")) {
+      const providerAltitude = Number(getProviderDiffValue(snapshot, "plannedAltitudeFt"));
+      if (Number.isFinite(providerAltitude) && providerAltitude > 0) updates.filingPlannedAltitudeFt = Math.round(providerAltitude);
+    }
+    if (changedFields.has("alternate")) {
+      const providerAlternate = getProviderDiffValue(snapshot, "alternate");
+      if (providerAlternate) updates.alternate = providerAlternate.toUpperCase();
+    }
+    return updates;
+  };
+
   const persistLeidosProviderSync = async (
     plan: any,
     syncResult: Awaited<ReturnType<typeof syncLeidosPlanMetadata>>,
@@ -23464,6 +23500,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       nextProviderSnapshotBase,
       "provider_retrieve",
     );
+    const providerAuthoredPlanUpdates = buildProviderAuthoredPlanUpdates(nextProviderSnapshot);
     if (!options.suppressTransitionLog) {
       logProviderLifecycleTransition({
         plan,
@@ -23490,6 +23527,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       filingProviderMessages: nextProviderMessages as any,
       filingAssignedBeaconCode: String((nextProviderSnapshot as any)?.beaconCode || plan.filingAssignedBeaconCode || "").trim() || null,
       filingRaw: nextRaw as any,
+      ...providerAuthoredPlanUpdates,
       ...providerStatusUpdates,
     } as any);
   };

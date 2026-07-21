@@ -155,7 +155,7 @@ export const canFilePlan = (plan: FlightPlan | null | undefined) => {
 
 export const getFileAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
   if (!plan) return "Save the current values first, then RSF will submit the saved packet.";
-  if (hasPendingProviderReview(plan)) return "Review and accept provider changes before filing another provider action.";
+  if (hasPendingProviderReview(plan)) return "Review and acknowledge the provider update before filing another provider action.";
   if (!canFilePlan(plan)) return "This plan already has a provider lifecycle state. Use Amend, Activate, Cancel, Close, or Provider Sync as applicable.";
   return "RSF saves the visible planner values first, then files that saved packet.";
 };
@@ -351,9 +351,9 @@ export function FlightPlanLifecycleActions({
           variant="default"
           onClick={onAcceptProviderChanges}
           disabled={actionPending || syncPending || acceptPending || providerActionsPaused}
-          title={providerActionsPausedReason || "Accept the provider changes shown in RSF."}
+          title={providerActionsPausedReason || "Acknowledge the provider update shown in RSF."}
         >
-          {acceptPending ? "Accepting..." : "Accept provider changes"}
+          {acceptPending ? "Acknowledging..." : "Acknowledge provider update"}
         </Button>
       )}
       <Button

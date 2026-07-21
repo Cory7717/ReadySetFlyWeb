@@ -665,7 +665,7 @@ const canFilePlan = (plan: FlightPlan | null | undefined) => {
 
 const getFileAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
   if (!plan) return "Save the current values first, then RSF will submit the saved packet.";
-  if (hasPendingProviderReview(plan)) return "Review and accept provider changes before filing another provider action.";
+  if (hasPendingProviderReview(plan)) return "Review and acknowledge the provider update before filing another provider action.";
   if (!canFilePlan(plan)) return "This plan already has a provider lifecycle state. Use Amend, Activate, Cancel, Close, or Provider Sync as applicable.";
   return "RSF saves the visible planner values first, then files that saved packet.";
 };
@@ -2046,6 +2046,7 @@ export default function FlightPlanner() {
   const [providerUpdatesPlan, setProviderUpdatesPlan] = useState<FlightPlan | null>(null);
   const [labAcknowledgementBlockedSync, setLabAcknowledgementBlockedSync] = useState<Record<string, LabAcknowledgementBlockedSync>>({});
   const backgroundSyncInFlightRef = useRef<Set<string>>(new Set());
+  const lastProviderNotificationCountRef = useRef<number | null>(null);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
   const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string; focusId?: string } | null>(null);
   useEffect(() => {
@@ -2909,6 +2910,20 @@ export default function FlightPlanner() {
     refetchInterval: isAuthenticated && activeTab === "file" ? 15_000 : false,
     refetchOnWindowFocus: true,
   });
+  const { data: unreadNotificationState } = useQuery<{ count: number }>({
+    queryKey: ["/api/notifications/unread"],
+    enabled: isAuthenticated,
+    refetchInterval: isAuthenticated ? 15_000 : false,
+    refetchOnWindowFocus: true,
+  });
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const nextCount = Number(unreadNotificationState?.count ?? 0);
+    const previousCount = lastProviderNotificationCountRef.current;
+    lastProviderNotificationCountRef.current = nextCount;
+    if (previousCount === null || nextCount === previousCount) return;
+    queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+  }, [isAuthenticated, queryClient, unreadNotificationState?.count]);
   const currentUserId = user?.id || null;
   const savedPlans = useMemo(() => {
     const plansCarryOwner = savedPlansRaw.some((plan) => typeof (plan as any).userId === "string");
@@ -7345,7 +7360,7 @@ export default function FlightPlanner() {
       field: "providerState",
       label: "Provider Change Review",
       severity: "required",
-      message: "Review and accept provider changes before submitting another provider action.",
+      message: "Review and acknowledge the provider update before submitting another provider action.",
       why: "RSF blocks lifecycle actions until provider-side changes are reviewed so local and provider state do not diverge.",
       actionLabel: "Review",
       actionTab: fileTab,
@@ -7723,7 +7738,7 @@ export default function FlightPlanner() {
       }
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       toast({
-        title: "Provider changes accepted",
+        title: "Provider update acknowledged",
         description: result?.message || "You can submit an amendment from the current provider version.",
       });
     },
@@ -13274,9 +13289,9 @@ export default function FlightPlanner() {
           </DialogHeader>
           {providerUpdatesPlan && hasPendingProviderReview(providerUpdatesPlan) && (
             <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100">
-              <div className="font-semibold">Provider changes need review</div>
+              <div className="font-semibold">Provider update needs acknowledgement</div>
               <div className="mt-1 text-amber-100/85">
-                The filing provider has updated this plan. Accept the current provider version before submitting another amendment.
+                The filing provider has updated this plan. Acknowledge the current provider version before submitting another amendment.
               </div>
               <Button
                 className="mt-3"
@@ -13284,7 +13299,7 @@ export default function FlightPlanner() {
                 onClick={() => acceptProviderReviewMutation.mutate(providerUpdatesPlan.id)}
                 disabled={acceptProviderReviewMutation.isPending || filingSyncMutation.isPending || filingActionMutation.isPending}
               >
-                {acceptProviderReviewMutation.isPending ? "Accepting..." : "Accept provider changes"}
+                {acceptProviderReviewMutation.isPending ? "Acknowledging..." : "Acknowledge provider update"}
               </Button>
             </div>
           )}

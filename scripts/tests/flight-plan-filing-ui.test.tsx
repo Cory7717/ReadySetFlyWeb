@@ -508,7 +508,7 @@ test("rendered lifecycle actions show accept provider changes when review is pen
     },
   }));
 
-  assertButtonVisible(html, "Accept provider changes", { disabled: false });
+  assertButtonVisible(html, "Acknowledge provider update", { disabled: false });
   assertButtonVisible(html, lifecycleLabels.amend, { disabled: false });
   assertButtonVisible(html, lifecycleLabels.cancel, { disabled: false });
 });
@@ -719,6 +719,14 @@ test("blank Fuel On Board is not treated as full usable fuel capacity", () => {
   assert.match(source, /if \(Number\.isFinite\(onboard\) && onboard > 0\) return onboard;/);
   assert.match(source, /return null;\s*\}, \[form\.fuelOnBoard\]\);/);
   assert.doesNotMatch(source, /return planningFuel;\s*\}, \[form\.fuelOnBoard, planningFuel\]\);/);
+});
+
+test("flight planner refreshes saved plans when notification polling changes", () => {
+  const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /queryKey:\s*\["\/api\/notifications\/unread"\]/);
+  assert.match(source, /refetchInterval:\s*isAuthenticated\s*\?\s*15_000\s*:\s*false/);
+  assert.match(source, /lastProviderNotificationCountRef\.current\s*=\s*nextCount/);
+  assert.match(source, /queryClient\.invalidateQueries\(\{\s*queryKey:\s*\["\/api\/flight-plans"\]\s*\}\)/);
 });
 
 test("timezone-less display strings are not canonical lifecycle-action instants", () => {

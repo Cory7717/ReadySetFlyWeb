@@ -421,7 +421,7 @@ export default function ListAircraft() {
           variant: "destructive",
         });
         setTimeout(() => {
-          navigate("/profile");
+          navigate("/verify-identity");
         }, 1000);
         return;
       }

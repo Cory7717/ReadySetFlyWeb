@@ -27,11 +27,26 @@ test("rental sponsored ads are inserted in the listing stream every 15 listings"
   assert.match(homeSource, /\(listingIndex \+ 1\) % RENTAL_LISTING_AD_INTERVAL === 0/);
 
   const listingMapIndex = homeSource.indexOf("filteredAircraft.map((listing, index)");
-  const inlineAdIndex = homeSource.indexOf('data-testid={`rental-listing-ad-slot-', listingMapIndex);
-  const bannerIndex = homeSource.indexOf('<BannerAdRotation', inlineAdIndex);
+  const inlineAdCallIndex = homeSource.indexOf("shouldShowRentalAdAfterListing(index)", listingMapIndex);
+  const bannerIndex = homeSource.indexOf("<BannerAdRotation");
   assert.ok(listingMapIndex >= 0, "listing map should be present");
-  assert.ok(inlineAdIndex > listingMapIndex, "ad slot should be inside the listing stream");
-  assert.ok(bannerIndex > inlineAdIndex, "banner rotation should render inside the inline ad slot");
+  assert.ok(inlineAdCallIndex > listingMapIndex, "ad slot should be inserted from inside the listing stream");
+  assert.ok(bannerIndex >= 0, "banner rotation should render inside the inline ad slot helper");
+  assert.match(homeSource, /filteredAircraft\.length < RENTAL_LISTING_AD_INTERVAL/);
+  assert.match(homeSource, /renderRentalInlineAd\(1\)/);
+});
+
+test("unverified authenticated owners get a top-level verification action", () => {
+  const homeSource = source();
+
+  const actionsIndex = homeSource.indexOf('actions={');
+  const verifyIndex = homeSource.indexOf("Complete Verification", actionsIndex);
+  const createIndex = homeSource.indexOf("Create Rental Listing", actionsIndex);
+  assert.ok(actionsIndex >= 0, "page actions should be present");
+  assert.ok(verifyIndex > actionsIndex, "verification CTA should be in page actions");
+  assert.ok(createIndex > verifyIndex, "create listing remains the primary next action after verification CTA");
+  assert.match(homeSource, /isAuthenticated && !isVerifiedOwner/);
+  assert.match(homeSource, /<Link href=\{verificationHref\}>Complete Verification<\/Link>/);
 });
 
 test("owner listing prompt is below browse results instead of blocking the first listings", () => {

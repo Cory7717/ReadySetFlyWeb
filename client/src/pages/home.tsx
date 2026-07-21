@@ -241,6 +241,29 @@ export default function Home() {
   const rentalsSubpanelClass = "rsf-rentals-subpanel rounded-[1rem] text-[#DCE6F2]";
   const rentalsPrimaryButtonClass = "rsf-metal-button-primary";
   const rentalsSecondaryButtonClass = "rsf-metal-button-secondary";
+  const renderRentalInlineAd = (slotNumber: number) => (
+    <div
+      className="md:col-span-2 lg:col-span-3"
+      data-testid={`rental-listing-ad-slot-${slotNumber}`}
+    >
+      <div className={`${rentalsSubpanelClass} mb-3 flex flex-wrap items-center justify-between gap-3 border-dashed px-4 py-3 text-sm`}>
+        <div className="text-[#A9BBCD]">
+          Sponsored aviation partners for pilots browsing rentals.
+        </div>
+        <Button asChild size="sm" className={rentalsSecondaryButtonClass} data-testid="button-banner-ad-info-rentals-inline">
+          <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
+            Advertise here
+          </a>
+        </Button>
+      </div>
+      <BannerAdRotation
+        placement="rentals"
+        variant="compact"
+        showLeadIn={false}
+        className="rounded-[1.4rem]"
+      />
+    </div>
+  );
 
   return (
     <PageShell
@@ -250,6 +273,11 @@ export default function Home() {
       actions={
         <>
           <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">Verified listings</Badge>
+          {isAuthenticated && !isVerifiedOwner ? (
+            <Button asChild variant="outline" className={rentalsSecondaryButtonClass}>
+              <Link href={verificationHref}>Complete Verification</Link>
+            </Button>
+          ) : null}
           <Button asChild className={rentalsPrimaryButtonClass}>
             <Link href={listAircraftHref}>Create Rental Listing</Link>
           </Button>
@@ -506,30 +534,13 @@ export default function Home() {
                       }}
                     />
                     {!pressDemo.enabled && shouldShowRentalAdAfterListing(index) ? (
-                      <div
-                        className="md:col-span-2 lg:col-span-3"
-                        data-testid={`rental-listing-ad-slot-${Math.floor(index / RENTAL_LISTING_AD_INTERVAL) + 1}`}
-                      >
-                        <div className={`${rentalsSubpanelClass} mb-3 flex flex-wrap items-center justify-between gap-3 border-dashed px-4 py-3 text-sm`}>
-                          <div className="text-[#A9BBCD]">
-                            Sponsored aviation partners for pilots browsing rentals.
-                          </div>
-                          <Button asChild size="sm" className={rentalsSecondaryButtonClass} data-testid="button-banner-ad-info-rentals-inline">
-                            <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
-                              Advertise here
-                            </a>
-                          </Button>
-                        </div>
-                        <BannerAdRotation
-                          placement="rentals"
-                          variant="compact"
-                          showLeadIn={false}
-                          className="rounded-[1.4rem]"
-                        />
-                      </div>
+                      renderRentalInlineAd(Math.floor(index / RENTAL_LISTING_AD_INTERVAL) + 1)
                     ) : null}
                   </Fragment>
                 ))}
+                {!pressDemo.enabled && filteredAircraft.length < RENTAL_LISTING_AD_INTERVAL
+                  ? renderRentalInlineAd(1)
+                  : null}
               </div>
             )}
           </div>

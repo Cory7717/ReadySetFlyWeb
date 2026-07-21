@@ -340,6 +340,21 @@ const summarizePlannerError = (value: unknown) => {
 const isLeidosTimeoutMessage = (value: unknown) =>
   /Leidos .* timed out before Flight Service responded|connect timeout|timed out|fetch failed/i.test(String(value || ""));
 
+const summarizeFilingActionError = (error: unknown) => {
+  const record = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  const validationMessages = Array.isArray(record.validationMessages)
+    ? Array.from(new Set(record.validationMessages.map((item) => String(item || "").trim()).filter(Boolean)))
+    : [];
+  const fallbackMessage = summarizePlannerError(record.message);
+
+  if (validationMessages.length === 0) return fallbackMessage;
+
+  const header = record.code === "FLIGHT_PLAN_READINESS_FAILED"
+    ? "Flight plan is not ready for this action."
+    : fallbackMessage.replace(/\s+/g, " ").trim() || "Flight plan action failed.";
+  return [header, ...validationMessages.map((message) => `- ${summarizePlannerError(message)}`)].join("\n");
+};
+
 const roundAltitudeUp = (value: number, increment = 500) => {
   if (!Number.isFinite(value) || value <= 0) return null;
   return Math.ceil(value / increment) * increment;
@@ -2908,14 +2923,19 @@ export default function FlightPlanner() {
     refetchInterval: isAuthenticated ? 15_000 : false,
     refetchOnWindowFocus: true,
   });
+  const invalidateFlightPlanQueries = useCallback(() => {
+    queryClient.invalidateQueries({
+      predicate: (query) => String(query.queryKey?.[0] || "").startsWith("/api/flight-plans"),
+    });
+  }, [queryClient]);
   useEffect(() => {
     if (!isAuthenticated) return;
     const nextCount = Number(unreadNotificationState?.count ?? 0);
     const previousCount = lastProviderNotificationCountRef.current;
     lastProviderNotificationCountRef.current = nextCount;
     if (previousCount === null || nextCount === previousCount) return;
-    queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
-  }, [isAuthenticated, queryClient, unreadNotificationState?.count]);
+    invalidateFlightPlanQueries();
+  }, [invalidateFlightPlanQueries, isAuthenticated, unreadNotificationState?.count]);
   const currentUserId = user?.id || null;
   const savedPlans = useMemo(() => {
     const plansCarryOwner = savedPlansRaw.some((plan) => typeof (plan as any).userId === "string");
@@ -3051,6 +3071,7 @@ export default function FlightPlanner() {
         }
       }
     };
+    void poll();
     const timer = window.setInterval(poll, 60000);
     return () => {
       cancelled = true;
@@ -7221,7 +7242,7 @@ export default function FlightPlanner() {
       field: "departureTimezone",
       label: "Departure Timezone",
       severity: "required",
-      message: "Local/Zulu departure conversion could not be verified.",
+      message: "Departure airport timezone could not be verified. Re-select the departure airport in Route Setup.",
       why: "Provider filing uses UTC timing, so RSF must resolve the departure airport timezone before submission.",
       actionLabel: "Edit",
       actionTab: "route",
@@ -7610,7 +7631,7 @@ export default function FlightPlanner() {
         });
         return;
       }
-      const message = summarizePlannerError(error?.message);
+      const message = summarizeFilingActionError(error);
       setFilingActionFeedback({
         tone: "error",
         title: "Flight plan action failed",
@@ -11697,7 +11718,7 @@ export default function FlightPlanner() {
             >
               <AlertDescription>
                 <div className="font-semibold">{filingActionFeedback.title}</div>
-                <div className="mt-1">{filingActionFeedback.message}</div>
+                <div className="mt-1 whitespace-pre-line">{filingActionFeedback.message}</div>
                 {(filingActionFeedback.providerPlanId || filingActionFeedback.beaconCode) && (
                   <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">
                     {isGenuineFilingProviderPlanId(filingActionFeedback.providerPlanId) && <span>Provider reference: <span className="font-mono font-semibold">{filingActionFeedback.providerPlanId}</span></span>}

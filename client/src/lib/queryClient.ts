@@ -63,8 +63,12 @@ async function throwIfResNotOk(res: Response) {
           reason?: unknown;
           retryable?: unknown;
           operatorActionRequired?: unknown;
+          validationMessages?: string[];
         };
         error.status = res.status;
+        if (validationMessages.length > 0) {
+          error.validationMessages = Array.from(new Set(validationMessages));
+        }
         if (payload && typeof payload === "object") {
           const record = payload as Record<string, unknown>;
           error.code = record.code;

@@ -707,10 +707,27 @@ test("planner filing readiness edit target sends departure time fixes to Route S
     source,
     /departureTime:\s*\{\s*tab:\s*"route",\s*sectionId:\s*"planner-route-setup",\s*focusId:\s*"planner-field-departure-time"\s*\}/,
   );
+  assert.match(
+    source,
+    /departureTimezone:\s*\{\s*tab:\s*"route",\s*sectionId:\s*"planner-route-setup",\s*focusId:\s*"planner-field-departure"\s*\}/,
+  );
   assert.doesNotMatch(
     source,
     /departureTime:\s*\{\s*tab:\s*"route",\s*sectionId:\s*"planner-distance-performance"/,
   );
+});
+
+test("filing action failures preserve server readiness details", () => {
+  const plannerSource = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
+  const queryClientSource = readFileSync(resolve(process.cwd(), "client/src/lib/queryClient.ts"), "utf8");
+
+  assert.match(queryClientSource, /validationMessages\?:\s*string\[\]/);
+  assert.match(queryClientSource, /error\.validationMessages = Array\.from\(new Set\(validationMessages\)\)/);
+  assert.match(plannerSource, /const summarizeFilingActionError = \(error: unknown\) => \{/);
+  assert.match(plannerSource, /record\.code === "FLIGHT_PLAN_READINESS_FAILED"/);
+  assert.match(plannerSource, /validationMessages\.map\(\(message\) => `- \$\{summarizePlannerError\(message\)\}`\)/);
+  assert.match(plannerSource, /const message = summarizeFilingActionError\(error\);/);
+  assert.match(plannerSource, /className="mt-1 whitespace-pre-line"/);
 });
 
 test("blank Fuel On Board is not treated as full usable fuel capacity", () => {
@@ -726,7 +743,10 @@ test("flight planner refreshes saved plans when notification polling changes", (
   assert.match(source, /queryKey:\s*\["\/api\/notifications\/unread"\]/);
   assert.match(source, /refetchInterval:\s*isAuthenticated\s*\?\s*15_000\s*:\s*false/);
   assert.match(source, /lastProviderNotificationCountRef\.current\s*=\s*nextCount/);
-  assert.match(source, /queryClient\.invalidateQueries\(\{\s*queryKey:\s*\["\/api\/flight-plans"\]\s*\}\)/);
+  assert.match(source, /const invalidateFlightPlanQueries = useCallback\(\(\) => \{/);
+  assert.match(source, /predicate:\s*\(query\) => String\(query\.queryKey\?\.\[0\] \|\| ""\)\.startsWith\("\/api\/flight-plans"\)/);
+  assert.match(source, /invalidateFlightPlanQueries\(\);/);
+  assert.match(source, /void poll\(\);\s*const timer = window\.setInterval\(poll, 60000\)/);
 });
 
 test("timezone-less display strings are not canonical lifecycle-action instants", () => {

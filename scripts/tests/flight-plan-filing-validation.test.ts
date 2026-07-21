@@ -379,6 +379,29 @@ test("KMSP to KJVL filing validates with authoritative airport timezone metadata
   assert.equal(validation.errors.some((error) => /Departure date and time are required/i.test(error)), false);
 });
 
+test("KMSP to KJVL with blank fuel blocks on endurance, not timezone", () => {
+  const plan = filingPlan({
+    departure: "KMSP",
+    destination: "KJVL",
+    route: "DLL",
+    filingFlightRules: "IFR",
+    fuelOnBoard: null,
+    filingEnduranceMinutes: null,
+    plannedDepartureAt: new Date("2026-07-21T15:00:00.000Z"),
+    plannerState: {
+      userDisplayDepartureTimeLocal: "2026-07-21T10:00",
+      departureTimeZone: "",
+    },
+  });
+
+  const validation = validateFlightPlanForAction(plan, "file");
+
+  assert.equal(validation.ready, false);
+  assert.equal(getProviderDepartureInstantForPlan(plan), "2026-07-21T15:00:00.000Z");
+  assert.equal(validation.errors.some((error) => /Departure airport timezone could not be determined/i.test(error)), false);
+  assert.ok(validation.errors.some((error) => /Fuel on Board or a filed ICAO endurance is required/i.test(error)));
+});
+
 test("airport timezone resolver uses coordinates for recognized airports without explicit timezone metadata", () => {
   const resolution = resolveDepartureAirportTimezone({
     departureAirport: {

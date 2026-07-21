@@ -7345,8 +7345,8 @@ export default function FlightPlanner() {
       field: "fuelEndurance",
       label: "Fuel Endurance",
       severity: "required",
-      message: "Fuel endurance is required.",
-      why: "Fuel endurance is required for Flight Service and search and rescue context if the flight becomes overdue.",
+      message: "Fuel on Board or a filed ICAO endurance is required.",
+      why: "Fuel endurance is required for Flight Service and search and rescue context if the flight becomes overdue. Enter Fuel on Board and fuel burn so RSF can calculate endurance, or enable the Manual ICAO endurance override.",
       actionLabel: "Edit",
       actionTab: fileTab,
     });

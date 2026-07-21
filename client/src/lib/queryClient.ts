@@ -42,9 +42,18 @@ async function throwIfResNotOk(res: Response) {
       }
 
       if (payload) {
-        const validationMessages =
+        const validationPayload =
           payload && typeof payload === "object" && "validation" in payload
-            ? collectValidationMessages((payload as Record<string, unknown>).validation)
+            ? (payload as Record<string, unknown>).validation
+            : null;
+        const validationMessages =
+          validationPayload &&
+          typeof validationPayload === "object" &&
+          !Array.isArray(validationPayload) &&
+          Array.isArray((validationPayload as Record<string, unknown>).errors)
+            ? collectValidationMessages((validationPayload as Record<string, unknown>).errors)
+            : validationPayload
+              ? collectValidationMessages(validationPayload)
             : [];
         const errorField =
           payload && typeof payload === "object" && "error" in payload

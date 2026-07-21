@@ -758,6 +758,8 @@ test("filing action failures preserve server readiness details", () => {
   const queryClientSource = readFileSync(resolve(process.cwd(), "client/src/lib/queryClient.ts"), "utf8");
 
   assert.match(queryClientSource, /validationMessages\?:\s*string\[\]/);
+  assert.match(queryClientSource, /Array\.isArray\(\(validationPayload as Record<string, unknown>\)\.errors\)/);
+  assert.match(queryClientSource, /collectValidationMessages\(\(validationPayload as Record<string, unknown>\)\.errors\)/);
   assert.match(queryClientSource, /error\.validationMessages = Array\.from\(new Set\(validationMessages\)\)/);
   assert.match(plannerSource, /const summarizeFilingActionError = \(error: unknown\) => \{/);
   assert.match(plannerSource, /record\.code === "FLIGHT_PLAN_READINESS_FAILED"/);

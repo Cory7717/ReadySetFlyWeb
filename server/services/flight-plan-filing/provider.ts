@@ -2757,7 +2757,7 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     errors.push("Estimated enroute time is required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && !plan.filingEnduranceMinutes) {
-    errors.push("Endurance is required before sending this filing action to the filing provider.");
+    errors.push("Fuel on Board or a filed ICAO endurance is required before sending this filing action to the filing provider.");
   }
   if (
     (action === "file" || action === "amend") &&

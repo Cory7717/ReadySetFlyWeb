@@ -52,7 +52,7 @@ interface BannerAdRotationProps {
   category?: string;
   rotationIntervalMs?: number;
   className?: string;
-  variant?: "default" | "compact";
+  variant?: "default" | "compact" | "listingCard";
   showLeadIn?: boolean;
 }
 
@@ -192,6 +192,7 @@ export function BannerAdRotation({
   const facebookUrl = resolveSocialUrl(currentAd?.facebookUrl, "facebook");
   const hasSocialLinks = Boolean(instagramUrl || facebookUrl);
   const isCompact = variant === "compact";
+  const isListingCard = variant === "listingCard";
   const resolveObjectUrl = (value?: string | null) => {
     if (!value) return undefined;
     if (/^https?:\/\//i.test(value)) {
@@ -303,6 +304,193 @@ export function BannerAdRotation({
     });
     window.open(trackingUrl, "_blank", "noopener,noreferrer");
   };
+
+  const contactDialog = (
+    <Dialog
+      open={contactDialogOpen}
+      onOpenChange={(open) => {
+        setContactDialogOpen(open);
+        if (!open) {
+          setContactAd(null);
+        }
+      }}
+    >
+      <DialogContent className="max-w-md" data-testid="dialog-contact-advertiser">
+        <DialogHeader>
+          <DialogTitle>Contact advertiser</DialogTitle>
+          <DialogDescription>
+            Send a message about {contactAd?.title || "this sponsor"}.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...contactForm}>
+          <form
+            onSubmit={contactForm.handleSubmit((data) => sendContactMutation.mutate(data))}
+            className="space-y-4"
+          >
+            <FormField
+              control={contactForm.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input {...field} data-testid="input-ad-contact-name" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={contactForm.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input type="email" {...field} data-testid="input-ad-contact-email" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={contactForm.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone</FormLabel>
+                  <FormControl>
+                    <Input {...field} data-testid="input-ad-contact-phone" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={contactForm.control}
+              name="message"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Message</FormLabel>
+                  <FormControl>
+                    <Textarea rows={4} {...field} data-testid="textarea-ad-contact-message" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setContactDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={sendContactMutation.isPending} data-testid="button-submit-ad-contact">
+                {sendContactMutation.isPending ? "Sending..." : "Send message"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (isListingCard) {
+    return (
+      <>
+        <Card
+          className={`group rsf-metal-panel rsf-metal-panel-interactive overflow-hidden text-[#E8EDF4] transition-all duration-200 ${
+            isClickable ? "cursor-pointer hover:scale-[1.02]" : "cursor-default"
+          } ${className}`}
+          onClick={handleClick}
+          onKeyDown={(event) => {
+            if (!isClickable) return;
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              handleClick();
+            }
+          }}
+          role={isClickable ? "button" : undefined}
+          tabIndex={isClickable ? 0 : -1}
+          data-testid={`banner-ad-${currentAd.id}`}
+        >
+          <div className="relative aspect-[3/2] overflow-hidden rounded-t-xl bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))]">
+            {hasVideo ? (
+              <video
+                src={resolveObjectUrl(currentAd.videoUrl)}
+                className={`h-full w-full ${isPortraitVideo ? "object-contain" : "object-cover"}`}
+                autoPlay
+                loop
+                muted={isVideoMuted}
+                poster={resolveObjectUrl(currentAd.imageUrl)}
+                playsInline
+                controls={!isVideoMuted}
+                onClick={(event) => {
+                  if (!isVideoMuted) {
+                    event.stopPropagation();
+                  }
+                }}
+              />
+            ) : hasImage ? (
+              <img
+                src={resolveObjectUrl(currentAd.imageUrl)}
+                alt={currentAd.title}
+                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
+              />
+            ) : (
+              <div className="h-full w-full bg-[linear-gradient(135deg,rgba(35,47,62,0.96),rgba(12,18,27,0.98))]" />
+            )}
+            <div className="absolute top-3 left-3">
+              <span className="rounded-full border border-[#d6a94c]/45 bg-[#1b1609]/90 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-[#ffe6a6] backdrop-blur">
+                Sponsored Partner
+              </span>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <h3 className="mb-2 font-display text-xl font-semibold text-[#F5F8FC] transition-colors group-hover:text-[#9ebdff]">
+              {currentAd.title}
+            </h3>
+            {hasTagline ? (
+              <p className="mb-2 line-clamp-2 text-sm text-[#A9BBCD]">{currentAd.description}</p>
+            ) : null}
+            {hasAdCopy ? (
+              <p className="mb-4 line-clamp-3 text-sm text-[#A9BBCD]">{currentAd.adCopy}</p>
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-2 border-t border-[#5d6f85]/16 pt-4 text-xs font-semibold text-[#dceaff]">
+              {currentAd.link ? (
+                <span className="inline-flex items-center gap-1">
+                  Visit sponsor
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </span>
+              ) : null}
+              {canContact ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-[#5d6f85]/24 bg-[#141b24] text-xs text-[#E8EDF4] hover:bg-[#18212c]"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setContactAd(currentAd);
+                    setContactDialogOpen(true);
+                  }}
+                  onKeyDown={(event) => {
+                    event.stopPropagation();
+                  }}
+                  data-testid="button-contact-advertiser"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  Contact advertiser
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </Card>
+        {contactDialog}
+      </>
+    );
+  }
 
   return (
     <div className={`w-full ${className}`}>

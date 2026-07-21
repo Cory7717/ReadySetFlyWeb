@@ -32,6 +32,8 @@ test("rental sponsored ads are inserted in the listing stream every 15 listings"
   assert.ok(listingMapIndex >= 0, "listing map should be present");
   assert.ok(inlineAdCallIndex > listingMapIndex, "ad slot should be inserted from inside the listing stream");
   assert.ok(bannerIndex >= 0, "banner rotation should render inside the inline ad slot helper");
+  assert.match(homeSource, /variant="listingCard"/);
+  assert.doesNotMatch(homeSource, /md:col-span-2 lg:col-span-3/);
   assert.match(homeSource, /filteredAircraft\.length < RENTAL_LISTING_AD_INTERVAL/);
   assert.match(homeSource, /renderRentalInlineAd\(1\)/);
 });

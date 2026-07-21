@@ -243,24 +243,12 @@ export default function Home() {
   const rentalsSecondaryButtonClass = "rsf-metal-button-secondary";
   const renderRentalInlineAd = (slotNumber: number) => (
     <div
-      className="md:col-span-2 lg:col-span-3"
       data-testid={`rental-listing-ad-slot-${slotNumber}`}
     >
-      <div className={`${rentalsSubpanelClass} mb-3 flex flex-wrap items-center justify-between gap-3 border-dashed px-4 py-3 text-sm`}>
-        <div className="text-[#A9BBCD]">
-          Sponsored aviation partners for pilots browsing rentals.
-        </div>
-        <Button asChild size="sm" className={rentalsSecondaryButtonClass} data-testid="button-banner-ad-info-rentals-inline">
-          <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
-            Advertise here
-          </a>
-        </Button>
-      </div>
       <BannerAdRotation
         placement="rentals"
-        variant="compact"
+        variant="listingCard"
         showLeadIn={false}
-        className="rounded-[1.4rem]"
       />
     </div>
   );

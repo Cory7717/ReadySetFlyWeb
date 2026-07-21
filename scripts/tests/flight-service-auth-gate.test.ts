@@ -23,6 +23,8 @@ test("Flight Service tester gate logs safe structured diagnostics before rejecti
 
 test("Flight Service tester email comparison uses normalized auth and database email candidates", () => {
   assert.match(routesSource, /const normalizeFlightServiceTesterEmail = \(value: unknown\) =>/);
+  assert.match(routesSource, /defaultFlightServiceTesterEmails/);
+  assert.match(routesSource, /"sean\.seichter@leidos\.com"/);
   assert.match(routesSource, /process\.env\.FLIGHT_SERVICE_TESTER_EMAILS/);
   assert.match(routesSource, /\.split\(","\)/);
   assert.match(routesSource, /\.map\(normalizeFlightServiceTesterEmail\)/);
@@ -60,8 +62,10 @@ test("Flight Service LAB filing allows authenticated users unless tester restric
 
 test("Flight Service LAB testers can bypass active-plan cap without changing normal free-tier limit", () => {
   assert.match(routesSource, /const canBypassActiveFlightPlanLimitForLabTesting = \(args: \{/);
-  assert.match(routesSource, /isFlightServiceLabRuntime\(args\.runtimeMode\)/);
-  assert.match(routesSource, /Boolean\(args\.user\?\.isSuperAdmin \|\| args\.user\?\.isAdmin\) \|\| args\.testerEmailMatch/);
+  assert.match(routesSource, /!isFlightServiceLabRuntime\(args\.runtimeMode\) \|\| !isLeidosLabSubmissionEnabled\(args\.runtimeMode\)/);
+  assert.match(routesSource, /const adminOrSuperAdmin = Boolean\(args\.user\?\.isSuperAdmin \|\| args\.user\?\.isAdmin\)/);
+  assert.match(routesSource, /if \(adminOrSuperAdmin \|\| args\.testerEmailMatch\) return true/);
+  assert.match(routesSource, /return !isFlightServiceRestrictedLabTesterMode\(\)/);
   assert.match(routesSource, /const labTesterPlanLimitBypass = canBypassActiveFlightPlanLimitForLabTesting/);
   assert.match(routesSource, /entitlements\.canUseUnlimitedActiveFlightPlans \|\| labTesterPlanLimitBypass/);
   assert.match(routesSource, /entitlements\.canUseUnlimitedActiveFlightPlans \|\|\s+canBypassActiveFlightPlanLimitForLabTesting/);

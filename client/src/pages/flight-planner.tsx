@@ -7751,13 +7751,13 @@ export default function FlightPlanner() {
         clearActiveSavedPlanIdentity();
         toast({
           title: "Provider review unavailable",
-          description: "That saved plan belongs to a different session or account. Save this draft again before accepting provider changes.",
+          description: "That saved plan belongs to a different session or account. Save this draft again before acknowledging provider updates.",
           variant: "destructive",
         });
         return;
       }
       toast({
-        title: "Could not accept provider changes",
+        title: "Could not acknowledge provider update",
         description: summarizePlannerError(error?.message),
         variant: "destructive",
       });

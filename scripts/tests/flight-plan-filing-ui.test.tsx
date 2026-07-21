@@ -230,6 +230,26 @@ test("provider updates list renders event entries", () => {
   assert.ok(html.includes("Provider reference: ABC123"));
 });
 
+test("provider updates list displays historical accept records as acknowledgements", () => {
+  const legacyPlan = {
+    ...plan,
+    filingProviderMessages: [{
+      id: "msg-accepted",
+      timestamp: "2026-07-16T22:00:00.000Z",
+      severity: "success",
+      title: "Provider changes accepted",
+      details: "Pilot reviewed and accepted the current provider version in RSF. Amendments can be submitted again from this provider state.",
+      providerPlanId: "ABC123",
+    }],
+  } as unknown as FlightPlan;
+  const html = renderToStaticMarkup(<FilingProviderUpdatesList plan={legacyPlan} />);
+
+  assert.ok(html.includes("Provider update acknowledged"));
+  assert.ok(html.includes("Pilot reviewed the current provider version in RSF."));
+  assert.equal(html.includes("Provider changes accepted"), false);
+  assert.equal(html.includes("reviewed and accepted"), false);
+});
+
 test("internal RSF references are not displayed or treated as live provider IDs", () => {
   const internalReference = "rsf-245fd8ec-c8fb-4d68-ac74-7cec4dc3f5e1-file";
   const legacyPlan = {

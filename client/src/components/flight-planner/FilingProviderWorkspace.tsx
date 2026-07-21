@@ -62,7 +62,7 @@ export const collapseDuplicateProviderMessages = (messages: ProviderMessage[]) =
   const seen = new Set<string>();
   return messages.filter((message) => {
     const title = String(message.title || "").trim().toLowerCase();
-    if (title !== "provider changes accepted") return true;
+    if (title !== "provider changes accepted" && title !== "provider update acknowledged") return true;
     const key = [
       title,
       String(message.providerPlanId || "").trim().toLowerCase(),
@@ -72,6 +72,20 @@ export const collapseDuplicateProviderMessages = (messages: ProviderMessage[]) =
     seen.add(key);
     return true;
   });
+};
+
+const displayProviderMessageTitle = (title: unknown) => {
+  const normalized = String(title || "").trim();
+  if (normalized.toLowerCase() === "provider changes accepted") return "Provider update acknowledged";
+  return normalized || "Provider update";
+};
+
+const displayProviderMessageDetails = (details: unknown) => {
+  const normalized = sanitizeNotificationMessage(details);
+  if (/Pilot reviewed and accepted the current provider version in RSF/i.test(normalized)) {
+    return "Pilot reviewed the current provider version in RSF. Amendments can be submitted again from this provider state.";
+  }
+  return normalized;
 };
 
 export const summarizeProviderUpdates = (plan: FlightPlan) => {
@@ -278,7 +292,7 @@ export function FilingProviderUpdatesList({ plan }: { plan: FlightPlan }) {
       {messages.map((message) => (
         <div key={message.id} className={`rounded-lg border p-3 ${severityTone[message.severity] || severityTone.info}`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="font-medium">{message.title}</div>
+            <div className="font-medium">{displayProviderMessageTitle(message.title)}</div>
             <div className="text-xs opacity-80">{formatDateTime(message.timestamp)}</div>
           </div>
           {(() => {
@@ -287,7 +301,7 @@ export function FilingProviderUpdatesList({ plan }: { plan: FlightPlan }) {
               <ProviderChangeSummaryView summary={summary} />
             ) : (
               <div className="mt-2 text-sm break-words">
-                {sanitizeNotificationMessage(message.details) || "The filing provider pushed an update for this flight plan."}
+                {displayProviderMessageDetails(message.details) || "The filing provider pushed an update for this flight plan."}
               </div>
             );
           })()}

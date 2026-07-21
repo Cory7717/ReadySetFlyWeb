@@ -23604,10 +23604,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const normalizeFlightServiceTesterEmail = (value: unknown) =>
     String(value || "").trim().toLowerCase();
 
+  const defaultFlightServiceTesterEmails = [
+    "sean.seichter@leidos.com",
+  ].map(normalizeFlightServiceTesterEmail);
+
   const getConfiguredFlightServiceTesterEmails = () =>
     new Set(
-      String(process.env.FLIGHT_SERVICE_TESTER_EMAILS || "")
-        .split(",")
+      [
+        ...defaultFlightServiceTesterEmails,
+        ...String(process.env.FLIGHT_SERVICE_TESTER_EMAILS || "").split(","),
+      ]
         .map(normalizeFlightServiceTesterEmail)
         .filter(Boolean),
     );
@@ -23647,9 +23653,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     user: any;
     runtimeMode: ReturnType<typeof getFlightServiceRuntimeMode>;
     testerEmailMatch: boolean;
-  }) =>
-    isFlightServiceLabRuntime(args.runtimeMode) &&
-    (Boolean(args.user?.isSuperAdmin || args.user?.isAdmin) || args.testerEmailMatch);
+  }) => {
+    if (!isFlightServiceLabRuntime(args.runtimeMode) || !isLeidosLabSubmissionEnabled(args.runtimeMode)) {
+      return false;
+    }
+    const adminOrSuperAdmin = Boolean(args.user?.isSuperAdmin || args.user?.isAdmin);
+    if (adminOrSuperAdmin || args.testerEmailMatch) return true;
+    return !isFlightServiceRestrictedLabTesterMode();
+  };
 
   const logFlightServiceAuthGateDebug = async (args: {
     req: any;
@@ -25604,7 +25615,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       if (action === "amend" && actionProviderSnapshot.providerPendingReview === true) {
         return res.status(409).json({
-          error: "The filing provider has updated this flight plan. Review and accept or reconcile those changes before submitting another amendment.",
+          error: "The filing provider has updated this flight plan. Review and acknowledge or reconcile those changes before submitting another amendment.",
           requiresProviderReview: true,
           providerSnapshot: actionProviderSnapshot,
           plan,
@@ -26385,7 +26396,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.json({
           ok: true,
           alreadyAccepted: true,
-          message: "Provider changes were already accepted for the current provider version.",
+          message: "Provider update was already acknowledged for the current provider version.",
           acceptedVersionStamp,
           acceptedEffectivePlanHash,
           providerPendingReview: false,
@@ -26410,8 +26421,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         id: acceptanceEventId,
         timestamp: now.toISOString(),
         severity: "success",
-        title: "Provider changes accepted",
-        details: "Pilot reviewed and accepted the current provider version in RSF. Amendments can be submitted again from this provider state.",
+        title: "Provider update acknowledged",
+        details: "Pilot reviewed the current provider version in RSF. Amendments can be submitted again from this provider state.",
         source: "rsf",
         action: null,
         provider: "Leidos Flight Service",
@@ -26437,7 +26448,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!updated) {
         const latestPlan = await storage.getFlightPlanById(currentPlan.id);
         return res.status(409).json({
-          error: "Provider changes changed while acceptance was being saved. Refresh provider updates and review the latest provider state.",
+          error: "Provider update changed while acknowledgement was being saved. Refresh provider updates and review the latest provider state.",
           code: "PROVIDER_REVIEW_STALE_ACCEPTANCE",
           plan: latestPlan || currentPlan,
         });
@@ -26445,18 +26456,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       res.json({
         ok: true,
-        message: "Provider changes accepted. You can submit an amendment from the current provider version.",
+        message: "Provider update acknowledged. You can submit an amendment from the current provider version.",
         acceptedVersionStamp,
         acceptedEffectivePlanHash,
         providerPendingReview: false,
         plan: updated,
       });
     } catch (error: any) {
-      console.error("Failed to accept flight plan provider review:", error);
+      console.error("Failed to acknowledge flight plan provider review:", error);
       res.status(500).json({
         error: error instanceof Error && error.message
           ? error.message
-          : "Failed to accept provider changes",
+          : "Failed to acknowledge provider update",
       });
     }
   });

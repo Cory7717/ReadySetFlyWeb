@@ -48,8 +48,8 @@ test("required Leidos REST paths and retrieve/sync plumbing remain present", () 
 
 test("flight-planner lifecycle controls are not hard-suppressed", () => {
   const combinedUi = `${plannerSource}\n${lifecycleActionsSource}`;
-  assert.doesNotMatch(combinedUi, /false\s*&&[\s\S]{0,180}(Amend|Activate|Cancel|Close|Sync|Provider updates|Accept Provider Changes)/i);
-  assert.doesNotMatch(combinedUi, /Boolean\(false\)[\s\S]{0,180}(Amend|Activate|Cancel|Close|Sync|Provider updates|Accept Provider Changes)/i);
+  assert.doesNotMatch(combinedUi, /false\s*&&[\s\S]{0,180}(Amend|Activate|Cancel|Close|Sync|Provider updates|Acknowledge provider update)/i);
+  assert.doesNotMatch(combinedUi, /Boolean\(false\)[\s\S]{0,180}(Amend|Activate|Cancel|Close|Sync|Provider updates|Acknowledge provider update)/i);
   for (const label of [
     "File Flight Plan",
     "Amend",
@@ -57,7 +57,7 @@ test("flight-planner lifecycle controls are not hard-suppressed", () => {
     "Cancel",
     "Close",
     "Provider updates",
-    "Accept Provider Changes",
+    "Acknowledge provider update",
     "Download Filing Summary",
   ]) {
     assert.match(combinedUi, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));

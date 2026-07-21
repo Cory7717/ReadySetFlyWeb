@@ -2125,6 +2125,7 @@ export default function FlightPlanner() {
   const [labAcknowledgementBlockedSync, setLabAcknowledgementBlockedSync] = useState<Record<string, LabAcknowledgementBlockedSync>>({});
   const backgroundSyncInFlightRef = useRef<Set<string>>(new Set());
   const lastProviderNotificationCountRef = useRef<number | null>(null);
+  const lastProviderNotificationActivityRef = useRef<string | null>(null);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
   const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string; focusId?: string } | null>(null);
   useEffect(() => {
@@ -2980,7 +2981,7 @@ export default function FlightPlanner() {
     refetchInterval: isAuthenticated && activeTab === "file" ? 15_000 : false,
     refetchOnWindowFocus: true,
   });
-  const { data: unreadNotificationState } = useQuery<{ count: number }>({
+  const { data: unreadNotificationState } = useQuery<{ count: number; latestActivityAt?: string | null }>({
     queryKey: ["/api/notifications/unread"],
     enabled: isAuthenticated,
     refetchInterval: isAuthenticated ? 15_000 : false,
@@ -2994,11 +2995,15 @@ export default function FlightPlanner() {
   useEffect(() => {
     if (!isAuthenticated) return;
     const nextCount = Number(unreadNotificationState?.count ?? 0);
+    const nextActivity = String(unreadNotificationState?.latestActivityAt || "");
     const previousCount = lastProviderNotificationCountRef.current;
+    const previousActivity = lastProviderNotificationActivityRef.current;
     lastProviderNotificationCountRef.current = nextCount;
-    if (previousCount === null || nextCount === previousCount) return;
+    lastProviderNotificationActivityRef.current = nextActivity;
+    if (previousCount === null && previousActivity === null) return;
+    if (nextCount === previousCount && nextActivity === previousActivity) return;
     invalidateFlightPlanQueries();
-  }, [invalidateFlightPlanQueries, isAuthenticated, unreadNotificationState?.count]);
+  }, [invalidateFlightPlanQueries, isAuthenticated, unreadNotificationState?.count, unreadNotificationState?.latestActivityAt]);
   const currentUserId = user?.id || null;
   const savedPlans = useMemo(() => {
     const plansCarryOwner = savedPlansRaw.some((plan) => typeof (plan as any).userId === "string");

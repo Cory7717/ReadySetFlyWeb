@@ -22287,7 +22287,22 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(401).json({ error: "Unauthorized" });
       }
       const notifications = await storage.getUnreadUserNotifications(userId);
-      res.json({ count: notifications.length });
+      const latestActivityAt = notifications.reduce<string | null>((latest, notification) => {
+        const candidates = [
+          (notification as any).updatedAt,
+          (notification as any).createdAt,
+          (notification as any).referenceDate,
+        ];
+        for (const candidate of candidates) {
+          if (!candidate) continue;
+          const parsed = new Date(candidate);
+          if (!Number.isFinite(parsed.getTime())) continue;
+          const iso = parsed.toISOString();
+          if (!latest || iso > latest) latest = iso;
+        }
+        return latest;
+      }, null);
+      res.json({ count: notifications.length, latestActivityAt });
     } catch (error) {
       console.error("Failed to fetch unread notifications:", error);
       res.status(500).json({ error: "Failed to fetch unread notifications" });

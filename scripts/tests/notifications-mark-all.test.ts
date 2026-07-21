@@ -34,6 +34,20 @@ test("notifications page exposes mark all as read and clears unread badge cache"
   assert.doesNotMatch(notificationsPageSource, /invalidateQueries\(\{ queryKey: \["\/api\/notifications\/unread"\] \}\)/);
 });
 
+test("unread notification endpoint includes safe latest activity for planner refresh", () => {
+  const unreadRoute = routesSource.slice(
+    routesSource.indexOf('app.get("/api/notifications/unread"'),
+    routesSource.indexOf('app.patch("/api/notifications/mark-all-read"'),
+  );
+  assert.match(unreadRoute, /const latestActivityAt = notifications\.reduce<string \| null>/);
+  assert.match(unreadRoute, /\(notification as any\)\.updatedAt/);
+  assert.match(unreadRoute, /\(notification as any\)\.createdAt/);
+  assert.match(unreadRoute, /\(notification as any\)\.referenceDate/);
+  assert.match(unreadRoute, /Number\.isFinite\(parsed\.getTime\(\)\)/);
+  assert.match(unreadRoute, /res\.json\(\{ count: notifications\.length, latestActivityAt \}\)/);
+  assert.doesNotMatch(unreadRoute, /res\.json\(\s*notifications\s*\)/);
+});
+
 test("provider notification read endpoint resolves review and notification atomically", () => {
   const singleReadRoute = routesSource.slice(routesSource.indexOf('app.patch("/api/notifications/:id/read"'));
   assert.match(singleReadRoute, /db\.transaction\(async \(tx\)/);

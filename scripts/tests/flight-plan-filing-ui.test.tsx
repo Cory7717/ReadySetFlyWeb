@@ -778,7 +778,10 @@ test("flight planner refreshes saved plans when notification polling changes", (
   const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
   assert.match(source, /queryKey:\s*\["\/api\/notifications\/unread"\]/);
   assert.match(source, /refetchInterval:\s*isAuthenticated\s*\?\s*15_000\s*:\s*false/);
+  assert.match(source, /latestActivityAt\?: string \| null/);
   assert.match(source, /lastProviderNotificationCountRef\.current\s*=\s*nextCount/);
+  assert.match(source, /lastProviderNotificationActivityRef\.current\s*=\s*nextActivity/);
+  assert.match(source, /nextCount === previousCount && nextActivity === previousActivity/);
   assert.match(source, /const invalidateFlightPlanQueries = useCallback\(\(\) => \{/);
   assert.match(source, /predicate:\s*\(query\) => String\(query\.queryKey\?\.\[0\] \|\| ""\)\.startsWith\("\/api\/flight-plans"\)/);
   assert.match(source, /invalidateFlightPlanQueries\(\);/);

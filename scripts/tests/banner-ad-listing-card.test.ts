@@ -15,11 +15,11 @@ test("banner ads support a rental-listing card variant", () => {
   assert.match(source, /data-testid=\{`banner-ad-\$\{currentAd\.id\}`\}/);
 });
 
-test("listing-card banner rotation can merge all active sponsor ads", () => {
+test("listing-card banner rotation preserves placement filtering", () => {
   const source = readFileSync(resolve(process.cwd(), "client/src/components/banners/BannerAdRotation.tsx"), "utf8");
 
-  assert.match(source, /includeAllActiveFallback\?: boolean/);
-  assert.match(source, /const primaryAds = await fetchAds\(placement\)/);
-  assert.match(source, /const fallbackAds = await fetchAds\(undefined\)/);
-  assert.match(source, /const adsById = new Map<string, BannerAd>\(\)/);
+  assert.match(source, /queryKey: \["\/api\/banner-ads\/active", placement, category\]/);
+  assert.match(source, /if \(placement\) params\.set\('placement', placement\)/);
+  assert.doesNotMatch(source, /includeAllActiveFallback/);
+  assert.doesNotMatch(source, /fetchAds\(undefined\)/);
 });

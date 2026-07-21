@@ -1810,6 +1810,17 @@ export const buildZzzzOtherInfoForLeidos = (
   return merged || null;
 };
 
+const buildLeidosPilotData = (plan: FlightPlan) => {
+  const pilotName = String(plan.filingPilotName || "").trim();
+  const pilotPhone = String(plan.filingPilotPhone || "").trim();
+  const aircraftHomeBase = String(plan.filingAircraftHomeBase || "").trim().toUpperCase();
+  return [
+    pilotName,
+    pilotPhone ? `PHONE ${pilotPhone}` : null,
+    aircraftHomeBase ? `HOME BASE ${aircraftHomeBase}` : null,
+  ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim() || null;
+};
+
 export const buildLeidosActionPayload = (
   plan: FlightPlan,
   action: FlightPlanFilingAction,
@@ -1891,7 +1902,7 @@ export const buildLeidosActionPayload = (
     const primaryRemarks = String(plan.filingRemarks || plan.notes || "").trim();
     append("remarks", primaryRemarks);
     append("fuelOnBoard", minutesToIsoDuration(plan.filingEnduranceMinutes));
-    append("pilotData", plan.filingPilotName);
+    append("pilotData", buildLeidosPilotData(plan));
     append("peopleOnBoardExtended", plan.filingSoulsOnBoard);
     append("aircraftColorExtended", normalizeLeidosAircraftColorExtended(plan.filingAircraftColor));
     append("typeOfFlight", plan.filingTypeOfFlight);

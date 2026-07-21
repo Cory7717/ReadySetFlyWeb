@@ -265,6 +265,7 @@ test("Leidos payload logs redact pilot phone while retaining population metadata
 
   assert.equal(logEntry.pilotPhonePopulated, true);
   assert.equal(loggedPayload.pilotPhone, "[redacted]");
+  assert.equal(loggedPayload.pilotData, "[redacted]");
   assert.equal(JSON.stringify(logEntry).includes(phone), false);
 });
 

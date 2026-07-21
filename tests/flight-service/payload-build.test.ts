@@ -22,4 +22,7 @@ test("phone and home base are included in provider payload", () => {
   }));
   assert.equal(fields.pilotPhone, "15124121762");
   assert.equal(fields.aircraftHomeBase, "KEDC");
+  assert.match(fields.pilotData, /Cert Pilot/);
+  assert.match(fields.pilotData, /PHONE 15124121762/);
+  assert.match(fields.pilotData, /HOME BASE KEDC/);
 });

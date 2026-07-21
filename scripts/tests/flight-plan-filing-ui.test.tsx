@@ -230,6 +230,38 @@ test("provider updates list renders event entries", () => {
   assert.ok(html.includes("Provider reference: ABC123"));
 });
 
+test("internal RSF references are not displayed or treated as live provider IDs", () => {
+  const internalReference = "rsf-245fd8ec-c8fb-4d68-ac74-7cec4dc3f5e1-file";
+  const legacyPlan = {
+    ...plan,
+    filingProviderPlanId: internalReference,
+    filingProviderSnapshot: {
+      providerReferenceId: internalReference,
+      providerLifecycleStatus: "proposed",
+      providerStatus: "PROPOSED",
+      versionStamp: "20260721120540000",
+    },
+    filingProviderMessages: [{
+      id: "msg-internal",
+      timestamp: "2026-07-21T17:05:40.000Z",
+      severity: "info",
+      title: "Provider update",
+      details: "Provider sync available.",
+      providerPlanId: internalReference,
+    }],
+  } as unknown as FlightPlan;
+
+  const workspaceHtml = renderToStaticMarkup(<FilingProviderWorkspace plan={legacyPlan} />);
+  const updatesHtml = renderToStaticMarkup(<FilingProviderUpdatesList plan={legacyPlan} />);
+  const actionHtml = renderLifecycleActions(legacyPlan);
+
+  assert.equal(canCancelPlan(legacyPlan), false);
+  assert.equal(workspaceHtml.includes(internalReference), false);
+  assert.equal(updatesHtml.includes(internalReference), false);
+  assertButtonAbsent(actionHtml, "Test Cancel");
+  assert.match(getLifecycleActionDisabledReason(legacyPlan, "cancel") || "", /does not have a live provider filing reference/i);
+});
+
 test("flight planner review workflow exposes one clear filing surface", () => {
   const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
   assert.match(source, /Review &amp; File/);

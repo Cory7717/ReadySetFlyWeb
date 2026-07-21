@@ -3,7 +3,7 @@ import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { FlightPlan } from "@shared/schema";
-import { extractFilingVersionStamp } from "@shared/flight-plan-filing";
+import { extractFilingVersionStamp, isGenuineFilingProviderPlanId } from "@shared/flight-plan-filing";
 import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
 import { summarizeProviderUpdates } from "./FilingProviderWorkspace";
 
@@ -17,7 +17,7 @@ export const getProviderSnapshot = (plan: FlightPlan | null | undefined) => {
 };
 
 export const hasLiveProviderPlan = (plan: FlightPlan | null | undefined) =>
-  Boolean(plan?.filingIsLive && plan?.filingProviderPlanId);
+  Boolean(plan?.filingIsLive && isGenuineFilingProviderPlanId(plan?.filingProviderPlanId));
 
 export const isCertificationFlightPlan = (plan: FlightPlan | null | undefined) =>
   Boolean((plan as any)?.isCertificationTest || String((plan as any)?.source || "") === "leidos-certification");
@@ -199,7 +199,7 @@ export const getAmendAvailabilityMessage = (plan: FlightPlan | null | undefined)
     return "This saved plan is still local or staged. File it live with the filing provider first, then amend it from the filed record.";
   }
 
-  if (!plan.filingProviderPlanId) {
+  if (!isGenuineFilingProviderPlanId(plan.filingProviderPlanId)) {
     return "This filed record is missing the provider flight identifier. File it again so RSF can refresh the amend tracking.";
   }
 
@@ -224,7 +224,7 @@ export const getAmendAvailabilityMessage = (plan: FlightPlan | null | undefined)
 };
 
 export const getProviderLifecycleAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
-  if (!plan?.filingProviderPlanId) return null;
+  if (!isGenuineFilingProviderPlanId(plan?.filingProviderPlanId)) return null;
   const provider = getProviderActionAvailability(plan);
   const snapshot = getProviderSnapshot(plan);
   if (snapshot.externalChangeNotice) return String(snapshot.externalChangeNotice);

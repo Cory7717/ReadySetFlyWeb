@@ -448,7 +448,7 @@ const buildCase22DofEvidence = (
   departureTimeZone: string,
   now: Date,
 ) => {
-  const payloadContext = buildLeidosActionPayload(plan, "file", { otherInfo: null } as any);
+  const payloadContext = buildLeidosActionPayload(plan, "file", { otherInfo: null } as any, { now });
   const transmittedOtherInfo = String(payloadContext.payloadSnapshot?.otherInfo || payloadContext.payloadSnapshot?.transmittedFields?.otherInfo || "").trim();
   const dofEntries = transmittedOtherInfo.match(/\bDOF\/\d{6}\b/g) || [];
   const departureDateLocal = localDateTime.slice(0, 10);

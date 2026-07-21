@@ -73,7 +73,7 @@ import {
   type FiledRouteToken,
   type FiledRouteTokenKind,
 } from "@shared/flight-plan-route";
-import { extractFilingVersionStamp } from "@shared/flight-plan-filing";
+import { extractFilingVersionStamp, isGenuineFilingProviderPlanId } from "@shared/flight-plan-filing";
 import { buildFuelEnduranceState, calculateFuelEnduranceMinutes, calculateFuelRequiredGallons, formatFuelDurationClock, resolveAuthoritativeEteMinutes } from "@shared/flight-plan-fuel";
 import {
   assessCruiseAltitudePracticality,
@@ -507,7 +507,7 @@ const logZzzzPlannerStateEvent = (event: string, details: Record<string, unknown
 };
 
 const hasLiveProviderPlan = (plan: FlightPlan | null | undefined) =>
-  Boolean(plan?.filingIsLive && plan?.filingProviderPlanId);
+  Boolean(plan?.filingIsLive && isGenuineFilingProviderPlanId(plan?.filingProviderPlanId));
 
 const isCertificationFlightPlan = (plan: FlightPlan | null | undefined) =>
   Boolean((plan as any)?.isCertificationTest || String((plan as any)?.source || "") === "leidos-certification");
@@ -704,7 +704,11 @@ const buildProviderUpdateSignature = (plan: FlightPlan | null | undefined) => {
     filingStatus: normalizedClientFilingStatus(plan) || "draft",
     pendingAction: (plan as any)?.filingPendingAction || null,
     isLive: Boolean((plan as any)?.filingIsLive),
-    providerPlanId: (plan as any)?.filingProviderPlanId || snapshotRecord.providerPlanId || null,
+    providerPlanId: isGenuineFilingProviderPlanId((plan as any)?.filingProviderPlanId)
+      ? (plan as any)?.filingProviderPlanId
+      : isGenuineFilingProviderPlanId(snapshotRecord.providerPlanId)
+      ? snapshotRecord.providerPlanId
+      : null,
     versionStamp: snapshotRecord.versionStamp || null,
     providerStatus: snapshotRecord.providerStatus || null,
     artccState: snapshotRecord.artccState || null,
@@ -784,7 +788,7 @@ const getAmendAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
     return "This saved plan is still local or staged. File it live with the filing provider first, then amend it from the filed record.";
   }
 
-  if (!plan.filingProviderPlanId) {
+  if (!isGenuineFilingProviderPlanId(plan.filingProviderPlanId)) {
     return "This filed record is missing the provider flight identifier. File it again so RSF can refresh the amend tracking.";
   }
 
@@ -864,7 +868,7 @@ const getDraftAmendAvailabilityMessage = ({
 };
 
 const getProviderLifecycleAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
-  if (!plan?.filingProviderPlanId) return null;
+  if (!isGenuineFilingProviderPlanId(plan?.filingProviderPlanId)) return null;
   const provider = getProviderActionAvailability(plan);
   const snapshot = getProviderSnapshot(plan);
   if (snapshot.externalChangeNotice) return String(snapshot.externalChangeNotice);
@@ -2995,7 +2999,7 @@ export default function FlightPlanner() {
       ? `${storedTestAcknowledgement.environment}:${storedTestAcknowledgement.acknowledgedAt}`
       : `${effectiveFlightServiceEnvironment.environment}:missing`;
     const visibleProviderPlans = savedPlansView.filter((plan) =>
-      plan.filingProviderPlanId &&
+      isGenuineFilingProviderPlanId(plan.filingProviderPlanId) &&
       !["cancelled", "closed"].includes(normalizedClientFilingStatus(plan)) &&
       !isCertificationFlightPlan(plan) &&
       (!isFlightServiceTestMode || Boolean(storedTestAcknowledgement)) &&
@@ -6342,7 +6346,7 @@ export default function FlightPlanner() {
     const title = plan.title || `${plan.departure || "Departure"} to ${plan.destination || "Destination"}`;
     const status = filingStatusLabel(plan.filingStatus);
     const provider = formatFilingProviderDisplayName(plan.filingProvider);
-    const providerPlanId = plan.filingProviderPlanId || "�";
+    const providerPlanId = isGenuineFilingProviderPlanId(plan.filingProviderPlanId) ? plan.filingProviderPlanId : "-";
     const versionStamp = extractClientVersionStamp(plan) || "�";
     const history = Array.isArray(plan.filingActionHistory) ? [...plan.filingActionHistory].slice().reverse().slice(0, 8) : [];
     const logoUrl = typeof window !== "undefined" ? new URL(logoImage, window.location.origin).toString() : logoImage;
@@ -7571,7 +7575,11 @@ export default function FlightPlanner() {
         tone: live ? "success" : "warning",
         title: actionTitles[variables.action] ?? (live ? "Request accepted" : "Request staged"),
         message: testMode ? testModeMessage : result?.message || (live ? "The filing provider accepted the request." : "The request is staged and has not been accepted live by the filing provider."),
-        providerPlanId: result?.providerPlanId || updatedPlan?.filingProviderPlanId || null,
+        providerPlanId: isGenuineFilingProviderPlanId(result?.providerPlanId)
+          ? result?.providerPlanId
+          : isGenuineFilingProviderPlanId(updatedPlan?.filingProviderPlanId)
+          ? updatedPlan?.filingProviderPlanId
+          : null,
         beaconCode: getPlanBeaconCode(updatedPlan) || null,
       });
       toast({
@@ -7929,7 +7937,7 @@ export default function FlightPlanner() {
         tone: "success",
         title: result.live ? "Guest test flight plan submitted" : "Guest filing staged",
         message: result.message || "RSF processed the guest filing request.",
-        providerPlanId: result.providerPlanId ?? null,
+        providerPlanId: isGenuineFilingProviderPlanId(result.providerPlanId) ? result.providerPlanId ?? null : null,
         beaconCode: null,
       });
       toast({
@@ -11747,7 +11755,7 @@ export default function FlightPlanner() {
                 <div className="mt-1">{filingActionFeedback.message}</div>
                 {(filingActionFeedback.providerPlanId || filingActionFeedback.beaconCode) && (
                   <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">
-                    {filingActionFeedback.providerPlanId && <span>Provider reference: <span className="font-mono font-semibold">{filingActionFeedback.providerPlanId}</span></span>}
+                    {isGenuineFilingProviderPlanId(filingActionFeedback.providerPlanId) && <span>Provider reference: <span className="font-mono font-semibold">{filingActionFeedback.providerPlanId}</span></span>}
                     {filingActionFeedback.beaconCode && <span>Assigned beacon code: <span className="font-mono font-semibold">{filingActionFeedback.beaconCode}</span></span>}
                   </div>
                 )}
@@ -12109,7 +12117,7 @@ export default function FlightPlanner() {
                   </div>
                   <div className="min-w-0">
                     <div className="text-muted-foreground">Provider reference</div>
-                    <div className="break-all font-mono text-xs sm:text-sm">{plan.filingProviderPlanId || "-"}</div>
+                    <div className="break-all font-mono text-xs sm:text-sm">{isGenuineFilingProviderPlanId(plan.filingProviderPlanId) ? plan.filingProviderPlanId : "-"}</div>
                   </div>
                   <div className="min-w-0">
                     <div className="text-muted-foreground">Last sync</div>
@@ -12122,7 +12130,7 @@ export default function FlightPlanner() {
                     Assigned Beacon Code: <span className="font-mono font-semibold">{beaconCode}</span>
                   </div>
                 )}
-                {plan.filingProviderPlanId && (
+                {isGenuineFilingProviderPlanId(plan.filingProviderPlanId) && (
                   <div className="rounded-lg border border-[#5d6f85]/25 bg-[#0f141a]/75 p-3 text-sm text-[#E8EDF4]">
                     <div className="mb-2 font-semibold text-[#F5F8FC]">Provider Lifecycle Evidence</div>
                     <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">

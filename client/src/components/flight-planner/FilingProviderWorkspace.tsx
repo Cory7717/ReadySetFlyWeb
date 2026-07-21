@@ -1,6 +1,7 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import type { FlightPlan } from "@shared/schema";
+import { isGenuineFilingProviderPlanId } from "@shared/flight-plan-filing";
 import { formatFlightPlanDepartureTime } from "@shared/flight-plan-time";
 import { sanitizeNotificationMessage, summarizeProviderChangeDetails } from "@shared/provider-notification-format";
 import { ProviderChangeSummaryView } from "./ProviderChangeSummaryView";
@@ -94,6 +95,11 @@ const valueTone = (changed: boolean) => (changed ? "text-amber-200" : "text-fore
 export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { plan: FlightPlan; pilotPhone?: string | null; pilotHomeBase?: string | null }) {
   const payload = readPayload(plan);
   const providerSnapshot = readProviderSnapshot(plan);
+  const providerReference = isGenuineFilingProviderPlanId(providerSnapshot.providerReferenceId)
+    ? asString(providerSnapshot.providerReferenceId)
+    : isGenuineFilingProviderPlanId(plan.filingProviderPlanId)
+    ? plan.filingProviderPlanId
+    : null;
   const payloadRoute = asRecord(payload.route);
   const providerRoute = asRecord(providerSnapshot.route);
   const localRoute = asString(plan.route);
@@ -238,7 +244,7 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
           </div>
           <div>
             <div className="text-xs text-muted-foreground">Provider reference</div>
-            <div className="font-medium break-all">{asString(providerSnapshot.providerReferenceId) || plan.filingProviderPlanId || "—"}</div>
+            <div className="font-medium break-all">{providerReference || "—"}</div>
           </div>
           {fieldDiffs.length > 0 && (
             <div className="space-y-1">
@@ -285,7 +291,7 @@ export function FilingProviderUpdatesList({ plan }: { plan: FlightPlan }) {
               </div>
             );
           })()}
-          {message.providerPlanId && (
+          {isGenuineFilingProviderPlanId(message.providerPlanId) && (
             <div className="mt-2 text-[11px] opacity-80">Provider reference: {message.providerPlanId}</div>
           )}
         </div>

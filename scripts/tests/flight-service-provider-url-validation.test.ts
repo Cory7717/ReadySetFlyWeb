@@ -33,7 +33,8 @@ test("Leidos request code validates final URL before constructing Authorization"
   const basicIndex = providerSource.indexOf("const basic = Buffer.from(`${config.username}:${config.password}`)", actionIndex);
   assert.ok(actionIndex > 0);
   assert.ok(basicIndex > actionIndex, "Authorization should be built after action URL validation");
-  assert.match(providerSource, /const req = httpsRequest\(/);
+  assert.match(providerSource, /let leidosHttpsRequest: LeidosHttpsRequest = httpsRequest/);
+  assert.match(providerSource, /const req = leidosHttpsRequest\(/);
   assert.doesNotMatch(providerSource, /url\.protocol === "http:"/);
   assert.match(providerSource, /event: "leidos_provider_url_rejected"/);
   assert.match(providerSource, /cross-origin|redirected instead of returning a REST response|Location:/i);

@@ -82,3 +82,40 @@ test("diagnostic sanitization occurs after provider response operational extract
   assert.ok(messagesIndex > snapshotIndex);
   assert.ok(rawSanitizerIndex > messagesIndex, "diagnostic sanitizer must run after operational extraction");
 });
+
+test("FILE response handling cannot fabricate an RSF provider plan id", () => {
+  assert.doesNotMatch(providerSource, /`rsf-\$\{plan\.id\}-\$\{action\}`/);
+  assert.doesNotMatch(providerSource, /buildProviderPlanId/);
+  assert.match(providerSource, /const returnedProviderPlanId = extractFilingProviderPlanId\(parsedResponse\)/);
+  assert.match(providerSource, /if \(action === "file" && !returnedProviderPlanId\)/);
+  const missingFileIdIndex = providerSource.indexOf('if (action === "file" && !returnedProviderPlanId)');
+  const retrieveIndex = providerSource.indexOf("retrieveLeidosPlanMetadataWithVersionStamp(providerPlanId, config)", missingFileIdIndex);
+  assert.ok(missingFileIdIndex > 0);
+  assert.ok(retrieveIndex > missingFileIdIndex, "FILE without provider ID must branch before retrieve is attempted");
+  assert.match(plannerSource, /isGenuineFilingProviderPlanId\(filingActionFeedback\.providerPlanId\)/);
+  assert.match(lifecycleActionsSource, /isGenuineFilingProviderPlanId\(plan\?\.filingProviderPlanId\)/);
+});
+
+test("server rejects unconfirmed provider ids before sync or lifecycle dispatch", () => {
+  const actionSchemaStart = routesSource.indexOf("const filingLifecycleActionSchema = z.object({");
+  const actionSchemaEnd = routesSource.indexOf("const getFlightPlanProviderRequestSource", actionSchemaStart);
+  const actionSchema = routesSource.slice(actionSchemaStart, actionSchemaEnd);
+  assert.ok(actionSchemaStart > 0);
+  assert.doesNotMatch(actionSchema, /providerPlanId|filingProviderPlanId|versionStamp|filingProviderSnapshot/);
+
+  const actionRouteStart = routesSource.indexOf('app.post("/api/flight-plans/:id/filing-action"');
+  const actionDispatchIndex = routesSource.indexOf("flightPlanFilingProvider.stageAction(effectivePlanForAction, action)", actionRouteStart);
+  const actionGuardIndex = routesSource.indexOf("!isGenuineFilingProviderPlanId(plan.filingProviderPlanId)", actionRouteStart);
+  assert.ok(actionRouteStart > 0);
+  assert.ok(actionGuardIndex > actionRouteStart);
+  assert.ok(actionDispatchIndex > actionGuardIndex, "provider-unconfirmed action guard must run before provider dispatch");
+  assert.match(routesSource.slice(actionGuardIndex, actionDispatchIndex), /FLIGHT_SERVICE_PROVIDER_UNCONFIRMED/);
+
+  const syncRouteStart = routesSource.indexOf('app.post("/api/flight-plans/:id/filing-sync"');
+  const syncDispatchIndex = routesSource.indexOf("syncLeidosPlanMetadata(plan as any)", syncRouteStart);
+  const syncGuardIndex = routesSource.indexOf("!isGenuineFilingProviderPlanId(plan.filingProviderPlanId)", syncRouteStart);
+  assert.ok(syncRouteStart > 0);
+  assert.ok(syncGuardIndex > syncRouteStart);
+  assert.ok(syncDispatchIndex > syncGuardIndex, "provider-unconfirmed sync guard must run before retrieve dispatch");
+  assert.match(routesSource.slice(syncGuardIndex, syncDispatchIndex), /FLIGHT_SERVICE_PROVIDER_UNCONFIRMED/);
+});

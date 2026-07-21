@@ -7,6 +7,11 @@ const asTrimmedString = (value: unknown) => {
   return text || null;
 };
 
+export const isGenuineFilingProviderPlanId = (value: unknown) => {
+  const text = asTrimmedString(value);
+  return Boolean(text && !/^rsf-/i.test(text));
+};
+
 const extractNestedPrimitiveString = (input: unknown, maxDepth = 4) => {
   if (input === null || input === undefined) return null;
   if (typeof input !== "object") {
@@ -217,11 +222,7 @@ export const extractFilingProviderPlanId = (input: unknown) => {
     asTrimmedString(record.flightIdentifier) ||
     extractNestedPrimitiveString(record.flightIdentifier) ||
     asTrimmedString(record.flightPlanId) ||
-    extractNestedPrimitiveString(record.flightPlanId) ||
-    asTrimmedString(record.planId) ||
-    extractNestedPrimitiveString(record.planId) ||
-    asTrimmedString(record.id) ||
-    extractNestedPrimitiveString(record.id);
+    extractNestedPrimitiveString(record.flightPlanId);
 
   if (direct) return direct;
 
@@ -232,7 +233,5 @@ export const extractFilingProviderPlanId = (input: unknown) => {
     "flight_identifier",
     "flightPlanId",
     "flight_plan_id",
-    "planId",
-    "plan_id",
   ]);
 };

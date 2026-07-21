@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
-import { extractFilingProviderPlanId, extractFilingVersionStamp } from "@shared/flight-plan-filing";
+import { extractFilingProviderPlanId, extractFilingVersionStamp, isGenuineFilingProviderPlanId } from "@shared/flight-plan-filing";
 import {
   buildFilingEventId,
   buildFilingFieldDiffs,
@@ -58,7 +58,7 @@ export type FilingServiceResult = {
   nextStatus: FlightPlanFilingStatus;
   warnings: string[];
   providerUrl: string;
-  providerPlanId: string;
+  providerPlanId: string | null;
   raw: Record<string, unknown>;
   payloadSnapshot?: FilingPayloadSnapshot | null;
   providerSnapshot?: FilingProviderSnapshot | null;
@@ -367,7 +367,7 @@ const fetchLeidosUrl = async (
 
   return await new Promise<Response>((resolve, reject) => {
     let settled = false;
-    const req = httpsRequest(
+    const req = leidosHttpsRequest(
       url,
       {
         method: options.method,
@@ -422,6 +422,13 @@ const parseMetadataRetryDelays = (value?: string | null) => {
     return Array.from(new Set(parsed));
   }
   return [0, 1500, 5000, 15000, 30000];
+};
+
+type LeidosHttpsRequest = typeof httpsRequest;
+let leidosHttpsRequest: LeidosHttpsRequest = httpsRequest;
+
+export const setLeidosHttpsRequestForTesting = (request: LeidosHttpsRequest | null) => {
+  leidosHttpsRequest = request || httpsRequest;
 };
 
 const normalizeFlightRules = (value?: string | null) => (value || "VFR").toUpperCase();
@@ -733,9 +740,6 @@ const getLifecycleMessage = (action: FlightPlanFilingAction) => {
       return "RSF submitted the request to the filing provider.";
   }
 };
-
-const buildProviderPlanId = (plan: FlightPlan, action: FlightPlanFilingAction) =>
-  plan.filingProviderPlanId || `rsf-${plan.id}-${action}`;
 
 const minutesToIsoDuration = (minutes?: number | null) => {
   if (!minutes || !Number.isFinite(minutes) || minutes <= 0) return null;
@@ -1806,7 +1810,12 @@ export const buildZzzzOtherInfoForLeidos = (
   return merged || null;
 };
 
-export const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingAction, config: LeidosFlightServiceConfig) => {
+export const buildLeidosActionPayload = (
+  plan: FlightPlan,
+  action: FlightPlanFilingAction,
+  config: LeidosFlightServiceConfig,
+  options: { now?: Date } = {},
+) => {
   const params = new URLSearchParams();
   const routeNormalization = normalizeRouteForProvider(plan.route || "DCT", {
     departure: plan.departure,
@@ -1819,6 +1828,7 @@ export const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFil
     existingOtherInfo: plan.filingOtherInfo || config.otherInfo,
     plannedDepartureAt: providerDepartureInstant || plan.plannedDepartureAt,
     operationalTimeZone: departureTimeZone,
+    now: options.now,
   });
 
   const append = (key: string, value: unknown) => {
@@ -2111,7 +2121,7 @@ const retrieveLeidosPlanMetadata = async (
   config: LeidosFlightServiceConfig,
 ): Promise<Record<string, unknown> | null> => {
   const providerPlanId = String(plan.filingProviderPlanId || '').trim();
-  if (!providerPlanId || !config.username || !config.password) return null;
+  if (!isGenuineFilingProviderPlanId(providerPlanId) || !config.username || !config.password) return null;
   return retrieveLeidosPlanMetadataByProviderPlanId(providerPlanId, config);
 };
 
@@ -2119,6 +2129,12 @@ const retrieveLeidosPlanMetadataWithVersionStamp = async (
   providerPlanId: string,
   config: LeidosFlightServiceConfig,
 ) => {
+  if (!isGenuineFilingProviderPlanId(providerPlanId)) {
+    return {
+      metadataResponse: null as Record<string, unknown> | null,
+      versionStamp: null as string | null,
+    };
+  }
   const delaysMs = parseMetadataRetryDelays(process.env.LEIDOS_FLIGHT_SERVICE_METADATA_RETRY_DELAYS_MS);
   let metadataResponse: Record<string, unknown> | null = null;
   let versionStamp: string | null = null;
@@ -2142,14 +2158,17 @@ const retrieveLeidosPlanMetadataWithVersionStamp = async (
 export const syncLeidosPlanMetadata = async (plan: FlightPlan) => {
   const config = getLeidosFlightServiceConfig();
   const providerPlanId = String(plan.filingProviderPlanId || "").trim();
-  if (!providerPlanId) {
+  if (!isGenuineFilingProviderPlanId(providerPlanId)) {
     return {
       providerPlanId: null,
       versionStamp: null,
       metadataResponse: null as Record<string, unknown> | null,
       providerSnapshot: null as FilingProviderSnapshot | null,
       providerMessages: [] as FilingProviderMessage[],
-      message: "This plan does not have a Leidos flight identifier yet.",
+      providerUnconfirmed: true,
+      message: providerPlanId
+        ? "This plan has an internal RSF reference, not a confirmed Leidos flight identifier. Provider sync was not sent."
+        : "This plan does not have a Leidos flight identifier yet.",
     };
   }
 
@@ -2640,7 +2659,7 @@ const buildStagedFallbackResult = (
     nextStatus: "staged",
     warnings: validation.warnings,
     providerUrl: getProviderUrl(),
-    providerPlanId: String(options?.providerPlanId || "").trim() || buildProviderPlanId(plan, action),
+    providerPlanId: String(options?.providerPlanId || "").trim() || null,
     payloadSnapshot: options?.payloadSnapshot ?? null,
     providerSnapshot: options?.providerSnapshot ?? null,
     providerMessages: options?.providerMessages ?? [],
@@ -2878,8 +2897,8 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     errors.push(`${action === "activate" ? "Activation" : "Closure"} is only available for VFR flight plans.`);
   }
 
-  if (action !== "file" && !plan.filingProviderPlanId) {
-    errors.push("Stage or file the plan first so a provider plan ID exists before using this action.");
+  if (action !== "file" && !isGenuineFilingProviderPlanId(plan.filingProviderPlanId)) {
+    errors.push("Stage or file the plan first so a confirmed Leidos flight identifier exists before using this action.");
   }
   const providerSnapshot = plan.filingProviderSnapshot && typeof plan.filingProviderSnapshot === "object" && !Array.isArray(plan.filingProviderSnapshot)
     ? plan.filingProviderSnapshot as Record<string, unknown>
@@ -2982,12 +3001,12 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       );
     }
 
-    if (action !== "file" && !plan.filingProviderPlanId) {
+    if (action !== "file" && !isGenuineFilingProviderPlanId(plan.filingProviderPlanId)) {
       return buildStagedFallbackResult(
         plan,
         action,
         validation,
-        `The Leidos ${action.toUpperCase()} request needs a flightIdentifier from a prior file response, so RSF kept it staged.`,
+        `The Leidos ${action.toUpperCase()} request needs a confirmed flightIdentifier from a prior file response, so RSF kept it staged.`,
       );
     }
 
@@ -3013,7 +3032,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
     }
 
     if ((action === "amend" || action === "activate") && !extractVersionStamp(effectivePlan)) {
-      const providerPlanId = String(plan.filingProviderPlanId || "").trim() || buildProviderPlanId(plan, action);
+      const providerPlanId = String(plan.filingProviderPlanId || "").trim();
       const retrieval = providerPlanId
         ? await retrieveLeidosPlanMetadataWithVersionStamp(providerPlanId, config)
         : { metadataResponse: null as Record<string, unknown> | null, versionStamp: null as string | null };
@@ -3191,12 +3210,48 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
     const returnedProviderPlanId = extractFilingProviderPlanId(parsedResponse);
     const providerPlanId =
       returnedProviderPlanId ||
-      plan.filingProviderPlanId ||
-      buildProviderPlanId(plan, action);
+      String(plan.filingProviderPlanId || "").trim() ||
+      null;
     let versionStamp = extractFilingVersionStamp(parsedResponse);
     let metadataResponse: Record<string, unknown> | null = null;
     const terminalAction = action === "cancel" || action === "close";
     const versionStampExpected = !terminalAction;
+
+    if (action === "file" && !returnedProviderPlanId) {
+      console.info(JSON.stringify({
+        event: "leidos_file_missing_provider_plan_id",
+        action,
+        providerPlanId: null,
+        responseKeys: summarizeObjectKeys(parsedResponse),
+        responseProviderPlanIdCandidates: collectProviderPlanIdCandidatePaths(parsedResponse),
+        responseMessages,
+        returnStatus: providerReturnStatus,
+      }));
+      return buildStagedFallbackResult(
+        plan,
+        action,
+        validation,
+        responseMessages.length > 0
+          ? `Leidos accepted the FILE response over HTTP but did not return a usable flightIdentifier: ${responseMessages.join(" | ")}`
+          : "Leidos accepted the FILE response over HTTP but did not return a usable flightIdentifier, so RSF kept the record staged.",
+        {
+          providerPlanId: null,
+          payloadSnapshot: payloadContext.payloadSnapshot,
+          providerMessages: buildProviderMessages({
+            action,
+            providerPlanId: null,
+            response: parsedResponse,
+            source: "provider",
+          }),
+          rawExtras: {
+            requestUrl,
+            response: parsedResponse,
+            responseMessages,
+            returnStatus: providerReturnStatus,
+          },
+        },
+      );
+    }
 
     if (!versionStamp && providerPlanId && (action === "file" || action === "amend" || action === "activate")) {
       const retrieval = await retrieveLeidosPlanMetadataWithVersionStamp(providerPlanId, config);
@@ -3236,42 +3291,6 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         responseVersionCandidates: collectVersionCandidatePaths(parsedResponse),
         metadataVersionCandidates: collectVersionCandidatePaths(metadataResponse),
       }));
-    }
-
-    if (action === "file" && !returnedProviderPlanId) {
-      console.info(JSON.stringify({
-        event: "leidos_file_missing_provider_plan_id",
-        action,
-        providerPlanId,
-        responseKeys: summarizeObjectKeys(parsedResponse),
-        responseProviderPlanIdCandidates: collectProviderPlanIdCandidatePaths(parsedResponse),
-        responseMessages,
-        returnStatus: providerReturnStatus,
-      }));
-      return buildStagedFallbackResult(
-        plan,
-        action,
-        validation,
-        responseMessages.length > 0
-          ? `Leidos accepted the FILE response over HTTP but did not return a usable flightIdentifier: ${responseMessages.join(" | ")}`
-          : "Leidos accepted the FILE response over HTTP but did not return a usable flightIdentifier, so RSF kept the record staged.",
-        {
-          providerPlanId: null,
-          payloadSnapshot: payloadContext.payloadSnapshot,
-          providerMessages: buildProviderMessages({
-            action,
-            providerPlanId: null,
-            response: parsedResponse,
-            source: "provider",
-          }),
-          rawExtras: {
-            requestUrl,
-            response: parsedResponse,
-            responseMessages,
-            returnStatus: providerReturnStatus,
-          },
-        },
-      );
     }
 
     const providerSnapshot = buildProviderSnapshot({

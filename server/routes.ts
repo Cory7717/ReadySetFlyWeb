@@ -128,6 +128,7 @@ import {
   type FilingFieldDiff,
   type FilingProviderMessage,
 } from "@shared/flight-plan-filing-workflow";
+import { isGenuineFilingProviderPlanId } from "@shared/flight-plan-filing";
 import { buildWeeklyDigestProfile, type WeeklyDigestSegment } from "./weeklyEmailPersonalization";
 import {
   fetchMetar,
@@ -25510,6 +25511,22 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           plan,
         });
       }
+      if (action !== "file" && !isGenuineFilingProviderPlanId(plan.filingProviderPlanId)) {
+        console.warn(JSON.stringify({
+          event: "flight_service_provider_unconfirmed_action_blocked",
+          planId: plan.id,
+          action,
+          requestSource,
+          providerPlanIdPresent: Boolean(String(plan.filingProviderPlanId || "").trim()),
+          blockedReason: "provider_unconfirmed",
+        }));
+        return res.status(409).json({
+          error: "This plan is not confirmed with Flight Service because it does not have a valid provider flight identifier. File the plan again or reconcile it before submitting provider lifecycle actions.",
+          code: "FLIGHT_SERVICE_PROVIDER_UNCONFIRMED",
+          providerUnconfirmed: true,
+          plan,
+        });
+      }
       if (["cancel", "close", "activate"].includes(action) && plan.filingProviderPlanId) {
         const providerSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
         const availability = asRecord(providerSnapshot.providerActionAvailability);
@@ -26101,6 +26118,23 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         userEmail: userEmail || null,
         blockedBecausePublicOperationalDisabled: false,
       }));
+
+      if (!isGenuineFilingProviderPlanId(plan.filingProviderPlanId)) {
+        console.warn(JSON.stringify({
+          event: "flight_service_provider_unconfirmed_sync_blocked",
+          planId: plan.id,
+          action: "sync",
+          requestSource,
+          providerPlanIdPresent: Boolean(String(plan.filingProviderPlanId || "").trim()),
+          blockedReason: "provider_unconfirmed",
+        }));
+        return res.status(409).json({
+          error: "This plan is not confirmed with Flight Service because it does not have a valid provider flight identifier. File the plan again or reconcile it before syncing.",
+          code: "FLIGHT_SERVICE_PROVIDER_UNCONFIRMED",
+          providerUnconfirmed: true,
+          plan,
+        });
+      }
 
       const syncResult = await syncLeidosPlanMetadata(plan as any);
       const updated = await persistLeidosProviderSync(plan as any, syncResult);

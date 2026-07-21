@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import type { FlightPlan } from "../../shared/schema";
 import { resolveDepartureAirportTimezone } from "../../shared/airport-timezones";
 import { formatFlightPlanDepartureTime } from "../../shared/flight-plan-time";
-import { extractFilingProviderPlanId } from "../../shared/flight-plan-filing";
+import { extractFilingProviderPlanId, isGenuineFilingProviderPlanId } from "../../shared/flight-plan-filing";
 import { ICAO_OTHER_INFO_GUIDANCE, ICAO_OTHER_INFO_PREFIX_OPTIONS, ICAO_OTHER_INFO_VALUE_OPTIONS, buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
 import { formatDecimalCoordinatesForLeidos, normalizeZzzzActualLocation } from "../../shared/zzzz-location";
-import { buildLeidosActionPayload, buildOtherInfoWithAircraftType, buildOtherInfoWithRemarks, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, compareRetrievedProviderPlanFields, findLikelyDuplicateFlightPlan, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, redactLeidosPayloadForLog, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
+import { LeidosFlightPlanFilingProvider, buildLeidosActionPayload, buildOtherInfoWithAircraftType, buildOtherInfoWithRemarks, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, compareRetrievedProviderPlanFields, findLikelyDuplicateFlightPlan, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, redactLeidosPayloadForLog, setLeidosHttpsRequestForTesting, syncLeidosPlanMetadata, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
 
 const futureChicagoDate = new Intl.DateTimeFormat("en-CA", {
   timeZone: "America/Chicago",
@@ -18,6 +19,94 @@ const testDepartureLocal = `${futureChicagoDate}T10:00`;
 const testDepartureAt = new Date(zonedLocalDateTimeToUtcIso(testDepartureLocal, "America/Chicago")!);
 const testArrivalAt = new Date(testDepartureAt.getTime() + 60 * 60 * 1000);
 const testDof = futureChicagoDate.slice(2).replaceAll("-", "");
+
+type MockLeidosResponse = {
+  status?: number;
+  contentType?: string;
+  body?: unknown;
+  error?: Error;
+};
+
+const withMockedLeidosProvider = async (
+  responses: MockLeidosResponse[],
+  run: (calls: Array<{ url: string; method: string; body: string }>) => Promise<void>,
+) => {
+  const envKeys = [
+    "FLIGHT_SERVICE_ENVIRONMENT",
+    "LEIDOS_FLIGHT_SERVICE_ENABLE_LIVE",
+    "LEIDOS_FLIGHT_SERVICE_USERNAME",
+    "LEIDOS_FLIGHT_SERVICE_PASSWORD",
+    "LEIDOS_FLIGHT_SERVICE_FILE_PATH",
+    "LEIDOS_FLIGHT_SERVICE_AMEND_PATH",
+    "LEIDOS_FLIGHT_SERVICE_ACTIVATE_PATH",
+    "LEIDOS_FLIGHT_SERVICE_CANCEL_PATH",
+    "LEIDOS_FLIGHT_SERVICE_CLOSE_PATH",
+    "LEIDOS_FLIGHT_SERVICE_RETRIEVE_PATH",
+    "LEIDOS_FLIGHT_SERVICE_REQUEST_TIMEOUT_MS",
+  ];
+  const previousEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  process.env.FLIGHT_SERVICE_ENVIRONMENT = "LAB";
+  process.env.LEIDOS_FLIGHT_SERVICE_ENABLE_LIVE = "true";
+  process.env.LEIDOS_FLIGHT_SERVICE_USERNAME = "test-user";
+  process.env.LEIDOS_FLIGHT_SERVICE_PASSWORD = "test-password";
+  process.env.LEIDOS_FLIGHT_SERVICE_FILE_PATH = "FP/file";
+  process.env.LEIDOS_FLIGHT_SERVICE_AMEND_PATH = "FP/{providerPlanId}/amend";
+  process.env.LEIDOS_FLIGHT_SERVICE_ACTIVATE_PATH = "FP/{providerPlanId}/activate";
+  process.env.LEIDOS_FLIGHT_SERVICE_CANCEL_PATH = "FP/{providerPlanId}/cancel";
+  process.env.LEIDOS_FLIGHT_SERVICE_CLOSE_PATH = "FP/{providerPlanId}/close";
+  process.env.LEIDOS_FLIGHT_SERVICE_RETRIEVE_PATH = "FP/{providerPlanId}/retrieve";
+  process.env.LEIDOS_FLIGHT_SERVICE_REQUEST_TIMEOUT_MS = "5000";
+
+  const calls: Array<{ url: string; method: string; body: string }> = [];
+  const queue = [...responses];
+  setLeidosHttpsRequestForTesting(((url: URL, options: any, callback: (incoming: EventEmitter & { statusCode?: number; statusMessage?: string; headers: Record<string, string> }) => void) => {
+    const request = new EventEmitter() as EventEmitter & {
+      setTimeout: (timeoutMs: number, handler: () => void) => void;
+      write: (chunk: Buffer | string) => void;
+      end: () => void;
+      destroy: (error?: Error) => void;
+    };
+    let body = "";
+    request.setTimeout = () => undefined;
+    request.write = (chunk) => {
+      body += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+    };
+    request.destroy = (error) => {
+      if (error) queueMicrotask(() => request.emit("error", error));
+    };
+    request.end = () => {
+      calls.push({ url: url.toString(), method: String(options?.method || "GET"), body });
+      const response = queue.shift() || { status: 500, body: { returnStatus: false, messages: ["Unexpected mocked request."] } };
+      if (response.error) {
+        queueMicrotask(() => request.emit("error", response.error));
+        return;
+      }
+      const incoming = new EventEmitter() as EventEmitter & { statusCode?: number; statusMessage?: string; headers: Record<string, string> };
+      incoming.statusCode = response.status ?? 200;
+      incoming.statusMessage = incoming.statusCode >= 400 ? "ERROR" : "OK";
+      incoming.headers = { "content-type": response.contentType || "application/json" };
+      const responseBody = typeof response.body === "string"
+        ? response.body
+        : JSON.stringify(response.body ?? {});
+      queueMicrotask(() => {
+        callback(incoming);
+        incoming.emit("data", Buffer.from(responseBody, "utf8"));
+        incoming.emit("end");
+      });
+    };
+    return request as any;
+  }) as any);
+
+  try {
+    await run(calls);
+  } finally {
+    setLeidosHttpsRequestForTesting(null);
+    for (const key of envKeys) {
+      if (previousEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = previousEnv[key];
+    }
+  }
+};
 
 function filingPlan(overrides: Partial<FlightPlan> = {}): FlightPlan {
   return {
@@ -916,6 +1005,281 @@ test("Leidos FILE flightIdentifier is accepted as the provider plan id", () => {
     }),
     "651864278_696243_7021",
   );
+});
+
+test("Leidos FILE provider id extraction ignores RSF and generic response identifiers", () => {
+  assert.equal(
+    extractFilingProviderPlanId({
+      returnStatus: true,
+      clientReference: "rsf-245fd8ec-c8fb-4d68-ac74-7cec4dc3f5e1-file",
+      correlationId: "attempt-1",
+      id: "generic-operation-id",
+      planId: "245fd8ec-c8fb-4d68-ac74-7cec4dc3f5e1",
+    }),
+    null,
+  );
+  assert.equal(
+    extractFilingProviderPlanId({
+      returnStatus: true,
+      nested: {
+        id: "unrelated-id",
+        planId: "local-plan-id",
+      },
+    }),
+    null,
+  );
+  assert.equal(
+    extractFilingProviderPlanId({
+      returnStatus: true,
+      filing: {
+        flightIdentifier: "658167349_806440_10941",
+      },
+      clientReference: "rsf-local-action",
+    }),
+    "658167349_806440_10941",
+  );
+  assert.equal(isGenuineFilingProviderPlanId("658167349_806440_10941"), true);
+  assert.equal(isGenuineFilingProviderPlanId("rsf-245fd8ec-c8fb-4d68-ac74-7cec4dc3f5e1-file"), false);
+  assert.equal(isGenuineFilingProviderPlanId(null), false);
+});
+
+test("Leidos live FILE accepts only a genuine provider plan id from the response", async () => {
+  await withMockedLeidosProvider([
+    {
+      body: {
+        returnStatus: true,
+        flightIdentifier: "658167349_806440_10941",
+        versionStamp: "20260721120540000",
+      },
+    },
+  ], async (calls) => {
+    const result = await new LeidosFlightPlanFilingProvider().stageAction(filingPlan({
+      filingOtherInfo: null,
+    }), "file");
+
+    assert.equal(result.live, true);
+    assert.equal(result.nextStatus, "filed");
+    assert.equal(result.providerPlanId, "658167349_806440_10941");
+    assert.equal(result.providerSnapshot?.providerPlanId, "658167349_806440_10941");
+    assert.equal(result.providerSnapshot?.versionStamp, "20260721120540000");
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /\/FP\/file$/);
+  });
+});
+
+test("Leidos live FILE with 2xx but no provider id stays unconfirmed and does not retrieve", async () => {
+  await withMockedLeidosProvider([
+    {
+      body: {
+        returnStatus: true,
+        messages: ["Request accepted for processing"],
+      },
+    },
+  ], async (calls) => {
+    const result = await new LeidosFlightPlanFilingProvider().stageAction(filingPlan({
+      filingOtherInfo: null,
+    }), "file");
+
+    assert.equal(result.live, false);
+    assert.equal(result.nextStatus, "staged");
+    assert.equal(result.providerPlanId, null);
+    assert.equal(result.providerSnapshot, null);
+    assert.match(result.message, /did not return a usable flightIdentifier/i);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /\/FP\/file$/);
+  });
+});
+
+test("Leidos live FILE ignores echoed RSF references and unrelated generic ids", async () => {
+  const internalReference = "rsf-245fd8ec-c8fb-4d68-ac74-7cec4dc3f5e1-file";
+  await withMockedLeidosProvider([
+    {
+      body: {
+        returnStatus: true,
+        clientReference: internalReference,
+        correlationId: "attempt-1",
+        id: "generic-operation-id",
+        planId: "245fd8ec-c8fb-4d68-ac74-7cec4dc3f5e1",
+        versionStamp: "20260721120540000",
+      },
+    },
+  ], async (calls) => {
+    const result = await new LeidosFlightPlanFilingProvider().stageAction(filingPlan({
+      id: "245fd8ec-c8fb-4d68-ac74-7cec4dc3f5e1",
+      filingOtherInfo: null,
+    }), "file");
+
+    assert.equal(result.live, false);
+    assert.equal(result.nextStatus, "staged");
+    assert.equal(result.providerPlanId, null);
+    assert.equal(JSON.stringify(result).includes(internalReference), false);
+    assert.equal(calls.length, 1);
+  });
+});
+
+test("Leidos live FILE rejection fails without provider confirmation", async () => {
+  await withMockedLeidosProvider([
+    {
+      body: {
+        returnStatus: false,
+        messages: ["Duplicate flight"],
+      },
+    },
+  ], async () => {
+    await assert.rejects(
+      () => new LeidosFlightPlanFilingProvider().stageAction(filingPlan({
+        filingOtherInfo: null,
+      }), "file"),
+      /unsuccessful FILE response/i,
+    );
+  });
+});
+
+test("Leidos live FILE empty success body remains unconfirmed", async () => {
+  await withMockedLeidosProvider([
+    {
+      contentType: "text/plain",
+      body: "",
+    },
+  ], async (calls) => {
+    const result = await new LeidosFlightPlanFilingProvider().stageAction(filingPlan({
+      filingOtherInfo: null,
+    }), "file");
+
+    assert.equal(result.live, false);
+    assert.equal(result.nextStatus, "staged");
+    assert.equal(result.providerPlanId, null);
+    assert.equal(calls.length, 1);
+  });
+});
+
+test("Leidos live FILE network failure does not fabricate provider confirmation", async () => {
+  await withMockedLeidosProvider([
+    {
+      error: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
+    },
+  ], async (calls) => {
+    const result = await new LeidosFlightPlanFilingProvider().stageAction(filingPlan({
+      filingOtherInfo: null,
+    }), "file");
+
+    assert.equal(result.live, false);
+    assert.equal(result.nextStatus, "staged");
+    assert.equal(result.providerPlanId, null);
+    assert.match(result.message, /could not reach Leidos|kept it staged/i);
+    assert.equal(calls.length, 1);
+  });
+});
+
+test("provider lifecycle actions are blocked when FILE confirmation has no genuine provider id", () => {
+  const unconfirmed = filingPlan({
+    filingStatus: "staged",
+    filingIsLive: false,
+    filingProviderPlanId: null,
+    filingOtherInfo: null,
+  });
+
+  for (const action of ["amend", "activate", "cancel", "close"] as const) {
+    const validation = validateFlightPlanForAction(unconfirmed, action);
+    assert.equal(validation.ready, false, `${action} should be blocked`);
+    assert.ok(
+      validation.errors.some((error) => /confirmed Leidos flight identifier|provider plan ID|filed flight plan|active VFR flight plan|filed VFR plan/i.test(error)),
+      `${action} should explain the missing provider confirmation`,
+    );
+  }
+});
+
+test("direct provider sync with an internal RSF reference makes no provider request", async () => {
+  const internalReference = "rsf-245fd8ec-c8fb-4d68-ac74-7cec4dc3f5e1-file";
+  await withMockedLeidosProvider([], async (calls) => {
+    const result = await syncLeidosPlanMetadata(filingPlan({
+      filingStatus: "filed",
+      filingIsLive: true,
+      filingProviderPlanId: internalReference,
+      filingOtherInfo: null,
+    }));
+
+    assert.equal(result.providerUnconfirmed, true);
+    assert.equal(result.providerPlanId, null);
+    assert.equal(result.versionStamp, null);
+    assert.match(result.message, /internal RSF reference|not a confirmed Leidos flight identifier/i);
+    assert.equal(calls.length, 0);
+  });
+});
+
+test("direct lifecycle actions with an internal RSF reference make no provider request", async () => {
+  const internalReference = "rsf-245fd8ec-c8fb-4d68-ac74-7cec4dc3f5e1-file";
+  const base = filingPlan({
+    filingStatus: "filed",
+    filingIsLive: true,
+    filingProviderPlanId: internalReference,
+    filingRaw: { versionStamp: "20260721120540000" },
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "filed",
+      providerActionAvailability: {
+        amend: true,
+        activate: true,
+        cancel: true,
+        close: false,
+      },
+    } as any,
+    filingOtherInfo: null,
+  });
+
+  await withMockedLeidosProvider([], async (calls) => {
+    for (const action of ["amend", "activate", "cancel"] as const) {
+      const result = await new LeidosFlightPlanFilingProvider().stageAction(base, action);
+      assert.equal(result.live, false, `${action} must not be live`);
+      assert.equal(result.providerPlanId, null, `${action} must not retain internal provider id`);
+      assert.match(result.message, /confirmed flightIdentifier/i);
+    }
+
+    const closeResult = await new LeidosFlightPlanFilingProvider().stageAction({
+      ...base,
+      filingStatus: "activated",
+      filingProviderSnapshot: {
+        providerLifecycleStatus: "activated",
+        providerActionAvailability: {
+          amend: true,
+          activate: false,
+          cancel: false,
+          close: true,
+        },
+      } as any,
+    }, "close");
+    assert.equal(closeResult.live, false);
+    assert.equal(closeResult.providerPlanId, null);
+    assert.match(closeResult.message, /confirmed flightIdentifier/i);
+    assert.equal(calls.length, 0);
+  });
+});
+
+test("legitimate Leidos provider id still retrieves during direct sync", async () => {
+  await withMockedLeidosProvider([
+    {
+      body: {
+        returnStatus: true,
+        flightIdentifier: "658167349_806440_10941",
+        versionStamp: "20260721120540000",
+        flightState: "PROPOSED",
+        artccState: "ROGERED",
+      },
+    },
+  ], async (calls) => {
+    const result = await syncLeidosPlanMetadata(filingPlan({
+      filingStatus: "filed",
+      filingIsLive: true,
+      filingProviderPlanId: "658167349_806440_10941",
+      filingOtherInfo: null,
+    }));
+
+    assert.equal(result.providerPlanId, "658167349_806440_10941");
+    assert.equal(result.versionStamp, "20260721120540000");
+    assert.notEqual(result.providerUnconfirmed, true);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /658167349_806440_10941/);
+    assert.match(calls[0].url, /\/retrieve\?/);
+  });
 });
 
 test("VFR and IFR lifecycle action matrix matches the Leidos demo", () => {

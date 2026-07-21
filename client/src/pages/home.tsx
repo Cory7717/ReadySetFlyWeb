@@ -249,6 +249,7 @@ export default function Home() {
         placement="rentals"
         variant="listingCard"
         showLeadIn={false}
+        includeAllActiveFallback
       />
     </div>
   );

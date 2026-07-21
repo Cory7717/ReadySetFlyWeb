@@ -54,6 +54,7 @@ interface BannerAdRotationProps {
   className?: string;
   variant?: "default" | "compact" | "listingCard";
   showLeadIn?: boolean;
+  includeAllActiveFallback?: boolean;
 }
 
 const resolveSocialUrl = (value?: string | null, network?: "instagram" | "facebook") => {
@@ -79,6 +80,7 @@ export function BannerAdRotation({
   className = "",
   variant = "default",
   showLeadIn = true,
+  includeAllActiveFallback = false,
 }: BannerAdRotationProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hasTrackedImpression, setHasTrackedImpression] = useState(false);
@@ -88,17 +90,29 @@ export function BannerAdRotation({
   const { user } = useAuth();
 
   const { data: bannerAds = [], isLoading } = useQuery<BannerAd[]>({
-    queryKey: ["/api/banner-ads/active", placement, category],
+    queryKey: ["/api/banner-ads/active", placement, category, includeAllActiveFallback],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (placement) params.set('placement', placement);
-      if (category) params.set('category', category);
-      
-      const response = await fetch(apiUrl(`/api/banner-ads/active?${params.toString()}`));
-      if (!response.ok) {
-        throw new Error('Failed to fetch banner ads');
+      const fetchAds = async (targetPlacement?: string) => {
+        const params = new URLSearchParams();
+        if (targetPlacement) params.set("placement", targetPlacement);
+        if (category) params.set("category", category);
+
+        const response = await fetch(apiUrl(`/api/banner-ads/active?${params.toString()}`));
+        if (!response.ok) {
+          throw new Error("Failed to fetch banner ads");
+        }
+        return response.json() as Promise<BannerAd[]>;
+      };
+
+      const primaryAds = await fetchAds(placement);
+      if (!includeAllActiveFallback) {
+        return primaryAds;
       }
-      return response.json();
+
+      const fallbackAds = await fetchAds(undefined);
+      const adsById = new Map<string, BannerAd>();
+      [...primaryAds, ...fallbackAds].forEach((ad) => adsById.set(ad.id, ad));
+      return Array.from(adsById.values());
     },
     staleTime: 60000,
   });
@@ -430,11 +444,13 @@ export function BannerAdRotation({
                 }}
               />
             ) : hasImage ? (
-              <img
-                src={resolveObjectUrl(currentAd.imageUrl)}
-                alt={currentAd.title}
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
-              />
+              <div className="flex h-full w-full items-center justify-center bg-[#080d14] p-4">
+                <img
+                  src={resolveObjectUrl(currentAd.imageUrl)}
+                  alt={currentAd.title}
+                  className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.01]"
+                />
+              </div>
             ) : (
               <div className="h-full w-full bg-[linear-gradient(135deg,rgba(35,47,62,0.96),rgba(12,18,27,0.98))]" />
             )}

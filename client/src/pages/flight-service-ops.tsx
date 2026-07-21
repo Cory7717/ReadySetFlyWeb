@@ -69,6 +69,11 @@ type SortKey = "tailNumber" | "pilotName" | "departure" | "destination" | "etdZu
 type SortDirection = "asc" | "desc";
 
 const PAGE_SIZE = 25;
+const opsFieldClassName =
+  "border-slate-500 bg-slate-950 text-base text-slate-50 placeholder:text-slate-400 focus-visible:ring-blue-600 disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-400 disabled:placeholder:text-slate-500 [color-scheme:dark] [&:-webkit-autofill]:[-webkit-text-fill-color:#f8fafc] [&:-webkit-autofill]:[box-shadow:0_0_0_1000px_#020617_inset]";
+const opsSelectTriggerClassName =
+  "border-slate-500 bg-slate-950 text-base text-slate-50 focus:ring-blue-600 disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-400 [color-scheme:dark]";
+const opsSelectContentClassName = "border-slate-700 bg-slate-950 text-slate-50";
 
 const na = (value: unknown) => {
   const normalized = String(value ?? "").trim();
@@ -418,69 +423,69 @@ export default function FlightServiceOpsPage() {
           <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
             <div className="md:col-span-2">
               <Label htmlFor="all">Search all fields</Label>
-              <Input ref={searchInputRef} id="all" value={filters.all} onChange={(event) => setFilter("all", event.target.value)} placeholder="Tail, provider ID, airport, pilot, status" className="text-base" />
+              <Input ref={searchInputRef} id="all" value={filters.all} onChange={(event) => setFilter("all", event.target.value)} placeholder="Tail, provider ID, airport, pilot, status" className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="tail">Tail number</Label>
-              <Input id="tail" value={filters.tail} onChange={(event) => setFilter("tail", event.target.value)} className="text-base" />
+              <Input id="tail" value={filters.tail} onChange={(event) => setFilter("tail", event.target.value)} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="providerPlanId">Provider plan ID</Label>
-              <Input id="providerPlanId" value={filters.providerPlanId} onChange={(event) => setFilter("providerPlanId", event.target.value)} className="text-base" />
+              <Input id="providerPlanId" value={filters.providerPlanId} onChange={(event) => setFilter("providerPlanId", event.target.value)} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="pilotName">Pilot name</Label>
-              <Input id="pilotName" value={filters.pilotName} onChange={(event) => setFilter("pilotName", event.target.value)} className="text-base" />
+              <Input id="pilotName" value={filters.pilotName} onChange={(event) => setFilter("pilotName", event.target.value)} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="pilotEmail">Pilot email</Label>
-              <Input id="pilotEmail" value={filters.pilotEmail} onChange={(event) => setFilter("pilotEmail", event.target.value)} className="text-base" />
+              <Input id="pilotEmail" value={filters.pilotEmail} onChange={(event) => setFilter("pilotEmail", event.target.value)} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="departure">Departure</Label>
-              <Input id="departure" value={filters.departure} onChange={(event) => setFilter("departure", event.target.value.toUpperCase())} className="text-base" />
+              <Input id="departure" value={filters.departure} onChange={(event) => setFilter("departure", event.target.value.toUpperCase())} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="destination">Destination</Label>
-              <Input id="destination" value={filters.destination} onChange={(event) => setFilter("destination", event.target.value.toUpperCase())} className="text-base" />
+              <Input id="destination" value={filters.destination} onChange={(event) => setFilter("destination", event.target.value.toUpperCase())} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="route">Route contains</Label>
-              <Input id="route" value={filters.route} onChange={(event) => setFilter("route", event.target.value.toUpperCase())} className="text-base" />
+              <Input id="route" value={filters.route} onChange={(event) => setFilter("route", event.target.value.toUpperCase())} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="flightDate">Flight date</Label>
-              <Input id="flightDate" type="date" value={filters.flightDate} onChange={(event) => setFilter("flightDate", event.target.value)} className="text-base" />
+              <Input id="flightDate" type="date" value={filters.flightDate} onChange={(event) => setFilter("flightDate", event.target.value)} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="dateFrom">Date range start</Label>
-              <Input id="dateFrom" type="date" value={filters.dateFrom} onChange={(event) => setFilter("dateFrom", event.target.value)} className="text-base" />
+              <Input id="dateFrom" type="date" value={filters.dateFrom} onChange={(event) => setFilter("dateFrom", event.target.value)} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="dateTo">Date range end</Label>
-              <Input id="dateTo" type="date" value={filters.dateTo} onChange={(event) => setFilter("dateTo", event.target.value)} className="text-base" />
+              <Input id="dateTo" type="date" value={filters.dateTo} onChange={(event) => setFilter("dateTo", event.target.value)} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="status">Status</Label>
-              <Input id="status" value={filters.status} onChange={(event) => setFilter("status", event.target.value)} placeholder="filed, closed" className="text-base" />
+              <Input id="status" value={filters.status} onChange={(event) => setFilter("status", event.target.value)} placeholder="filed, closed" className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="providerStatus">Provider status</Label>
-              <Input id="providerStatus" value={filters.providerStatus} onChange={(event) => setFilter("providerStatus", event.target.value)} className="text-base" />
+              <Input id="providerStatus" value={filters.providerStatus} onChange={(event) => setFilter("providerStatus", event.target.value)} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="aircraftType">Aircraft type</Label>
-              <Input id="aircraftType" value={filters.aircraftType} onChange={(event) => setFilter("aircraftType", event.target.value.toUpperCase())} className="text-base" />
+              <Input id="aircraftType" value={filters.aircraftType} onChange={(event) => setFilter("aircraftType", event.target.value.toUpperCase())} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="versionStamp">Version stamp</Label>
-              <Input id="versionStamp" value={filters.versionStamp} onChange={(event) => setFilter("versionStamp", event.target.value)} className="text-base" />
+              <Input id="versionStamp" value={filters.versionStamp} onChange={(event) => setFilter("versionStamp", event.target.value)} className={opsFieldClassName} />
             </div>
             <div>
               <Label htmlFor="flightRules">Flight rule</Label>
               <Select value={filters.flightRules} onValueChange={(value) => setFilter("flightRules", value)}>
-                <SelectTrigger id="flightRules"><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectTrigger id="flightRules" className={opsSelectTriggerClassName}><SelectValue /></SelectTrigger>
+                <SelectContent className={opsSelectContentClassName}>
                   <SelectItem value="all">Any rule</SelectItem>
                   <SelectItem value="VFR">VFR</SelectItem>
                   <SelectItem value="IFR">IFR</SelectItem>
@@ -491,8 +496,8 @@ export default function FlightServiceOpsPage() {
             <div>
               <Label htmlFor="state">Operational state</Label>
               <Select value={filters.state} onValueChange={(value) => setFilter("state", value)}>
-                <SelectTrigger id="state"><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectTrigger id="state" className={opsSelectTriggerClassName}><SelectValue /></SelectTrigger>
+                <SelectContent className={opsSelectContentClassName}>
                   <SelectItem value="all">Any state</SelectItem>
                   <SelectItem value="open">Open</SelectItem>
                   <SelectItem value="active">Active</SelectItem>

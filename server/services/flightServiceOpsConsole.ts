@@ -168,7 +168,7 @@ export const classifyFlightServiceOperationalState = (plan: FlightPlan, now = ne
 };
 
 export const logFlightServiceOpsAuditEvent = (
-  event: "flight_service_ops_search" | "flight_service_ops_view" | "flight_service_ops_sar_report",
+  event: "flight_service_ops_search" | "flight_service_ops_view" | "flight_service_ops_sar_report" | "flight_service_ops_provider_diagnostics",
   payload: {
     adminUserId?: string | null;
     searchType?: string | null;
@@ -182,6 +182,24 @@ export const logFlightServiceOpsAuditEvent = (
     searchType: payload.searchType || null,
     selectedPlanId: payload.selectedPlanId || null,
     resultCount: payload.resultCount ?? null,
+    timestamp: new Date().toISOString(),
+  }));
+};
+
+export const getFlightServiceOpsAdminUserId = (req: unknown): string | null => {
+  const request = req && typeof req === "object" ? req as any : {};
+  const userId = request.user?.claims?.sub || request.session?.userId;
+  const normalized = String(userId || "").trim();
+  return normalized || null;
+};
+
+export const logFlightServiceOpsMissingAdminUserId = (event: string, route: string, selectedPlanId?: string | null) => {
+  console.warn(JSON.stringify({
+    event: "flight_service_ops_audit_context_missing",
+    activityEvent: event,
+    route,
+    selectedPlanId: selectedPlanId || null,
+    hasUserClaims: false,
     timestamp: new Date().toISOString(),
   }));
 };

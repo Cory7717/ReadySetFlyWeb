@@ -69,6 +69,8 @@ import {
   buildFlightServiceSarReport,
   classifyFlightServiceOperationalState,
   FLIGHT_SERVICE_OPS_RETENTION_NOTICE,
+  getFlightServiceOpsAdminUserId,
+  logFlightServiceOpsMissingAdminUserId,
   logFlightServiceOpsAuditEvent,
 } from "./services/flightServiceOpsConsole";
 import { resolveTfmsProviderKey, type TfmsOverlay, type TfmsStatus } from "./services/tfms/provider";
@@ -23795,6 +23797,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.get("/api/admin/flight-service-ops/search", isAuthenticated, isSuperAdmin, async (req: any, res) => {
     try {
+      const adminUserId = getFlightServiceOpsAdminUserId(req);
+      if (!adminUserId) {
+        logFlightServiceOpsMissingAdminUserId("flight_service_ops_search", "/api/admin/flight-service-ops/search");
+        return res.status(403).json({ error: "Forbidden - Super Admin access required" });
+      }
       const parsed = flightServiceOpsSearchSchema.parse(req.query);
       const q = parsed.q.trim();
       const like = `%${q}%`;
@@ -23841,7 +23848,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const results = filteredRows.map(({ plan, owner }) => buildFlightServiceOpsSearchResult(plan as any, owner as any));
 
       logFlightServiceOpsAuditEvent("flight_service_ops_search", {
-        adminUserId: req.user?.id || null,
+        adminUserId,
         searchType: parsed.field,
         resultCount: results.length,
       });
@@ -23859,6 +23866,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.get("/api/admin/flight-service-ops/plans/:planId", isAuthenticated, isSuperAdmin, async (req: any, res) => {
     try {
+      const adminUserId = getFlightServiceOpsAdminUserId(req);
+      if (!adminUserId) {
+        logFlightServiceOpsMissingAdminUserId("flight_service_ops_view", "/api/admin/flight-service-ops/plans/:planId", String(req.params.planId || "").trim() || null);
+        return res.status(403).json({ error: "Forbidden - Super Admin access required" });
+      }
       const planId = String(req.params.planId || "").trim();
       const rows = await db
         .select({ plan: flightPlans, owner: users })
@@ -23870,7 +23882,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!row) return res.status(404).json({ error: "Flight Service record not found" });
 
       logFlightServiceOpsAuditEvent("flight_service_ops_view", {
-        adminUserId: req.user?.id || null,
+        adminUserId,
         selectedPlanId: planId,
       });
 
@@ -23883,6 +23895,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.get("/api/admin/flight-service-ops/plans/:planId/sar-report", isAuthenticated, isSuperAdmin, async (req: any, res) => {
     try {
+      const adminUserId = getFlightServiceOpsAdminUserId(req);
+      if (!adminUserId) {
+        logFlightServiceOpsMissingAdminUserId("flight_service_ops_sar_report", "/api/admin/flight-service-ops/plans/:planId/sar-report", String(req.params.planId || "").trim() || null);
+        return res.status(403).json({ error: "Forbidden - Super Admin access required" });
+      }
       const planId = String(req.params.planId || "").trim();
       const rows = await db
         .select({ plan: flightPlans, owner: users })
@@ -23894,7 +23911,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!row) return res.status(404).json({ error: "Flight Service record not found" });
 
       logFlightServiceOpsAuditEvent("flight_service_ops_sar_report", {
-        adminUserId: req.user?.id || null,
+        adminUserId,
         selectedPlanId: planId,
       });
 
@@ -23912,10 +23929,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.get("/api/admin/leidos-flight-service/debug/:planId", isAuthenticated, isSuperAdmin, async (req: any, res) => {
     try {
+      const adminUserId = getFlightServiceOpsAdminUserId(req);
+      if (!adminUserId) {
+        logFlightServiceOpsMissingAdminUserId("flight_service_ops_provider_diagnostics", "/api/admin/leidos-flight-service/debug/:planId", String(req.params.planId || "").trim() || null);
+        return res.status(403).json({ error: "Forbidden - Super Admin access required" });
+      }
       const plan = await storage.getFlightPlanById(String(req.params.planId || ""));
       if (!plan) {
         return res.status(404).json({ error: "Flight plan not found" });
       }
+
+      logFlightServiceOpsAuditEvent("flight_service_ops_provider_diagnostics", {
+        adminUserId,
+        selectedPlanId: plan.id,
+      });
 
       const debug = getLeidosFlightServicePlanDebug(plan as any);
       const retrievalVerification = plan.filingProviderPlanId

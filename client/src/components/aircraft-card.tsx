@@ -1,7 +1,10 @@
+import React from "react";
 import { Clock, CheckCircle2, Gauge } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FavoriteButton } from "@/components/favorite-button";
+
+const EXAMPLE_RENTAL_CARD_IMAGE = "/assets/rental-default-image.png";
 
 interface AircraftCardProps {
   id: string;
@@ -40,6 +43,11 @@ export function AircraftCard({
   isExample,
   onCardClick,
 }: AircraftCardProps) {
+  const cardImage = isExample ? EXAMPLE_RENTAL_CARD_IMAGE : image;
+  const imageAlt = isExample
+    ? "Be the first in your area to list your aircraft"
+    : `${year} ${make} ${model}`;
+
   return (
     <Card 
       className="group rsf-metal-panel rsf-metal-panel-interactive overflow-hidden cursor-pointer text-[#E8EDF4] transition-all duration-200 hover:scale-[1.02]" 
@@ -48,15 +56,13 @@ export function AircraftCard({
     >
       <div className="relative aspect-[3/2] overflow-hidden rounded-t-xl bg-[linear-gradient(180deg,rgba(18,22,28,0.98),rgba(9,12,16,0.99))]">
         <img
-          src={image}
-          alt={`${year} ${make} ${model}`}
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
+          src={cardImage}
+          alt={imageAlt}
+          className={`h-full w-full transition-transform duration-300 group-hover:scale-[1.01] ${isExample ? "object-contain" : "object-cover"}`}
         />
         {isExample && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="bg-black/60 text-white text-xs font-semibold uppercase tracking-[0.35em] px-4 py-1 -rotate-12">
-              Sample
-            </div>
+          <div className="pointer-events-none absolute bottom-3 right-3 rounded-full border border-[#8db8ff]/35 bg-[#07111f]/85 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-[#dceaff] backdrop-blur">
+            Sample listing preview
           </div>
         )}
         <div className="absolute top-3 left-3 flex gap-2">

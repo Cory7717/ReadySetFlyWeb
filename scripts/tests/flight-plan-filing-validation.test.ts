@@ -359,6 +359,26 @@ test("airport timezone resolver covers required filing timezones", () => {
   }
 });
 
+test("KMSP to KJVL filing validates with authoritative airport timezone metadata", () => {
+  const plan = filingPlan({
+    departure: "KMSP",
+    destination: "KJVL",
+    route: "DLL",
+    filingFlightRules: "IFR",
+    plannedDepartureAt: new Date("2026-07-21T15:00:00.000Z"),
+    plannerState: {
+      userDisplayDepartureTimeLocal: "2026-07-21T10:00",
+      departureTimeZone: "",
+    },
+  });
+
+  const validation = validateFlightPlanForAction(plan, "file");
+
+  assert.equal(getProviderDepartureInstantForPlan(plan), "2026-07-21T15:00:00.000Z");
+  assert.equal(validation.errors.some((error) => /Departure airport timezone could not be determined/i.test(error)), false);
+  assert.equal(validation.errors.some((error) => /Departure date and time are required/i.test(error)), false);
+});
+
 test("airport timezone resolver uses coordinates for recognized airports without explicit timezone metadata", () => {
   const resolution = resolveDepartureAirportTimezone({
     departureAirport: {

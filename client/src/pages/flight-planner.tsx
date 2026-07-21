@@ -3968,22 +3968,24 @@ export default function FlightPlanner() {
   );
 
   const departureTimeZone = useMemo(() => {
-    const departureAirport = airportMap.get(planningDepartureCode);
+    const departureCodeForTimezone = planningDepartureCode || filedDepartureCode;
+    const departureAirport = airportMap.get(departureCodeForTimezone);
     const referenceAirport = airportMap.get(planningReferenceDepartureAirport);
     return resolveDepartureAirportTimezone({
-      departureAirport: airportForTimezoneResolution(planningDepartureCode, departureAirport),
+      departureAirport: airportForTimezoneResolution(departureCodeForTimezone, departureAirport),
       planningReferenceDepartureAirport: airportForTimezoneResolution(planningReferenceDepartureAirport, referenceAirport),
       explicitDepartureTimezone: null,
     }).timezone || "";
-  }, [airportMap, planningDepartureCode, planningReferenceDepartureAirport]);
+  }, [airportMap, filedDepartureCode, planningDepartureCode, planningReferenceDepartureAirport]);
 
   const destinationTimeZone = useMemo(() => {
-    const airport = airportMap.get(planningDestinationCode);
+    const destinationCodeForTimezone = planningDestinationCode || filedDestinationCode;
+    const airport = airportMap.get(destinationCodeForTimezone);
     return resolveDepartureAirportTimezone({
-      departureAirport: airportForTimezoneResolution(planningDestinationCode, airport),
+      departureAirport: airportForTimezoneResolution(destinationCodeForTimezone, airport),
       explicitDepartureTimezone: null,
     }).timezone || "";
-  }, [airportMap, planningDestinationCode]);
+  }, [airportMap, filedDestinationCode, planningDestinationCode]);
 
   const plannedDepartureUtc = useMemo(() => {
     if (!form.plannedDepartureAt) return null;

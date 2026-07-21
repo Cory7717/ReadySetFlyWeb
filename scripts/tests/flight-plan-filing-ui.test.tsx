@@ -1206,3 +1206,22 @@ test("flight planner preserves newer provider sync state during stale query merg
   assert.match(source, /mergePlanPreservingNewerProviderState\(plan, nextPlan\)/);
   assert.match(source, /mergePlanPreservingNewerProviderState\(current, refreshedPlan\)/);
 });
+
+test("flight planner timezone lookup falls back to typed filed airport while async resolution settles", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  const departureBlock = source.slice(
+    source.indexOf("const departureTimeZone = useMemo(() => {"),
+    source.indexOf("const destinationTimeZone = useMemo(() => {"),
+  );
+  const destinationBlock = source.slice(
+    source.indexOf("const destinationTimeZone = useMemo(() => {"),
+    source.indexOf("const plannedDepartureUtc = useMemo(() => {"),
+  );
+
+  assert.match(departureBlock, /const departureCodeForTimezone = planningDepartureCode \|\| filedDepartureCode/);
+  assert.match(departureBlock, /airportForTimezoneResolution\(departureCodeForTimezone, departureAirport\)/);
+  assert.match(departureBlock, /\[airportMap, filedDepartureCode, planningDepartureCode, planningReferenceDepartureAirport\]/);
+  assert.match(destinationBlock, /const destinationCodeForTimezone = planningDestinationCode \|\| filedDestinationCode/);
+  assert.match(destinationBlock, /airportForTimezoneResolution\(destinationCodeForTimezone, airport\)/);
+  assert.match(destinationBlock, /\[airportMap, filedDestinationCode, planningDestinationCode\]/);
+});

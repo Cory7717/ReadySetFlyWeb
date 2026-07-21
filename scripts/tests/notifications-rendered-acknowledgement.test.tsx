@@ -14,6 +14,7 @@ type NotificationRecord = {
   isRead: boolean;
   createdAt: string;
   readAt?: string | null;
+  meta?: Record<string, unknown> | null;
 };
 
 const makeQueryClient = () =>
@@ -422,6 +423,143 @@ test("pending acknowledgement disables only the clicked notification", async () 
     const idleButton = findButtonByText(renderer!, "Acknowledge");
     assert.equal(pendingButton.props.disabled, true);
     assert.equal(idleButton.props.disabled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("provider ACK and ROGERED text renders unacknowledged and does not call PATCH until clicked", async () => {
+  const notification: NotificationRecord = {
+    id: "notification-provider-ack",
+    title: "Provider sync update",
+    message: "ACK FPL/007 received. ARTCC state ROGERED. Provider lifecycle PROPOSED.",
+    type: "flight_alert",
+    isRead: false,
+    createdAt: "2026-07-21T18:00:00.000Z",
+    readAt: null,
+    meta: {
+      providerEventHash: "event-ack-rogered",
+      providerVersionStamp: "20260721180000000",
+      providerPendingReview: false,
+      changedFields: [],
+    },
+  };
+  let patchCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = String(init?.method || "GET").toUpperCase();
+    if (method === "GET" && url.endsWith("/api/notifications")) return Response.json([notification]);
+    if (method === "GET" && url.endsWith("/api/notifications/unread")) return Response.json({ count: 1 });
+    if (method === "PATCH" && url.endsWith("/api/notifications/notification-provider-ack/read")) {
+      patchCalls += 1;
+      return Response.json({ ...notification, ok: true, isRead: true, readAt: "2026-07-21T18:00:01.000Z", unreadCount: 0 });
+    }
+    throw new Error(`Unexpected request in test: ${method} ${url}`);
+  }) as typeof fetch;
+
+  try {
+    const queryClient = makeQueryClient();
+    let renderer: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <QueryClientProvider client={queryClient}>
+          <NotificationsPage />
+        </QueryClientProvider>,
+      );
+    });
+    await flush();
+
+    assert.equal(patchCalls, 0);
+    assert.match(textContent(renderer!.toJSON()), /1 unread/);
+    assert.equal(findButtonByText(renderer!, "Acknowledge")?.props.disabled, false);
+
+    await act(async () => {
+      findButtonByText(renderer!, "Acknowledge").props.onClick();
+    });
+    await flush();
+    assert.equal(patchCalls, 1);
+    assert.equal(findButtonByText(renderer!, "Acknowledged")?.props.disabled, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("same notification id with a new provider event identity resets to Acknowledge", async () => {
+  const firstEvent: NotificationRecord = {
+    id: "notification-reused",
+    title: "Provider sync update",
+    message: "First provider event.",
+    type: "flight_alert",
+    isRead: false,
+    createdAt: "2026-07-21T18:00:00.000Z",
+    readAt: null,
+    meta: {
+      providerEventHash: "event-first",
+      providerVersionStamp: "20260721180000000",
+      providerPendingReview: false,
+      changedFields: [],
+    },
+  };
+  const secondEvent = {
+    ...firstEvent,
+    message: "Second provider event.",
+    isRead: false,
+    readAt: null,
+    createdAt: "2026-07-21T18:05:00.000Z",
+    meta: {
+      providerEventHash: "event-second",
+      providerVersionStamp: "20260721180500000",
+      providerPendingReview: false,
+      changedFields: [],
+    },
+  };
+  let currentNotification: NotificationRecord = firstEvent;
+  let patchCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = String(init?.method || "GET").toUpperCase();
+    if (method === "GET" && url.endsWith("/api/notifications")) return Response.json([currentNotification]);
+    if (method === "GET" && url.endsWith("/api/notifications/unread")) return Response.json({ count: currentNotification.isRead ? 0 : 1 });
+    if (method === "PATCH" && url.endsWith("/api/notifications/notification-reused/read")) {
+      patchCalls += 1;
+      currentNotification = { ...currentNotification, isRead: true, readAt: "2026-07-21T18:00:01.000Z" };
+      return Response.json({ ...currentNotification, ok: true, unreadCount: 0 });
+    }
+    throw new Error(`Unexpected request in test: ${method} ${url}`);
+  }) as typeof fetch;
+
+  try {
+    const queryClient = makeQueryClient();
+    let renderer: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <QueryClientProvider client={queryClient}>
+          <NotificationsPage />
+        </QueryClientProvider>,
+      );
+    });
+    await flush();
+    await act(async () => {
+      findButtonByText(renderer!, "Acknowledge").props.onClick();
+    });
+    await flush();
+    assert.equal(patchCalls, 1);
+    assert.equal(findButtonByText(renderer!, "Acknowledged")?.props.disabled, true);
+
+    currentNotification = secondEvent;
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ["/api/notifications"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/notifications/unread"] });
+    });
+    await flush();
+
+    assert.match(textContent(renderer!.toJSON()), /Second provider event/);
+    assert.match(textContent(renderer!.toJSON()), /1 unread/);
+    assert.equal(findButtonByText(renderer!, "Acknowledge")?.props.disabled, false);
+    assert.equal(findButtonByText(renderer!, "Acknowledged"), undefined);
+    assert.equal(patchCalls, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }

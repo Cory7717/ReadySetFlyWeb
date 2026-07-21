@@ -22301,7 +22301,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(401).json({ error: "Unauthorized" });
       }
       const updatedCount = await storage.markAllUserNotificationsRead(userId);
-      res.json({ updatedCount, count: 0 });
+      const unreadAfterMarkAll = await storage.getUnreadUserNotifications(userId);
+      res.json({ updatedCount, count: unreadAfterMarkAll.length });
     } catch (error) {
       console.error("Failed to mark all notifications read:", error);
       res.status(500).json({ error: "Failed to update notifications" });
@@ -22528,6 +22529,17 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         resultReason,
       }));
       const unreadAfterAcknowledgement = await storage.getUnreadUserNotifications(userId);
+      console.info(JSON.stringify({
+        event: "flight_service_notification_acknowledged_by_user",
+        userId,
+        notificationId,
+        providerEventHash: notificationEventHash || null,
+        providerMessageId: String(notificationMeta.providerMessageId || notificationMeta.messageId || "").trim() || null,
+        providerVersionStamp: notificationVersionStamp || null,
+        providerEventTimestamp: String(notificationMeta.providerEventTimestamp || notificationMeta.messageDateTime || "").trim() || null,
+        acknowledgedAt: new Date().toISOString(),
+        source: "explicit_user_action",
+      }));
       res.json({
         ...updated,
         ok: true,
@@ -24671,6 +24683,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             flightPlanId: matchedPlan.id,
             providerPlanId: flightIdentifier,
             providerEventHash: eventHash,
+            providerMessageId,
+            providerEventTimestamp: messageDateTime,
             providerVersionStamp: notificationProviderVersionStamp,
             providerEffectivePlanHash: notificationProviderEffectivePlanHash,
             providerPendingReview: notificationProviderPendingReview,

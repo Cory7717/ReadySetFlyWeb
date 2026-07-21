@@ -4602,6 +4602,7 @@ export class DatabaseStorage implements IStorage {
           title: notification.title,
           message: notification.message,
           isRead: false,
+          readAt: null,
           meta: (notification.meta ?? null) as any,
           updatedAt: new Date(),
         },
@@ -4623,7 +4624,11 @@ export class DatabaseStorage implements IStorage {
     const updated = await db
       .update(userNotifications)
       .set({ isRead: true, readAt: new Date() })
-      .where(and(eq(userNotifications.userId, userId), eq(userNotifications.isRead, false)))
+      .where(and(
+        eq(userNotifications.userId, userId),
+        eq(userNotifications.isRead, false),
+        sql`${userNotifications.type} !~ '^(flight_alert|flight_change|provider_sync|flight_plan_)'`,
+      ))
       .returning({ id: userNotifications.id });
     return updated.length;
   }

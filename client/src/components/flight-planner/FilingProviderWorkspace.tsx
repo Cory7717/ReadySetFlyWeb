@@ -62,9 +62,13 @@ export const collapseDuplicateProviderMessages = (messages: ProviderMessage[]) =
   const seen = new Set<string>();
   return messages.filter((message) => {
     const title = String(message.title || "").trim().toLowerCase();
-    if (title !== "provider changes accepted" && title !== "provider update acknowledged") return true;
+    if (
+      title !== "provider changes accepted" &&
+      title !== "provider update acknowledged" &&
+      title !== "provider update marked reviewed"
+    ) return true;
     const key = [
-      title,
+      "provider_update_reviewed",
       String(message.providerPlanId || "").trim().toLowerCase(),
       String(message.details || "").trim().toLowerCase(),
     ].join("|");
@@ -76,7 +80,9 @@ export const collapseDuplicateProviderMessages = (messages: ProviderMessage[]) =
 
 const displayProviderMessageTitle = (title: unknown) => {
   const normalized = String(title || "").trim();
-  if (normalized.toLowerCase() === "provider changes accepted") return "Provider update acknowledged";
+  if (["provider changes accepted", "provider update acknowledged"].includes(normalized.toLowerCase())) {
+    return "Provider update marked reviewed";
+  }
   return normalized || "Provider update";
 };
 

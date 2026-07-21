@@ -680,7 +680,7 @@ const canFilePlan = (plan: FlightPlan | null | undefined) => {
 
 const getFileAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
   if (!plan) return "Save the current values first, then RSF will submit the saved packet.";
-  if (hasPendingProviderReview(plan)) return "Review and acknowledge the provider update before filing another provider action.";
+  if (hasPendingProviderReview(plan)) return "Open Provider Updates and mark the current provider version reviewed before filing another provider action.";
   if (!canFilePlan(plan)) return "This plan already has a provider lifecycle state. Use Amend, Activate, Cancel, Close, or Provider Sync as applicable.";
   return "RSF saves the visible planner values first, then files that saved packet.";
 };
@@ -733,6 +733,68 @@ const buildProviderUpdateSignature = (plan: FlightPlan | null | undefined) => {
     notices: Array.isArray(snapshotRecord.notices) ? snapshotRecord.notices : [],
     messages,
   });
+};
+
+const getProviderMergeVersionStamp = (plan: FlightPlan | null | undefined): string => {
+  const snapshot = getProviderSnapshot(plan);
+  return String(snapshot.versionStamp || extractClientVersionStamp(plan) || "").trim();
+};
+
+const getProviderMergeTimestampMs = (plan: FlightPlan | null | undefined): number => {
+  const snapshot = getProviderSnapshot(plan);
+  const candidates = [
+    (plan as any)?.filingLastProviderSyncAt,
+    snapshot.lastProviderUpdateAt,
+    snapshot.lastProviderDataAt,
+    snapshot.lastProviderRetrieveAt,
+    snapshot.syncedAt,
+    (plan as any)?.updatedAt,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = new Date(candidate as any).getTime();
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+};
+
+const compareProviderMergeFreshness = (left: FlightPlan | null | undefined, right: FlightPlan | null | undefined): number => {
+  const leftVersion = getProviderMergeVersionStamp(left);
+  const rightVersion = getProviderMergeVersionStamp(right);
+  if (/^\d+$/.test(leftVersion) && /^\d+$/.test(rightVersion) && leftVersion !== rightVersion) {
+    return leftVersion > rightVersion ? 1 : -1;
+  }
+  if (leftVersion && rightVersion && leftVersion !== rightVersion) {
+    return leftVersion.localeCompare(rightVersion);
+  }
+  const leftTime = getProviderMergeTimestampMs(left);
+  const rightTime = getProviderMergeTimestampMs(right);
+  return leftTime === rightTime ? 0 : leftTime > rightTime ? 1 : -1;
+};
+
+const mergePlanPreservingNewerProviderState = (currentPlan: FlightPlan, nextPlan: FlightPlan): FlightPlan => {
+  const merged = { ...currentPlan, ...nextPlan } as FlightPlan;
+  if (compareProviderMergeFreshness(currentPlan, nextPlan) <= 0) return merged;
+
+  return {
+    ...merged,
+    filingStatus: currentPlan.filingStatus,
+    filingPendingAction: currentPlan.filingPendingAction,
+    filingProviderPlanId: currentPlan.filingProviderPlanId,
+    filingLastProviderSyncAt: currentPlan.filingLastProviderSyncAt,
+    filingProviderSnapshot: currentPlan.filingProviderSnapshot,
+    filingProviderMessages: currentPlan.filingProviderMessages,
+    filingAssignedBeaconCode: currentPlan.filingAssignedBeaconCode,
+    filingRaw: currentPlan.filingRaw,
+    filingActionHistory: currentPlan.filingActionHistory,
+    route: currentPlan.route,
+    alternate: currentPlan.alternate,
+    filingOtherInfo: currentPlan.filingOtherInfo,
+    filingPlannedAltitudeFt: currentPlan.filingPlannedAltitudeFt,
+    activatedAt: currentPlan.activatedAt,
+    cancelledAt: currentPlan.cancelledAt,
+    closedAt: currentPlan.closedAt,
+  } as FlightPlan;
 };
 
 const canDeleteLocalDraftPlan = (plan: FlightPlan | null | undefined) => {
@@ -2954,7 +3016,7 @@ export default function FlightPlanner() {
     const merged = plans.map((plan) => {
       if (plan.id !== nextPlan.id) return plan;
       replaced = true;
-      return { ...plan, ...nextPlan };
+      return mergePlanPreservingNewerProviderState(plan, nextPlan);
     });
     if (replaced) return merged;
     return [nextPlan, ...plans];
@@ -2999,8 +3061,8 @@ export default function FlightPlanner() {
       : 0;
     if (previousProviderState === nextProviderState && previousHistoryCount === nextHistoryCount) return;
     skipNextEditingPlanHydrationRef.current = true;
-    setEditingPlan((current) => current?.id === refreshedPlan.id ? { ...current, ...refreshedPlan } : current);
-    setProviderUpdatesPlan((current) => current?.id === refreshedPlan.id ? { ...current, ...refreshedPlan } : current);
+    setEditingPlan((current) => current?.id === refreshedPlan.id ? mergePlanPreservingNewerProviderState(current, refreshedPlan) : current);
+    setProviderUpdatesPlan((current) => current?.id === refreshedPlan.id ? mergePlanPreservingNewerProviderState(current, refreshedPlan) : current);
   }, [editingPlan, savedPlans]);
 
   useEffect(() => {
@@ -7342,8 +7404,8 @@ export default function FlightPlanner() {
       field: "providerState",
       label: "Provider Change Review",
       severity: "required",
-      message: "Review and acknowledge the provider update before submitting another provider action.",
-      why: "RSF blocks lifecycle actions until provider-side changes are reviewed so local and provider state do not diverge.",
+      message: "Open Provider Updates and mark the current provider version reviewed before submitting another provider action.",
+      why: "RSF applies provider-side updates where supported and pauses follow-up provider actions until the pilot has reviewed the current provider version.",
       actionLabel: "Review",
       actionTab: fileTab,
     });
@@ -7720,7 +7782,7 @@ export default function FlightPlanner() {
       }
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       toast({
-        title: "Provider update acknowledged",
+        title: "Provider update marked reviewed",
         description: result?.message || "You can submit an amendment from the current provider version.",
       });
     },
@@ -7757,7 +7819,7 @@ export default function FlightPlanner() {
         return;
       }
       toast({
-        title: "Could not acknowledge provider update",
+        title: "Could not mark update reviewed",
         description: summarizePlannerError(error?.message),
         variant: "destructive",
       });
@@ -13238,9 +13300,9 @@ export default function FlightPlanner() {
           </DialogHeader>
           {providerUpdatesPlan && hasPendingProviderReview(providerUpdatesPlan) && (
             <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100">
-              <div className="font-semibold">Provider update needs acknowledgement</div>
+              <div className="font-semibold">Provider update needs review</div>
               <div className="mt-1 text-amber-100/85">
-                The filing provider has updated this plan. Acknowledge the current provider version before submitting another amendment.
+                RSF has applied the provider update where supported. Mark the current provider version reviewed before submitting another amendment.
               </div>
               <Button
                 className="mt-3"
@@ -13248,7 +13310,7 @@ export default function FlightPlanner() {
                 onClick={() => acceptProviderReviewMutation.mutate(providerUpdatesPlan.id)}
                 disabled={acceptProviderReviewMutation.isPending || filingSyncMutation.isPending || filingActionMutation.isPending}
               >
-                {acceptProviderReviewMutation.isPending ? "Acknowledging..." : "Acknowledge provider update"}
+                {acceptProviderReviewMutation.isPending ? "Marking reviewed..." : "Mark update reviewed"}
               </Button>
             </div>
           )}

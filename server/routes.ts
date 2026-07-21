@@ -25615,7 +25615,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       if (action === "amend" && actionProviderSnapshot.providerPendingReview === true) {
         return res.status(409).json({
-          error: "The filing provider has updated this flight plan. Review and acknowledge or reconcile those changes before submitting another amendment.",
+          error: "The filing provider has updated this flight plan. Open Provider Updates and mark the current provider version reviewed before submitting another amendment.",
           requiresProviderReview: true,
           providerSnapshot: actionProviderSnapshot,
           plan,
@@ -26396,7 +26396,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.json({
           ok: true,
           alreadyAccepted: true,
-          message: "Provider update was already acknowledged for the current provider version.",
+          message: "Provider update was already marked reviewed for the current provider version.",
           acceptedVersionStamp,
           acceptedEffectivePlanHash,
           providerPendingReview: false,
@@ -26421,7 +26421,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         id: acceptanceEventId,
         timestamp: now.toISOString(),
         severity: "success",
-        title: "Provider update acknowledged",
+        title: "Provider update marked reviewed",
         details: "Pilot reviewed the current provider version in RSF. Amendments can be submitted again from this provider state.",
         source: "rsf",
         action: null,
@@ -26448,7 +26448,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!updated) {
         const latestPlan = await storage.getFlightPlanById(currentPlan.id);
         return res.status(409).json({
-          error: "Provider update changed while acknowledgement was being saved. Refresh provider updates and review the latest provider state.",
+          error: "Provider update changed while the reviewed state was being saved. Refresh Provider Updates and review the latest provider state.",
           code: "PROVIDER_REVIEW_STALE_ACCEPTANCE",
           plan: latestPlan || currentPlan,
         });
@@ -26456,18 +26456,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       res.json({
         ok: true,
-        message: "Provider update acknowledged. You can submit an amendment from the current provider version.",
+        message: "Provider update marked reviewed. You can submit an amendment from the current provider version.",
         acceptedVersionStamp,
         acceptedEffectivePlanHash,
         providerPendingReview: false,
         plan: updated,
       });
     } catch (error: any) {
-      console.error("Failed to acknowledge flight plan provider review:", error);
+      console.error("Failed to mark flight plan provider update reviewed:", error);
       res.status(500).json({
         error: error instanceof Error && error.message
           ? error.message
-          : "Failed to acknowledge provider update",
+          : "Failed to mark provider update reviewed",
       });
     }
   });

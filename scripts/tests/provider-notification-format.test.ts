@@ -52,13 +52,13 @@ test("provider change summary suppresses whitespace-only changes", () => {
   assert.equal(summary, null);
 });
 
-test("provider review acknowledgement messages de-dupe by stable provider version id", () => {
+test("provider review marked-reviewed messages de-dupe by stable provider version id", () => {
   const id = buildFilingEventId("rsf", "plan-1", "provider_review_accepted", "version-1");
   const first: FilingProviderMessage = {
     id,
     timestamp: "2026-07-16T22:00:00.000Z",
     severity: "success",
-    title: "Provider update acknowledged",
+    title: "Provider update marked reviewed",
     details: "Pilot reviewed the current provider version in RSF.",
     source: "rsf",
     action: null,
@@ -73,5 +73,5 @@ test("provider review acknowledgement messages de-dupe by stable provider versio
   const merged = mergeProviderMessages([first], [retry]);
 
   assert.equal(merged.filter((message) => message.id === id).length, 1);
-  assert.equal(merged.filter((message) => message.title === "Provider update acknowledged").length, 1);
+  assert.equal(merged.filter((message) => message.title === "Provider update marked reviewed").length, 1);
 });

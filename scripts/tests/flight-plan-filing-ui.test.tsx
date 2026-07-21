@@ -230,7 +230,7 @@ test("provider updates list renders event entries", () => {
   assert.ok(html.includes("Provider reference: ABC123"));
 });
 
-test("provider updates list displays historical accept records as acknowledgements", () => {
+test("provider updates list displays historical accept records as reviewed updates", () => {
   const legacyPlan = {
     ...plan,
     filingProviderMessages: [{
@@ -244,7 +244,7 @@ test("provider updates list displays historical accept records as acknowledgemen
   } as unknown as FlightPlan;
   const html = renderToStaticMarkup(<FilingProviderUpdatesList plan={legacyPlan} />);
 
-  assert.ok(html.includes("Provider update acknowledged"));
+  assert.ok(html.includes("Provider update marked reviewed"));
   assert.ok(html.includes("Pilot reviewed the current provider version in RSF."));
   assert.equal(html.includes("Provider changes accepted"), false);
   assert.equal(html.includes("reviewed and accepted"), false);
@@ -511,7 +511,7 @@ test("rendered lifecycle actions show activated VFR close and sync controls", ()
   assertButtonVisible(html, lifecycleLabels.cancel, { disabled: true });
 });
 
-test("rendered lifecycle actions show accept provider changes when review is pending", () => {
+test("rendered lifecycle actions show mark reviewed when provider review is pending", () => {
   const html = renderLifecycleActions(lifecyclePlan({
     filingProviderSnapshot: {
       providerLifecycleStatus: "proposed",
@@ -528,7 +528,7 @@ test("rendered lifecycle actions show accept provider changes when review is pen
     },
   }));
 
-  assertButtonVisible(html, "Acknowledge provider update", { disabled: false });
+  assertButtonVisible(html, "Mark update reviewed", { disabled: false });
   assertButtonVisible(html, lifecycleLabels.amend, { disabled: false });
   assertButtonVisible(html, lifecycleLabels.cancel, { disabled: false });
 });
@@ -1174,4 +1174,19 @@ test("flight planner keeps lifecycle action labels present after altitude adviso
   assert.match(source, /action: "cancel"/);
   assert.match(source, /submitProviderSync/);
   assert.match(source, /acceptProviderReviewMutation/);
+});
+
+test("flight planner preserves newer provider sync state during stale query merges", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /const mergePlanPreservingNewerProviderState = \(currentPlan: FlightPlan, nextPlan: FlightPlan\): FlightPlan =>/);
+  assert.match(source, /compareProviderMergeFreshness\(currentPlan, nextPlan\) <= 0/);
+  assert.match(source, /filingProviderSnapshot: currentPlan\.filingProviderSnapshot/);
+  assert.match(source, /filingProviderMessages: currentPlan\.filingProviderMessages/);
+  assert.match(source, /filingActionHistory: currentPlan\.filingActionHistory/);
+  assert.match(source, /route: currentPlan\.route/);
+  assert.match(source, /alternate: currentPlan\.alternate/);
+  assert.match(source, /filingOtherInfo: currentPlan\.filingOtherInfo/);
+  assert.match(source, /filingPlannedAltitudeFt: currentPlan\.filingPlannedAltitudeFt/);
+  assert.match(source, /mergePlanPreservingNewerProviderState\(plan, nextPlan\)/);
+  assert.match(source, /mergePlanPreservingNewerProviderState\(current, refreshedPlan\)/);
 });

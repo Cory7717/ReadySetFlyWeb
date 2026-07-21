@@ -23638,6 +23638,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     };
   };
 
+  const canBypassActiveFlightPlanLimitForLabTesting = (args: {
+    user: any;
+    runtimeMode: ReturnType<typeof getFlightServiceRuntimeMode>;
+    testerEmailMatch: boolean;
+  }) =>
+    isFlightServiceLabRuntime(args.runtimeMode) &&
+    (Boolean(args.user?.isSuperAdmin || args.user?.isAdmin) || args.testerEmailMatch);
+
   const logFlightServiceAuthGateDebug = async (args: {
     req: any;
     user: any;
@@ -25541,7 +25549,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           }));
         }
         const activePlanAccess = canCreateAnotherActiveFlightPlan({
-          isPremium: Boolean(entitlements.canUseUnlimitedActiveFlightPlans),
+          isPremium: Boolean(
+            entitlements.canUseUnlimitedActiveFlightPlans ||
+            canBypassActiveFlightPlanLimitForLabTesting({
+              user,
+              runtimeMode,
+              testerEmailMatch,
+            }),
+          ),
           existingPlans: plans,
           exceptPlanId: plan.id,
         });
@@ -26498,8 +26513,17 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       const entitlements = getEntitlementsForUser(user);
       const plans = await storage.getFlightPlansByUser(userId);
+      const runtimeMode = getFlightServiceRuntimeMode();
+      const testerEmails = getConfiguredFlightServiceTesterEmails();
+      const { normalizedUserEmail } = resolveFlightServiceUserEmail(req, user);
+      const testerEmailMatch = Boolean(normalizedUserEmail && testerEmails.has(normalizedUserEmail));
+      const labTesterPlanLimitBypass = canBypassActiveFlightPlanLimitForLabTesting({
+        user,
+        runtimeMode,
+        testerEmailMatch,
+      });
       const activePlanAccess = canCreateAnotherActiveFlightPlan({
-        isPremium: Boolean(entitlements.canUseUnlimitedActiveFlightPlans),
+        isPremium: Boolean(entitlements.canUseUnlimitedActiveFlightPlans || labTesterPlanLimitBypass),
         existingPlans: plans,
       });
       if (!activePlanAccess.allowed) {

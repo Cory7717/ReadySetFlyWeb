@@ -912,6 +912,16 @@ test("flight planner first-use route flow removes scratch pad and assigns stable
   assert.equal(duplicates.includes("planner-route-summary"), false);
 });
 
+test("flight planner removes stale quick route helper midpoint UI", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+
+  assert.doesNotMatch(source, /Quick Route Helpers/);
+  assert.doesNotMatch(source, /Add midpoint/);
+  assert.doesNotMatch(source, /Planning helper waypoint/);
+  assert.doesNotMatch(source, /setRouteSuggestion/);
+  assert.doesNotMatch(source, /useState<"direct" \| "midpoint">/);
+});
+
 test("flight planner route summary is a semantic action targeting route setup focus", () => {
   const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
 

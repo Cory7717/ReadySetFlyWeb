@@ -57,3 +57,13 @@ test("Flight Service LAB filing allows authenticated users unless tester restric
   assert.match(routesSource, /authorizationReason: runtimeMode\.operationalFilingEnabled[\s\S]*"authenticated_lab_user"/);
   assert.match(routesSource, /restrictedTesterMode: isFlightServiceRestrictedLabTesterMode\(\)/);
 });
+
+test("Flight Service LAB testers can bypass active-plan cap without changing normal free-tier limit", () => {
+  assert.match(routesSource, /const canBypassActiveFlightPlanLimitForLabTesting = \(args: \{/);
+  assert.match(routesSource, /isFlightServiceLabRuntime\(args\.runtimeMode\)/);
+  assert.match(routesSource, /Boolean\(args\.user\?\.isSuperAdmin \|\| args\.user\?\.isAdmin\) \|\| args\.testerEmailMatch/);
+  assert.match(routesSource, /const labTesterPlanLimitBypass = canBypassActiveFlightPlanLimitForLabTesting/);
+  assert.match(routesSource, /entitlements\.canUseUnlimitedActiveFlightPlans \|\| labTesterPlanLimitBypass/);
+  assert.match(routesSource, /entitlements\.canUseUnlimitedActiveFlightPlans \|\|\s+canBypassActiveFlightPlanLimitForLabTesting/);
+  assert.match(routesSource, /code: "FLIGHT_PLAN_LIMIT_EXCEEDED"/);
+});

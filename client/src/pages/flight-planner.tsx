@@ -2206,7 +2206,6 @@ export default function FlightPlanner() {
   const [plannedAltitude, setPlannedAltitude] = useState("");
   const [altitudePracticalityDialogOpen, setAltitudePracticalityDialogOpen] = useState(false);
   const [arrivalAuto, setArrivalAuto] = useState(true);
-  const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
   const [routeMode, setRouteMode] = useState<"auto" | "direct" | "manual">("direct");
   const [routeOptionPreview, setRouteOptionPreview] = useState<string | null>(null);
   const [mapStyle, setMapStyle] = useState<RsfPlannerMapStyle>("sectional");
@@ -2460,9 +2459,6 @@ export default function FlightPlanner() {
       if (typeof parsed?.showTfrOverlay === "boolean") setShowTfrOverlay(parsed.showTfrOverlay);
       if (typeof parsed?.plannedAltitude === "string") setPlannedAltitude(parsed.plannedAltitude);
       if (typeof parsed?.arrivalAuto === "boolean") setArrivalAuto(parsed.arrivalAuto);
-      if (parsed?.routeSuggestion === "direct" || parsed?.routeSuggestion === "midpoint") {
-        setRouteSuggestion(parsed.routeSuggestion);
-      }
       if (parsed?.filingDraft) setFilingDraft((current) => ({ ...current, ...parsed.filingDraft }));
       if (parsed?.customProfile) setCustomProfile((current) => ({ ...current, ...parsed.customProfile }));
     } catch {
@@ -2491,7 +2487,6 @@ export default function FlightPlanner() {
         showTfrOverlay,
         plannedAltitude,
         arrivalAuto,
-        routeSuggestion,
         filingDraft,
         customProfile,
       }),
@@ -2509,7 +2504,6 @@ export default function FlightPlanner() {
     plannedFuelUplifts,
     plannedStopsInput,
     reserveMinutes,
-    routeSuggestion,
     draftPlanId,
     selectedProfileId,
     selectedTypeId,
@@ -2800,7 +2794,6 @@ export default function FlightPlanner() {
         showTfrOverlay,
         plannedAltitude,
         arrivalAuto,
-        routeSuggestion,
         filingDraft,
         customProfile,
       }),
@@ -2829,7 +2822,6 @@ export default function FlightPlanner() {
     plannedFuelUplifts,
     plannedStopsInput,
     reserveMinutes,
-    routeSuggestion,
     selectedProfileId,
     selectedTypeId,
     showTfrOverlay,
@@ -4030,33 +4022,6 @@ export default function FlightPlanner() {
       .filter(Boolean) as PlannerPoint[];
   }, [resolvedRouteAssistAnalysis?.routePoints]);
 
-  const suggestedWaypoint = useMemo(() => {
-    if (routeMode !== "auto") return null;
-    if (routeSuggestion !== "midpoint") return null;
-    if (routeIntermediates.length > 0) return null;
-    if (airportPoints.length < 2) return null;
-    const start = airportPoints[0];
-    const end = airportPoints[airportPoints.length - 1];
-    const lat1 = (start.lat * Math.PI) / 180;
-    const lon1 = (start.lon * Math.PI) / 180;
-    const lat2 = (end.lat * Math.PI) / 180;
-    const lon2 = (end.lon * Math.PI) / 180;
-    const dLon = lon2 - lon1;
-    const bx = Math.cos(lat2) * Math.cos(dLon);
-    const by = Math.cos(lat2) * Math.sin(dLon);
-    const lat3 = Math.atan2(
-      Math.sin(lat1) + Math.sin(lat2),
-      Math.sqrt((Math.cos(lat1) + bx) ** 2 + by ** 2)
-    );
-    const lon3 = lon1 + Math.atan2(by, Math.cos(lat1) + bx);
-    const midpoint = {
-      icao: "MID",
-      lat: (lat3 * 180) / Math.PI,
-      lon: (lon3 * 180) / Math.PI,
-    };
-    return midpoint;
-  }, [airportPoints, routeMode, routeSuggestion, routeIntermediates.length]);
-
   const routePoints: PlannerPoint[] = useMemo(() => {
     if (routeMode === "direct") {
       return airportPoints;
@@ -4067,11 +4032,8 @@ export default function FlightPlanner() {
     if (routeMode === "auto" && waypoints.length > 0 && routeAssistResolvedPoints.length >= 2) {
       return routeAssistResolvedPoints;
     }
-    if (!suggestedWaypoint) return airportPoints;
-    const [start, ...rest] = airportPoints;
-    if (!start || rest.length === 0) return airportPoints;
-    return [start, suggestedWaypoint, rest[rest.length - 1]];
-  }, [airportPoints, filedRouteResolvedPoints, hasCanonicalRouteEndpoints, routeAssistResolvedPoints, routeMode, suggestedWaypoint, waypoints.length]);
+    return airportPoints;
+  }, [airportPoints, filedRouteResolvedPoints, hasCanonicalRouteEndpoints, routeAssistResolvedPoints, routeMode, waypoints.length]);
 
   const routeBbox = useMemo(() => {
     if (routePoints.length === 0) return null;
@@ -6194,7 +6156,6 @@ export default function FlightPlanner() {
     setHeadwind("0");
     setPlannedAltitude("");
     setArrivalAuto(true);
-    setRouteSuggestion("direct");
     setRouteMode("direct");
     setCustomProfile({
       name: "",
@@ -9616,39 +9577,6 @@ export default function FlightPlanner() {
                     {selectedType.verificationSource ? ` Source: ${selectedType.verificationSource}.` : ""}
                   </AlertDescription>
                 </Alert>
-              )}
-            </div>
-            <div className={cn("md:col-span-2 space-y-2 p-4", plannerSubpanelClass)}>
-              <div className="font-semibold">Quick Route Helpers</div>
-              <div className="text-xs text-muted-foreground">
-                Optional planning shortcuts only. Midpoint adds a virtual waypoint for planning and does not replace the route you choose to file.
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={routeSuggestion === "direct" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setRouteSuggestion("direct")}
-                >
-                  Direct
-                </Button>
-                <Button
-                  variant={routeSuggestion === "midpoint" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setRouteSuggestion("midpoint")}
-                  disabled={waypoints.length > 0}
-                >
-                  Add midpoint
-                </Button>
-              </div>
-              {(waypoints.length > 0 || plannedStops.length > 0) && (
-                <div className="text-xs text-muted-foreground">
-                  Midpoint is disabled when custom waypoints are entered.
-                </div>
-              )}
-              {suggestedWaypoint && (
-                <div className="text-xs text-muted-foreground">
-                  Planning helper waypoint: MID ({suggestedWaypoint.lat.toFixed(3)}, {suggestedWaypoint.lon.toFixed(3)})
-                </div>
               )}
             </div>
           </CardContent>

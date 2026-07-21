@@ -100,6 +100,22 @@ test("terminal plan with stale provider-review flag remains past and terminal", 
   assert.equal(getSavedPlanStatusChip(grouped.pastPlans[0]).label, "Closed");
 });
 
+test("provider terminal lifecycle overrides stale filed status and review flag", () => {
+  const grouped = groupSavedFlightPlans([
+    plan({
+      id: "provider-closed",
+      filingStatus: "filed",
+      filingProviderSnapshot: {
+        providerLifecycleStatus: "closed",
+        providerPendingReview: true,
+      },
+    }),
+  ]);
+  assert.equal(grouped.currentPlans.length, 0);
+  assert.deepEqual(grouped.pastPlans.map((entry) => entry.id), ["provider-closed"]);
+  assert.equal(getSavedPlanStatusChip(grouped.pastPlans[0]).label, "Closed");
+});
+
 test("provider-review-needed filed plan remains current", () => {
   const grouped = groupSavedFlightPlans([
     plan({
@@ -110,7 +126,7 @@ test("provider-review-needed filed plan remains current", () => {
   ]);
   assert.deepEqual(grouped.currentPlans.map((entry) => entry.id), ["review"]);
   assert.equal(grouped.pastPlans.length, 0);
-  assert.equal(getSavedPlanStatusChip(grouped.currentPlans[0]).label, "Needs Review");
+  assert.equal(getSavedPlanStatusChip(grouped.currentPlans[0]).label, "Provider Updated");
 });
 
 test("sorting places review and active plans ahead of drafts", () => {

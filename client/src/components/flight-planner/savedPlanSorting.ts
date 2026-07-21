@@ -20,6 +20,17 @@ const normalizeStatus = (plan: FlightPlan | null | undefined) =>
 
 const terminalStatuses = new Set(["closed", "cancelled", "canceled", "expired", "completed", "inactive"]);
 
+const getProviderLifecycleStatus = (plan: FlightPlan | null | undefined) =>
+  String(asRecord((plan as Record<string, unknown> | null | undefined)?.filingProviderSnapshot).providerLifecycleStatus || "")
+    .trim()
+    .toLowerCase();
+
+const effectiveStatus = (plan: FlightPlan | null | undefined) => {
+  const providerLifecycle = getProviderLifecycleStatus(plan);
+  if (terminalStatuses.has(providerLifecycle)) return providerLifecycle;
+  return normalizeStatus(plan);
+};
+
 const dateMs = (value: unknown) => {
   if (!value) return 0;
   const ms = new Date(String(value)).getTime();
@@ -37,18 +48,18 @@ const latestHistoryMs = (plan: FlightPlan) => {
 };
 
 export const savedPlanNeedsProviderReview = (plan: FlightPlan | null | undefined) =>
-  !terminalStatuses.has(normalizeStatus(plan)) &&
+  !terminalStatuses.has(effectiveStatus(plan)) &&
   asRecord((plan as Record<string, unknown> | null | undefined)?.filingProviderSnapshot).providerPendingReview === true;
 
 const isPastSavedPlan = (plan: FlightPlan) => {
   if (savedPlanNeedsProviderReview(plan)) return false;
-  const status = normalizeStatus(plan);
+  const status = effectiveStatus(plan);
   return terminalStatuses.has(status);
 };
 
 const currentPriority = (plan: FlightPlan) => {
   if (savedPlanNeedsProviderReview(plan)) return 0;
-  const status = normalizeStatus(plan);
+  const status = effectiveStatus(plan);
   if (["activated", "active"].includes(status)) return 1;
   if (["filed", "proposed", "staged"].includes(status)) return 2;
   if (String(plan.filingPendingAction || "").trim()) return 3;
@@ -99,10 +110,10 @@ export const groupSavedFlightPlans = (plans: FlightPlan[]): SavedPlanSection => 
 };
 
 export const getSavedPlanStatusChip = (plan: FlightPlan): SavedPlanStatusChip => {
-  if (savedPlanNeedsProviderReview(plan)) return { label: "Needs Review", tone: "review" };
+  if (savedPlanNeedsProviderReview(plan)) return { label: "Provider Updated", tone: "review" };
   if (String(plan.filingPendingAction || "").trim()) return { label: "Amendment Pending", tone: "current" };
 
-  switch (normalizeStatus(plan)) {
+  switch (effectiveStatus(plan)) {
     case "activated":
     case "active":
       return { label: "Active", tone: "current" };

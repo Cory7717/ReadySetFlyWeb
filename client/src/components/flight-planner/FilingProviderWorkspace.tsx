@@ -81,7 +81,7 @@ export const collapseDuplicateProviderMessages = (messages: ProviderMessage[]) =
 const displayProviderMessageTitle = (title: unknown) => {
   const normalized = String(title || "").trim();
   if (["provider changes accepted", "provider update acknowledged"].includes(normalized.toLowerCase())) {
-    return "Provider update marked reviewed";
+    return "Provider update acknowledged";
   }
   return normalized || "Provider update";
 };
@@ -89,7 +89,7 @@ const displayProviderMessageTitle = (title: unknown) => {
 const displayProviderMessageDetails = (details: unknown) => {
   const normalized = sanitizeNotificationMessage(details);
   if (/Pilot reviewed and accepted the current provider version in RSF/i.test(normalized)) {
-    return "Pilot reviewed the current provider version in RSF. Amendments can be submitted again from this provider state.";
+    return "Pilot acknowledged the current provider version in RSF. Amendments can be submitted again from this provider state.";
   }
   return normalized;
 };

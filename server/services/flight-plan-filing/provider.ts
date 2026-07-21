@@ -2915,7 +2915,7 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     ? plan.filingProviderSnapshot as Record<string, unknown>
     : null;
   if (action !== "file" && action !== "close" && providerSnapshot?.providerPendingReview === true) {
-    errors.push("The filing provider has updated this flight plan. Open Provider Updates and mark the current provider version reviewed before submitting another provider action.");
+    errors.push("The filing provider has updated this flight plan. Open Provider Updates and acknowledge the current provider version before submitting another provider action.");
   }
 
   if (action === "amend") {

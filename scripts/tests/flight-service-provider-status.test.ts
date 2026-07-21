@@ -119,7 +119,7 @@ test("provider review acknowledgement is idempotent for the current provider ver
   assert.match(acceptRoute, /providerPendingReview !== true/);
   assert.match(acceptRoute, /alreadyAccepted: true/);
   assert.match(panel, /collapseDuplicateProviderMessages/);
-  assert.match(panel, /provider update marked reviewed/);
+  assert.match(panel, /provider update acknowledged/);
 });
 
 test("provider terminal cancel and close attempts produce conclusive structured completion logs", () => {

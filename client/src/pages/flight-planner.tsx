@@ -681,7 +681,7 @@ const canFilePlan = (plan: FlightPlan | null | undefined) => {
 
 const getFileAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
   if (!plan) return "Save the current values first, then RSF will submit the saved packet.";
-  if (hasPendingProviderReview(plan)) return "Open Provider Updates and mark the current provider version reviewed before filing another provider action.";
+  if (hasPendingProviderReview(plan)) return "Open Provider Updates and acknowledge the current provider version before filing another provider action.";
   if (!canFilePlan(plan)) return "This plan already has a provider lifecycle state. Use Amend, Activate, Cancel, Close, or Provider Sync as applicable.";
   return "RSF saves the visible planner values first, then files that saved packet.";
 };
@@ -7412,8 +7412,8 @@ export default function FlightPlanner() {
       field: "providerState",
       label: "Provider Change Review",
       severity: "required",
-      message: "Open Provider Updates and mark the current provider version reviewed before submitting another provider action.",
-      why: "RSF applies provider-side updates where supported and pauses follow-up provider actions until the pilot has reviewed the current provider version.",
+      message: "Open Provider Updates and acknowledge the current provider version before submitting another provider action.",
+      why: "RSF applies provider-side updates where supported and pauses follow-up provider actions until the pilot has acknowledged the current provider version.",
       actionLabel: "Review",
       actionTab: fileTab,
     });
@@ -7790,7 +7790,7 @@ export default function FlightPlanner() {
       }
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       toast({
-        title: "Provider update marked reviewed",
+        title: "Provider update acknowledged",
         description: result?.message || "You can submit an amendment from the current provider version.",
       });
     },
@@ -7827,7 +7827,7 @@ export default function FlightPlanner() {
         return;
       }
       toast({
-        title: "Could not mark update reviewed",
+        title: "Could not acknowledge provider update",
         description: summarizePlannerError(error?.message),
         variant: "destructive",
       });
@@ -13308,9 +13308,9 @@ export default function FlightPlanner() {
           </DialogHeader>
           {providerUpdatesPlan && hasPendingProviderReview(providerUpdatesPlan) && (
             <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100">
-              <div className="font-semibold">Provider update needs review</div>
+              <div className="font-semibold">Provider update ready to acknowledge</div>
               <div className="mt-1 text-amber-100/85">
-                RSF has applied the provider update where supported. Mark the current provider version reviewed before submitting another amendment.
+                RSF has applied the provider update where supported. Acknowledge the current provider version before submitting another amendment.
               </div>
               <Button
                 className="mt-3"
@@ -13318,7 +13318,7 @@ export default function FlightPlanner() {
                 onClick={() => acceptProviderReviewMutation.mutate(providerUpdatesPlan.id)}
                 disabled={acceptProviderReviewMutation.isPending || filingSyncMutation.isPending || filingActionMutation.isPending}
               >
-                {acceptProviderReviewMutation.isPending ? "Marking reviewed..." : "Mark update reviewed"}
+                {acceptProviderReviewMutation.isPending ? "Acknowledging..." : "Acknowledge provider update"}
               </Button>
             </div>
           )}

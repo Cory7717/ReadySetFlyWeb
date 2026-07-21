@@ -230,7 +230,7 @@ test("provider updates list renders event entries", () => {
   assert.ok(html.includes("Provider reference: ABC123"));
 });
 
-test("provider updates list displays historical accept records as reviewed updates", () => {
+test("provider updates list displays historical accept records as acknowledged updates", () => {
   const legacyPlan = {
     ...plan,
     filingProviderMessages: [{
@@ -244,8 +244,8 @@ test("provider updates list displays historical accept records as reviewed updat
   } as unknown as FlightPlan;
   const html = renderToStaticMarkup(<FilingProviderUpdatesList plan={legacyPlan} />);
 
-  assert.ok(html.includes("Provider update marked reviewed"));
-  assert.ok(html.includes("Pilot reviewed the current provider version in RSF."));
+  assert.ok(html.includes("Provider update acknowledged"));
+  assert.ok(html.includes("Pilot acknowledged the current provider version in RSF."));
   assert.equal(html.includes("Provider changes accepted"), false);
   assert.equal(html.includes("reviewed and accepted"), false);
 });
@@ -511,7 +511,7 @@ test("rendered lifecycle actions show activated VFR close and sync controls", ()
   assertButtonVisible(html, lifecycleLabels.cancel, { disabled: true });
 });
 
-test("rendered lifecycle actions show mark reviewed when provider review is pending", () => {
+test("rendered lifecycle actions show acknowledge provider update when provider review is pending", () => {
   const html = renderLifecycleActions(lifecyclePlan({
     filingProviderSnapshot: {
       providerLifecycleStatus: "proposed",
@@ -528,7 +528,7 @@ test("rendered lifecycle actions show mark reviewed when provider review is pend
     },
   }));
 
-  assertButtonVisible(html, "Mark update reviewed", { disabled: false });
+  assertButtonVisible(html, "Acknowledge provider update", { disabled: false });
   assertButtonVisible(html, lifecycleLabels.amend, { disabled: false });
   assertButtonVisible(html, lifecycleLabels.cancel, { disabled: false });
 });
@@ -572,7 +572,7 @@ test("rendered lifecycle actions ignore stale provider review flags on terminal 
     },
   }));
 
-  assertButtonAbsent(html, "Mark update reviewed");
+  assertButtonAbsent(html, "Acknowledge provider update");
   assertButtonAbsent(html, lifecycleLabels.amend);
   assertButtonAbsent(html, lifecycleLabels.cancel);
   assertButtonAbsent(html, lifecycleLabels.close);

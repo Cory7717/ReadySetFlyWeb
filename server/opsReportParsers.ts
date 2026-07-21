@@ -229,6 +229,26 @@ function headerIndexes(header: string[]) {
   };
 }
 
+function findHeaderByAliases(rows: string[][], aliases: Array<Array<string | RegExp>>) {
+  return rows.findIndex((row) => {
+    const normalized = row.map(normalizedHeader);
+    return aliases.every((group) => normalized.some((cell) => group.some((alias) =>
+      typeof alias === "string"
+        ? cell === normalizedHeader(alias) || cell.includes(normalizedHeader(alias))
+        : alias.test(cell)
+    )));
+  });
+}
+
+function findColumnByAliases(header: string[], aliases: Array<string | RegExp>) {
+  const normalized = header.map(normalizedHeader);
+  const exact = normalized.findIndex((cell) => aliases.some((alias) => typeof alias === "string" && cell === normalizedHeader(alias)));
+  if (exact >= 0) return exact;
+  return normalized.findIndex((cell) => aliases.some((alias) =>
+    typeof alias === "string" ? cell.includes(normalizedHeader(alias)) : alias.test(cell)
+  ));
+}
+
 function selectedWeekLabel(context: OpsParserContext) {
   return context.weekStart && context.weekEnd ? `${context.weekStart}/${context.weekEnd}` : "";
 }
@@ -578,27 +598,33 @@ function privateGuestName(value: unknown) {
 
 function parseResponses(file: Express.Multer.File, rows: string[][], context: OpsParserContext): ParsedReport {
   const warnings: string[] = [];
+  const responseDateAliases = ["Response Date", "Survey Response Date", "Submitted Date", "Submission Date", "Date Submitted", "Date", /response.*date/, /survey.*date/];
+  const scoreAliases = ["Intent to Recommend (Property)", "Intent to Recommend Property", "Intent to Recommend", "ITR", "Recommend Property", "Overall Score", "Score", "Rating", /intent.*recommend/, /\bitr\b/, /recommend.*property/];
+  const commentAliases = ["Overall Comment", "Guest Comment", "Guest Comments", "Comment", "Comments", "Verbatim", "Response", "Review", "Review Text", "Overall Experience", /overall.*comment/, /guest.*comment/, /verbatim/, /review.*text/, /response.*text/];
   const headerIndex = findHeader(rows, ["Response Date", "Intent to Recommend (Property)", "Overall Comment"]);
-  if (headerIndex < 0) throw new Error("Marriott response headers were not found.");
-  const header = rows[headerIndex];
+  const flexibleHeaderIndex = headerIndex >= 0 ? headerIndex : findHeaderByAliases(rows, [responseDateAliases, commentAliases]);
+  if (flexibleHeaderIndex < 0) throw new Error("Marriott response headers were not found. Expected response date and guest comment columns.");
+  const header = rows[flexibleHeaderIndex];
   const indexes = headerIndexes(header);
   const index = {
-    name: indexes.find("Name"),
-    responseDate: indexes.find("Response Date"),
-    room: indexes.find("Room Number"),
-    roomType: indexes.find("Room Types", "Room Type"),
-    score: indexes.find("Intent to Recommend (Property)"),
-    comment: indexes.find("Overall Comment"),
-    cleanliness: indexes.find("Cleanliness"),
-    staffService: indexes.find("Staff Service"),
-    maintenance: indexes.find("Maintenance and Upkeep"),
-    elite: indexes.find("Elite Appreciation"),
+    name: findColumnByAliases(header, ["Name", "Guest Name", "Member Name", "Customer Name", /guest.*name/, /member.*name/]),
+    responseDate: findColumnByAliases(header, responseDateAliases),
+    room: findColumnByAliases(header, ["Room Number", "Room No", "Room", /room.*number/, /^room$/]),
+    roomType: findColumnByAliases(header, ["Room Types", "Room Type", /room.*type/]),
+    score: findColumnByAliases(header, scoreAliases),
+    comment: findColumnByAliases(header, commentAliases),
+    cleanliness: findColumnByAliases(header, ["Cleanliness", /cleanliness/]),
+    staffService: findColumnByAliases(header, ["Staff Service", "Staff", "Service", /staff.*service/]),
+    maintenance: findColumnByAliases(header, ["Maintenance and Upkeep", "Maintenance", "Upkeep", /maintenance/, /upkeep/]),
+    elite: findColumnByAliases(header, ["Elite Appreciation", "Elite", /elite.*appreciation/]),
   };
-  const parsed = rows.slice(headerIndex + 1).flatMap((row) => {
+  if (index.responseDate < 0) throw new Error("Marriott response date column was not found.");
+  if (index.comment < 0) throw new Error("Marriott guest comment column was not found.");
+  if (index.score < 0) warnings.push("Intent to Recommend score column was not found; scored review classification may be incomplete.");
+  const allCommented = rows.slice(flexibleHeaderIndex + 1).flatMap((row) => {
     const responseDate = excelDateToIso(row[index.responseDate]);
-    if (!responseDate || context.weekStart && responseDate < context.weekStart || context.weekEnd && responseDate > context.weekEnd) return [];
     const comment = String(row[index.comment] || "").replace(/&#xa;/gi, "\n").trim();
-    if (!comment) return [];
+    if (!responseDate || !comment) return [];
     const score = numeric(row[index.score]);
     return [{
       source: privateGuestName(row[index.name]),
@@ -613,10 +639,18 @@ function parseResponses(file: Express.Multer.File, rows: string[][], context: Op
       eliteAppreciation: numeric(row[index.elite]) || "",
     }];
   });
+  const parsed = allCommented.filter((row) =>
+    (!context.weekStart || row.responseDate >= context.weekStart) &&
+    (!context.weekEnd || row.responseDate <= context.weekEnd)
+  );
   const operationalIssue = /\b(dirty|broken|noise|odor|smell|bug|bed bug|hot water|cold shower|maintenance|parking|linens?|elevator|air condition|billing|problem|issue|unavailable|not available)\b/i;
   const positiveReviews = parsed.filter((row) => numeric(row.score) >= 9 && !operationalIssue.test(row.comment)).slice(0, 5);
   const negativeReviews = parsed.filter((row) => numeric(row.score) <= 8 || operationalIssue.test(row.comment)).slice(0, 5);
-  if (!parsed.length) warnings.push("No commented responses fell inside the selected report week.");
+  if (!allCommented.length) warnings.push("No commented Marriott responses were found in the uploaded file.");
+  if (allCommented.length && !parsed.length) {
+    const dates = allCommented.map((row) => row.responseDate).sort();
+    warnings.push(`No commented responses fell inside the selected report week. Uploaded response dates run ${dates[0]} to ${dates[dates.length - 1]}.`);
+  }
   return { ...baseReport(file, "marriott_responses", context, warnings), preview: parsed.slice(0, 10), mapping: { positiveReviews, negativeReviews } };
 }
 

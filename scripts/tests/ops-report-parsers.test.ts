@@ -150,6 +150,32 @@ test("Detailed Flash maps MTD and YTD room revenue from transient plus group", a
   assert.equal((report.mapping.mtd as any).occupancy, 0.42);
 });
 
+test("Marriott Responses parser accepts current export header variants and maps weekly reviews", async () => {
+  const report = await parseOpsReportFile(csvFile("Marriott Responses Export.csv", [
+    "Guest Name,Survey Response Date,Room No,Room Type,ITR,Guest Comments,Cleanliness,Staff,Maintenance,Elite",
+    "\"Smith, John\",2026-06-01,214,KING,10,Great stay and clean room,10,10,10,9",
+    "Guest Two,2026-06-03,318,QQ,6,The elevator was broken and room had odor,7,8,5,8",
+  ].join("\n")), context);
+
+  assert.equal(report.reportType, "marriott_responses");
+  assert.equal((report.mapping.positiveReviews as any[]).length, 1);
+  assert.equal((report.mapping.negativeReviews as any[]).length, 1);
+  assert.equal((report.mapping.positiveReviews as any[])[0].source, "John S.");
+  assert.match(String((report.mapping.negativeReviews as any[])[0].comment), /elevator was broken/);
+});
+
+test("Marriott Responses parser reports out-of-week comments without silently rendering blank rows", async () => {
+  const report = await parseOpsReportFile(csvFile("Marriott Responses Export.csv", [
+    "Guest Name,Response Date,Intent to Recommend,Overall Comment",
+    "Old Guest,2026-05-20,10,Excellent stay",
+  ].join("\n")), context);
+
+  assert.equal(report.reportType, "marriott_responses");
+  assert.equal((report.mapping.positiveReviews as any[]).length, 0);
+  assert.match(report.warnings.join(" "), /No commented responses fell inside the selected report week/);
+  assert.match(report.warnings.join(" "), /2026-05-20 to 2026-05-20/);
+});
+
 test("AR Aging warns on missing buckets and aggregates available balances", async () => {
   const report = await parseOpsReportFile(csvFile("AR Aging.csv", "Account,Current,1-30,31-60,61-90,120+,Total\nCompany A,100,20,10,5,2,137"), context);
   assert.equal(report.reportType, "ar_aging");

@@ -26,6 +26,7 @@ test("landing page omits redundant navigation-style sections", () => {
     "Start Flight Plan",
     "landing_hero_open_planner",
     "landing_hero_explore_tools",
+    "Pilots are already using RSF to plan, file, and track flights",
   ];
 
   for (const removedSection of removedSections) {
@@ -47,6 +48,7 @@ test("landing page keeps current conditions and featured partner modules", () =>
 
 test("landing hero keeps concise headline and no removed section anchor", () => {
   assert.match(landingSource, /RSF keeps the pilot workflow in one place/);
+  assert.match(landingSource, /Join our fast growing community of GA pilots using RSF/);
   assert.equal(landingSource.includes("#landing-workflow-section"), false);
 });
 

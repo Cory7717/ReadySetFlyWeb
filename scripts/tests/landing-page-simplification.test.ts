@@ -66,6 +66,8 @@ test("app download badge component labels Android as a test version", () => {
   const badgeSource = readFileSync(resolve(process.cwd(), "client/src/components/GooglePlayBadge.tsx"), "utf8");
   assert.match(badgeSource, /statusLabel="Test Version"/);
   assert.match(badgeSource, /Coming Soon/);
+  assert.match(badgeSource, /const STATUS_PILL_CLASS/);
+  assert.match(badgeSource, /imageClassName="h-10"/);
 });
 
 test("landing content order puts weather before partner offers and sponsor", () => {
@@ -95,4 +97,11 @@ test("current conditions search controls live inside the weather card before adv
   assert.ok(updateIndex < advisoryIndex, "Expected update button before VFR advisory");
   assert.match(conditionsSource, /onChange=\{\(event\) => onIcaoInputChange\(event\.target\.value\)\}/);
   assert.match(conditionsSource, /onClick=\{onRefresh\}/);
+});
+
+test("landing hero uses wingtip clouds background and constrained text width", () => {
+  assert.match(landingSource, /wingtipCloudsImage/);
+  assert.match(landingSource, /object-\[72%_50%\]/);
+  assert.match(landingSource, /mask-image:linear-gradient/);
+  assert.match(landingSource, /lg:max-w-\[52%\]/);
 });

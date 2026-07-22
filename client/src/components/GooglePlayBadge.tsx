@@ -12,6 +12,9 @@ type GooglePlayBadgeProps = {
   statusLabel?: string;
 };
 
+const STATUS_PILL_CLASS =
+  "mt-1 inline-flex h-5 items-center rounded-full border border-[#5d6f85]/35 bg-[#141d29] px-2 text-[10px] font-semibold uppercase leading-none tracking-[0.16em] text-[#C8D8EA]";
+
 export function GooglePlayBadge({ className, imageClassName, source = "unknown", statusLabel }: GooglePlayBadgeProps) {
   return (
     <a
@@ -31,7 +34,7 @@ export function GooglePlayBadge({ className, imageClassName, source = "unknown",
         className={cn("h-14 w-auto max-w-full object-contain", imageClassName)}
       />
       {statusLabel ? (
-        <span className="mt-1 rounded-full border border-[#5d6f85]/35 bg-[#141d29] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C8D8EA]">
+        <span className={STATUS_PILL_CLASS}>
           {statusLabel}
         </span>
       ) : null}
@@ -85,7 +88,7 @@ export function AppStoreBadge({ className, imageClassName, source = "unknown" }:
       )}
     >
       {image}
-      <span className="mt-1 rounded-full border border-[#5d6f85]/35 bg-[#141d29] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C8D8EA]">
+      <span className={STATUS_PILL_CLASS}>
         Coming Soon
       </span>
     </div>
@@ -120,7 +123,7 @@ export function AppDownloadBadges({
         <GooglePlayBadge
           source={source}
           className={cn(forceRow ? "w-fit" : "sm:w-fit", badgeClassName)}
-          imageClassName="h-14"
+          imageClassName="h-10"
           statusLabel="Test Version"
         />
         <AppStoreBadge

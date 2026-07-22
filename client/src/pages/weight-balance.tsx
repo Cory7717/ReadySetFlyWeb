@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   CartesianGrid,
@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { AlertTriangle, Check, CheckCircle2, ChevronsUpDown, Plane, Scale } from "lucide-react";
 import { apiUrl } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,11 +34,26 @@ type AircraftType = {
   category?: string | null;
   maxGrossWeightLb: number | string;
   usableFuelGal: number | string;
+  max_gross_weight_lb_effective?: number | string | null;
+  usable_fuel_gal_effective?: number | string | null;
   emptyArmIn?: number | string | null;
   frontArmIn?: number | string | null;
   rearArmIn?: number | string | null;
   baggageArmIn?: number | string | null;
   fuelArmIn?: number | string | null;
+};
+
+type AircraftProfile = {
+  id: string;
+  name: string;
+  tailNumber?: string | null;
+  typeId?: string | null;
+  isDefault?: boolean | null;
+  type?: AircraftType | null;
+  usableFuelOverrideGal?: number | string | null;
+  maxGrossWeightOverrideLb?: number | string | null;
+  usable_fuel_gal_effective?: number | string | null;
+  max_gross_weight_lb_effective?: number | string | null;
 };
 
 type StationCalc = {
@@ -113,7 +129,9 @@ function StatusBadge({ status, label }: { status: ReturnType<typeof statusFromEn
 }
 
 export default function WeightBalance() {
+  const { isAuthenticated } = useAuth();
   const [selectedTypeId, setSelectedTypeId] = useState("");
+  const [selectedProfileId, setSelectedProfileId] = useState("");
   const [aircraftLibraryOpen, setAircraftLibraryOpen] = useState(false);
   const [fuelDensity, setFuelDensity] = useState("6.0");
 
@@ -145,50 +163,49 @@ export default function WeightBalance() {
     },
   });
 
+  const { data: aircraftProfiles = [] } = useQuery<AircraftProfile[]>({
+    queryKey: ["/api/aircraft/profiles"],
+    queryFn: async () => {
+      const response = await fetch(apiUrl("/api/aircraft/profiles"), { credentials: "include" });
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: isAuthenticated,
+  });
+
   const selectedType = useMemo(
     () => aircraftTypes.find((type) => type.id === selectedTypeId) ?? null,
     [aircraftTypes, selectedTypeId]
   );
-  const selectedAircraftLabel = selectedType
-    ? `${selectedType.make} ${selectedType.model}${selectedType.icaoType ? ` (${selectedType.icaoType})` : ""}`
-    : "Type to search aircraft";
+  const selectedProfile = useMemo(
+    () => aircraftProfiles.find((profile) => profile.id === selectedProfileId) ?? null,
+    [aircraftProfiles, selectedProfileId]
+  );
+  const selectedAircraftLabel = selectedProfile
+    ? `${selectedProfile.tailNumber ? `${selectedProfile.tailNumber} - ` : ""}${selectedProfile.name}`
+    : selectedType
+      ? `${selectedType.make} ${selectedType.model}${selectedType.icaoType ? ` (${selectedType.icaoType})` : ""}`
+    : "Select saved aircraft or type";
 
-  useEffect(() => {
-    if (!selectedType) return;
+  const getTypeMaxGross = (type: AircraftType | null | undefined) =>
+    toNum(type?.max_gross_weight_lb_effective ?? type?.maxGrossWeightLb);
+  const getTypeUsableFuel = (type: AircraftType | null | undefined) =>
+    toNum(type?.usable_fuel_gal_effective ?? type?.usableFuelGal);
 
-    const maybePrefill = (
-      currentValue: string,
-      nextValue: number | string | null | undefined,
-      setter: (value: string) => void
-    ) => {
-      if (currentValue !== "" && toNum(currentValue) !== 0) return;
-      const next = toNum(nextValue);
-      if (next <= 0) return;
-      setter(String(next));
-    };
+  const applyAircraftDefaults = (type: AircraftType | null | undefined, profile?: AircraftProfile | null) => {
+    const maxGrossValue = toNum(profile?.max_gross_weight_lb_effective ?? profile?.maxGrossWeightOverrideLb) || getTypeMaxGross(type);
+    const usableFuelValue = toNum(profile?.usable_fuel_gal_effective ?? profile?.usableFuelOverrideGal) || getTypeUsableFuel(type);
 
-    maybePrefill(emptyArm, selectedType.emptyArmIn, setEmptyArm);
-    maybePrefill(frontArm, selectedType.frontArmIn, setFrontArm);
-    maybePrefill(rearArm, selectedType.rearArmIn, setRearArm);
-    maybePrefill(baggage1Arm, selectedType.baggageArmIn, setBaggage1Arm);
-    maybePrefill(fuelArm, selectedType.fuelArmIn, setFuelArm);
-
-    if (!maxGrossOverride || toNum(maxGrossOverride) <= 0) {
-      setMaxGrossOverride(String(toNum(selectedType.maxGrossWeightLb)));
+    if (type) {
+      setEmptyArm(String(toNum(type.emptyArmIn)));
+      setFrontArm(String(toNum(type.frontArmIn)));
+      setRearArm(String(toNum(type.rearArmIn)));
+      setBaggage1Arm(String(toNum(type.baggageArmIn)));
+      setFuelArm(String(toNum(type.fuelArmIn)));
     }
-    if (toNum(fuelGallons) <= 0 && toNum(selectedType.usableFuelGal) > 0) {
-      setFuelGallons(String(toNum(selectedType.usableFuelGal)));
-    }
-  }, [
-    selectedType,
-    emptyArm,
-    frontArm,
-    rearArm,
-    baggage1Arm,
-    fuelArm,
-    maxGrossOverride,
-    fuelGallons,
-  ]);
+    setMaxGrossOverride(maxGrossValue > 0 ? String(maxGrossValue) : "");
+    setFuelGallons(usableFuelValue > 0 ? String(usableFuelValue) : fuelGallons);
+  };
 
   const fuelWeightPerGal = toNum(fuelDensity) > 0 ? toNum(fuelDensity) : 6.0;
   const fuelTakeoffWeight = toNum(fuelGallons) * fuelWeightPerGal;
@@ -293,16 +310,16 @@ export default function WeightBalance() {
         </p>
       </div>
 
-      <Card>
+      <Card className="rsf-card-shell">
         <CardHeader>
           <CardTitle>Aircraft Setup</CardTitle>
           <CardDescription>
-            Select your aircraft to prefill baseline arms and max gross. Confirm every value before flight.
+            Select a saved aircraft profile or library type to prefill baseline arms, usable fuel, and max gross. Confirm every value before flight.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>RSF Aircraft Library</Label>
+            <Label>Saved Aircraft & RSF Library</Label>
             <Popover open={aircraftLibraryOpen} onOpenChange={setAircraftLibraryOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -318,10 +335,43 @@ export default function WeightBalance() {
               </PopoverTrigger>
               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                 <Command>
-                  <CommandInput placeholder="Search make or model..." />
+                  <CommandInput placeholder="Search tail, make, or model..." />
                   <CommandList>
                     <CommandEmpty>No aircraft found.</CommandEmpty>
-                    <CommandGroup>
+                    {aircraftProfiles.length > 0 ? (
+                      <CommandGroup heading="Saved Aircraft">
+                        {aircraftProfiles.map((profile) => {
+                          const type = profile.type ?? aircraftTypes.find((candidate) => candidate.id === profile.typeId) ?? null;
+                          const label = `${profile.tailNumber ? `${profile.tailNumber} - ` : ""}${profile.name}`.trim();
+                          const detail = type ? `${type.make} ${type.model}${type.icaoType ? ` (${type.icaoType})` : ""}` : "Custom aircraft";
+                          return (
+                            <CommandItem
+                              key={profile.id}
+                              value={`${label} ${detail} ${profile.isDefault ? "default" : ""}`}
+                              onSelect={() => {
+                                setSelectedProfileId(profile.id);
+                                setSelectedTypeId(type?.id ?? "");
+                                applyAircraftDefaults(type, profile);
+                                setAircraftLibraryOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedProfileId === profile.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="min-w-0">
+                                <div className="truncate">{label}</div>
+                                <div className="truncate text-xs text-muted-foreground">{detail}</div>
+                              </div>
+                              {profile.isDefault ? <Badge variant="outline" className="ml-auto">Default</Badge> : null}
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    ) : null}
+                    <CommandGroup heading="Aircraft Types">
                       {aircraftTypes.map((type) => {
                         const label = `${type.make} ${type.model}`.trim();
                         return (
@@ -329,8 +379,9 @@ export default function WeightBalance() {
                             key={type.id}
                             value={`${label} ${type.icaoType ?? ""} ${type.category ?? ""}`}
                             onSelect={() => {
+                              setSelectedProfileId("");
                               setSelectedTypeId(type.id);
-                              setMaxGrossOverride("");
+                              applyAircraftDefaults(type);
                               setAircraftLibraryOpen(false);
                             }}
                           >
@@ -351,15 +402,22 @@ export default function WeightBalance() {
               </PopoverContent>
             </Popover>
             <p className="text-xs text-muted-foreground">
-              Start typing your aircraft make or model to filter the list.
+              Saved profiles use your tail-number overrides when available; type templates provide generic planning arms.
             </p>
-            {selectedType && (
+            {(selectedType || selectedProfile) && (
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                {selectedProfile ? (
+                  <Badge variant="outline">
+                    Source: saved profile{selectedProfile.tailNumber ? ` ${selectedProfile.tailNumber}` : ""}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline">Source: aircraft type template</Badge>
+                )}
                 <Badge variant="outline">
-                  Max gross baseline: {toNum(selectedType.maxGrossWeightLb).toFixed(0)} lb
+                  Max gross baseline: {maxGross > 0 ? maxGross.toFixed(0) : "--"} lb
                 </Badge>
                 <Badge variant="outline">
-                  Usable fuel baseline: {toNum(selectedType.usableFuelGal).toFixed(1)} gal
+                  Usable fuel baseline: {toNum(fuelGallons).toFixed(1)} gal
                 </Badge>
               </div>
             )}
@@ -388,6 +446,11 @@ export default function WeightBalance() {
               Enter the exact value used in your operation. Do not rely on default assumptions.
             </p>
           </div>
+          <Alert className="md:col-span-2">
+            <AlertDescription className="text-xs">
+              Aircraft profiles can prefill reusable setup values such as max gross, usable fuel, and station arms when available. Empty weight, empty moment/CG, and the approved envelope still need to be verified from the specific tail number's current weight-and-balance record.
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
 

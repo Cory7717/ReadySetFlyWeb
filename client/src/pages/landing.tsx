@@ -9,8 +9,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
 import { LandingCurrentConditions } from "@/components/landing/LandingCurrentConditions";
-import { LandingEventsRail } from "@/components/landing/LandingEventsRail";
-import { LandingModuleChooser } from "@/components/landing/LandingModuleChooser";
 import { MobileBottomNav as LandingMobileBottomNav, MobilePillNav as LandingMobilePillNav, type LandingMobileTab } from "@/components/landing/MobileLandingNav";
 import WeatherBriefingSummarizer from "@/components/ai/WeatherBriefingSummarizer";
 import NotamTranslator from "@/components/ai/NotamTranslator";
@@ -1832,16 +1830,13 @@ export default function Landing() {
                     Start Flight Plan
                   </Link>
                 </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className={metallicSecondaryButtonClass}
-                  onClick={() => {
-                    trackEvent("cta_click", { label: "landing_hero_explore_tools", target: "#landing-workflow-section" });
-                    document.getElementById("landing-workflow-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
-                >
-                  Explore Tools
+                <Button asChild size="lg" variant="outline" className={metallicSecondaryButtonClass}>
+                  <Link
+                    href="/tool-hub"
+                    onClick={() => trackEvent("cta_click", { label: "landing_hero_explore_tools", target: "/tool-hub" })}
+                  >
+                    Explore Tools
+                  </Link>
                 </Button>
               </div>
               <AppDownloadBadges
@@ -1989,338 +1984,83 @@ export default function Landing() {
           </div>
         </div>
       </div>
-
-      <section id="landing-workflow-section" className="rsf-metal-section border-y border-white/8 px-4 py-8 sm:py-10">
-        <div className="container mx-auto space-y-8">
-          <div className="max-w-3xl space-y-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9cb8df]">Pilot workflow</div>
-            <h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#F5F8FC] sm:text-3xl">
-              Start where pilots actually start.
-            </h2>
-            <p className="text-sm leading-6 text-[#B8C8DA]">
-              RSF is organized around the work: plan the flight, fly smarter, train and track progress, then manage the records and aircraft details that support the next flight.
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {[
-              {
-                title: "Plan a Flight",
-                copy: "Build routes, review weather, brief airports, and prepare flight plans.",
-                cta: "Open Flight Planner",
-                href: "/flight-planner",
-                icon: Plane,
-              },
-              {
-                title: "Fly Smarter",
-                copy: "Use flight deck, ADS-B, synthetic vision, and route awareness tools.",
-                cta: "Explore Flight Tools",
-                href: "/live-traffic",
-                icon: Smartphone,
-              },
-              {
-                title: "Train & Track",
-                copy: "Student tools, logbook, syllabi, currency tracking, and proficiency tools.",
-                cta: "Open Training Hub",
-                href: "/student",
-                icon: BookOpen,
-              },
-              {
-                title: "Manage Aviation",
-                copy: "Aircraft profiles, records, ownership tools, listings, and notifications.",
-                cta: "Open Dashboard",
-                href: "/dashboard",
-                icon: FileText,
-              },
-            ].map((card) => (
-              <div key={card.title} className={`${metallicPanelInteractiveClass} flex h-full flex-col rounded-[1.2rem] p-5 text-[#E8EDF4]`}>
-                <div className="rsf-metal-icon-chip mb-4 flex h-11 w-11 items-center justify-center rounded-full text-[#9ebdff]">
-                  <card.icon className="h-5 w-5" />
-                </div>
-                <h3 className="text-lg font-semibold text-[#F5F8FC]">{card.title}</h3>
-                <p className="mt-2 flex-1 text-sm leading-6 text-[#B8C8DA]">{card.copy}</p>
-                <Button asChild className={`mt-4 w-full ${card.href === "/flight-planner" ? metallicPrimaryButtonClass : metallicSecondaryButtonClass}`} variant={card.href === "/flight-planner" ? "default" : "outline"}>
-                  <Link href={card.href}>{card.cta}</Link>
-                </Button>
-              </div>
-            ))}
-          </div>
-          <div className={`${metallicPanelClass} rounded-[1.25rem] p-5 text-[#E8EDF4] sm:p-6`}>
-            <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9cb8df]">Featured capability</div>
-                <h2 className="mt-2 text-2xl font-semibold text-[#F5F8FC]">Weather-Aware Route Planning</h2>
-              </div>
-              <p className="text-sm leading-6 text-[#B8C8DA]">
-                RSF can assist route planning by evaluating weather and route conditions before the pilot reviews and files. The workflow is AI-assisted, weather-aware, and pilot-reviewed; route suggestions support judgment, they do not replace it.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="landing-quickstart-section" className="rsf-metal-section border-y border-white/8 px-4 py-8 sm:py-10">
-        <div className="container mx-auto">
-          <div className="space-y-6">
-            <div className="max-w-2xl space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9cb8df]">First action</div>
-              <h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#F5F8FC] sm:text-3xl">
-                Start with something useful
-              </h2>
-              <p className="text-sm leading-6 text-[#B8C8DA]">
-                Try one of these — no account needed.
-              </p>
-            </div>
-
-            {resumeFlow ? (
-              <div className={`${metallicPanelClass} flex flex-col gap-4 rounded-[1.15rem] p-4 text-[#E8EDF4] sm:flex-row sm:items-center sm:justify-between`}>
-                <div className="space-y-1">
-                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#9cb8df]">Finish what you started</div>
-                  <div className="text-base font-semibold text-[#F5F8FC]">{resumeFlow.title}</div>
-                  <div className="text-sm text-[#AFC1D6]">{resumeFlow.description}</div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" className={metallicPrimaryButtonClass} onClick={handleContinueFlow}>
-                    {resumeFlow.type === "listing"
-                      ? "Complete your aircraft listing"
-                      : resumeFlow.type === "verification"
-                        ? "Finish your verification"
-                        : "Log your first flight"}
-                  </Button>
-                  <Button type="button" variant="outline" className={metallicSecondaryButtonClass} onClick={dismissResumeFlow}>
-                    Dismiss
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)]">
-              <div className={`${metallicPanelInteractiveClass} rounded-[1.25rem] p-5 text-[#E8EDF4]`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#9cb8df]">Recommended first step</div>
-                    <div className="text-xl font-semibold tracking-[-0.02em] text-[#F5F8FC]">
-                      Plan your route, weather, and hazards (~2 min)
-                    </div>
-                    <p className="text-sm leading-6 text-[#B8C8DA]">
-                      Build your route, weather, and hazards in one place before you create an account.
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff]">
-                    About 2 minutes
-                  </Badge>
-                </div>
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <Button type="button" className={metallicPrimaryButtonClass} onClick={() => handleFirstActionClick("planner")}>
-                    Open Flight Planner
-                  </Button>
-                </div>
-              </div>
-
-              <div className={`${metallicPanelInteractiveClass} rounded-[1.25rem] p-5 text-[#E8EDF4]`}>
-                <div className="space-y-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#9cb8df]">Quick logbook start</div>
-                  <div className="text-lg font-semibold tracking-[-0.02em] text-[#F5F8FC]">Log your first flight</div>
-                  <p className="text-sm leading-6 text-[#B8C8DA]">
-                    Start tracking your hours with a simple first entry in about a minute.
-                  </p>
-                </div>
-                <div className="mt-5">
-                  <Button type="button" variant="outline" className={metallicSecondaryButtonClass} onClick={() => handleFirstActionClick("logbook")}>
-                    Open quick log
-                  </Button>
-                </div>
-              </div>
-
-              <div className={`${metallicPanelInteractiveClass} rounded-[1.25rem] p-5 text-[#E8EDF4]`}>
-                <div className="space-y-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#9cb8df]">Aircraft search</div>
-                  <div className="text-lg font-semibold tracking-[-0.02em] text-[#F5F8FC]">Explore aircraft rentals</div>
-                  <p className="text-sm leading-6 text-[#B8C8DA]">
-                    Find aircraft near you and compare options without leaving RSF.
-                  </p>
-                </div>
-                <div className="mt-5">
-                  <Button type="button" variant="outline" className={metallicSecondaryButtonClass} onClick={() => handleFirstActionClick("rentals")}>
-                    Browse rentals
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div className="rsf-metal-section px-4 py-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="mb-3 text-center">
-            <p className="text-sm font-medium text-[#E1E8F2]">Check live conditions while you plan</p>
-            <p className="text-xs text-[#98AEC8]">Quick airport weather, runway, and NOTAM context without leaving the homepage.</p>
-          </div>
-          <div className="relative flex flex-col gap-2 sm:flex-row">
-            <div className="relative flex-1">
-              <Input
-                value={icaoInput}
-                onChange={(e) => setIcaoInput(e.target.value)}
-                onBlur={submitIcao}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") { e.preventDefault(); refreshAirportConditions(); }
-                }}
-                placeholder="ICAO or city, e.g. KAUS"
-                className="h-12 border-[#4c5d73]/35 bg-[#0f1318] font-mono text-base text-[#F3F7FC] placeholder:text-[#60758f]"
-              />
-              {(loadingSuggestions || airportSuggestions.length > 0) && (
-                 <div className="absolute z-20 mt-1 w-full rounded-md border border-[#47576c]/35 bg-[#11161d] shadow-lg">
-                  {loadingSuggestions ? (
-                    <div className="px-3 py-2 text-xs text-[#91a8c3]">Searching airports...</div>
-                  ) : (
-                    <ul className="max-h-52 overflow-auto">
-                      {airportSuggestions.map((s) => (
-                        <li key={s.icao}>
-                          <button
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => applySuggestion(s)}
-                            className="w-full px-3 py-2 text-left text-sm text-[#E8EDF4] transition-colors hover:bg-[#18202a]"
-                          >
-                            <div className="font-semibold font-mono text-[#F1F5FA]">{s.icao}</div>
-                            <div className="text-xs text-[#91a8c3]">
-                              {[s.name, s.city, s.state].filter(Boolean).join(" / ")}
-                            </div>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </div>
-            <Button
-              onClick={() => { refreshAirportConditions(); scrollToWeatherSection(); }}
-              disabled={!ICAO_REGEX.test(icaoInput.trim().toUpperCase())}
-              className={`h-12 shrink-0 px-6 ${metallicPrimaryButtonClass}`}
-            >
-              Check Conditions
-            </Button>
-          </div>
-        </div>
       </div>
 
-      <section className="rsf-metal-section">
-        <div className="container mx-auto px-4 py-14 sm:py-16">
-          <div className="max-w-3xl space-y-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9cb8df]">Why RSF Exists</div>
-            <h2 className="text-3xl font-semibold tracking-[-0.03em] text-[#F5F8FC] sm:text-4xl">
-              Still juggling multiple aviation apps?
-            </h2>
-            <p className="text-base leading-7 text-[#C0CDDC]">
-              Most GA pilots bounce between separate tools for flight planning, weather, NOTAMs, filing, in-flight tracking, training, rentals, and marketplace activity. RSF brings those workflows back into one aviation-native platform.
-            </p>
-          </div>
-          <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {fragmentedWorkflowCards.map((item) => (
-                <div key={item.title} className={`${metallicPanelInteractiveClass} rounded-[1.1rem] p-5`}>
-                  <div className="rsf-metal-icon-chip flex h-11 w-11 items-center justify-center rounded-[0.85rem] text-[#9ebdff]">
-                    <item.icon className="h-5 w-5" />
-                  </div>
-                  <div className="mt-4 text-base font-semibold text-[#F5F8FC]">{item.title}</div>
-                  <p className="mt-2 text-sm leading-6 text-[#B8C8DA]">{item.description}</p>
-                </div>
-              ))}
-            </div>
-            <Card className={`${metallicPanelClass} text-[#E8EDF4]`}>
-              <CardContent className="space-y-5 p-6">
-                <div>
-                  <div className="text-[10px] uppercase tracking-[0.22em] text-[#9cb8df]">Unified Answer</div>
-                  <h3 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-[#F5F8FC]">RSF keeps the flight, the tools, and the follow-through on one system.</h3>
-                </div>
-                <div className="space-y-3">
-                  {[
-                    "One route can flow from web planning into the app instead of being rebuilt from scratch.",
-                    "One account connects filing, logbook, training, rentals, marketplace, and utilities.",
-                    "One ecosystem keeps the pilot workflow connected before, during, and after the flight.",
-                  ].map((item) => (
-                    <div key={item} className={`${metallicSubpanelClass} rounded-[0.95rem] px-4 py-3 text-sm leading-6 text-[#DCE6F2]`}>
-                      {item}
-                    </div>
-                  ))}
-                </div>
-                <Button asChild className={`w-full ${metallicPrimaryButtonClass}`}>
-                  <Link
-                    href="/register"
-                    onClick={() => trackEvent("cta_click", { label: "landing_fragmentation_register", target: "/register" })}
-                  >
-                    Create Free Account
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
+      <LandingCurrentConditions
+        open={openLandingModules.includes("conditions")}
+        icaoInput={icaoInput}
+        searchIcao={searchIcao}
+        airportSuggestions={airportSuggestions}
+        loadingSuggestions={loadingSuggestions}
+        airportMeta={airportMeta}
+        airportLocation={airportLocation}
+        isValidIcao={ICAO_REGEX.test(icaoInput.trim().toUpperCase())}
+        weather={weather}
+        runwayBriefing={runwayBriefing}
+        notams={notams}
+        weatherLoading={weatherLoading}
+        weatherFetching={weatherFetching}
+        runwayLoading={runwayLoading}
+        runwayFetching={runwayFetching}
+        notamsLoading={notamsLoading}
+        notamsFetching={notamsFetching}
+        notamsError={notamsError}
+        conditionsTitle={conditionsTitle}
+        weatherUpdatedAt={weatherUpdatedAt}
+        weatherAvailabilityMessage={weatherAvailabilityMessage}
+        flightCategory={flightCategory}
+        runwayInUseDisplay={runwayInUseDisplay}
+        atisInfo={atisInfo}
+        weatherHazards={weatherHazards}
+        showAiWeatherSummary={showAiWeatherSummary}
+        showAiNotamTranslator={showAiNotamTranslator}
+        onIcaoInputChange={setIcaoInput}
+        onSubmitIcao={submitIcao}
+        onRefresh={refreshAirportConditions}
+        onApplySuggestion={applySuggestion}
+        onToggleAiWeatherSummary={() => {
+          const next = !showAiWeatherSummary;
+          setShowAiWeatherSummary(next);
+          if (next) {
+            pixelEvent("ViewContent", {
+              content_name: "AI Weather Summary",
+              content_category: "Aviation Tools",
+            });
+          }
+        }}
+        onToggleAiNotamTranslator={() => {
+          const next = !showAiNotamTranslator;
+          setShowAiNotamTranslator(next);
+          if (next) {
+            pixelEvent("ViewContent", {
+              content_name: "AI NOTAM Translator",
+              content_category: "Aviation Tools",
+            });
+          }
+        }}
+      />
+
+      {openLandingModules.includes("partner") && (
+        <div className="hidden py-10 sm:py-12 md:block">
+          <div className="container mx-auto px-4">
+            <FeaturedPartnerToolCard
+              className="mx-auto w-full md:w-2/3"
+              partnerKey="av8maps"
+              title="Av8Maps - Nationwide GA Destination Maps"
+              description="Choose your next flight destination with fly-in camping, restaurants, aviation-friendly stays, and more."
+              logoSrc={av8mapsLogo}
+              ctaLabel="Explore Av8Maps"
+              outboundPath="/out/av8maps"
+              placement="home_featured_partner_card"
+              source="home_featured_partner_card"
+              badgeLabel="Featured Partner Tool"
+              embedEnabled={AV8MAPS_EMBED_ENABLED}
+              embedUrl={AV8MAPS_EMBED_URL || undefined}
+              tiles={av8mapsTiles}
+            />
           </div>
         </div>
-      </section>
-
-      <section className="rsf-metal-section">
-        <div className="container mx-auto px-4 py-14 sm:py-16">
-          <div className="grid gap-8 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:items-start">
-            <div className="space-y-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9cb8df]">Serious Differentiator</div>
-              <h2 className="text-3xl font-semibold tracking-[-0.03em] text-[#F5F8FC] sm:text-4xl">
-                Plan on the web. File with the FAA. Follow the flight in the app.
-              </h2>
-              <p className="text-base leading-7 text-[#C0CDDC]">
-                RSF is built around continuity. Start the flight plan on the web, submit it to FAA Flight Service, pick it up with ATC when ready, then continue the flight in the app with the same operational context still intact.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {[
-                  "Full FMS capability in the mobile app",
-                  "Live traffic and en route weather",
-                  "ADS-B connectivity for compatible setups",
-                  "FAA filing workflow without switching platforms",
-                ].map((item) => (
-                  <div key={item} className={`${metallicSubpanelClass} rounded-[1rem] px-4 py-3 text-sm text-[#E0E7F1]`}>
-                    {item}
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Button asChild className={metallicPrimaryButtonClass}>
-                  <Link
-                    href="/flight-planner"
-                    onClick={() => trackEvent("cta_click", { label: "landing_workflow_open_planner", target: "/flight-planner" })}
-                  >
-                    Start on the Web
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className={metallicSecondaryButtonClass}>
-                  <Link
-                    href="/adsb-receiver-help"
-                    onClick={() => trackEvent("cta_click", { label: "landing_workflow_adsb_help", target: "/adsb-receiver-help" })}
-                  >
-                    See ADS-B Connectivity
-                  </Link>
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid gap-4">
-              {workflowSteps.map((step, index) => (
-                <div key={step.title} className={`${metallicPanelInteractiveClass} rounded-[1.15rem] p-5 text-[#E8EDF4]`}>
-                  <div className="flex items-start gap-4">
-                    <div className="rsf-metal-icon-chip flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#9ebdff]">
-                      <step.icon className="h-5 w-5" />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-[10px] uppercase tracking-[0.22em] text-[#9cb8df]">Phase {index + 1}</div>
-                      <div className="text-lg font-semibold text-[#F5F8FC]">{step.title}</div>
-                      <div className="text-sm leading-6 text-[#B8C8DA]">{step.description}</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+      )}
 
       {activeMobileTab === "find" && (
         <div className="border-b border-[#203249] bg-[#0a0e14] md:hidden">
@@ -2394,340 +2134,6 @@ export default function Landing() {
             </div>
           </div>
         </div>
-      )}
-
-      <div id="landing-ecosystem-section" className="hidden rsf-section-band py-8 sm:py-10 md:block">
-        <div className="container mx-auto px-4">
-          <div className={`grid gap-6 ${!hasProPlus ? "xl:grid-cols-[minmax(0,1.12fr)_320px]" : ""}`}>
-            <section className={`${metallicPanelClass} rounded-[1.45rem] p-5 text-[#E8EDF4] sm:p-6 ${activeMobileTab === "find" || activeMobileTab === "plan" || activeMobileTab === "log" ? "" : "hidden md:block"}`}>
-              <div className="mb-6 space-y-2">
-                <span className="rsf-kicker text-[#bfd0e8]">The Full RSF Ecosystem</span>
-                <h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#F5F8FC] sm:text-3xl">Beyond the flight plan, everything else stays connected too.</h2>
-                <p className="max-w-3xl text-sm text-[#AFC1D6]">RSF is not only a planner. It keeps training, logbook, marketplace, rentals, pilot tools, and follow-through tied back to the same aviation workflow.</p>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {ecosystemCards.map((card) => (
-                  <div key={card.title} className={`${metallicPanelInteractiveClass} flex flex-col gap-4 rounded-[1.15rem] p-5`}>
-                    <div className="flex items-center gap-3">
-                      <div className="rsf-metal-icon-chip flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.75rem]">
-                        <card.icon className="h-5 w-5 text-[#9ebdff]" />
-                      </div>
-                      <div className="text-base font-semibold text-[#F5F8FC]">{card.title}</div>
-                    </div>
-                    <p className="text-sm leading-6 text-[#B8C8DA]">{card.description}</p>
-                    <div className="mt-auto flex flex-wrap gap-2 pt-2">
-                      {card.actions.map((action, index) => (
-                        <Button
-                          key={action.href}
-                          asChild
-                          variant={index === 0 ? "default" : "outline"}
-                          className={index === 0 ? metallicPrimaryButtonClass : metallicSecondaryButtonClass}
-                        >
-                          <Link href={action.href} onClick={() => trackEvent("cta_click", { label: action.track, target: action.href })}>
-                            {action.label}
-                          </Link>
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-            {!hasProPlus && (
-              <aside className="hidden md:block">
-                <Card id="landing-membership-section" className={`${metallicPanelClass} sticky top-24 overflow-hidden text-[#E8EDF4]`}>
-                  <div className="rsf-metal-divider bg-[linear-gradient(135deg,rgba(22,28,36,0.96),rgba(19,34,61,0.92),rgba(13,19,28,0.98))] px-5 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="rsf-kicker text-[#d4e1f7]">RSF Premium</span>
-                      <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141d29] text-[#d6e4ff]">
-                        Membership status
-                      </Badge>
-                    </div>
-                    <div className="mt-3 space-y-1">
-                      <div className="text-[10px] uppercase tracking-[0.24em] text-[#9cb8df]">Pilot workflow upgrade</div>
-                      <div className="text-2xl font-semibold tracking-[-0.02em] text-[#F5F8FC]">{membershipCtaLabel}</div>
-                    </div>
-                  </div>
-                  <CardContent className="space-y-4 p-5">
-                    <div className={`${metallicSubpanelClass} rounded-[0.95rem] p-4`}>
-                      <div className="text-[10px] uppercase tracking-[0.22em] text-[#9cb8df]">Why this lives here</div>
-                      <p className="mt-2 text-sm leading-6 text-[#C1D0E0]">
-                        {membershipCtaDescription}
-                      </p>
-                    </div>
-                    <div className="grid gap-3">
-                      {[
-                        "Detailed plan comparison moved off the landing page",
-                        "Quick Start stays focused on day-of-flight workflows",
-                        "Use the dedicated membership page for subscribe and manage actions",
-                      ].map((item) => (
-                        <div key={item} className={`${metallicSubpanelClass} rounded-[0.95rem] px-3 py-2.5 text-sm text-[#E0E7F1]`}>
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-                    <Button asChild className={`w-full ${metallicPrimaryButtonClass}`}>
-                      <Link
-                        href={membershipPageHref}
-                        onClick={() => trackEvent("cta_click", { label: "landing_sidebar_membership_cta", target: membershipPageHref })}
-                      >
-                        {membershipCtaLabel}
-                      </Link>
-                    </Button>
-                    <p className="text-xs text-[#A1B5CC]">
-                      The membership page now carries plan details, feature breakdowns, and subscription links instead of splitting attention on the landing surface.
-                    </p>
-                  </CardContent>
-                </Card>
-              </aside>
-            )}
-
-          </div>
-
-        </div>
-      </div>
-      </div>
-
-      <LandingModuleChooser
-        modules={[
-          {
-            id: "conditions",
-            title: "Current Conditions",
-            description: "Weather, runway guidance, and NOTAM context",
-          },
-          {
-            id: "cfi",
-            title: "Create Your CFI Profile",
-            description: "Instructor directory and profile setup",
-          },
-          {
-            id: "partner",
-            title: "Featured Partner Tool",
-            description: "Destination planning with Av8Maps",
-          },
-          {
-            id: "events",
-            title: "Community Calendar",
-            description: "Fly-ins, safety seminars, and aviation events",
-          },
-        ]}
-        openModules={openLandingModules}
-        onToggle={toggleLandingModule}
-      />
-
-      <LandingCurrentConditions
-        open={openLandingModules.includes("conditions")}
-        icaoInput={icaoInput}
-        searchIcao={searchIcao}
-        airportSuggestions={airportSuggestions}
-        loadingSuggestions={loadingSuggestions}
-        airportMeta={airportMeta}
-        airportLocation={airportLocation}
-        isValidIcao={ICAO_REGEX.test(icaoInput.trim().toUpperCase())}
-        weather={weather}
-        runwayBriefing={runwayBriefing}
-        notams={notams}
-        weatherLoading={weatherLoading}
-        weatherFetching={weatherFetching}
-        runwayLoading={runwayLoading}
-        runwayFetching={runwayFetching}
-        notamsLoading={notamsLoading}
-        notamsFetching={notamsFetching}
-        notamsError={notamsError}
-        conditionsTitle={conditionsTitle}
-        weatherUpdatedAt={weatherUpdatedAt}
-        weatherAvailabilityMessage={weatherAvailabilityMessage}
-        flightCategory={flightCategory}
-        runwayInUseDisplay={runwayInUseDisplay}
-        atisInfo={atisInfo}
-        weatherHazards={weatherHazards}
-        showAiWeatherSummary={showAiWeatherSummary}
-        showAiNotamTranslator={showAiNotamTranslator}
-        onIcaoInputChange={setIcaoInput}
-        onSubmitIcao={submitIcao}
-        onRefresh={refreshAirportConditions}
-        onApplySuggestion={applySuggestion}
-        onToggleAiWeatherSummary={() => {
-          const next = !showAiWeatherSummary;
-          setShowAiWeatherSummary(next);
-          if (next) {
-            pixelEvent("ViewContent", {
-              content_name: "AI Weather Summary",
-              content_category: "Aviation Tools",
-            });
-          }
-        }}
-        onToggleAiNotamTranslator={() => {
-          const next = !showAiNotamTranslator;
-          setShowAiNotamTranslator(next);
-          if (next) {
-            pixelEvent("ViewContent", {
-              content_name: "AI NOTAM Translator",
-              content_category: "Aviation Tools",
-            });
-          }
-        }}
-      />
-      {/* CFI marketplace and featured partner */}
-      {(openLandingModules.includes("cfi") || openLandingModules.includes("partner") || activeMobileTab === "find") && (
-      <div className={`py-10 sm:py-12 ${activeMobileTab !== "find" ? "hidden md:block" : ""}`}>
-        <div className="container mx-auto px-4">
-          {(openLandingModules.includes("partner") || activeMobileTab === "find") ? (
-            <FeaturedPartnerToolCard
-              className="mt-6 mx-auto w-full md:w-2/3"
-              partnerKey="av8maps"
-              title="Av8Maps - Nationwide GA Destination Maps"
-              description="Choose your next flight destination with fly-in camping, restaurants, aviation-friendly stays, and more."
-              logoSrc={av8mapsLogo}
-              ctaLabel="Explore Av8Maps"
-              outboundPath="/out/av8maps"
-              placement="home_featured_partner_card"
-              source="home_featured_partner_card"
-              badgeLabel="Featured Partner Tool"
-              embedEnabled={AV8MAPS_EMBED_ENABLED}
-              embedUrl={AV8MAPS_EMBED_URL || undefined}
-              tiles={av8mapsTiles}
-            />
-          ) : null}
-          {(openLandingModules.includes("cfi") || activeMobileTab === "find") ? (
-          <Card className={`${metallicPanelClass} mt-6 text-[#E8EDF4]`}>
-            <CardContent className="p-5 sm:p-6 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-4 max-w-3xl">
-                <div className="space-y-2">
-                  <span className="rsf-kicker text-[#d4e1f7]">CFI Marketplace</span>
-                  <div className="flex items-center gap-2 text-base sm:text-lg font-semibold text-[#F5F8FC]">
-                    <BookOpen className="h-5 w-5 text-[#9ebdff]" />
-                    CFI Instructors: Create your RSF profile
-                  </div>
-                  <p className="text-sm text-[#AFC1D6] max-w-2xl">
-                    Get discovered by student pilots, highlight your ratings, set your training focus, and accept booking requests through the CFI marketplace.
-                  </p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {[
-                    "Create a free RSF account or sign in",
-                    "Build your instructor profile with ratings and specialties",
-                    "Appear in the directory and receive student inquiries",
-                  ].map((item) => (
-                    <div key={item} className={`${metallicSubpanelClass} rounded-[0.9rem] p-3 text-sm text-[#AFC1D6]`}>
-                      {item}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="flex w-full flex-col gap-3 sm:w-auto sm:min-w-[260px]">
-                <Button variant="outline" asChild className={metallicSecondaryButtonClass}>
-                  <Link
-                    href="/cfi"
-                    onClick={() => trackEvent("cta_click", { label: "landing_cfi_directory", target: "/cfi" })}
-                  >
-                    View CFI directory
-                  </Link>
-                </Button>
-                <Button asChild className={metallicPrimaryButtonClass}>
-                  <Link
-                    href={isAuthenticated ? "/dashboard/cfi" : "/register"}
-                    onClick={() =>
-                      trackEvent("cta_click", {
-                        label: isAuthenticated ? "landing_cfi_create_profile" : "landing_cfi_register",
-                        target: isAuthenticated ? "/dashboard/cfi" : "/register",
-                      })
-                    }
-                  >
-                    {isAuthenticated ? "Create your profile" : "Create free account"}
-                  </Link>
-                </Button>
-                {!isAuthenticated ? (
-                    <Button variant="ghost" asChild className="text-[#b9cbdf] hover:bg-[#161d27] hover:text-[#F5F8FC]">
-                    <Link
-                      href="/login"
-                      onClick={() => trackEvent("cta_click", { label: "landing_cfi_sign_in", target: "/login" })}
-                    >
-                      Already have an account? Sign in
-                    </Link>
-                  </Button>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-          ) : null}
-          <Card className={`${metallicPanelClass} mt-6 text-[#E8EDF4]`}>
-            <CardContent className="p-5 sm:p-6 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-4 max-w-3xl">
-                <div className="space-y-2">
-                  <span className="rsf-kicker text-[#d4e1f7]">Flying Clubs</span>
-                  <div className="flex items-center gap-2 text-base sm:text-lg font-semibold text-[#F5F8FC]">
-                    <Users className="h-5 w-5 text-[#9ebdff]" />
-                    Run your flying club inside RSF
-                  </div>
-                  <p className="text-sm text-[#AFC1D6] max-w-2xl">
-                    Clubs can create a profile, organize members, assign aircraft, and build a shared scheduling workflow. Pilots can also browse listed clubs through the RSF club directory.
-                  </p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {[
-                    "Create a club profile and publish it in the RSF directory",
-                    "Organize member access, fleet records, and club communications",
-                    "Grow into deeper scheduling, billing, and maintenance workflows over time",
-                  ].map((item) => (
-                    <div key={item} className={`${metallicSubpanelClass} rounded-[0.9rem] p-3 text-sm text-[#AFC1D6]`}>
-                      {item}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="flex w-full flex-col gap-3 sm:w-auto sm:min-w-[260px]">
-                <Button variant="outline" asChild className={metallicSecondaryButtonClass}>
-                  <Link
-                    href="/flying-clubs"
-                    onClick={() => trackEvent("cta_click", { label: "landing_flying_clubs_directory", target: "/flying-clubs" })}
-                  >
-                    View Flying Clubs
-                  </Link>
-                </Button>
-                <Button asChild className={metallicPrimaryButtonClass}>
-                  <Link
-                    href={isAuthenticated ? "/flying-clubs" : "/register"}
-                    onClick={() =>
-                      trackEvent("cta_click", {
-                        label: isAuthenticated ? "landing_flying_clubs_start" : "landing_flying_clubs_register",
-                        target: isAuthenticated ? "/flying-clubs" : "/register",
-                      })
-                    }
-                  >
-                    {isAuthenticated ? "Start your club" : "Create free account"}
-                  </Link>
-                </Button>
-                {!isAuthenticated ? (
-                  <Button variant="ghost" asChild className="text-[#b9cbdf] hover:bg-[#161d27] hover:text-[#F5F8FC]">
-                    <Link
-                      href="/login"
-                      onClick={() => trackEvent("cta_click", { label: "landing_flying_clubs_sign_in", target: "/login" })}
-                    >
-                      Already have an account? Sign in
-                    </Link>
-                  </Button>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-      )}
-
-      {/* Aviation Events Feed */}
-      {(openLandingModules.includes("events") || activeMobileTab === "find") && (
-      <div className={`py-10 ${activeMobileTab !== "find" ? "hidden md:block" : ""}`}>
-        <LandingEventsRail
-          feedEvents={feedEvents}
-          eventsScrollRef={eventsScrollRef}
-          formatEventRange={formatEventRange}
-          onHoveringChange={setEventsHovering}
-          onPauseAutoScroll={() => pauseAutoScroll()}
-          onScroll={scrollEvents}
-          onEventClick={() => trackEvent("cta_click", { label: "events_feed", target: "/events" })}
-        />
-      </div>
       )}
 
       <Dialog open={isQuickLogOpen} onOpenChange={setIsQuickLogOpen}>

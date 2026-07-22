@@ -1231,7 +1231,7 @@ export default function Landing() {
               { label: "Flight Planner", desc: "Route, fuel, timing, alternates.", href: "/flight-planner", icon: Plane },
               { label: "TFR + NOTAM Map", desc: "Active restrictions and airspace.", href: "/tfr-map", icon: AlertTriangle },
               { label: "E6B Calculator", desc: "Wind, fuel burn, time/speed/dist.", href: "/tools/e6b", icon: Calculator },
-              { label: "Crosswind Calc", desc: "Headwind and crosswind components.", href: "/pilot-tools", icon: Plane },
+              { label: "Crosswind Calc", desc: "Headwind and crosswind components.", href: "/crosswind-calculator", icon: Plane },
               { label: "Density Altitude", desc: "Performance altitude calculator.", href: "/density-altitude", icon: Plane },
               { label: "All Tools", desc: "Full tool hub.", href: "/tool-hub", icon: Search },
             ].map((item) => (

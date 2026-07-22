@@ -97,7 +97,7 @@ export const RSF_TOOLS: ToolRegistryItem[] = [
     id: "pilot-calculators",
     title: "Crosswind Calculator",
     description: "Quick headwind, tailwind, and crosswind component planning.",
-    path: "/pilot-tools#calculators",
+    path: "/crosswind-calculator",
     group: "calculate",
     keywords: ["crosswind", "headwind", "tailwind", "calculator"],
   },

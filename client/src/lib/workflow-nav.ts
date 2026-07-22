@@ -36,7 +36,7 @@ export const WORKFLOW_NAV_GROUPS: WorkflowNavGroup[] = [
     items: [
       { label: "EFB Tool Hub", href: "/tool-hub", description: "All RSF pilot tools in one place." },
       { label: "Density Altitude", href: "/density-altitude", description: "Pressure altitude, ISA deviation, and density altitude." },
-      { label: "Crosswind Calculator", href: "/pilot-tools#calculators", description: "Headwind, tailwind, and crosswind component planning." },
+      { label: "Crosswind Calculator", href: "/crosswind-calculator", description: "Headwind, tailwind, and crosswind component planning." },
       { label: "Weight & Balance", href: "/weight-balance", description: "Weight, CG, and envelope planning." },
       { label: "E6B Flight Computer", href: "/tools/e6b", description: "Wind, fuel, speed, time, and altitude math." },
       { label: "Logbook", href: "/logbook", description: "Digital flight records and currency tracking." },

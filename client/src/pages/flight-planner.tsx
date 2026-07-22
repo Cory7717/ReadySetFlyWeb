@@ -6000,7 +6000,7 @@ export default function FlightPlanner() {
         title: "Crosswind component",
         description: "Winds and runway heading suggest a notable crosswind component for departure.",
         cta: "Review crosswind calculator",
-        href: "/pilot-tools",
+        href: "/crosswind-calculator",
       });
     }
 

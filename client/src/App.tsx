@@ -63,6 +63,7 @@ import TfrMap from "@/pages/tfr-map";
 import OwnershipCostCalculator from "@/pages/ownership-cost-calculator";
 import WeightBalance from "@/pages/weight-balance";
 import DensityAltitude from "@/pages/density-altitude";
+import CrosswindCalculator from "@/pages/crosswind-calculator";
 import LogbookPro from "@/pages/logbook-pro";
 import LogbookProSuccess from "@/pages/logbook-pro-success";
 import LogbookProCancel from "@/pages/logbook-pro-cancel";
@@ -273,6 +274,7 @@ function Router() {
       <Route path="/ownership-cost-calculator" component={() => <PaidToolAccess component={OwnershipCostCalculator} />} />
       <Route path="/weight-balance" component={() => <PaidToolAccess component={WeightBalance} />} />
       <Route path="/density-altitude" component={DensityAltitude} />
+      <Route path="/crosswind-calculator" component={() => <PaidToolAccess component={CrosswindCalculator} />} />
       <Route path="/tools/e6b" component={() => <PaidToolAccess component={Eb6Calculator} />} />
       <Route path="/radio-comms-trainer" component={() => <PaidToolAccess component={RadioCommsTrainer} />} />
       <Route path="/adsb-receiver-help" component={() => <PaidToolAccess component={AdsbReceiverHelp} />} />

@@ -22,6 +22,10 @@ test("landing page omits redundant navigation-style sections", () => {
     "Web-to-App Continuity",
     "One flight, one workflow, one ecosystem",
     "workflowSteps",
+    "Plan, train, fly, and manage your aviation workflow.",
+    "Start Flight Plan",
+    "landing_hero_open_planner",
+    "landing_hero_explore_tools",
   ];
 
   for (const removedSection of removedSections) {
@@ -41,9 +45,8 @@ test("landing page keeps current conditions and featured partner modules", () =>
   assert.match(landingSource, /Av8Maps - Nationwide GA Destination Maps/);
 });
 
-test("landing hero tools CTA points to a live route instead of a removed section anchor", () => {
-  assert.match(landingSource, /href="\/tool-hub"/);
-  assert.match(landingSource, /landing_hero_explore_tools/);
+test("landing hero keeps concise headline and no removed section anchor", () => {
+  assert.match(landingSource, /Ready Set Fly keeps the pilot workflow in one place/);
   assert.equal(landingSource.includes("#landing-workflow-section"), false);
 });
 
@@ -51,4 +54,10 @@ test("landing premium flat-rate banner is hidden from signed-in users", () => {
   assert.match(landingSource, /!\s*isAuthenticated\s*&&\s*\(/);
   assert.match(landingSource, /New flat rate/);
   assert.match(landingSource, /landing_premium_banner/);
+});
+
+test("landing app download badges render near the top of the page", () => {
+  assert.match(landingSource, /source="landing_top_bar"/);
+  assert.match(landingSource, /Ready Set Fly is available on Android/);
+  assert.doesNotMatch(landingSource, /source="landing_hero"/);
 });

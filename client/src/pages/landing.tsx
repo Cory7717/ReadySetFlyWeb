@@ -927,6 +927,20 @@ export default function Landing() {
           </div>
         </div>
       )}
+      <div className="border-b border-[#5d6f85]/12 bg-[#0a0e14]">
+        <div className="container mx-auto flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm font-medium text-[#CCD7E5]">
+            Ready Set Fly is available on Android. iPhone support is coming soon.
+          </div>
+          <AppDownloadBadges
+            source="landing_top_bar"
+            forceRow
+            showSupportText={false}
+            className="space-y-0"
+            rowClassName="justify-start sm:justify-end"
+          />
+        </div>
+      </div>
       {activeMobileTab === "weather" && (
         <div className="md:hidden">
           <div className="container mx-auto space-y-4 px-4 pt-4 text-[#E8EDF4]">
@@ -1782,47 +1796,12 @@ export default function Landing() {
               </div>
               <div className="space-y-4">
                 <h1 className="max-w-4xl text-4xl font-semibold tracking-[-0.045em] text-[#F6F8FC] sm:text-5xl xl:text-6xl [font-family:var(--font-display)]">
-                  Plan, train, fly, and manage your aviation workflow.
-                  <span className="block text-[#cdd9ee]">Ready Set Fly keeps the pilot workflow in one place.</span>
+                  Ready Set Fly keeps the pilot workflow in one place.
                 </h1>
-                <p className="max-w-3xl text-lg leading-8 text-[#CCD6E4]">
-                  Plan, train, fly, and manage your aviation workflow in one place. Start with a flight plan, then review weather, route context, aircraft records, training tools, and marketplace access without hunting through disconnected menus.
+                <p className="max-w-2xl text-lg leading-8 text-[#CCD6E4]">
+                  Plan flights, review weather, track training, manage records, and keep the next aviation step close.
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {[
-                  "One shared workflow from planning to post-flight follow-through",
-                  "Web-to-app continuity instead of disconnected tools",
-                  "Live flight plan submission to FAA Flight Service",
-                  "Training, rentals, marketplace, and pilot tools under one account",
-                ].map((item) => (
-                  <div key={item} className={`${metallicSubpanelClass} px-4 py-3 text-sm text-[#E0E7F1]`}>
-                    {item}
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Button asChild size="lg" className={metallicPrimaryButtonClass}>
-                  <Link
-                    href="/flight-planner"
-                    onClick={() => trackEvent("cta_click", { label: "landing_hero_open_planner", target: "/flight-planner" })}
-                  >
-                    Start Flight Plan
-                  </Link>
-                </Button>
-                <Button asChild size="lg" variant="outline" className={metallicSecondaryButtonClass}>
-                  <Link
-                    href="/tool-hub"
-                    onClick={() => trackEvent("cta_click", { label: "landing_hero_explore_tools", target: "/tool-hub" })}
-                  >
-                    Explore Tools
-                  </Link>
-                </Button>
-              </div>
-              <AppDownloadBadges
-                source="landing_hero"
-                className="sm:inline-block"
-              />
               <p className="text-sm text-[#9aafcc] leading-relaxed">
                 Pilots are already using RSF to plan, file, and track flights in one place.{" "}
                 <span className="text-[#c0d0e8]">Free to use. No account required to start planning.</span>

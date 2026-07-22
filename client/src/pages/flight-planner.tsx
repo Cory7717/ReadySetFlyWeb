@@ -5990,7 +5990,7 @@ export default function FlightPlanner() {
         title: "Density altitude check",
         description: "Performance may be impacted at the departure airport based on temperature and elevation.",
         cta: "Open density altitude calculator",
-        href: "/pilot-tools",
+        href: "/density-altitude",
       });
     }
 

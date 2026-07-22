@@ -95,11 +95,19 @@ export const RSF_TOOLS: ToolRegistryItem[] = [
   },
   {
     id: "pilot-calculators",
-    title: "Crosswind + Density Altitude",
-    description: "Quick wind component and density altitude planning tools.",
+    title: "Crosswind Calculator",
+    description: "Quick headwind, tailwind, and crosswind component planning.",
     path: "/pilot-tools#calculators",
     group: "calculate",
-    keywords: ["crosswind", "density altitude", "headwind", "tailwind", "calculator"],
+    keywords: ["crosswind", "headwind", "tailwind", "calculator"],
+  },
+  {
+    id: "density-altitude",
+    title: "Density Altitude Calculator",
+    description: "Pressure altitude, ISA deviation, and density altitude planning.",
+    path: "/density-altitude",
+    group: "calculate",
+    keywords: ["density altitude", "density calculator", "pressure altitude", "isa deviation", "performance calculator"],
   },
   {
     id: "weight-balance",

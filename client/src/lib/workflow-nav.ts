@@ -1,4 +1,4 @@
-export type WorkflowNavGroupId = "plan" | "fly" | "train" | "manage" | "marketplace" | "schools";
+export type WorkflowNavGroupId = "plan" | "efb" | "fly" | "train" | "manage" | "marketplace" | "schools";
 
 export type WorkflowNavItem = {
   label: string;
@@ -27,6 +27,20 @@ export const WORKFLOW_NAV_GROUPS: WorkflowNavGroup[] = [
       { label: "Route Builder Assist", href: "/flight-planner", description: "Build and review route suggestions." },
       { label: "Runway Briefings", href: "/pilot-tools", description: "Runway, airport, and conditions tools." },
       { label: "Cabin Brief", href: "/cabin-brief", description: "Passenger-friendly weather briefings." },
+    ],
+  },
+  {
+    id: "efb",
+    label: "EFB",
+    description: "Pilot calculators, records, and electronic flight bag tools.",
+    items: [
+      { label: "EFB Tool Hub", href: "/tool-hub", description: "All RSF pilot tools in one place." },
+      { label: "Density Altitude", href: "/density-altitude", description: "Pressure altitude, ISA deviation, and density altitude." },
+      { label: "Weight & Balance", href: "/weight-balance", description: "Weight, CG, and envelope planning." },
+      { label: "E6B Flight Computer", href: "/tools/e6b", description: "Wind, fuel, speed, time, and altitude math." },
+      { label: "Logbook", href: "/logbook", description: "Digital flight records and currency tracking." },
+      { label: "Ownership Cost Calculator", href: "/ownership-cost-calculator", description: "Estimate aircraft ownership costs." },
+      { label: "Pilot Tools", href: "/pilot-tools", description: "Airport conditions, crosswind, and briefing tools." },
     ],
   },
   {
@@ -63,11 +77,8 @@ export const WORKFLOW_NAV_GROUPS: WorkflowNavGroup[] = [
     description: "Records, aircraft, ownership, and account operations.",
     items: [
       { label: "Dashboard", href: "/dashboard", description: "Account overview and quick actions." },
-      { label: "Logbook", href: "/logbook", description: "Digital logbook and currency tracking." },
       { label: "My Aircraft", href: "/my-aircraft", description: "Saved aircraft profiles." },
       { label: "Aircraft Profiles", href: "/my-aircraft", description: "Performance and filing defaults." },
-      { label: "Weight & Balance", href: "/weight-balance", description: "Weight and CG planning." },
-      { label: "Ownership Cost Calculator", href: "/ownership-cost-calculator", description: "Estimate aircraft ownership costs." },
       { label: "Notifications", href: "/notifications", description: "Provider and account notifications." },
     ],
   },

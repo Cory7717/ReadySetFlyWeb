@@ -30,6 +30,7 @@ const iconMap: Record<string, ComponentType<{ className?: string }>> = {
   "aviation-weather": CloudSun,
   e6b: Calculator,
   "pilot-calculators": Calculator,
+  "density-altitude": Calculator,
   "weight-balance": Calculator,
   "ownership-cost": Calculator,
   "radio-comms": Signal,
@@ -57,6 +58,7 @@ const MARKETPLACE_PATHS: PathEntry[] = [
 
 const PILOT_TOOL_PATHS: PathEntry[] = [
   { path: "/pilot-tools", label: "Pilot Tools", desc: "Full suite of aviation calculators and references", Icon: Calculator },
+  { path: "/density-altitude", label: "Density Altitude", desc: "Pressure altitude, ISA deviation, and DA estimate", Icon: Calculator },
   { path: "/weight-balance", label: "Weight & Balance", desc: "Load calculations and CG envelope checks", Icon: Calculator },
   { path: "/tools/e6b", label: "E6B Calculator", desc: "Flight computer for time, speed, distance, and fuel", Icon: Calculator },
   { path: "/ifr-tools", label: "IFR Tools", desc: "Approach, hold, and instrument procedure references", Icon: Radio },

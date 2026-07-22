@@ -59,6 +59,7 @@ import CabinBrief from "@/pages/cabin-brief";
 import TfrMap from "@/pages/tfr-map";
 import OwnershipCostCalculator from "@/pages/ownership-cost-calculator";
 import WeightBalance from "@/pages/weight-balance";
+import DensityAltitude from "@/pages/density-altitude";
 import LogbookPro from "@/pages/logbook-pro";
 import LogbookProSuccess from "@/pages/logbook-pro-success";
 import LogbookProCancel from "@/pages/logbook-pro-cancel";
@@ -174,6 +175,7 @@ function AnalyticsTracker() {
       "/ownership-cost-calculator",
       "/weight-balance",
       "/tools/e6b",
+      "/density-altitude",
       "/flight-planner",
       "/radio-comms-trainer",
       "/adsb-receiver-help",
@@ -227,6 +229,7 @@ function Router() {
       <Route path="/approach-plates" component={() => <PaidToolAccess component={ApproachPlates} />} />
       <Route path="/ownership-cost-calculator" component={() => <PaidToolAccess component={OwnershipCostCalculator} />} />
       <Route path="/weight-balance" component={() => <PaidToolAccess component={WeightBalance} />} />
+      <Route path="/density-altitude" component={DensityAltitude} />
       <Route path="/tools/e6b" component={() => <PaidToolAccess component={Eb6Calculator} />} />
       <Route path="/radio-comms-trainer" component={() => <PaidToolAccess component={RadioCommsTrainer} />} />
       <Route path="/adsb-receiver-help" component={() => <PaidToolAccess component={AdsbReceiverHelp} />} />

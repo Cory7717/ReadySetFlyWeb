@@ -83,11 +83,10 @@ export default function AircraftDetail() {
         rental_id: data.id,
         aircraft_id: aircraft?.id,
       });
-      // Redirect to payment page with the rental ID
-      navigate(`/rental-payment/${data.id}`);
+      navigate("/dashboard");
       toast({
-        title: "Booking request created!",
-        description: "Please complete payment to finalize your booking.",
+        title: "Rental request sent",
+        description: "The aircraft owner will review your request. Payment opens after approval.",
       });
     },
     onError: (error: any) => {

@@ -10996,7 +10996,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/rentals/aircraft/:aircraftId", async (req, res) => {
     try {
       const rentals = await storage.getRentalsByAircraft(req.params.aircraftId);
-      res.json(rentals);
+      res.json(rentals
+        .filter((rental) => ["approved", "active"].includes(String(rental.status)))
+        .map((rental) => ({
+          id: rental.id,
+          aircraftId: rental.aircraftId,
+          startDate: rental.startDate,
+          endDate: rental.endDate,
+          status: rental.status,
+        })));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch aircraft rentals" });
     }
@@ -11088,6 +11096,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const validatedData = insertRentalSchema.parse(rentalData);
       const rental = await storage.createRental(validatedData);
+
+      await storage.createUserNotification({
+        userId: aircraft.ownerId,
+        type: "rental_request_received",
+        title: "New rental request",
+        message: `A renter requested ${aircraft.year} ${aircraft.make} ${aircraft.model} for ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}. Review the request in your dashboard.`,
+        channels: ["in_app"],
+        referenceDate: null,
+        meta: {
+          rentalId: rental.id,
+          aircraftId: aircraft.id,
+          renterId,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          estimatedHours: rental.estimatedHours,
+          totalCostRenter: rental.totalCostRenter,
+          ownerPayout: rental.ownerPayout,
+          actionPath: "/dashboard",
+        },
+      });
+
       res.status(201).json(rental);
     } catch (error: any) {
       console.error("Rental creation error:", error);
@@ -11112,6 +11141,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (rental.ownerId !== userId) {
           return res.status(403).json({ error: "Only the aircraft owner can approve this rental" });
         }
+        const owner = await storage.getUser(userId);
+        if (!owner?.isVerified) {
+          return res.status(403).json({
+            error: "Account verification required",
+            message: "Aircraft owners must remain verified before approving rental requests.",
+          });
+        }
         if (rental.status !== "pending") {
           return res.status(400).json({ error: "Only pending rentals can be approved" });
         }
@@ -11127,6 +11163,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updatedRental = await storage.updateRental(req.params.id, { status: nextStatus });
+      if (updatedRental) {
+        const aircraft = await storage.getAircraftListing(rental.aircraftId);
+        const aircraftLabel = aircraft
+          ? `${aircraft.year} ${aircraft.make} ${aircraft.model}`
+          : "your requested aircraft";
+        if (nextStatus === "approved") {
+          await storage.createUserNotification({
+            userId: rental.renterId,
+            type: "rental_request_approved",
+            title: "Rental approved - payment ready",
+            message: `Your rental request for ${aircraftLabel} was approved. Complete payment to activate the rental.`,
+            channels: ["in_app"],
+            referenceDate: null,
+            meta: {
+              rentalId: rental.id,
+              aircraftId: rental.aircraftId,
+              ownerId: rental.ownerId,
+              startDate: new Date(rental.startDate).toISOString(),
+              endDate: new Date(rental.endDate).toISOString(),
+              totalCostRenter: rental.totalCostRenter,
+              actionPath: `/rental-payment/${rental.id}`,
+            },
+          });
+        } else if (nextStatus === "cancelled") {
+          const notifyUserId = userId === rental.renterId ? rental.ownerId : rental.renterId;
+          await storage.createUserNotification({
+            userId: notifyUserId,
+            type: "rental_request_cancelled",
+            title: "Rental request cancelled",
+            message: `The rental request for ${aircraftLabel} was cancelled.`,
+            channels: ["in_app"],
+            referenceDate: null,
+            meta: {
+              rentalId: rental.id,
+              aircraftId: rental.aircraftId,
+              changedBy: userId,
+              previousStatus: rental.status,
+              actionPath: "/dashboard",
+            },
+          });
+        }
+      }
       res.json(updatedRental);
     } catch (error) {
       res.status(500).json({ error: "Failed to update rental" });
@@ -11279,6 +11357,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isPaid: true,
         status: "active",
       });
+
+      if (updatedRental) {
+        const aircraft = await storage.getAircraftListing(rental.aircraftId);
+        const aircraftLabel = aircraft
+          ? `${aircraft.year} ${aircraft.make} ${aircraft.model}`
+          : "your aircraft";
+        await storage.createUserNotification({
+          userId: rental.ownerId,
+          type: "rental_payment_completed",
+          title: "Rental payment completed",
+          message: `The renter paid for ${aircraftLabel}. Messaging is now available for this active rental.`,
+          channels: ["in_app"],
+          referenceDate: null,
+          meta: {
+            rentalId: rental.id,
+            aircraftId: rental.aircraftId,
+            renterId: rental.renterId,
+            totalCostRenter: rental.totalCostRenter,
+            ownerPayout: rental.ownerPayout,
+            actionPath: "/dashboard",
+          },
+        });
+      }
 
       res.json(updatedRental);
     } catch (error: any) {

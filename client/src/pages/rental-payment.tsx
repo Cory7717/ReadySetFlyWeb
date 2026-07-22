@@ -5,7 +5,7 @@ import type { Rental, AircraftListing } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Plane, Calendar, Clock } from "lucide-react";
+import { AlertCircle, CheckCircle2, Plane, Calendar, Clock } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 
 declare global {
@@ -315,6 +315,104 @@ export default function RentalPayment() {
     );
   }
 
+  const status = String(rental.status || "").toLowerCase();
+  const isPending = status === "pending";
+  const isApprovedForPayment = status === "approved" && !rental.isPaid;
+  const isPaidOrActive = Boolean(rental.isPaid) || status === "active";
+  const isCancelled = status === "cancelled";
+  const isCompleted = status === "completed";
+
+  const renderStatusPanel = () => {
+    if (isApprovedForPayment) {
+      return (
+        <Card className="rsf-metal-panel text-[#E8EDF4]">
+          <CardHeader>
+            <CardTitle>Payment Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CheckoutForm
+              rental={rental}
+              aircraft={aircraft}
+              onSuccess={() => setLocation("/dashboard")}
+            />
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (isPending) {
+      return (
+        <Card className="rsf-metal-panel text-[#E8EDF4]" data-testid="card-rental-payment-pending">
+          <CardContent className="space-y-4 p-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 h-5 w-5 text-[#f2dca4]" />
+              <div>
+                <h2 className="text-xl font-semibold">Waiting for owner approval</h2>
+                <p className="mt-1 text-sm text-[#A9BBCD]">
+                  Your request has been sent to the aircraft owner. Payment will become available after the owner approves the rental.
+                </p>
+              </div>
+            </div>
+            <Button className="rsf-metal-button-secondary" onClick={() => setLocation("/dashboard")}>
+              View request status
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (isCancelled) {
+      return (
+        <Card className="rsf-metal-panel text-[#E8EDF4]" data-testid="card-rental-payment-cancelled">
+          <CardContent className="space-y-4 p-6">
+            <h2 className="text-xl font-semibold">Rental unavailable</h2>
+            <p className="text-sm text-[#A9BBCD]">
+              This rental request was cancelled, so payment is no longer available.
+            </p>
+            <Button className="rsf-metal-button-secondary" onClick={() => setLocation("/rentals")}>
+              Browse rentals
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (isPaidOrActive || isCompleted) {
+      return (
+        <Card className="rsf-metal-panel text-[#E8EDF4]" data-testid="card-rental-payment-complete">
+          <CardContent className="space-y-4 p-6">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="mt-0.5 h-5 w-5 text-[#6dc8ab]" />
+              <div>
+                <h2 className="text-xl font-semibold">Payment already completed</h2>
+                <p className="mt-1 text-sm text-[#A9BBCD]">
+                  This rental is already paid. Manage the rental from your dashboard.
+                </p>
+              </div>
+            </div>
+            <Button className="rsf-metal-button-secondary" onClick={() => setLocation("/dashboard")}>
+              Go to dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <Card className="rsf-metal-panel text-[#E8EDF4]" data-testid="card-rental-payment-unavailable">
+        <CardContent className="space-y-4 p-6">
+          <h2 className="text-xl font-semibold">Payment unavailable</h2>
+          <p className="text-sm text-[#A9BBCD]">
+            This rental is not currently ready for payment. Check your dashboard for the latest status.
+          </p>
+          <Button className="rsf-metal-button-secondary" onClick={() => setLocation("/dashboard")}>
+            Go to dashboard
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  };
+
   return (
     <div className="min-h-screen rsf-app-shell rsf-rentals-theme">
       <div className="container mx-auto px-4 py-8">
@@ -377,19 +475,7 @@ export default function RentalPayment() {
               </CardContent>
             </Card>
 
-            {/* Payment Form */}
-            <Card className="rsf-metal-panel text-[#E8EDF4]">
-              <CardHeader>
-                <CardTitle>Payment Information</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CheckoutForm
-                  rental={rental}
-                  aircraft={aircraft}
-                  onSuccess={() => setLocation("/dashboard")}
-                />
-              </CardContent>
-            </Card>
+            {renderStatusPanel()}
           </div>
         </div>
       </div>

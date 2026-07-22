@@ -279,9 +279,9 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
       canopyClassName="rsf-metal-hero border-b border-white/10"
       contentClassName="rsf-logbook-theme space-y-8"
     >
-      <section className={`${logbookPanelClass} rounded-[1.6rem] p-5 sm:p-6`}>
-        <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-          <div className="space-y-5">
+      <section className={`${logbookPanelClass} mx-auto max-w-2xl rounded-[1.6rem] p-5 sm:p-6`}>
+        <div className="grid gap-5">
+          <div className="hidden">
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Save plans</Badge>
               <Badge variant="outline" className="border-[#5d6f85]/24 bg-[#141b24] text-[#E8EDF4]">Track currency</Badge>

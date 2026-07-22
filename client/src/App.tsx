@@ -1,9 +1,11 @@
 import { Switch, Route, useLocation } from "wouter";
-import { lazy, Suspense, type ComponentType, useEffect } from "react";
+import { lazy, Suspense, type ComponentType, useEffect, useState } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ThemeProvider } from "./components/theme-provider";
 import { Header } from "./components/header";
 import { Footer } from "./components/footer";
@@ -18,6 +20,7 @@ import { AuthGateModal } from "@/components/AuthGateModal";
 import { ScrollToTopButton } from "@/components/scroll-to-top-button";
 import { recordAnonSession, recordAnonToolInteraction, isSoftAuthEnabled } from "@/utils/anonUsage";
 import { setAuthState } from "@/utils/authGate";
+import { PREMIUM_MONTHLY_PRICE, PREMIUM_ANNUAL_PRICE } from "@shared/membership-plans";
 import Home from "@/pages/home";
 import Landing from "@/pages/landing";
 import Marketplace from "@/pages/marketplace";
@@ -137,15 +140,55 @@ function PaidToolAccess({ component: Component }: { component: ComponentType }) 
     return <div className="container mx-auto px-4 py-10 text-sm text-muted-foreground">Loading...</div>;
   }
 
-  if (!isAuthenticated) {
-    return <RequireAuth />;
-  }
-
-  if (!isPaid) {
-    return <LogbookPro />;
+  if (!isAuthenticated || !isPaid) {
+    return <LockedPremiumToolPreview component={Component} />;
   }
 
   return <Component />;
+}
+
+function LockedPremiumToolPreview({ component: Component }: { component: ComponentType }) {
+  const { isAuthenticated } = useAuth();
+  const [location] = useLocation();
+  const [open, setOpen] = useState(false);
+  const signupHref = isAuthenticated
+    ? "/logbook/pro"
+    : `/register?returnTo=${encodeURIComponent(location || "/")}`;
+
+  return (
+    <>
+      <div className="relative min-h-screen bg-[#080a0d]">
+        <div className="pointer-events-none select-none opacity-95" aria-hidden="true">
+          <Component />
+        </div>
+        <button
+          type="button"
+          className="absolute inset-0 z-20 cursor-pointer bg-transparent"
+          aria-label="Unlock this RSF Premium calculator"
+          onClick={() => setOpen(true)}
+        />
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="rsf-metal-panel border-[#5d6f85]/30 text-[#E8EDF4] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-[#F5F8FC]">Available with RSF Premium</DialogTitle>
+            <DialogDescription className="text-[#A9BBCD]">
+              This calculator is available for RSF Premium subscribers. Premium unlocks live inputs, saved planning context, and the full RSF EFB workflow.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-[1rem] border border-[#5d6f85]/24 bg-[#101720] p-4 text-sm text-[#DCE6F2]">
+            RSF Premium is ${PREMIUM_MONTHLY_PRICE.toFixed(2)}/month or ${PREMIUM_ANNUAL_PRICE.toFixed(2)}/year. Create an account or upgrade to use this calculator.
+          </div>
+          <DialogFooter>
+            <Button asChild className="rsf-metal-button-primary">
+              <a href={signupHref}>{isAuthenticated ? "View Premium Pricing" : "Sign up for RSF Premium"}</a>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 function RedirectTo({ to }: { to: string }) {

@@ -1792,9 +1792,9 @@ export default function Landing() {
           src={wingtipCloudsImage}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[72%_50%] opacity-60 [mask-image:linear-gradient(90deg,rgba(0,0,0,0.7)_0%,rgba(0,0,0,0.52)_46%,rgba(0,0,0,0.18)_100%)]"
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[72%_50%] opacity-75 [mask-image:linear-gradient(90deg,rgba(0,0,0,0.82)_0%,rgba(0,0,0,0.68)_44%,rgba(0,0,0,0.36)_100%)]"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,11,17,0.9)_0%,rgba(7,11,17,0.72)_42%,rgba(7,11,17,0.56)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,11,17,0.82)_0%,rgba(7,11,17,0.58)_42%,rgba(7,11,17,0.26)_100%)]" />
         <div className="container relative z-10 mx-auto px-4 py-12 md:py-16 xl:py-20">
           <div className="max-w-xl space-y-6 lg:max-w-[52%]">
             <div className="space-y-6">

@@ -1807,13 +1807,9 @@ export default function Landing() {
                   RSF keeps the pilot workflow in one place.
                 </h1>
                 <p className="text-lg leading-8 text-[#CCD6E4] drop-shadow-[0_1px_10px_rgba(0,0,0,0.6)]">
-                  Join the fast growing community of GA pilots using RSF.  Plan flights, review weather, track training, manage records, and keep the next aviation step close.
+                  Join our fast growing community of GA pilots using RSF. Plan flights, review weather, track training, manage records, and keep the next aviation step close.
                 </p>
               </div>
-              <p className="text-sm text-[#9aafcc] leading-relaxed">
-                Pilots are already using RSF to plan, file, and track flights in one place.{" "}
-                <span className="text-[#c0d0e8]">Free to use. No account required to start planning.</span>
-              </p>
               <div className="flex flex-wrap items-center gap-3 text-xs text-[#A8B8CC]">
                 <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141a22] text-[#d2dbe8]">US-only</Badge>
                 <span className="tracking-[0.16em] text-[#8fa6c8]">Plan. Train. Fly. Manage.</span>

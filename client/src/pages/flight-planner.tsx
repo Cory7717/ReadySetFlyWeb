@@ -3286,6 +3286,21 @@ export default function FlightPlanner() {
     selectedType.usable_fuel_gal_effective ??
     FALLBACK_TYPE.usable_fuel_gal_effective ??
     null;
+  const selectedAircraftFuelLabel = useMemo(() => {
+    if (useManual) return customProfile.name?.trim() || "Custom aircraft";
+    if (selectedProfile?.name?.trim()) return selectedProfile.name.trim();
+    const typeLabel = [selectedType.make, selectedType.model].filter(Boolean).join(" ").trim();
+    return typeLabel || "Selected aircraft";
+  }, [customProfile.name, selectedProfile?.name, selectedType.make, selectedType.model, useManual]);
+  const selectedAircraftFuelSourceLabel = useMemo(() => {
+    if (useManual) return "custom aircraft entry";
+    if (selectedProfile?.usable_fuel_gal_effective) return "saved aircraft profile";
+    if (selectedType.usable_fuel_gal_effective) return "aircraft library";
+    return "RSF fallback reference";
+  }, [selectedProfile?.usable_fuel_gal_effective, selectedType.usable_fuel_gal_effective, useManual]);
+  const selectedAircraftFuelCapacityLabel = Number.isFinite(planningFuel) && planningFuel > 0
+    ? `${Number(planningFuel).toFixed(1).replace(/\.0$/, "")} gal`
+    : "Unavailable";
   const filedDepartureCode = form.departure.trim().toUpperCase();
   const filedDestinationCode = form.destination.trim().toUpperCase();
   const filedAlternateCode = form.alternate.trim().toUpperCase();
@@ -9772,8 +9787,28 @@ export default function FlightPlanner() {
                 placeholder="Enter actual fuel aboard"
                 type="number"
               />
+              <div
+                className="rounded-[0.85rem] border border-[#3f6488]/55 bg-[#101923]/95 px-3 py-2 text-sm shadow-[0_14px_30px_-24px_rgba(0,0,0,0.9)]"
+                data-testid="selected-aircraft-usable-fuel-reference"
+              >
+                <div className="flex items-start gap-2">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#8fb7df]" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[#9db6cf]">
+                      Selected aircraft usable fuel
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span className="text-lg font-semibold text-[#F5F8FC]">{selectedAircraftFuelCapacityLabel}</span>
+                      <span className="text-xs text-[#A9BBCD]">from {selectedAircraftFuelSourceLabel}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-[#C8D7E8]">
+                      {selectedAircraftFuelLabel}
+                    </div>
+                  </div>
+                </div>
+              </div>
               <p className="text-xs text-muted-foreground">
-                Drives trip fuel, filed endurance, reserve margin, and suggested fuel stops. {planningFuel ? `Aircraft usable fuel reference: ${planningFuel} gal.` : ""}
+                Enter the actual fuel aboard for this flight. RSF compares it against the selected aircraft capacity above.
               </p>
             </div>
           </div>

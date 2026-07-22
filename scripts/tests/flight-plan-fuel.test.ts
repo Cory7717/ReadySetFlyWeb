@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { FlightPlan } from "../../shared/schema";
 import {
   buildFuelEnduranceState,
@@ -75,6 +77,19 @@ const basePlan = {
 test("fuel aboard and burn calculate endurance in whole minutes", () => {
   assert.equal(calculateFuelEnduranceMinutes(750, 100), 450);
   assert.equal(formatFuelDurationClock(450), "7:30");
+});
+
+test("planner shows selected aircraft usable fuel capacity next to fuel aboard input", () => {
+  const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
+
+  assert.match(source, /selectedAircraftFuelCapacityLabel/);
+  assert.match(source, /selectedAircraftFuelSourceLabel/);
+  assert.match(source, /selectedProfile\?\.usable_fuel_gal_effective/);
+  assert.match(source, /selectedType\.usable_fuel_gal_effective/);
+  assert.match(source, /data-testid="selected-aircraft-usable-fuel-reference"/);
+  assert.match(source, /Selected aircraft usable fuel/);
+  assert.match(source, /Enter the actual fuel aboard for this flight/);
+  assert.doesNotMatch(source, /Aircraft usable fuel reference: \$\{planningFuel\} gal/);
 });
 
 test("fuel required and surplus use the authoritative ETE", () => {

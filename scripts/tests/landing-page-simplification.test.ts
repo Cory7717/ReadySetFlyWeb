@@ -27,6 +27,7 @@ test("landing page omits redundant navigation-style sections", () => {
     "landing_hero_open_planner",
     "landing_hero_explore_tools",
     "Pilots are already using RSF to plan, file, and track flights",
+    "General Aviation Ecosystem",
   ];
 
   for (const removedSection of removedSections) {
@@ -106,4 +107,5 @@ test("landing hero uses wingtip clouds background and constrained text width", (
   assert.match(landingSource, /object-\[72%_50%\]/);
   assert.match(landingSource, /mask-image:linear-gradient/);
   assert.match(landingSource, /lg:max-w-\[52%\]/);
+  assert.match(landingSource, /py-6 md:py-8 xl:py-10/);
 });

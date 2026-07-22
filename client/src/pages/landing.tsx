@@ -1795,13 +1795,9 @@ export default function Landing() {
           className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[72%_50%] opacity-60 [mask-image:linear-gradient(90deg,rgba(0,0,0,0.7)_0%,rgba(0,0,0,0.52)_46%,rgba(0,0,0,0.18)_100%)]"
         />
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,11,17,0.9)_0%,rgba(7,11,17,0.72)_42%,rgba(7,11,17,0.56)_100%)]" />
-        <div className="container relative z-10 mx-auto px-4 py-12 md:py-16 xl:py-20">
+        <div className="container relative z-10 mx-auto px-4 py-6 md:py-8 xl:py-10">
           <div className="max-w-xl space-y-6 lg:max-w-[52%]">
             <div className="space-y-6">
-              <div className="rsf-kicker text-[#bfd0e8]">
-                <Plane className="h-3.5 w-3.5 text-[#8eb3ff]" />
-                General Aviation Ecosystem
-              </div>
               <div className="space-y-4">
                 <h1 className="text-4xl font-semibold tracking-[-0.045em] text-[#F6F8FC] drop-shadow-[0_2px_16px_rgba(0,0,0,0.62)] sm:text-5xl xl:text-6xl [font-family:var(--font-display)]">
                   RSF keeps the pilot workflow in one place.

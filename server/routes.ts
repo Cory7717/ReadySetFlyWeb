@@ -4321,6 +4321,57 @@ function getAirportReferenceByIcao(referenceMap: Map<string, AirportReference>, 
   return null;
 }
 
+function toFilingAirportTimezoneMetadata(reference: AirportReference | null, fallbackIcao?: string | null) {
+  if (!reference) {
+    const icao = String(fallbackIcao || "").trim().toUpperCase();
+    return icao ? { icao } : null;
+  }
+  return {
+    icao: String(reference.icao || reference.displayIdentifier || fallbackIcao || "").trim().toUpperCase() || null,
+    ident: reference.ident ?? null,
+    gpsCode: reference.gpsCode ?? null,
+    localCode: reference.localCode ?? null,
+    timezone: reference.timezone ?? null,
+    lat: Number.isFinite(Number(reference.lat)) ? Number(reference.lat) : null,
+    lon: Number.isFinite(Number(reference.lon)) ? Number(reference.lon) : null,
+  };
+}
+
+async function enrichFlightPlanWithFilingAirportTimezoneMetadata<T extends { departure?: string | null; plannerState?: unknown }>(plan: T): Promise<T> {
+  const departure = String(plan.departure || "").trim().toUpperCase();
+  const plannerState = plan.plannerState && typeof plan.plannerState === "object" && !Array.isArray(plan.plannerState)
+    ? plan.plannerState as Record<string, unknown>
+    : {};
+  const planningReferenceDepartureAirport = String(plannerState.planningReferenceDepartureAirport || "").trim().toUpperCase();
+  if (!departure && !planningReferenceDepartureAirport) return plan;
+
+  try {
+    const referenceMap = await loadAirportReferenceCache();
+    const departureReference = departure ? getAirportReferenceByIcao(referenceMap, departure) : null;
+    const planningReference = planningReferenceDepartureAirport
+      ? getAirportReferenceByIcao(referenceMap, planningReferenceDepartureAirport)
+      : null;
+    return {
+      ...plan,
+      plannerState: {
+        ...plannerState,
+        departureAirportMetadata: toFilingAirportTimezoneMetadata(departureReference, departure),
+        planningReferenceDepartureAirportMetadata: planningReferenceDepartureAirport
+          ? toFilingAirportTimezoneMetadata(planningReference, planningReferenceDepartureAirport)
+          : plannerState.planningReferenceDepartureAirportMetadata ?? null,
+      },
+    };
+  } catch (error: any) {
+    console.warn(JSON.stringify({
+      event: "flight_plan_airport_timezone_metadata_unavailable",
+      departure: departure || null,
+      planningReferenceDepartureAirport: planningReferenceDepartureAirport || null,
+      error: error?.message || String(error),
+    }));
+    return plan;
+  }
+}
+
 function computeAirportSurfaceBounds(
   airport: { lat: number; lon: number },
   radiusNm = 1.6,
@@ -25780,8 +25831,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const effectivePlanForAction = closeLocation
         ? { ...plan, filingCloseLocation: closeLocation } as typeof plan
         : plan;
+      const effectivePlanWithAirportTimezoneMetadata = await enrichFlightPlanWithFilingAirportTimezoneMetadata(effectivePlanForAction);
 
-      const validation = validateFlightPlanForAction(effectivePlanForAction, action);
+      const validation = validateFlightPlanForAction(effectivePlanWithAirportTimezoneMetadata, action);
       if (!validation.ready) {
         await logFlightServiceLabAuthorization({
           req,
@@ -25822,7 +25874,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         });
       }
 
-      const actionFingerprint = buildFlightServiceActionFingerprint(effectivePlanForAction as any, action, req.body ?? {});
+      const actionFingerprint = buildFlightServiceActionFingerprint(effectivePlanWithAirportTimezoneMetadata as any, action, req.body ?? {});
       const attemptReservation = await reserveFlightServiceProviderActionAttempt({
         flightPlanId: plan.id,
         userId,
@@ -25869,7 +25921,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         dispatchedAt: new Date(),
       });
 
-      const providerResult = await flightPlanFilingProvider.stageAction(effectivePlanForAction, action);
+      const providerResult = await flightPlanFilingProvider.stageAction(effectivePlanWithAirportTimezoneMetadata, action);
       const providerOutcomeUnknown =
         action === "file" &&
         providerResult.live === false &&

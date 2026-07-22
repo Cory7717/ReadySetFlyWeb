@@ -13,7 +13,7 @@ import {
   type FilingProviderMessage,
   type FilingProviderSnapshot,
 } from "@shared/flight-plan-filing-workflow";
-import { resolveDepartureAirportTimezone } from "@shared/airport-timezones";
+import { resolveDepartureAirportTimezone, type AirportTimezoneInput } from "@shared/airport-timezones";
 import { normalizeIcaoEquipmentCodes, validateFlightServiceAircraftEquipmentCodes } from "@shared/icao-equipment-codes";
 import { validateIcaoEquipmentReadiness } from "@shared/icao-readiness";
 import { ICAO_OTHER_INFO_PREFIXES, getIcaoOtherInfoEquipmentWarnings, hasOnlyFlightServiceSurveillanceCodes, hasOnlyKnownIcaoSurveillanceCodes } from "@shared/icao-filing";
@@ -1056,19 +1056,38 @@ const getPlannerStateRecord = (plan: FlightPlan) => {
     : null;
 };
 
+const asAirportTimezoneInput = (value: unknown, fallbackIcao?: string | null): AirportTimezoneInput | null => {
+  const fallbackCode = String(fallbackIcao || "").trim().toUpperCase() || null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fallbackCode ? { icao: fallbackCode } : null;
+  }
+  const record = value as Record<string, unknown>;
+  const icao = String(record.icao || record.ident || record.gpsCode || record.localCode || fallbackCode || "").trim().toUpperCase();
+  return {
+    icao: icao || fallbackCode,
+    timezone: typeof record.timezone === "string" ? record.timezone : null,
+    lat: record.lat as number | string | null | undefined,
+    lon: record.lon as number | string | null | undefined,
+  };
+};
+
 const getDepartureTimezoneResolutionForPlan = (plan: FlightPlan) => {
   const plannerState = getPlannerStateRecord(plan);
   const planningReferenceDepartureAirport =
     plannerState && typeof plannerState.planningReferenceDepartureAirport === "string"
       ? plannerState.planningReferenceDepartureAirport.trim().toUpperCase()
       : null;
+  const departureAirportMetadata = asAirportTimezoneInput(
+    plannerState?.departureAirportMetadata,
+    plan.departure || null,
+  );
+  const planningReferenceDepartureAirportMetadata = asAirportTimezoneInput(
+    plannerState?.planningReferenceDepartureAirportMetadata,
+    planningReferenceDepartureAirport,
+  );
   return resolveDepartureAirportTimezone({
-    departureAirport: {
-      icao: plan.departure || null,
-    },
-    planningReferenceDepartureAirport: planningReferenceDepartureAirport
-      ? { icao: planningReferenceDepartureAirport }
-      : null,
+    departureAirport: departureAirportMetadata ?? { icao: plan.departure || null },
+    planningReferenceDepartureAirport: planningReferenceDepartureAirportMetadata,
   });
 };
 

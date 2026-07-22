@@ -427,6 +427,30 @@ test("airport timezone resolver uses standard-time UTC conversion from coordinat
   assert.equal(zonedLocalDateTimeToUtcIso("2026-01-15T10:00", resolution.timezone), "2026-01-15T16:00:00.000Z");
 });
 
+test("filing validation uses server-enriched airport metadata for ICAO airports outside the known fallback list", () => {
+  const plan = filingPlan({
+    departure: "KUGN",
+    destination: "KJVL",
+    route: "DCT",
+    plannedDepartureAt: new Date("2026-07-21T15:00:00.000Z"),
+    plannerState: {
+      userDisplayDepartureTimeLocal: "2026-07-21T10:00",
+      departureTimeZone: "",
+      departureAirportMetadata: {
+        icao: "KUGN",
+        lat: 42.4222,
+        lon: -87.8679,
+        timezone: "America/Chicago",
+      },
+    },
+  });
+
+  const validation = validateFlightPlanForAction(plan, "file");
+
+  assert.equal(getProviderDepartureInstantForPlan(plan), "2026-07-21T15:00:00.000Z");
+  assert.equal(validation.errors.some((error) => /Departure airport timezone could not be determined/i.test(error)), false);
+});
+
 test("KPBI and KLAS ignore stale saved Chicago timezone in reopened plans", () => {
   const cases = [
     ["KPBI", "2026-07-15T10:00", "2026-07-15T14:00:00.000Z"],

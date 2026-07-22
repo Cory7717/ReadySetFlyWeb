@@ -19,6 +19,9 @@ test("landing page omits redundant navigation-style sections", () => {
     "Choose the next briefing module",
     "Weather-Aware Route Planning",
     "Check live conditions while you plan",
+    "Web-to-App Continuity",
+    "One flight, one workflow, one ecosystem",
+    "workflowSteps",
   ];
 
   for (const removedSection of removedSections) {
@@ -42,4 +45,10 @@ test("landing hero tools CTA points to a live route instead of a removed section
   assert.match(landingSource, /href="\/tool-hub"/);
   assert.match(landingSource, /landing_hero_explore_tools/);
   assert.equal(landingSource.includes("#landing-workflow-section"), false);
+});
+
+test("landing premium flat-rate banner is hidden from signed-in users", () => {
+  assert.match(landingSource, /!\s*isAuthenticated\s*&&\s*\(/);
+  assert.match(landingSource, /New flat rate/);
+  assert.match(landingSource, /landing_premium_banner/);
 });

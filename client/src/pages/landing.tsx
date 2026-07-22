@@ -432,28 +432,6 @@ export default function Landing() {
       icon: ShoppingBag,
     },
   ] as const;
-  const workflowSteps = [
-    {
-      title: "Plan on the web",
-      description: "Build the route, review weather and NOTAM context, and stage the whole flight in one web workflow.",
-      icon: Plane,
-    },
-    {
-      title: "File to the FAA",
-      description: "Submit to FAA Flight Service, then pick the plan up with ATC when you are ready.",
-      icon: FileText,
-    },
-    {
-      title: "Continue in the app",
-      description: "Open the same flight in the app with full FMS capability instead of starting over on another device.",
-      icon: Smartphone,
-    },
-    {
-      title: "Fly with live awareness",
-      description: "See live traffic, en route weather, and ADS-B-connected situational awareness as the flight unfolds.",
-      icon: CheckCircle2,
-    },
-  ] as const;
   const ecosystemCards = [
     {
       title: "Planning and Flight Following",
@@ -915,38 +893,40 @@ export default function Landing() {
         isPaidUser={isPaidUser}
         onSelectTab={setActiveMobileTab}
       />
-      <div className="border-b border-[#5d6f85]/18 bg-[#0d1219]">
-        <div className="container mx-auto px-4 py-2.5">
-          <div className="flex flex-col gap-2 rounded-xl border border-[#5d6f85]/22 bg-[linear-gradient(135deg,rgba(17,24,34,0.96),rgba(24,33,45,0.92))] px-4 py-3 text-[#E8EDF4] shadow-[0_18px_50px_-35px_rgba(0,0,0,0.9)] sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <Badge className="border border-[#D9A441]/35 bg-[#D9A441]/12 text-[#F6D788] hover:bg-[#D9A441]/12">
-                New flat rate
-              </Badge>
-              <div className="text-sm font-semibold text-[#F5F8FC]">
-                Full RSF Premium access for ${PREMIUM_MONTHLY_PRICE.toFixed(2)}/month or ${PREMIUM_ANNUAL_PRICE.toFixed(2)}/year.
+      {!isAuthenticated && (
+        <div className="border-b border-[#5d6f85]/18 bg-[#0d1219]">
+          <div className="container mx-auto px-4 py-2.5">
+            <div className="flex flex-col gap-2 rounded-xl border border-[#5d6f85]/22 bg-[linear-gradient(135deg,rgba(17,24,34,0.96),rgba(24,33,45,0.92))] px-4 py-3 text-[#E8EDF4] shadow-[0_18px_50px_-35px_rgba(0,0,0,0.9)] sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <Badge className="border border-[#D9A441]/35 bg-[#D9A441]/12 text-[#F6D788] hover:bg-[#D9A441]/12">
+                  New flat rate
+                </Badge>
+                <div className="text-sm font-semibold text-[#F5F8FC]">
+                  Full RSF Premium access for ${PREMIUM_MONTHLY_PRICE.toFixed(2)}/month or ${PREMIUM_ANNUAL_PRICE.toFixed(2)}/year.
+                </div>
+                <div className="text-xs text-[#A9BBCD]">
+                  Unlimited active flight plans, AI tools, logbook, training, and advanced aviation features.
+                </div>
               </div>
-              <div className="text-xs text-[#A9BBCD]">
-                Unlimited active flight plans, AI tools, logbook, training, and advanced aviation features.
-              </div>
+              <Button
+                asChild
+                size="sm"
+                className="h-8 shrink-0 rounded-lg bg-[#4F8DFF] px-3 text-xs font-semibold text-white hover:bg-[#3F7BE8]"
+                onClick={() => {
+                  trackEvent("subscription_cta_click", {
+                    source_page: "/",
+                    target: "/logbook/pro",
+                    context: "landing_premium_banner",
+                    tier: "premium",
+                  });
+                }}
+              >
+                <Link href="/logbook/pro">Upgrade to Premium</Link>
+              </Button>
             </div>
-            <Button
-              asChild
-              size="sm"
-              className="h-8 shrink-0 rounded-lg bg-[#4F8DFF] px-3 text-xs font-semibold text-white hover:bg-[#3F7BE8]"
-              onClick={() => {
-                trackEvent("subscription_cta_click", {
-                  source_page: "/",
-                  target: "/logbook/pro",
-                  context: "landing_premium_banner",
-                  tier: "premium",
-                });
-              }}
-            >
-              <Link href="/logbook/pro">Upgrade to Premium</Link>
-            </Button>
           </div>
         </div>
-      </div>
+      )}
       {activeMobileTab === "weather" && (
         <div className="md:hidden">
           <div className="container mx-auto space-y-4 px-4 pt-4 text-[#E8EDF4]">
@@ -1794,7 +1774,7 @@ export default function Landing() {
 
       <div className="rsf-metal-hero relative overflow-hidden">
         <div className="container mx-auto px-4 py-12 md:py-16 xl:py-20">
-          <div className="grid gap-8 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)] xl:items-start">
+          <div className="max-w-4xl space-y-6">
             <div className="space-y-6">
               <div className="rsf-kicker text-[#bfd0e8]">
                 <Plane className="h-3.5 w-3.5 text-[#8eb3ff]" />
@@ -1851,50 +1831,6 @@ export default function Landing() {
                 <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141a22] text-[#d2dbe8]">US-only</Badge>
                 <span className="tracking-[0.16em] text-[#8fa6c8]">Plan. Train. Fly. Manage.</span>
               </div>
-            </div>
-
-            <div className="space-y-4 xl:pt-2">
-              <Card className={`${metallicPanelClass} overflow-hidden text-[#E8EDF4]`}>
-                <CardContent className="space-y-5 p-5 sm:p-6">
-                  <div className="rsf-metal-divider flex flex-wrap items-center justify-between gap-3 pb-4">
-                    <div>
-                      <div className="text-[10px] uppercase tracking-[0.24em] text-[#9cb8df]">Web-to-App Continuity</div>
-                      <div className="mt-1 text-xl font-semibold tracking-[-0.02em] text-[#F6F8FC]">One flight, one workflow, one ecosystem.</div>
-                    </div>
-                    <Badge variant="outline" className="border-[#5a7398]/35 bg-[#141d29] text-[#d6e4ff]">
-                      Live FAA filing
-                    </Badge>
-                  </div>
-                  <div className="grid gap-3">
-                    {workflowSteps.map((step, index) => (
-                      <div key={step.title} className={`${metallicPanelInteractiveClass} rounded-[1rem] p-4`}>
-                        <div className="flex items-start gap-3">
-                          <div className="rsf-metal-icon-chip flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#9ebdff]">
-                            <step.icon className="h-4 w-4" />
-                          </div>
-                          <div className="space-y-1">
-                            <div className="text-[10px] uppercase tracking-[0.2em] text-[#94aed3]">Step {index + 1}</div>
-                            <div className="text-sm font-semibold text-[#F6F8FC]">{step.title}</div>
-                            <div className="text-sm leading-6 text-[#B8C8DA]">{step.description}</div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {[
-                      "Full FMS capability in the app",
-                      "Live traffic and en route weather",
-                      "ADS-B system connectivity",
-                      "Shared plans and follow-through across devices",
-                    ].map((item) => (
-                      <div key={item} className={`${metallicSubpanelClass} rounded-[0.95rem] px-3 py-2 text-sm text-[#E0E7F1]`}>
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           </div>
 

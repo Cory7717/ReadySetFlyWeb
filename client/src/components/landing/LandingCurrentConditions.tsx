@@ -105,7 +105,7 @@ export function LandingCurrentConditions({
   };
 
   return (
-    <div id="landing-weather-section" className="hidden pb-10 sm:pb-12 md:block">
+    <div id="landing-weather-section" className="hidden pb-10 md:block sm:pb-12">
       <div className="container mx-auto px-4 space-y-6">
         <div className="text-center space-y-2">
           <h2 className="text-2xl sm:text-3xl font-semibold">Current Conditions</h2>

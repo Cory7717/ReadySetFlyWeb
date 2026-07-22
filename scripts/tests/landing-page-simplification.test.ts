@@ -63,6 +63,7 @@ test("landing app download badges render near the top of the page", () => {
   assert.match(landingSource, /source="landing_top_bar"/);
   assert.match(landingSource, /Ready Set Fly is available on Android/);
   assert.doesNotMatch(landingSource, /source="landing_hero"/);
+  assert.doesNotMatch(landingSource, /border-b border-\[#5d6f85\]\/12 bg-\[#0a0e14\]/);
 });
 
 test("app download badge component labels Android as a test version", () => {
@@ -105,7 +106,9 @@ test("current conditions search controls live inside the weather card before adv
 test("landing hero uses wingtip clouds background and constrained text width", () => {
   assert.match(landingSource, /wingtipCloudsImage/);
   assert.match(landingSource, /object-\[72%_50%\]/);
+  assert.match(landingSource, /opacity-75/);
   assert.match(landingSource, /mask-image:linear-gradient/);
   assert.match(landingSource, /lg:max-w-\[52%\]/);
   assert.match(landingSource, /py-6 md:py-8 xl:py-10/);
+  assert.match(landingSource, /!border-0 !shadow-none before:!hidden/);
 });

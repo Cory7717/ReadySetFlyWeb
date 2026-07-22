@@ -50,6 +50,7 @@ test("landing page keeps current conditions and featured partner modules", () =>
 test("landing hero keeps concise headline and no removed section anchor", () => {
   assert.match(landingSource, /RSF keeps the pilot workflow in one place/);
   assert.match(landingSource, /Join our fast growing community of GA pilots using RSF/);
+  assert.match(landingSource, /Plan flights, review weather, track training, manage records to help stay ahead of your aircraft/);
   assert.equal(landingSource.includes("#landing-workflow-section"), false);
 });
 

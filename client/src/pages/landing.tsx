@@ -1792,9 +1792,9 @@ export default function Landing() {
           src={wingtipCloudsImage}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[72%_50%] opacity-75 [mask-image:linear-gradient(90deg,rgba(0,0,0,0.82)_0%,rgba(0,0,0,0.68)_44%,rgba(0,0,0,0.36)_100%)]"
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[72%_50%] opacity-60 [mask-image:linear-gradient(90deg,rgba(0,0,0,0.7)_0%,rgba(0,0,0,0.52)_46%,rgba(0,0,0,0.18)_100%)]"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,11,17,0.82)_0%,rgba(7,11,17,0.58)_42%,rgba(7,11,17,0.26)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,11,17,0.9)_0%,rgba(7,11,17,0.72)_42%,rgba(7,11,17,0.56)_100%)]" />
         <div className="container relative z-10 mx-auto px-4 py-12 md:py-16 xl:py-20">
           <div className="max-w-xl space-y-6 lg:max-w-[52%]">
             <div className="space-y-6">
@@ -1806,11 +1806,14 @@ export default function Landing() {
                 <h1 className="text-4xl font-semibold tracking-[-0.045em] text-[#F6F8FC] drop-shadow-[0_2px_16px_rgba(0,0,0,0.62)] sm:text-5xl xl:text-6xl [font-family:var(--font-display)]">
                   RSF keeps the pilot workflow in one place.
                 </h1>
-                <div className="space-y-3 text-lg leading-8 text-[#CCD6E4] drop-shadow-[0_1px_10px_rgba(0,0,0,0.6)]">
-                  <p>Join our fast growing community of GA pilots using RSF.</p>
-                  <p>Plan flights, review weather, track training, manage records, and keep the next aviation step close.</p>
-                </div>
+                <p className="text-lg leading-8 text-[#CCD6E4] drop-shadow-[0_1px_10px_rgba(0,0,0,0.6)]">
+                  Join the fast growing community of GA pilots using RSF.  Plan flights, review weather, track training, manage records, and keep the next aviation step close.
+                </p>
               </div>
+              <p className="text-sm text-[#9aafcc] leading-relaxed">
+                Pilots are already using RSF to plan, file, and track flights in one place.{" "}
+                <span className="text-[#c0d0e8]">Free to use. No account required to start planning.</span>
+              </p>
               <div className="flex flex-wrap items-center gap-3 text-xs text-[#A8B8CC]">
                 <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141a22] text-[#d2dbe8]">US-only</Badge>
                 <span className="tracking-[0.16em] text-[#8fa6c8]">Plan. Train. Fly. Manage.</span>

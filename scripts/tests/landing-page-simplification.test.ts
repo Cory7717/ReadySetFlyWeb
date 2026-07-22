@@ -46,7 +46,7 @@ test("landing page keeps current conditions and featured partner modules", () =>
 });
 
 test("landing hero keeps concise headline and no removed section anchor", () => {
-  assert.match(landingSource, /Ready Set Fly keeps the pilot workflow in one place/);
+  assert.match(landingSource, /RSF keeps the pilot workflow in one place/);
   assert.equal(landingSource.includes("#landing-workflow-section"), false);
 });
 
@@ -60,4 +60,22 @@ test("landing app download badges render near the top of the page", () => {
   assert.match(landingSource, /source="landing_top_bar"/);
   assert.match(landingSource, /Ready Set Fly is available on Android/);
   assert.doesNotMatch(landingSource, /source="landing_hero"/);
+});
+
+test("app download badge component labels Android as a test version", () => {
+  const badgeSource = readFileSync(resolve(process.cwd(), "client/src/components/GooglePlayBadge.tsx"), "utf8");
+  assert.match(badgeSource, /statusLabel="Test Version"/);
+  assert.match(badgeSource, /Coming Soon/);
+});
+
+test("landing content order puts weather before partner offers and sponsor", () => {
+  const heroIndex = landingSource.indexOf("RSF keeps the pilot workflow in one place");
+  const weatherIndex = landingSource.indexOf("<LandingCurrentConditions");
+  const offersIndex = landingSource.indexOf("RSF Partner Membership Offers");
+  const sponsorIndex = landingSource.indexOf("Premium aviation partner placement integrated into the RSF homepage");
+
+  assert.ok(heroIndex >= 0, "Expected hero headline to be present");
+  assert.ok(weatherIndex > heroIndex, "Expected weather section after hero");
+  assert.ok(offersIndex > weatherIndex, "Expected partner offers below weather");
+  assert.ok(sponsorIndex > weatherIndex, "Expected featured sponsor below weather");
 });

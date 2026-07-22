@@ -9,9 +9,10 @@ type GooglePlayBadgeProps = {
   className?: string;
   imageClassName?: string;
   source?: string;
+  statusLabel?: string;
 };
 
-export function GooglePlayBadge({ className, imageClassName, source = "unknown" }: GooglePlayBadgeProps) {
+export function GooglePlayBadge({ className, imageClassName, source = "unknown", statusLabel }: GooglePlayBadgeProps) {
   return (
     <a
       href={GOOGLE_PLAY_APP_URL}
@@ -19,7 +20,7 @@ export function GooglePlayBadge({ className, imageClassName, source = "unknown" 
       rel="noopener noreferrer"
       aria-label="Download Ready Set Fly on Google Play"
       className={cn(
-        "inline-flex min-h-[48px] w-full items-center justify-center rounded-[0.7rem] transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#74a7ff] focus:ring-offset-2 focus:ring-offset-[#0c1118] sm:w-fit",
+        "inline-flex min-h-[48px] w-full flex-col items-center justify-center rounded-[0.7rem] transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#74a7ff] focus:ring-offset-2 focus:ring-offset-[#0c1118] sm:w-fit",
         className,
       )}
       onClick={() => trackEvent("google_play_badge_click", { source, target: GOOGLE_PLAY_APP_URL })}
@@ -29,6 +30,11 @@ export function GooglePlayBadge({ className, imageClassName, source = "unknown" 
         alt="Get it on Google Play"
         className={cn("h-14 w-auto max-w-full object-contain", imageClassName)}
       />
+      {statusLabel ? (
+        <span className="mt-1 rounded-full border border-[#5d6f85]/35 bg-[#141d29] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C8D8EA]">
+          {statusLabel}
+        </span>
+      ) : null}
     </a>
   );
 }
@@ -115,6 +121,7 @@ export function AppDownloadBadges({
           source={source}
           className={cn(forceRow ? "w-fit" : "sm:w-fit", badgeClassName)}
           imageClassName="h-14"
+          statusLabel="Test Version"
         />
         <AppStoreBadge
           source={source}

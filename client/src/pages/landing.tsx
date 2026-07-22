@@ -1796,7 +1796,7 @@ export default function Landing() {
               </div>
               <div className="space-y-4">
                 <h1 className="max-w-4xl text-4xl font-semibold tracking-[-0.045em] text-[#F6F8FC] sm:text-5xl xl:text-6xl [font-family:var(--font-display)]">
-                  Ready Set Fly keeps the pilot workflow in one place.
+                  RSF keeps the pilot workflow in one place.
                 </h1>
                 <p className="max-w-2xl text-lg leading-8 text-[#CCD6E4]">
                   Plan flights, review weather, track training, manage records, and keep the next aviation step close.
@@ -1813,7 +1813,67 @@ export default function Landing() {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-6 xl:grid-cols-2 xl:items-stretch">
+        </div>
+      </div>
+      </div>
+
+      <LandingCurrentConditions
+        open={openLandingModules.includes("conditions")}
+        icaoInput={icaoInput}
+        searchIcao={searchIcao}
+        airportSuggestions={airportSuggestions}
+        loadingSuggestions={loadingSuggestions}
+        airportMeta={airportMeta}
+        airportLocation={airportLocation}
+        isValidIcao={ICAO_REGEX.test(icaoInput.trim().toUpperCase())}
+        weather={weather}
+        runwayBriefing={runwayBriefing}
+        notams={notams}
+        weatherLoading={weatherLoading}
+        weatherFetching={weatherFetching}
+        runwayLoading={runwayLoading}
+        runwayFetching={runwayFetching}
+        notamsLoading={notamsLoading}
+        notamsFetching={notamsFetching}
+        notamsError={notamsError}
+        conditionsTitle={conditionsTitle}
+        weatherUpdatedAt={weatherUpdatedAt}
+        weatherAvailabilityMessage={weatherAvailabilityMessage}
+        flightCategory={flightCategory}
+        runwayInUseDisplay={runwayInUseDisplay}
+        atisInfo={atisInfo}
+        weatherHazards={weatherHazards}
+        showAiWeatherSummary={showAiWeatherSummary}
+        showAiNotamTranslator={showAiNotamTranslator}
+        onIcaoInputChange={setIcaoInput}
+        onSubmitIcao={submitIcao}
+        onRefresh={refreshAirportConditions}
+        onApplySuggestion={applySuggestion}
+        onToggleAiWeatherSummary={() => {
+          const next = !showAiWeatherSummary;
+          setShowAiWeatherSummary(next);
+          if (next) {
+            pixelEvent("ViewContent", {
+              content_name: "AI Weather Summary",
+              content_category: "Aviation Tools",
+            });
+          }
+        }}
+        onToggleAiNotamTranslator={() => {
+          const next = !showAiNotamTranslator;
+          setShowAiNotamTranslator(next);
+          if (next) {
+            pixelEvent("ViewContent", {
+              content_name: "AI NOTAM Translator",
+              content_category: "Aviation Tools",
+            });
+          }
+        }}
+      />
+
+      <div className="rsf-metal-section px-4 py-10 sm:py-12">
+        <div className="container mx-auto">
+          <div className="grid gap-6 xl:grid-cols-2 xl:items-stretch">
             <Card className={`${metallicPanelClass} h-full text-[#E8EDF4]`}>
               <CardContent className="space-y-5 p-5 sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1899,61 +1959,6 @@ export default function Landing() {
           </div>
         </div>
       </div>
-      </div>
-
-      <LandingCurrentConditions
-        open={openLandingModules.includes("conditions")}
-        icaoInput={icaoInput}
-        searchIcao={searchIcao}
-        airportSuggestions={airportSuggestions}
-        loadingSuggestions={loadingSuggestions}
-        airportMeta={airportMeta}
-        airportLocation={airportLocation}
-        isValidIcao={ICAO_REGEX.test(icaoInput.trim().toUpperCase())}
-        weather={weather}
-        runwayBriefing={runwayBriefing}
-        notams={notams}
-        weatherLoading={weatherLoading}
-        weatherFetching={weatherFetching}
-        runwayLoading={runwayLoading}
-        runwayFetching={runwayFetching}
-        notamsLoading={notamsLoading}
-        notamsFetching={notamsFetching}
-        notamsError={notamsError}
-        conditionsTitle={conditionsTitle}
-        weatherUpdatedAt={weatherUpdatedAt}
-        weatherAvailabilityMessage={weatherAvailabilityMessage}
-        flightCategory={flightCategory}
-        runwayInUseDisplay={runwayInUseDisplay}
-        atisInfo={atisInfo}
-        weatherHazards={weatherHazards}
-        showAiWeatherSummary={showAiWeatherSummary}
-        showAiNotamTranslator={showAiNotamTranslator}
-        onIcaoInputChange={setIcaoInput}
-        onSubmitIcao={submitIcao}
-        onRefresh={refreshAirportConditions}
-        onApplySuggestion={applySuggestion}
-        onToggleAiWeatherSummary={() => {
-          const next = !showAiWeatherSummary;
-          setShowAiWeatherSummary(next);
-          if (next) {
-            pixelEvent("ViewContent", {
-              content_name: "AI Weather Summary",
-              content_category: "Aviation Tools",
-            });
-          }
-        }}
-        onToggleAiNotamTranslator={() => {
-          const next = !showAiNotamTranslator;
-          setShowAiNotamTranslator(next);
-          if (next) {
-            pixelEvent("ViewContent", {
-              content_name: "AI NOTAM Translator",
-              content_category: "Aviation Tools",
-            });
-          }
-        }}
-      />
 
       {openLandingModules.includes("partner") && (
         <div className="hidden py-10 sm:py-12 md:block">

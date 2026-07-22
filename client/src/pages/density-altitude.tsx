@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Gauge, PlaneTakeoff, Thermometer, Wind } from "lucide-react";
+import { Gauge, MapPin, PlaneTakeoff, Ruler, Search, Thermometer, Wind } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,51 @@ type AircraftType = {
   usableFuelGal?: number | string | null;
 };
 
+type AirportSearchResult = {
+  icao: string;
+  displayIdentifier?: string | null;
+  name?: string | null;
+  city?: string | null;
+  state?: string | null;
+  elevationFt?: number | null;
+};
+
+type AirportDetail = {
+  icao: string;
+  name?: string | null;
+  lat?: number | null;
+  lon?: number | null;
+  elevationFt?: number | null;
+  timezone?: string | null;
+};
+
+type RunwayBriefingRunway = {
+  leIdent?: string | null;
+  heIdent?: string | null;
+  leHeading?: number | null;
+  heHeading?: number | null;
+  lengthFt?: number | null;
+  widthFt?: number | null;
+  surface?: string | null;
+};
+
+type RunwayBriefingResponse = {
+  icao: string;
+  runwayInUse?: string | null;
+  wind?: {
+    direction?: number | null;
+    speed?: number | null;
+    gust?: number | null;
+  } | null;
+  advisory?: {
+    runway?: string | null;
+    heading?: number | null;
+    headwind?: number | null;
+    crosswind?: number | null;
+  } | null;
+  runways: RunwayBriefingRunway[];
+};
+
 const toNumber = (value: string) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -37,12 +82,24 @@ const formatTemp = (value: number | null) => {
   return value.toFixed(1);
 };
 
+const formatRunwayValue = (value: number | null | undefined) => {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "--";
+  return Math.round(Number(value)).toLocaleString();
+};
+
+const formatRunwayIdent = (runway: RunwayBriefingRunway) => {
+  const ends = [runway.leIdent, runway.heIdent].filter(Boolean);
+  return ends.length ? ends.join("/") : "Runway";
+};
+
 export default function DensityAltitude() {
   const [fieldElevation, setFieldElevation] = useState("500");
   const [altimeter, setAltimeter] = useState("29.92");
   const [oat, setOat] = useState("20");
   const [tempUnit, setTempUnit] = useState<"C" | "F">("C");
   const [selectedAircraftId, setSelectedAircraftId] = useState("");
+  const [airportSearch, setAirportSearch] = useState("");
+  const [selectedAirportIcao, setSelectedAirportIcao] = useState("");
 
   const { data: aircraftTypes = [] } = useQuery<AircraftType[]>({
     queryKey: ["/api/aircraft/types"],
@@ -53,9 +110,56 @@ export default function DensityAltitude() {
     },
   });
 
+  const normalizedAirportSearch = airportSearch.trim();
+  const { data: airportSuggestions = [], isFetching: airportSearchFetching } = useQuery<AirportSearchResult[]>({
+    queryKey: ["/api/airports/search", normalizedAirportSearch, "density-altitude"],
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(normalizedAirportSearch)}`), {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to search airports");
+      return response.json();
+    },
+    enabled: normalizedAirportSearch.length >= 2 && !selectedAirportIcao,
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const { data: selectedAirport } = useQuery<AirportDetail | null>({
+    queryKey: ["/api/airports", selectedAirportIcao, "density-altitude"],
+    queryFn: async () => {
+      if (!selectedAirportIcao) return null;
+      const response = await fetch(apiUrl(`/api/airports/${encodeURIComponent(selectedAirportIcao)}`), {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to load airport");
+      return response.json();
+    },
+    enabled: !!selectedAirportIcao,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const { data: runwayBriefing, isFetching: runwayFetching } = useQuery<RunwayBriefingResponse>({
+    queryKey: ["/api/airports/runway-briefing", selectedAirportIcao, "density-altitude"],
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/airports/${encodeURIComponent(selectedAirportIcao)}/runway-briefing`), {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to load runway briefing");
+      return response.json();
+    },
+    enabled: !!selectedAirportIcao,
+    staleTime: 1000 * 60 * 2,
+  });
+
   useEffect(() => {
     trackEvent("tool_view", { tool: "density_altitude" });
   }, []);
+
+  useEffect(() => {
+    if (selectedAirport?.elevationFt !== null && selectedAirport?.elevationFt !== undefined && Number.isFinite(Number(selectedAirport.elevationFt))) {
+      setFieldElevation(String(Math.round(Number(selectedAirport.elevationFt))));
+    }
+  }, [selectedAirport?.elevationFt, selectedAirportIcao]);
 
   const result = useMemo(() => {
     const elevationValue = toNumber(fieldElevation);
@@ -104,6 +208,9 @@ export default function DensityAltitude() {
     : null;
   const densityAboveField = result.densityAltitude !== null ? result.densityAltitude - (toNumber(fieldElevation) ?? 0) : null;
   const selectedAircraft = aircraftTypes.find((aircraft) => aircraft.id === selectedAircraftId) ?? null;
+  const visibleAirportSuggestions = airportSuggestions.slice(0, 6);
+  const runwayList = runwayBriefing?.runways ?? [];
+  const currentAdvisory = runwayBriefing?.advisory ?? null;
   const interpretation = useMemo(() => {
     if (densityAboveField === null || result.densityAltitude === null) {
       return {
@@ -183,6 +290,82 @@ export default function DensityAltitude() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="airport-search" className="text-[#D7E3F2]">Airport lookup</Label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7f94ab]" />
+                <Input
+                  id="airport-search"
+                  value={airportSearch}
+                  onChange={(event) => {
+                    setAirportSearch(event.target.value);
+                    if (selectedAirportIcao) setSelectedAirportIcao("");
+                  }}
+                  placeholder="Search ICAO, city, or airport name"
+                  className="border-[#5d6f85]/35 bg-[#0A0E14] pl-9 text-[#F1F5FA]"
+                />
+              </div>
+              {visibleAirportSuggestions.length > 0 && !selectedAirportIcao ? (
+                <div className="grid gap-2 rounded-lg border border-[#5d6f85]/24 bg-[#0A0E14] p-2">
+                  {visibleAirportSuggestions.map((airport) => {
+                    const identifier = (airport.displayIdentifier || airport.icao || "").toUpperCase();
+                    const label = [airport.city, airport.state].filter(Boolean).join(", ");
+                    return (
+                      <button
+                        key={`${identifier}-${airport.name}`}
+                        type="button"
+                        onClick={() => {
+                          setSelectedAirportIcao(identifier);
+                          setAirportSearch(`${identifier}${airport.name ? ` - ${airport.name}` : ""}`);
+                          trackEvent("density_altitude_airport_selected", { airport: identifier });
+                        }}
+                        className="rounded-md border border-transparent px-3 py-2 text-left transition-colors hover:border-[#5d6f85]/35 hover:bg-[#121923]"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-semibold text-[#F1F5FA]">{identifier}</span>
+                          {airport.elevationFt !== null && airport.elevationFt !== undefined ? (
+                            <span className="text-xs text-[#A9BBCD]">{formatFeet(Number(airport.elevationFt))} ft</span>
+                          ) : null}
+                        </div>
+                        <div className="mt-0.5 text-xs text-[#A9BBCD]">
+                          {airport.name ?? "Airport"}{label ? `, ${label}` : ""}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : normalizedAirportSearch.length >= 2 && airportSearchFetching ? (
+                <div className="rounded-lg border border-[#5d6f85]/20 bg-[#0A0E14] px-3 py-2 text-sm text-[#A9BBCD]">
+                  Searching airports...
+                </div>
+              ) : null}
+              {selectedAirport ? (
+                <div className="flex flex-col gap-2 rounded-lg border border-[#5d6f85]/24 bg-[#101720] p-3 text-sm text-[#A9BBCD] sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="mt-0.5 h-4 w-4 text-[#D9A441]" />
+                    <div>
+                      <div className="font-semibold text-[#F1F5FA]">{selectedAirport.icao} {selectedAirport.name ?? "Airport"}</div>
+                      <div>
+                        {selectedAirport.elevationFt !== null && selectedAirport.elevationFt !== undefined
+                          ? `Field elevation loaded: ${formatFeet(Number(selectedAirport.elevationFt))} ft MSL`
+                          : "Airport selected. Enter field elevation manually if it is not published here."}
+                      </div>
+                    </div>
+                  </div>
+                  {selectedAirport.elevationFt !== null && selectedAirport.elevationFt !== undefined ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rsf-metal-button-secondary"
+                      onClick={() => setFieldElevation(String(Math.round(Number(selectedAirport.elevationFt))))}
+                    >
+                      Use Elevation
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="field-elevation" className="text-[#D7E3F2]">Field elevation (ft MSL)</Label>
@@ -289,6 +472,106 @@ export default function DensityAltitude() {
                 ))}
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rsf-card-shell text-[#E8EDF4]">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-[#F1F5FA]">
+              <Ruler className="h-5 w-5 text-[#D9A441]" />
+              Airport & Runway Context
+            </CardTitle>
+            <CardDescription className="text-[#A9BBCD]">
+              Pull runway data from the selected airport to compare against approved aircraft performance charts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!selectedAirportIcao ? (
+              <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-4 text-sm text-[#A9BBCD]">
+                Search and select an airport above to load runway length, surface, and current wind/runway context.
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rsf-metal-subpanel rounded-lg p-3">
+                    <div className="text-xs text-[#A9BBCD]">Airport</div>
+                    <div className="mt-1 text-sm font-semibold text-[#F1F5FA]">{selectedAirportIcao}</div>
+                  </div>
+                  <div className="rsf-metal-subpanel rounded-lg p-3">
+                    <div className="text-xs text-[#A9BBCD]">Wind</div>
+                    <div className="mt-1 text-sm font-semibold text-[#F1F5FA]">
+                      {runwayBriefing?.wind?.direction !== null && runwayBriefing?.wind?.direction !== undefined && runwayBriefing?.wind?.speed !== null && runwayBriefing?.wind?.speed !== undefined
+                        ? `${Math.round(Number(runwayBriefing.wind.direction)).toString().padStart(3, "0")} at ${Math.round(Number(runwayBriefing.wind.speed))} kt${runwayBriefing.wind.gust ? ` G${Math.round(Number(runwayBriefing.wind.gust))}` : ""}`
+                        : runwayFetching ? "Loading..." : "Not available"}
+                    </div>
+                  </div>
+                  <div className="rsf-metal-subpanel rounded-lg p-3">
+                    <div className="text-xs text-[#A9BBCD]">Best runway estimate</div>
+                    <div className="mt-1 text-sm font-semibold text-[#F1F5FA]">
+                      {currentAdvisory?.runway ?? runwayBriefing?.runwayInUse ?? "Not available"}
+                    </div>
+                  </div>
+                </div>
+
+                {currentAdvisory ? (
+                  <div className="rounded-lg border border-[#5d6f85]/24 bg-[#0A0E14] p-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#A9BBCD]">Current runway component</div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <div className="text-xs text-[#A9BBCD]">Runway heading</div>
+                        <div className="text-lg font-semibold text-[#F1F5FA]">{currentAdvisory.heading ?? "--"} deg</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-[#A9BBCD]">Headwind</div>
+                        <div className="text-lg font-semibold text-[#F1F5FA]">{currentAdvisory.headwind ?? "--"} kt</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-[#A9BBCD]">Crosswind</div>
+                        <div className="text-lg font-semibold text-[#F1F5FA]">{currentAdvisory.crosswind ?? "--"} kt</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  {runwayList.length > 0 ? runwayList.slice(0, 6).map((runway) => (
+                    <div key={`${formatRunwayIdent(runway)}-${runway.lengthFt ?? "unknown"}`} className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="font-semibold text-[#F1F5FA]">{formatRunwayIdent(runway)}</div>
+                        <div className="text-xs text-[#A9BBCD]">{runway.surface ?? "Surface unknown"}</div>
+                      </div>
+                      <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-[#A9BBCD]">
+                        <div>
+                          <div>Length</div>
+                          <div className="mt-1 font-semibold text-[#F1F5FA]">{formatRunwayValue(runway.lengthFt)} ft</div>
+                        </div>
+                        <div>
+                          <div>Width</div>
+                          <div className="mt-1 font-semibold text-[#F1F5FA]">{formatRunwayValue(runway.widthFt)} ft</div>
+                        </div>
+                        <div>
+                          <div>Heading</div>
+                          <div className="mt-1 font-semibold text-[#F1F5FA]">
+                            {runway.leHeading ?? runway.heHeading ?? "--"} deg
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-4 text-sm text-[#A9BBCD]">
+                      {runwayFetching ? "Loading runway data..." : "No runway records were found for this airport."}
+                    </div>
+                  )}
+                </div>
+
+                <Alert className="border-[#7f6327]/40 bg-[#241c0d]/80 text-[#F2DCA4]">
+                  <AlertTitle className="text-[#F2DCA4]">Next step: POH/AFM runway required</AlertTitle>
+                  <AlertDescription className="text-[#D9BD7A]">
+                    RSF now shows the runway available and wind component context. The runway required still needs the selected aircraft's approved takeoff and landing performance chart for the actual weight and conditions.
+                  </AlertDescription>
+                </Alert>
+              </>
+            )}
           </CardContent>
         </Card>
 

@@ -79,3 +79,20 @@ test("landing content order puts weather before partner offers and sponsor", () 
   assert.ok(offersIndex > weatherIndex, "Expected partner offers below weather");
   assert.ok(sponsorIndex > weatherIndex, "Expected featured sponsor below weather");
 });
+
+test("current conditions search controls live inside the weather card before advisories", () => {
+  const conditionsSource = readFileSync(resolve(process.cwd(), "client/src/components/landing/LandingCurrentConditions.tsx"), "utf8");
+  const weatherCardIndex = conditionsSource.indexOf('<Card id="airport-weather"');
+  const cardContentIndex = conditionsSource.indexOf('<CardContent className="space-y-4">', weatherCardIndex);
+  const inputIndex = conditionsSource.indexOf('id="landing-icao"', cardContentIndex);
+  const updateIndex = conditionsSource.indexOf("Update conditions", cardContentIndex);
+  const advisoryIndex = conditionsSource.indexOf("is ceiling/visibility only", cardContentIndex);
+
+  assert.ok(weatherCardIndex >= 0, "Expected airport weather card");
+  assert.ok(inputIndex > cardContentIndex, "Expected ICAO input inside weather card content");
+  assert.ok(updateIndex > cardContentIndex, "Expected update button inside weather card content");
+  assert.ok(inputIndex < advisoryIndex, "Expected ICAO input before VFR advisory");
+  assert.ok(updateIndex < advisoryIndex, "Expected update button before VFR advisory");
+  assert.match(conditionsSource, /onChange=\{\(event\) => onIcaoInputChange\(event\.target\.value\)\}/);
+  assert.match(conditionsSource, /onClick=\{onRefresh\}/);
+});

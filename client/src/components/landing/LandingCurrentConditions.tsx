@@ -114,69 +114,6 @@ export function LandingCurrentConditions({
           </p>
         </div>
 
-        <Card className="overflow-visible border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.96),rgba(14,22,34,0.92))] text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.72)]">
-          <CardContent className="relative z-30 p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div className="space-y-2">
-                <Label htmlFor="landing-icao" className="text-sm font-semibold">
-                  Airport ICAO
-                </Label>
-                <div className="relative w-full sm:max-w-xs">
-                  <Input
-                    id="landing-icao"
-                    value={icaoInput}
-                    onChange={(event) => onIcaoInputChange(event.target.value)}
-                    onBlur={onSubmitIcao}
-                    onKeyDown={onKeyDown}
-                    placeholder="KAUS or Austin, TX"
-                  />
-                  {(loadingSuggestions || airportSuggestions.length > 0) && (
-                    <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-sm">
-                      {loadingSuggestions ? (
-                        <div className="px-3 py-2 text-xs text-muted-foreground">Searching airports...</div>
-                      ) : (
-                        <ul className="max-h-56 overflow-auto">
-                          {airportSuggestions.map((suggestion) => (
-                            <li key={suggestion.icao}>
-                              <button
-                                type="button"
-                                onMouseDown={(event) => event.preventDefault()}
-                                onClick={() => onApplySuggestion(suggestion)}
-                                className="w-full px-3 py-2 text-left text-sm hover:bg-muted/60"
-                              >
-                                <div className="font-semibold">{suggestion.icao}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {suggestion.name}
-                                  {suggestion.city ? ` - ${suggestion.city}` : ""}
-                                  {suggestion.state ? `, ${suggestion.state}` : ""}
-                                </div>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-                  {airportMeta && (
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      {airportMeta.name ?? "Unknown airport"}
-                      {airportLocation ? ` (${airportLocation})` : ""}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                onClick={onRefresh}
-                disabled={!isValidIcao}
-                className="w-full sm:w-auto"
-              >
-                {weatherFetching || runwayFetching || notamsFetching ? "Refreshing..." : "Update conditions"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Card id="airport-weather" className="border-[#203249] bg-[linear-gradient(180deg,rgba(10,14,20,0.98),rgba(12,22,34,0.96))] text-[#E8EDF4] shadow-[0_24px_60px_-32px_rgba(0,0,0,0.76)]">
             <CardHeader>
@@ -231,6 +168,67 @@ export function LandingCurrentConditions({
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-lg border border-[#203249] bg-[#0b1521] p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Label htmlFor="landing-icao" className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9fb7d3]">
+                      Airport ICAO
+                    </Label>
+                    <div className="relative w-full sm:max-w-xs">
+                      <Input
+                        id="landing-icao"
+                        value={icaoInput}
+                        onChange={(event) => onIcaoInputChange(event.target.value)}
+                        onBlur={onSubmitIcao}
+                        onKeyDown={onKeyDown}
+                        placeholder="KAUS or Austin, TX"
+                        className="border-[#45627d]/50 bg-[#0f1825] text-[#F1F5FA] placeholder:text-[#7890aa]"
+                      />
+                      {(loadingSuggestions || airportSuggestions.length > 0) && (
+                        <div className="absolute z-30 mt-2 w-full rounded-md border border-[#29415e] bg-[#0f1825] shadow-[0_18px_36px_-24px_rgba(0,0,0,0.9)]">
+                          {loadingSuggestions ? (
+                            <div className="px-3 py-2 text-xs text-[#91a8c3]">Searching airports...</div>
+                          ) : (
+                            <ul className="max-h-56 overflow-auto">
+                              {airportSuggestions.map((suggestion) => (
+                                <li key={suggestion.icao}>
+                                  <button
+                                    type="button"
+                                    onMouseDown={(event) => event.preventDefault()}
+                                    onClick={() => onApplySuggestion(suggestion)}
+                                    className="w-full px-3 py-2 text-left text-sm text-[#E8EDF4] hover:bg-[#16263a]"
+                                  >
+                                    <div className="font-semibold text-[#F1F5FA]">{suggestion.icao}</div>
+                                    <div className="text-xs text-[#91a8c3]">
+                                      {suggestion.name}
+                                      {suggestion.city ? ` - ${suggestion.city}` : ""}
+                                      {suggestion.state ? `, ${suggestion.state}` : ""}
+                                    </div>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {airportMeta && (
+                      <div className="text-xs text-[#91a8c3]">
+                        {airportMeta.name ?? "Unknown airport"}
+                        {airportLocation ? ` (${airportLocation})` : ""}
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={onRefresh}
+                    disabled={!isValidIcao}
+                    className="w-full border-[#2a425f] bg-[#0f1825] text-[#D8E2ED] hover:bg-[#122033] hover:text-[#F2F6FB] sm:w-auto"
+                  >
+                    {weatherFetching || runwayFetching || notamsFetching ? "Refreshing..." : "Update conditions"}
+                  </Button>
+                </div>
+              </div>
               <Alert className={weatherHazards.length > 0 ? "border-[#6d5520] bg-[#271d0b]" : "border-[#365478] bg-[#10253b]"}>
                 <AlertTriangle className={`h-4 w-4 ${weatherHazards.some((hazard) => hazard.tone === "red") ? "text-[#ff8c84]" : weatherHazards.length > 0 ? "text-[#ffd278]" : "text-[#8FC7FF]"}`} />
                 <AlertDescription className="text-xs text-[#E8EDF4] sm:text-sm">

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageShell } from "@/components/layout/PageShell";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +24,7 @@ import {
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
 import { getSourceFromWindow, withReturnTo } from "@/lib/returnTo";
+import { Calculator, DollarSign, Gauge, Scale, Wind } from "lucide-react";
 
 type MembershipPartnerOfferDetails = {
   id: string;
@@ -49,6 +51,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
   const [selectedTier, setSelectedTier] = useState<MembershipTier>("premium");
   const [selectedInterval, setSelectedInterval] = useState<MembershipInterval>("monthly");
   const [loading, setLoading] = useState(false);
+  const [lockedPreviewTool, setLockedPreviewTool] = useState<string | null>(null);
   const sourcePage = getSourceFromWindow();
   const offerSlug = useMemo(() => {
     if (offerSlugOverride) return offerSlugOverride;
@@ -252,6 +255,15 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
     }
   };
 
+  const handleLockedPreviewInteraction = (tool: string) => {
+    trackEvent("premium_locked_preview_interaction", {
+      page: "/logbook/pro",
+      source_page: sourcePage,
+      tool,
+    });
+    setLockedPreviewTool(tool);
+  };
+
   return (
     <PageShell
       kicker="Membership"
@@ -289,6 +301,260 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
                 <div className="mt-2 text-sm text-[#DCE6F2]">Keep logbook records, radio comms practice, and guided training workflows in one system.</div>
               </div>
             </div>
+
+            {!hasAccess ? (
+              <div className={`${logbookSubpanelClass} p-4 sm:p-5`}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <span className="rsf-kicker">Premium EFB previews</span>
+                    <h2 className="mt-2 text-2xl font-semibold text-[#F5F8FC]">Preview the tools before you upgrade.</h2>
+                  </div>
+                  <Badge variant="outline" className="border-[#5d6f85]/28 bg-[#141b24] text-[#A9BBCD]">
+                    Click any preview
+                  </Badge>
+                </div>
+                <div className="mt-4 grid gap-3 lg:grid-cols-2 2xl:grid-cols-5">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleLockedPreviewInteraction("Density Altitude Calculator")}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleLockedPreviewInteraction("Density Altitude Calculator");
+                      }
+                    }}
+                    className={`${logbookSubpanelClass} group min-h-[17rem] p-4 text-left transition-all hover:border-[#7f98b3]/45 hover:bg-[#18212c]`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-[#F5F8FC]">
+                        <Gauge className="h-4 w-4 text-[#D9A441]" />
+                        Density Altitude
+                      </div>
+                      <Badge variant="outline" className="border-[#7f6327]/40 bg-[#241c0d] text-[#F2DCA4]">Premium</Badge>
+                    </div>
+                    <div className="mt-4 grid gap-3">
+                      <div>
+                        <Label className="text-xs text-[#8FA6C0]">Field elevation</Label>
+                        <Input readOnly value="1,240 ft" onFocus={() => handleLockedPreviewInteraction("Density Altitude Calculator")} className="mt-1 border-[#5d6f85]/30 bg-[#0A0E14] text-[#DCE6F2]" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs text-[#8FA6C0]">Altimeter</Label>
+                          <Input readOnly value="29.84" onFocus={() => handleLockedPreviewInteraction("Density Altitude Calculator")} className="mt-1 border-[#5d6f85]/30 bg-[#0A0E14] text-[#DCE6F2]" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-[#8FA6C0]">OAT</Label>
+                          <Input readOnly value="31 C" onFocus={() => handleLockedPreviewInteraction("Density Altitude Calculator")} className="mt-1 border-[#5d6f85]/30 bg-[#0A0E14] text-[#DCE6F2]" />
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3">
+                        <div className="text-xs uppercase tracking-[0.16em] text-[#8FA6C0]">Density altitude</div>
+                        <div className="mt-1 text-2xl font-semibold text-[#F5F8FC]">3,780 ft</div>
+                      </div>
+                      <Button type="button" className={logbookSecondaryButtonClass}>Calculate</Button>
+                    </div>
+                  </div>
+
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleLockedPreviewInteraction("Crosswind Calculator")}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleLockedPreviewInteraction("Crosswind Calculator");
+                      }
+                    }}
+                    className={`${logbookSubpanelClass} group min-h-[17rem] p-4 text-left transition-all hover:border-[#7f98b3]/45 hover:bg-[#18212c]`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-[#F5F8FC]">
+                        <Wind className="h-4 w-4 text-[#D9A441]" />
+                        Crosswind
+                      </div>
+                      <Badge variant="outline" className="border-[#7f6327]/40 bg-[#241c0d] text-[#F2DCA4]">Premium</Badge>
+                    </div>
+                    <div className="mt-4 grid gap-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs text-[#8FA6C0]">Runway</Label>
+                          <Input readOnly value="180 deg" onFocus={() => handleLockedPreviewInteraction("Crosswind Calculator")} className="mt-1 border-[#5d6f85]/30 bg-[#0A0E14] text-[#DCE6F2]" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-[#8FA6C0]">Wind</Label>
+                          <Input readOnly value="220 / 18" onFocus={() => handleLockedPreviewInteraction("Crosswind Calculator")} className="mt-1 border-[#5d6f85]/30 bg-[#0A0E14] text-[#DCE6F2]" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3">
+                          <div className="text-xs text-[#8FA6C0]">Crosswind</div>
+                          <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">11.6 kt</div>
+                        </div>
+                        <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3">
+                          <div className="text-xs text-[#8FA6C0]">Headwind</div>
+                          <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">13.8 kt</div>
+                        </div>
+                      </div>
+                      <div className="h-16 rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3">
+                        <div className="relative h-full rounded border border-[#7f98b3]/24 bg-[linear-gradient(90deg,rgba(9,13,19,0.98),rgba(18,25,34,0.98))]">
+                          <div className="absolute left-1/2 top-1/2 h-12 w-2 -translate-x-1/2 -translate-y-1/2 rounded bg-[#DCE6F2]/70" />
+                          <div className="absolute left-[58%] top-[28%] h-0.5 w-12 rotate-[28deg] rounded bg-[#D9A441]" />
+                        </div>
+                      </div>
+                      <Button type="button" className={logbookSecondaryButtonClass}>Compute wind</Button>
+                    </div>
+                  </div>
+
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleLockedPreviewInteraction("Weight & Balance Calculator")}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleLockedPreviewInteraction("Weight & Balance Calculator");
+                      }
+                    }}
+                    className={`${logbookSubpanelClass} group min-h-[17rem] p-4 text-left transition-all hover:border-[#7f98b3]/45 hover:bg-[#18212c]`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-[#F5F8FC]">
+                        <Scale className="h-4 w-4 text-[#D9A441]" />
+                        Weight & Balance
+                      </div>
+                      <Badge variant="outline" className="border-[#7f6327]/40 bg-[#241c0d] text-[#F2DCA4]">Premium</Badge>
+                    </div>
+                    <div className="mt-4 grid gap-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs text-[#8FA6C0]">Pilot</Label>
+                          <Input readOnly value="185 lb" onFocus={() => handleLockedPreviewInteraction("Weight & Balance Calculator")} className="mt-1 border-[#5d6f85]/30 bg-[#0A0E14] text-[#DCE6F2]" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-[#8FA6C0]">Fuel</Label>
+                          <Input readOnly value="38 gal" onFocus={() => handleLockedPreviewInteraction("Weight & Balance Calculator")} className="mt-1 border-[#5d6f85]/30 bg-[#0A0E14] text-[#DCE6F2]" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3">
+                          <div className="text-xs text-[#8FA6C0]">Takeoff CG</div>
+                          <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">42.8 in</div>
+                        </div>
+                        <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3">
+                          <div className="text-xs text-[#8FA6C0]">Weight</div>
+                          <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">2,248 lb</div>
+                        </div>
+                      </div>
+                      <div className="h-16 rounded-lg border border-[#5d6f85]/22 bg-[linear-gradient(135deg,rgba(16,23,31,0.98),rgba(9,13,19,0.98))] p-3">
+                        <div className="h-full rounded border border-[#7f98b3]/24 bg-[#0A0E14]">
+                          <div className="ml-[54%] mt-5 h-3 w-3 rounded-full bg-[#D9A441] shadow-[0_0_18px_rgba(217,164,65,0.45)]" />
+                        </div>
+                      </div>
+                      <Button type="button" className={logbookSecondaryButtonClass}>Check envelope</Button>
+                    </div>
+                  </div>
+
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleLockedPreviewInteraction("E6B Flight Computer")}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleLockedPreviewInteraction("E6B Flight Computer");
+                      }
+                    }}
+                    className={`${logbookSubpanelClass} group min-h-[17rem] p-4 text-left transition-all hover:border-[#7f98b3]/45 hover:bg-[#18212c]`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-[#F5F8FC]">
+                        <Calculator className="h-4 w-4 text-[#D9A441]" />
+                        E6B Flight Computer
+                      </div>
+                      <Badge variant="outline" className="border-[#7f6327]/40 bg-[#241c0d] text-[#F2DCA4]">Premium</Badge>
+                    </div>
+                    <div className="mt-4 grid gap-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs text-[#8FA6C0]">Course</Label>
+                          <Input readOnly value="182 deg" onFocus={() => handleLockedPreviewInteraction("E6B Flight Computer")} className="mt-1 border-[#5d6f85]/30 bg-[#0A0E14] text-[#DCE6F2]" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-[#8FA6C0]">Wind</Label>
+                          <Input readOnly value="220 / 18" onFocus={() => handleLockedPreviewInteraction("E6B Flight Computer")} className="mt-1 border-[#5d6f85]/30 bg-[#0A0E14] text-[#DCE6F2]" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3">
+                          <div className="text-xs text-[#8FA6C0]">WCA</div>
+                          <div className="mt-1 text-lg font-semibold text-[#F5F8FC]">6R</div>
+                        </div>
+                        <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3">
+                          <div className="text-xs text-[#8FA6C0]">GS</div>
+                          <div className="mt-1 text-lg font-semibold text-[#F5F8FC]">112</div>
+                        </div>
+                        <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3">
+                          <div className="text-xs text-[#8FA6C0]">Fuel</div>
+                          <div className="mt-1 text-lg font-semibold text-[#F5F8FC]">8.7</div>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3 text-xs leading-5 text-[#A9BBCD]">
+                        Save custom output sets, copy results, and keep EFB settings across sessions.
+                      </div>
+                      <Button type="button" className={logbookSecondaryButtonClass}>Run E6B</Button>
+                    </div>
+                  </div>
+
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleLockedPreviewInteraction("Cost of Ownership Calculator")}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleLockedPreviewInteraction("Cost of Ownership Calculator");
+                      }
+                    }}
+                    className={`${logbookSubpanelClass} group min-h-[17rem] p-4 text-left transition-all hover:border-[#7f98b3]/45 hover:bg-[#18212c]`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-[#F5F8FC]">
+                        <DollarSign className="h-4 w-4 text-[#D9A441]" />
+                        Ownership Cost
+                      </div>
+                      <Badge variant="outline" className="border-[#7f6327]/40 bg-[#241c0d] text-[#F2DCA4]">Premium</Badge>
+                    </div>
+                    <div className="mt-4 grid gap-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs text-[#8FA6C0]">Fixed costs</Label>
+                          <Input readOnly value="$12,400" onFocus={() => handleLockedPreviewInteraction("Cost of Ownership Calculator")} className="mt-1 border-[#5d6f85]/30 bg-[#0A0E14] text-[#DCE6F2]" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-[#8FA6C0]">Hours / yr</Label>
+                          <Input readOnly value="95" onFocus={() => handleLockedPreviewInteraction("Cost of Ownership Calculator")} className="mt-1 border-[#5d6f85]/30 bg-[#0A0E14] text-[#DCE6F2]" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3">
+                          <div className="text-xs text-[#8FA6C0]">Hourly cost</div>
+                          <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">$168</div>
+                        </div>
+                        <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3">
+                          <div className="text-xs text-[#8FA6C0]">Annual total</div>
+                          <div className="mt-1 text-xl font-semibold text-[#F5F8FC]">$15.9k</div>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-[#5d6f85]/22 bg-[#0A0E14] p-3 text-xs leading-5 text-[#A9BBCD]">
+                        Compare fixed, variable, reserve, fuel, hangar, insurance, and maintenance assumptions.
+                      </div>
+                      <Button type="button" className={logbookSecondaryButtonClass}>Estimate cost</Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className={`${logbookSubpanelClass} p-4 sm:p-5`}>
               <span className="rsf-kicker">When pilots upgrade</span>
@@ -539,6 +805,31 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
           </div>
         </div>
       </section>
+
+      <Dialog open={Boolean(lockedPreviewTool)} onOpenChange={(open) => !open && setLockedPreviewTool(null)}>
+        <DialogContent className="rsf-logbook-theme rsf-metal-panel border-[#5d6f85]/30 text-[#E8EDF4] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-[#F5F8FC]">{lockedPreviewTool || "Premium tool"}</DialogTitle>
+            <DialogDescription className="text-[#A9BBCD]">
+              This is available for RSF Premium subscribers. Upgrade to use the full calculator with live inputs, saved settings, and connected RSF workflow support.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-[1rem] border border-[#5d6f85]/24 bg-[#101720] p-4 text-sm text-[#DCE6F2]">
+            The preview shows the tool surface and result layout. Premium unlocks interaction, calculation, copying, and saved continuity across RSF.
+          </div>
+          <DialogFooter>
+            {isAuthenticated ? (
+              <Button className={logbookPrimaryButtonClass} onClick={handleSubscribe} disabled={loading}>
+                {loading ? "Redirecting..." : "Subscribe to Premium"}
+              </Button>
+            ) : (
+              <Button asChild className={logbookPrimaryButtonClass}>
+                <a href={withReturnTo("/register", "/logbook/pro")}>Subscribe to Premium</a>
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

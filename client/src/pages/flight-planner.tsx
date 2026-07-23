@@ -10496,22 +10496,22 @@ export default function FlightPlanner() {
                           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             {group.label}
                           </div>
-                          <div className="grid gap-2 sm:grid-cols-2">
+                          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                             {group.items.map((item, index) => (
-                              <div key={`${icao}-${group.label}-${item.type || "other"}-${item.frequency || item.frequencyMhz || "na"}-${index}`} className={cn(plannerSubpanelMutedClass, "flex min-h-20 items-start justify-between gap-3 px-3 py-2")}>
-                                <div className="min-w-0">
-                                  <div className="text-sm font-semibold">{formatFrequencyTypeLabel(item.type)}</div>
+                              <div key={`${icao}-${group.label}-${item.type || "other"}-${item.frequency || item.frequencyMhz || "na"}-${index}`} className={cn(plannerSubpanelMutedClass, "grid min-h-24 gap-2 px-3 py-3")}>
+                                <div className="min-w-0 space-y-1">
+                                  <div className="break-words text-sm font-semibold leading-snug">{formatFrequencyTypeLabel(item.type)}</div>
+                                  <div className="font-mono text-base font-bold leading-none tabular-nums text-[#E8EDF4]">
+                                    {formatCommunicationFrequency(item)}
+                                  </div>
                                   {item.description ? (
-                                    <div className="text-xs text-muted-foreground">{item.description}</div>
+                                    <div className="break-words text-xs leading-snug text-muted-foreground">{item.description}</div>
                                   ) : null}
                                   {item.source === "faa_chart_supplement" ? (
                                     <Badge variant="outline" className="mt-2 border-[#5d6f85]/30 bg-[#141b24] text-[10px] uppercase tracking-wide text-[#B8CBDD]">
                                       FAA supplemental
                                     </Badge>
                                   ) : null}
-                                </div>
-                                <div className="shrink-0 font-mono text-base font-bold tabular-nums">
-                                  {formatCommunicationFrequency(item)}
                                 </div>
                               </div>
                             ))}

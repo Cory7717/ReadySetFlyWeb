@@ -113,7 +113,8 @@ export function OperationalIntelligencePanelView({
             <div className={`${plannerSubpanelClass} p-4`}>
               <div className="text-sm font-semibold text-[#F5F8FC]">Upgrade to unlock TFMS operational intelligence</div>
               <div className={`mt-1 text-xs ${plannerMutedClass}`}>
-                TFR corridor checks remain separate in the route map and analysis panels.
+                TFR map overlays and route-corridor TFR checks are available separately in the route map and analysis panels.
+                Premium unlocks the FAA traffic-flow intelligence below.
               </div>
               <ul className={`mt-2 list-disc space-y-1 pl-4 text-xs ${plannerMutedClass}`}>
                 {lockedBullets.map((item) => (

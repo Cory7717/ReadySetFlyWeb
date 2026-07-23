@@ -2229,7 +2229,11 @@ export default function FlightPlanner() {
   const pressDemo = usePressDemo(FLIGHT_PLANNER_PRESS_STEPS);
   const entitlements = (user as any)?.entitlements;
   const hasPlannerPersistence = entitlements?.canPersist ?? isAuthenticated;
-  const hasPremiumAccess = entitlements?.tier === "premium" || user?.logbookProStatus === "active";
+  const hasPremiumAccess =
+    entitlements?.tier === "premium" ||
+    entitlements?.canUseUnlimitedActiveFlightPlans === true ||
+    entitlements?.canUseLogbook === true ||
+    user?.logbookProStatus === "active";
   const isPro = isAuthenticated || hasPlannerPersistence;
   const tfmsTier: TfmsTier = hasPremiumAccess ? "premium" : "free";
   const isGuest = !isAuthenticated;

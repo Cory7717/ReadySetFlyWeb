@@ -66,6 +66,34 @@ test("inactive, cancelled, or expired paid records do not retain Premium entitle
   }
 });
 
+test("active admin membership grants return RSF Premium entitlement", () => {
+  const entitlements = getEntitlementsForUser({
+    ...activeUser("free"),
+    membershipStatus: "inactive",
+    membershipGrantTier: "premium",
+    membershipGrantEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    logbookProStatus: "inactive",
+  } as any);
+
+  assert.equal(entitlements.tier, "premium");
+  assert.equal(entitlements.canUseUnlimitedActiveFlightPlans, true);
+  assert.equal(entitlements.canUseLogbook, true);
+});
+
+test("expired admin membership grants do not retain RSF Premium entitlement", () => {
+  const entitlements = getEntitlementsForUser({
+    ...activeUser("free"),
+    membershipStatus: "inactive",
+    membershipGrantTier: "premium",
+    membershipGrantEndsAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    logbookProStatus: "inactive",
+  } as any);
+
+  assert.equal(entitlements.tier, "free");
+  assert.equal(entitlements.canUseUnlimitedActiveFlightPlans, false);
+  assert.equal(entitlements.canUseLogbook, false);
+});
+
 test("monthly and annual PayPal plan IDs map to the same Premium entitlement", () => {
   assert.equal(resolvePayPalPlanId("premium", "monthly"), "paypal-premium-monthly");
   assert.equal(resolvePayPalPlanId("premium", "annual"), "paypal-legacy-proplus-annual");

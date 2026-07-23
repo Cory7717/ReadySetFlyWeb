@@ -66,10 +66,19 @@ test("Flight Planner route-analysis query uses planning geometry route, not prov
 });
 
 test("Flight Planner Direct mode route points are endpoint-only and ignore stale helpers", () => {
-  assert.match(flightPlannerSource, /const suggestedWaypoint = useMemo\(\(\) => \{\s*if \(routeMode !== "auto"\) return null;/);
+  assert.match(flightPlannerSource, /const autoSuggestedIntermediates = useMemo\(\(\) => \{/);
+  assert.match(flightPlannerSource, /if \(routeMode !== "auto"\) return \[\];/);
+  assert.doesNotMatch(flightPlannerSource, /return autoSuggestedIntermediates;/);
   assert.match(flightPlannerSource, /const routePoints: PlannerPoint\[\] = useMemo\(\(\) => \{\s*if \(routeMode === "direct"\) \{\s*return airportPoints;\s*\}/);
   assert.match(flightPlannerSource, /if \(routeMode === "auto" && waypoints\.length > 0 && routeAssistResolvedPoints\.length >= 2\)/);
   assert.doesNotMatch(flightPlannerSource, /routeMode !== "manual" && waypoints\.length > 0 && routeAssistResolvedPoints\.length >= 2/);
   assert.match(flightPlannerSource, /flight_planner_direct_geometry_invariant_failed/);
   assert.match(flightPlannerSource, /filedRouteIsDirect/);
+});
+
+test("Flight Planner Manual mode does not inject Route Assist intermediates", () => {
+  assert.match(flightPlannerSource, /if \(routeMode === "manual"\) \{\s*return filedRouteAirportTokens;\s*\}/);
+  assert.match(flightPlannerSource, /route:\s*normalizeRouteText\(current\.route\),/);
+  assert.doesNotMatch(flightPlannerSource, /route:\s*normalizeRouteText\(current\.route\) \|\| generatedRouteCore \|\| routeAssistRouteCore/);
+  assert.doesNotMatch(flightPlannerSource, /form\.route\.trim\(\)\.toUpperCase\(\) === "DCT"[\s\S]{0,180}generatedRouteCore \|\| routeAssistRouteCore/);
 });

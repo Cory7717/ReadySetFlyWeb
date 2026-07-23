@@ -3680,14 +3680,14 @@ export default function FlightPlanner() {
     if (routeMode === "direct") {
       return [];
     }
+    if (routeMode === "manual") {
+      return filedRouteAirportTokens;
+    }
     if (plannedStops.length > 0 || waypoints.length > 0) {
       return [...plannedStops, ...routeAssistAirportTokens];
     }
-    if (routeMode === "manual" && filedRouteAirportTokens.length > 0) {
-      return filedRouteAirportTokens;
-    }
     if (routeMode !== "auto") return [];
-    return autoSuggestedIntermediates;
+    return [];
   }, [routeMode, plannedStops, waypoints.length, routeAssistAirportTokens, filedRouteAirportTokens, autoSuggestedIntermediates]);
 
   const routeSequenceRaw = useMemo(() => {
@@ -9156,11 +9156,11 @@ export default function FlightPlanner() {
                         if (nextMode === "manual") {
                           setForm((current) => ({
                             ...current,
-                            route: normalizeRouteText(current.route) || generatedRouteCore || routeAssistRouteCore || "",
+                            route: normalizeRouteText(current.route),
                           }));
                         }
                         if (nextMode === "auto" && form.route.trim().toUpperCase() === "DCT") {
-                          setForm((current) => ({ ...current, route: generatedRouteCore || routeAssistRouteCore || "" }));
+                          setForm((current) => ({ ...current, route: "" }));
                         }
                       }}
                     >

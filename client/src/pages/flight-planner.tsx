@@ -3680,7 +3680,6 @@ export default function FlightPlanner() {
   const filedRouteInputNormalized = useMemo(() => normalizeRouteText(form.route), [form.route]);
   const filedRouteAnalysis = useMemo(() => analyzeFiledRoute(filedRouteInputNormalized), [filedRouteInputNormalized]);
   const filedRouteTokens = filedRouteAnalysis.tokens;
-  const filedRouteAirportTokens = filedRouteAnalysis.airportTokens;
   const planningGeometryRouteInput = useMemo(() => composePlanningGeometryRoute({
     departure: planningDepartureCode,
     route: filedRouteInputNormalized || "DCT",
@@ -3732,11 +3731,12 @@ export default function FlightPlanner() {
   });
   const resolvedFiledRouteAnalysis = filedRouteAnalysisQuery.data ?? {
     ...filedRouteAnalysis,
-    recognizedAirportTokens: filedRouteAnalysis.airportTokens,
-    unresolvedAirportTokens: [] as string[],
+    recognizedAirportTokens: [] as string[],
+    unresolvedAirportTokens: filedRouteAnalysis.airportTokens,
     routePoints: [] as NonNullable<FiledRouteAnalysisResponse["routePoints"]>,
     unresolvedRoutePointTokens: [] as string[],
   };
+  const filedRouteAirportTokens = resolvedFiledRouteAnalysis.recognizedAirportTokens;
   const resolvedRouteAssistAnalysis = routeAssistAnalysisQuery.data ?? null;
   const routeAssistAirportTokens = useMemo(() => {
     const points = resolvedRouteAssistAnalysis?.routePoints || [];
@@ -3856,14 +3856,26 @@ export default function FlightPlanner() {
       const airportQuery = airportQueries[index];
       const airport = airportMap.get(icao);
       const detailHasCommunications = Boolean(extractAirportCommunications(airport));
+      const hasResolvedAirport = Boolean(
+        airport &&
+        airportSearchResultMatchesIdentifier(airport, icao) &&
+        Number.isFinite(Number(airport.lat)) &&
+        Number.isFinite(Number(airport.lon))
+      );
       return {
         queryKey: ["/api/airports", icao, "frequencies"],
         queryFn: async () => {
+          console.info(JSON.stringify({
+            event: "airport_frequency_lookup_requested",
+            identifier: icao,
+            origin: "flight_planner_airport_communications",
+            featureType: "airport",
+          }));
           const res = await fetch(apiUrl(`/api/airports/${encodeURIComponent(icao)}/frequencies`), { credentials: "include" });
           if (!res.ok) throw new Error("Failed to fetch airport frequencies");
           return res.json() as Promise<AirportFrequencyResponse>;
         },
-        enabled: Boolean(icao && !detailHasCommunications && !airportQuery?.isPending && !airportQuery?.isFetching),
+        enabled: Boolean(icao && hasResolvedAirport && !detailHasCommunications && !airportQuery?.isPending && !airportQuery?.isFetching),
         staleTime: 1000 * 60 * 60,
       };
     }),

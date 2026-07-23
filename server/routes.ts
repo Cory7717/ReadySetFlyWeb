@@ -4012,6 +4012,33 @@ function logAirportCommunicationUnavailable(icao: string, reason: string) {
   }));
 }
 
+function logAirportFrequencyLookupRejected(identifier: string, reason: string) {
+  console.info(JSON.stringify({
+    event: "airport_frequency_lookup_rejected",
+    identifier,
+    reason,
+  }));
+}
+
+async function resolveKnownAirportIdentifier(identifier: string) {
+  const requestedIcao = normalizeIcao(identifier || "");
+  if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) return null;
+  const candidates = buildIcaoCandidates(requestedIcao);
+  const [stations, referenceMap] = await Promise.all([
+    loadStationCache().catch(() => [] as AirportSearchResult[]),
+    loadAirportReferenceCache().catch(() => null),
+  ]);
+  const stationMatch = stations.find((station) => candidates.includes(normalizeIcao(station.icao || "")));
+  if (stationMatch?.icao) return normalizeIcao(stationMatch.icao);
+  if (referenceMap) {
+    for (const candidate of candidates) {
+      const reference = referenceMap.get(candidate);
+      if (reference) return normalizeIcao(reference.icao || reference.ident || candidate);
+    }
+  }
+  return null;
+}
+
 async function attachAirportCommunications<T extends Record<string, unknown>>(airport: T, icao: string): Promise<T & {
   communications: AirportCommunication[];
   communicationsUnavailable: boolean;
@@ -17864,14 +17891,27 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
 
+      const resolvedIcao = await resolveKnownAirportIdentifier(requestedIcao);
+      if (!resolvedIcao) {
+        logAirportFrequencyLookupRejected(requestedIcao, "unknown_airport_identifier");
+        return res.json({
+          icao: requestedIcao,
+          communications: [],
+          communicationsUnavailable: false,
+          frequencies: [],
+          invalidIdentifier: true,
+        });
+      }
+
       const frequencyMap = await loadAirportFrequencyCache();
-      const communications = normalizeAirportCommunications(requestedIcao, frequencyMap);
+      const communications = normalizeAirportCommunications(resolvedIcao, frequencyMap);
       if (communications.length === 0) {
-        logAirportCommunicationUnavailable(requestedIcao, "no_frequency_rows_for_airport");
+        logAirportCommunicationUnavailable(resolvedIcao, "no_frequency_rows_for_airport");
       }
 
       return res.json({
-        icao: requestedIcao,
+        icao: resolvedIcao,
+        requestedIcao,
         communications,
         communicationsUnavailable: communications.length === 0,
         frequencies: communications,

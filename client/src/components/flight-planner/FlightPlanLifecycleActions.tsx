@@ -30,6 +30,10 @@ export const getProviderActionAvailability = (plan: FlightPlan | null | undefine
   const snapshot = getProviderSnapshot(plan);
   const availability = snapshot.providerActionAvailability;
   const lifecycle = String(snapshot.providerLifecycleStatus || "").toLowerCase();
+  const lifecycleAllowsAmend = ["proposed", "filed", "activated", "active"].includes(lifecycle);
+  const lifecycleAllowsActivate = ["proposed", "filed"].includes(lifecycle);
+  const lifecycleAllowsCancel = lifecycle === "proposed" || lifecycle === "filed";
+  const lifecycleAllowsClose = lifecycle === "activated" || lifecycle === "active";
   const versionStamp = snapshot.versionStamp || extractFilingVersionStamp(plan);
   const providerStatusKnown = Boolean(
     lifecycle &&
@@ -48,10 +52,10 @@ export const getProviderActionAvailability = (plan: FlightPlan | null | undefine
   return {
     lifecycle: lifecycle || "unknown",
     providerStatusKnown,
-    amend: availability?.amend == null ? ["proposed", "filed", "activated", "active"].includes(lifecycle) : Boolean(availability.amend),
-    activate: availability?.activate == null ? lifecycle === "proposed" || lifecycle === "filed" : Boolean(availability.activate),
-    cancel: availability?.cancel == null ? lifecycle === "proposed" : Boolean(availability.cancel),
-    close: availability?.close == null ? lifecycle === "activated" || lifecycle === "active" : Boolean(availability.close),
+    amend: lifecycleAllowsAmend && (availability?.amend == null || Boolean(availability.amend)),
+    activate: lifecycleAllowsActivate && (availability?.activate == null || Boolean(availability.activate)),
+    cancel: lifecycleAllowsCancel && (availability?.cancel == null || Boolean(availability.cancel)),
+    close: lifecycleAllowsClose && (availability?.close == null || Boolean(availability.close)),
     reason: String(availability?.reason || ""),
   };
 };

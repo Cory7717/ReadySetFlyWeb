@@ -686,10 +686,10 @@ test("filed VFR provider lifecycle actions follow provider availability", () => 
 
   assertButtonVisible(html, lifecycleLabels.amend, { disabled: false });
   assertButtonVisible(html, lifecycleLabels.activate, { disabled: false });
-  assertButtonVisible(html, lifecycleLabels.close, { disabled: false });
+  assertButtonVisible(html, lifecycleLabels.close, { disabled: true });
   assertButtonVisible(html, lifecycleLabels.cancel, { disabled: false });
   assert.equal(getLifecycleActionDisabledReason(planForRender, "activate"), null);
-  assert.equal(getLifecycleActionDisabledReason(planForRender, "close"), null);
+  assert.match(getLifecycleActionDisabledReason(planForRender, "close") || "", /provider lifecycle is proposed/i);
   assert.equal(getLifecycleActionDisabledReason(planForRender, "cancel"), null);
 });
 
@@ -1158,6 +1158,20 @@ test("flight planner keeps schedule fields above airports and alternate below ru
   assert.match(source, /<div className="grid gap-4 md:grid-cols-2">/);
   assert.doesNotMatch(source, /xl:grid-cols-5/);
   assert.match(source, /Override winds/);
+});
+
+test("flight planner hydrates saved route mode from planner state before inferring direct", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /const savedPlannerRouteMode =[\s\S]*plannerState\.routeMode as "auto" \| "direct" \| "manual"/);
+  assert.match(source, /setRouteMode\(savedPlannerRouteMode \?\? \(normalizedSavedRoute === "DCT" \|\| !normalizedSavedRoute \? "direct" : "manual"\)\)/);
+  assert.doesNotMatch(source, /setRouteMode\(normalizedSavedRoute === "DCT" \|\| !normalizedSavedRoute \? "direct" : "manual"\);[\s\S]*setRouteMode\(plannerState\.routeMode\)/);
+});
+
+test("desktop header keeps global RSF search visible before ultra-wide breakpoint", () => {
+  const source = readFileSync(resolve("client/src/components/header.tsx"), "utf8");
+  assert.match(source, /placeholder="Search RSF"/);
+  assert.match(source, /className="relative ml-auto hidden w-40 shrink-0 xl:block 2xl:w-44"/);
+  assert.doesNotMatch(source, /relative ml-auto hidden w-40 shrink-0 2xl:block/);
 });
 
 test("flight planner gates downstream alternate weather on resolved airport identity", () => {

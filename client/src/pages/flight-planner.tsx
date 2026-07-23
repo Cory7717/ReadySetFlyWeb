@@ -605,6 +605,10 @@ const getProviderActionAvailability = (plan: FlightPlan | null | undefined) => {
   const snapshot = getProviderSnapshot(plan);
   const availability = snapshot.providerActionAvailability;
   const lifecycle = String(snapshot.providerLifecycleStatus || "").toLowerCase();
+  const lifecycleAllowsAmend = ["proposed", "filed", "activated", "active"].includes(lifecycle);
+  const lifecycleAllowsActivate = ["proposed", "filed"].includes(lifecycle);
+  const lifecycleAllowsCancel = lifecycle === "proposed" || lifecycle === "filed";
+  const lifecycleAllowsClose = lifecycle === "activated" || lifecycle === "active";
   const versionStamp = snapshot.versionStamp || extractClientVersionStamp(plan);
   const providerStatusKnown = Boolean(
     lifecycle &&
@@ -623,10 +627,10 @@ const getProviderActionAvailability = (plan: FlightPlan | null | undefined) => {
   return {
     lifecycle: lifecycle || "unknown",
     providerStatusKnown,
-    amend: availability?.amend == null ? ["proposed", "filed", "activated", "active"].includes(lifecycle) : Boolean(availability.amend),
-    activate: availability?.activate == null ? lifecycle === "proposed" || lifecycle === "filed" : Boolean(availability.activate),
-    cancel: availability?.cancel == null ? lifecycle === "proposed" : Boolean(availability.cancel),
-    close: availability?.close == null ? lifecycle === "activated" || lifecycle === "active" : Boolean(availability.close),
+    amend: lifecycleAllowsAmend && (availability?.amend == null || Boolean(availability.amend)),
+    activate: lifecycleAllowsActivate && (availability?.activate == null || Boolean(availability.activate)),
+    cancel: lifecycleAllowsCancel && (availability?.cancel == null || Boolean(availability.cancel)),
+    close: lifecycleAllowsClose && (availability?.close == null || Boolean(availability.close)),
     reason: String(availability?.reason || ""),
   };
 };
@@ -645,36 +649,45 @@ const canSubmitAmendForPlan = (plan: FlightPlan | null | undefined) => {
 };
 
 const canActivatePlan = (plan: FlightPlan | null | undefined) =>
-  Boolean(
-    plan &&
-    String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
-    normalizedClientFilingStatus(plan) === "filed" &&
-    getProviderActionAvailability(plan).providerStatusKnown &&
-    getProviderActionAvailability(plan).activate &&
-    hasLiveProviderPlan(plan),
-  );
+  {
+    const provider = getProviderActionAvailability(plan);
+    return Boolean(
+      plan &&
+      String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
+      !isTerminalFilingPlan(plan) &&
+      provider.providerStatusKnown &&
+      provider.activate &&
+      hasLiveProviderPlan(plan),
+    );
+  };
 
 const canClosePlan = (plan: FlightPlan | null | undefined) =>
-  Boolean(
-    plan &&
-    String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
-    normalizedClientFilingStatus(plan) === "activated" &&
-    getProviderActionAvailability(plan).providerStatusKnown &&
-    getProviderActionAvailability(plan).close &&
-    hasLiveProviderPlan(plan),
-  );
+  {
+    const provider = getProviderActionAvailability(plan);
+    return Boolean(
+      plan &&
+      String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
+      !isTerminalFilingPlan(plan) &&
+      provider.providerStatusKnown &&
+      provider.close &&
+      hasLiveProviderPlan(plan),
+    );
+  };
 
 const isPlanOverdueForClose = (plan: FlightPlan | null | undefined) =>
   Boolean(plan && isFlightPlanCloseOverdue(plan.plannedArrivalAt));
 
 const canCancelPlan = (plan: FlightPlan | null | undefined) =>
-  Boolean(
-    plan &&
-    normalizedClientFilingStatus(plan) === "filed" &&
-    getProviderActionAvailability(plan).providerStatusKnown &&
-    getProviderActionAvailability(plan).cancel &&
-    hasLiveProviderPlan(plan),
-  );
+  {
+    const provider = getProviderActionAvailability(plan);
+    return Boolean(
+      plan &&
+      !isTerminalFilingPlan(plan) &&
+      provider.providerStatusKnown &&
+      provider.cancel &&
+      hasLiveProviderPlan(plan),
+    );
+  };
 
 const canFilePlan = (plan: FlightPlan | null | undefined) => {
   if (!plan) return true;
@@ -8469,17 +8482,21 @@ export default function FlightPlanner() {
       alternateMode: savedPlannerState.actualAlternateLocationMode || null,
       alternateActualLocation: savedPlannerState.actualAlternateLocation || null,
     });
-    const normalizedSavedRoute = normalizeRouteText(editingPlan.route || "");
-    const savedRouteTokens = normalizedSavedRoute ? normalizedSavedRoute.split(/\s+/) : [];
-    const savedRouteIsAirportOnly = savedRouteTokens.length > 0 && savedRouteTokens.every((token) => ICAO_REGEX.test(token));
-    setWaypointsInput(savedRouteIsAirportOnly ? normalizedSavedRoute : "");
-    setRouteMode(normalizedSavedRoute === "DCT" || !normalizedSavedRoute ? "direct" : "manual");
-    setPlannedStopsInput("");
-    setPlannedAltitude(editingPlan.filingPlannedAltitudeFt ? String(editingPlan.filingPlannedAltitudeFt) : "");
     const plannerState =
       editingPlan.plannerState && typeof editingPlan.plannerState === "object" && !Array.isArray(editingPlan.plannerState)
         ? editingPlan.plannerState as Record<string, any>
         : null;
+    const normalizedSavedRoute = normalizeRouteText(editingPlan.route || "");
+    const savedRouteTokens = normalizedSavedRoute ? normalizedSavedRoute.split(/\s+/) : [];
+    const savedRouteIsAirportOnly = savedRouteTokens.length > 0 && savedRouteTokens.every((token) => ICAO_REGEX.test(token));
+    const savedPlannerRouteMode =
+      plannerState?.routeMode === "auto" || plannerState?.routeMode === "direct" || plannerState?.routeMode === "manual"
+        ? plannerState.routeMode as "auto" | "direct" | "manual"
+        : null;
+    setWaypointsInput(savedRouteIsAirportOnly ? normalizedSavedRoute : "");
+    setRouteMode(savedPlannerRouteMode ?? (normalizedSavedRoute === "DCT" || !normalizedSavedRoute ? "direct" : "manual"));
+    setPlannedStopsInput("");
+    setPlannedAltitude(editingPlan.filingPlannedAltitudeFt ? String(editingPlan.filingPlannedAltitudeFt) : "");
     if (plannerState?.customProfile && typeof plannerState.customProfile === "object") {
       setCustomProfile((prev) => ({
         ...prev,
@@ -8491,9 +8508,6 @@ export default function FlightPlanner() {
     }
     if (typeof plannerState?.selectedTypeId === "string") {
       setSelectedTypeId(plannerState.selectedTypeId);
-    }
-    if (plannerState?.routeMode === "auto" || plannerState?.routeMode === "direct" || plannerState?.routeMode === "manual") {
-      setRouteMode(plannerState.routeMode);
     }
     if (typeof plannerState?.selectedProfileId === "string" || typeof plannerState?.selectedTypeId === "string") {
       setArrivalAuto(false);

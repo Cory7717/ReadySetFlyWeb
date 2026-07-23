@@ -193,7 +193,7 @@ export function Header() {
 
           <form
             ref={searchRef}
-            className="relative ml-auto hidden w-40 shrink-0 2xl:block"
+            className="relative ml-auto hidden w-40 shrink-0 xl:block 2xl:w-44"
             onSubmit={(event) => {
               event.preventDefault();
               handleToolSubmit();

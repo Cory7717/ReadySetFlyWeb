@@ -9828,24 +9828,24 @@ export default function FlightPlanner() {
                       </div>
                     </div>
                   )}
-                  <div className="grid gap-2 md:grid-cols-3">
+                  <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))]">
                     {terrainAdvisorSummaries.map((summary) => (
                       <div
                         key={`terrain-advisor-${summary.id}`}
                         className={cn(
-                          "rounded-[1rem] border p-3 space-y-2 shadow-[0_16px_32px_-26px_rgba(0,0,0,0.88)]",
+                          "min-w-0 rounded-[1rem] border p-3 space-y-2 shadow-[0_16px_32px_-26px_rgba(0,0,0,0.88)]",
                           recommendedTerrainRoute?.id === summary.id
                             ? "border-[#5aa28e] bg-[linear-gradient(180deg,rgba(15,33,29,0.98),rgba(10,18,16,0.98))]"
                             : "border-[#40695f]/34 bg-[linear-gradient(180deg,rgba(14,23,21,0.96),rgba(10,15,15,0.96))]"
                         )}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
+                        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
                             <div className="font-semibold">{summary.label}</div>
                             <div className="text-[11px] text-[#a9cec3]">{summary.description}</div>
                           </div>
                           {recommendedTerrainRoute?.id === summary.id && (
-                            <Badge className="border-0 bg-[#2f7a6a] text-[#f2fbf8] hover:bg-[#2f7a6a]">Recommended</Badge>
+                            <Badge className="shrink-0 border-0 bg-[#2f7a6a] text-[#f2fbf8] hover:bg-[#2f7a6a]">Recommended</Badge>
                           )}
                         </div>
                         <div className="space-y-1">
@@ -10016,7 +10016,7 @@ export default function FlightPlanner() {
           <CardDescription className={plannerCardDescriptionClass}>Review trip distance, time, and fuel after your aircraft selection fills in the planning assumptions above.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Reserve Fuel (minutes)</Label>
               <Select value={reserveMinutes} onValueChange={setReserveMinutes}>
@@ -10030,7 +10030,7 @@ export default function FlightPlanner() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2 md:col-span-2 xl:col-span-2">
+            <div className="space-y-2">
               <Label>Route wind component</Label>
               <div className={cn("min-h-[134px] rounded-[0.9rem] border border-[#5d6f85]/24 bg-[#101820] px-3 py-2 text-sm text-[#D9E4F0]")}>
                 <div className="font-semibold text-[#F5F8FC]">
@@ -10103,20 +10103,20 @@ export default function FlightPlanner() {
                 type="number"
               />
               <div
-                className="rounded-[0.85rem] border border-[#3f6488]/55 bg-[#101923]/95 px-3 py-2 text-sm shadow-[0_14px_30px_-24px_rgba(0,0,0,0.9)]"
+                className="min-w-0 rounded-[0.85rem] border border-[#3f6488]/55 bg-[#101923]/95 px-3 py-2 text-sm shadow-[0_14px_30px_-24px_rgba(0,0,0,0.9)]"
                 data-testid="selected-aircraft-usable-fuel-reference"
               >
                 <div className="flex items-start gap-2">
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#8fb7df]" aria-hidden="true" />
                   <div className="min-w-0">
-                    <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[#9db6cf]">
+                    <div className="break-words text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[#9db6cf]">
                       Selected aircraft usable fuel
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       <span className="text-lg font-semibold text-[#F5F8FC]">{selectedAircraftFuelCapacityLabel}</span>
-                      <span className="text-xs text-[#A9BBCD]">from {selectedAircraftFuelSourceLabel}</span>
+                      <span className="min-w-0 break-words text-xs text-[#A9BBCD]">from {selectedAircraftFuelSourceLabel}</span>
                     </div>
-                    <div className="mt-1 text-xs text-[#C8D7E8]">
+                    <div className="mt-1 break-words text-xs text-[#C8D7E8]">
                       {selectedAircraftFuelLabel}
                     </div>
                   </div>

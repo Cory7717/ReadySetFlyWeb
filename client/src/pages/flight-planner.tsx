@@ -1112,6 +1112,78 @@ const extractPolygonRings = (geometry: any): [number, number][][] => {
   return [];
 };
 
+const collectGeometryCoordinates = (coordinates: any, points: [number, number][] = []): [number, number][] => {
+  if (
+    Array.isArray(coordinates) &&
+    coordinates.length >= 2 &&
+    typeof coordinates[0] === "number" &&
+    typeof coordinates[1] === "number"
+  ) {
+    points.push([coordinates[0], coordinates[1]]);
+    return points;
+  }
+  if (Array.isArray(coordinates)) {
+    coordinates.forEach((item) => collectGeometryCoordinates(item, points));
+  }
+  return points;
+};
+
+const getTfrFeatureCenter = (feature: any): { lat: number; lon: number } | null => {
+  const geometry = feature?.geometry;
+  const props = feature?.properties || {};
+  const candidates = [
+    { lat: Number(props.centerLat), lon: Number(props.centerLon) },
+    { lat: Number(props.lat), lon: Number(props.lon) },
+    { lat: Number(props.latitude), lon: Number(props.longitude) },
+  ];
+  for (const candidate of candidates) {
+    if (Number.isFinite(candidate.lat) && Number.isFinite(candidate.lon)) return candidate;
+  }
+  if (geometry?.type === "Point" && Array.isArray(geometry.coordinates)) {
+    const [lon, lat] = geometry.coordinates;
+    if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
+  }
+  const points = collectGeometryCoordinates(geometry?.coordinates);
+  if (!points.length) return null;
+  const totals = points.reduce((sum, [lon, lat]) => ({ lon: sum.lon + lon, lat: sum.lat + lat }), { lon: 0, lat: 0 });
+  return { lat: totals.lat / points.length, lon: totals.lon / points.length };
+};
+
+const getTfrDisplayTitle = (feature: any) => {
+  const props = feature?.properties || {};
+  return String(props.title || props.location || props.notamId || "Temporary Flight Restriction").trim();
+};
+
+const getTfrDisplayReason = (feature: any) => {
+  const props = feature?.properties || {};
+  const raw = String(props.reason || props.legal || props.tfrType || props.text || "").trim();
+  if (!raw) return "Reason not returned by the TFR feed. Verify the NOTAM text before flight.";
+  if (/parachute|jump/i.test(raw)) return "Parachute jump activity";
+  if (/airshow|aerial demonstration|demonstration/i.test(raw)) return "Airshow or aerial demonstration";
+  if (/security|vip|presidential/i.test(raw)) return "Security/VIP restriction";
+  if (/space|rocket|launch/i.test(raw)) return "Space or launch activity";
+  if (/hazard|disaster|fire|rescue/i.test(raw)) return "Hazard, disaster, or emergency response";
+  return raw.length > 120 ? `${raw.slice(0, 117)}...` : raw;
+};
+
+const getTfrDisplayTime = (feature: any) => {
+  const props = feature?.properties || {};
+  const start = props.effectiveStart || props.startTime || props.notamStart || props.validFrom || props.effectiveAt || props.start;
+  const end = props.effectiveEnd || props.endTime || props.notamEnd || props.validTo || props.expiresAt || props.end;
+  const format = (value: any) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return null;
+    return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+  };
+  const startLabel = format(start);
+  const endLabel = format(end);
+  if (startLabel && endLabel) return `${startLabel} - ${endLabel}`;
+  if (startLabel) return `Starts ${startLabel}`;
+  if (endLabel) return `Ends ${endLabel}`;
+  return null;
+};
+
 const buildPolygonBounds = (ring: [number, number][]) => {
   let minLon = Infinity;
   let maxLon = -Infinity;
@@ -1204,6 +1276,17 @@ const ringIntersectsRouteCorridor = (route: AirportPoint[], ring: [number, numbe
   return ring.some(([lon, lat]) => pointToRouteDistanceNm({ lat, lon }, route) <= corridorNm);
 };
 
+const geometryIntersectsRouteCorridor = (feature: any, route: AirportPoint[], corridorNm: number) => {
+  const geometry = feature?.geometry;
+  const rings = extractPolygonRings(geometry);
+  if (rings.some((ring) => ringIntersectsRouteCorridor(route, ring, corridorNm))) return true;
+  const center = getTfrFeatureCenter(feature);
+  if (center && pointToRouteDistanceNm(center, route) <= corridorNm) return true;
+  return collectGeometryCoordinates(geometry?.coordinates).some(([lon, lat]) =>
+    pointToRouteDistanceNm({ lat, lon }, route) <= corridorNm
+  );
+};
+
 const classifyTfrTiming = (feature: any, flightStartUtc: Date | null, flightEndUtc: Date | null) => {
   const props = feature?.properties || {};
   const startRaw = props.effectiveStart || props.startTime || props.notamStart || props.validFrom || props.start;
@@ -1244,17 +1327,24 @@ const filterTfrFeaturesForCorridor = ({
   if (route.length < 2) return [];
   return features
     .filter((feature) => {
-      const rings = extractPolygonRings(feature?.geometry);
-      return rings.some((ring) => ringIntersectsRouteCorridor(route, ring, corridorNm));
+      return geometryIntersectsRouteCorridor(feature, route, corridorNm);
     })
     .filter((feature) => classifyTfrTiming(feature, flightStartUtc, flightEndUtc) !== "expired")
-    .map((feature) => ({
-      ...feature,
-      properties: {
-        ...(feature?.properties || {}),
-        corridorStatus: classifyTfrTiming(feature, flightStartUtc, flightEndUtc),
-      },
-    }));
+    .map((feature) => {
+      const center = getTfrFeatureCenter(feature);
+      return {
+        ...feature,
+        properties: {
+          ...(feature?.properties || {}),
+          corridorStatus: classifyTfrTiming(feature, flightStartUtc, flightEndUtc),
+          displayTitle: getTfrDisplayTitle(feature),
+          displayReason: getTfrDisplayReason(feature),
+          displayTime: getTfrDisplayTime(feature),
+          displayCenterLat: center?.lat ?? null,
+          displayCenterLon: center?.lon ?? null,
+        },
+      };
+    });
 };
 
 const calculateWindComponentKt = (courseDeg: number, windDirFromDeg: number, windSpeedKt: number) => {
@@ -10651,16 +10741,27 @@ export default function FlightPlanner() {
                 <AlertDescription>
                   <div className="font-semibold">TFRs intersect your planned route</div>
                   <div className="text-sm text-muted-foreground mt-1">
-                    Update waypoints to avoid restricted airspace before flight.
+                    Review the restriction reason and adjust the route or altitude as needed before flight.
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-3 grid gap-2">
                     {tfrConflicts.slice(0, 4).map((feature: any) => {
                       const id = feature?.properties?.notamId || "TFR";
-                      const title = feature?.properties?.title || feature?.properties?.reason || "";
+                      const title = feature?.properties?.displayTitle || feature?.properties?.title || feature?.properties?.location || "Temporary Flight Restriction";
+                      const reason = feature?.properties?.displayReason || getTfrDisplayReason(feature);
+                      const altitude = feature?.properties?.altitude;
+                      const time = feature?.properties?.displayTime || getTfrDisplayTime(feature);
+                      const status = feature?.properties?.corridorStatus === "planned-flight-window" ? "Active during planned flight" : "Active TFR";
                       return (
-                        <Badge key={`${id}-${title}`} variant="outline">
-                          {title ? `${id} � ${title}` : id}
-                        </Badge>
+                        <div key={`${id}-${title}`} className="rounded-lg border border-red-400/40 bg-red-950/20 p-3 text-sm text-[#F5D7DA]">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="border-red-300/60 text-red-100">{id}</Badge>
+                            <Badge variant="outline" className="border-amber-300/60 text-amber-100">{status}</Badge>
+                          </div>
+                          <div className="mt-2 font-semibold text-red-50">{title}</div>
+                          <div className="mt-1 text-red-100/90">Reason: {reason}</div>
+                          {altitude ? <div className="mt-1 text-red-100/80">Altitude: {altitude}</div> : null}
+                          {time ? <div className="mt-1 text-red-100/80">Valid: {time}</div> : null}
+                        </div>
                       );
                     })}
                   </div>

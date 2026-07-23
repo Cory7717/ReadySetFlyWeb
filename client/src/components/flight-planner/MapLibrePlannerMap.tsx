@@ -28,6 +28,8 @@ const TERRAIN_SURFACE_LAYER_ID = "rsf-planner-terrain-surface";
 const TERRAIN_LINE_LAYER_ID = "rsf-planner-terrain-line";
 const TFR_FILL_LAYER_ID = "rsf-planner-tfr-fill";
 const TFR_LINE_LAYER_ID = "rsf-planner-tfr-line";
+const TFR_POINT_LAYER_ID = "rsf-planner-tfr-point";
+const TFR_LABEL_LAYER_ID = "rsf-planner-tfr-label";
 const SECTIONAL_SOURCE_ID = "rsf-planner-sectional";
 const SECTIONAL_LAYER_ID = "rsf-planner-sectional-layer";
 const RADAR_SOURCE_ID = "rsf-planner-radar";
@@ -96,16 +98,42 @@ function buildTerrainGeoJson(segments: PlannerTerrainSegment[]) {
 }
 
 function buildTfrGeoJson(features: Planner2DMapProps["tfrFeatures"] = []) {
+  const markerFeatures = features
+    .map((feature) => {
+      const props = feature?.properties || {};
+      const lat = Number(props.displayCenterLat);
+      const lon = Number(props.displayCenterLon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      return {
+        type: "Feature" as const,
+        id: `${feature.id || props.notamId || props.title || "tfr"}-marker`,
+        geometry: {
+          type: "Point" as const,
+          coordinates: [lon, lat],
+        },
+        properties: {
+          ...props,
+          tfrMarker: true,
+        },
+      };
+    })
+    .filter(Boolean);
   return {
     type: "FeatureCollection" as const,
-    features: features
-      .filter((feature) => feature?.geometry)
-      .map((feature) => ({
+    features: [
+      ...features
+        .filter((feature) => feature?.geometry)
+        .map((feature) => ({
         type: "Feature" as const,
         id: feature.id,
         geometry: feature.geometry as any,
-        properties: feature.properties || {},
+        properties: {
+          ...(feature.properties || {}),
+          tfrMarker: false,
+        },
       })),
+      ...markerFeatures,
+    ],
   } as any;
 }
 
@@ -405,6 +433,7 @@ export default function MapLibrePlannerMap({
         id: TFR_FILL_LAYER_ID,
         type: "fill",
         source: TFR_SOURCE_ID,
+        filter: ["==", ["geometry-type"], "Polygon"],
         layout: {
           visibility: showTfrOverlay && tfrFeatures.length > 0 ? "visible" : "none",
         },
@@ -434,6 +463,7 @@ export default function MapLibrePlannerMap({
         id: TFR_LINE_LAYER_ID,
         type: "line",
         source: TFR_SOURCE_ID,
+        filter: ["!=", ["geometry-type"], "Point"],
         layout: {
           "line-cap": "round",
           "line-join": "round",
@@ -454,15 +484,81 @@ export default function MapLibrePlannerMap({
         },
       });
 
+      map.addLayer({
+        id: TFR_POINT_LAYER_ID,
+        type: "circle",
+        source: TFR_SOURCE_ID,
+        filter: ["==", ["get", "tfrMarker"], true],
+        layout: {
+          visibility: showTfrOverlay && tfrFeatures.length > 0 ? "visible" : "none",
+        },
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            5,
+            7,
+            10,
+            11,
+          ],
+          "circle-color": [
+            "match",
+            ["get", "corridorStatus"],
+            "active",
+            "#ef4444",
+            "planned-flight-window",
+            "#f59e0b",
+            "#f59e0b",
+          ],
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+          "circle-opacity": 0.95,
+        },
+      });
+
+      map.addLayer({
+        id: TFR_LABEL_LAYER_ID,
+        type: "symbol",
+        source: TFR_SOURCE_ID,
+        filter: ["==", ["get", "tfrMarker"], true],
+        layout: {
+          visibility: showTfrOverlay && tfrFeatures.length > 0 ? "visible" : "none",
+          "text-field": ["coalesce", ["get", "notamId"], "TFR"],
+          "text-size": 11,
+          "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+          "text-offset": [0, 1.35],
+          "text-anchor": "top",
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": "#fee2e2",
+          "text-halo-color": "#111827",
+          "text-halo-width": 1.5,
+        },
+      });
+
       map.on("click", TFR_FILL_LAYER_ID, (event) => {
         const feature = event.features?.[0] as any;
         if (!feature) return;
         onSelectTfr?.(feature);
         const props = feature.properties || {};
-        const label = props.notamId || props.title || props.reason || "TFR";
+        const label = props.notamId || props.displayTitle || props.title || props.reason || "TFR";
         new maplibregl.Popup({ offset: 12 })
           .setLngLat(event.lngLat)
-          .setHTML(`<div style="font-size:12px;line-height:1.35"><strong>${String(label).replace(/[<>&]/g, "")}</strong><br/>${props.corridorStatus || "TFR"}</div>`)
+          .setHTML(`<div style="font-size:12px;line-height:1.35"><strong>${String(label).replace(/[<>&]/g, "")}</strong><br/>${String(props.displayReason || props.corridorStatus || "TFR").replace(/[<>&]/g, "")}</div>`)
+          .addTo(map);
+      });
+
+      map.on("click", TFR_POINT_LAYER_ID, (event) => {
+        const feature = event.features?.[0] as any;
+        if (!feature) return;
+        onSelectTfr?.(feature);
+        const props = feature.properties || {};
+        const label = props.notamId || props.displayTitle || props.title || props.reason || "TFR";
+        new maplibregl.Popup({ offset: 12 })
+          .setLngLat(event.lngLat)
+          .setHTML(`<div style="font-size:12px;line-height:1.35"><strong>${String(label).replace(/[<>&]/g, "")}</strong><br/>${String(props.displayReason || props.corridorStatus || "TFR").replace(/[<>&]/g, "")}</div>`)
           .addTo(map);
       });
 
@@ -581,6 +677,8 @@ export default function MapLibrePlannerMap({
     const visible = showTfrOverlay && tfrFeatures.length > 0 ? "visible" : "none";
     if (map.getLayer(TFR_FILL_LAYER_ID)) map.setLayoutProperty(TFR_FILL_LAYER_ID, "visibility", visible);
     if (map.getLayer(TFR_LINE_LAYER_ID)) map.setLayoutProperty(TFR_LINE_LAYER_ID, "visibility", visible);
+    if (map.getLayer(TFR_POINT_LAYER_ID)) map.setLayoutProperty(TFR_POINT_LAYER_ID, "visibility", visible);
+    if (map.getLayer(TFR_LABEL_LAYER_ID)) map.setLayoutProperty(TFR_LABEL_LAYER_ID, "visibility", visible);
   }, [mapReady, showTfrOverlay, tfrFeatures.length, tfrGeoJson]);
 
   useEffect(() => {

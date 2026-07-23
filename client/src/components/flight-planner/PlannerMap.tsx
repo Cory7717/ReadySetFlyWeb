@@ -35,6 +35,39 @@ type WindsAloftMeta = {
   warnings: string[];
 };
 
+function buildLeafletTfrFeatures(tfrFeatures: Planner2DMapProps["tfrFeatures"] = []) {
+  const markers = tfrFeatures
+    .map((feature) => {
+      const props = feature?.properties || {};
+      const lat = Number(props.displayCenterLat);
+      const lon = Number(props.displayCenterLon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      return {
+        type: "Feature" as const,
+        id: `${feature.id || props.notamId || props.title || "tfr"}-marker`,
+        geometry: {
+          type: "Point" as const,
+          coordinates: [lon, lat],
+        },
+        properties: {
+          ...props,
+          tfrMarker: true,
+        },
+      };
+    })
+    .filter(Boolean);
+  return [
+    ...tfrFeatures.map((feature) => ({
+      ...feature,
+      properties: {
+        ...(feature.properties || {}),
+        tfrMarker: false,
+      },
+    })),
+    ...markers,
+  ];
+}
+
 const WINDS_ALOFT_LEVELS = [3000, 6000, 9000, 12000, 18000, 24000, 30000, 34000, 39000];
 
 const defaultIcon = L.icon({
@@ -338,6 +371,7 @@ export default function PlannerMap({
   const showWinds = mapStyle === "winds";
   const showClouds = mapStyle === "clouds";
   const initialZoom = mapStyle === "sectional" ? 4 : (points.length ? 6 : 4);
+  const leafletTfrFeatures = useMemo(() => buildLeafletTfrFeatures(tfrFeatures), [tfrFeatures]);
   const [mapZoom, setMapZoom] = useState(initialZoom);
   const [mapCenter, setMapCenter] = useState<L.LatLng | null>(null);
   const showCloudsConus = showClouds;
@@ -569,7 +603,7 @@ export default function PlannerMap({
         {showTfrOverlay && tfrFeatures.length > 0 && (
           <GeoJSON
             key={`planner-tfr-${tfrFeatures.map((feature) => feature.id || feature.properties?.notamId || feature.properties?.title || "tfr").join("|")}`}
-            data={{ type: "FeatureCollection", features: tfrFeatures } as any}
+            data={{ type: "FeatureCollection", features: leafletTfrFeatures } as any}
             style={(feature: any) => {
               const status = feature?.properties?.corridorStatus;
               const active = status === "active";
@@ -581,6 +615,13 @@ export default function PlannerMap({
                 fillOpacity: active ? 0.16 : 0.1,
               };
             }}
+            pointToLayer={(_feature, latlng) => L.circleMarker(latlng, {
+              radius: 8,
+              color: "#ffffff",
+              weight: 2,
+              fillColor: "#ef4444",
+              fillOpacity: 0.95,
+            })}
             eventHandlers={{
               click: (event) => {
                 const feature = (event as any).layer?.feature;
@@ -589,7 +630,7 @@ export default function PlannerMap({
             }}
             onEachFeature={(feature, layer) => {
               const props: any = feature?.properties || {};
-              const label = props.notamId || props.title || props.reason || "TFR";
+              const label = props.notamId || props.displayTitle || props.title || props.reason || "TFR";
               layer.bindTooltip(String(label), {
                 direction: "top",
                 opacity: 1,

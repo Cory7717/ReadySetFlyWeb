@@ -38,52 +38,52 @@ export function PlannerWorkflowFooter({
         className,
       )}
     >
-      <div className="flex flex-col gap-3 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
+      <div className="grid gap-3 md:grid-cols-2 md:items-center">
         <div className="flex min-w-0 justify-start">
           {previousStep ? (
             <Button
               type="button"
               variant="outline"
-              className="w-full border-[#60758C] bg-[#141b24] text-[#E8EDF4] hover:bg-[#1d2a36] hover:text-white focus-visible:ring-[#9CB4CC] sm:w-auto"
+              className="w-full min-w-0 border-[#60758C] bg-[#141b24] text-[#E8EDF4] hover:bg-[#1d2a36] hover:text-white focus-visible:ring-[#9CB4CC] sm:w-auto"
               onClick={() => onNavigate(previousStep.id, "back")}
             >
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              Back to {previousStep.label}
+              <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">Back to {previousStep.label}</span>
             </Button>
           ) : (
             <span className="hidden md:block" aria-hidden="true" />
           )}
         </div>
 
-        <div className="min-w-0 text-center">
+        <div className="min-w-0 text-center md:order-3 md:col-span-2">
           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9CB4CC]">
             Step {currentStep.step} of 5 - {currentStep.label}
           </div>
-          <div className="mt-1 text-sm text-[#DCE6F2]" aria-live="polite">
+          <div className="mx-auto mt-1 max-w-[48rem] text-sm leading-5 text-[#DCE6F2]" aria-live="polite">
             {status}
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row md:justify-end">
           {currentStep.id === "file" && onReturnToTop ? (
             <Button
               type="button"
               variant="outline"
-              className="w-full border-[#60758C] bg-[#141b24] text-[#E8EDF4] hover:bg-[#1d2a36] hover:text-white focus-visible:ring-[#9CB4CC] sm:w-auto"
+              className="w-full min-w-0 border-[#60758C] bg-[#141b24] text-[#E8EDF4] hover:bg-[#1d2a36] hover:text-white focus-visible:ring-[#9CB4CC] sm:w-auto"
               onClick={onReturnToTop}
             >
-              <ArrowUp className="h-4 w-4" aria-hidden="true" />
-              Return to Top
+              <ArrowUp className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">Return to Top</span>
             </Button>
           ) : null}
           {nextStep ? (
             <Button
               type="button"
-              className="w-full border border-[#7aa6ff]/70 bg-[linear-gradient(180deg,#2563EB,#1D4ED8)] text-white shadow-[0_14px_28px_-18px_rgba(37,99,235,0.9)] hover:bg-[linear-gradient(180deg,#2f6fff,#1f55e8)] focus-visible:ring-[#A7C4FF] sm:w-auto"
+              className="w-full min-w-0 border border-[#7aa6ff]/70 bg-[linear-gradient(180deg,#2563EB,#1D4ED8)] text-white shadow-[0_14px_28px_-18px_rgba(37,99,235,0.9)] hover:bg-[linear-gradient(180deg,#2f6fff,#1f55e8)] focus-visible:ring-[#A7C4FF] sm:w-auto"
               onClick={() => onNavigate(nextStep.id, "forward")}
             >
-              Continue to {nextStep.label}
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              <span className="truncate">Continue to {nextStep.label}</span>
+              <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
             </Button>
           ) : null}
         </div>

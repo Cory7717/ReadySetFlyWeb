@@ -158,7 +158,7 @@ export function Header() {
             <span className="hidden font-display text-lg font-bold 2xl:inline">Ready Set Fly</span>
           </Link>
 
-          <nav className="ml-1 hidden min-w-0 flex-1 items-center gap-0.5 xl:flex" aria-label="Primary navigation">
+          <nav className="ml-1 hidden min-w-0 flex-1 items-center gap-0.5 lg:flex" aria-label="Primary navigation">
             {WORKFLOW_NAV_GROUPS.map((group) => (
               <DropdownMenu key={group.id}>
                 <DropdownMenuTrigger asChild>
@@ -276,7 +276,7 @@ export function Header() {
               type="button"
               variant="ghost"
               size="icon"
-              className="xl:hidden"
+              className="lg:hidden"
               onClick={() => setMobileOpen((open) => !open)}
               aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
             >
@@ -340,7 +340,7 @@ export function Header() {
         </div>
 
         {mobileOpen && (
-          <div className="border-t border-border pb-4 pt-3 xl:hidden">
+          <div className="border-t border-border pb-4 pt-3 lg:hidden">
             <Button asChild className="mb-3 w-full" data-testid="button-mobile-start-flight-plan">
               <Link href="/flight-planner" onClick={() => trackEvent("nav_click", { label: "mobile_start_flight_plan", target: "/flight-planner" })}>
                 Start Flight Plan

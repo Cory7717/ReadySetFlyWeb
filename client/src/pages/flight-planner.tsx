@@ -8804,7 +8804,7 @@ export default function FlightPlanner() {
           </AlertDescription>
         </Alert>
       )}
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_540px]">
+      <div className="space-y-6">
       <div className="min-w-0 space-y-4">
       {!pressDemo.enabled && (plansLoading || recentPlans.length > 0) && (
       <Card className={plannerPanelClass}>
@@ -8816,11 +8816,11 @@ export default function FlightPlanner() {
           {plansLoading ? (
             <div className="text-sm text-[#A9BBCD]">Loading plans...</div>
           ) : (
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 size="sm"
-                className="min-w-[170px] rsf-metal-button-primary"
+                className="min-h-[52px] w-full shrink-0 rsf-metal-button-primary sm:w-[170px]"
                 onClick={handleClearForm}
               >
                 Clear form
@@ -8830,11 +8830,11 @@ export default function FlightPlanner() {
                   key={`recent-${plan.id}`}
                   type="button"
                   onClick={() => {
-                    setPendingFilingActionAfterSave(null);
-                    setDraftPlanId(plan.id);
-                    setEditingPlan(plan);
-                  }}
-                  className="min-w-[230px] rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(22,27,35,0.98),rgba(14,18,24,0.98))] px-3 py-2 text-left transition-all duration-200 hover:-translate-y-px hover:border-[#6f86a7]/35 hover:bg-[linear-gradient(180deg,rgba(28,35,46,0.98),rgba(16,21,28,0.98))]"
+                  setPendingFilingActionAfterSave(null);
+                  setDraftPlanId(plan.id);
+                  setEditingPlan(plan);
+                }}
+                  className="min-h-[52px] min-w-0 flex-1 basis-[210px] rounded-[1rem] border border-[#5d6f85]/20 bg-[linear-gradient(180deg,rgba(22,27,35,0.98),rgba(14,18,24,0.98))] px-3 py-2 text-left transition-all duration-200 hover:-translate-y-px hover:border-[#6f86a7]/35 hover:bg-[linear-gradient(180deg,rgba(28,35,46,0.98),rgba(16,21,28,0.98))]"
                 >
                   <div className="truncate text-sm font-semibold text-[#F3F7FC]">{plan.title || `${plan.departure} to ${plan.destination}`}</div>
                   <div className="text-xs text-[#B6C7D9]">{plan.departure} to {plan.destination}</div>
@@ -8844,7 +8844,7 @@ export default function FlightPlanner() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className={cn("min-w-[170px]", plannerInsetActionClass)}
+                className={cn("min-h-[52px] w-full shrink-0 sm:w-[170px]", plannerInsetActionClass)}
                 onClick={() => setActiveTab("file")}
               >
                 Open saved plans
@@ -8977,7 +8977,7 @@ export default function FlightPlanner() {
           </CardContent>
         </Card>
       )}
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(400px,0.85fr)]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(300px,0.8fr)_minmax(0,1.2fr)]">
         <div className="min-w-0 space-y-4">
       <div
         id="planner-workflow"

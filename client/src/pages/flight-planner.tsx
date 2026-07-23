@@ -8844,7 +8844,7 @@ export default function FlightPlanner() {
           </CardContent>
         </Card>
       )}
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.85fr)]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(400px,0.85fr)]">
         <div className="min-w-0 space-y-4">
       <div
         id="planner-workflow"

@@ -97,6 +97,8 @@ import {
 } from "@/components/flight-planner/FilingProviderWorkspace";
 import {
   FlightPlanLifecycleActions,
+  canSubmitAmendForPlan,
+  getProviderActionAvailability,
   getPastDepartureLifecycleMessage,
   shouldApplyPastDepartureReadinessBlock,
 } from "@/components/flight-planner/FlightPlanLifecycleActions";
@@ -601,93 +603,8 @@ const hasPendingProviderReview = (plan: FlightPlan | null | undefined) =>
   !["cancelled", "closed"].includes(normalizedClientFilingStatus(plan)) &&
   getProviderSnapshot(plan).providerPendingReview === true;
 
-const getProviderActionAvailability = (plan: FlightPlan | null | undefined) => {
-  const snapshot = getProviderSnapshot(plan);
-  const availability = snapshot.providerActionAvailability;
-  const lifecycle = String(snapshot.providerLifecycleStatus || "").toLowerCase();
-  const lifecycleAllowsAmend = ["proposed", "filed", "activated", "active"].includes(lifecycle);
-  const lifecycleAllowsActivate = ["proposed", "filed"].includes(lifecycle);
-  const lifecycleAllowsCancel = lifecycle === "proposed" || lifecycle === "filed";
-  const lifecycleAllowsClose = lifecycle === "activated" || lifecycle === "active";
-  const versionStamp = snapshot.versionStamp || extractClientVersionStamp(plan);
-  const providerStatusKnown = Boolean(
-    lifecycle &&
-    lifecycle !== "unknown" &&
-    (
-      snapshot.providerStatus ||
-      snapshot.providerFlightState ||
-      snapshot.artccState ||
-      snapshot.lastKnownArtccState ||
-      versionStamp ||
-      snapshot.cancellationIndicator ||
-      snapshot.closureIndicator ||
-      snapshot.providerLifecycleSource === "local_reconciliation"
-    )
-  );
-  return {
-    lifecycle: lifecycle || "unknown",
-    providerStatusKnown,
-    amend: lifecycleAllowsAmend && (availability?.amend == null || Boolean(availability.amend)),
-    activate: lifecycleAllowsActivate && (availability?.activate == null || Boolean(availability.activate)),
-    cancel: lifecycleAllowsCancel && (availability?.cancel == null || Boolean(availability.cancel)),
-    close: lifecycleAllowsClose && (availability?.close == null || Boolean(availability.close)),
-    reason: String(availability?.reason || ""),
-  };
-};
-
-const canSubmitAmendForPlan = (plan: FlightPlan | null | undefined) => {
-  if (!plan) return false;
-  const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
-  const status = normalizedClientFilingStatus(plan);
-  const provider = getProviderActionAvailability(plan);
-  return Boolean(
-    hasLiveProviderPlan(plan) &&
-    provider.providerStatusKnown &&
-    provider.amend &&
-    (rules === "VFR" ? ["filed", "activated"].includes(status) : status === "filed"),
-  );
-};
-
-const canActivatePlan = (plan: FlightPlan | null | undefined) =>
-  {
-    const provider = getProviderActionAvailability(plan);
-    return Boolean(
-      plan &&
-      String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
-      !isTerminalFilingPlan(plan) &&
-      provider.providerStatusKnown &&
-      provider.activate &&
-      hasLiveProviderPlan(plan),
-    );
-  };
-
-const canClosePlan = (plan: FlightPlan | null | undefined) =>
-  {
-    const provider = getProviderActionAvailability(plan);
-    return Boolean(
-      plan &&
-      String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
-      !isTerminalFilingPlan(plan) &&
-      provider.providerStatusKnown &&
-      provider.close &&
-      hasLiveProviderPlan(plan),
-    );
-  };
-
 const isPlanOverdueForClose = (plan: FlightPlan | null | undefined) =>
   Boolean(plan && isFlightPlanCloseOverdue(plan.plannedArrivalAt));
-
-const canCancelPlan = (plan: FlightPlan | null | undefined) =>
-  {
-    const provider = getProviderActionAvailability(plan);
-    return Boolean(
-      plan &&
-      !isTerminalFilingPlan(plan) &&
-      provider.providerStatusKnown &&
-      provider.cancel &&
-      hasLiveProviderPlan(plan),
-    );
-  };
 
 const canFilePlan = (plan: FlightPlan | null | undefined) => {
   if (!plan) return true;

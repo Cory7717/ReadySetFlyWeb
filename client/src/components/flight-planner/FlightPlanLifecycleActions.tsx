@@ -30,6 +30,16 @@ export const getProviderActionAvailability = (plan: FlightPlan | null | undefine
   const snapshot = getProviderSnapshot(plan);
   const availability = snapshot.providerActionAvailability;
   const lifecycle = String(snapshot.providerLifecycleStatus || "").toLowerCase();
+  const availabilityReason = String(availability?.reason || "");
+  const staleUnknownAvailability = Boolean(
+    lifecycle &&
+    lifecycle !== "unknown" &&
+    (
+      availability?.requiresSync === true ||
+      /could not determine|refresh provider sync|provider state is unknown/i.test(availabilityReason)
+    )
+  );
+  const allowsAvailability = (value: unknown) => value == null || staleUnknownAvailability || Boolean(value);
   const lifecycleAllowsAmend = ["proposed", "filed", "activated", "active"].includes(lifecycle);
   const lifecycleAllowsActivate = ["proposed", "filed"].includes(lifecycle);
   const lifecycleAllowsCancel = lifecycle === "proposed" || lifecycle === "filed";
@@ -46,17 +56,21 @@ export const getProviderActionAvailability = (plan: FlightPlan | null | undefine
       versionStamp ||
       snapshot.cancellationIndicator ||
       snapshot.closureIndicator ||
+      snapshot.providerLifecycleSource === "provider_response" ||
+      snapshot.providerLifecycleSource === "provider_retrieve" ||
       snapshot.providerLifecycleSource === "local_reconciliation"
     )
   );
   return {
     lifecycle: lifecycle || "unknown",
     providerStatusKnown,
-    amend: lifecycleAllowsAmend && (availability?.amend == null || Boolean(availability.amend)),
-    activate: lifecycleAllowsActivate && (availability?.activate == null || Boolean(availability.activate)),
-    cancel: lifecycleAllowsCancel && (availability?.cancel == null || Boolean(availability.cancel)),
-    close: lifecycleAllowsClose && (availability?.close == null || Boolean(availability.close)),
-    reason: String(availability?.reason || ""),
+    amend: lifecycleAllowsAmend && allowsAvailability(availability?.amend),
+    activate: lifecycleAllowsActivate && allowsAvailability(availability?.activate),
+    cancel: lifecycleAllowsCancel && allowsAvailability(availability?.cancel),
+    close: lifecycleAllowsClose && allowsAvailability(availability?.close),
+    reason: staleUnknownAvailability ? "" : availabilityReason,
+    staleUnknownAvailability,
+    rawAvailability: availability || null,
   };
 };
 
@@ -81,14 +95,12 @@ const normalizedClientFilingStatus = (plan: FlightPlan | null | undefined) =>
 
 export const canSubmitAmendForPlan = (plan: FlightPlan | null | undefined) => {
   if (!plan) return false;
-  const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
-  const status = normalizedClientFilingStatus(plan);
   const provider = getProviderActionAvailability(plan);
   return Boolean(
     hasLiveProviderPlan(plan) &&
+    !isTerminalFilingPlan(plan) &&
     provider.providerStatusKnown &&
-    provider.amend &&
-    (rules === "VFR" ? ["filed", "activated"].includes(status) : status === "filed"),
+    provider.amend,
   );
 };
 
@@ -319,6 +331,79 @@ export function FlightPlanLifecycleActions({
   const activateDisabledReason = providerActionsPausedReason || getLifecycleActionDisabledReason(plan, "activate");
   const cancelDisabledReason = providerActionsPausedReason || getLifecycleActionDisabledReason(plan, "cancel");
   const closeDisabledReason = providerActionsPausedReason || getLifecycleActionDisabledReason(plan, "close");
+  const provider = getProviderActionAvailability(plan);
+  const snapshot = getProviderSnapshot(plan);
+  const activateDisabled = actionPending || syncPending || providerActionsPaused || !canActivatePlan(plan);
+  const closeDisabled = actionPending || syncPending || providerActionsPaused || !canClosePlan(plan);
+  const cancelDisabled = actionPending || syncPending || providerActionsPaused || !canCancelPlan(plan);
+  const diagnosticSignature = JSON.stringify({
+    planId: plan.id,
+    rules,
+    status: normalizedClientFilingStatus(plan),
+    liveProviderPlan,
+    providerPlanIdPresent: isGenuineFilingProviderPlanId(plan.filingProviderPlanId),
+    versionStampPresent: Boolean(snapshot.versionStamp || extractFilingVersionStamp(plan)),
+    lifecycle: provider.lifecycle,
+    lifecycleSource: snapshot.providerLifecycleSource || null,
+    providerStatusKnown: provider.providerStatusKnown,
+    rawAvailability: provider.rawAvailability,
+    computedAvailability: {
+      amend: provider.amend,
+      activate: provider.activate,
+      cancel: provider.cancel,
+      close: provider.close,
+    },
+    disabledReasons: {
+      amend: amendBlockedReason,
+      activate: activateDisabledReason,
+      cancel: cancelDisabledReason,
+      close: closeDisabledReason,
+    },
+    disabled: {
+      amend: amendDisabled,
+      activate: activateDisabled,
+      cancel: cancelDisabled,
+      close: closeDisabled,
+    },
+  });
+  const lastDiagnosticSignatureRef = React.useRef("");
+  React.useEffect(() => {
+    if (!labels.activate.toLowerCase().includes("test")) return;
+    if (lastDiagnosticSignatureRef.current === diagnosticSignature) return;
+    lastDiagnosticSignatureRef.current = diagnosticSignature;
+    console.info(JSON.stringify({
+      event: "flight_plan_lifecycle_button_diagnostic",
+      planId: plan.id,
+      filingFlightRules: rules,
+      localFilingStatus: normalizedClientFilingStatus(plan),
+      filingIsLive: Boolean(plan.filingIsLive),
+      providerPlanIdPresent: isGenuineFilingProviderPlanId(plan.filingProviderPlanId),
+      versionStampPresent: Boolean(snapshot.versionStamp || extractFilingVersionStamp(plan)),
+      effectiveLifecycle: provider.lifecycle,
+      effectiveLifecycleSource: snapshot.providerLifecycleSource || null,
+      effectiveLifecycleKnown: provider.providerStatusKnown,
+      latestRetrieveIncludedLifecycle: snapshot.providerLifecycleSource === "provider_retrieve" && provider.lifecycle !== "unknown",
+      rawProviderActionAvailability: provider.rawAvailability,
+      computedActionAvailability: {
+        amend: provider.amend,
+        activate: provider.activate,
+        cancel: provider.cancel,
+        close: provider.close,
+      },
+      finalDisabledReasons: {
+        amend: amendBlockedReason,
+        activate: activateDisabledReason,
+        cancel: cancelDisabledReason,
+        close: closeDisabledReason,
+      },
+      finalButtonDisabled: {
+        amend: amendDisabled,
+        activate: activateDisabled,
+        cancel: cancelDisabled,
+        close: closeDisabled,
+      },
+    }));
+  }, [amendBlockedReason, amendDisabled, activateDisabled, activateDisabledReason, cancelDisabled, cancelDisabledReason, closeDisabled, closeDisabledReason, diagnosticSignature, labels.activate, plan, provider, rules, snapshot]);
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -394,7 +479,7 @@ export function FlightPlanLifecycleActions({
             size="sm"
             variant="outline"
             onClick={onActivate}
-            disabled={actionPending || syncPending || providerActionsPaused || !canActivatePlan(plan)}
+            disabled={activateDisabled}
             title={activateDisabledReason || "Activate this VFR provider flight plan."}
           >
             {labels.activate}
@@ -403,7 +488,7 @@ export function FlightPlanLifecycleActions({
             size="sm"
             variant="outline"
             onClick={onClose}
-            disabled={actionPending || syncPending || providerActionsPaused || !canClosePlan(plan)}
+            disabled={closeDisabled}
             title={closeDisabledReason || "Close this active VFR provider flight plan."}
           >
             {labels.close}
@@ -415,7 +500,7 @@ export function FlightPlanLifecycleActions({
           size="sm"
           variant="outline"
           onClick={onCancel}
-          disabled={actionPending || syncPending || providerActionsPaused || !canCancelPlan(plan)}
+          disabled={cancelDisabled}
           title={cancelDisabledReason || "Cancel this proposed provider flight plan."}
         >
           {labels.cancel}

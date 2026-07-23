@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { FlightPlanLifecycleActions } from "../../client/src/components/flight-planner/FlightPlanLifecycleActions";
 import {
   canCancelPlan,
+  getProviderActionAvailability,
   getCanonicalPlanDepartureInstant,
   getLifecycleActionDisabledReason,
   getPastDepartureLifecycleMessage,
@@ -698,6 +699,69 @@ test("filed VFR provider lifecycle actions follow provider availability", () => 
   assert.equal(getLifecycleActionDisabledReason(planForRender, "activate"), null);
   assert.match(getLifecycleActionDisabledReason(planForRender, "close") || "", /provider lifecycle is proposed/i);
   assert.equal(getLifecycleActionDisabledReason(planForRender, "cancel"), null);
+});
+
+test("proposed VFR lifecycle ignores stale false availability from omitted retrieve", () => {
+  for (const filingStatus of ["filed", "proposed"]) {
+    const planForRender = lifecyclePlan({
+      filingStatus,
+      filingFlightRules: "VFR",
+      plannedDepartureAt: new Date(Date.now() + 20 * 60 * 1000),
+      filingProviderSnapshot: {
+        providerLifecycleStatus: "proposed",
+        providerLifecycleSource: "provider_response",
+        versionStamp: "20260723204500000",
+        providerActionAvailability: {
+          amend: false,
+          activate: false,
+          cancel: false,
+          close: false,
+          requiresSync: true,
+          reason: "RSF could not determine the current Leidos state. Refresh provider sync before taking lifecycle actions.",
+        },
+      },
+    });
+    const provider = getProviderActionAvailability(planForRender);
+    const html = renderLifecycleActions(planForRender);
+
+    assert.equal(provider.providerStatusKnown, true);
+    assert.equal(provider.amend, true);
+    assert.equal(provider.activate, true);
+    assert.equal(provider.cancel, true);
+    assert.equal(provider.close, false);
+    assertButtonVisible(html, lifecycleLabels.amend, { disabled: false });
+    assertButtonVisible(html, lifecycleLabels.activate, { disabled: false });
+    assertButtonVisible(html, lifecycleLabels.cancel, { disabled: false });
+    assertButtonVisible(html, lifecycleLabels.close, { disabled: true });
+  }
+});
+
+test("active VFR lifecycle enables close from effective provider lifecycle", () => {
+  const planForRender = lifecyclePlan({
+    filingStatus: "filed",
+    filingFlightRules: "VFR",
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "active",
+      providerLifecycleSource: "provider_response",
+      versionStamp: "20260723204500000",
+      providerActionAvailability: {
+        amend: true,
+        activate: false,
+        cancel: false,
+        close: true,
+      },
+    },
+  });
+  const provider = getProviderActionAvailability(planForRender);
+  const html = renderLifecycleActions(planForRender);
+
+  assert.equal(provider.amend, true);
+  assert.equal(provider.activate, false);
+  assert.equal(provider.close, true);
+  assertButtonVisible(html, lifecycleLabels.amend, { disabled: false });
+  assertButtonVisible(html, lifecycleLabels.activate, { disabled: true });
+  assertButtonVisible(html, lifecycleLabels.close, { disabled: false });
+  assertButtonVisible(html, lifecycleLabels.cancel, { disabled: true });
 });
 
 test("cancel eligibility uses canonical UTC departure instant instead of browser-local display time", () => {

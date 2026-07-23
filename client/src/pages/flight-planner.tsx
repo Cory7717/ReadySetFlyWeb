@@ -94,6 +94,7 @@ import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight
 import {
   FilingProviderUpdatesList,
   FilingProviderWorkspace,
+  summarizeProviderUpdates,
 } from "@/components/flight-planner/FilingProviderWorkspace";
 import {
   FlightPlanLifecycleActions,
@@ -13680,11 +13681,15 @@ export default function FlightPlanner() {
               Filing provider events are shown in reverse chronological order. Use Refresh provider sync after a filing action if you need the latest effective route or ARTCC state.
             </DialogDescription>
           </DialogHeader>
-          {providerUpdatesPlan && hasPendingProviderReview(providerUpdatesPlan) && (
+          {providerUpdatesPlan && (hasPendingProviderReview(providerUpdatesPlan) || summarizeProviderUpdates(providerUpdatesPlan).count > 0) && (
             <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100">
-              <div className="font-semibold">Provider update ready to acknowledge</div>
+              <div className="font-semibold">
+                {hasPendingProviderReview(providerUpdatesPlan) ? "Provider update ready to acknowledge" : "Provider update acknowledgement"}
+              </div>
               <div className="mt-1 text-amber-100/85">
-                RSF has applied the provider update where supported. Acknowledge the current provider version before submitting another amendment.
+                {hasPendingProviderReview(providerUpdatesPlan)
+                  ? "RSF has applied the provider update where supported. Acknowledge the current provider version before submitting another amendment."
+                  : "Acknowledge that you reviewed the latest Flight Service provider update for this plan."}
               </div>
               <Button
                 className="mt-3"
@@ -13692,7 +13697,7 @@ export default function FlightPlanner() {
                 onClick={() => acceptProviderReviewMutation.mutate(providerUpdatesPlan.id)}
                 disabled={acceptProviderReviewMutation.isPending || filingSyncMutation.isPending || filingActionMutation.isPending}
               >
-                {acceptProviderReviewMutation.isPending ? "Acknowledging..." : "Acknowledge provider update"}
+                {acceptProviderReviewMutation.isPending ? "Acknowledging..." : hasPendingProviderReview(providerUpdatesPlan) ? "Acknowledge provider update" : "Acknowledge latest update"}
               </Button>
             </div>
           )}

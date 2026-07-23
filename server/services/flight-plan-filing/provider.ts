@@ -789,21 +789,32 @@ const parseJsonLikeRecord = (value: unknown) => {
 };
 
 const extractVersionStamp = (plan: FlightPlan) => {
+  const compareVersionStamp = (left: string, right: string) => {
+    if (/^\d+$/.test(left) && /^\d+$/.test(right)) {
+      if (left.length !== right.length) return left.length - right.length;
+      return left === right ? 0 : left > right ? 1 : -1;
+    }
+    return left.localeCompare(right);
+  };
+  const candidates: string[] = [];
+  const addCandidate = (value: unknown) => {
+    const versionStamp = extractFilingVersionStamp(value);
+    if (versionStamp) candidates.push(versionStamp);
+  };
   const raw = parseJsonLikeRecord(plan.filingRaw);
-  const rawVersionStamp = extractFilingVersionStamp(raw);
-  if (rawVersionStamp) return rawVersionStamp;
+  addCandidate(raw);
+  addCandidate(parseJsonLikeRecord((raw as Record<string, unknown>)?.response));
+  addCandidate(parseJsonLikeRecord(plan.filingProviderSnapshot));
 
   const history = Array.isArray(plan.filingActionHistory) ? [...plan.filingActionHistory].reverse() : [];
   for (const entry of history) {
-    const versionStamp =
-      extractFilingVersionStamp(entry) ||
-      extractFilingVersionStamp(parseJsonLikeRecord((entry as Record<string, unknown>)?.raw)) ||
-      extractFilingVersionStamp(parseJsonLikeRecord((entry as Record<string, unknown>)?.providerRaw)) ||
-      extractFilingVersionStamp(parseJsonLikeRecord((entry as Record<string, unknown>)?.response));
-    if (versionStamp) return versionStamp;
+    addCandidate(entry);
+    addCandidate(parseJsonLikeRecord((entry as Record<string, unknown>)?.raw));
+    addCandidate(parseJsonLikeRecord((entry as Record<string, unknown>)?.providerRaw));
+    addCandidate(parseJsonLikeRecord((entry as Record<string, unknown>)?.response));
   }
 
-  return null;
+  return candidates.sort(compareVersionStamp).at(-1) || null;
 };
 
 const formatDepartureInstant = (value?: Date | string | null) => {

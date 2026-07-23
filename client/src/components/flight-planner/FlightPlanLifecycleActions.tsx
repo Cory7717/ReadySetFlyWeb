@@ -58,6 +58,7 @@ export const getProviderActionAvailability = (plan: FlightPlan | null | undefine
       snapshot.closureIndicator ||
       snapshot.providerLifecycleSource === "provider_response" ||
       snapshot.providerLifecycleSource === "provider_retrieve" ||
+      snapshot.providerLifecycleSource === "leidos_webhook" ||
       snapshot.providerLifecycleSource === "local_reconciliation"
     )
   );
@@ -315,6 +316,8 @@ export function FlightPlanLifecycleActions({
   const terminal = isTerminalFilingPlan(plan);
   const liveProviderPlan = hasLiveProviderPlan(plan);
   const providerReviewPending = hasPendingProviderReview(plan);
+  const providerUpdatesSummary = summarizeProviderUpdates(plan);
+  const providerAcknowledgementAvailable = providerReviewPending || providerUpdatesSummary.count > 0;
   const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
   const isVfr = rules === "VFR";
   const actionPending = Boolean(pending?.filingAction);
@@ -440,7 +443,7 @@ export function FlightPlanLifecycleActions({
           </Button>
         </>
       )}
-      {providerReviewPending && (
+      {providerAcknowledgementAvailable && (
         <Button
           size="sm"
           variant="default"
@@ -448,7 +451,7 @@ export function FlightPlanLifecycleActions({
           disabled={actionPending || syncPending || acceptPending || providerActionsPaused}
           title={providerActionsPausedReason || "Acknowledge that RSF applied the provider update shown here."}
         >
-          {acceptPending ? "Acknowledging..." : "Acknowledge provider update"}
+          {acceptPending ? "Acknowledging..." : providerReviewPending ? "Acknowledge provider update" : "Acknowledge latest update"}
         </Button>
       )}
       <Button
@@ -456,19 +459,19 @@ export function FlightPlanLifecycleActions({
         variant="outline"
         className={cn(
           "relative",
-          summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "error" && "border-red-400/50 text-red-200",
-          summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "warning" && "border-amber-400/50 text-amber-200",
-          summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "success" && "border-emerald-400/50 text-emerald-200",
-          summarizeProviderUpdates(plan).count > 0 && summarizeProviderUpdates(plan).latestSeverity === "info" && "border-blue-400/50 text-blue-200",
+          providerUpdatesSummary.count > 0 && providerUpdatesSummary.latestSeverity === "error" && "border-red-400/50 text-red-200",
+          providerUpdatesSummary.count > 0 && providerUpdatesSummary.latestSeverity === "warning" && "border-amber-400/50 text-amber-200",
+          providerUpdatesSummary.count > 0 && providerUpdatesSummary.latestSeverity === "success" && "border-emerald-400/50 text-emerald-200",
+          providerUpdatesSummary.count > 0 && providerUpdatesSummary.latestSeverity === "info" && "border-blue-400/50 text-blue-200",
         )}
         onClick={onProviderUpdates}
         aria-label="Provider updates"
         title="Provider updates"
       >
         <Bell className="h-4 w-4 mr-1" />
-        {summarizeProviderUpdates(plan).count > 0 ? (
+        {providerUpdatesSummary.count > 0 ? (
           <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
-            {summarizeProviderUpdates(plan).count}
+            {providerUpdatesSummary.count}
           </span>
         ) : null}
         Provider updates

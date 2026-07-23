@@ -105,6 +105,7 @@ import {
   syncLeidosPlanMetadata,
   findLikelyDuplicateFlightPlan,
   validateFlightPlanForAction,
+  getProviderDepartureInstantForPlan,
   verifyLeidosWebhookAuthorization,
 } from "./services/flight-plan-filing/provider";
 import { buildLeidosWebhookEventFingerprint, extractLeidosWebhookFields, LEIDOS_WEBHOOK_SUCCESS_RESPONSE, summarizeLeidosWebhookPayload } from "./services/leidosWebhook";
@@ -22935,6 +22936,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           ? "incoming_retrieve_unavailable"
           : "incoming_retrieve_omitted_flight_state"
         : "no_known_lifecycle";
+    const resultProviderActionAvailability = buildProviderActionAvailabilityForLifecycle(
+      resultLifecycle,
+      preserveLifecycle ? existing.providerActionAvailability : incoming.providerActionAvailability,
+    );
     console.info(JSON.stringify({
       event: "provider_lifecycle_merge",
       planId: context.planId || null,
@@ -22965,6 +22970,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       providerLifecycleStatus: resultLifecycle,
       providerLifecycleSource: resultLifecycleSource,
       providerLifecycleReason: resultLifecycleReason,
+      providerActionAvailability: resultProviderActionAvailability,
       providerRetrievalState: incoming.providerRetrievalState ?? existing.providerRetrievalState ?? null,
       route: {
         ...asRecord(existing.route),
@@ -23209,7 +23215,13 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     const raw = asRecord((plan as Record<string, unknown>).filingRaw);
     const snapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
     const rawResponse = asRecord(raw.response);
-    return String(raw.versionStamp || snapshot.versionStamp || rawResponse.versionStamp || "").trim() || null;
+    const candidates = [
+      raw.versionStamp,
+      snapshot.versionStamp,
+      rawResponse.versionStamp,
+    ].map((value) => String(value || "").trim()).filter(Boolean);
+    if (candidates.length === 0) return null;
+    return candidates.sort(compareProviderVersionStamp).at(-1) || null;
   };
 
   const getPlanStatusFromProviderLifecycle = (snapshot: Record<string, unknown>) => {
@@ -23298,6 +23310,30 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       return a === b ? 0 : a > b ? 1 : -1;
     }
     return a.localeCompare(b);
+  };
+
+  const buildProviderActionAvailabilityForLifecycle = (lifecycleValue: unknown, existingAvailability: unknown = {}) => {
+    const lifecycle = String(lifecycleValue || "").trim().toLowerCase();
+    if (!lifecycle || lifecycle === "unknown") {
+      return {
+        ...asRecord(existingAvailability),
+        amend: false,
+        activate: false,
+        cancel: false,
+        close: false,
+        requiresSync: true,
+        reason: "RSF could not determine the current Leidos state. Refresh provider sync before taking lifecycle actions.",
+      };
+    }
+    return {
+      ...asRecord(existingAvailability),
+      amend: ["proposed", "filed", "activated", "active"].includes(lifecycle),
+      activate: lifecycle === "proposed" || lifecycle === "filed",
+      cancel: lifecycle === "proposed" || lifecycle === "filed",
+      close: lifecycle === "activated" || lifecycle === "active",
+      requiresSync: false,
+      reason: null,
+    };
   };
 
   const applyProviderWebhookOrderingGuard = (
@@ -25914,8 +25950,44 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           )
         );
         if (!lifecycle || lifecycle === "unknown" || (availability.requiresSync === true && !staleUnknownAvailability)) {
+          if (action === "activate") {
+            const nowUtc = new Date();
+            const plannerState = asRecord((plan as Record<string, unknown>).plannerState);
+            const filingPayload = asRecord((plan as Record<string, unknown>).filingPayload);
+            const computedDepartureInstantUtc = getProviderDepartureInstantForPlan(plan as any) || String(filingPayload.departureInstant || plan.plannedDepartureAt || "");
+            const departureInstant = computedDepartureInstantUtc ? new Date(computedDepartureInstantUtc) : null;
+            console.warn(JSON.stringify({
+              event: "flight_service_activate_conflict",
+              planId: plan.id,
+              conflictCode: "FLIGHT_SERVICE_PROVIDER_STATE_UNKNOWN",
+              conflictReason: "Provider lifecycle is unknown or marked as requiring sync.",
+              localFilingStatus: plan.filingStatus || null,
+              effectiveProviderLifecycle: lifecycle || "unknown",
+              effectiveProviderLifecycleSource: providerSnapshot.providerLifecycleSource || null,
+              rawProviderFlightState: providerSnapshot.providerFlightState || providerSnapshot.lastKnownProviderFlightState || null,
+              providerPlanIdPresent: Boolean(String(plan.filingProviderPlanId || "").trim()),
+              versionStamp: getStoredProviderVersionStamp(plan),
+              providerPendingReview: providerSnapshot.providerPendingReview === true,
+              plannedDepartureAtStored: plan.plannedDepartureAt || null,
+              departureDateLocal: String(plannerState.departureDateLocal || "").trim() || null,
+              departureTimeLocal: String(plannerState.departureTimeLocal || plannerState.userDisplayDepartureTimeLocal || "").trim() || null,
+              departureTimezone: String(plannerState.departureTimezone || plannerState.departureTimeZone || "").trim() || null,
+              computedDepartureInstantUtc,
+              currentInstantUtc: nowUtc.toISOString(),
+              millisecondsUntilDeparture: departureInstant && Number.isFinite(departureInstant.getTime())
+                ? departureInstant.getTime() - nowUtc.getTime()
+                : null,
+              activationWindowStartUtc: null,
+              activationWindowEndUtc: null,
+              insideActivationWindow: null,
+              activationWindowRule: "not_locally_enforced",
+              rawProviderActionAvailability: availability,
+              computedActivateAvailability: false,
+            }));
+          }
           return res.status(409).json({
             error: "RSF needs a fresh provider sync before this action because the current provider state is unknown.",
+            code: action === "activate" ? "FLIGHT_SERVICE_PROVIDER_STATE_UNKNOWN" : undefined,
             requiresProviderSync: true,
             plan,
           });
@@ -25926,8 +25998,52 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           action === "activate" ? lifecycle === "proposed" || lifecycle === "filed" :
           lifecycle === "activated" || lifecycle === "active";
         if ((available === false && !staleUnknownAvailability) || !lifecycleAllowsAction) {
+          const nowUtc = new Date();
+          const plannerState = asRecord((plan as Record<string, unknown>).plannerState);
+          const filingPayload = asRecord((plan as Record<string, unknown>).filingPayload);
+          const computedDepartureInstantUtc = action === "activate"
+            ? getProviderDepartureInstantForPlan(plan as any) || String(filingPayload.departureInstant || plan.plannedDepartureAt || "")
+            : null;
+          const departureInstant = computedDepartureInstantUtc ? new Date(computedDepartureInstantUtc) : null;
+          if (action === "activate") {
+            console.warn(JSON.stringify({
+              event: "flight_service_activate_conflict",
+              planId: plan.id,
+              conflictCode: lifecycleAllowsAction ? "FLIGHT_SERVICE_PROVIDER_ACTION_UNAVAILABLE" : "FLIGHT_SERVICE_PROVIDER_LIFECYCLE_BLOCKED",
+              conflictReason: lifecycleAllowsAction
+                ? `Provider action availability reported activate=${String(available)}.`
+                : `Provider lifecycle ${lifecycle || "unknown"} does not allow Activate.`,
+              localFilingStatus: plan.filingStatus || null,
+              effectiveProviderLifecycle: lifecycle || "unknown",
+              effectiveProviderLifecycleSource: providerSnapshot.providerLifecycleSource || null,
+              rawProviderFlightState: providerSnapshot.providerFlightState || providerSnapshot.lastKnownProviderFlightState || null,
+              providerPlanIdPresent: Boolean(String(plan.filingProviderPlanId || "").trim()),
+              versionStamp: getStoredProviderVersionStamp(plan),
+              providerPendingReview: providerSnapshot.providerPendingReview === true,
+              plannedDepartureAtStored: plan.plannedDepartureAt || null,
+              departureDateLocal: String(plannerState.departureDateLocal || "").trim() || null,
+              departureTimeLocal: String(plannerState.departureTimeLocal || plannerState.userDisplayDepartureTimeLocal || "").trim() || null,
+              departureTimezone: String(plannerState.departureTimezone || plannerState.departureTimeZone || "").trim() || null,
+              computedDepartureInstantUtc,
+              currentInstantUtc: nowUtc.toISOString(),
+              millisecondsUntilDeparture: departureInstant && Number.isFinite(departureInstant.getTime())
+                ? departureInstant.getTime() - nowUtc.getTime()
+                : null,
+              activationWindowStartUtc: null,
+              activationWindowEndUtc: null,
+              insideActivationWindow: null,
+              activationWindowRule: "not_locally_enforced",
+              rawProviderActionAvailability: availability,
+              computedActivateAvailability: Boolean(lifecycleAllowsAction && (available !== false || staleUnknownAvailability)),
+            }));
+          }
           return res.status(409).json({
             error: `The filing provider currently reports this flight plan as ${lifecycle}. ${action.toUpperCase()} is not available for that provider state.`,
+            code: action === "activate"
+              ? lifecycleAllowsAction
+                ? "FLIGHT_SERVICE_PROVIDER_ACTION_UNAVAILABLE"
+                : "FLIGHT_SERVICE_PROVIDER_LIFECYCLE_BLOCKED"
+              : undefined,
             providerLifecycleStatus: lifecycle,
             plan,
           });
@@ -26030,7 +26146,40 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         dispatchedAt: new Date(),
       });
 
+      if (action === "activate") {
+        const departureInstantUtc = getProviderDepartureInstantForPlan(effectivePlanWithAirportTimezoneMetadata as any) ||
+          String(asRecord((effectivePlanWithAirportTimezoneMetadata as Record<string, unknown>).filingPayload).departureInstant || effectivePlanWithAirportTimezoneMetadata.plannedDepartureAt || "");
+        const parsedDeparture = departureInstantUtc ? new Date(departureInstantUtc) : null;
+        console.info(JSON.stringify({
+          event: "flight_service_provider_action_attempt_started",
+          action: "activate",
+          planId: plan.id,
+          providerPlanId: plan.filingProviderPlanId || null,
+          effectiveLifecycle: getProviderLifecycleStatus(asRecord((plan as Record<string, unknown>).filingProviderSnapshot)) || null,
+          versionStamp: getStoredProviderVersionStamp(effectivePlanWithAirportTimezoneMetadata),
+          departureInstantUtc,
+          millisecondsUntilDeparture: parsedDeparture && Number.isFinite(parsedDeparture.getTime())
+            ? parsedDeparture.getTime() - Date.now()
+            : null,
+        }));
+      }
       const providerResult = await flightPlanFilingProvider.stageAction(effectivePlanWithAirportTimezoneMetadata, action);
+      if (action === "activate") {
+        const raw = asRecord(providerResult.raw);
+        const response = asRecord(raw.response);
+        console.info(JSON.stringify({
+          event: "flight_service_provider_action_attempt_completed",
+          action: "activate",
+          planId: plan.id,
+          providerPlanId: providerResult.providerPlanId || plan.filingProviderPlanId || null,
+          accepted: providerResult.live === true && providerResult.nextStatus === "activated",
+          providerStatusCode: raw.httpStatus ?? null,
+          providerErrorCode: raw.providerErrorCode || raw.errorCode || response.errorCode || null,
+          providerMessage: providerResult.message || response.message || null,
+          returnedVersionStamp: raw.versionStamp || asRecord(providerResult.providerSnapshot).versionStamp || null,
+          returnedFlightState: asRecord(providerResult.providerSnapshot).providerFlightState || asRecord(providerResult.providerSnapshot).providerStatus || null,
+        }));
+      }
       const providerOutcomeUnknown =
         action === "file" &&
         providerResult.live === false &&

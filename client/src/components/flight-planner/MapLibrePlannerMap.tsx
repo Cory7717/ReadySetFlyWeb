@@ -137,6 +137,19 @@ function buildTfrGeoJson(features: Planner2DMapProps["tfrFeatures"] = []) {
   } as any;
 }
 
+function moveTfrLayersToTop(map: MapLibreMap) {
+  [
+    TFR_FILL_LAYER_ID,
+    TFR_LINE_LAYER_ID,
+    TFR_POINT_LAYER_ID,
+    TFR_LABEL_LAYER_ID,
+  ].forEach((layerId) => {
+    if (map.getLayer(layerId)) {
+      map.moveLayer(layerId);
+    }
+  });
+}
+
 function buildAirportMarkerElement(point: PlannerPoint, airportLabelMode: Planner2DMapProps["airportLabelMode"]) {
   const wrapper = document.createElement("div");
   wrapper.style.display = "flex";
@@ -651,6 +664,7 @@ export default function MapLibrePlannerMap({
     const map = mapRef.current;
     if (!map || !mapReady) return;
     syncRasterLayers(map);
+    moveTfrLayersToTop(map);
   }, [mapReady, syncRasterLayers]);
 
   useEffect(() => {
@@ -679,6 +693,7 @@ export default function MapLibrePlannerMap({
     if (map.getLayer(TFR_LINE_LAYER_ID)) map.setLayoutProperty(TFR_LINE_LAYER_ID, "visibility", visible);
     if (map.getLayer(TFR_POINT_LAYER_ID)) map.setLayoutProperty(TFR_POINT_LAYER_ID, "visibility", visible);
     if (map.getLayer(TFR_LABEL_LAYER_ID)) map.setLayoutProperty(TFR_LABEL_LAYER_ID, "visibility", visible);
+    moveTfrLayersToTop(map);
   }, [mapReady, showTfrOverlay, tfrFeatures.length, tfrGeoJson]);
 
   useEffect(() => {

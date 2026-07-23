@@ -35,6 +35,15 @@ type WindsAloftMeta = {
   warnings: string[];
 };
 
+type LeafletTfrMarker = {
+  key: string;
+  lat: number;
+  lon: number;
+  label: string;
+  detail: string;
+  feature: NonNullable<Planner2DMapProps["tfrFeatures"]>[number];
+};
+
 function buildLeafletTfrFeatures(tfrFeatures: Planner2DMapProps["tfrFeatures"] = []) {
   const markers = tfrFeatures
     .map((feature) => {
@@ -66,6 +75,48 @@ function buildLeafletTfrFeatures(tfrFeatures: Planner2DMapProps["tfrFeatures"] =
     })),
     ...markers,
   ];
+}
+
+function buildLeafletTfrMarkers(tfrFeatures: Planner2DMapProps["tfrFeatures"] = []): LeafletTfrMarker[] {
+  return tfrFeatures
+    .map((feature, index) => {
+      const props = feature?.properties || {};
+      const lat = Number(props.displayCenterLat);
+      const lon = Number(props.displayCenterLon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      const id = String(props.notamId || props.title || feature.id || `TFR-${index}`);
+      const label = String(props.notamId || "TFR");
+      const detail = String(props.displayReason || props.displayTitle || props.reason || props.title || "Temporary Flight Restriction");
+      return { key: `${id}-${index}`, lat, lon, label, detail, feature };
+    })
+    .filter(Boolean) as LeafletTfrMarker[];
+}
+
+function buildTfrIcon(label: string) {
+  return L.divIcon({
+    className: "",
+    html: `
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        min-width:42px;
+        height:28px;
+        padding:0 8px;
+        border-radius:999px;
+        border:2px solid #fff;
+        background:#dc2626;
+        color:#fff;
+        font-size:11px;
+        font-weight:800;
+        letter-spacing:.08em;
+        box-shadow:0 8px 18px rgba(0,0,0,.45);
+        white-space:nowrap;
+      ">${label.replace(/[<>&]/g, "")}</div>
+    `,
+    iconSize: [42, 28],
+    iconAnchor: [21, 14],
+  });
 }
 
 const WINDS_ALOFT_LEVELS = [3000, 6000, 9000, 12000, 18000, 24000, 30000, 34000, 39000];
@@ -372,6 +423,7 @@ export default function PlannerMap({
   const showClouds = mapStyle === "clouds";
   const initialZoom = mapStyle === "sectional" ? 4 : (points.length ? 6 : 4);
   const leafletTfrFeatures = useMemo(() => buildLeafletTfrFeatures(tfrFeatures), [tfrFeatures]);
+  const leafletTfrMarkers = useMemo(() => buildLeafletTfrMarkers(tfrFeatures), [tfrFeatures]);
   const [mapZoom, setMapZoom] = useState(initialZoom);
   const [mapCenter, setMapCenter] = useState<L.LatLng | null>(null);
   const showCloudsConus = showClouds;
@@ -639,6 +691,23 @@ export default function PlannerMap({
             }}
           />
         )}
+        {showTfrOverlay && leafletTfrMarkers.map((marker) => (
+          <Marker
+            key={`planner-tfr-marker-${marker.key}`}
+            position={[marker.lat, marker.lon]}
+            icon={buildTfrIcon(marker.label)}
+            zIndexOffset={1200}
+            eventHandlers={{
+              click: () => {
+                if (onSelectTfr) onSelectTfr(marker.feature);
+              },
+            }}
+          >
+            <Tooltip direction="top" opacity={1} className={plannerTooltipClassName}>
+              {marker.label}: {marker.detail}
+            </Tooltip>
+          </Marker>
+        ))}
         {terrainSegments.length > 0
           ? terrainSegments.map((segment, index) => (
               <Fragment key={`planner-terrain-segment-${index}`}>

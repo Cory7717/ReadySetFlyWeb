@@ -112,7 +112,11 @@ import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignup
 import { PageShell } from "@/components/layout/PageShell";
 import { RsfModeToggle } from "@/components/map/RsfModeToggle";
 import Planner2DMapSurface from "@/components/flight-planner/Planner2DMapSurface";
-import type { PlannerLegHealthMarker, PlannerPoint } from "@/components/flight-planner/plannerMapTypes";
+import type {
+  PlannerActivityAreaFeature,
+  PlannerLegHealthMarker,
+  PlannerPoint,
+} from "@/components/flight-planner/plannerMapTypes";
 import { PressDemoBanner, PressDemoSpotlight, type PressDemoStep, usePressDemo } from "@/components/press/PressDemo";
 import NotamTranslator from "@/components/ai/NotamTranslator";
 import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
@@ -4894,6 +4898,20 @@ export default function FlightPlanner() {
     staleTime: 1000 * 60 * 15,
   });
 
+  const activityAreaRouteQuery = useQuery({
+    queryKey: ["/api/airspace/activity-areas", "route", tfrBboxParam],
+    queryFn: async () => {
+      if (!tfrBboxParam) return { features: [] };
+      const res = await fetch(apiUrl(`/api/airspace/activity-areas?bbox=${encodeURIComponent(tfrBboxParam)}`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to load FAA NASR activity areas");
+      return res.json();
+    },
+    enabled: Boolean(tfrBboxParam && routePoints.length > 1),
+    staleTime: 1000 * 60 * 60,
+  });
+
   const tfrCorridorNmValue = Number(tfrCorridorNm) || 10;
   const plannedArrivalUtcForTfr = useMemo(() => {
     if (!plannedDepartureUtc || !authoritativeEteMinutes) return null;
@@ -4914,6 +4932,24 @@ export default function FlightPlanner() {
   }, [plannedArrivalUtcForTfr, plannedDepartureUtc, routePoints, tfrCorridorNmValue, tfrRouteQuery.data?.features]);
 
   const tfrOverlayFeatures = showTfrOverlay ? tfrConflicts : [];
+  const activityAreaAdvisories = useMemo((): PlannerActivityAreaFeature[] => {
+    if (routePoints.length < 2) return [];
+    const features = activityAreaRouteQuery.data?.features ?? [];
+    if (!Array.isArray(features) || features.length === 0) return [];
+    return features
+      .filter((feature: any) => geometryIntersectsRouteCorridor(feature, routePoints, tfrCorridorNmValue))
+      .map((feature: any) => {
+        const center = getTfrFeatureCenter(feature);
+        return {
+          ...feature,
+          properties: {
+            ...(feature?.properties || {}),
+            corridorDistanceNm: center ? pointToRouteDistanceNm(center, routePoints) : null,
+          },
+        };
+      });
+  }, [activityAreaRouteQuery.data?.features, routePoints, tfrCorridorNmValue]);
+  const activityAreaOverlayFeatures = activityAreaAdvisories;
   const tfrOverlayStatus = !tfrBboxParam || routePoints.length < 2
     ? "no-route"
     : tfrRouteQuery.isLoading || tfrRouteQuery.isFetching
@@ -10773,6 +10809,52 @@ export default function FlightPlanner() {
                 </AlertDescription>
               </Alert>
             )}
+            {activityAreaRouteQuery.error && (
+              <Alert>
+                <AlertDescription>
+                  FAA NASR activity-area advisories are unavailable right now. Verify parachute jump, aerobatic,
+                  glider, and other special activity areas with current charts and NOTAMs.
+                </AlertDescription>
+              </Alert>
+            )}
+            {activityAreaAdvisories.length > 0 && (
+              <Alert className="border-amber-400/50 bg-amber-950/10">
+                <AlertDescription>
+                  <div className="font-semibold text-amber-100">Special activity areas near your planned route</div>
+                  <div className="mt-1 text-sm text-[#B7C4D2]">
+                    These are FAA NASR advisory areas such as parachute jump or miscellaneous activity areas. They
+                    are shown separately from terrain clearance and should be verified against the sectional, NOTAMs,
+                    and ATC/FSS before flight.
+                  </div>
+                  <div className="mt-3 grid gap-2">
+                    {activityAreaAdvisories.slice(0, 5).map((feature: any) => {
+                      const props = feature?.properties || {};
+                      const distance = Number(props.corridorDistanceNm);
+                      const distanceLabel = Number.isFinite(distance) ? `${distance.toFixed(1)} NM from route` : "Near route";
+                      return (
+                        <div key={`${feature.id || props.name || props.typeLabel}`} className="rounded-lg border border-amber-300/35 bg-[#151A21]/70 p-3 text-sm">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="border-amber-300/60 text-amber-100">
+                              {props.activityType || "AREA"}
+                            </Badge>
+                            <Badge variant="outline" className="border-[#6D7C8C]/60 text-[#D6E0EA]">
+                              {distanceLabel}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 font-semibold text-[#F5F8FC]">
+                            {props.typeLabel || "Activity area"}{props.name ? `: ${props.name}` : ""}
+                          </div>
+                          {props.altitude ? <div className="mt-1 text-[#B7C4D2]">Altitude: {props.altitude}</div> : null}
+                          {props.schedule ? <div className="mt-1 text-[#B7C4D2]">Schedule: {props.schedule}</div> : null}
+                          {props.checkNotams ? <div className="mt-1 text-[#B7C4D2]">NOTAM note: {props.checkNotams}</div> : null}
+                          {props.remarks ? <div className="mt-1 text-[#B7C4D2]">Remarks: {props.remarks}</div> : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
             {densityAltitudeTrigger && (
               <Alert>
                 <AlertDescription>
@@ -12944,6 +13026,11 @@ export default function FlightPlanner() {
                 <div className="flex flex-wrap gap-2 text-xs">
                   <span className="rounded-full border border-red-400/60 bg-red-500/15 px-2 py-1 text-red-100">Active TFR</span>
                   <span className="rounded-full border border-amber-400/60 bg-amber-500/15 px-2 py-1 text-amber-100">Active during planned flight</span>
+                  {activityAreaAdvisories.length > 0 && (
+                    <span className="rounded-full border border-amber-300/60 bg-amber-500/15 px-2 py-1 text-amber-100">
+                      {activityAreaAdvisories.length} NASR activity area{activityAreaAdvisories.length === 1 ? "" : "s"}
+                    </span>
+                  )}
                   <span className="rounded-full border border-[#5d6f85]/30 bg-[#121820] px-2 py-1 text-[#D9E4F0]">Corridor: {tfrCorridorNmValue} NM each side</span>
                 </div>
                 {selectedTfrFeature && (
@@ -13009,6 +13096,8 @@ export default function FlightPlanner() {
                   tfrFeatures={tfrOverlayFeatures}
                   showTfrOverlay={showTfrOverlay}
                   onSelectTfr={setSelectedTfrFeature}
+                  activityAreaFeatures={activityAreaOverlayFeatures}
+                  showActivityAreaOverlay={activityAreaOverlayFeatures.length > 0}
                 />
               )
             )}

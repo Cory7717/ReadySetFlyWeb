@@ -15,6 +15,7 @@ import multer from "multer";
 import OpenAI from "openai";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
+import { getNasrActivityAreas } from "./services/nasrActivityAreas";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
@@ -18892,6 +18893,34 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(200).json({ ...cached.data, stale: true });
       }
       res.status(502).json({ error: "Failed to fetch TFRs", stale: false });
+    }
+  });
+
+  app.get("/api/airspace/activity-areas", async (req, res) => {
+    try {
+      const bbox = parseBboxParam(req.query?.bbox);
+      const force = String(req.query?.force || "") === "1";
+      const payload = await getNasrActivityAreas({ force });
+      const features = bbox
+        ? payload.features.filter((feature: any) => featureIntersectsBbox(feature, bbox))
+        : payload.features;
+      res.json({
+        ...payload,
+        features,
+        count: features.length,
+      });
+    } catch (error: any) {
+      console.warn("[airspace/activity-areas] FAA NASR activity area lookup failed:", error?.message || error);
+      res.status(502).json({
+        type: "FeatureCollection",
+        features: [],
+        count: 0,
+        source: "FAA NASR Subscription PJA/MAA CSV",
+        cycle: null,
+        updatedAt: new Date().toISOString(),
+        stale: true,
+        error: "Failed to fetch FAA NASR activity areas",
+      });
     }
   });
 

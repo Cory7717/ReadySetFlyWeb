@@ -44,6 +44,14 @@ type LeafletTfrMarker = {
   feature: NonNullable<Planner2DMapProps["tfrFeatures"]>[number];
 };
 
+type LeafletActivityAreaMarker = {
+  key: string;
+  lat: number;
+  lon: number;
+  label: string;
+  detail: string;
+};
+
 function buildLeafletTfrFeatures(tfrFeatures: Planner2DMapProps["tfrFeatures"] = []) {
   const markers = tfrFeatures
     .map((feature) => {
@@ -111,6 +119,59 @@ function buildTfrIcon(label: string) {
         font-weight:800;
         letter-spacing:.08em;
         box-shadow:0 8px 18px rgba(0,0,0,.45);
+        white-space:nowrap;
+      ">${label.replace(/[<>&]/g, "")}</div>
+    `,
+    iconSize: [42, 28],
+    iconAnchor: [21, 14],
+  });
+}
+
+function buildLeafletActivityAreaFeatures(activityAreaFeatures: Planner2DMapProps["activityAreaFeatures"] = []) {
+  return activityAreaFeatures.map((feature) => ({
+    ...feature,
+    properties: {
+      ...(feature.properties || {}),
+      activityAreaMarker: false,
+    },
+  }));
+}
+
+function buildLeafletActivityAreaMarkers(
+  activityAreaFeatures: Planner2DMapProps["activityAreaFeatures"] = []
+): LeafletActivityAreaMarker[] {
+  return activityAreaFeatures
+    .map((feature, index) => {
+      const props = feature?.properties || {};
+      const lat = Number(props.displayCenterLat);
+      const lon = Number(props.displayCenterLon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      const label = String(props.activityType || "AREA");
+      const detail = String(props.typeLabel || props.name || "Activity area");
+      return { key: `${feature.id || props.name || label}-${index}`, lat, lon, label, detail };
+    })
+    .filter(Boolean) as LeafletActivityAreaMarker[];
+}
+
+function buildActivityAreaIcon(label: string) {
+  return L.divIcon({
+    className: "",
+    html: `
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        min-width:42px;
+        height:28px;
+        padding:0 8px;
+        border-radius:999px;
+        border:2px solid #0f172a;
+        background:#f59e0b;
+        color:#111827;
+        font-size:11px;
+        font-weight:900;
+        letter-spacing:.08em;
+        box-shadow:0 8px 18px rgba(0,0,0,.42);
         white-space:nowrap;
       ">${label.replace(/[<>&]/g, "")}</div>
     `,
@@ -414,6 +475,8 @@ export default function PlannerMap({
   tfrFeatures = [],
   showTfrOverlay = false,
   onSelectTfr,
+  activityAreaFeatures = [],
+  showActivityAreaOverlay = false,
 }: Planner2DMapProps) {
   const center: [number, number] = points.length
     ? [points[0].lat, points[0].lon]
@@ -424,6 +487,14 @@ export default function PlannerMap({
   const initialZoom = mapStyle === "sectional" ? 4 : (points.length ? 6 : 4);
   const leafletTfrFeatures = useMemo(() => buildLeafletTfrFeatures(tfrFeatures), [tfrFeatures]);
   const leafletTfrMarkers = useMemo(() => buildLeafletTfrMarkers(tfrFeatures), [tfrFeatures]);
+  const leafletActivityAreaFeatures = useMemo(
+    () => buildLeafletActivityAreaFeatures(activityAreaFeatures),
+    [activityAreaFeatures]
+  );
+  const leafletActivityAreaMarkers = useMemo(
+    () => buildLeafletActivityAreaMarkers(activityAreaFeatures),
+    [activityAreaFeatures]
+  );
   const [mapZoom, setMapZoom] = useState(initialZoom);
   const [mapCenter, setMapCenter] = useState<L.LatLng | null>(null);
   const showCloudsConus = showClouds;
@@ -702,6 +773,48 @@ export default function PlannerMap({
                 if (onSelectTfr) onSelectTfr(marker.feature);
               },
             }}
+          >
+            <Tooltip direction="top" opacity={1} className={plannerTooltipClassName}>
+              {marker.label}: {marker.detail}
+            </Tooltip>
+          </Marker>
+        ))}
+        {showActivityAreaOverlay && activityAreaFeatures.length > 0 && (
+          <GeoJSON
+            key={`planner-activity-area-${activityAreaFeatures.map((feature) => feature.id || feature.properties?.name || "area").join("|")}`}
+            data={{ type: "FeatureCollection", features: leafletActivityAreaFeatures } as any}
+            style={() => ({
+              color: "#f59e0b",
+              weight: 2,
+              opacity: 0.85,
+              dashArray: "6 4",
+              fillColor: "#f59e0b",
+              fillOpacity: 0.12,
+            })}
+            pointToLayer={(_feature, latlng) => L.circleMarker(latlng, {
+              radius: 8,
+              color: "#111827",
+              weight: 2,
+              fillColor: "#f59e0b",
+              fillOpacity: 0.95,
+            })}
+            onEachFeature={(feature, layer) => {
+              const props: any = feature?.properties || {};
+              const label = [props.typeLabel, props.name].filter(Boolean).join(": ") || "Activity area";
+              layer.bindTooltip(String(label), {
+                direction: "top",
+                opacity: 1,
+                className: plannerTooltipClassName,
+              });
+            }}
+          />
+        )}
+        {showActivityAreaOverlay && leafletActivityAreaMarkers.map((marker) => (
+          <Marker
+            key={`planner-activity-area-marker-${marker.key}`}
+            position={[marker.lat, marker.lon]}
+            icon={buildActivityAreaIcon(marker.label)}
+            zIndexOffset={1150}
           >
             <Tooltip direction="top" opacity={1} className={plannerTooltipClassName}>
               {marker.label}: {marker.detail}

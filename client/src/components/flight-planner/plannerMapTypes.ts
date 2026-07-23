@@ -43,6 +43,16 @@ export type PlannerTfrFeature = {
   properties?: Record<string, any> | null;
 };
 
+export type PlannerActivityAreaFeature = {
+  type?: "Feature";
+  id?: string | number;
+  geometry?: {
+    type?: string;
+    coordinates?: any;
+  } | null;
+  properties?: Record<string, any> | null;
+};
+
 export type Planner2DMapProps = {
   points: PlannerPoint[];
   heightClassName?: string;
@@ -56,4 +66,6 @@ export type Planner2DMapProps = {
   tfrFeatures?: PlannerTfrFeature[];
   showTfrOverlay?: boolean;
   onSelectTfr?: (feature: PlannerTfrFeature) => void;
+  activityAreaFeatures?: PlannerActivityAreaFeature[];
+  showActivityAreaOverlay?: boolean;
 };

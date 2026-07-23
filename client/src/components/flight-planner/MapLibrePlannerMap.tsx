@@ -23,6 +23,7 @@ import { addOrReplaceRasterLayer, createRasterBaseStyle, removeRasterLayer } fro
 const MAP_SOURCE_ID = "rsf-planner-route";
 const TERRAIN_SOURCE_ID = "rsf-planner-terrain";
 const TFR_SOURCE_ID = "rsf-planner-tfr";
+const ACTIVITY_AREA_SOURCE_ID = "rsf-planner-activity-area";
 const ROUTE_LAYER_ID = "rsf-planner-route-line";
 const TERRAIN_SURFACE_LAYER_ID = "rsf-planner-terrain-surface";
 const TERRAIN_LINE_LAYER_ID = "rsf-planner-terrain-line";
@@ -30,6 +31,10 @@ const TFR_FILL_LAYER_ID = "rsf-planner-tfr-fill";
 const TFR_LINE_LAYER_ID = "rsf-planner-tfr-line";
 const TFR_POINT_LAYER_ID = "rsf-planner-tfr-point";
 const TFR_LABEL_LAYER_ID = "rsf-planner-tfr-label";
+const ACTIVITY_AREA_FILL_LAYER_ID = "rsf-planner-activity-area-fill";
+const ACTIVITY_AREA_LINE_LAYER_ID = "rsf-planner-activity-area-line";
+const ACTIVITY_AREA_POINT_LAYER_ID = "rsf-planner-activity-area-point";
+const ACTIVITY_AREA_LABEL_LAYER_ID = "rsf-planner-activity-area-label";
 const SECTIONAL_SOURCE_ID = "rsf-planner-sectional";
 const SECTIONAL_LAYER_ID = "rsf-planner-sectional-layer";
 const RADAR_SOURCE_ID = "rsf-planner-radar";
@@ -137,8 +142,52 @@ function buildTfrGeoJson(features: Planner2DMapProps["tfrFeatures"] = []) {
   } as any;
 }
 
+function buildActivityAreaGeoJson(features: Planner2DMapProps["activityAreaFeatures"] = []) {
+  const markerFeatures = features
+    .map((feature) => {
+      const props = feature?.properties || {};
+      const lat = Number(props.displayCenterLat);
+      const lon = Number(props.displayCenterLon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      return {
+        type: "Feature" as const,
+        id: `${feature.id || props.name || "activity-area"}-marker`,
+        geometry: {
+          type: "Point" as const,
+          coordinates: [lon, lat],
+        },
+        properties: {
+          ...props,
+          activityAreaMarker: true,
+        },
+      };
+    })
+    .filter(Boolean);
+  return {
+    type: "FeatureCollection" as const,
+    features: [
+      ...features
+        .filter((feature) => feature?.geometry)
+        .map((feature) => ({
+          type: "Feature" as const,
+          id: feature.id,
+          geometry: feature.geometry as any,
+          properties: {
+            ...(feature.properties || {}),
+            activityAreaMarker: false,
+          },
+        })),
+      ...markerFeatures,
+    ],
+  } as any;
+}
+
 function moveTfrLayersToTop(map: MapLibreMap) {
   [
+    ACTIVITY_AREA_FILL_LAYER_ID,
+    ACTIVITY_AREA_LINE_LAYER_ID,
+    ACTIVITY_AREA_POINT_LAYER_ID,
+    ACTIVITY_AREA_LABEL_LAYER_ID,
     TFR_FILL_LAYER_ID,
     TFR_LINE_LAYER_ID,
     TFR_POINT_LAYER_ID,
@@ -237,6 +286,8 @@ export default function MapLibrePlannerMap({
   tfrFeatures = [],
   showTfrOverlay = false,
   onSelectTfr,
+  activityAreaFeatures = [],
+  showActivityAreaOverlay = false,
 }: Planner2DMapProps) {
   const center = useMemo<[number, number]>(
     () => (points.length ? [points[0].lon, points[0].lat] : [-98.35, 39.5]),
@@ -265,6 +316,7 @@ export default function MapLibrePlannerMap({
   const routeGeoJson = useMemo(() => buildRouteGeoJson(points), [points]);
   const terrainGeoJson = useMemo(() => buildTerrainGeoJson(terrainSegments), [terrainSegments]);
   const tfrGeoJson = useMemo(() => buildTfrGeoJson(tfrFeatures), [tfrFeatures]);
+  const activityAreaGeoJson = useMemo(() => buildActivityAreaGeoJson(activityAreaFeatures), [activityAreaFeatures]);
 
   const radarTileUrl = useMemo(() => {
     if (mapStyle !== "radar" || radarFrames.length === 0) return "";
@@ -441,6 +493,10 @@ export default function MapLibrePlannerMap({
         type: "geojson",
         data: tfrGeoJson,
       });
+      map.addSource(ACTIVITY_AREA_SOURCE_ID, {
+        type: "geojson",
+        data: activityAreaGeoJson,
+      });
 
       map.addLayer({
         id: TFR_FILL_LAYER_ID,
@@ -546,6 +602,76 @@ export default function MapLibrePlannerMap({
         },
         paint: {
           "text-color": "#fee2e2",
+          "text-halo-color": "#111827",
+          "text-halo-width": 1.5,
+        },
+      });
+
+      map.addLayer({
+        id: ACTIVITY_AREA_FILL_LAYER_ID,
+        type: "fill",
+        source: ACTIVITY_AREA_SOURCE_ID,
+        filter: ["==", ["geometry-type"], "Polygon"],
+        layout: {
+          visibility: showActivityAreaOverlay && activityAreaFeatures.length > 0 ? "visible" : "none",
+        },
+        paint: {
+          "fill-color": "#f59e0b",
+          "fill-opacity": 0.12,
+        },
+      });
+
+      map.addLayer({
+        id: ACTIVITY_AREA_LINE_LAYER_ID,
+        type: "line",
+        source: ACTIVITY_AREA_SOURCE_ID,
+        filter: ["!=", ["geometry-type"], "Point"],
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
+          visibility: showActivityAreaOverlay && activityAreaFeatures.length > 0 ? "visible" : "none",
+        },
+        paint: {
+          "line-color": "#f59e0b",
+          "line-width": 2,
+          "line-dasharray": [2, 1.5],
+          "line-opacity": 0.9,
+        },
+      });
+
+      map.addLayer({
+        id: ACTIVITY_AREA_POINT_LAYER_ID,
+        type: "circle",
+        source: ACTIVITY_AREA_SOURCE_ID,
+        filter: ["==", ["get", "activityAreaMarker"], true],
+        layout: {
+          visibility: showActivityAreaOverlay && activityAreaFeatures.length > 0 ? "visible" : "none",
+        },
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 7, 10, 11],
+          "circle-color": "#f59e0b",
+          "circle-stroke-color": "#111827",
+          "circle-stroke-width": 2,
+          "circle-opacity": 0.95,
+        },
+      });
+
+      map.addLayer({
+        id: ACTIVITY_AREA_LABEL_LAYER_ID,
+        type: "symbol",
+        source: ACTIVITY_AREA_SOURCE_ID,
+        filter: ["==", ["get", "activityAreaMarker"], true],
+        layout: {
+          visibility: showActivityAreaOverlay && activityAreaFeatures.length > 0 ? "visible" : "none",
+          "text-field": ["coalesce", ["get", "activityType"], "AREA"],
+          "text-size": 11,
+          "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+          "text-offset": [0, 1.35],
+          "text-anchor": "top",
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": "#fde68a",
           "text-halo-color": "#111827",
           "text-halo-width": 1.5,
         },
@@ -695,6 +821,18 @@ export default function MapLibrePlannerMap({
     if (map.getLayer(TFR_LABEL_LAYER_ID)) map.setLayoutProperty(TFR_LABEL_LAYER_ID, "visibility", visible);
     moveTfrLayersToTop(map);
   }, [mapReady, showTfrOverlay, tfrFeatures.length, tfrGeoJson]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !map.isStyleLoaded()) return;
+    setGeoJsonSourceData(map, ACTIVITY_AREA_SOURCE_ID, activityAreaGeoJson);
+    const visible = showActivityAreaOverlay && activityAreaFeatures.length > 0 ? "visible" : "none";
+    if (map.getLayer(ACTIVITY_AREA_FILL_LAYER_ID)) map.setLayoutProperty(ACTIVITY_AREA_FILL_LAYER_ID, "visibility", visible);
+    if (map.getLayer(ACTIVITY_AREA_LINE_LAYER_ID)) map.setLayoutProperty(ACTIVITY_AREA_LINE_LAYER_ID, "visibility", visible);
+    if (map.getLayer(ACTIVITY_AREA_POINT_LAYER_ID)) map.setLayoutProperty(ACTIVITY_AREA_POINT_LAYER_ID, "visibility", visible);
+    if (map.getLayer(ACTIVITY_AREA_LABEL_LAYER_ID)) map.setLayoutProperty(ACTIVITY_AREA_LABEL_LAYER_ID, "visibility", visible);
+    moveTfrLayersToTop(map);
+  }, [activityAreaFeatures.length, activityAreaGeoJson, mapReady, showActivityAreaOverlay]);
 
   useEffect(() => {
     const map = mapRef.current;

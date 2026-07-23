@@ -638,6 +638,13 @@ test("past filed departure renders provider lifecycle status instead of incomple
   );
 });
 
+test("filed provider amendments are not client-disabled only because departure time passed", () => {
+  const source = readFileSync(resolve("client/src/pages/flight-planner.tsx"), "utf8");
+  assert.doesNotMatch(source, /This plan's departure time has passed\. Synchronize with Flight Service to confirm its current lifecycle before amending\./);
+  assert.match(source, /const draftAmendAvailabilityMessage = useMemo/);
+  assert.match(source, /canSubmitAmendForPlan\(draftPlan\)/);
+});
+
 test("filed IFR lifecycle actions never render activate or close after departure", () => {
   const html = renderLifecycleActions(lifecyclePlan({
     filingStatus: "filed",

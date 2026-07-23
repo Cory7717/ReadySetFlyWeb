@@ -896,11 +896,6 @@ const getAmendAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
     return provider.reason || "Refresh provider sync before taking filing provider lifecycle actions. RSF could not determine the current provider state.";
   }
 
-  const plannedDepartureAt = plan.plannedDepartureAt ? new Date(plan.plannedDepartureAt) : null;
-  if (plannedDepartureAt && Number.isFinite(plannedDepartureAt.getTime()) && plannedDepartureAt.getTime() < Date.now() - 60_000) {
-    return "This plan's departure time has passed. Synchronize with Flight Service to confirm its current lifecycle before amending.";
-  }
-
   if (rules === "IFR" && status !== "filed") {
     return "IFR plans can only be amended from the filed state.";
   }
@@ -946,11 +941,6 @@ const getDraftAmendAvailabilityMessage = ({
   if (!plannedDepartureAt) {
     return "Planned departure time is required before RSF can send this amend request.";
   }
-  const plannedDepartureDate = plannedDepartureInstantUtc ? new Date(plannedDepartureInstantUtc) : null;
-  if (plannedDepartureDate && Number.isFinite(plannedDepartureDate.getTime()) && plannedDepartureDate.getTime() < Date.now() - 60_000) {
-    return "This plan's departure time has passed. Synchronize with Flight Service to confirm its current lifecycle before amending.";
-  }
-
   if (!trueAirspeedKtas || trueAirspeedKtas <= 0) {
     return "Cruise speed is required before RSF can send this amend request.";
   }

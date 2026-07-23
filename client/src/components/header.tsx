@@ -151,21 +151,21 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-[80] w-full border-b border-border bg-background/95 text-foreground shadow-sm backdrop-blur-md">
-      <div className="container mx-auto px-3 sm:px-4 lg:px-8">
-        <div className="flex min-h-[4.25rem] items-center gap-2">
+      <div className="mx-auto w-full max-w-[96rem] px-2 sm:px-3 lg:px-4 xl:px-5">
+        <div className="flex min-h-[4.25rem] min-w-0 items-center gap-1.5">
           <Link href="/" className="flex shrink-0 items-center gap-2 rounded-md px-1 py-1 hover:bg-accent" data-testid="link-home">
             <img src={logoImage} alt="Ready Set Fly" className="h-9 w-9 sm:h-11 sm:w-11" />
-            <span className="hidden font-display text-lg font-bold sm:inline">Ready Set Fly</span>
+            <span className="hidden font-display text-lg font-bold 2xl:inline">Ready Set Fly</span>
           </Link>
 
-          <nav className="ml-2 hidden flex-1 items-center gap-1 lg:flex" aria-label="Primary navigation">
+          <nav className="ml-1 hidden min-w-0 flex-1 items-center gap-0.5 xl:flex" aria-label="Primary navigation">
             {WORKFLOW_NAV_GROUPS.map((group) => (
               <DropdownMenu key={group.id}>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className={activeGroup?.id === group.id ? "bg-accent text-accent-foreground" : ""}
+                    className={`shrink-0 px-2 text-xs xl:px-3 xl:text-sm ${activeGroup?.id === group.id ? "bg-accent text-accent-foreground" : ""}`}
                   >
                     {group.label}
                     <ChevronDown className="h-3.5 w-3.5" />
@@ -193,7 +193,7 @@ export function Header() {
 
           <form
             ref={searchRef}
-            className="relative ml-auto hidden w-44 shrink-0 xl:block"
+            className="relative ml-auto hidden w-40 shrink-0 2xl:block"
             onSubmit={(event) => {
               event.preventDefault();
               handleToolSubmit();
@@ -251,13 +251,14 @@ export function Header() {
             )}
           </form>
 
-          <Button asChild className="hidden shrink-0 sm:inline-flex" data-testid="button-start-flight-plan">
+          <Button asChild className="hidden shrink-0 px-3 sm:inline-flex xl:px-4" data-testid="button-start-flight-plan">
             <Link href="/flight-planner" onClick={() => trackEvent("nav_click", { label: "start_flight_plan", target: "/flight-planner" })}>
-              Start Flight Plan
+              <span className="hidden xl:inline">Start Flight Plan</span>
+              <span className="xl:hidden">Flight Plan</span>
             </Link>
           </Button>
 
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="ml-1 flex shrink-0 items-center gap-0.5 sm:gap-1">
             {user && (
               <Link href="/notifications" className="flex" data-testid="link-notifications">
                 <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications" aria-label="Notifications">
@@ -275,7 +276,7 @@ export function Header() {
               type="button"
               variant="ghost"
               size="icon"
-              className="lg:hidden"
+              className="xl:hidden"
               onClick={() => setMobileOpen((open) => !open)}
               aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
             >
@@ -339,7 +340,7 @@ export function Header() {
         </div>
 
         {mobileOpen && (
-          <div className="border-t border-border pb-4 pt-3 lg:hidden">
+          <div className="border-t border-border pb-4 pt-3 xl:hidden">
             <Button asChild className="mb-3 w-full" data-testid="button-mobile-start-flight-plan">
               <Link href="/flight-planner" onClick={() => trackEvent("nav_click", { label: "mobile_start_flight_plan", target: "/flight-planner" })}>
                 Start Flight Plan

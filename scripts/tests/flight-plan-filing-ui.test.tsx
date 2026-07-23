@@ -664,6 +664,35 @@ test("filed IFR lifecycle actions never render activate or close after departure
   assertButtonAbsent(html, lifecycleLabels.close);
 });
 
+test("filed VFR provider lifecycle actions follow provider availability", () => {
+  const planForRender = lifecyclePlan({
+    filingStatus: "filed",
+    filingFlightRules: "VFR",
+    plannedDepartureAt: new Date("2026-07-23T20:45:00.000Z"),
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "proposed",
+      providerStatus: "PROPOSED",
+      artccState: "ROGERED",
+      versionStamp: "20260723204500000",
+      providerActionAvailability: {
+        amend: true,
+        activate: true,
+        cancel: true,
+        close: true,
+      },
+    },
+  });
+  const html = renderLifecycleActions(planForRender);
+
+  assertButtonVisible(html, lifecycleLabels.amend, { disabled: false });
+  assertButtonVisible(html, lifecycleLabels.activate, { disabled: false });
+  assertButtonVisible(html, lifecycleLabels.close, { disabled: false });
+  assertButtonVisible(html, lifecycleLabels.cancel, { disabled: false });
+  assert.equal(getLifecycleActionDisabledReason(planForRender, "activate"), null);
+  assert.equal(getLifecycleActionDisabledReason(planForRender, "close"), null);
+  assert.equal(getLifecycleActionDisabledReason(planForRender, "cancel"), null);
+});
+
 test("cancel eligibility uses canonical UTC departure instant instead of browser-local display time", () => {
   const planForRender = lifecyclePlan({
     id: "7406aa3f-fa7e-47c4-b19b-28fe4f9342e8",
@@ -849,7 +878,7 @@ test("cancel remains disabled for active and terminal provider states", () => {
   });
 
   assert.equal(canCancelPlan(activePlan), false);
-  assert.match(getLifecycleActionDisabledReason(activePlan, "cancel") || "", /Cancellation is only available/);
+  assert.match(getLifecycleActionDisabledReason(activePlan, "cancel") || "", /Cancellation unavailable because the provider lifecycle is activated/);
   assert.equal(canCancelPlan(closedPlan), false);
   assert.match(getLifecycleActionDisabledReason(closedPlan, "cancel") || "", /already closed or cancelled/);
 });
@@ -1126,7 +1155,8 @@ test("flight planner keeps schedule fields above airports and alternate below ru
   assert.ok(plannedDepartureIndex < departureAirportIndex, "planned departure is above airport selection");
   assert.ok(alternateIndex > departureRunwayIndex, "alternate is below departure runway");
   assert.ok(alternateIndex < routeModeIndex, "alternate remains before route construction controls");
-  assert.match(source, /xl:grid-cols-5/);
+  assert.match(source, /<div className="grid gap-4 md:grid-cols-2">/);
+  assert.doesNotMatch(source, /xl:grid-cols-5/);
   assert.match(source, /Override winds/);
 });
 

@@ -12582,22 +12582,22 @@ export default function FlightPlanner() {
                 {isGenuineFilingProviderPlanId(plan.filingProviderPlanId) && (
                   <div className="rounded-lg border border-[#5d6f85]/25 bg-[#0f141a]/75 p-3 text-sm text-[#E8EDF4]">
                     <div className="mb-2 font-semibold text-[#F5F8FC]">Provider Lifecycle Evidence</div>
-                    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                      <div>
+                    <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
+                      <div className="min-w-0">
                         <div className="text-xs text-[#A9BBCD]">Effective lifecycle</div>
-                        <div>{providerLifecycleEvidence.lifecycle}</div>
+                        <div className="break-words">{providerLifecycleEvidence.lifecycle}</div>
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-xs text-[#A9BBCD]">Confirmed by</div>
-                        <div>{providerLifecycleEvidence.confirmedBy}</div>
+                        <div className="break-words">{providerLifecycleEvidence.confirmedBy}</div>
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-xs text-[#A9BBCD]">Confirmed at</div>
-                        <div>{providerLifecycleEvidence.evidenceTime ? formatPlanLocalZulu(providerLifecycleEvidence.evidenceTime, getPlanTimeZone(plan, "departureTimeZone", departureTimeZone)).local : "Not available"}</div>
+                        <div className="break-words">{providerLifecycleEvidence.evidenceTime ? formatPlanLocalZulu(providerLifecycleEvidence.evidenceTime, getPlanTimeZone(plan, "departureTimeZone", departureTimeZone)).local : "Not available"}</div>
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-xs text-[#A9BBCD]">Latest provider retrieval</div>
-                        <div>{providerLifecycleEvidence.latestRetrieve}</div>
+                        <div className="break-words">{providerLifecycleEvidence.latestRetrieve}</div>
                       </div>
                     </div>
                   </div>

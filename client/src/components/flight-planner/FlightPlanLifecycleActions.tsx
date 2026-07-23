@@ -89,36 +89,45 @@ export const canSubmitAmendForPlan = (plan: FlightPlan | null | undefined) => {
 };
 
 export const canActivatePlan = (plan: FlightPlan | null | undefined) =>
-  Boolean(
-    plan &&
-    String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
-    normalizedClientFilingStatus(plan) === "filed" &&
-    getProviderActionAvailability(plan).providerStatusKnown &&
-    getProviderActionAvailability(plan).activate &&
-    hasLiveProviderPlan(plan),
-  );
+  {
+    const provider = getProviderActionAvailability(plan);
+    return Boolean(
+      plan &&
+      String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
+      !isTerminalFilingPlan(plan) &&
+      provider.providerStatusKnown &&
+      provider.activate &&
+      hasLiveProviderPlan(plan),
+    );
+  };
 
 export const canClosePlan = (plan: FlightPlan | null | undefined) =>
-  Boolean(
-    plan &&
-    String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
-    normalizedClientFilingStatus(plan) === "activated" &&
-    getProviderActionAvailability(plan).providerStatusKnown &&
-    getProviderActionAvailability(plan).close &&
-    hasLiveProviderPlan(plan),
-  );
+  {
+    const provider = getProviderActionAvailability(plan);
+    return Boolean(
+      plan &&
+      String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
+      !isTerminalFilingPlan(plan) &&
+      provider.providerStatusKnown &&
+      provider.close &&
+      hasLiveProviderPlan(plan),
+    );
+  };
 
 export const isPlanOverdueForClose = (plan: FlightPlan | null | undefined) =>
   Boolean(plan && isFlightPlanCloseOverdue(plan.plannedArrivalAt));
 
 export const canCancelPlan = (plan: FlightPlan | null | undefined) =>
-  Boolean(
-    plan &&
-    normalizedClientFilingStatus(plan) === "filed" &&
-    getProviderActionAvailability(plan).providerStatusKnown &&
-    getProviderActionAvailability(plan).cancel &&
-    hasLiveProviderPlan(plan),
-  );
+  {
+    const provider = getProviderActionAvailability(plan);
+    return Boolean(
+      plan &&
+      !isTerminalFilingPlan(plan) &&
+      provider.providerStatusKnown &&
+      provider.cancel &&
+      hasLiveProviderPlan(plan),
+    );
+  };
 
 export const getLifecycleActionDisabledReason = (plan: FlightPlan | null | undefined, action: "activate" | "cancel" | "close") => {
   if (!plan) return "Save this plan before using filing provider lifecycle actions.";
@@ -128,20 +137,16 @@ export const getLifecycleActionDisabledReason = (plan: FlightPlan | null | undef
   if (!provider.providerStatusKnown) {
     return provider.reason || "Refresh provider sync before taking filing provider lifecycle actions. RSF could not determine the current provider state.";
   }
-  const status = normalizedClientFilingStatus(plan);
   const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
   if (action === "cancel") {
-    if (status !== "filed") return "Cancellation is only available while the provider plan is proposed/filed.";
     if (!provider.cancel) return `Cancellation unavailable because the provider lifecycle is ${provider.lifecycle}.`;
   }
   if (action === "activate") {
     if (rules !== "VFR") return "Activation is only available for VFR flight plans.";
-    if (status !== "filed") return "Activation is only available while a VFR provider plan is proposed/filed.";
     if (!provider.activate) return `Activation unavailable because the provider lifecycle is ${provider.lifecycle}.`;
   }
   if (action === "close") {
     if (rules !== "VFR") return "Close is only available for VFR flight plans.";
-    if (status !== "activated") return "Close is only available for active VFR flight plans.";
     if (!provider.close) return `Close unavailable because the provider lifecycle is ${provider.lifecycle}.`;
   }
   return null;

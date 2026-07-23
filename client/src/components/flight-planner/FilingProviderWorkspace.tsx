@@ -138,8 +138,8 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
   });
 
   return (
-    <div className="grid gap-3 lg:grid-cols-3">
-      <section className="rounded-lg border p-3">
+    <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr))]">
+      <section className="min-w-0 rounded-lg border p-3">
         <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Local Plan</div>
         <div className="mt-3 space-y-3 text-sm">
           <div>
@@ -178,7 +178,7 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
         </div>
       </section>
 
-      <section className="rounded-lg border p-3">
+      <section className="min-w-0 rounded-lg border p-3">
         <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Filed Payload Summary</div>
         <div className="mt-3 space-y-3 text-sm">
           <div>
@@ -210,7 +210,7 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
         </div>
       </section>
 
-      <section className="rounded-lg border p-3">
+      <section className="min-w-0 rounded-lg border p-3">
         <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Provider Sync / Effective Plan</div>
         <div className="mt-3 space-y-3 text-sm">
           <div>
@@ -222,7 +222,7 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
               <div className="mt-1 text-[11px] text-amber-200">Updated by provider</div>
             )}
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))]">
             <div>
               <div className="text-xs text-muted-foreground">Provider lifecycle</div>
               <div className="font-medium">{formatStatusValue(providerLifecycle)}</div>
@@ -241,7 +241,7 @@ export function FilingProviderWorkspace({ plan, pilotPhone, pilotHomeBase }: { p
             </div>
           </div>
           {(providerSnapshot.providerStatus || providerSnapshot.artccState || plan.filingStatus) && (
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))]">
             <div>
               <div className="text-xs text-muted-foreground">Current provider status</div>
               <div className="font-medium">{asString(providerSnapshot.providerStatus) || plan.filingStatus || "—"}</div>

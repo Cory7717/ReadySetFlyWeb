@@ -2275,6 +2275,7 @@ export default function FlightPlanner() {
   const [providerUpdatesPlan, setProviderUpdatesPlan] = useState<FlightPlan | null>(null);
   const [labAcknowledgementBlockedSync, setLabAcknowledgementBlockedSync] = useState<Record<string, LabAcknowledgementBlockedSync>>({});
   const backgroundSyncInFlightRef = useRef<Set<string>>(new Set());
+  const backgroundSyncLastAttemptRef = useRef<Map<string, number>>(new Map());
   const lastProviderNotificationCountRef = useRef<number | null>(null);
   const lastProviderNotificationActivityRef = useRef<string | null>(null);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
@@ -3254,8 +3255,13 @@ export default function FlightPlanner() {
     if (visibleProviderPlans.length === 0) return;
     let cancelled = false;
     const poll = async () => {
+      const now = Date.now();
       for (const plan of visibleProviderPlans.slice(0, 5)) {
+        const syncThrottleKey = `${plan.id}:${acknowledgementGeneration}`;
+        const lastAttemptAt = backgroundSyncLastAttemptRef.current.get(syncThrottleKey) ?? 0;
+        if (now - lastAttemptAt < 55_000) continue;
         if (backgroundSyncInFlightRef.current.has(plan.id)) continue;
+        backgroundSyncLastAttemptRef.current.set(syncThrottleKey, now);
         backgroundSyncInFlightRef.current.add(plan.id);
         try {
           const body: Record<string, unknown> = { requestSource: "background" };

@@ -2005,10 +2005,13 @@ function runwaySurfaceClass(surface?: string | null) {
 }
 
 function buildRoutePreview(departure: string, route: string, destination: string) {
-  return [departure, route, destination]
-    .map((value) => value.trim().toUpperCase())
-    .filter(Boolean)
-    .join(" ");
+  const normalizedDeparture = departure.trim().toUpperCase();
+  const normalizedDestination = destination.trim().toUpperCase();
+  return composePlanningGeometryRoute({
+    departure: normalizedDeparture,
+    route,
+    destination: normalizedDestination,
+  });
 }
 
 function parseDateTimeLocal(value: string) {

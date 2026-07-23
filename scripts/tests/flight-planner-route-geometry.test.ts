@@ -38,6 +38,22 @@ test("planning geometry does not duplicate endpoints already in the user route",
   assert.deepEqual(tokenList(planningGeometry), ["KBOS", "ALB", "KSEA"]);
 });
 
+test("planning geometry preserves DCT separators without duplicating entered endpoints", () => {
+  const enrouteOnly = composePlanningGeometryRoute({
+    departure: "KARB",
+    route: "DCT 75G DCT",
+    destination: "KAXV",
+  });
+  const endpointsIncluded = composePlanningGeometryRoute({
+    departure: "KARB",
+    route: "KARB DCT 75G DCT KAXV",
+    destination: "KAXV",
+  });
+
+  assert.equal(enrouteOnly, "KARB DCT 75G DCT KAXV");
+  assert.equal(endpointsIncluded, "KARB DCT 75G DCT KAXV");
+});
+
 test("direct route planning geometry connects departure to destination", () => {
   const planningGeometry = composePlanningGeometryRoute({
     departure: "KBOS",
@@ -62,6 +78,7 @@ test("Flight Planner route-analysis query uses planning geometry route, not prov
   assert.match(flightPlannerSource, /planningGeometryRouteInput/);
   assert.match(flightPlannerSource, /queryKey:\s*\["\/api\/flight-plans\/route-analysis",\s*"planning-geometry",\s*planningGeometryRouteInput\]/);
   assert.match(flightPlannerSource, /route:\s*planningGeometryRouteInput/);
+  assert.match(flightPlannerSource, /function buildRoutePreview\(departure: string, route: string, destination: string\) \{\s*const normalizedDeparture[\s\S]{0,260}return composePlanningGeometryRoute\(/);
   assert.match(flightPlannerSource, /event:\s*"flight_planner_route_geometry_debug"/);
 });
 

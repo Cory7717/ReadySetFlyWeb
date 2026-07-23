@@ -1891,8 +1891,8 @@ const buildHazardSummary = (payload: any) => {
     if (!entry) return;
     const hazard = pickHazardValue(entry.hazard || entry.hazard_type || entry.rawAirSigmet || entry.rawAirmet || fallback);
     const dueTo = pickHazardValue(entry.dueTo || entry.due_to || entry.due_to_desc || "");
-    const validFrom = pickHazardValue(entry.validTimeFrom || entry.valid_time_from || entry.validFrom || "");
-    const validTo = pickHazardValue(entry.validTimeTo || entry.valid_time_to || entry.validTo || "");
+    const validFrom = formatAdvisoryDateTime(entry.validTimeFrom || entry.valid_time_from || entry.validFrom || "");
+    const validTo = formatAdvisoryDateTime(entry.validTimeTo || entry.valid_time_to || entry.validTo || "");
     items.push({ source, hazard, dueTo: dueTo || undefined, validFrom: validFrom || undefined, validTo: validTo || undefined });
   };
 
@@ -1952,6 +1952,56 @@ function parseRunwayHeading(runway: string) {
 function extractRunwayIdent(value?: string | null) {
   const match = String(value || "").trim().toUpperCase().match(/\b(\d{1,2}[LCR]?)\b/);
   return match ? match[1] : null;
+}
+
+function formatAdvisoryDateTime(value?: string | number | Date | null) {
+  if (value === null || value === undefined || value === "") return "";
+  let date: Date | null = null;
+  if (value instanceof Date) {
+    date = value;
+  } else if (typeof value === "number" && Number.isFinite(value)) {
+    date = new Date(value < 10_000_000_000 ? value * 1000 : value);
+  } else {
+    const raw = String(value).trim();
+    if (/^\d{10}$/.test(raw)) {
+      date = new Date(Number(raw) * 1000);
+    } else if (/^\d{13}$/.test(raw)) {
+      date = new Date(Number(raw));
+    } else {
+      const parsed = new Date(raw);
+      date = Number.isFinite(parsed.getTime()) ? parsed : null;
+    }
+  }
+  if (!date || !Number.isFinite(date.getTime())) return String(value);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const lookup = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return `${lookup.month} ${lookup.day}, ${lookup.year} ${lookup.hour}${lookup.minute}Z`;
+}
+
+function runwaySurfaceKind(surface?: string | null) {
+  const normalized = String(surface || "").trim().toUpperCase();
+  if (!normalized) return "unknown" as const;
+  if (/(TURF|GRASS|SOD)/.test(normalized)) return "grass" as const;
+  if (/(CONC|CONCRETE)/.test(normalized)) return "concrete" as const;
+  if (/(ASPH|ASPHALT|PAVED|BITUMINOUS)/.test(normalized)) return "paved" as const;
+  return "other" as const;
+}
+
+function runwaySurfaceClass(surface?: string | null) {
+  const kind = runwaySurfaceKind(surface);
+  if (kind === "grass") return "border-emerald-400/60 bg-emerald-500/15 text-emerald-100";
+  if (kind === "concrete") return "border-slate-300/60 bg-slate-400/15 text-slate-100";
+  if (kind === "paved") return "border-zinc-300/60 bg-zinc-400/15 text-zinc-100";
+  if (kind === "other") return "border-[#D9A441]/60 bg-[#D9A441]/15 text-[#F2DCA4]";
+  return "border-[#5d6f85]/35 bg-[#141b24] text-[#D9E4F0]";
 }
 
 function buildRoutePreview(departure: string, route: string, destination: string) {
@@ -4896,6 +4946,7 @@ export default function FlightPlanner() {
         if (a.riskScore !== b.riskScore) return a.riskScore - b.riskScore;
         return a.clearanceScore - b.clearanceScore;
       })
+      .filter((item) => item.segment.risk !== "comfortable")
       .slice(0, 3)
       .map(({ index, segment, progressLabel }) => ({ index, segment, progressLabel }));
   }, [terrainCueSegments]);
@@ -5467,6 +5518,36 @@ export default function FlightPlanner() {
     staleTime: 1000 * 60 * 5,
   });
 
+  const routeNotamIcaos = useMemo(() => {
+    return Array.from(new Set([
+      planningDepartureCode,
+      ...waypoints,
+      ...plannedStops,
+      planningDestinationCode,
+      planningAlternateCode,
+    ]
+      .map((icao) => String(icao || "").trim().toUpperCase())
+      .filter((icao) => ICAO_REGEX.test(icao))));
+  }, [plannedStops, planningAlternateCode, planningDepartureCode, planningDestinationCode, waypoints]);
+
+  const additionalRouteNotamIcaos = useMemo(
+    () => routeNotamIcaos.filter((icao) => icao !== primaryIcao),
+    [primaryIcao, routeNotamIcaos],
+  );
+
+  const additionalRouteNotamQueries = useQueries({
+    queries: additionalRouteNotamIcaos.map((icao) => ({
+      queryKey: ["/api/notams", icao, "route"],
+      queryFn: async () => {
+        const res = await fetch(apiUrl(`/api/notams?icao=${icao}`), { credentials: "include" });
+        if (!res.ok) throw new Error(`Failed to fetch NOTAMs for ${icao}`);
+        return res.json();
+      },
+      enabled: ICAO_REGEX.test(icao),
+      staleTime: 1000 * 60 * 5,
+    })),
+  });
+
   const convectiveHazardsQuery = useQuery({
     queryKey: ["/api/aviation/hazards", "conv"],
     queryFn: async () => {
@@ -5520,7 +5601,41 @@ export default function FlightPlanner() {
     [turbulenceHazardsQuery.data]
   );
 
-  const notamsCount = Array.isArray(notamsSummaryQuery.data?.notams) ? notamsSummaryQuery.data.notams.length : 0;
+  const routeNotamGroups = useMemo(() => {
+    const groups: Array<{ icao: string; source?: string; isError: boolean; isLoading: boolean; notams: any[] }> = [];
+    if (primaryIcao) {
+      groups.push({
+        icao: primaryIcao,
+        source: notamsSummaryQuery.data?.source,
+        isError: notamsSummaryQuery.isError,
+        isLoading: notamsSummaryQuery.isLoading || notamsSummaryQuery.isFetching,
+        notams: Array.isArray(notamsSummaryQuery.data?.notams) ? notamsSummaryQuery.data.notams : [],
+      });
+    }
+    additionalRouteNotamIcaos.forEach((icao, index) => {
+      const query = additionalRouteNotamQueries[index];
+      groups.push({
+        icao,
+        source: (query?.data as any)?.source,
+        isError: Boolean(query?.isError),
+        isLoading: Boolean(query?.isLoading || query?.isFetching),
+        notams: Array.isArray((query?.data as any)?.notams) ? (query?.data as any).notams : [],
+      });
+    });
+    return groups;
+  }, [
+    additionalRouteNotamIcaos,
+    additionalRouteNotamQueries,
+    notamsSummaryQuery.data?.notams,
+    notamsSummaryQuery.data?.source,
+    notamsSummaryQuery.isError,
+    notamsSummaryQuery.isFetching,
+    notamsSummaryQuery.isLoading,
+    primaryIcao,
+  ]);
+  const notamsCount = routeNotamGroups.reduce((sum, group) => sum + group.notams.length, 0);
+  const routeNotamLoading = routeNotamGroups.some((group) => group.isLoading);
+  const routeNotamError = routeNotamGroups.some((group) => group.isError);
   const pirepsCount = Array.isArray(pirepsQuery.data?.reports) ? pirepsQuery.data.reports.length : 0;
   const windsCount = Array.isArray(windsSummaryQuery.data?.stations) ? windsSummaryQuery.data.stations.length : 0;
   const convectiveCount = countHazards(convectiveHazardsQuery.data);
@@ -5753,20 +5868,28 @@ export default function FlightPlanner() {
       }, 0),
     [weatherQueries]
   );
+  const routeNotamsUpdatedAtMs = useMemo(
+    () =>
+      additionalRouteNotamQueries.reduce(
+        (maxValue, query) => Math.max(maxValue, query.dataUpdatedAt || 0),
+        notamsSummaryQuery.dataUpdatedAt || 0,
+      ),
+    [additionalRouteNotamQueries, notamsSummaryQuery.dataUpdatedAt],
+  );
   const latestBriefingUpdatedAtMs = useMemo(
     () =>
       Math.max(
         weatherDataUpdatedAtMs,
         windsSummaryQuery.dataUpdatedAt || 0,
         pirepsQuery.dataUpdatedAt || 0,
-        notamsSummaryQuery.dataUpdatedAt || 0,
+        routeNotamsUpdatedAtMs,
         tfrRouteQuery.dataUpdatedAt || 0
       ),
     [
       weatherDataUpdatedAtMs,
       windsSummaryQuery.dataUpdatedAt,
       pirepsQuery.dataUpdatedAt,
-      notamsSummaryQuery.dataUpdatedAt,
+      routeNotamsUpdatedAtMs,
       tfrRouteQuery.dataUpdatedAt,
     ]
   );
@@ -5783,13 +5906,12 @@ export default function FlightPlanner() {
   const autoChecklist = useMemo(() => ({
     weather: weatherData.length > 0 && !hasIfrWeather && !hasThunderRisk,
     fuel: totalFuel > 0 && !fuelPlanSummary.firstUnreachableLeg && fuelPlanSummary.reserveBalanceGallons >= 0,
-    notams: notamsSummaryQuery.isFetched && !notamsSummaryQuery.isError,
+    notams: routeNotamGroups.length > 0 && routeNotamGroups.every((group) => !group.isLoading && !group.isError),
     tfr: tfrOverlayStatus === "none",
     fuelSufficient: totalFuel > 0 && !fuelPlanSummary.firstUnreachableLeg && fuelPlanSummary.reserveBalanceGallons >= 0,
     currency: false,
   }), [weatherData, hasIfrWeather, hasThunderRisk, totalFuel,
-    fuelPlanSummary.firstUnreachableLeg, fuelPlanSummary.reserveBalanceGallons, notamsSummaryQuery.isFetched,
-    notamsSummaryQuery.isError, tfrOverlayStatus]);
+    fuelPlanSummary.firstUnreachableLeg, fuelPlanSummary.reserveBalanceGallons, routeNotamGroups, tfrOverlayStatus]);
   const checklistCompletionCount = useMemo(() => {
     const keys: (keyof typeof autoChecklist)[] = ["weather", "fuel", "currency", "notams", "tfr", "fuelSufficient"];
     return keys.filter((key) => checklist[key] || autoChecklist[key]).length;
@@ -5832,7 +5954,36 @@ export default function FlightPlanner() {
     ) => {
       const normalized = extractRunwayIdent(ident);
       if (!normalized) return;
-      if (options.has(normalized)) return;
+      const existing = options.get(normalized);
+      const normalizedSurface = String(surface || "").trim();
+      if (existing) {
+        const nextHeading = existing.heading ?? heading ?? null;
+        const nextLengthFt = existing.lengthFt ?? lengthFt ?? null;
+        const nextWidthFt = existing.widthFt ?? widthFt ?? null;
+        const nextSurface = existing.surface || normalizedSurface || null;
+        const parts = [normalized];
+        if (nextHeading !== null && nextHeading !== undefined && Number.isFinite(nextHeading)) {
+          parts.push(`${Math.round(nextHeading)} deg`);
+        }
+        if (nextLengthFt !== null && nextLengthFt !== undefined && Number.isFinite(nextLengthFt)) {
+          parts.push(`${Math.round(nextLengthFt).toLocaleString()} ft`);
+        }
+        if (nextWidthFt !== null && nextWidthFt !== undefined && Number.isFinite(nextWidthFt)) {
+          parts.push(`${Math.round(nextWidthFt).toLocaleString()} ft wide`);
+        }
+        if (nextSurface) {
+          parts.push(nextSurface);
+        }
+        options.set(normalized, {
+          label: parts.join(" - "),
+          heading: nextHeading,
+          lengthFt: nextLengthFt,
+          widthFt: nextWidthFt,
+          surface: nextSurface,
+          source: existing.source === "runway" ? existing.source : source,
+        });
+        return;
+      }
       const parts = [normalized];
       if (heading !== null && heading !== undefined && Number.isFinite(heading)) {
         parts.push(`${Math.round(heading)} deg`);
@@ -5843,7 +5994,6 @@ export default function FlightPlanner() {
       if (widthFt !== null && widthFt !== undefined && Number.isFinite(widthFt)) {
         parts.push(`${Math.round(widthFt).toLocaleString()} ft wide`);
       }
-      const normalizedSurface = String(surface || "").trim();
       if (normalizedSurface) {
         parts.push(normalizedSurface);
       }
@@ -8924,11 +9074,19 @@ export default function FlightPlanner() {
                       key={option.ident}
                       type="button"
                       size="sm"
-                      className={departureRunway === option.ident ? "rsf-metal-button-primary" : plannerInsetActionClass}
+                      className={cn(
+                        "gap-2",
+                        departureRunway === option.ident ? "rsf-metal-button-primary" : plannerInsetActionClass
+                      )}
                       onClick={() => setDepartureRunway(option.ident)}
                       title={option.label}
                     >
-                      {option.label}
+                      <span>{option.ident}</span>
+                      {option.surface ? (
+                        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]", runwaySurfaceClass(option.surface))}>
+                          {option.surface}
+                        </span>
+                      ) : null}
                     </Button>
                   ))}
                 </div>
@@ -8959,7 +9117,7 @@ export default function FlightPlanner() {
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Pulling runway options for the selected departure airport. Turf and paved runways remain selectable when they exist in the runway dataset.
+                Runway selection currently drives runway/wind context, crosswind checks, surface cautions, and performance reminders. It does not yet move route geometry, top-of-climb, or fuel burn.
               </p>
             </div>
             <div className="space-y-2 md:col-span-2">
@@ -8990,8 +9148,18 @@ export default function FlightPlanner() {
                           trackEvent("planner_route_mode_change", { from_mode: routeMode, to_mode: nextMode });
                         }
                         setRouteMode(nextMode);
-                        if (nextMode === "direct") setForm((current) => ({ ...current, route: "DCT" }));
-                        if (nextMode === "auto" && form.route.trim().toUpperCase() === "DCT") setForm((current) => ({ ...current, route: "" }));
+                        if (nextMode === "direct") {
+                          setForm((current) => ({ ...current, route: "DCT" }));
+                        }
+                        if (nextMode === "manual") {
+                          setForm((current) => ({
+                            ...current,
+                            route: normalizeRouteText(current.route) || generatedRouteCore || routeAssistRouteCore || "",
+                          }));
+                        }
+                        if (nextMode === "auto" && form.route.trim().toUpperCase() === "DCT") {
+                          setForm((current) => ({ ...current, route: generatedRouteCore || routeAssistRouteCore || "" }));
+                        }
                       }}
                     >
                       {option.label}
@@ -10395,7 +10563,7 @@ export default function FlightPlanner() {
             <div className={plannerMetricClass}>
               <div className="text-xs text-muted-foreground">NOTAMs</div>
               <div className="text-sm font-semibold">
-                {notamsSummaryQuery.isError ? "Unavailable" : notamsCount > 0 ? `${notamsCount} active` : "None loaded"}
+                {routeNotamError ? "Some unavailable" : notamsCount > 0 ? `${notamsCount} returned` : "None returned"}
               </div>
             </div>
           </div>
@@ -10425,7 +10593,7 @@ export default function FlightPlanner() {
               <Link href="/aviation-weather">Open Aviation Weather Hub</Link>
             </Button>
           </div>
-          {(windsSummaryQuery.isLoading || pirepsQuery.isLoading || notamsSummaryQuery.isLoading) && (
+          {(windsSummaryQuery.isLoading || pirepsQuery.isLoading || routeNotamLoading) && (
             <div className="text-xs text-muted-foreground">Loading summary data...</div>
           )}
         </CardContent>
@@ -10655,7 +10823,7 @@ export default function FlightPlanner() {
                       ) : null}
                       {terrainHotSpots.length > 0 && (
                         <div className="space-y-2">
-                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Terrain hot spots</div>
+                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Terrain clearance flags</div>
                           {terrainHotSpots.map((item, hotSpotIndex) => (
                             <div key={`planner-terrain-hotspot-${item.index}`} className="rounded-lg border px-3 py-2 text-sm">
                               <div className="flex items-center justify-between gap-3">
@@ -10668,7 +10836,7 @@ export default function FlightPlanner() {
                                       ? "Warning segment"
                                       : item.segment.risk === "caution"
                                         ? "Tight clearance segment"
-                                        : "Comfortable segment"}
+                                        : "Review segment"}
                                   </span>
                                 </div>
                                 <Badge variant="outline">{item.progressLabel}</Badge>
@@ -12678,8 +12846,8 @@ export default function FlightPlanner() {
                       const props = selectedTfrFeature.properties || {};
                       const id = props.notamId || props.tfrId || props.id || "TFR";
                       const title = props.title || props.reason || props.tfrType || null;
-                      const start = props.effectiveStart || props.startTime || props.validFrom || null;
-                      const end = props.effectiveEnd || props.endTime || props.validTo || null;
+                      const start = formatAdvisoryDateTime(props.effectiveStart || props.effectiveAt || props.startTime || props.validFrom || null);
+                      const end = formatAdvisoryDateTime(props.effectiveEnd || props.expiresAt || props.endTime || props.validTo || null);
                       const altitude = props.altitude || props.altitudeLimits || props.lowerAltitude || props.upperAltitude || null;
                       const source = props.source || props.lastUpdated || props.updatedAt || null;
                       const status = props.corridorStatus === "active" ? "Active now" : props.corridorStatus === "planned-flight-window" ? "Active during planned flight" : "Candidate";
@@ -12688,7 +12856,7 @@ export default function FlightPlanner() {
                           <div className="font-semibold text-[#F5F8FC]">{String(id)}</div>
                           {title ? <div>{String(title)}</div> : null}
                           <div>Status: {status}</div>
-                          {start || end ? <div>Effective: {start ? String(start) : "Not returned"} to {end ? String(end) : "Not returned"}</div> : null}
+                          {start || end ? <div>Effective: {start || "Not returned"} to {end || "Not returned"}</div> : null}
                           {altitude ? <div>Altitude: {String(altitude)}</div> : null}
                           {source ? <div>Source/updated: {String(source)}</div> : null}
                         </div>
@@ -12785,7 +12953,7 @@ export default function FlightPlanner() {
                       </div>
                     </div>
                     <div className={plannerMetricClass}>
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-[#8fa6c0]">Hot spots</div>
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[#8fa6c0]">Terrain flags</div>
                       <div className="font-semibold">
                         {terrainHotSpots.length > 0 ? `${terrainHotSpots.length} flagged` : "None"}
                       </div>
@@ -13028,19 +13196,50 @@ export default function FlightPlanner() {
             <>
               <SheetHeader>
                 <SheetTitle>NOTAMs</SheetTitle>
-                <SheetDescription>Latest NOTAMs for {primaryIcao || "your route"}.</SheetDescription>
+                <SheetDescription>NOTAMs returned for route airports. Verify official briefings before flight.</SheetDescription>
               </SheetHeader>
               <div className="space-y-2 text-sm">
-                {notamsSummaryQuery.isError && (
-                  <div className="text-muted-foreground">NOTAM feed unavailable.</div>
+                {routeNotamError && (
+                  <div className="text-muted-foreground">One or more route NOTAM feeds are unavailable.</div>
                 )}
-                {!notamsSummaryQuery.isError && notamsCount === 0 && (
-                  <div className="text-muted-foreground">No active NOTAMs.</div>
+                {!routeNotamError && notamsCount === 0 && (
+                  <div className="text-muted-foreground">No NOTAMs returned for the current route airports.</div>
                 )}
-                {notamsSummaryQuery.data?.notams?.map((notam: any) => (
-                  <div key={notam.id} className={cn("p-2", plannerSubpanelClass)}>
-                    <div className="font-semibold">{notam.id}</div>
-                    <div className="text-xs text-muted-foreground mt-1">{notam.text}</div>
+                {routeNotamGroups.map((group) => (
+                  <div key={`notam-group-${group.icao}`} className={cn("space-y-2 p-3", plannerSubpanelMutedClass)}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-semibold text-[#F5F8FC]">{group.icao}</div>
+                      <Badge variant="outline">
+                        {group.isLoading ? "Loading" : group.isError ? "Unavailable" : `${group.notams.length} returned`}
+                      </Badge>
+                    </div>
+                    {!group.isLoading && !group.isError && group.notams.length === 0 && (
+                      <div className="text-xs text-muted-foreground">No NOTAMs returned for this airport.</div>
+                    )}
+                    {group.notams.map((notam: any, index) => {
+                      const effective = notam.effective ?? notam.effectiveAt ?? notam.startTime ?? notam.validFrom ?? null;
+                      const expires = notam.expires ?? notam.expiresAt ?? notam.endTime ?? notam.validTo ?? null;
+                      const effectiveLabel = formatAdvisoryDateTime(effective);
+                      const expiresLabel = formatAdvisoryDateTime(expires);
+                      return (
+                        <div key={`${group.icao}-${notam.id || index}`} className={cn("p-2", plannerSubpanelClass)}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="font-semibold">{notam.id || `NOTAM ${index + 1}`}</div>
+                            {!effectiveLabel && !expiresLabel ? (
+                              <Badge variant="outline" className="border-[#D9A441]/45 bg-[#241c0d] text-[#F2DCA4]">
+                                Validity not returned
+                              </Badge>
+                            ) : null}
+                          </div>
+                          {(effectiveLabel || expiresLabel) && (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Effective {effectiveLabel || "not returned"} to {expiresLabel || "not returned"}
+                            </div>
+                          )}
+                          <div className="text-xs text-muted-foreground mt-1">{notam.text}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ))}
                 <div className={cn("p-3", plannerSubpanelClass)}>
@@ -13064,8 +13263,8 @@ export default function FlightPlanner() {
                   {showAiNotamTranslator && (
                     <div className="mt-3">
                       <NotamTranslator
-                        notams={notamsSummaryQuery.data?.notams?.map((notam: any) => notam.text ?? notam.notamTxt ?? notam.raw ?? "").filter(Boolean).join("\n\n") ?? ""}
-                        airport={primaryIcao}
+                        notams={routeNotamGroups.flatMap((group) => group.notams.map((notam: any) => `${group.icao}: ${notam.text ?? notam.notamTxt ?? notam.raw ?? ""}`)).filter(Boolean).join("\n\n")}
+                        airport={routeNotamIcaos.join(", ") || primaryIcao}
                         route={routePreviewFull}
                       />
                     </div>

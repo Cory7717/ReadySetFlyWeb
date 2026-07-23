@@ -4763,8 +4763,24 @@ function normalizeNotams(payload: any): Array<{ id: string; text: string; effect
     return candidate.map((item, index) => ({
       id: item?.id || item?.notam_id || item?.notamId || `notam-${index}`,
       text: item?.text || item?.notamText || item?.raw || JSON.stringify(item),
-      effective: item?.effective || item?.start || item?.startDate,
-      expires: item?.expires || item?.end || item?.endDate,
+      effective:
+        item?.effective ||
+        item?.effectiveAt ||
+        item?.effectiveStart ||
+        item?.start ||
+        item?.startTime ||
+        item?.startDate ||
+        item?.validFrom ||
+        item?.validTimeFrom,
+      expires:
+        item?.expires ||
+        item?.expiresAt ||
+        item?.effectiveEnd ||
+        item?.end ||
+        item?.endTime ||
+        item?.endDate ||
+        item?.validTo ||
+        item?.validTimeTo,
     }));
   }
 
@@ -4775,8 +4791,8 @@ function normalizeNotams(payload: any): Array<{ id: string; text: string; effect
         {
           id: candidate?.id || "notam-0",
           text,
-          effective: candidate?.effective || candidate?.start,
-          expires: candidate?.expires || candidate?.end,
+          effective: candidate?.effective || candidate?.effectiveAt || candidate?.effectiveStart || candidate?.start || candidate?.startTime || candidate?.validFrom,
+          expires: candidate?.expires || candidate?.expiresAt || candidate?.effectiveEnd || candidate?.end || candidate?.endTime || candidate?.validTo,
         },
       ];
     }
@@ -4789,10 +4805,21 @@ function stableNotamIdFromText(text: string) {
   return crypto.createHash("sha256").update(text).digest("hex").slice(0, 24);
 }
 
+function filterCurrentNotams(notams: Array<{ id: string; text: string; effective?: string; expires?: string }>) {
+  const now = Date.now();
+  return notams.filter((notam) => {
+    const expiresAt = parseNotamDateValue(notam?.expires);
+    return !expiresAt || expiresAt.getTime() >= now;
+  });
+}
+
 function parseNotamDateValue(value: any): Date | null {
   if (!value) return null;
   if (value instanceof Date && Number.isFinite(value.getTime())) return value;
   if (typeof value === "string") {
+    const raw = value.trim();
+    if (/^\d{10}$/.test(raw)) return new Date(Number(raw) * 1000);
+    if (/^\d{13}$/.test(raw)) return new Date(Number(raw));
     const iso = parseISO(value);
     if (Number.isFinite(iso.getTime())) return iso;
     const fallback = new Date(value);
@@ -18042,7 +18069,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       const payload = await response.json().catch(() => null);
-      const notams = normalizeNotams(payload);
+      const notams = filterCurrentNotams(normalizeNotams(payload));
       console.log(
         JSON.stringify({
           event: "notam_backfill_fetch",
@@ -18169,7 +18196,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
 
     const payload = await response.json().catch(() => null);
-    const notams = normalizeNotams(payload);
+    const notams = filterCurrentNotams(normalizeNotams(payload));
     console.log(
       JSON.stringify({
         event: "notam_fetch",

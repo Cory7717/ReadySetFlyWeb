@@ -1374,6 +1374,27 @@ test("VFR and IFR lifecycle action matrix matches the Leidos demo", () => {
   assert.equal(validateFlightPlanForAction(filedVfr, "activate").ready, true);
   assert.equal(validateFlightPlanForAction(filedVfr, "cancel").ready, true);
 
+  const proposedProviderVfr = filingPlan({
+    filingStatus: "proposed",
+    filingProviderPlanId: "LEIDOS-VFR-2",
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "proposed",
+      providerLifecycleSource: "provider_response",
+      versionStamp: "20260723202101220",
+      providerActionAvailability: {
+        amend: false,
+        activate: false,
+        cancel: false,
+        close: false,
+        requiresSync: true,
+        reason: "RSF could not determine the current Leidos state. Refresh provider sync before taking lifecycle actions.",
+      },
+    },
+  });
+  assert.equal(validateFlightPlanForAction(proposedProviderVfr, "activate").ready, true);
+  assert.equal(validateFlightPlanForAction(proposedProviderVfr, "cancel").ready, true);
+  assert.equal(validateFlightPlanForAction(proposedProviderVfr, "close").ready, false);
+
   const activeVfr = filingPlan({
     filingStatus: "activated",
     filingProviderPlanId: "LEIDOS-VFR-1",

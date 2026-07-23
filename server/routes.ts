@@ -25904,7 +25904,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const providerSnapshot = asRecord((plan as Record<string, unknown>).filingProviderSnapshot);
         const availability = asRecord(providerSnapshot.providerActionAvailability);
         const lifecycle = getProviderLifecycleStatus(providerSnapshot);
-        if (!lifecycle || lifecycle === "unknown" || availability.requiresSync === true) {
+        const availabilityReason = String(availability.reason || "");
+        const staleUnknownAvailability = Boolean(
+          lifecycle &&
+          lifecycle !== "unknown" &&
+          (
+            availability.requiresSync === true ||
+            /could not determine|refresh provider sync|provider state is unknown/i.test(availabilityReason)
+          )
+        );
+        if (!lifecycle || lifecycle === "unknown" || (availability.requiresSync === true && !staleUnknownAvailability)) {
           return res.status(409).json({
             error: "RSF needs a fresh provider sync before this action because the current provider state is unknown.",
             requiresProviderSync: true,
@@ -25912,7 +25921,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           });
         }
         const available = action === "cancel" ? availability.cancel : action === "close" ? availability.close : availability.activate;
-        if (available === false) {
+        const lifecycleAllowsAction =
+          action === "cancel" ? lifecycle === "proposed" || lifecycle === "filed" :
+          action === "activate" ? lifecycle === "proposed" || lifecycle === "filed" :
+          lifecycle === "activated" || lifecycle === "active";
+        if ((available === false && !staleUnknownAvailability) || !lifecycleAllowsAction) {
           return res.status(409).json({
             error: `The filing provider currently reports this flight plan as ${lifecycle}. ${action.toUpperCase()} is not available for that provider state.`,
             providerLifecycleStatus: lifecycle,

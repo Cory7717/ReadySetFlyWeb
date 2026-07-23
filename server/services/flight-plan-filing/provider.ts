@@ -2718,6 +2718,14 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   const warnings: string[] = [];
   const rules = normalizeFlightRules(plan.filingFlightRules);
   const lifecycleStatus = String(plan.filingStatus || "").toLowerCase();
+  const providerSnapshot = plan.filingProviderSnapshot && typeof plan.filingProviderSnapshot === "object" && !Array.isArray(plan.filingProviderSnapshot)
+    ? plan.filingProviderSnapshot as Record<string, unknown>
+    : null;
+  const providerLifecycleStatus = String(providerSnapshot?.providerLifecycleStatus || "").trim().toLowerCase();
+  const effectiveLifecycleStatus =
+    providerLifecycleStatus && providerLifecycleStatus !== "unknown"
+      ? providerLifecycleStatus
+      : lifecycleStatus;
   const routeNormalization = normalizeRouteForProvider(plan.route || "DCT", {
     departure: plan.departure,
     destination: plan.destination,
@@ -2930,16 +2938,13 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if (action !== "file" && !isGenuineFilingProviderPlanId(plan.filingProviderPlanId)) {
     errors.push("Stage or file the plan first so a confirmed Leidos flight identifier exists before using this action.");
   }
-  const providerSnapshot = plan.filingProviderSnapshot && typeof plan.filingProviderSnapshot === "object" && !Array.isArray(plan.filingProviderSnapshot)
-    ? plan.filingProviderSnapshot as Record<string, unknown>
-    : null;
   if (action !== "file" && action !== "close" && providerSnapshot?.providerPendingReview === true) {
     errors.push("The filing provider has updated this flight plan. Open Provider Updates and acknowledge the current provider version before submitting another provider action.");
   }
 
   if (action === "amend") {
-    const amendableStatuses = rules === "VFR" ? ["filed", "activated"] : ["filed"];
-    if (!amendableStatuses.includes(lifecycleStatus)) {
+    const amendableStatuses = rules === "VFR" ? ["proposed", "filed", "activated", "active"] : ["proposed", "filed"];
+    if (!amendableStatuses.includes(effectiveLifecycleStatus)) {
       errors.push(
         rules === "VFR"
           ? "Only a filed or active VFR plan can be amended."
@@ -2948,15 +2953,15 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     }
   }
 
-  if (action === "cancel" && lifecycleStatus !== "filed") {
+  if (action === "cancel" && !["proposed", "filed"].includes(effectiveLifecycleStatus)) {
     errors.push("Only a filed flight plan in the PROPOSED state can be cancelled through the filing provider.");
   }
 
-  if (action === "activate" && lifecycleStatus !== "filed") {
+  if (action === "activate" && !["proposed", "filed"].includes(effectiveLifecycleStatus)) {
     errors.push("Only a filed VFR plan in the PROPOSED state can be activated.");
   }
 
-  if (action === "close" && lifecycleStatus !== "activated") {
+  if (action === "close" && !["activated", "active"].includes(effectiveLifecycleStatus)) {
     errors.push("Only an active VFR flight plan can be closed.");
   }
 

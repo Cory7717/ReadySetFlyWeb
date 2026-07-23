@@ -44,6 +44,13 @@ test("provider snapshot merge preserves last-known values on null retrieve", () 
   assert.match(routes, /local_filing_status_baseline/);
 });
 
+test("filing action route guard does not let stale unknown availability override known lifecycle", () => {
+  const routes = readFileSync("server/routes.ts", "utf8");
+  assert.match(routes, /const staleUnknownAvailability = Boolean/);
+  assert.match(routes, /availability\.requiresSync === true && !staleUnknownAvailability/);
+  assert.match(routes, /action === "cancel" \? lifecycle === "proposed" \|\| lifecycle === "filed"/);
+});
+
 test("Flight Planner panel does not show local filingStatus as provider status", () => {
   const panel = readFileSync("client/src/components/flight-planner/FilingProviderWorkspace.tsx", "utf8");
   assert.match(panel, /Provider lifecycle/);

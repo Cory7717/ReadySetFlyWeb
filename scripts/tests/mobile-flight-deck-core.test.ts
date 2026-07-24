@@ -30,6 +30,13 @@ import {
   transitionSkippedLegs,
   updateActiveFlightSession,
 } from '../../mobile/src/lib/activeFlightSession';
+import { deriveFlightDataState } from '../../mobile/src/lib/flight-data-engine';
+
+const ENGINE_ROUTE_POINTS = [
+  { icao: 'KARB', name: 'Ann Arbor', latitude: 42.223, longitude: -83.745 },
+  { icao: '75G', name: 'Rossettie', latitude: 41.908, longitude: -84.586 },
+  { icao: 'KAXV', name: 'Neil Armstrong', latitude: 40.493, longitude: -84.298 },
+];
 
 test('blank VFR entry remains no-route and does not infer a planned route', () => {
   const params = normalizeFlightDeckRouteParams(createBlankVfrFlightDeckParams());
@@ -95,6 +102,166 @@ test('fresh receiver ownship is selected ahead of GPS', () => {
   assert.equal(health.receiverOwnshipFresh, true);
   assert.equal(health.gpsOwnshipFresh, true);
   assert.equal(health.activeSource, 'receiver');
+});
+
+test('flight data engine selects fresh receiver ownship and derives active route legs', () => {
+  const nowMs = 1_000_000;
+  const route = createActiveFlightRoute({
+    departure: 'KARB',
+    destination: 'KAXV',
+    waypoints: '75G',
+    points: ENGINE_ROUTE_POINTS,
+    totalNm: 106.8,
+  });
+  const session = createActiveFlightSession({
+    id: 'engine-route',
+    entryMode: 'planned_route',
+    route,
+    now: '2026-07-24T12:00:00.000Z',
+  });
+  const state = deriveFlightDataState({
+    nowMs,
+    session,
+    routeSnapshot: route,
+    routePoints: ENGINE_ROUTE_POINTS,
+    routeTotalNm: 106.8,
+    simulation: { active: false, ownship: null, attitude: null, trafficTargets: [] },
+    deviceGps: { lat: 0, lon: 0, altitudeFt: 1000, speedKts: 90, heading: 0, updatedAt: nowMs - 1000, source: 'gps' },
+    receiver: {
+      health: { status: 'healthy', ownshipFresh: true },
+      ownship: { lat: 42.1, lon: -84.0, altitudeFt: 3500, speedKts: 110, heading: 245, updatedAt: nowMs - 500, source: 'receiver' },
+      attitude: { headingDeg: 250, updatedAt: nowMs - 500, source: 'receiver' },
+    },
+    trafficTargets: [],
+    configuration: { plannedAltitudeFt: 6500 },
+  });
+
+  assert.equal(state.source.health.activeSource, 'receiver');
+  assert.equal(state.source.ownship?.source, 'receiver');
+  assert.equal(state.route.legs.length, 2);
+  assert.equal(state.navigation.activeLegIndex, 0);
+  assert.equal(state.navigation.progress?.nextWaypoint, '75G');
+});
+
+test('flight data engine falls back to fresh GPS when receiver ownship is stale', () => {
+  const nowMs = 1_000_000;
+  const state = deriveFlightDataState({
+    nowMs,
+    session: null,
+    routeSnapshot: null,
+    routePoints: [],
+    simulation: { active: false, ownship: null, attitude: null, trafficTargets: [] },
+    deviceGps: { lat: 42.223, lon: -83.745, altitudeFt: 1000, speedKts: 35, heading: 180, updatedAt: nowMs - 1000, source: 'gps' },
+    receiver: {
+      health: { status: 'stale' },
+      ownship: { lat: 42.0, lon: -84.0, altitudeFt: 3000, speedKts: 95, heading: 220, updatedAt: nowMs - FLIGHT_DECK_RECEIVER_OWNSHIP_STALE_MS - 1, source: 'receiver' },
+      attitude: null,
+    },
+    trafficTargets: [],
+  });
+
+  assert.equal(state.source.health.activeSource, 'gps');
+  assert.equal(state.source.ownship?.source, 'gps');
+});
+
+test('flight data engine expires stale traffic and ranks immediate conflicts', () => {
+  const nowMs = 1_000_000;
+  const state = deriveFlightDataState({
+    nowMs,
+    session: null,
+    routeSnapshot: null,
+    routePoints: [],
+    simulation: { active: false, ownship: null, attitude: null, trafficTargets: [] },
+    deviceGps: { lat: 42.223, lon: -83.745, altitudeFt: 3000, speedKts: 90, heading: 180, updatedAt: nowMs - 1000, source: 'gps' },
+    receiver: { health: null, ownship: null, attitude: null },
+    trafficTargets: [
+      { id: 'near', lat: 42.224, lon: -83.746, altitudeFt: 3100, updatedAt: nowMs - 1000 },
+      { id: 'stale', lat: 42.224, lon: -83.746, altitudeFt: 3100, updatedAt: nowMs - FLIGHT_DECK_TRAFFIC_STALE_MS },
+    ],
+  });
+
+  assert.deepEqual(state.traffic.tacticalTargets.map((target) => target.id), ['near']);
+  assert.equal(state.traffic.immediateCount, 1);
+  assert.equal(state.alerts.some((alert) => alert.id === 'traffic-immediate'), true);
+});
+
+test('flight data engine proposes active leg sequencing without mutating the session', () => {
+  const nowMs = 1_000_000;
+  const routePoints = [
+    ENGINE_ROUTE_POINTS[0],
+    ENGINE_ROUTE_POINTS[1],
+    { icao: 'MID', name: 'Midpoint', latitude: 41.2, longitude: -84.45 },
+    ENGINE_ROUTE_POINTS[2],
+  ];
+  const almostAt75g = {
+    latitude: routePoints[1].latitude + (routePoints[2].latitude - routePoints[1].latitude) * 0.98,
+    longitude: routePoints[1].longitude + (routePoints[2].longitude - routePoints[1].longitude) * 0.98,
+  };
+  const route = createActiveFlightRoute({
+    departure: 'KARB',
+    destination: 'KAXV',
+    waypoints: '75G MID',
+    points: routePoints,
+    totalNm: 106.8,
+  });
+  const session = transitionActiveLeg(
+    createActiveFlightSession({
+      id: 'engine-sequence',
+      entryMode: 'planned_route',
+      route,
+      now: '2026-07-24T12:00:00.000Z',
+    }),
+    1
+  );
+  const state = deriveFlightDataState({
+    nowMs,
+    session,
+    routeSnapshot: route,
+    routePoints,
+    simulation: {
+      active: true,
+      ownship: { lat: almostAt75g.latitude, lon: almostAt75g.longitude, altitudeFt: 4500, speedKts: 115, heading: 172, updatedAt: nowMs, source: 'simulation' },
+      attitude: null,
+      trafficTargets: [],
+    },
+    deviceGps: null,
+    receiver: { health: null, ownship: null, attitude: null },
+    trafficTargets: [],
+    configuration: { plannedAltitudeFt: 6500 },
+  });
+
+  assert.deepEqual(
+    state.transitionProposals.filter((proposal) => proposal.type === 'sequence-active-leg'),
+    [{ type: 'sequence-active-leg', activeLegIndex: 2, reason: 'auto-sequence' }]
+  );
+  assert.equal(session.navigation.activeLegIndex, 1);
+});
+
+test('flight data engine honors local active leg fallback when no session exists', () => {
+  const nowMs = 1_000_000;
+  const state = deriveFlightDataState({
+    nowMs,
+    session: null,
+    routeSnapshot: null,
+    routePoints: [
+      ENGINE_ROUTE_POINTS[0],
+      ENGINE_ROUTE_POINTS[1],
+      ENGINE_ROUTE_POINTS[2],
+    ],
+    simulation: {
+      active: true,
+      ownship: { lat: 41.5, lon: -84.5, altitudeFt: 4500, speedKts: 100, heading: 170, updatedAt: nowMs, source: 'simulation' },
+      attitude: null,
+      trafficTargets: [],
+    },
+    deviceGps: null,
+    receiver: { health: null, ownship: null, attitude: null },
+    trafficTargets: [],
+    navigation: { activeLegIndex: 1, sequencingSuspended: true },
+  });
+
+  assert.equal(state.navigation.activeLegIndex, 1);
+  assert.equal(state.navigation.activeLeg?.from, '75G');
 });
 
 test('traffic expiration removes stale and timestampless targets deterministically', () => {

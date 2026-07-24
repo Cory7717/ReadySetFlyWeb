@@ -62,14 +62,12 @@ import {
   interpolateRouteOwnship,
   normalizeHeadingDelta,
   offsetLatLonByNm,
-  rankTrafficTargets,
   relativeClockPosition,
 } from '../lib/flightMath';
 import type { MobileRouteLeg, MobileRouteNavDataLegPayload, MobileRouteProgressSummary } from '../lib/flightMath';
 import { analyzeFiledRoute, isFiledRouteAnchorKind } from '@shared/flight-plan-route';
 import type { FlightPlan } from '@shared/schema';
 import { ICAO_EQUIPMENT_CODES, normalizeIcaoEquipmentCodes, parseIcaoEquipmentCodes } from '@shared/icao-equipment-codes';
-import { getFlightDeckSourceArbitrationState } from '../lib/sourceArbitration';
 import FlightDeckView from '../components/flight-deck/FlightDeckView';
 import {
   getFlightDeckLayoutProfile,
@@ -96,7 +94,6 @@ import {
   shouldInitializeFlightDeckWithoutRoute,
 } from '../lib/flightDeckEntry';
 import {
-  deriveFlightDeckSourceHealth,
   expireFlightDeckTrafficTargets,
   FLIGHT_DECK_DEVICE_OWNSHIP_STALE_MS,
   FLIGHT_DECK_RECEIVER_ATTITUDE_STALE_MS,
@@ -123,6 +120,7 @@ import {
   type ActiveFlightSession,
 } from '../lib/activeFlightSession';
 import { useActiveFlightSessionScope } from '../lib/activeFlightSessionContext';
+import { deriveFlightDataState } from '../lib/flight-data-engine';
 import FormDateTimeField from '../components/FormDateTimeField';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { diagnosticsEnabled, logDiagnostic, warnDiagnostic } from '../utils/diagnostics';
@@ -1870,46 +1868,74 @@ export default function FlightPlannerScreen() {
     () => buildSimulatedTrafficTargets(simulatedGpsData, { injectConflict: simulationConflictEnabled }),
     [simulatedGpsData, simulationConflictEnabled]
   );
-  const sourceHealth = useMemo(
+  const flightDataEngineState = useMemo(
     () =>
-      deriveFlightDeckSourceHealth({
+      deriveFlightDataState({
         nowMs: ownshipClockMs,
-        simulationEnabled,
-        simulationOwnshipAvailable: Boolean(simulatedGpsData),
-        receiverOwnshipUpdatedAt: receiverOwnship?.updatedAt,
-        receiverAttitudeUpdatedAt: receiverAttitude?.updatedAt,
-        gpsOwnshipUpdatedAt: gpsData?.updatedAt,
-        receiverHealth,
+        session: activeFlightSession,
+        routeSnapshot: activeFlightSession?.route || null,
+        routePoints,
+        routeTotalNm: routeSummary?.totalNm ?? null,
+        simulation: {
+          active: simulationEnabled,
+          ownship: simulatedGpsData,
+          attitude: simulatedGpsData
+            ? {
+                pitchDeg: 0,
+                rollDeg: 0,
+                headingDeg: simulatedGpsData.heading,
+                headingReference: 'true',
+                indicatedAirspeedKts: simulatedGpsData.speedKts,
+                trueAirspeedKts: simulatedGpsData.speedKts,
+                updatedAt: simulatedGpsData.updatedAt,
+                source: 'simulation',
+              }
+            : null,
+          trafficTargets: simulatedTrafficTargets,
+        },
+        deviceGps: gpsData,
+        receiver: {
+          health: receiverHealth,
+          ownship: receiverOwnship,
+          attitude: receiverAttitude,
+        },
+        trafficTargets,
+        navigation: {
+          activeLegIndex,
+          sequencingSuspended,
+        },
+        configuration: {
+          plannedAltitudeFt: plannedAltitudeValue ?? null,
+          simulationAltitudeFt,
+        },
       }),
     [
-      gpsData?.updatedAt,
+      activeFlightSession,
+      activeLegIndex,
+      gpsData,
       ownshipClockMs,
-      receiverAttitude?.updatedAt,
+      plannedAltitudeValue,
+      receiverAttitude,
       receiverHealth,
-      receiverOwnship?.updatedAt,
+      receiverOwnship,
+      routePoints,
+      routeSummary?.totalNm,
       simulatedGpsData,
+      simulatedTrafficTargets,
+      simulationAltitudeFt,
       simulationEnabled,
+      sequencingSuspended,
+      trafficTargets,
     ]
   );
+  const sourceHealth = flightDataEngineState.source.health;
   const receiverOwnshipAgeMs = sourceHealth.receiverOwnshipAgeMs;
   const receiverOwnshipFresh = sourceHealth.receiverOwnshipFresh;
   const receiverAttitudeAgeMs = sourceHealth.receiverAttitudeAgeMs;
   const receiverAttitudeFresh = sourceHealth.receiverAttitudeFresh;
   const gpsOwnshipAgeMs = sourceHealth.gpsOwnshipAgeMs;
   const gpsOwnshipFresh = sourceHealth.gpsOwnshipFresh;
-  const activeOwnship: OwnshipData | null = simulationEnabled && simulatedGpsData
-    ? simulatedGpsData
-    : receiverOwnshipFresh && receiverOwnship
-      ? {
-          ...receiverOwnship,
-          heading:
-            receiverAttitudeFresh && typeof receiverAttitude?.headingDeg === 'number'
-              ? receiverAttitude.headingDeg
-              : receiverOwnship.heading,
-        }
-      : gpsOwnshipFresh && gpsData
-        ? gpsData
-        : null;
+  const activeOwnship: OwnshipData | null = flightDataEngineState.source.ownship as OwnshipData | null;
   useEffect(() => {
     if (!isFlightDeck) return;
     logDiagnostic('flightDeck', 'source_health', {
@@ -2140,18 +2166,7 @@ export default function FlightPlannerScreen() {
       detail: 'Stable synthetic vision guidance is available, but live attitude remains advisory until AHRS is connected.',
     };
   }, [attitudeSourceSummary.pilotGrade, receiverAttitudeFresh, receiverOwnshipFresh]);
-  const sourceArbitrationSummary = useMemo(
-    () =>
-      getFlightDeckSourceArbitrationState({
-        simulationEnabled,
-        receiverOwnshipFresh,
-        receiverAttitudeFresh,
-        gpsOwnshipFresh,
-        receiverHealthy: receiverHealth?.status === 'healthy',
-        deviceMotionActive: false,
-      }),
-    [gpsOwnshipFresh, receiverAttitudeFresh, receiverHealth?.status, receiverOwnshipFresh, simulationEnabled]
-  );
+  const sourceArbitrationSummary = flightDataEngineState.source.arbitration;
   const receiverStatusSummary = useMemo(() => {
     const ownshipFresh = Boolean(receiverHealth?.ownshipFresh || receiverOwnshipFresh);
     const trafficFresh = Boolean(receiverHealth?.trafficFresh);
@@ -2336,25 +2351,8 @@ export default function FlightPlannerScreen() {
     diversionError,
   ]);
   const activeVerticalSpeedFpm = simulationEnabled ? simulatedVerticalSpeedFpm : verticalSpeedFpm;
-  const currentTrafficTargets = useMemo(
-    () => expireFlightDeckTrafficTargets(trafficTargets, ownshipClockMs),
-    [ownshipClockMs, trafficTargets]
-  );
-  const activeTrafficTargets = simulationEnabled ? simulatedTrafficTargets : currentTrafficTargets;
-  const activeAttitude = simulationEnabled && simulatedGpsData
-    ? {
-        pitchDeg: 0,
-        rollDeg: 0,
-        headingDeg: simulatedGpsData.heading,
-        headingReference: 'true' as const,
-        indicatedAirspeedKts: simulatedGpsData.speedKts,
-        trueAirspeedKts: simulatedGpsData.speedKts,
-        updatedAt: simulatedGpsData.updatedAt,
-        source: 'simulation' as const,
-      }
-    : receiverAttitudeFresh
-      ? receiverAttitude
-      : null;
+  const activeTrafficTargets = flightDataEngineState.traffic.tacticalTargets as TrafficTarget[];
+  const activeAttitude = flightDataEngineState.source.attitude as AttitudeReport | null;
   const flightDeckSessionState = simulationEnabled
     ? 'SIM'
     : activeOwnship
@@ -2375,12 +2373,8 @@ export default function FlightPlannerScreen() {
               ? 'Winds'
               : 'Clouds';
   const flightDeckActiveSession = simulationEnabled || gpsEnabled || trafficEnabled || Boolean(activeOwnship);
-  const directToRouteActive =
-    routeExecutionOverride?.mode === 'direct-to-diversion' || routeExecutionOverride?.mode === 'direct-to-route';
-  const activeRoutePoints = useMemo(() => {
-    if (!directToRouteActive) return routePoints;
-    return [routeExecutionOverride.origin, routeExecutionOverride.target];
-  }, [directToRouteActive, routeExecutionOverride, routePoints]);
+  const directToRouteActive = flightDataEngineState.route.directToActive;
+  const activeRoutePoints = flightDataEngineState.route.points as AirportMeta[];
   const activeSessionRouteSnapshot = useMemo(
     () =>
       createActiveFlightRoute({
@@ -2458,21 +2452,9 @@ export default function FlightPlannerScreen() {
         .map((token) => token.token),
     [providerRouteAnalysis]
   );
-  const activeRouteLegs = useMemo(
-    () =>
-      buildMobileRouteLegs(activeRoutePoints, {
-        mode: directToRouteActive ? 'direct-to' : 'planned',
-      }),
-    [activeRoutePoints, directToRouteActive]
-  );
-  const activeLegDefinition = useMemo(
-    () => activeRouteLegs[Math.min(activeLegIndex, Math.max(0, activeRouteLegs.length - 1))] || null,
-    [activeLegIndex, activeRouteLegs]
-  );
-  const routeProgress = useMemo(
-    () => computeMobileRouteProgress(activeRoutePoints, activeOwnship, { activeLegIndex }),
-    [activeLegIndex, activeOwnship, activeRoutePoints]
-  );
+  const activeRouteLegs = flightDataEngineState.route.legs;
+  const activeLegDefinition = flightDataEngineState.navigation.activeLeg;
+  const routeProgress = flightDataEngineState.navigation.progress;
   const visionMode = useMemo<'route' | 'free'>(() => (
     routeProgress?.nextWaypoint || activeRoutePoints.length > 1 ? 'route' : 'free'
   ), [activeRoutePoints.length, routeProgress?.nextWaypoint]);
@@ -2529,48 +2511,9 @@ export default function FlightPlannerScreen() {
     setSequencingSuspended(false);
   }, [activeFlightSession?.id, routePoints, routeExecutionOverride?.mode, routeExecutionOverride?.target.icao]);
   useEffect(() => {
-    if (!activeOwnship || !routeProgress || activeRoutePoints.length < 2) return;
-    const currentLegIndex = Math.min(activeLegIndex, activeRoutePoints.length - 2);
-    if (currentLegIndex !== routeProgress.legIndex) return;
-    if (currentLegIndex >= activeRoutePoints.length - 2) return;
-    if (routeProgress.sequencingState === 'reintercept') return;
-    if (sequencingSuspended) return;
-
-    const activeLegEnd = activeRoutePoints[currentLegIndex + 1];
-    if (!activeLegEnd) return;
-
-    const distanceToLegEndNm = getDistanceNmFromLatLon(
-      { lat: activeOwnship.lat, lon: activeOwnship.lon },
-      { lat: activeLegEnd.latitude, lon: activeLegEnd.longitude },
-    );
-    const speedCaptureNm = Math.max(0.45, Math.min(2.4, (activeOwnship.speedKts ?? 90) / 120));
-    const sequencingCaptureNm = Math.max(activeLegBehavior.sequencingCaptureNm, speedCaptureNm * 0.75);
-    const armingProgressPct = clamp(
-      activeProcedureExecutionProfilePreview.armAtProgressPct + activeProcedureRoleExecutionPolicyPreview.armBiasPct,
-      30,
-      96,
-    );
-    const openProgressPct = clamp(
-      activeProcedureExecutionProfilePreview.openAtProgressPct + activeProcedureRoleExecutionPolicyPreview.openBiasPct,
-      40,
-      99,
-    );
-    const gateArmed =
-      routeProgress.legProgressPct >= armingProgressPct ||
-      routeProgress.remainingLegNm <= sequencingCaptureNm * 1.35;
-    const gateOpenByProgress =
-      routeProgress.legProgressPct >= openProgressPct ||
-      routeProgress.remainingLegNm <= sequencingCaptureNm * 0.85 ||
-      distanceToLegEndNm <= sequencingCaptureNm;
-    const lateralReady =
-      !activeProcedureExecutionProfilePreview.requiresLateralCapture ||
-      lateralCapturedForSequencing;
-    const gateOpen = gateArmed && gateOpenByProgress && lateralReady;
-    const effectiveSequencingModel = activeProcedureRoleExecutionPolicyPreview.sequencingModel;
-    const shouldAdvance = gateOpen && effectiveSequencingModel === 'auto';
-
-    if (shouldAdvance) {
-      const nextLegIndex = Math.min(currentLegIndex + 1, activeRoutePoints.length - 2);
+    const proposal = flightDataEngineState.transitionProposals.find((item) => item.type === 'sequence-active-leg');
+    if (proposal?.type === 'sequence-active-leg') {
+      const nextLegIndex = proposal.activeLegIndex;
       if (activeFlightSession) {
         transitionActiveSession(
           'active_leg_changed',
@@ -2581,84 +2524,8 @@ export default function FlightPlannerScreen() {
         setActiveLegIndex(nextLegIndex);
       }
     }
-  }, [activeFlightSession?.id, activeLegBehavior.sequencingCaptureNm, activeLegIndex, activeOwnship, activeProcedureExecutionProfilePreview.armAtProgressPct, activeProcedureExecutionProfilePreview.openAtProgressPct, activeProcedureExecutionProfilePreview.requiresLateralCapture, activeProcedureRoleExecutionPolicyPreview.armBiasPct, activeProcedureRoleExecutionPolicyPreview.openBiasPct, activeProcedureRoleExecutionPolicyPreview.sequencingModel, activeRoutePoints, lateralCapturedForSequencing, routeProgress, sequencingSuspended]);
-  const flightDeckPhaseSummary = useMemo(() => {
-    if (!activeOwnship) {
-      return {
-        stage: 'preflight' as FlightDeckPhaseStage,
-        label: 'Preflight',
-        detail: 'Build a route and connect a live source to start active guidance.',
-      };
-    }
-    const speedKts = activeOwnship.speedKts ?? 0;
-    const altitudeFt = activeOwnship.altitudeFt ?? 0;
-    const progressPct = routeProgress?.progressPct ?? 0;
-    const remainingRouteNm = routeProgress?.remainingRouteNm ?? Number.POSITIVE_INFINITY;
-    const targetCruiseAltitudeFt = Number(plannedAltitude) || simulationAltitudeFt;
-    const cruiseCaptureFloorFt = Math.max(targetCruiseAltitudeFt * 0.88, targetCruiseAltitudeFt - 1500);
-
-    if (progressPct >= 95 && speedKts < 45) {
-      return {
-        stage: 'taxi-in' as FlightDeckPhaseStage,
-        label: 'Taxi in',
-        detail: 'Arrival rollout complete. Surface guidance should favor ramp and parking flow.',
-      };
-    }
-    if (remainingRouteNm <= 12) {
-      return {
-        stage: 'final' as FlightDeckPhaseStage,
-        label: 'Final',
-        detail: 'Runway environment should be primary with final-alignment and rollout cues.',
-      };
-    }
-    if (progressPct > 78 || remainingRouteNm < 35) {
-      return {
-        stage: 'arrival' as FlightDeckPhaseStage,
-        label: 'Arrival',
-        detail: 'Arrival corridor is active. Tighten runway, terrain, and diversion awareness.',
-      };
-    }
-    if (progressPct > 58 && altitudeFt < cruiseCaptureFloorFt) {
-      return {
-        stage: 'descent' as FlightDeckPhaseStage,
-        label: 'Descent',
-        detail: 'Manage descent path, terrain clearance, and arrival setup.',
-      };
-    }
-    if (altitudeFt >= cruiseCaptureFloorFt && progressPct >= 25 && progressPct <= 72) {
-      return {
-        stage: 'cruise' as FlightDeckPhaseStage,
-        label: 'Cruise',
-        detail: 'Enroute tactical scan is primary. Traffic, weather, and route execution should dominate.',
-      };
-    }
-    if (progressPct < 25 && altitudeFt < cruiseCaptureFloorFt && speedKts >= 85) {
-      return {
-        stage: 'climb' as FlightDeckPhaseStage,
-        label: 'Climb',
-        detail: 'Initial climb is active. Terrain, obstacle, and departure corridor cues should stay elevated.',
-      };
-    }
-    if (progressPct < 10 && speedKts >= 45) {
-      return {
-        stage: 'departure' as FlightDeckPhaseStage,
-        label: 'Departure',
-        detail: 'Runway departure and initial corridor capture should be primary.',
-      };
-    }
-    if (progressPct < 6 && speedKts < 45) {
-      return {
-        stage: 'taxi-out' as FlightDeckPhaseStage,
-        label: 'Taxi out',
-        detail: 'Surface movement and hold-short guidance should be primary.',
-      };
-    }
-    return {
-      stage: 'climb' as FlightDeckPhaseStage,
-      label: 'Climb',
-      detail: 'Flight is transitioning from terminal to enroute guidance.',
-    };
-  }, [activeOwnship, plannedAltitude, routeProgress, simulationAltitudeFt]);
+  }, [activeFlightSession?.id, flightDataEngineState.transitionProposals]);
+  const flightDeckPhaseSummary = flightDataEngineState.navigation.phase;
   const flightPhase = useMemo<'ground' | 'departure' | 'enroute' | 'arrival'>(() => {
     switch (flightDeckPhaseSummary.stage) {
       case 'preflight':
@@ -2678,10 +2545,7 @@ export default function FlightPlannerScreen() {
         return 'ground';
     }
   }, [flightDeckPhaseSummary.stage]);
-  const rankedTrafficTargets = useMemo(
-    () => rankTrafficTargets(activeTrafficTargets, activeOwnship),
-    [activeOwnship, activeTrafficTargets]
-  );
+  const rankedTrafficTargets = flightDataEngineState.traffic.rankedTargets;
   const visibleTrafficTargets = useMemo(() => {
     if (trafficFilter === 'all') return rankedTrafficTargets;
     if (trafficFilter === 'monitor') {
@@ -2698,10 +2562,7 @@ export default function FlightPlannerScreen() {
     }
     return rankedTrafficTargets.filter((target) => (target.altitudeDeltaFt ?? 0) < 0);
   }, [rankedTrafficTargets, trafficFilter]);
-  const immediateTrafficCount = useMemo(
-    () => rankedTrafficTargets.filter((target) => target.threatLevel === 'immediate').length,
-    [rankedTrafficTargets]
-  );
+  const immediateTrafficCount = flightDataEngineState.traffic.immediateCount;
   const selectedDiversion = useMemo(
     () => diversionCandidates.find((airport) => airport.icao === selectedDiversionIcao) || null,
     [diversionCandidates, selectedDiversionIcao]
@@ -6750,10 +6611,11 @@ export default function FlightPlannerScreen() {
   }, [departure, destination]);
   const flightDeckRouteHeadline = useMemo(() => {
     if (directToRouteActive) {
-      return `Direct ${routeExecutionOverride.target.icao}`;
+      const directTarget = routeExecutionOverride?.target.icao || activeRoutePoints[1]?.icao || 'target';
+      return `Direct ${directTarget}`;
     }
     return routeHeadline;
-  }, [directToRouteActive, routeExecutionOverride, routeHeadline]);
+  }, [activeRoutePoints, directToRouteActive, routeExecutionOverride?.target.icao, routeHeadline]);
 
   useEffect(() => {
     if (effectiveProfile) {

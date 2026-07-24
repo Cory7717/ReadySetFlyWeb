@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import { createBlankVfrFlightDeckParams, createResumeFlightDeckParams, type FlightDeckEntryMode } from '../lib/flightDeckEntry';
 
 const ACTIVE_FLIGHT_KEY = 'rsf_active_flight_v1';
 const ACTIVE_FLIGHT_MAX_AGE_MS = 8 * 60 * 60 * 1000; // 8 hours
@@ -59,11 +60,14 @@ function RailCard({ icon, title, subtitle, onPress }: RailCardProps) {
 }
 
 type ActiveFlight = {
+  entryMode?: FlightDeckEntryMode | null;
   departure: string | null;
   destination: string | null;
   waypoints: string | null;
+  plannedStops?: string | null;
   plannedAltitude: string | null;
   cruiseKtas: string | null;
+  activeFlightSessionId?: string | null;
   savedAt: number;
 };
 
@@ -100,14 +104,15 @@ export default function HomeScreen({ navigation }: any) {
     if (!activeFlight) return;
     navigation.navigate('Profile', {
       screen: 'FlightDeck',
-      params: {
+      params: createResumeFlightDeckParams({
         departure: activeFlight.departure ?? undefined,
         destination: activeFlight.destination ?? undefined,
         waypoints: activeFlight.waypoints ?? undefined,
+        plannedStops: activeFlight.plannedStops ?? undefined,
         plannedAltitude: activeFlight.plannedAltitude ?? undefined,
         cruiseKtas: activeFlight.cruiseKtas ?? undefined,
-        mode: 'flight',
-      },
+        activeFlightSessionId: activeFlight.activeFlightSessionId ?? undefined,
+      }),
     });
   };
 
@@ -241,7 +246,7 @@ export default function HomeScreen({ navigation }: any) {
             title="Fly"
             subtitle="Receiver-backed traffic, live map, and diversions."
             accent={colors.cockpit}
-            onPress={() => navigation.navigate('Profile', { screen: 'FlightDeck', params: { mode: 'flight' } })}
+            onPress={() => navigation.navigate('Profile', { screen: 'FlightDeck', params: createBlankVfrFlightDeckParams() })}
           />
           <ShortcutCard
             icon="airplane-outline"

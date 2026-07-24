@@ -11,6 +11,7 @@ import AviationWeatherHubScreen from '../screens/AviationWeatherHubScreen';
 import ApproachPlatesScreen from '../screens/ApproachPlatesScreen';
 import FlightPlannerScreen from '../screens/FlightPlannerScreen';
 import FlightDeckScreen from '../screens/FlightDeckScreen';
+import type { FlightDeckRouteParams } from '../lib/flightDeckEntry';
 import RadioCommsTrainerScreen from '../screens/RadioCommsTrainerScreen';
 import LogbookScreen from '../screens/LogbookScreen';
 import LogbookEntryScreen from '../screens/LogbookEntryScreen';
@@ -65,17 +66,7 @@ export type ProfileStackParamList = {
         cruiseKtas?: string;
       }
     | undefined;
-  FlightDeck:
-    | {
-        departure?: string;
-        destination?: string;
-        waypoints?: string;
-        plannedStops?: string;
-        plannedAltitude?: string;
-        cruiseKtas?: string;
-        mode?: 'flight';
-      }
-    | undefined;
+  FlightDeck: FlightDeckRouteParams | undefined;
   RadioCommsTrainer: undefined;
   Logbook: undefined;
   LogbookEntry: { entryId?: string } | undefined;

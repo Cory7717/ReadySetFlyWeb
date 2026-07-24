@@ -88,6 +88,18 @@ import {
   getFallbackFlightDeckSectionalSource,
   getPrimaryFlightDeckSectionalSource,
 } from '../components/flight-deck/flightDeckMapTiles';
+import {
+  createPlannedRouteFlightDeckParams,
+  normalizeFlightDeckRouteParams,
+  shouldInitializeFlightDeckWithoutRoute,
+} from '../lib/flightDeckEntry';
+import {
+  deriveFlightDeckSourceHealth,
+  expireFlightDeckTrafficTargets,
+  FLIGHT_DECK_DEVICE_OWNSHIP_STALE_MS,
+  FLIGHT_DECK_RECEIVER_ATTITUDE_STALE_MS,
+  FLIGHT_DECK_RECEIVER_OWNSHIP_STALE_MS,
+} from '../lib/flightDeckSafety';
 import FormDateTimeField from '../components/FormDateTimeField';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { diagnosticsEnabled, logDiagnostic, warnDiagnostic } from '../utils/diagnostics';
@@ -637,9 +649,9 @@ type RouteExecutionOverride = {
   targetLegIndex?: number | null;
 };
 
-const RECEIVER_OWNSHIP_STALE_MS = 15000;
-const DEVICE_OWNSHIP_STALE_MS = 15000;
-const RECEIVER_ATTITUDE_STALE_MS = 5000;
+const RECEIVER_OWNSHIP_STALE_MS = FLIGHT_DECK_RECEIVER_OWNSHIP_STALE_MS;
+const DEVICE_OWNSHIP_STALE_MS = FLIGHT_DECK_DEVICE_OWNSHIP_STALE_MS;
+const RECEIVER_ATTITUDE_STALE_MS = FLIGHT_DECK_RECEIVER_ATTITUDE_STALE_MS;
 
 function formatOwnshipAge(ms: number | null | undefined) {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '--';
@@ -1576,14 +1588,16 @@ export default function FlightPlannerScreen() {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const { isAuthenticated, user } = useIsAuthenticated();
   const isFlightDeck = route.name === 'FlightDeck' || route.params?.mode === 'flight';
+  const flightDeckEntryParams = useMemo(() => normalizeFlightDeckRouteParams(route.params), [route.params]);
+  const isNoRouteFlightDeck = isFlightDeck && shouldInitializeFlightDeckWithoutRoute(flightDeckEntryParams);
   const flightDeckLayoutProfile = useMemo(
     () => getFlightDeckLayoutProfile({ width: screenWidth, height: screenHeight }),
     [screenHeight, screenWidth]
   );
   const plannerSectionalPrimarySource = useMemo(() => getPrimaryFlightDeckSectionalSource(), []);
   const plannerSectionalFallbackSource = useMemo(() => getFallbackFlightDeckSectionalSource(), []);
-  const [departure, setDeparture] = useState('KJFK');
-  const [destination, setDestination] = useState('KBOS');
+  const [departure, setDeparture] = useState(() => (isNoRouteFlightDeck ? '' : flightDeckEntryParams?.departure || 'KJFK'));
+  const [destination, setDestination] = useState(() => (isNoRouteFlightDeck ? '' : flightDeckEntryParams?.destination || 'KBOS'));
   const [waypoints, setWaypoints] = useState('');
   const [plannedStops, setPlannedStops] = useState('');
   const [alternate, setAlternate] = useState('');
@@ -1784,12 +1798,33 @@ export default function FlightPlannerScreen() {
     () => buildSimulatedTrafficTargets(simulatedGpsData, { injectConflict: simulationConflictEnabled }),
     [simulatedGpsData, simulationConflictEnabled]
   );
-  const receiverOwnshipAgeMs = receiverOwnship?.updatedAt ? ownshipClockMs - receiverOwnship.updatedAt : null;
-  const receiverOwnshipFresh = receiverOwnshipAgeMs != null && receiverOwnshipAgeMs <= RECEIVER_OWNSHIP_STALE_MS;
-  const receiverAttitudeAgeMs = receiverAttitude?.updatedAt ? ownshipClockMs - receiverAttitude.updatedAt : null;
-  const receiverAttitudeFresh = receiverAttitudeAgeMs != null && receiverAttitudeAgeMs <= RECEIVER_ATTITUDE_STALE_MS;
-  const gpsOwnshipAgeMs = gpsData?.updatedAt ? ownshipClockMs - gpsData.updatedAt : null;
-  const gpsOwnshipFresh = gpsOwnshipAgeMs != null && gpsOwnshipAgeMs <= DEVICE_OWNSHIP_STALE_MS;
+  const sourceHealth = useMemo(
+    () =>
+      deriveFlightDeckSourceHealth({
+        nowMs: ownshipClockMs,
+        simulationEnabled,
+        simulationOwnshipAvailable: Boolean(simulatedGpsData),
+        receiverOwnshipUpdatedAt: receiverOwnship?.updatedAt,
+        receiverAttitudeUpdatedAt: receiverAttitude?.updatedAt,
+        gpsOwnshipUpdatedAt: gpsData?.updatedAt,
+        receiverHealth,
+      }),
+    [
+      gpsData?.updatedAt,
+      ownshipClockMs,
+      receiverAttitude?.updatedAt,
+      receiverHealth,
+      receiverOwnship?.updatedAt,
+      simulatedGpsData,
+      simulationEnabled,
+    ]
+  );
+  const receiverOwnshipAgeMs = sourceHealth.receiverOwnshipAgeMs;
+  const receiverOwnshipFresh = sourceHealth.receiverOwnshipFresh;
+  const receiverAttitudeAgeMs = sourceHealth.receiverAttitudeAgeMs;
+  const receiverAttitudeFresh = sourceHealth.receiverAttitudeFresh;
+  const gpsOwnshipAgeMs = sourceHealth.gpsOwnshipAgeMs;
+  const gpsOwnshipFresh = sourceHealth.gpsOwnshipFresh;
   const activeOwnship: OwnshipData | null = simulationEnabled && simulatedGpsData
     ? simulatedGpsData
     : receiverOwnshipFresh && receiverOwnship
@@ -1803,6 +1838,29 @@ export default function FlightPlannerScreen() {
       : gpsOwnshipFresh && gpsData
         ? gpsData
         : null;
+  useEffect(() => {
+    if (!isFlightDeck) return;
+    logDiagnostic('flightDeck', 'source_health', {
+      activeSource: sourceHealth.activeSource,
+      receiverOwnshipFresh: sourceHealth.receiverOwnshipFresh,
+      receiverAttitudeFresh: sourceHealth.receiverAttitudeFresh,
+      gpsOwnshipFresh: sourceHealth.gpsOwnshipFresh,
+      receiverPacketCurrent: sourceHealth.receiverPacketCurrent,
+      receiverOwnshipAgeMs: sourceHealth.receiverOwnshipAgeMs,
+      receiverAttitudeAgeMs: sourceHealth.receiverAttitudeAgeMs,
+      gpsOwnshipAgeMs: sourceHealth.gpsOwnshipAgeMs,
+    });
+  }, [
+    isFlightDeck,
+    sourceHealth.activeSource,
+    sourceHealth.gpsOwnshipAgeMs,
+    sourceHealth.gpsOwnshipFresh,
+    sourceHealth.receiverAttitudeAgeMs,
+    sourceHealth.receiverAttitudeFresh,
+    sourceHealth.receiverOwnshipAgeMs,
+    sourceHealth.receiverOwnshipFresh,
+    sourceHealth.receiverPacketCurrent,
+  ]);
   const mapConfig = (Constants.expoConfig?.extra as { googleMaps?: { androidApiKeyConfigured?: boolean; androidPackage?: string } } | undefined)
     ?.googleMaps;
   const plannerMapUsesGoogleProvider = Platform.OS === 'android';
@@ -2206,7 +2264,11 @@ export default function FlightPlannerScreen() {
     diversionError,
   ]);
   const activeVerticalSpeedFpm = simulationEnabled ? simulatedVerticalSpeedFpm : verticalSpeedFpm;
-  const activeTrafficTargets = simulationEnabled ? simulatedTrafficTargets : trafficTargets;
+  const currentTrafficTargets = useMemo(
+    () => expireFlightDeckTrafficTargets(trafficTargets, ownshipClockMs),
+    [ownshipClockMs, trafficTargets]
+  );
+  const activeTrafficTargets = simulationEnabled ? simulatedTrafficTargets : currentTrafficTargets;
   const activeAttitude = simulationEnabled && simulatedGpsData
     ? {
         pitchDeg: 0,
@@ -4131,6 +4193,16 @@ export default function FlightPlannerScreen() {
     return () => clearInterval(timer);
   }, [gpsData, receiverOwnship, simulatedGpsData, simulationEnabled]);
   useEffect(() => {
+    if (!trafficTargets.length || simulationEnabled) return;
+    const timer = setInterval(() => {
+      setTrafficTargets((prev) => {
+        const next = expireFlightDeckTrafficTargets(prev);
+        return next.length === prev.length ? prev : next;
+      });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [simulationEnabled, trafficTargets.length]);
+  useEffect(() => {
     if (!activeOwnship || !rankedTrafficTargets.length) {
       setTrafficTrendMap({});
       trafficSnapshotRef.current = {};
@@ -4957,17 +5029,29 @@ export default function FlightPlannerScreen() {
   // Persist active flight state so the home screen can offer "Resume Active Flight"
   useEffect(() => {
     if (!isFlightDeck) return;
-    if (!departure && !destination) return;
     const state = {
+      entryMode: flightDeckEntryParams?.entryMode || (departure || destination ? 'planned_route' : 'blank_vfr'),
       departure: departure || null,
       destination: destination || null,
       waypoints: waypoints || null,
+      plannedStops: plannedStops || null,
       plannedAltitude: plannedAltitude || null,
       cruiseKtas: cruiseKtas || null,
+      activeFlightSessionId: flightDeckEntryParams?.activeFlightSessionId || null,
       savedAt: Date.now(),
     };
     AsyncStorage.setItem(ACTIVE_FLIGHT_KEY, JSON.stringify(state)).catch(() => undefined);
-  }, [isFlightDeck, departure, destination, waypoints, plannedAltitude, cruiseKtas]);
+  }, [
+    cruiseKtas,
+    departure,
+    destination,
+    flightDeckEntryParams?.activeFlightSessionId,
+    flightDeckEntryParams?.entryMode,
+    isFlightDeck,
+    plannedAltitude,
+    plannedStops,
+    waypoints,
+  ]);
 
   useEffect(() => {
     logDiagnostic('maps', 'map_style_changed', {
@@ -5089,7 +5173,7 @@ export default function FlightPlannerScreen() {
       port,
       (target) => {
         setTrafficTargets((prev) => {
-          const next = prev.filter((t) => Date.now() - t.updatedAt < 2 * 60 * 1000);
+          const next = expireFlightDeckTrafficTargets(prev);
           const existingIndex = next.findIndex((t) => t.id === target.id);
           if (existingIndex >= 0) {
             next[existingIndex] = target;
@@ -5266,12 +5350,44 @@ export default function FlightPlannerScreen() {
 
   useEffect(() => {
     const routeParams = route.params || {};
+    const flightDeckParams = normalizeFlightDeckRouteParams(routeParams);
     const nextDeparture = typeof routeParams.departure === 'string' ? routeParams.departure.trim().toUpperCase() : '';
     const nextDestination = typeof routeParams.destination === 'string' ? routeParams.destination.trim().toUpperCase() : '';
     const nextWaypoints = typeof routeParams.waypoints === 'string' ? routeParams.waypoints.trim().toUpperCase() : '';
     const nextPlannedStops = typeof routeParams.plannedStops === 'string' ? routeParams.plannedStops.trim().toUpperCase() : '';
     const nextPlannedAltitude = typeof routeParams.plannedAltitude === 'string' ? routeParams.plannedAltitude.trim() : '';
     const nextCruiseKtas = typeof routeParams.cruiseKtas === 'string' ? routeParams.cruiseKtas.trim() : '';
+
+    if (isFlightDeck && shouldInitializeFlightDeckWithoutRoute(flightDeckParams)) {
+      setDeparture('');
+      setDestination('');
+      setWaypoints('');
+      setPlannedStops('');
+      setRouteSummary(null);
+      setRoutePoints([]);
+      setActiveLegIndex(0);
+      setSequencingSuspended(false);
+      setRouteExecutionOverride(null);
+      if (flightDeckParams?.simulation) {
+        setSimulationEnabled(true);
+      }
+      return;
+    }
+
+    if (isFlightDeck && flightDeckParams) {
+      setDeparture(nextDeparture);
+      setDestination(nextDestination);
+      setWaypoints(nextWaypoints);
+      setPlannedStops(nextPlannedStops);
+      setPlannedAltitude(nextPlannedAltitude);
+      if (nextCruiseKtas) {
+        dispatchAircraftPerformance({ type: 'set_field', field: 'cruiseKtas', value: nextCruiseKtas });
+      }
+      if (flightDeckParams.simulation) {
+        setSimulationEnabled(true);
+      }
+      return;
+    }
 
     if (nextDeparture) setDeparture(nextDeparture);
     if (nextDestination) setDestination(nextDestination);
@@ -5281,7 +5397,7 @@ export default function FlightPlannerScreen() {
     if (nextCruiseKtas) {
       dispatchAircraftPerformance({ type: 'set_field', field: 'cruiseKtas', value: nextCruiseKtas });
     }
-  }, [route.params]);
+  }, [isFlightDeck, route.params]);
 
   useEffect(() => {
     if (!isFlightDeck) {
@@ -7831,15 +7947,14 @@ export default function FlightPlannerScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.heroSecondaryAction}
-            onPress={() => navigation?.navigate?.('FlightDeck', {
+            onPress={() => navigation?.navigate?.('FlightDeck', createPlannedRouteFlightDeckParams({
               departure,
               destination,
               waypoints,
               plannedStops,
               plannedAltitude,
               cruiseKtas,
-              mode: 'flight',
-            })}
+            }))}
           >
             <Text style={styles.heroSecondaryActionText}>Fly This Plan</Text>
           </TouchableOpacity>

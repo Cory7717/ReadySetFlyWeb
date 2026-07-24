@@ -104,6 +104,11 @@ export type ActiveFlightSessionUpdate = Partial<
   lastBackgroundAt?: string | null;
 };
 
+export type ActiveFlightSessionRestoreResult =
+  | { status: 'restored'; session: ActiveFlightSession; migrated: false }
+  | { status: 'migrated'; session: ActiveFlightSession; migrated: true }
+  | { status: 'discard'; reason: string };
+
 const toIso = (value: Date | string | number = new Date()) => new Date(value).toISOString();
 
 const createSessionId = (now = Date.now()) => `afs_${now.toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -114,6 +119,33 @@ const normalizeText = (value: unknown, upper = false) => {
   if (!trimmed) return null;
   return upper ? trimmed.toUpperCase() : trimmed;
 };
+
+const VALID_STATUSES: ActiveFlightSessionStatus[] = [
+  'initializing',
+  'active',
+  'paused',
+  'backgrounded',
+  'completed',
+  'abandoned',
+];
+
+const VALID_PHASES: FlightOperationalPhase[] = [
+  'preflight',
+  'taxi-out',
+  'departure',
+  'climb',
+  'cruise',
+  'descent',
+  'arrival',
+  'final',
+  'taxi-in',
+];
+
+const isFlightOperationalPhase = (value: unknown): value is FlightOperationalPhase =>
+  typeof value === 'string' && VALID_PHASES.includes(value as FlightOperationalPhase);
+
+const isActiveFlightSessionStatus = (value: unknown): value is ActiveFlightSessionStatus =>
+  typeof value === 'string' && VALID_STATUSES.includes(value as ActiveFlightSessionStatus);
 
 const normalizePoint = (point: unknown): ActiveFlightRoutePoint | null => {
   if (!point || typeof point !== 'object') return null;
@@ -247,6 +279,115 @@ export function updateActiveFlightSession(
   };
 }
 
+export function transitionActiveLeg(
+  session: ActiveFlightSession,
+  activeLegIndex: number | null,
+  nowValue: Date | string | number = new Date()
+) {
+  const boundedLeg = typeof activeLegIndex === 'number' && Number.isFinite(activeLegIndex)
+    ? Math.max(0, Math.floor(activeLegIndex))
+    : null;
+  return updateActiveFlightSession(session, { navigation: { activeLegIndex: boundedLeg } }, nowValue);
+}
+
+export function transitionSkippedLegs(
+  session: ActiveFlightSession,
+  skippedLegIndexes: number[],
+  nowValue: Date | string | number = new Date()
+) {
+  const unique = Array.from(
+    new Set(
+      skippedLegIndexes
+        .filter((index) => Number.isFinite(index))
+        .map((index) => Math.max(0, Math.floor(index)))
+    )
+  ).sort((a, b) => a - b);
+  return updateActiveFlightSession(session, { navigation: { skippedLegIndexes: unique } }, nowValue);
+}
+
+export function transitionSequencingSuspended(
+  session: ActiveFlightSession,
+  sequencingSuspended: boolean,
+  nowValue: Date | string | number = new Date()
+) {
+  return updateActiveFlightSession(session, { navigation: { sequencingSuspended } }, nowValue);
+}
+
+export function transitionDirectTo(
+  session: ActiveFlightSession,
+  directTo: ActiveDirectToState | null,
+  nowValue: Date | string | number = new Date()
+) {
+  return updateActiveFlightSession(
+    session,
+    {
+      navigation: {
+        directTo,
+        activeLegIndex: directTo ? 0 : session.navigation.activeLegIndex,
+        sequencingSuspended: directTo ? false : session.navigation.sequencingSuspended,
+      },
+    },
+    nowValue
+  );
+}
+
+export function transitionOperationalPhase(
+  session: ActiveFlightSession,
+  phase: FlightOperationalPhase,
+  nowValue: Date | string | number = new Date()
+) {
+  return updateActiveFlightSession(session, { phase }, nowValue);
+}
+
+export function transitionDisplayState(
+  session: ActiveFlightSession,
+  display: ActiveFlightSession['display'],
+  nowValue: Date | string | number = new Date()
+) {
+  return updateActiveFlightSession(session, { display }, nowValue);
+}
+
+export function transitionSessionBackgrounded(
+  session: ActiveFlightSession,
+  nowValue: Date | string | number = new Date()
+) {
+  const now = toIso(nowValue);
+  return updateActiveFlightSession(session, { status: 'backgrounded', lastBackgroundAt: now }, now);
+}
+
+export function transitionSessionForegrounded(
+  session: ActiveFlightSession,
+  nowValue: Date | string | number = new Date()
+) {
+  const now = toIso(nowValue);
+  return updateActiveFlightSession(
+    session,
+    {
+      status: session.completedAt ? session.status : 'active',
+      resumedAt: now,
+      lastForegroundAt: now,
+      sourceSnapshot: {
+        positionSource: 'none',
+        receiverState: 'foreground-pending',
+        attitudeSource: 'none',
+      },
+      traffic: {
+        targetCount: 0,
+        immediateCount: 0,
+        lastUpdatedAt: null,
+      },
+    },
+    now
+  );
+}
+
+export function transitionSessionAbandoned(
+  session: ActiveFlightSession,
+  nowValue: Date | string | number = new Date()
+) {
+  return updateActiveFlightSession(session, { status: 'abandoned', completedAt: toIso(nowValue) }, nowValue);
+}
+
 export function markActiveFlightSessionPersisted(
   session: ActiveFlightSession,
   nowValue: Date | string | number = new Date()
@@ -274,6 +415,8 @@ export function parseActiveFlightSession(raw: unknown): ActiveFlightSession | nu
   const value = raw as Partial<ActiveFlightSession>;
   if (value.schemaVersion !== ACTIVE_FLIGHT_SESSION_SCHEMA_VERSION || typeof value.id !== 'string') return null;
   if (!value.entryMode || !value.createdAt || !value.updatedAt) return null;
+  if (!isActiveFlightSessionStatus(value.status)) return null;
+  if (!isFlightOperationalPhase(value.phase)) return null;
   return {
     ...createActiveFlightSession({
       entryMode: value.entryMode,
@@ -283,6 +426,8 @@ export function parseActiveFlightSession(raw: unknown): ActiveFlightSession | nu
     }),
     ...value,
     schemaVersion: ACTIVE_FLIGHT_SESSION_SCHEMA_VERSION,
+    status: value.status,
+    phase: value.phase,
     navigation: {
       activeLegIndex:
         typeof value.navigation?.activeLegIndex === 'number' ? value.navigation.activeLegIndex : null,
@@ -296,6 +441,52 @@ export function parseActiveFlightSession(raw: unknown): ActiveFlightSession | nu
       lastBackgroundAt: value.resumeMetadata?.lastBackgroundAt || null,
     },
   };
+}
+
+export function restoreActiveFlightSessionStorageValue(raw: string | null): ActiveFlightSessionRestoreResult {
+  if (!raw) return { status: 'discard', reason: 'missing' };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { status: 'discard', reason: 'corrupt-json' };
+  }
+
+  const session = parseActiveFlightSession(parsed);
+  if (session) return { status: 'restored', session, migrated: false };
+
+  if (!parsed || typeof parsed !== 'object') {
+    return { status: 'discard', reason: 'unsupported-payload' };
+  }
+
+  const legacy = parsed as {
+    departure?: string | null;
+    destination?: string | null;
+    waypoints?: string | null;
+    plannedStops?: string | null;
+    plannedAltitude?: string | null;
+    cruiseKtas?: string | null;
+    activeFlightSessionId?: string | null;
+    savedAt?: number | null;
+    entryMode?: FlightDeckEntryMode | null;
+  };
+  const hasLegacyShape =
+    'savedAt' in legacy ||
+    'departure' in legacy ||
+    'destination' in legacy ||
+    'waypoints' in legacy ||
+    'activeFlightSessionId' in legacy;
+  if (!hasLegacyShape) return { status: 'discard', reason: 'unsupported-schema' };
+
+  try {
+    return {
+      status: 'migrated',
+      session: createSessionFromLegacyResumePayload(legacy),
+      migrated: true,
+    };
+  } catch {
+    return { status: 'discard', reason: 'migration-failed' };
+  }
 }
 
 export function createSessionFromLegacyResumePayload(

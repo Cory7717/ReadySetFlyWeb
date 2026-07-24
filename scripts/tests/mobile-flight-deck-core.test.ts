@@ -20,6 +20,14 @@ import {
   createSessionFromLegacyResumePayload,
   mapPositionSource,
   parseActiveFlightSession,
+  restoreActiveFlightSessionStorageValue,
+  transitionActiveLeg,
+  transitionDirectTo,
+  transitionOperationalPhase,
+  transitionSequencingSuspended,
+  transitionSessionBackgrounded,
+  transitionSessionForegrounded,
+  transitionSkippedLegs,
   updateActiveFlightSession,
 } from '../../mobile/src/lib/activeFlightSession';
 
@@ -206,4 +214,140 @@ test('source health active source maps into session-safe source names', () => {
   assert.equal(mapPositionSource('gps'), 'device_gps');
   assert.equal(mapPositionSource('simulation'), 'simulation');
   assert.equal(mapPositionSource('none'), 'none');
+});
+
+test('session authority transitions active leg, skipped legs, sequencing, direct-to, and phase', () => {
+  const session = createActiveFlightSession({
+    id: 'authority-session',
+    entryMode: 'planned_route',
+    now: '2026-07-24T12:00:00.000Z',
+  });
+  const directTo = {
+    mode: 'direct-to-route' as const,
+    origin: { icao: 'KARB', name: 'Ann Arbor', latitude: 42.223, longitude: -83.745 },
+    target: { icao: '75G', name: 'Rossettie', latitude: 41.908, longitude: -84.586 },
+    activatedAt: '2026-07-24T12:01:00.000Z',
+    targetLegIndex: 1,
+  };
+  const transitioned = transitionOperationalPhase(
+    transitionSkippedLegs(
+      transitionDirectTo(
+        transitionSequencingSuspended(transitionActiveLeg(session, 2, '2026-07-24T12:01:00.000Z'), true),
+        directTo,
+        '2026-07-24T12:02:00.000Z'
+      ),
+      [2, 2, 1],
+      '2026-07-24T12:03:00.000Z'
+    ),
+    'cruise',
+    '2026-07-24T12:04:00.000Z'
+  );
+
+  assert.equal(transitioned.navigation.activeLegIndex, 0);
+  assert.equal(transitioned.navigation.sequencingSuspended, false);
+  assert.equal(transitioned.navigation.directTo?.target.icao, '75G');
+  assert.deepEqual(transitioned.navigation.skippedLegIndexes, [1, 2]);
+  assert.equal(transitioned.phase, 'cruise');
+});
+
+test('session lifecycle background and foreground do not preserve live source or tactical traffic', () => {
+  const session = updateActiveFlightSession(
+    createActiveFlightSession({ id: 'lifecycle-session', entryMode: 'planned_route', now: '2026-07-24T12:00:00.000Z' }),
+    {
+      status: 'active',
+      sourceSnapshot: {
+        positionSource: 'gdl90',
+        receiverState: 'healthy',
+        attitudeSource: 'gdl90_ahrs',
+      },
+      traffic: {
+        targetCount: 4,
+        immediateCount: 1,
+        lastUpdatedAt: '2026-07-24T12:02:00.000Z',
+      },
+    },
+    '2026-07-24T12:02:00.000Z'
+  );
+  const backgrounded = transitionSessionBackgrounded(session, '2026-07-24T12:03:00.000Z');
+  const foregrounded = transitionSessionForegrounded(backgrounded, '2026-07-24T12:04:00.000Z');
+  const duplicateForegrounded = transitionSessionForegrounded(foregrounded, '2026-07-24T12:05:00.000Z');
+
+  assert.equal(backgrounded.id, session.id);
+  assert.equal(backgrounded.status, 'backgrounded');
+  assert.equal(backgrounded.resumeMetadata.lastBackgroundAt, '2026-07-24T12:03:00.000Z');
+  assert.equal(foregrounded.id, session.id);
+  assert.equal(foregrounded.status, 'active');
+  assert.equal(foregrounded.sourceSnapshot.positionSource, 'none');
+  assert.equal(foregrounded.sourceSnapshot.receiverState, 'foreground-pending');
+  assert.equal(foregrounded.traffic.targetCount, 0);
+  assert.equal(duplicateForegrounded.id, session.id);
+});
+
+test('storage restore discards corrupt json, unsupported schema, missing id, and invalid phase', () => {
+  assert.deepEqual(restoreActiveFlightSessionStorageValue('{not-json').status, 'discard');
+  assert.deepEqual(restoreActiveFlightSessionStorageValue(JSON.stringify({ schemaVersion: 99 })).status, 'discard');
+  assert.deepEqual(
+    restoreActiveFlightSessionStorageValue(
+      JSON.stringify({
+        schemaVersion: 1,
+        status: 'active',
+        entryMode: 'planned_route',
+        phase: 'cruise',
+        createdAt: '2026-07-24T12:00:00.000Z',
+        updatedAt: '2026-07-24T12:00:00.000Z',
+      })
+    ).status,
+    'discard'
+  );
+  assert.deepEqual(
+    restoreActiveFlightSessionStorageValue(
+      JSON.stringify({
+        schemaVersion: 1,
+        id: 'bad-phase',
+        status: 'active',
+        entryMode: 'planned_route',
+        phase: 'warp',
+        createdAt: '2026-07-24T12:00:00.000Z',
+        updatedAt: '2026-07-24T12:00:00.000Z',
+      })
+    ).status,
+    'discard'
+  );
+});
+
+test('storage restore migrates legacy once into a v1 session', () => {
+  const restored = restoreActiveFlightSessionStorageValue(
+    JSON.stringify({
+      departure: 'KARB',
+      destination: 'KAXV',
+      waypoints: '75G',
+      activeFlightSessionId: 'legacy-once',
+      savedAt: Date.parse('2026-07-24T12:00:00.000Z'),
+    })
+  );
+
+  assert.equal(restored.status, 'migrated');
+  assert.equal(restored.migrated, true);
+  if (restored.status !== 'migrated') throw new Error('expected migration');
+  assert.equal(restored.session.schemaVersion, 1);
+  assert.equal(restored.session.id, 'legacy-once');
+  assert.equal(restored.session.route?.departure, 'KARB');
+});
+
+test('restoring an existing v1 session does not create a duplicate session id', () => {
+  const session = createActiveFlightSession({
+    id: 'no-duplicate',
+    entryMode: 'planned_route',
+    now: '2026-07-24T12:00:00.000Z',
+  });
+  const restored = restoreActiveFlightSessionStorageValue(JSON.stringify(session));
+  const restoredAgain = restoreActiveFlightSessionStorageValue(JSON.stringify(session));
+
+  assert.equal(restored.status, 'restored');
+  assert.equal(restoredAgain.status, 'restored');
+  if (restored.status !== 'restored' || restoredAgain.status !== 'restored') {
+    throw new Error('expected restore');
+  }
+  assert.equal(restored.session.id, 'no-duplicate');
+  assert.equal(restoredAgain.session.id, 'no-duplicate');
 });

@@ -9,8 +9,7 @@ import { createBlankVfrFlightDeckParams, type FlightDeckEntryMode } from '../lib
 import {
   ACTIVE_FLIGHT_STORAGE_KEY,
   createFlightDeckParamsFromSession,
-  createSessionFromLegacyResumePayload,
-  parseActiveFlightSession,
+  restoreActiveFlightSessionStorageValue,
   type ActiveFlightSession,
 } from '../lib/activeFlightSession';
 
@@ -93,8 +92,15 @@ export default function HomeScreen({ navigation }: any) {
       .then((raw) => {
         if (!raw) return;
         try {
-          const parsed = JSON.parse(raw);
-          const session = parseActiveFlightSession(parsed) || createSessionFromLegacyResumePayload(parsed);
+          const restored = restoreActiveFlightSessionStorageValue(raw);
+          if (restored.status === 'discard') {
+            AsyncStorage.removeItem(ACTIVE_FLIGHT_STORAGE_KEY).catch(() => undefined);
+            return;
+          }
+          const session = restored.session;
+          if (restored.migrated) {
+            AsyncStorage.setItem(ACTIVE_FLIGHT_STORAGE_KEY, JSON.stringify(session)).catch(() => undefined);
+          }
           const savedAt = Date.parse(session.resumeMetadata.lastPersistedAt || session.updatedAt || session.createdAt);
           const age = Date.now() - (Number.isFinite(savedAt) ? savedAt : 0);
           if (age < ACTIVE_FLIGHT_MAX_AGE_MS) {

@@ -100,6 +100,18 @@ import {
   FLIGHT_DECK_RECEIVER_ATTITUDE_STALE_MS,
   FLIGHT_DECK_RECEIVER_OWNSHIP_STALE_MS,
 } from '../lib/flightDeckSafety';
+import {
+  ACTIVE_FLIGHT_STORAGE_KEY,
+  createActiveFlightRoute,
+  createActiveFlightSession,
+  createSessionFromLegacyResumePayload,
+  markActiveFlightSessionPersisted,
+  mapPositionSource,
+  parseActiveFlightSession,
+  updateActiveFlightSession,
+  type ActiveDirectToState,
+  type ActiveFlightSession,
+} from '../lib/activeFlightSession';
 import FormDateTimeField from '../components/FormDateTimeField';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { diagnosticsEnabled, logDiagnostic, warnDiagnostic } from '../utils/diagnostics';
@@ -132,7 +144,6 @@ type AircraftType = {
 
 const FLIGHT_DECK_PHONE_RECOMMENDATION_KEY = 'flight_deck_phone_recommendation_dismissed_at';
 const FLIGHT_DECK_MAP_ORIENTATION_KEY = 'flight_deck_map_orientation_mode';
-const ACTIVE_FLIGHT_KEY = 'rsf_active_flight_v1';
 
 type AircraftProfile = {
   id: string;
@@ -660,6 +671,35 @@ function formatOwnshipAge(ms: number | null | undefined) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}m ${seconds}s`;
+}
+
+function serializeActiveRoutePoint(point: AirportMeta) {
+  return {
+    icao: point.icao,
+    name: point.name || point.icao,
+    latitude: point.latitude,
+    longitude: point.longitude,
+  };
+}
+
+function serializeDirectToState(override: RouteExecutionOverride | null): ActiveDirectToState | null {
+  if (!override) return null;
+  return {
+    mode: override.mode,
+    origin: serializeActiveRoutePoint(override.origin),
+    target: serializeActiveRoutePoint(override.target),
+    activatedAt: new Date(override.activatedAt).toISOString(),
+    targetLegIndex: override.targetLegIndex ?? null,
+  };
+}
+
+function restoreActiveRoutePoint(point: ActiveDirectToState['origin']): AirportMeta {
+  return {
+    icao: point.icao,
+    name: point.name || point.icao,
+    latitude: point.latitude,
+    longitude: point.longitude,
+  };
 }
 
 function buildSimulatedTrafficTargets(
@@ -1617,6 +1657,8 @@ export default function FlightPlannerScreen() {
   const [activeLegIndex, setActiveLegIndex] = useState(0);
   const [sequencingSuspended, setSequencingSuspended] = useState(false);
   const [routeExecutionOverride, setRouteExecutionOverride] = useState<RouteExecutionOverride | null>(null);
+  const [activeFlightSession, setActiveFlightSession] = useState<ActiveFlightSession | null>(null);
+  const sessionRestoredRef = useRef(false);
   const [mapStyle, setMapStyle] = useState<'standard' | 'sectional' | 'terrain' | 'radar' | 'winds' | 'clouds'>('standard');
   const [windsAltitudeChoice, setWindsAltitudeChoice] = useState<'planned' | string>('planned');
   const [windsAloftPoints, setWindsAloftPoints] = useState<WindsAloftPoint[]>([]);
@@ -2309,6 +2351,24 @@ export default function FlightPlannerScreen() {
     if (!directToRouteActive) return routePoints;
     return [routeExecutionOverride.origin, routeExecutionOverride.target];
   }, [directToRouteActive, routeExecutionOverride, routePoints]);
+  const activeSessionRouteSnapshot = useMemo(
+    () =>
+      createActiveFlightRoute({
+        departure,
+        destination,
+        waypoints,
+        plannedStops,
+        plannedAltitude,
+        cruiseKtas,
+        points: activeRoutePoints,
+        totalNm: routeSummary?.totalNm ?? null,
+      }),
+    [activeRoutePoints, cruiseKtas, departure, destination, plannedAltitude, plannedStops, routeSummary?.totalNm, waypoints]
+  );
+  const activeSessionDirectToSnapshot = useMemo(
+    () => serializeDirectToState(routeExecutionOverride),
+    [routeExecutionOverride]
+  );
   const plannedRouteStructureText = useMemo(() => {
     const dep = departure.trim().toUpperCase();
     const dest = destination.trim().toUpperCase();
@@ -5026,32 +5086,156 @@ export default function FlightPlannerScreen() {
     AsyncStorage.setItem(FLIGHT_DECK_MAP_ORIENTATION_KEY, mapOrientationMode).catch(() => undefined);
   }, [mapOrientationMode]);
 
-  // Persist active flight state so the home screen can offer "Resume Active Flight"
   useEffect(() => {
-    if (!isFlightDeck) return;
-    const state = {
-      entryMode: flightDeckEntryParams?.entryMode || (departure || destination ? 'planned_route' : 'blank_vfr'),
-      departure: departure || null,
-      destination: destination || null,
-      waypoints: waypoints || null,
-      plannedStops: plannedStops || null,
-      plannedAltitude: plannedAltitude || null,
-      cruiseKtas: cruiseKtas || null,
-      activeFlightSessionId: flightDeckEntryParams?.activeFlightSessionId || null,
-      savedAt: Date.now(),
+    if (!isFlightDeck || sessionRestoredRef.current) return;
+    sessionRestoredRef.current = true;
+    let cancelled = false;
+
+    AsyncStorage.getItem(ACTIVE_FLIGHT_STORAGE_KEY)
+      .then((raw) => {
+        if (cancelled) return;
+        let restoredSession: ActiveFlightSession | null = null;
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            restoredSession = parseActiveFlightSession(parsed) || createSessionFromLegacyResumePayload(parsed);
+          } catch {
+            restoredSession = null;
+          }
+        }
+
+        const requestedSessionId = flightDeckEntryParams?.activeFlightSessionId || null;
+        const shouldRestoreStoredSession = flightDeckEntryParams?.entryMode === 'resume' || Boolean(requestedSessionId);
+        if (!shouldRestoreStoredSession || (restoredSession && requestedSessionId && restoredSession.id !== requestedSessionId)) {
+          restoredSession = null;
+        }
+
+        const nextSession =
+          restoredSession ||
+          createActiveFlightSession({
+            id: requestedSessionId,
+            entryMode:
+              flightDeckEntryParams?.entryMode ||
+              (departure || destination || waypoints || plannedStops ? 'planned_route' : 'blank_vfr'),
+            route: activeSessionRouteSnapshot,
+          });
+
+        if (nextSession.navigation.activeLegIndex != null) {
+          setActiveLegIndex(Math.max(0, nextSession.navigation.activeLegIndex));
+        }
+        setSequencingSuspended(nextSession.navigation.sequencingSuspended);
+        if (nextSession.navigation.directTo) {
+          setRouteExecutionOverride({
+            mode: nextSession.navigation.directTo.mode,
+            origin: restoreActiveRoutePoint(nextSession.navigation.directTo.origin),
+            target: restoreActiveRoutePoint(nextSession.navigation.directTo.target),
+            activatedAt: Date.parse(nextSession.navigation.directTo.activatedAt) || Date.now(),
+            targetLegIndex: nextSession.navigation.directTo.targetLegIndex ?? undefined,
+          });
+        }
+        setActiveFlightSession(
+          updateActiveFlightSession(nextSession, {
+            status: 'active',
+            resumedAt: new Date().toISOString(),
+            lastForegroundAt: new Date().toISOString(),
+          })
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setActiveFlightSession(
+          createActiveFlightSession({
+            entryMode:
+              flightDeckEntryParams?.entryMode ||
+              (departure || destination || waypoints || plannedStops ? 'planned_route' : 'blank_vfr'),
+            route: activeSessionRouteSnapshot,
+          })
+        );
+      });
+
+    return () => {
+      cancelled = true;
     };
-    AsyncStorage.setItem(ACTIVE_FLIGHT_KEY, JSON.stringify(state)).catch(() => undefined);
   }, [
-    cruiseKtas,
+    activeSessionRouteSnapshot,
     departure,
     destination,
     flightDeckEntryParams?.activeFlightSessionId,
     flightDeckEntryParams?.entryMode,
     isFlightDeck,
-    plannedAltitude,
     plannedStops,
     waypoints,
   ]);
+
+  useEffect(() => {
+    if (!isFlightDeck || !activeFlightSession) return;
+    setActiveFlightSession((current) => {
+      if (!current) return current;
+      return updateActiveFlightSession(current, {
+        status: flightDeckActiveSession ? 'active' : 'initializing',
+        entryMode: flightDeckEntryParams?.entryMode || current.entryMode,
+        route: activeSessionRouteSnapshot,
+        navigation: {
+          activeLegIndex: activeRoutePoints.length > 1 ? activeLegIndex : null,
+          sequencingSuspended,
+          directTo: activeSessionDirectToSnapshot,
+        },
+        phase: flightDeckPhaseSummary.stage,
+        aircraft:
+          selectedProfileId || tailNumber || aircraftPerformanceState.selectedType?.id
+            ? {
+                profileId: selectedProfileId || undefined,
+                tailNumber: tailNumber.trim().toUpperCase() || undefined,
+                aircraftTypeId: aircraftPerformanceState.selectedType?.id || undefined,
+              }
+            : null,
+        sourceSnapshot: {
+          positionSource: mapPositionSource(sourceHealth.activeSource),
+          receiverState: receiverHealth?.status || trafficStatus || 'idle',
+          attitudeSource: simulationEnabled ? 'simulation' : receiverAttitudeFresh ? 'gdl90_ahrs' : 'none',
+        },
+        traffic: {
+          targetCount: activeTrafficTargets.length,
+          immediateCount: immediateTrafficCount,
+          lastUpdatedAt: activeTrafficTargets.length ? new Date().toISOString() : null,
+        },
+        display: {
+          mode: flightDeckView,
+          orientation: mapOrientationMode,
+        },
+      });
+    });
+  }, [
+    activeFlightSession?.id,
+    activeLegIndex,
+    activeRoutePoints.length,
+    activeSessionDirectToSnapshot,
+    activeSessionRouteSnapshot,
+    activeTrafficTargets.length,
+    aircraftPerformanceState.selectedType?.id,
+    flightDeckActiveSession,
+    flightDeckEntryParams?.entryMode,
+    flightDeckPhaseSummary.stage,
+    flightDeckView,
+    immediateTrafficCount,
+    isFlightDeck,
+    mapOrientationMode,
+    receiverAttitudeFresh,
+    receiverHealth?.status,
+    selectedProfileId,
+    sequencingSuspended,
+    simulationEnabled,
+    sourceHealth.activeSource,
+    tailNumber,
+    trafficStatus,
+  ]);
+
+  // Persist the authoritative active-flight session so Home can resume the same operational state.
+  useEffect(() => {
+    if (!isFlightDeck || !activeFlightSession) return;
+    const persisted = markActiveFlightSessionPersisted(activeFlightSession);
+    AsyncStorage.setItem(ACTIVE_FLIGHT_STORAGE_KEY, JSON.stringify(persisted)).catch(() => undefined);
+  }, [activeFlightSession, isFlightDeck]);
 
   useEffect(() => {
     logDiagnostic('maps', 'map_style_changed', {
@@ -7717,6 +7901,7 @@ export default function FlightPlannerScreen() {
     plannedAltitude,
     cruiseKtas,
     routeHeadline: flightDeckRouteHeadline,
+    activeFlightSession,
     flightDeckSessionState,
     flightDeckPhaseSummary,
     visionMode,
@@ -7872,7 +8057,8 @@ export default function FlightPlannerScreen() {
     focusTrafficTarget,
     setAlternate,
     clearActiveFlight: () => {
-      AsyncStorage.removeItem(ACTIVE_FLIGHT_KEY).catch(() => undefined);
+      setActiveFlightSession(null);
+      AsyncStorage.removeItem(ACTIVE_FLIGHT_STORAGE_KEY).catch(() => undefined);
     },
     openWiFiSettings,
   };

@@ -5,9 +5,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
-import { createBlankVfrFlightDeckParams, createResumeFlightDeckParams, type FlightDeckEntryMode } from '../lib/flightDeckEntry';
+import { createBlankVfrFlightDeckParams, type FlightDeckEntryMode } from '../lib/flightDeckEntry';
+import {
+  ACTIVE_FLIGHT_STORAGE_KEY,
+  createFlightDeckParamsFromSession,
+  createSessionFromLegacyResumePayload,
+  parseActiveFlightSession,
+  type ActiveFlightSession,
+} from '../lib/activeFlightSession';
 
-const ACTIVE_FLIGHT_KEY = 'rsf_active_flight_v1';
 const ACTIVE_FLIGHT_MAX_AGE_MS = 8 * 60 * 60 * 1000; // 8 hours
 
 const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
@@ -60,6 +66,7 @@ function RailCard({ icon, title, subtitle, onPress }: RailCardProps) {
 }
 
 type ActiveFlight = {
+  session?: ActiveFlightSession | null;
   entryMode?: FlightDeckEntryMode | null;
   departure: string | null;
   destination: string | null;
@@ -82,16 +89,29 @@ export default function HomeScreen({ navigation }: any) {
   const [activeFlight, setActiveFlight] = useState<ActiveFlight | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem(ACTIVE_FLIGHT_KEY)
+    AsyncStorage.getItem(ACTIVE_FLIGHT_STORAGE_KEY)
       .then((raw) => {
         if (!raw) return;
         try {
-          const parsed = JSON.parse(raw) as ActiveFlight;
-          const age = Date.now() - (parsed.savedAt || 0);
+          const parsed = JSON.parse(raw);
+          const session = parseActiveFlightSession(parsed) || createSessionFromLegacyResumePayload(parsed);
+          const savedAt = Date.parse(session.resumeMetadata.lastPersistedAt || session.updatedAt || session.createdAt);
+          const age = Date.now() - (Number.isFinite(savedAt) ? savedAt : 0);
           if (age < ACTIVE_FLIGHT_MAX_AGE_MS) {
-            setActiveFlight(parsed);
+            setActiveFlight({
+              session,
+              entryMode: session.entryMode,
+              departure: session.route?.departure || null,
+              destination: session.route?.destination || null,
+              waypoints: session.route?.waypoints || null,
+              plannedStops: session.route?.plannedStops || null,
+              plannedAltitude: session.route?.plannedAltitude || null,
+              cruiseKtas: session.route?.cruiseKtas || null,
+              activeFlightSessionId: session.id,
+              savedAt: Number.isFinite(savedAt) ? savedAt : Date.now(),
+            });
           } else {
-            AsyncStorage.removeItem(ACTIVE_FLIGHT_KEY).catch(() => undefined);
+            AsyncStorage.removeItem(ACTIVE_FLIGHT_STORAGE_KEY).catch(() => undefined);
           }
         } catch {
           // ignore malformed
@@ -102,23 +122,18 @@ export default function HomeScreen({ navigation }: any) {
 
   const resumeActiveFlight = () => {
     if (!activeFlight) return;
+    const params = activeFlight.session
+      ? createFlightDeckParamsFromSession(activeFlight.session)
+      : createBlankVfrFlightDeckParams();
     navigation.navigate('Profile', {
       screen: 'FlightDeck',
-      params: createResumeFlightDeckParams({
-        departure: activeFlight.departure ?? undefined,
-        destination: activeFlight.destination ?? undefined,
-        waypoints: activeFlight.waypoints ?? undefined,
-        plannedStops: activeFlight.plannedStops ?? undefined,
-        plannedAltitude: activeFlight.plannedAltitude ?? undefined,
-        cruiseKtas: activeFlight.cruiseKtas ?? undefined,
-        activeFlightSessionId: activeFlight.activeFlightSessionId ?? undefined,
-      }),
+      params,
     });
   };
 
   const dismissActiveFlight = () => {
     setActiveFlight(null);
-    AsyncStorage.removeItem(ACTIVE_FLIGHT_KEY).catch(() => undefined);
+    AsyncStorage.removeItem(ACTIVE_FLIGHT_STORAGE_KEY).catch(() => undefined);
   };
 
   const handleLogin = () => {

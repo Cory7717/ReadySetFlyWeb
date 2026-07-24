@@ -9,7 +9,9 @@ import {
   buildLifecycleEvidenceSummary,
   buildValidationSummary,
   compareGeneratedSentReturned,
+  classifyAlreadyTerminalRetryEvidence,
   isAmbiguousProviderTerminalRejection,
+  isAlreadyTerminalInvalidFlightIdRejection,
   shouldCleanupImmediatelyAfterCase,
   verifyActivationActionState,
 } from "./leidos-live-lab/live-lab-runner";
@@ -542,6 +544,142 @@ test("cleanup duplicate cancellation rejection is ambiguous and requires termina
   );
   assert.equal(isAmbiguousProviderTerminalRejection("cancel", "FuelEndurance.lessThanETE"), false);
   assert.equal(isAmbiguousProviderTerminalRejection("file", "Webservice.CannotCancel"), false);
+});
+
+test("Case 17 already-terminal InvalidFlightId retry is inferred only after accepted original cancel", () => {
+  const message = "Webservice.InvalidFlightId: Your flight plan action cannot be processed. The flight may have been canceled or closed.";
+  const plan = basePlan({
+    filingProviderPlanId: "provider-17",
+    filingProviderSnapshot: {
+      providerPlanId: "provider-17",
+      versionStamp: "20260724131533240",
+      providerLifecycleStatus: "proposed",
+      providerLifecycleSource: "leidos_webhook",
+      providerLifecycleReason: "explicit_provider_flight_state",
+      providerFlightState: "PROPOSED",
+      providerEventHash: "older-proposed",
+      lastProviderUpdateAt: "2026-07-24T13:15:33.000Z",
+    },
+    certificationAudit: {
+      actions: [{
+        action: "cancel",
+        responseStatus: "accepted",
+        providerActionAccepted: true,
+        providerPlanId: "provider-17",
+        terminalVerification: {
+          status: "REVIEW",
+          actionBaseline: {
+            providerPlanId: "provider-17",
+            versionStamp: "20260724131533240",
+            lifecycle: "proposed",
+            eventHash: "older-proposed",
+            evidenceTime: "2026-07-24T13:15:33.000Z",
+            evidenceSource: "leidos_webhook",
+            actionStartedAt: "2026-07-24T13:15:33.400Z",
+          },
+        },
+      }],
+    },
+  });
+
+  assert.equal(isAlreadyTerminalInvalidFlightIdRejection("cancel", message), true);
+  const evidence = classifyAlreadyTerminalRetryEvidence({ plan, action: "cancel", providerPlanId: "provider-17", message });
+  assert.equal(evidence.matched, true);
+  assert.equal(evidence.evidenceKind, "inferred_already_terminal_retry");
+  assert.equal(evidence.effectiveLifecycle, "cancelled");
+
+  const summary = buildCleanupSummary([{
+    cleanupPhase: "final_sweep",
+    action: "cancel",
+    responseStatus: "error_inferred_already_terminal",
+    pass: true,
+    providerPlanId: "provider-17",
+    terminalVerificationAttempted: true,
+    terminalVerificationMatched: true,
+    terminalEvidenceKind: "inferred_already_terminal_retry",
+    finalCleanupDisposition: "cleanup_inferred_already_terminal",
+  }], [{ actions: [{ action: "file", providerPlanId: "provider-17", responseStatus: "accepted" }] }]);
+  assert.equal(summary.cleanupErrors, 0);
+  assert.equal(summary.unresolvedProviderPlans, 0);
+  assert.equal(summary.uniquePlansExplicitlyTerminalVerified, 0);
+  assert.equal(summary.inferredAlreadyTerminal, 1);
+  assert.equal(summary.cleanupFinalDispositions[0].disposition, "inferred_already_terminal");
+});
+
+test("unrelated provider rejection is not inferred as already terminal", () => {
+  const plan = basePlan({
+    filingProviderPlanId: "provider-17",
+    certificationAudit: {
+      actions: [{ action: "cancel", responseStatus: "accepted", providerActionAccepted: true, providerPlanId: "provider-17" }],
+    },
+  });
+  const evidence = classifyAlreadyTerminalRetryEvidence({
+    plan,
+    action: "cancel",
+    providerPlanId: "provider-17",
+    message: "FuelEndurance.lessThanETE",
+  });
+  assert.equal(evidence.matched, false);
+});
+
+test("InvalidFlightId alone is not sufficient when original cancel was not accepted", () => {
+  const plan = basePlan({
+    filingProviderPlanId: "provider-17",
+    certificationAudit: {
+      actions: [{ action: "cancel", responseStatus: "error", providerActionAccepted: false, providerPlanId: "provider-17" }],
+    },
+  });
+  const evidence = classifyAlreadyTerminalRetryEvidence({
+    plan,
+    action: "cancel",
+    providerPlanId: "provider-17",
+    message: "Webservice.InvalidFlightId: Your flight plan action cannot be processed. The flight may have been canceled or closed.",
+  });
+  assert.equal(evidence.matched, false);
+  assert.equal(evidence.originalActionAccepted, false);
+});
+
+test("newer contradictory provider lifecycle blocks already-terminal inference", () => {
+  const plan = basePlan({
+    filingProviderPlanId: "provider-17",
+    filingProviderSnapshot: {
+      providerPlanId: "provider-17",
+      versionStamp: "20260724131533520",
+      providerLifecycleStatus: "proposed",
+      providerLifecycleSource: "leidos_webhook",
+      providerLifecycleReason: "explicit_provider_flight_state",
+      providerFlightState: "PROPOSED",
+      providerEventHash: "newer-proposed",
+      lastProviderUpdateAt: "2026-07-24T13:16:00.000Z",
+    },
+    certificationAudit: {
+      actions: [{
+        action: "cancel",
+        responseStatus: "accepted",
+        providerActionAccepted: true,
+        providerPlanId: "provider-17",
+        terminalVerification: {
+          actionBaseline: {
+            providerPlanId: "provider-17",
+            versionStamp: "20260724131533240",
+            lifecycle: "proposed",
+            eventHash: "older-proposed",
+            evidenceTime: "2026-07-24T13:15:33.000Z",
+            evidenceSource: "leidos_webhook",
+            actionStartedAt: "2026-07-24T13:15:33.400Z",
+          },
+        },
+      }],
+    },
+  });
+  const evidence = classifyAlreadyTerminalRetryEvidence({
+    plan,
+    action: "cancel",
+    providerPlanId: "provider-17",
+    message: "Webservice.InvalidFlightId: Your flight plan action cannot be processed. The flight may have been canceled or closed.",
+  });
+  assert.equal(evidence.matched, false);
+  assert.equal(evidence.contradictoryEvidence, true);
 });
 
 test("cleanup summary distinguishes rejected but verified terminal cleanup from unresolved plans", () => {

@@ -168,6 +168,12 @@ export const isAmbiguousProviderTerminalRejection = (action: CaseAction | Flight
   return /Webservice\.Cannot|CannotCancel|CannotClose|not in the PROPOSED state|could not be cancelled|could not be closed/i.test(text);
 };
 
+export const isAlreadyTerminalInvalidFlightIdRejection = (action: CaseAction | FlightPlanFilingAction | "verify" | "none", value: unknown) => {
+  const text = String(value || "").trim();
+  if (!text || !["cancel", "close"].includes(String(action))) return false;
+  return /Webservice\.InvalidFlightId/i.test(text) && /may have been (?:canceled|cancelled) or closed/i.test(text);
+};
+
 const isTerminalProviderStatus = (value: unknown, action: CaseAction) => {
   const status = String(value || "").trim().toLowerCase();
   if (!status) return null;
@@ -353,6 +359,92 @@ export const evaluateTerminalEvidenceObservation = ({
     versionOrder,
     sameEvent,
     sameBaselineVersion,
+  };
+};
+
+const getCertificationAuditActions = (plan: FlightPlan) => {
+  const audit = plan.certificationAudit && typeof plan.certificationAudit === "object" && !Array.isArray(plan.certificationAudit)
+    ? plan.certificationAudit as Record<string, any>
+    : {};
+  return Array.isArray(audit.actions)
+    ? audit.actions.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry))
+    : [];
+};
+
+const getAcceptedOriginalTerminalAction = (
+  plan: FlightPlan,
+  action: CaseAction | FlightPlanFilingAction | "verify" | "none",
+  providerPlanId?: string | null,
+) => {
+  const normalizedAction = String(action || "").trim().toLowerCase();
+  if (!["cancel", "close"].includes(normalizedAction)) return null;
+  const expectedProviderPlanId = String(providerPlanId || plan.filingProviderPlanId || "").trim();
+  return [...getCertificationAuditActions(plan)].reverse().find((entry) => {
+    const entryAction = String(entry.action || "").trim().toLowerCase();
+    const entryProviderPlanId = String(entry.providerPlanId || "").trim();
+    if (entryAction !== normalizedAction) return false;
+    if (expectedProviderPlanId && entryProviderPlanId && entryProviderPlanId !== expectedProviderPlanId) return false;
+    return entry.providerActionAccepted === true || String(entry.responseStatus || "").trim().toLowerCase() === "accepted";
+  }) || null;
+};
+
+export const classifyAlreadyTerminalRetryEvidence = ({
+  plan,
+  action,
+  providerPlanId,
+  message,
+}: {
+  plan: FlightPlan;
+  action: CaseAction | FlightPlanFilingAction | "verify" | "none";
+  providerPlanId?: string | null;
+  message: unknown;
+}) => {
+  const expectedStatus = expectedTerminalStatusForAction(action as CaseAction);
+  const originalAction = getAcceptedOriginalTerminalAction(plan, action, providerPlanId);
+  if (!expectedStatus || !originalAction || !isAlreadyTerminalInvalidFlightIdRejection(action, message)) {
+    return {
+      matched: false,
+      evidenceKind: null,
+      evidenceSource: null,
+      effectiveLifecycle: null,
+      reason: null,
+      originalActionAccepted: Boolean(originalAction),
+      contradictoryEvidence: false,
+    };
+  }
+  const baseline = originalAction.terminalVerification?.actionBaseline || null;
+  const currentEvidence = classifyLifecycleEvidence((plan.filingProviderSnapshot as any) || null, expectedStatus);
+  const observation = evaluateTerminalEvidenceObservation({
+    evidence: currentEvidence,
+    expectedStatus,
+    baseline,
+  });
+  const contradictoryEvidence = Boolean(
+    currentEvidence.hasExplicitProviderEvidence &&
+    currentEvidence.lifecycle &&
+    currentEvidence.lifecycle !== expectedStatus &&
+    !observation.predatesAction &&
+    !observation.sameBaselineVersion
+  );
+  if (contradictoryEvidence) {
+    return {
+      matched: false,
+      evidenceKind: currentEvidence.kind,
+      evidenceSource: currentEvidence.source,
+      effectiveLifecycle: currentEvidence.lifecycle,
+      reason: "A newer explicit provider lifecycle conflicts with the expected terminal state.",
+      originalActionAccepted: true,
+      contradictoryEvidence: true,
+    };
+  }
+  return {
+    matched: true,
+    evidenceKind: "inferred_already_terminal_retry",
+    evidenceSource: "leidos_invalid_flight_id_retry",
+    effectiveLifecycle: expectedStatus,
+    reason: `The original ${String(action).toUpperCase()} was accepted by Leidos. No explicit terminal webhook was observed during the verification window. A later retry returned Leidos InvalidFlightId indicating the plan was already cancelled or closed, with no newer contradictory lifecycle evidence.`,
+    originalActionAccepted: true,
+    contradictoryEvidence: false,
   };
 };
 
@@ -1850,7 +1942,11 @@ export const buildCleanupSummary = (cleanupResults: any[], results: any[]) => {
   const finalSweep = cleanupResults.filter((item) => item.cleanupPhase === "final_sweep");
   const unresolved = cleanupResults.filter((item) => item.pass === false);
   const cancelAccepted = cleanupResults.filter((item) => item.action === "cancel" && ["accepted", "dry_run"].includes(String(item.responseStatus)));
-  const explicitlyVerified = cleanupResults.filter((item) => item.terminalVerificationMatched === true);
+  const explicitlyVerified = cleanupResults.filter((item) =>
+    item.terminalVerificationMatched === true &&
+    item.terminalEvidenceKind !== "inferred_already_terminal_retry"
+  );
+  const inferredAlreadyTerminal = cleanupResults.filter((item) => item.finalCleanupDisposition === "cleanup_inferred_already_terminal");
   const acceptedUnverified = cleanupResults.filter((item) => item.finalCleanupDisposition === "accepted_unverified");
   const providerPlanIdsCreated = Array.from(new Set(actions
     .filter((action: any) => action.action === "file" && action.providerPlanId && ["accepted", "dry_run"].includes(String(action.responseStatus)))
@@ -1873,8 +1969,10 @@ export const buildCleanupSummary = (cleanupResults: any[], results: any[]) => {
     const events = cleanupEventsByProviderPlan.get(providerPlanId) || [];
     const disposition = events.some((event) => event.pass === false)
       ? "cleanup_failed"
-      : events.some((event) => event.terminalVerificationMatched === true)
+      : events.some((event) => event.terminalVerificationMatched === true && event.terminalEvidenceKind !== "inferred_already_terminal_retry")
         ? "explicitly_terminal"
+        : events.some((event) => event.finalCleanupDisposition === "cleanup_inferred_already_terminal")
+          ? "inferred_already_terminal"
         : events.some((event) => event.finalCleanupDisposition === "accepted_unverified")
           ? "cancel_accepted_evidence_unavailable"
           : events.some((event) => ["not_required", "staged_only_not_submitted", "already_terminal", "dry_run"].includes(String(event.responseStatus)))
@@ -1926,6 +2024,7 @@ export const buildCleanupSummary = (cleanupResults: any[], results: any[]) => {
       name: "all_provider_created_plans_have_allowed_final_disposition",
       pass: finalDispositions.every((item) => [
         "explicitly_terminal",
+        "inferred_already_terminal",
         "cleanup_not_required",
         "cancel_accepted_evidence_unavailable",
         "cleanup_failed",
@@ -1958,6 +2057,7 @@ export const buildCleanupSummary = (cleanupResults: any[], results: any[]) => {
     cancelAccepted: cancelAccepted.length,
     terminalStateExplicitlyVerified: explicitPlanIds.size,
     acceptedButTerminalEvidenceUnavailable: acceptedUnverified.length,
+    inferredAlreadyTerminal: inferredAlreadyTerminal.length,
     cancelled: cancelAccepted.length,
     closed: cleanupResults.filter((item) => item.action === "close" && ["accepted", "dry_run"].includes(String(item.responseStatus))).length,
     alreadyTerminal: cleanupResults.filter((item) => item.responseStatus === "already_terminal").length,
@@ -2958,7 +3058,17 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
       const cancelReturnMessages = Array.isArray(response.providerMessages)
         ? response.providerMessages.map((message: any) => message?.message || message?.text || message?.summary).filter(Boolean)
         : [];
-      const rejectedAmbiguousTerminalAction = !response.live && isAmbiguousProviderTerminalRejection(cleanupAction, `${response.message || ""} ${cancelReturnMessages.join(" ")}`);
+      const retryMessage = `${response.message || ""} ${cancelReturnMessages.join(" ")}`;
+      const alreadyTerminalRetryEvidence = !response.live
+        ? classifyAlreadyTerminalRetryEvidence({
+          plan,
+          action: cleanupAction,
+          providerPlanId,
+          message: retryMessage,
+        })
+        : null;
+      const rejectedAlreadyTerminalRetry = alreadyTerminalRetryEvidence?.matched === true;
+      const rejectedAmbiguousTerminalAction = !response.live && !rejectedAlreadyTerminalRetry && isAmbiguousProviderTerminalRejection(cleanupAction, retryMessage);
       const ambiguousTerminalRecheck = rejectedAmbiguousTerminalAction && expectedTerminalStatusForAction(cleanupAction as CaseAction)
         ? await waitForPersistedTerminalLifecycleEvidence({
           planId: plan.id,
@@ -2970,7 +3080,9 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
         : null;
       const terminalVerificationMatched = terminalVerification?.status === "PASS";
       const ambiguousCleanupVerified = ambiguousTerminalRecheck?.matched === true;
-      const finalCleanupDisposition = ambiguousCleanupVerified
+      const finalCleanupDisposition = rejectedAlreadyTerminalRetry
+        ? "cleanup_inferred_already_terminal"
+        : ambiguousCleanupVerified
         ? "cleanup_rejected_but_terminal_verified"
         : rejectedAmbiguousTerminalAction
           ? "cleanup_rejected_terminal_unverified"
@@ -2983,39 +3095,50 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
         ...base,
         responseStatus: ambiguousCleanupVerified
           ? "rejected_but_terminal_verified"
+          : rejectedAlreadyTerminalRetry
+            ? "rejected_inferred_already_terminal"
           : rejectedAmbiguousTerminalAction
             ? "rejected_terminal_unverified"
             : response.live
               ? "accepted"
               : "staged",
-        pass: response.live || ambiguousCleanupVerified,
+        pass: response.live || ambiguousCleanupVerified || rejectedAlreadyTerminalRetry,
         cancelAttempted: cleanupAction === "cancel",
-        cancelAccepted: response.live && cleanupAction === "cancel",
+        cancelAccepted: (response.live || rejectedAlreadyTerminalRetry) && cleanupAction === "cancel",
         cancelReturnMessages,
-        terminalVerificationAttempted: response.live || rejectedAmbiguousTerminalAction,
-        terminalVerificationMatched: terminalVerificationMatched || ambiguousCleanupVerified,
-        terminalEvidenceKind: terminalVerification?.evidenceKind || ambiguousTerminalRecheck?.evidence?.kind || null,
-        terminalEvidenceSource: terminalVerification?.evidenceSource || ambiguousTerminalRecheck?.evidence?.source || null,
-        effectiveLifecycle: terminalVerification?.effectiveLifecycle || ambiguousTerminalRecheck?.evidence?.lifecycle || response.nextStatus || null,
+        terminalVerificationAttempted: response.live || rejectedAmbiguousTerminalAction || rejectedAlreadyTerminalRetry,
+        terminalVerificationMatched: terminalVerificationMatched || ambiguousCleanupVerified || rejectedAlreadyTerminalRetry,
+        terminalEvidenceKind: terminalVerification?.evidenceKind || alreadyTerminalRetryEvidence?.evidenceKind || ambiguousTerminalRecheck?.evidence?.kind || null,
+        terminalEvidenceSource: terminalVerification?.evidenceSource || alreadyTerminalRetryEvidence?.evidenceSource || ambiguousTerminalRecheck?.evidence?.source || null,
+        terminalEvidenceReason: alreadyTerminalRetryEvidence?.reason || null,
+        effectiveLifecycle: terminalVerification?.effectiveLifecycle || alreadyTerminalRetryEvidence?.effectiveLifecycle || ambiguousTerminalRecheck?.evidence?.lifecycle || response.nextStatus || null,
         pollCount: terminalVerification?.polling?.pollCount || ambiguousTerminalRecheck?.polls || 0,
         timedOut: Boolean(terminalVerification?.polling?.timedOut || ambiguousTerminalRecheck?.timedOut),
         finalCleanupDisposition,
         terminalVerification,
         ambiguousCleanupRejection: rejectedAmbiguousTerminalAction,
+        alreadyTerminalRetryEvidence,
         ambiguousCleanupVerification: ambiguousTerminalRecheck,
         warnings: response.warnings || [],
-        errors: response.live || ambiguousCleanupVerified ? [] : [response.message],
+        errors: response.live || ambiguousCleanupVerified || rejectedAlreadyTerminalRetry ? [] : [response.message],
         elapsedMs: Date.now() - started,
       };
       cleanupResults.push(result);
       await appendCertificationAudit(updated, "cleanup", result, dryRun);
     } catch (error) {
       const message = String((error as any)?.message || error);
-      const rejectedAmbiguousTerminalAction = isAmbiguousProviderTerminalRejection(cleanupAction, message);
       const cleanupActionBaseline = ["cancel", "close"].includes(cleanupAction)
         ? captureTerminalActionEvidenceBaseline(plan, new Date().toISOString())
         : null;
       const expectedStatus = expectedTerminalStatusForAction(cleanupAction as CaseAction);
+      const alreadyTerminalRetryEvidence = classifyAlreadyTerminalRetryEvidence({
+        plan,
+        action: cleanupAction,
+        providerPlanId,
+        message,
+      });
+      const rejectedAlreadyTerminalRetry = alreadyTerminalRetryEvidence.matched === true;
+      const rejectedAmbiguousTerminalAction = !rejectedAlreadyTerminalRetry && isAmbiguousProviderTerminalRejection(cleanupAction, message);
       const ambiguousTerminalRecheck = rejectedAmbiguousTerminalAction && expectedStatus
         ? await waitForPersistedTerminalLifecycleEvidence({
           planId: plan.id,
@@ -3030,26 +3153,34 @@ export const cleanupCertificationPlans = async (plans: FlightPlan[], dryRun: boo
         ...base,
         responseStatus: ambiguousCleanupVerified
           ? "error_but_terminal_verified"
+          : rejectedAlreadyTerminalRetry
+            ? "error_inferred_already_terminal"
           : rejectedAmbiguousTerminalAction
             ? "error_terminal_unverified"
             : "error",
-        pass: ambiguousCleanupVerified,
-        errors: ambiguousCleanupVerified ? [] : [message],
+        pass: ambiguousCleanupVerified || rejectedAlreadyTerminalRetry,
+        errors: ambiguousCleanupVerified || rejectedAlreadyTerminalRetry ? [] : [message],
         ambiguousCleanupRejection: rejectedAmbiguousTerminalAction,
-        terminalVerificationAttempted: rejectedAmbiguousTerminalAction,
-        terminalVerificationMatched: ambiguousCleanupVerified,
-        terminalEvidenceKind: ambiguousTerminalRecheck?.evidence?.kind || null,
-        terminalEvidenceSource: ambiguousTerminalRecheck?.evidence?.source || null,
-        effectiveLifecycle: ambiguousTerminalRecheck?.evidence?.lifecycle || null,
+        alreadyTerminalRetryEvidence,
+        terminalVerificationAttempted: rejectedAmbiguousTerminalAction || rejectedAlreadyTerminalRetry,
+        terminalVerificationMatched: ambiguousCleanupVerified || rejectedAlreadyTerminalRetry,
+        terminalEvidenceKind: alreadyTerminalRetryEvidence.evidenceKind || ambiguousTerminalRecheck?.evidence?.kind || null,
+        terminalEvidenceSource: alreadyTerminalRetryEvidence.evidenceSource || ambiguousTerminalRecheck?.evidence?.source || null,
+        terminalEvidenceReason: alreadyTerminalRetryEvidence.reason || null,
+        effectiveLifecycle: alreadyTerminalRetryEvidence.effectiveLifecycle || ambiguousTerminalRecheck?.evidence?.lifecycle || null,
         pollCount: ambiguousTerminalRecheck?.polls || 0,
         timedOut: Boolean(ambiguousTerminalRecheck?.timedOut),
-        finalCleanupDisposition: ambiguousCleanupVerified ? "cleanup_rejected_but_terminal_verified" : "cleanup_failed",
+        finalCleanupDisposition: rejectedAlreadyTerminalRetry
+          ? "cleanup_inferred_already_terminal"
+          : ambiguousCleanupVerified
+            ? "cleanup_rejected_but_terminal_verified"
+            : "cleanup_failed",
         ambiguousCleanupVerification: ambiguousTerminalRecheck,
         elapsedMs: Date.now() - started,
       };
       cleanupResults.push(result);
       await appendCertificationAudit(plan, "cleanup", result, dryRun);
-      if (!ambiguousCleanupVerified && isCleanupBlockingError(error)) break;
+      if (!ambiguousCleanupVerified && !rejectedAlreadyTerminalRetry && isCleanupBlockingError(error)) break;
     }
   }
   return cleanupResults;

@@ -1,39 +1,1079 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, BarChart3, Building2, Calendar, ChevronDown, Eye, FileClock, Search, Trash2, TrendingUp, Upload } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  ArrowLeft,
+  BarChart3,
+  Building2,
+  Calendar,
+  ChevronDown,
+  Eye,
+  FileClock,
+  Search,
+  Trash2,
+  TrendingUp,
+  Upload,
+} from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiUrl } from "@/lib/api";
 
-const C={page:"!bg-[#f7f1e7] !text-[#201814]",shell:"!border-[#cdbda8] !bg-[#fffaf2] !bg-none !text-[#201814] shadow-sm",green:"!bg-[#2f5f46] !bg-none !text-white hover:!bg-[#274f3b]",outline:"!border-[#8d765a] !bg-white !bg-none !text-[#201814] hover:!bg-[#f4eadb]",muted:"!text-[#5f5247]"};
-const money=new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}); const money2=new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2});
-async function json(url:string,init?:RequestInit){const r=await fetch(apiUrl(url),{credentials:"include",...init});const body=r.status===204?null:await r.json();if(!r.ok)throw Object.assign(new Error(body?.error||"Request failed"),{code:body?.code});return body}
-type Account=any;
-export default function CourtyardSalesIntelligence(){const {toast}=useToast();const qc=useQueryClient();const [hotelId,setHotelId]=useState("");const [period,setPeriod]=useState("all");const [search,setSearch]=useState("");const [status,setStatus]=useState("all");const [uploadOpen,setUploadOpen]=useState(false);const [historyOpen,setHistoryOpen]=useState(false);const [detail,setDetail]=useState<Account|null>(null);const [file,setFile]=useState<File|null>(null);const now=new Date();const [month,setMonth]=useState(String(now.getMonth()+1));const [year,setYear]=useState(String(now.getFullYear()));const [preview,setPreview]=useState<any>(null);const [replace,setReplace]=useState(false);
- const me=useQuery({queryKey:["/api/courtyard/sales-intelligence/me"],queryFn:()=>json("/api/courtyard/sales-intelligence/me")});const selectedHotel=hotelId||me.data?.hotels?.[0]?.id||"";const dashboard=useQuery({queryKey:["/api/courtyard/sales-intelligence/dashboard",selectedHotel],queryFn:()=>json(`/api/courtyard/sales-intelligence/dashboard?hotelId=${encodeURIComponent(selectedHotel)}`),enabled:!!selectedHotel});
- const previewMutation=useMutation({mutationFn:async()=>{if(!file)throw new Error("Choose a report file.");const f=new FormData();f.append("file",file);return json("/api/courtyard/sales-intelligence/preview",{method:"POST",body:f})},onSuccess:setPreview,onError:(e:Error)=>toast({title:"Could not read report",description:e.message,variant:"destructive"})});
- const importMutation=useMutation({mutationFn:async()=>{if(!file)throw new Error("Choose a report file.");const f=new FormData();f.append("file",file);f.append("hotelId",selectedHotel);f.append("reportMonth",month);f.append("reportYear",year);f.append("replace",String(replace));return json("/api/courtyard/sales-intelligence/import",{method:"POST",body:f})},onSuccess:(r)=>{toast({title:`${r.label} imported successfully`,description:`${r.accounts} accounts · ${r.roomNights.toLocaleString()} room nights · ${money.format(r.roomRevenue)}`});setUploadOpen(false);setPreview(null);setFile(null);setReplace(false);qc.invalidateQueries({queryKey:["/api/courtyard/sales-intelligence/dashboard"]})},onError:(e:any)=>{if(e.code==="duplicate_month")setReplace(true);toast({title:"Import needs attention",description:e.message,variant:"destructive"})}});
- const remove=useMutation({mutationFn:(id:string)=>json(`/api/courtyard/sales-intelligence/imports/${id}`,{method:"DELETE"}),onSuccess:()=>qc.invalidateQueries({queryKey:["/api/courtyard/sales-intelligence/dashboard"]}),onError:(e:Error)=>toast({title:"Could not delete import",description:e.message,variant:"destructive"})});
- const accounts=useMemo(()=>{let rows=(dashboard.data?.accounts||[]) as Account[];if(period!=="all"){const [y,m]=period.split("-").map(Number);rows=rows.map(a=>{const h=a.history.find((x:any)=>x.year===y&&x.month===m);return h?{...a,roomNights:h.roomNights,roomRevenue:h.roomRevenue,adr:h.adr,averageLos:h.averageLos,status:a.firstPeriod===h.index?"New":a.status}:null}).filter(Boolean)}const q=search.trim().toLowerCase();if(q)rows=rows.filter(a=>[a.displayName,a.highestLevelAccountId,a.accountId,a.marketSegment,a.rateProgram,...a.bookingOffices].some(v=>String(v||"").toLowerCase().includes(q)));if(status!=="all")rows=rows.filter(a=>a.status===status);return rows.sort((a,b)=>b.roomRevenue-a.roomRevenue)},[dashboard.data,period,search,status]);
- const totals=useMemo(()=>{const roomNights=accounts.reduce((s,a)=>s+a.roomNights,0),roomRevenue=accounts.reduce((s,a)=>s+a.roomRevenue,0);return {accounts:accounts.length,roomNights,roomRevenue,adr:roomNights?roomRevenue/roomNights:0,los:roomNights?accounts.reduce((s,a)=>s+a.averageLos*a.roomNights,0)/roomNights:0}},[accounts]);
- if(me.isLoading)return <div className={`min-h-screen p-8 ${C.page}`}>Loading Sales Intelligence…</div>;if(me.error)return <div className={`min-h-screen p-8 ${C.page}`}><Card className={C.shell}><CardHeader><CardTitle>Sales Intelligence</CardTitle><CardDescription>{(me.error as Error).message}</CardDescription></CardHeader><CardContent><Button asChild className={C.green}><Link href="/courtyard">Go to Courtyard portal</Link></Button></CardContent></Card></div>;
- return <div className={`min-h-screen ${C.page}`}><header className="border-b border-[#deceba] bg-[#fffaf2]/95 px-4 py-4"><div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-xs font-semibold uppercase tracking-[.24em] text-[#8a6b3f]">Courtyard Austin Lakeline</div><h1 className="text-3xl font-semibold">Sales Intelligence</h1><p className={C.muted}>Review historical Marriott account production, track monthly trends, and identify business that may need recovery outreach.</p></div><div className="flex gap-2"><Button asChild variant="outline" className={C.outline}><Link href="/courtyard"><ArrowLeft className="mr-2 h-4 w-4"/>Portal</Link></Button><Button variant="outline" className={C.outline} onClick={()=>setHistoryOpen(true)}><FileClock className="mr-2 h-4 w-4"/>Import History</Button><Button className={C.green} onClick={()=>setUploadOpen(true)}><Upload className="mr-2 h-4 w-4"/>Upload MINT Report</Button></div></div></header>
- <main className="sales-intelligence-content mx-auto max-w-7xl space-y-5 px-4 py-6"><div className="flex flex-wrap gap-3"><Select value={selectedHotel} onValueChange={setHotelId}><SelectTrigger className="w-72 bg-white"><Building2 className="mr-2 h-4 w-4"/><SelectValue/></SelectTrigger><SelectContent>{me.data.hotels.map((h:any)=><SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}</SelectContent></Select><Select value={period} onValueChange={setPeriod}><SelectTrigger className="w-52 bg-white"><Calendar className="mr-2 h-4 w-4"/><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All imported months</SelectItem>{dashboard.data?.periods.map((p:any)=><SelectItem key={`${p.year}-${p.month}`} value={`${p.year}-${p.month}`}>{p.label}</SelectItem>)}</SelectContent></Select></div>
- <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{[["Accounts",totals.accounts],["Room Nights",Math.round(totals.roomNights).toLocaleString()],["Room Revenue",money.format(totals.roomRevenue)],["ADR",money2.format(totals.adr)],["Average Length of Stay",totals.los.toFixed(1)]].map(([k,v])=><Card className={C.shell} key={k}><CardContent className="p-4"><div className={`text-sm ${C.muted}`}>{k}</div><div className="mt-1 text-2xl font-semibold">{v}</div></CardContent></Card>)}</section>
- <Tabs defaultValue="production"><TabsList className="bg-[#eadfce]"><TabsTrigger value="production">Account Production</TabsTrigger><TabsTrigger value="recovery">Recovery Opportunities</TabsTrigger></TabsList><TabsContent value="production"><AccountTable accounts={accounts} search={search} setSearch={setSearch} status={status} setStatus={setStatus} onDetail={setDetail}/></TabsContent><TabsContent value="recovery"><Card className={C.shell}><CardHeader><CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-[#8a6b3f]"/>Recovery Opportunities</CardTitle><CardDescription>Accounts with no production in the last {me.data.recoveryThresholdMonths} completed imported months, ranked by transparent historical value and consistency.</CardDescription></CardHeader><CardContent><AccountTable accounts={accounts.filter(a=>a.status==="Potential Recovery").sort((a,b)=>b.recoveryPriority-a.recoveryPriority)} search={search} setSearch={setSearch} status="all" setStatus={()=>{}} onDetail={setDetail} recovery/></CardContent></Card></TabsContent></Tabs></main>
- <UploadDialog open={uploadOpen} setOpen={setUploadOpen} file={file} setFile={(f:File|null)=>{setFile(f);setPreview(null);setReplace(false)}} month={month} setMonth={setMonth} year={year} setYear={setYear} preview={preview} previewing={previewMutation.isPending} importing={importMutation.isPending} onPreview={()=>previewMutation.mutate()} onImport={()=>importMutation.mutate()} replace={replace}/><DetailDialog account={detail} onClose={()=>setDetail(null)}/><HistoryDialog open={historyOpen} setOpen={setHistoryOpen} imports={dashboard.data?.imports||[]} isAdmin={me.data.user.isAdmin} onDelete={(id:string)=>{if(confirm("Delete this import and all of its production rows? This cannot be undone."))remove.mutate(id)}}/></div>}
+const C = {
+  page: "!bg-[#f7f1e7] !text-[#201814]",
+  shell: "!border-[#cdbda8] !bg-[#fffaf2] !bg-none !text-[#201814] shadow-sm",
+  green: "!bg-[#2f5f46] !bg-none !text-white hover:!bg-[#274f3b]",
+  outline:
+    "!border-[#8d765a] !bg-white !bg-none !text-[#201814] hover:!bg-[#f4eadb]",
+  muted: "!text-[#5f5247]",
+};
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+const money2 = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+});
+async function json(url: string, init?: RequestInit) {
+  const r = await fetch(apiUrl(url), { credentials: "include", ...init });
+  const body = r.status === 204 ? null : await r.json();
+  if (!r.ok)
+    throw Object.assign(new Error(body?.error || "Request failed"), {
+      code: body?.code,
+    });
+  return body;
+}
+type Account = any;
+export default function CourtyardSalesIntelligence() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [hotelId, setHotelId] = useState("");
+  const [period, setPeriod] = useState("all");
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [view, setView] = useState("production");
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [detail, setDetail] = useState<Account | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const now = new Date();
+  const [month, setMonth] = useState(String(now.getMonth() + 1));
+  const [year, setYear] = useState(String(now.getFullYear()));
+  const [preview, setPreview] = useState<any>(null);
+  const [replace, setReplace] = useState(false);
+  const [reportType, setReportType] = useState(
+    "marriott_mint_group_account_tracking",
+  );
+  const me = useQuery({
+    queryKey: ["/api/courtyard/sales-intelligence/me"],
+    queryFn: () => json("/api/courtyard/sales-intelligence/me"),
+  });
+  const selectedHotel = hotelId || me.data?.hotels?.[0]?.id || "";
+  const dashboard = useQuery({
+    queryKey: ["/api/courtyard/sales-intelligence/dashboard", selectedHotel],
+    queryFn: () =>
+      json(
+        `/api/courtyard/sales-intelligence/dashboard?hotelId=${encodeURIComponent(selectedHotel)}`,
+      ),
+    enabled: !!selectedHotel,
+  });
+  const previewMutation = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new Error("Choose a report file.");
+      const f = new FormData();
+      f.append("file", file);
+      return json("/api/courtyard/sales-intelligence/preview", {
+        method: "POST",
+        body: f,
+      });
+    },
+    onSuccess: (result) => {
+      setPreview(result);
+      setReportType(result.suggestedReportType);
+    },
+    onError: (e: Error) =>
+      toast({
+        title: "Could not read report",
+        description: e.message,
+        variant: "destructive",
+      }),
+  });
+  const importMutation = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new Error("Choose a report file.");
+      const f = new FormData();
+      f.append("file", file);
+      f.append("hotelId", selectedHotel);
+      f.append("reportMonth", month);
+      f.append("reportYear", year);
+      f.append("reportType", reportType);
+      f.append("replace", String(replace));
+      return json("/api/courtyard/sales-intelligence/import", {
+        method: "POST",
+        body: f,
+      });
+    },
+    onSuccess: (r) => {
+      toast({
+        title: `${r.label} imported successfully`,
+        description: `${r.accounts} accounts · ${r.roomNights.toLocaleString()} room nights · ${money.format(r.roomRevenue)}`,
+      });
+      setUploadOpen(false);
+      setPreview(null);
+      setFile(null);
+      setReplace(false);
+      qc.invalidateQueries({
+        queryKey: ["/api/courtyard/sales-intelligence/dashboard"],
+      });
+    },
+    onError: (e: any) => {
+      if (e.code === "duplicate_month") setReplace(true);
+      toast({
+        title: "Import needs attention",
+        description: e.message,
+        variant: "destructive",
+      });
+    },
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) =>
+      json(`/api/courtyard/sales-intelligence/imports/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: ["/api/courtyard/sales-intelligence/dashboard"],
+      }),
+    onError: (e: Error) =>
+      toast({
+        title: "Could not delete import",
+        description: e.message,
+        variant: "destructive",
+      }),
+  });
+  const accounts = useMemo(() => {
+    let rows = (dashboard.data?.accounts || []) as Account[];
+    if (period !== "all") {
+      const [y, m] = period.split("-").map(Number);
+      rows = rows
+        .map((a) => {
+          const h = a.history.find((x: any) => x.year === y && x.month === m);
+          return h
+            ? {
+                ...a,
+                roomNights: h.roomNights,
+                roomRevenue: h.roomRevenue,
+                adr: h.adr,
+                averageLos: h.averageLos,
+                status: a.firstPeriod === h.index ? "New" : a.status,
+              }
+            : null;
+        })
+        .filter(Boolean);
+    }
+    const q = search.trim().toLowerCase();
+    if (q)
+      rows = rows.filter((a) =>
+        [
+          a.displayName,
+          a.highestLevelAccountId,
+          a.accountId,
+          a.marketSegment,
+          a.rateProgram,
+          ...a.bookingOffices,
+        ].some((v) =>
+          String(v || "")
+            .toLowerCase()
+            .includes(q),
+        ),
+      );
+    if (status !== "all") rows = rows.filter((a) => a.status === status);
+    return rows.sort((a, b) => b.roomRevenue - a.roomRevenue);
+  }, [dashboard.data, period, search, status]);
+  const groupAccounts = accounts.filter(
+    (account) => account.reportCategory === "group",
+  );
+  const specialAccounts = accounts.filter(
+    (account) => account.reportCategory === "special",
+  );
+  const visibleAccounts = view === "special" ? specialAccounts : groupAccounts;
+  const totals = useMemo(() => {
+    const roomNights = visibleAccounts.reduce((s, a) => s + a.roomNights, 0),
+      roomRevenue = visibleAccounts.reduce((s, a) => s + a.roomRevenue, 0);
+    return {
+      accounts: visibleAccounts.length,
+      recurring: visibleAccounts.filter((account) => account.recurring).length,
+      roomNights,
+      roomRevenue,
+      adr: roomNights ? roomRevenue / roomNights : 0,
+      los: roomNights
+        ? visibleAccounts.reduce((s, a) => s + a.averageLos * a.roomNights, 0) /
+          roomNights
+        : 0,
+    };
+  }, [visibleAccounts]);
+  if (me.isLoading)
+    return (
+      <div className={`min-h-screen p-8 ${C.page}`}>
+        Loading Sales Intelligence…
+      </div>
+    );
+  if (me.error)
+    return (
+      <div className={`min-h-screen p-8 ${C.page}`}>
+        <Card className={C.shell}>
+          <CardHeader>
+            <CardTitle>Sales Intelligence</CardTitle>
+            <CardDescription>{(me.error as Error).message}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild className={C.green}>
+              <Link href="/courtyard">Go to Courtyard portal</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  return (
+    <div className={`min-h-screen ${C.page}`}>
+      <header className="border-b border-[#deceba] bg-[#fffaf2]/95 px-4 py-4">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[.24em] text-[#8a6b3f]">
+              Courtyard Austin Lakeline
+            </div>
+            <h1 className="text-3xl font-semibold">Sales Intelligence</h1>
+            <p className={C.muted}>
+              Review historical Marriott account production, track monthly
+              trends, and identify business that may need recovery outreach.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild variant="outline" className={C.outline}>
+              <Link href="/courtyard">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Portal
+              </Link>
+            </Button>
+            <Button
+              variant="outline"
+              className={C.outline}
+              onClick={() => setHistoryOpen(true)}
+            >
+              <FileClock className="mr-2 h-4 w-4" />
+              Import History
+            </Button>
+            <Button className={C.green} onClick={() => setUploadOpen(true)}>
+              <Upload className="mr-2 h-4 w-4" />
+              Upload MINT Report
+            </Button>
+          </div>
+        </div>
+      </header>
+      <main className="sales-intelligence-content mx-auto max-w-7xl space-y-5 px-4 py-6">
+        <div className="flex flex-wrap gap-3">
+          <Select value={selectedHotel} onValueChange={setHotelId}>
+            <SelectTrigger className="w-72 bg-white">
+              <Building2 className="mr-2 h-4 w-4" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {me.data.hotels.map((h: any) => (
+                <SelectItem key={h.id} value={h.id}>
+                  {h.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-52 bg-white">
+              <Calendar className="mr-2 h-4 w-4" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All imported months</SelectItem>
+              {dashboard.data?.periods.map((p: any) => (
+                <SelectItem
+                  key={`${p.year}-${p.month}`}
+                  value={`${p.year}-${p.month}`}
+                >
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          {[
+            ["Accounts", totals.accounts],
+            ["Room Nights", Math.round(totals.roomNights).toLocaleString()],
+            ["Room Revenue", money.format(totals.roomRevenue)],
+            ["ADR", money2.format(totals.adr)],
+            ["Average Length of Stay", totals.los.toFixed(1)],
+            ["Recurring Accounts", totals.recurring],
+          ].map(([k, v]) => (
+            <Card className={C.shell} key={k}>
+              <CardContent className="p-4">
+                <div className={`text-sm ${C.muted}`}>{k}</div>
+                <div className="mt-1 text-2xl font-semibold">{v}</div>
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+        <Tabs value={view} onValueChange={setView}>
+          <TabsList className="bg-[#eadfce]">
+            <TabsTrigger value="production">Account Production</TabsTrigger>
+            <TabsTrigger value="recovery">Recovery Opportunities</TabsTrigger>
+            <TabsTrigger value="special">Special Corp/Govt</TabsTrigger>
+          </TabsList>
+          <TabsContent value="production">
+            <AccountTable
+              accounts={groupAccounts}
+              search={search}
+              setSearch={setSearch}
+              status={status}
+              setStatus={setStatus}
+              onDetail={setDetail}
+            />
+          </TabsContent>
+          <TabsContent value="recovery">
+            <Card className={C.shell}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-[#8a6b3f]" />
+                  Recovery Opportunities
+                </CardTitle>
+                <CardDescription>
+                  Accounts with no production in the last{" "}
+                  {me.data.recoveryThresholdMonths} completed imported months,
+                  ranked by transparent historical value and consistency.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AccountTable
+                  accounts={groupAccounts
+                    .filter((a) => a.status === "Potential Recovery")
+                    .sort((a, b) => b.recoveryPriority - a.recoveryPriority)}
+                  search={search}
+                  setSearch={setSearch}
+                  status="all"
+                  setStatus={() => {}}
+                  onDetail={setDetail}
+                  recovery
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="special">
+            <AccountTable
+              accounts={specialAccounts}
+              search={search}
+              setSearch={setSearch}
+              status={status}
+              setStatus={setStatus}
+              onDetail={setDetail}
+              title="Special Corp/Govt Production"
+            />
+          </TabsContent>
+        </Tabs>
+      </main>
+      <UploadDialog
+        open={uploadOpen}
+        setOpen={setUploadOpen}
+        file={file}
+        setFile={(f: File | null) => {
+          setFile(f);
+          setPreview(null);
+          setReplace(false);
+        }}
+        month={month}
+        setMonth={setMonth}
+        year={year}
+        setYear={setYear}
+        preview={preview}
+        previewing={previewMutation.isPending}
+        importing={importMutation.isPending}
+        onPreview={() => previewMutation.mutate()}
+        onImport={() => importMutation.mutate()}
+        replace={replace}
+        reportType={reportType}
+        setReportType={setReportType}
+      />
+      <DetailDialog
+        account={detail}
+        hotelId={selectedHotel}
+        onClose={() => setDetail(null)}
+      />
+      <HistoryDialog
+        open={historyOpen}
+        setOpen={setHistoryOpen}
+        imports={dashboard.data?.imports || []}
+        isAdmin={me.data.user.isAdmin}
+        onDelete={(id: string) => {
+          if (
+            confirm(
+              "Delete this import and all of its production rows? This cannot be undone.",
+            )
+          )
+            remove.mutate(id);
+        }}
+      />
+    </div>
+  );
+}
 
-function AccountTable({accounts,search,setSearch,status,setStatus,onDetail,recovery=false}:any){return <Card className={recovery?"border-0 bg-transparent shadow-none":C.shell}>{!recovery&&<CardHeader><CardTitle>Account Production</CardTitle><CardDescription>Source rows are aggregated to stable account identities. Default sort is room revenue.</CardDescription></CardHeader>}<CardContent className={recovery?"p-0":""}><div className="mb-4 flex flex-wrap gap-2"><div className="relative min-w-64 flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground"/><Input className="bg-white pl-9" placeholder="Search accounts, IDs, booking office…" value={search} onChange={e=>setSearch(e.target.value)}/></div>{!recovery&&<Select value={status} onValueChange={setStatus}><SelectTrigger className="w-48 bg-white"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem><SelectItem value="Active">Active</SelectItem><SelectItem value="New">New</SelectItem><SelectItem value="Potential Recovery">Potential Recovery</SelectItem></SelectContent></Select>}</div><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-[#6e5d50]"><th className="p-3">Account</th><th className="p-3 text-right">Room Nights</th><th className="p-3 text-right">Room Revenue</th><th className="p-3 text-right">ADR</th><th className="p-3 text-right">Avg LOS</th><th className="p-3">Last Production</th><th className="p-3">{recovery?"Recovery Priority":"Status"}</th><th className="p-3"></th></tr></thead><tbody>{accounts.map((a:any)=><tr key={a.key} className="border-b border-[#eadfce] hover:bg-[#f7f0e5]"><td className="p-3"><div className="font-medium">{a.displayName}</div><div className="text-xs text-[#7b6a5d]">{a.highestLevelAccountId&&`UAID ${a.highestLevelAccountId} · `}{a.marketSegment||a.rateProgram||"Account production"}</div></td><td className="p-3 text-right">{Math.round(a.roomNights).toLocaleString()}</td><td className="p-3 text-right font-medium">{money.format(a.roomRevenue)}</td><td className="p-3 text-right">{money2.format(a.adr)}</td><td className="p-3 text-right">{a.averageLos.toFixed(1)}</td><td className="p-3">{a.history.at(-1)?.label}</td><td className="p-3">{recovery?<div><div className="font-semibold">{a.recoveryPriority}</div><div className="text-xs text-[#7b6a5d]">{a.history.length} months · {a.monthsSinceLast} since last</div></div>:<Badge variant={a.status==="Potential Recovery"?"destructive":"outline"}>{a.status}</Badge>}</td><td className="p-3"><Button size="sm" variant="outline" onClick={()=>onDetail(a)}><Eye className="mr-1 h-4 w-4"/>History</Button></td></tr>)}</tbody></table>{!accounts.length&&<div className="py-12 text-center text-[#6e5d50]">No accounts match the selected period and filters.</div>}</div></CardContent></Card>}
+function AccountTable({
+  accounts,
+  search,
+  setSearch,
+  status,
+  setStatus,
+  onDetail,
+  recovery = false,
+  title = "Account Production",
+}: any) {
+  return (
+    <Card
+      className={recovery ? "border-0 bg-transparent shadow-none" : C.shell}
+    >
+      {!recovery && (
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>
+            Source rows are aggregated to stable account identities. Default
+            sort is room revenue.
+          </CardDescription>
+        </CardHeader>
+      )}
+      <CardContent className={recovery ? "p-0" : ""}>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <div className="relative min-w-64 flex-1">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="bg-white pl-9"
+              placeholder="Search accounts, IDs, booking office…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {!recovery && (
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="w-48 bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="New">New</SelectItem>
+                <SelectItem value="Potential Recovery">
+                  Potential Recovery
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left text-[#6e5d50]">
+                <th className="p-3">Account</th>
+                <th className="p-3 text-right">Room Nights</th>
+                <th className="p-3 text-right">Room Revenue</th>
+                <th className="p-3 text-right">ADR</th>
+                <th className="p-3 text-right">Avg LOS</th>
+                <th className="p-3">Last Production</th>
+                <th className="p-3">
+                  {recovery ? "Recovery Priority" : "Status"}
+                </th>
+                <th className="p-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map((a: any) => (
+                <tr
+                  key={a.key}
+                  className="border-b border-[#eadfce] hover:bg-[#f7f0e5]"
+                >
+                  <td className="p-3">
+                    <button
+                      className="font-medium text-[#214f3a] underline-offset-4 hover:underline"
+                      onClick={() => onDetail(a)}
+                    >
+                      {a.displayName}
+                    </button>
+                    <div className="text-xs text-[#7b6a5d]">
+                      {a.highestLevelAccountId &&
+                        `UAID ${a.highestLevelAccountId} · `}
+                      {a.marketSegment || a.rateProgram || "Account production"}
+                    </div>
+                  </td>
+                  <td className="p-3 text-right">
+                    {Math.round(a.roomNights).toLocaleString()}
+                  </td>
+                  <td className="p-3 text-right font-medium">
+                    {money.format(a.roomRevenue)}
+                  </td>
+                  <td className="p-3 text-right">{money2.format(a.adr)}</td>
+                  <td className="p-3 text-right">{a.averageLos.toFixed(1)}</td>
+                  <td className="p-3">{a.history.at(-1)?.label}</td>
+                  <td className="p-3">
+                    {recovery ? (
+                      <div>
+                        <div className="font-semibold">
+                          {a.recoveryPriority}
+                        </div>
+                        <div className="text-xs text-[#7b6a5d]">
+                          {a.history.length} months · {a.monthsSinceLast} since
+                          last
+                        </div>
+                      </div>
+                    ) : (
+                      <Badge
+                        variant={
+                          a.status === "Potential Recovery"
+                            ? "destructive"
+                            : "outline"
+                        }
+                      >
+                        {a.status}
+                      </Badge>
+                    )}
+                    {a.recurring && !recovery && (
+                      <Badge className="ml-2 !bg-[#dcecdf] !text-[#214f3a]">
+                        Recurring
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="p-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onDetail(a)}
+                    >
+                      <Eye className="mr-1 h-4 w-4" />
+                      History
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!accounts.length && (
+            <div className="py-12 text-center text-[#6e5d50]">
+              No accounts match the selected period and filters.
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-function UploadDialog(p:any){return <Dialog open={p.open} onOpenChange={p.setOpen}><DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>Upload MINT Report</DialogTitle><DialogDescription>Analytical Account Tracking exports may use .xls even when they contain tab-delimited text. Parsing happens securely on the server.</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><div><Label>Report month</Label><Select value={p.month} onValueChange={p.setMonth}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{Array.from({length:12},(_,i)=><SelectItem key={i+1} value={String(i+1)}>{new Date(2020,i,1).toLocaleDateString("en-US",{month:"long"})}</SelectItem>)}</SelectContent></Select></div><div><Label>Report year</Label><Input type="number" min="2000" max="2100" value={p.year} onChange={e=>p.setYear(e.target.value)}/></div><div className="sm:col-span-2"><Label>File (.xls, .csv, .tsv, .txt)</Label><Input type="file" accept=".xls,.csv,.tsv,.txt" onChange={e=>p.setFile(e.target.files?.[0]||null)}/></div></div>{p.preview&&<div className="space-y-3 rounded-lg border bg-[#f7f1e7] p-4"><div className="flex flex-wrap gap-2"><Badge>{p.preview.detectedDelimiter}-delimited</Badge><Badge variant="outline">{p.preview.rowsFound} rows found</Badge><Badge variant="outline">{p.preview.acceptedRows} accepted</Badge>{p.preview.rejectedRows>0&&<Badge variant="destructive">{p.preview.rejectedRows} rejected</Badge>}{p.preview.duplicateRows>0&&<Badge variant="secondary">{p.preview.duplicateRows} duplicate rows skipped</Badge>}</div><div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr><th className="p-2 text-left">Account</th><th>Booking Office</th><th>Room Nights</th><th>Revenue</th></tr></thead><tbody>{p.preview.preview.map((r:any,i:number)=><tr key={i}><td className="p-2">{r.account}</td><td>{r.bookingOffice}</td><td className="text-right">{r.roomNights}</td><td className="text-right">{money.format(r.roomRevenue)}</td></tr>)}</tbody></table></div>{p.preview.warnings.length>0&&<div className="text-xs text-[#6e5d50]">Optional columns not present: {p.preview.warnings.slice(0,6).join(", ")}{p.preview.warnings.length>6?"…":""}</div>}</div>}{p.replace&&<div className="rounded border border-amber-400 bg-amber-50 p-3 text-sm"><strong>Replace Month confirmation:</strong> Existing production for this month will be marked as replaced and excluded from reports. Select Import again to confirm.</div>}<DialogFooter><Button variant="outline" onClick={()=>p.setOpen(false)}>Cancel</Button>{!p.preview?<Button className={C.green} disabled={!p.file||p.previewing} onClick={p.onPreview}>{p.previewing?"Reading report…":"Validate & Preview"}</Button>:<Button className={C.green} disabled={p.importing} onClick={p.onImport}>{p.importing?"Importing…":p.replace?"Confirm Replace Month":"Import Report"}</Button>}</DialogFooter></DialogContent></Dialog>}
-function DetailDialog({account,onClose}:any){if(!account)return null;return <Dialog open onOpenChange={o=>!o&&onClose()}><DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto"><DialogHeader><DialogTitle>{account.displayName}</DialogTitle><DialogDescription>{account.highestLevelAccountId?`Highest-level UAID ${account.highestLevelAccountId}`:"Matched using normalized account name"}</DialogDescription></DialogHeader><div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">{[["Lifetime Room Nights",Math.round(account.roomNights).toLocaleString()],["Lifetime Revenue",money.format(account.roomRevenue)],["Weighted ADR",money2.format(account.adr)],["Average LOS",account.averageLos.toFixed(1)],["First Production",account.history[0]?.label],["Most Recent",account.history.at(-1)?.label],["Market Segment",account.marketSegment||"—"],["Rate Program",account.rateProgram||"—"]].map(([k,v])=><div className="rounded border bg-[#f7f1e7] p-3" key={k}><div className="text-xs text-[#6e5d50]">{k}</div><div className="font-semibold">{v}</div></div>)}</div><div><h3 className="mb-2 font-semibold">Monthly Room Revenue</h3><div className="h-56"><ResponsiveContainer><BarChart data={account.history}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="label"/><YAxis tickFormatter={v=>`$${Math.round(v/1000)}k`}/><Tooltip formatter={(v:any)=>money.format(v)}/><Bar dataKey="roomRevenue" fill="#2f5f46" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div></div><table className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Month</th><th className="text-right">Room Nights</th><th className="text-right">Revenue</th><th className="text-right">ADR</th><th className="p-2">Booking Offices</th></tr></thead><tbody>{account.history.map((h:any)=><tr className="border-b" key={h.index}><td className="p-2">{h.label}</td><td className="text-right">{Math.round(h.roomNights)}</td><td className="text-right">{money.format(h.roomRevenue)}</td><td className="text-right">{money2.format(h.adr)}</td><td className="p-2 text-xs">{h.bookingOffices.join(", ")||"—"}</td></tr>)}</tbody></table></DialogContent></Dialog>}
-function HistoryDialog({open,setOpen,imports,isAdmin,onDelete}:any){return <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85vh] max-w-5xl overflow-y-auto"><DialogHeader><DialogTitle>Import History</DialogTitle><DialogDescription>Every upload retains its filename, validation summary, checksum, and raw source rows.</DialogDescription></DialogHeader><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Period / File</th><th>Rows</th><th>Accounts</th><th>Room Nights</th><th>Revenue</th><th>Status</th><th></th></tr></thead><tbody>{imports.map((x:any)=><tr className="border-b" key={x.id}><td className="p-2"><div>{new Date(x.reportYear,x.reportMonth-1).toLocaleDateString("en-US",{month:"long",year:"numeric"})}</div><div className="max-w-64 truncate text-xs text-[#6e5d50]">{x.originalFilename}</div></td><td>{x.acceptedRowCount}{x.rejectedRowCount?` (${x.rejectedRowCount} rejected)`:""}</td><td>{x.accounts}</td><td>{Math.round(x.roomNights).toLocaleString()}</td><td>{money.format(x.roomRevenue)}</td><td><Badge variant={x.status==="completed"?"outline":"secondary"}>{x.status}</Badge></td><td>{isAdmin&&x.status==="completed"&&<Button size="icon" variant="ghost" title="Delete import" onClick={()=>onDelete(x.id)}><Trash2 className="h-4 w-4"/></Button>}</td></tr>)}</tbody></table>{!imports.length&&<div className="py-10 text-center text-[#6e5d50]">No reports have been imported yet.</div>}</div></DialogContent></Dialog>}
+function UploadDialog(p: any) {
+  return (
+    <Dialog open={p.open} onOpenChange={p.setOpen}>
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Upload MINT Report</DialogTitle>
+          <DialogDescription>
+            Analytical Account Tracking exports may use .xls even when they
+            contain tab-delimited text. Parsing happens securely on the server.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <Label>Production report type</Label>
+            <Select value={p.reportType} onValueChange={p.setReportType}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="marriott_mint_group_account_tracking">
+                  Group Account Production
+                </SelectItem>
+                <SelectItem value="marriott_mint_special_corp_government">
+                  Special Corp/Govt Production
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {p.preview && (
+              <p className="mt-1 text-xs text-[#5f5247]">
+                Suggested from the report's Market Segment:{" "}
+                {p.preview.suggestedReportType ===
+                "marriott_mint_special_corp_government"
+                  ? "Special Corp/Govt"
+                  : "Group Account Production"}
+                .
+              </p>
+            )}
+          </div>
+          <div>
+            <Label>Report month</Label>
+            <Select value={p.month} onValueChange={p.setMonth}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 12 }, (_, i) => (
+                  <SelectItem key={i + 1} value={String(i + 1)}>
+                    {new Date(2020, i, 1).toLocaleDateString("en-US", {
+                      month: "long",
+                    })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Report year</Label>
+            <Input
+              type="number"
+              min="2000"
+              max="2100"
+              value={p.year}
+              onChange={(e) => p.setYear(e.target.value)}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Label>File (.xls, .csv, .tsv, .txt)</Label>
+            <Input
+              type="file"
+              accept=".xls,.csv,.tsv,.txt"
+              onChange={(e) => p.setFile(e.target.files?.[0] || null)}
+            />
+          </div>
+        </div>
+        {p.preview && (
+          <div className="space-y-3 rounded-lg border bg-[#f7f1e7] p-4">
+            <div className="flex flex-wrap gap-2">
+              <Badge>{p.preview.detectedDelimiter}-delimited</Badge>
+              <Badge variant="outline">{p.preview.rowsFound} rows found</Badge>
+              <Badge variant="outline">{p.preview.acceptedRows} accepted</Badge>
+              {p.preview.rejectedRows > 0 && (
+                <Badge variant="destructive">
+                  {p.preview.rejectedRows} rejected
+                </Badge>
+              )}
+              {p.preview.duplicateRows > 0 && (
+                <Badge variant="secondary">
+                  {p.preview.duplicateRows} duplicate rows skipped
+                </Badge>
+              )}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr>
+                    <th className="p-2 text-left">Account</th>
+                    <th>Booking Office</th>
+                    <th>Room Nights</th>
+                    <th>Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {p.preview.preview.map((r: any, i: number) => (
+                    <tr key={i}>
+                      <td className="p-2">{r.account}</td>
+                      <td>{r.bookingOffice}</td>
+                      <td className="text-right">{r.roomNights}</td>
+                      <td className="text-right">
+                        {money.format(r.roomRevenue)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {p.preview.warnings.length > 0 && (
+              <div className="text-xs text-[#6e5d50]">
+                Optional columns not present:{" "}
+                {p.preview.warnings.slice(0, 6).join(", ")}
+                {p.preview.warnings.length > 6 ? "…" : ""}
+              </div>
+            )}
+          </div>
+        )}
+        {p.replace && (
+          <div className="rounded border border-amber-400 bg-amber-50 p-3 text-sm">
+            <strong>Replace Month confirmation:</strong> Existing production for
+            this month will be marked as replaced and excluded from reports.
+            Select Import again to confirm.
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => p.setOpen(false)}>
+            Cancel
+          </Button>
+          {!p.preview ? (
+            <Button
+              className={C.green}
+              disabled={!p.file || p.previewing}
+              onClick={p.onPreview}
+            >
+              {p.previewing ? "Reading report…" : "Validate & Preview"}
+            </Button>
+          ) : (
+            <Button
+              className={C.green}
+              disabled={p.importing}
+              onClick={p.onImport}
+            >
+              {p.importing
+                ? "Importing…"
+                : p.replace
+                  ? "Confirm Replace Month"
+                  : "Import Report"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+function DetailDialog({ account, hotelId, onClose }: any) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [contactName, setContactName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [note, setNote] = useState("");
+  const accountUrl = account
+    ? `/api/courtyard/sales-intelligence/accounts/${encodeURIComponent(account.key)}`
+    : "";
+  const crm = useQuery({
+    queryKey: ["sales-account-crm", hotelId, account?.key],
+    queryFn: () => json(`${accountUrl}?hotelId=${encodeURIComponent(hotelId)}`),
+    enabled: Boolean(account && hotelId),
+  });
+  useEffect(() => {
+    if (!crm.data?.profile) return;
+    setContactName(crm.data.profile.contactName || "");
+    setPhone(crm.data.profile.phone || "");
+    setEmail(crm.data.profile.email || "");
+  }, [crm.data]);
+  const refreshCrm = () =>
+    qc.invalidateQueries({
+      queryKey: ["sales-account-crm", hotelId, account?.key],
+    });
+  const saveContact = useMutation({
+    mutationFn: () =>
+      json(accountUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hotelId, contactName, phone, email }),
+      }),
+    onSuccess: () => {
+      refreshCrm();
+      toast({ title: "Contact information saved" });
+    },
+    onError: (error: Error) =>
+      toast({
+        title: "Could not save contact",
+        description: error.message,
+        variant: "destructive",
+      }),
+  });
+  const addNote = useMutation({
+    mutationFn: () =>
+      json(`${accountUrl}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hotelId, note }),
+      }),
+    onSuccess: () => {
+      setNote("");
+      refreshCrm();
+      toast({ title: "Contact note added" });
+    },
+    onError: (error: Error) =>
+      toast({
+        title: "Could not add note",
+        description: error.message,
+        variant: "destructive",
+      }),
+  });
+  if (!account) return null;
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{account.displayName}</DialogTitle>
+          <DialogDescription>
+            {account.highestLevelAccountId
+              ? `Highest-level UAID ${account.highestLevelAccountId}`
+              : "Matched using normalized account name"}
+          </DialogDescription>
+        </DialogHeader>
+        <Card className={C.shell}>
+          <CardHeader>
+            <CardTitle className="text-xl">Sales Contact</CardTitle>
+            <CardDescription>
+              Contact details and dated outreach activity are shared across this
+              account's production history.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <Label>Contact name</Label>
+                <Input
+                  value={contactName}
+                  onChange={(event) => setContactName(event.target.value)}
+                  placeholder="Name"
+                />
+              </div>
+              <div>
+                <Label>Phone number</Label>
+                <Input
+                  type="tel"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  placeholder="(512) 555-0123"
+                />
+              </div>
+              <div>
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="contact@company.com"
+                />
+              </div>
+            </div>
+            <Button
+              className={C.green}
+              disabled={saveContact.isPending}
+              onClick={() => saveContact.mutate()}
+            >
+              {saveContact.isPending ? "Saving…" : "Save Contact"}
+            </Button>
+            <div className="border-t border-[#deceba] pt-4">
+              <Label>New contact note</Label>
+              <Textarea
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="Called and left a voicemail regarding fall group dates…"
+                rows={3}
+              />
+              <Button
+                className={`mt-2 ${C.green}`}
+                disabled={!note.trim() || addNote.isPending}
+                onClick={() => addNote.mutate()}
+              >
+                {addNote.isPending ? "Adding…" : "Add Dated Note"}
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <h3 className="font-semibold">Contact History</h3>
+              {crm.data?.notes?.map((item: any) => (
+                <div
+                  key={item.id}
+                  className="rounded-md border border-[#deceba] bg-white p-3"
+                >
+                  <div className="mb-1 text-xs font-medium text-[#6e5d50]">
+                    {new Date(item.createdAt).toLocaleString()}
+                  </div>
+                  <div className="whitespace-pre-wrap text-sm">{item.note}</div>
+                </div>
+              ))}
+              {!crm.isLoading && !crm.data?.notes?.length && (
+                <p className="text-sm text-[#6e5d50]">No outreach notes yet.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          {[
+            [
+              "Lifetime Room Nights",
+              Math.round(account.roomNights).toLocaleString(),
+            ],
+            ["Lifetime Revenue", money.format(account.roomRevenue)],
+            ["Weighted ADR", money2.format(account.adr)],
+            ["Average LOS", account.averageLos.toFixed(1)],
+            ["First Production", account.history[0]?.label],
+            ["Most Recent", account.history.at(-1)?.label],
+            ["Market Segment", account.marketSegment || "—"],
+            ["Rate Program", account.rateProgram || "—"],
+          ].map(([k, v]) => (
+            <div className="rounded border bg-[#f7f1e7] p-3" key={k}>
+              <div className="text-xs text-[#6e5d50]">{k}</div>
+              <div className="font-semibold">{v}</div>
+            </div>
+          ))}
+        </div>
+        <div>
+          <h3 className="mb-2 font-semibold">Monthly Room Revenue</h3>
+          <div className="h-56">
+            <ResponsiveContainer>
+              <BarChart data={account.history}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="label" />
+                <YAxis tickFormatter={(v) => `$${Math.round(v / 1000)}k`} />
+                <Tooltip formatter={(v: any) => money.format(v)} />
+                <Bar
+                  dataKey="roomRevenue"
+                  fill="#2f5f46"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left">
+              <th className="p-2">Month</th>
+              <th className="text-right">Room Nights</th>
+              <th className="text-right">Revenue</th>
+              <th className="text-right">ADR</th>
+              <th className="p-2">Booking Offices</th>
+            </tr>
+          </thead>
+          <tbody>
+            {account.history.map((h: any) => (
+              <tr className="border-b" key={h.index}>
+                <td className="p-2">{h.label}</td>
+                <td className="text-right">{Math.round(h.roomNights)}</td>
+                <td className="text-right">{money.format(h.roomRevenue)}</td>
+                <td className="text-right">{money2.format(h.adr)}</td>
+                <td className="p-2 text-xs">
+                  {h.bookingOffices.join(", ") || "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </DialogContent>
+    </Dialog>
+  );
+}
+function HistoryDialog({ open, setOpen, imports, isAdmin, onDelete }: any) {
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-h-[85vh] max-w-5xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Import History</DialogTitle>
+          <DialogDescription>
+            Every upload retains its filename, validation summary, checksum, and
+            raw source rows.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="p-2">Period / File</th>
+                <th>Rows</th>
+                <th>Accounts</th>
+                <th>Room Nights</th>
+                <th>Revenue</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {imports.map((x: any) => (
+                <tr className="border-b" key={x.id}>
+                  <td className="p-2">
+                    <div>
+                      {new Date(
+                        x.reportYear,
+                        x.reportMonth - 1,
+                      ).toLocaleDateString("en-US", {
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </div>
+                    <div className="max-w-64 truncate text-xs text-[#6e5d50]">
+                      {x.originalFilename}
+                    </div>
+                    <div className="text-xs font-medium text-[#2f5f46]">
+                      {x.sourceReportType === "marriott_mint_special_corp_government"
+                        ? "Special Corp/Govt"
+                        : "Group Account Production"}
+                    </div>
+                  </td>
+                  <td>
+                    {x.acceptedRowCount}
+                    {x.rejectedRowCount
+                      ? ` (${x.rejectedRowCount} rejected)`
+                      : ""}
+                  </td>
+                  <td>{x.accounts}</td>
+                  <td>{Math.round(x.roomNights).toLocaleString()}</td>
+                  <td>{money.format(x.roomRevenue)}</td>
+                  <td>
+                    <Badge
+                      variant={
+                        x.status === "completed" ? "outline" : "secondary"
+                      }
+                    >
+                      {x.status}
+                    </Badge>
+                  </td>
+                  <td>
+                    {isAdmin && x.status === "completed" && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title="Delete import"
+                        onClick={() => onDelete(x.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!imports.length && (
+            <div className="py-10 text-center text-[#6e5d50]">
+              No reports have been imported yet.
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -101,6 +101,7 @@ import ComptrollerPage from "@/pages/comptroller";
 import DosReportingPage from "@/pages/dos-reporting";
 import CourtyardPortalPage from "@/pages/courtyard";
 import CourtyardBudgetPage from "@/pages/courtyard-budget";
+import CourtyardSalesIntelligencePage from "@/pages/courtyard-sales-intelligence";
 import BankDepositPage from "@/pages/bank-deposit";
 import IncidentReportPage from "@/pages/incident-report";
 import IncidentReportSharePage from "@/pages/incident-report-share";
@@ -308,6 +309,7 @@ function Router() {
       <Route path="/tips/admin" component={TipsPage} />
       <Route path="/courtyard" component={CourtyardPortalPage} />
       <Route path="/courtyard/budget" component={CourtyardBudgetPage} />
+      <Route path="/courtyard/sales-intelligence" component={CourtyardSalesIntelligencePage} />
       <Route path="/bankdeposit" component={BankDepositPage} />
       <Route path="/schedule" component={SchedulePage} />
       <Route path="/opsreport" component={OpsReportPage} />

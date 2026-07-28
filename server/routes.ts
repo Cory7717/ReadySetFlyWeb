@@ -91,6 +91,7 @@ import { registerOpsReportRoutes } from "./routes/opsReport";
 import { registerDosReportingRoutes } from "./routes/dosReporting";
 import { registerIncidentReportRoutes } from "./routes/incidentReport";
 import { registerCourtyardBudgetRoutes } from "./routes/courtyardBudget";
+import { registerCourtyardSalesIntelligenceRoutes } from "./routes/courtyardSalesIntelligence";
 import { registerComptrollerRoutes } from "./routes/comptroller";
 import { registerVehicleListingRoutes } from "./routes/vehicleListings";
 import {
@@ -5406,6 +5407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerDosReportingRoutes(app);
   registerIncidentReportRoutes(app);
   registerCourtyardBudgetRoutes(app);
+  registerCourtyardSalesIntelligenceRoutes(app);
   registerComptrollerRoutes(app);
   registerVehicleListingRoutes(app);
   app.use("/api/fuel-prices", fuelPricesRouter);

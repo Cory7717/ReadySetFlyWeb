@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Banknote, Calculator, CalendarClock, CalendarDays, ClipboardPlus, Coffee, DollarSign, DoorOpen, FileSpreadsheet, KeyRound, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
+import { Banknote, BarChart3, Calculator, CalendarClock, CalendarDays, ClipboardPlus, Coffee, DollarSign, DoorOpen, FileSpreadsheet, KeyRound, LogOut, Search, Settings2, ShieldCheck } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -40,7 +40,7 @@ type CourtyardUser = {
   canAccessOpsReport?: boolean;
 };
 
-type ToolKey = "schedule" | "tips" | "opsreport" | "dosreporting" | "incidentreport" | "bankdeposit" | "budget" | "comptroller";
+type ToolKey = "schedule" | "tips" | "opsreport" | "dosreporting" | "salesintelligence" | "incidentreport" | "bankdeposit" | "budget" | "comptroller";
 type ToolAccessResponse = { users: CourtyardUser[]; tools: ToolKey[] };
 const DEFAULT_TOOL_KEYS: ToolKey[] = ["schedule", "tips", "opsreport", "dosreporting", "incidentreport", "bankdeposit", "budget", "comptroller"];
 
@@ -263,6 +263,7 @@ function CourtyardToolAccessAdmin() {
     tips: "Tips",
     opsreport: "Ops Report",
     dosreporting: "DOS Reporting",
+    salesintelligence: "Sales Intelligence",
     incidentreport: "Incident Report",
     bankdeposit: "Bank Deposit",
     budget: "Budget",
@@ -473,6 +474,15 @@ export default function CourtyardPortalPage() {
       tone: C.green,
       disabled: false,
     }] : []),
+    {
+      href: "/courtyard/sales-intelligence",
+      icon: BarChart3,
+      title: "Sales Intelligence",
+      description: "Upload Marriott MINT account production reports, review historical group business, and identify accounts that may need recovery outreach.",
+      action: "Open Sales Intelligence",
+      tone: C.green,
+      disabled: !toolEnabled(user, "salesintelligence") && !toolEnabled(user, "dosreporting"),
+    },
   ];
 
   return (

@@ -878,6 +878,59 @@ export const courtyardDosReports = pgTable("courtyard_dos_reports", {
   index("idx_courtyard_dos_report_updated").on(table.updatedAt),
 ]);
 
+export const courtyardSalesImportBatches = pgTable("courtyard_sales_import_batches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  reportYear: integer("report_year").notNull(),
+  reportMonth: integer("report_month").notNull(),
+  originalFilename: text("original_filename").notNull(),
+  detectedDelimiter: text("detected_delimiter").notNull(),
+  sourceReportType: text("source_report_type").notNull().default("marriott_mint_analytical_account_tracking"),
+  uploadedBy: varchar("uploaded_by").references(() => tipsUsers.id, { onDelete: "set null" }),
+  rowCount: integer("row_count").notNull().default(0),
+  acceptedRowCount: integer("accepted_row_count").notNull().default(0),
+  rejectedRowCount: integer("rejected_row_count").notNull().default(0),
+  duplicateRowCount: integer("duplicate_row_count").notNull().default(0),
+  fileChecksum: text("file_checksum").notNull(),
+  status: text("status").notNull().default("completed"),
+  validationSummaryJson: jsonb("validation_summary_json").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  replacedAt: timestamp("replaced_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_courtyard_sales_import_period").on(table.hotelId, table.reportYear, table.reportMonth),
+  index("idx_courtyard_sales_import_checksum").on(table.hotelId, table.fileChecksum),
+]);
+
+export const courtyardSalesRawRows = pgTable("courtyard_sales_raw_rows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  importBatchId: varchar("import_batch_id").notNull().references(() => courtyardSalesImportBatches.id, { onDelete: "cascade" }),
+  sourceRowNumber: integer("source_row_number").notNull(),
+  rawPayloadJson: jsonb("raw_payload_json").$type<Record<string, string>>().notNull(),
+  normalizedRowHash: text("normalized_row_hash").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("idx_courtyard_sales_raw_batch").on(table.importBatchId)]);
+
+export const courtyardSalesProduction = pgTable("courtyard_sales_production", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  importBatchId: varchar("import_batch_id").notNull().references(() => courtyardSalesImportBatches.id, { onDelete: "cascade" }),
+  hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  reportYear: integer("report_year").notNull(), reportMonth: integer("report_month").notNull(),
+  globalUltimateAccountName: text("global_ultimate_account_name"), highestLevelAccountId: text("highest_level_account_id"),
+  accountName: text("account_name"), accountId: text("account_id"), accountType: text("account_type"),
+  marketCategory: text("market_category"), marketSegment: text("market_segment"),
+  rateProgramCode: text("rate_program_code"), rateProgram: text("rate_program"), bookingOffice: text("booking_office"),
+  roomNights: numeric("room_nights", { precision: 14, scale: 3 }).notNull().default("0"),
+  roomRevenue: numeric("room_revenue", { precision: 16, scale: 2 }).notNull().default("0"),
+  roomAdr: numeric("room_adr", { precision: 14, scale: 2 }), totalRevenue: numeric("total_revenue", { precision: 16, scale: 2 }),
+  totalAdr: numeric("total_adr", { precision: 14, scale: 2 }), averageLos: numeric("average_los", { precision: 12, scale: 3 }),
+  fees: numeric("fees", { precision: 16, scale: 2 }), taxes: numeric("taxes", { precision: 16, scale: 2 }), addOns: numeric("add_ons", { precision: 16, scale: 2 }),
+  sourceRowNumber: integer("source_row_number").notNull(), normalizedAccountKey: text("normalized_account_key").notNull(), normalizedRowHash: text("normalized_row_hash").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_courtyard_sales_production_period").on(table.hotelId, table.reportYear, table.reportMonth),
+  index("idx_courtyard_sales_production_account").on(table.hotelId, table.normalizedAccountKey),
+]);
+
 export const courtyardIncidentReports = pgTable("courtyard_incident_reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   propertyId: text("property_id").notNull().default("courtyard-austin-lakeline"),

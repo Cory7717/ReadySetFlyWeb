@@ -24,6 +24,57 @@
   }
 }
 
+/* Courtyard Sales Intelligence uses a fixed, accessible light palette. The
+   application theme otherwise gives shared cards a dark gradient in dark mode. */
+.sales-intelligence-content [data-slot="card"],
+.sales-intelligence-content .rsf-card-shell {
+  color: #201814 !important;
+  background: #fffaf2 !important;
+  border-color: #cdbda8 !important;
+}
+
+.sales-intelligence-content [data-slot="card-description"],
+.sales-intelligence-content .text-muted-foreground {
+  color: #5f5247 !important;
+}
+
+.sales-intelligence-content input,
+.sales-intelligence-content button[role="combobox"] {
+  color: #201814 !important;
+  background: #ffffff !important;
+  border-color: #8d765a !important;
+}
+
+.sales-intelligence-content input::placeholder {
+  color: #6b7280 !important;
+  opacity: 1;
+}
+
+.sales-intelligence-content [role="tablist"] {
+  background: #e4d6c2 !important;
+}
+
+.sales-intelligence-content [role="tab"] {
+  color: #5a493c !important;
+}
+
+.sales-intelligence-content [role="tab"][data-state="active"] {
+  color: #ffffff !important;
+  background: #2f5f46 !important;
+}
+
+.sales-intelligence-content thead {
+  color: #59483b !important;
+}
+
+.sales-intelligence-content tbody {
+  color: #201814 !important;
+}
+
+.sales-intelligence-content tbody tr:hover {
+  background: #f1e5d4 !important;
+}
+
 .uppy-DashboardItem-previewImg {
   object-fit: contain !important;
   background-color: #fff;

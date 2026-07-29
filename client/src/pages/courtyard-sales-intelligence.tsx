@@ -302,7 +302,12 @@ export default function CourtyardSalesIntelligence() {
                 roomRevenue: h.roomRevenue,
                 adr: h.adr,
                 averageLos: h.averageLos,
-                status: a.firstPeriod === h.index ? "New" : a.status,
+                status:
+                  !String(a.key).startsWith("stay-segment:") &&
+                  !String(a.key).startsWith("stay-company:") &&
+                  a.firstPeriod === h.index
+                    ? "New"
+                    : a.status,
               }
             : null;
         })
@@ -352,6 +357,16 @@ export default function CourtyardSalesIntelligence() {
         : 0,
     };
   }, [visibleAccounts]);
+  const entityLabel =
+    view === "total"
+      ? "Segments"
+      : view === "segment:Group"
+        ? "Groups"
+        : ["segment:Special Corp", "segment:Government"].includes(view)
+          ? "Prospects"
+          : view.startsWith("segment:")
+            ? "Segments"
+            : "Accounts";
   const selectedPeriodLabel =
     period === "all"
       ? `Calendar Year ${latestImportedYear || ""}`
@@ -363,6 +378,12 @@ export default function CourtyardSalesIntelligence() {
             1,
           ).toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const latestImportedLabel = dashboard.data?.periods?.[0]?.label;
+  const selectedDataHealth = (dashboard.data?.dataHealth || []).find(
+    (item: any) =>
+      item.year === activeYear &&
+      (activePeriodValue === "total" ||
+        item.month === Number(activePeriodValue)),
+  );
   if (me.isLoading)
     return (
       <div className={`min-h-screen p-8 ${C.page}`}>
@@ -395,8 +416,8 @@ export default function CourtyardSalesIntelligence() {
             </div>
             <h1 className="text-3xl font-semibold">Sales Intelligence</h1>
             <p className={C.muted}>
-              Review historical Marriott account production, track monthly
-              trends, and identify business that may need recovery outreach.
+              Review hotel production, compare market segments, analyze group
+              history, identify prospects, and manage ongoing sales efforts.
             </p>
           </div>
           <div className="flex gap-2">
@@ -416,7 +437,7 @@ export default function CourtyardSalesIntelligence() {
             </Button>
             <Button className={C.green} onClick={() => setUploadOpen(true)}>
               <Upload className="mr-2 h-4 w-4" />
-              Upload MINT Report
+              Upload Sales Reports
             </Button>
           </div>
         </div>
@@ -514,23 +535,70 @@ export default function CourtyardSalesIntelligence() {
               )}
           </CardContent>
         </Card>
+        {selectedDataHealth && (
+          <Card className={C.shell}>
+            <CardHeader className="pb-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-lg">Monthly Data Health</CardTitle>
+                  <CardDescription>
+                    {activePeriodValue === "total"
+                      ? "Latest imported month: "
+                      : ""}
+                    {selectedDataHealth.label}
+                  </CardDescription>
+                </div>
+                <Badge
+                  className={
+                    selectedDataHealth.status === "Complete"
+                      ? "!bg-[#2f5f46] !text-white"
+                      : "!bg-amber-100 !text-amber-900"
+                  }
+                >
+                  {selectedDataHealth.status}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-2 md:grid-cols-3">
+              {selectedDataHealth.sources.map((source: any) => (
+                <div
+                  key={source.sourceReportType}
+                  className="rounded-md border border-[#deceba] bg-white p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-[#6e5d50]">
+                        {source.system} · {source.purpose}
+                      </div>
+                      <div className="font-medium">{source.label}</div>
+                    </div>
+                    <Badge variant={source.imported ? "outline" : "secondary"}>
+                      {source.imported ? "Imported" : "Missing"}
+                    </Badge>
+                  </div>
+                  {source.imported &&
+                    source.sourceReportType !==
+                      "stay_reservations_company_names" && (
+                      <div className="mt-2 text-sm text-[#5f5247]">
+                        {Math.round(source.roomNights).toLocaleString()} rooms ·{" "}
+                        {money.format(source.roomRevenue)}
+                      </div>
+                    )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {[
-            [
-              activeYear >= 2026 &&
-              (view === "total" || view.startsWith("segment:"))
-                ? "Segments"
-                : "Accounts",
-              totals.accounts,
-            ],
+            [activeYear >= 2026 ? entityLabel : "Accounts", totals.accounts],
             ["Room Nights", Math.round(totals.roomNights).toLocaleString()],
             ["Room Revenue", money.format(totals.roomRevenue)],
             ["ADR", money2.format(totals.adr)],
             ["Average Length of Stay", totals.los.toFixed(1)],
             [
-              activeYear >= 2026 &&
-              (view === "total" || view.startsWith("segment:"))
-                ? "Recurring Segments"
+              activeYear >= 2026
+                ? `Recurring ${entityLabel}`
                 : "Recurring Accounts",
               totals.recurring,
             ],
@@ -683,6 +751,18 @@ function AccountTable({
                 <SelectItem value="Potential Recovery">
                   Potential Recovery
                 </SelectItem>
+                <SelectItem value="Insufficient Data">
+                  Insufficient Data
+                </SelectItem>
+                <SelectItem value="Identified Prospect">
+                  Identified Prospect
+                </SelectItem>
+                <SelectItem value="Growing">Growing</SelectItem>
+                <SelectItem value="Stable">Stable</SelectItem>
+                <SelectItem value="Declining">Declining</SelectItem>
+                <SelectItem value="Insufficient History">
+                  Insufficient History
+                </SelectItem>
               </SelectContent>
             </Select>
           )}
@@ -827,7 +907,8 @@ function SalesCrm({ hotelId, accounts }: any) {
       accounts
         .filter(
           (a: any) =>
-            ["group", "special"].includes(a.reportCategory) &&
+            (["group", "special", "corporate"].includes(a.reportCategory) ||
+              String(a.key).startsWith("stay-company:")) &&
             !String(a.key).startsWith("stay-segment:"),
         )
         .map((a: any) => [a.key, a]),
@@ -861,6 +942,45 @@ function SalesCrm({ hotelId, accounts }: any) {
     [details, setDetails] = useState(""),
     [followUp, setFollowUp] = useState("");
   const manualAccountKey = `manual:${newAccountName.trim().toLowerCase().replace(/\s+/g, " ")}`;
+  const salesFocus = useMemo(() => {
+    const opportunities = crm.data?.opportunities || [];
+    const activities = crm.data?.activities || [];
+    const contacted = new Set(
+      activities.map((activity: any) => activity.normalizedAccountKey),
+    );
+    const activeOpportunityKeys = new Set(
+      opportunities
+        .filter(
+          (opportunity: any) =>
+            !["definite", "lost"].includes(opportunity.stage),
+        )
+        .map((opportunity: any) => opportunity.normalizedAccountKey),
+    );
+    const today = new Date();
+    const todayKey = today.toLocaleDateString("en-CA");
+    return {
+      overdue: (crm.data?.queue || []).filter((item: any) => item.overdue),
+      dueToday: (crm.data?.queue || []).filter(
+        (item: any) =>
+          item.nextActionAt &&
+          new Date(item.nextActionAt).toLocaleDateString("en-CA") === todayKey,
+      ),
+      neverContacted: accountOptions
+        .filter((account: any) => !contacted.has(account.key))
+        .slice(0, 8),
+      recurringWithoutOpportunity: accountOptions
+        .filter(
+          (account: any) =>
+            account.recurring &&
+            !String(account.key).startsWith("stay-segment:") &&
+            !activeOpportunityKeys.has(account.key),
+        )
+        .slice(0, 8),
+      recovery: accountOptions
+        .filter((account: any) => account.status === "Potential Recovery")
+        .slice(0, 8),
+    };
+  }, [accountOptions, accounts, crm.data]);
   const refresh = () =>
     qc.invalidateQueries({ queryKey: ["sales-crm", hotelId] });
   const createOpportunity = useMutation({
@@ -987,6 +1107,49 @@ function SalesCrm({ hotelId, accounts }: any) {
           </Card>
         ))}
       </section>
+      <Card className={C.shell}>
+        <CardHeader>
+          <CardTitle>Today’s Sales Focus</CardTitle>
+          <CardDescription>
+            A prioritized working list assembled from production history, CRM
+            activity, and scheduled follow-ups.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {[
+            ["Overdue", salesFocus.overdue, "accountName"],
+            ["Due Today", salesFocus.dueToday, "accountName"],
+            ["Never Contacted", salesFocus.neverContacted, "displayName"],
+            [
+              "Recurring / No Opportunity",
+              salesFocus.recurringWithoutOpportunity,
+              "displayName",
+            ],
+            ["Recovery Candidates", salesFocus.recovery, "displayName"],
+          ].map(([label, items, nameField]: any) => (
+            <div
+              key={label}
+              className="rounded-md border border-[#deceba] bg-white p-3"
+            >
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="font-semibold">{label}</div>
+                <Badge variant="outline">{items.length}</Badge>
+              </div>
+              <div className="space-y-1 text-sm">
+                {items.slice(0, 5).map((item: any) => (
+                  <div
+                    key={item.id || item.key}
+                    className="truncate text-[#405f4b]"
+                  >
+                    {item[nameField]}
+                  </div>
+                ))}
+                {!items.length && <div className="text-[#6e5d50]">None</div>}
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
       <Tabs defaultValue="queue">
         <TabsList>
           <TabsTrigger value="queue">Follow-Up Queue</TabsTrigger>
@@ -1380,17 +1543,19 @@ function WeeklySalesReport({ hotelId }: any) {
             {report.data?.report?.status || "New Draft"}
           </Badge>
         </div>
-        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-8">
           {[
             ["Activities", m.totalActivities || 0],
             ["Calls", m.byType?.call || 0],
             ["Emails", m.byType?.email || 0],
+            ["Proposals", m.byType?.proposal || 0],
             [
               "Meetings/Tours",
               (m.byType?.meeting || 0) + (m.byType?.site_tour || 0),
             ],
             ["Pipeline Rooms", Math.round(m.pipelineRoomNights || 0)],
             ["Pipeline Revenue", money.format(m.pipelineRevenue || 0)],
+            ["Definite / Won", m.won || 0],
           ].map(([k, v]) => (
             <div className="rounded border bg-white p-3" key={k}>
               <div className="text-xs text-[#5f5247]">{k}</div>
@@ -1569,13 +1734,7 @@ function UploadDialog(p: any) {
     <Dialog open={p.open} onOpenChange={p.setOpen}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {usesStayFormat
-              ? p.reportType === "stay_group_summary"
-                ? "Upload STAY Group Summary"
-                : "Upload STAY Hotel Production"
-              : "Upload MINT Report"}
-          </DialogTitle>
+          <DialogTitle>Upload Sales Reports</DialogTitle>
           <DialogDescription>
             {usesStayFormat
               ? "Upload the selected monthly STAY report. Hotel Production controls totals; Named Groups builds the prospecting history."
@@ -2119,18 +2278,11 @@ function HistoryDialog({ open, setOpen, imports, isAdmin, onDelete }: any) {
                       {x.originalFilename}
                     </div>
                     <div className="text-xs font-medium text-[#2f5f46]">
-                      {x.sourceReportType === "stay_group_summary"
-                        ? "STAY Named Groups"
-                        : x.sourceReportType ===
-                            "stay_revenue_by_market_segment_with_groups"
-                          ? "STAY Market Segments"
-                          : x.sourceReportType ===
-                              "marriott_mint_all_market_segments"
-                            ? "All Market Segments"
-                            : x.sourceReportType ===
-                                "marriott_mint_special_corp_government"
-                              ? "Special Corp/Govt"
-                              : "Group Account Production"}
+                      {x.system ? `${x.system} · ` : ""}
+                      {x.label || x.sourceReportType}
+                    </div>
+                    <div className="text-xs text-[#6e5d50]">
+                      {x.purpose || "Historical Sales Intelligence"}
                     </div>
                   </td>
                   <td>

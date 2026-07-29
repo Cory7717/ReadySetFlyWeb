@@ -1,13 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  consecutiveComparableMonths,
   detectStaySalesReportType,
   normalizeSalesMarketSegment,
   parseSalesImport,
   parseStayGroupSummaryImport,
   parseStayMarketSegmentImport,
+  parseStayReservationsCompanyImport,
   recoveryPriority,
 } from "../../server/courtyardSalesImport";
+
+test("recovery aging stops when a comparable monthly source is missing", () => {
+  assert.equal(
+    consecutiveComparableMonths(100, 103, new Set([101, 102, 103])),
+    3,
+  );
+  assert.equal(
+    consecutiveComparableMonths(100, 103, new Set([101, 103])),
+    null,
+  );
+  assert.equal(consecutiveComparableMonths(103, 103, new Set([103])), 0);
+});
 
 test("combines related STAY market segments into sales families", () => {
   assert.equal(normalizeSalesMarketSegment("Group Contract"), "Group");
@@ -113,4 +127,31 @@ test("parses parent Group Summary rows and uses picked up as room production", (
   assert.equal(result.accepted[0].roomNights, 16);
   assert.equal(result.accepted[0].blockedRoomNights, 18);
   assert.equal(result.accepted[0].released, true);
+});
+
+test("aggregates the current daily-detail Group Summary layout by booking code", () => {
+  const input = Buffer.from(
+    "GROUP NAME,GROUP CODE,ARRIVAL DATE,DEPARTURE DATE,DATES,ROOM TYPE,CONTRACTED,BLOCKED,PICKED UP,REMAINING,CANCELLED,NO SHOWS,ROOM REVENUE,ADR,CUT OFF DATE,RELEASED\nExample Team,ABC123,Jan 01 2026,Jan 03 2026,Jan 01 2026,King,2,2,2,0,0,0,200,100,Dec 20 2025,Yes\nExample Team,ABC123,Jan 01 2026,Jan 03 2026,Jan 02 2026,King,2,1,1,0,1,0,100,100,Dec 20 2025,Yes\n",
+  );
+  const result = parseStayGroupSummaryImport(input);
+  assert.equal(result.accepted.length, 1);
+  assert.equal(result.accepted[0].accountName, "Example Team");
+  assert.equal(result.accepted[0].roomNights, 3);
+  assert.equal(result.accepted[0].roomRevenue, 300);
+});
+
+test("Reservations Report retains company names without adding production", () => {
+  const input = Buffer.from(
+    "GUEST NAME,ARRIVE,DEPART,RATE($),COMPANY,GROUP\nPerson One,2026-01-01,2026-01-02,RFP1 - 100,Acme Corp,\nPerson Two,2026-01-02,2026-01-03,GOV1 - 110,Government of The United States,\nPerson Three,2026-01-03,2026-01-04,AAA - 90,AAA,\n",
+  );
+  const result = parseStayReservationsCompanyImport(input);
+  assert.equal(result.accepted.length, 2);
+  assert.equal(
+    result.accepted.reduce((sum, row) => sum + row.roomRevenue, 0),
+    0,
+  );
+  assert.deepEqual(result.accepted.map((row) => row.marketSegment).sort(), [
+    "Government",
+    "Special Corp",
+  ]);
 });

@@ -21,6 +21,7 @@ import {
 } from "@shared/schema";
 import {
   MAX_SALES_IMPORT_BYTES,
+  consecutiveComparableMonths,
   detectStaySalesReportType,
   parseSalesImport,
   parseStayGroupSummaryImport,
@@ -38,6 +39,46 @@ const ALL_MARKET_REPORT_TYPE = "marriott_mint_all_market_segments";
 const STAY_MARKET_REPORT_TYPE = "stay_revenue_by_market_segment_with_groups";
 const STAY_GROUP_SUMMARY_REPORT_TYPE = "stay_group_summary";
 const STAY_RESERVATIONS_REPORT_TYPE = "stay_reservations_company_names";
+const REPORT_METADATA: Record<
+  string,
+  { system: string; label: string; purpose: string }
+> = {
+  [STAY_MARKET_REPORT_TYPE]: {
+    system: "STAY",
+    label: "Revenue by Market Segment",
+    purpose: "Hotel Production",
+  },
+  [STAY_GROUP_SUMMARY_REPORT_TYPE]: {
+    system: "STAY",
+    label: "Group Summary",
+    purpose: "Named Group Prospecting",
+  },
+  [STAY_RESERVATIONS_REPORT_TYPE]: {
+    system: "STAY",
+    label: "Reservations by Company",
+    purpose: "Special Corp/Govt Names",
+  },
+  [ALL_MARKET_REPORT_TYPE]: {
+    system: "MINT",
+    label: "All Market Segments",
+    purpose: "Hotel Production",
+  },
+  [GROUP_REPORT_TYPE]: {
+    system: "MINT",
+    label: "Account Tracking",
+    purpose: "Historical Account Prospecting",
+  },
+  marriott_mint_analytical_account_tracking: {
+    system: "MINT",
+    label: "Analytical Account Tracking",
+    purpose: "Historical Account Prospecting",
+  },
+  [SPECIAL_REPORT_TYPE]: {
+    system: "MINT",
+    label: "Special Corp/Govt",
+    purpose: "Corporate Account Prospecting",
+  },
+};
 const OPPORTUNITY_STAGES = [
   "prospect",
   "contact_attempted",
@@ -622,6 +663,13 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
             .where(inArray(courtyardSalesProduction.importBatchId, batchIds))
         : [];
       const batchById = new Map(active.map((batch) => [batch.id, batch]));
+      const periodsBySource = new Map<string, Set<number>>();
+      for (const batch of active) {
+        const periods =
+          periodsBySource.get(batch.sourceReportType) || new Set<number>();
+        periods.add(periodIndex(batch.reportYear, batch.reportMonth));
+        periodsBySource.set(batch.sourceReportType, periods);
+      }
       const stayRows = rows.filter(
         (row) =>
           batchById.get(row.importBatchId)?.sourceReportType ===
@@ -632,14 +680,21 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           batchById.get(row.importBatchId)?.sourceReportType ===
           STAY_RESERVATIONS_REPORT_TYPE,
       );
+      const analyticalAccountRows = rows.filter(
+        (row) =>
+          batchById.get(row.importBatchId)?.sourceReportType ===
+          "marriott_mint_analytical_account_tracking",
+      );
       const groupRows = rows
         .filter((row) => {
           const type = batchById.get(row.importBatchId)?.sourceReportType;
-          return (
-            type === GROUP_REPORT_TYPE ||
-            type === "marriott_mint_analytical_account_tracking"
-          );
+          return type === GROUP_REPORT_TYPE;
         })
+        .concat(
+          analyticalAccountRows.filter(
+            (row) => normalizeSalesMarketSegment(row.marketSegment) === "Group",
+          ),
+        )
         .concat(
           rows.filter(
             (row) =>
@@ -647,6 +702,9 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
               STAY_GROUP_SUMMARY_REPORT_TYPE,
           ),
         );
+      const corporateRows = analyticalAccountRows.filter(
+        (row) => normalizeSalesMarketSegment(row.marketSegment) !== "Group",
+      );
       const specialRows = rows
         .filter(
           (row) =>
@@ -709,6 +767,11 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           reportCategory: "special",
           recurring: account.history.length >= 2,
         })),
+        ...summarize(corporateRows).map((account) => ({
+          ...account,
+          reportCategory: "corporate",
+          recurring: account.history.length >= 2,
+        })),
         ...summarize(allMarketRows).map((account) => ({
           ...account,
           reportCategory: "total",
@@ -741,11 +804,82 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const latest = accounts.length
         ? Math.max(...accounts.map((a) => a.lastPeriod))
         : null;
+      const groupPeriods = new Set<number>(
+        active
+          .filter((batch) =>
+            [
+              GROUP_REPORT_TYPE,
+              "marriott_mint_analytical_account_tracking",
+              STAY_GROUP_SUMMARY_REPORT_TYPE,
+            ].includes(batch.sourceReportType),
+          )
+          .map((batch) => periodIndex(batch.reportYear, batch.reportMonth)),
+      );
+      const specialPeriods = new Set<number>(
+        active
+          .filter((batch) =>
+            [SPECIAL_REPORT_TYPE, STAY_RESERVATIONS_REPORT_TYPE].includes(
+              batch.sourceReportType,
+            ),
+          )
+          .map((batch) => periodIndex(batch.reportYear, batch.reportMonth)),
+      );
+      const corporatePeriods =
+        periodsBySource.get("marriott_mint_analytical_account_tracking") ||
+        new Set<number>();
       for (const a of accounts) {
         const monthsSince = latest === null ? 0 : latest - a.lastPeriod;
         a.monthsSinceLast = monthsSince;
-        a.status =
-          monthsSince >= RECOVERY_MONTHS ? "Potential Recovery" : "Active";
+        if (String(a.key).startsWith("stay-company:")) {
+          a.status = "Identified Prospect";
+        } else if (
+          a.reportCategory === "total" ||
+          String(a.key).startsWith("stay-segment:")
+        ) {
+          const history = a.history
+            .slice()
+            .sort((x: any, y: any) => x.index - y.index);
+          const current = history.at(-1);
+          const prior = history.at(-2);
+          a.status =
+            !current || !prior || current.index - prior.index !== 1
+              ? "Insufficient History"
+              : prior.roomRevenue === 0
+                ? current.roomRevenue > 0
+                  ? "Growing"
+                  : "Stable"
+                : (current.roomRevenue - prior.roomRevenue) /
+                      Math.abs(prior.roomRevenue) >=
+                    0.05
+                  ? "Growing"
+                  : (current.roomRevenue - prior.roomRevenue) /
+                        Math.abs(prior.roomRevenue) <=
+                      -0.05
+                    ? "Declining"
+                    : "Stable";
+        } else {
+          const comparablePeriods =
+            a.reportCategory === "special"
+              ? specialPeriods
+              : a.reportCategory === "corporate"
+                ? corporatePeriods
+                : groupPeriods;
+          const comparableLatest = comparablePeriods.size
+            ? Math.max(...Array.from(comparablePeriods))
+            : a.lastPeriod;
+          const comparableMonths = consecutiveComparableMonths(
+            a.lastPeriod,
+            comparableLatest,
+            comparablePeriods,
+          );
+          a.monthsSinceLast = comparableMonths;
+          a.status =
+            comparableMonths === null
+              ? "Insufficient Data"
+              : comparableMonths >= RECOVERY_MONTHS
+                ? "Potential Recovery"
+                : "Active";
+        }
         a.recoveryPriority = recoveryPriority(
           a.roomRevenue,
           a.roomNights,
@@ -765,13 +899,65 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           ]),
         ).values(),
       ];
+      const dataHealth = periods.map((period) => {
+        const periodBatches = active.filter(
+          (batch) =>
+            batch.reportYear === period.year &&
+            batch.reportMonth === period.month,
+        );
+        const expected =
+          period.year >= 2026
+            ? [
+                STAY_MARKET_REPORT_TYPE,
+                STAY_GROUP_SUMMARY_REPORT_TYPE,
+                STAY_RESERVATIONS_REPORT_TYPE,
+              ]
+            : [ALL_MARKET_REPORT_TYPE, GROUP_REPORT_TYPE, SPECIAL_REPORT_TYPE];
+        const sources = expected.map((sourceReportType, index) => {
+          const batch = periodBatches.find(
+            (item) => item.sourceReportType === sourceReportType,
+          );
+          const sourceRows = batch
+            ? rows.filter((row) => row.importBatchId === batch.id)
+            : [];
+          return {
+            sourceReportType,
+            ...(REPORT_METADATA[sourceReportType] || {}),
+            required: index === 0,
+            imported: !!batch,
+            roomNights: sourceRows.reduce(
+              (sum, row) => sum + n(row.roomNights),
+              0,
+            ),
+            roomRevenue: sourceRows.reduce(
+              (sum, row) => sum + n(row.roomRevenue),
+              0,
+            ),
+          };
+        });
+        const requiredComplete = sources
+          .filter((source) => source.required)
+          .every((source) => source.imported);
+        const allComplete = sources.every((source) => source.imported);
+        return {
+          ...period,
+          status: allComplete
+            ? "Complete"
+            : requiredComplete
+              ? "Production Complete — Prospecting Sources Missing"
+              : "Missing Hotel Production",
+          sources,
+        };
+      });
       res.json({
         periods,
         latestPeriod: latest,
         accounts,
         marketSegments,
+        dataHealth,
         imports: batches.map((b) => ({
           ...b,
+          ...(REPORT_METADATA[b.sourceReportType] || {}),
           accounts: new Set(
             rows
               .filter((r) => r.importBatchId === b.id)

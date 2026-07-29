@@ -2,6 +2,18 @@ import crypto from "crypto";
 
 export const MAX_SALES_IMPORT_BYTES = 5 * 1024 * 1024;
 export const MAX_SALES_IMPORT_ROWS = 25_000;
+export function consecutiveComparableMonths(
+  lastPeriod: number,
+  latestPeriod: number,
+  importedPeriods: Set<number>,
+) {
+  let count = 0;
+  for (let period = lastPeriod + 1; period <= latestPeriod; period++) {
+    if (!importedPeriods.has(period)) return null;
+    count++;
+  }
+  return count;
+}
 const aliases: Record<string, string> = {
   "global ultimate account name": "globalUltimateAccountName",
   "highest level account id (uaid)": "highestLevelAccountId",

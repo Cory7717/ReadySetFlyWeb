@@ -12,6 +12,7 @@ import {
   distanceMiles,
   discoverRegionalBusinesses,
   prospectScore,
+  resolveHotelLocation,
   targetRoles,
 } from "../../server/courtyardSalesDemand";
 import { isDemandEventHotelFit } from "../../server/courtyardSalesDemandResearch";
@@ -195,6 +196,13 @@ test("distance calculation and target roles are deterministic", () => {
   assert.ok(roles.includes("Operations or Project Manager"));
 });
 
+test("regional discovery falls back to the canonical hotel when Render coordinates are invalid or misplaced", () => {
+  assert.equal(resolveHotelLocation("30.465947", "-97.801203").usedCanonicalFallback, false);
+  assert.equal(resolveHotelLocation("30.465947,", "-97.801203").usedCanonicalFallback, true);
+  assert.equal(resolveHotelLocation("29.42", "-98.49").usedCanonicalFallback, true);
+  assert.deepEqual(resolveHotelLocation("not-a-number", "").location, { latitude: 30.465947, longitude: -97.801203 });
+});
+
 test("demand-event fit uses a short construction radius and a broader event radius", () => {
   assert.equal(isDemandEventHotelFit({ category: "Construction", distanceMiles: 10 }), true);
   assert.equal(isDemandEventHotelFit({ category: "Construction", distanceMiles: 16 }), false);
@@ -220,6 +228,7 @@ test("regional discovery reports Google result diagnostics and creates prospects
     assert.equal(result.diagnostics.queriesRun, 8);
     assert.equal(result.diagnostics.placesReturned, 8);
     assert.equal(result.prospects.length, 1);
+    assert.equal(result.diagnostics.rejected.outside75Miles, 0);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalKey == null) delete process.env.GOOGLE_PLACES_API_KEY;

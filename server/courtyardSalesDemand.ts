@@ -1,7 +1,14 @@
-export const HOTEL_LOCATION = {
-  latitude: Number(process.env.COURTYARD_HOTEL_LATITUDE || 30.4654),
-  longitude: Number(process.env.COURTYARD_HOTEL_LONGITUDE || -97.7987),
-};
+export const CANONICAL_HOTEL_LOCATION = { latitude: 30.465947, longitude: -97.801203 };
+
+export function resolveHotelLocation(latitude = process.env.COURTYARD_HOTEL_LATITUDE, longitude = process.env.COURTYARD_HOTEL_LONGITUDE) {
+  const candidate = { latitude: Number(String(latitude || "").trim()), longitude: Number(String(longitude || "").trim()) };
+  const valid = Number.isFinite(candidate.latitude) && Number.isFinite(candidate.longitude) && Math.abs(candidate.latitude) <= 90 && Math.abs(candidate.longitude) <= 180;
+  const nearHotel = valid && distanceMiles(CANONICAL_HOTEL_LOCATION.latitude, CANONICAL_HOTEL_LOCATION.longitude, candidate.latitude, candidate.longitude) <= 25;
+  return { location: nearHotel ? candidate : CANONICAL_HOTEL_LOCATION, usedCanonicalFallback: !nearHotel };
+}
+
+const resolvedHotelLocation = resolveHotelLocation();
+export const HOTEL_LOCATION = resolvedHotelLocation.location;
 
 export function distanceMiles(lat1: number, lon1: number, lat2: number, lon2: number) {
   const radians = (value: number) => (value * Math.PI) / 180;
@@ -90,10 +97,16 @@ export async function discoverRegionalBusinesses() {
     all.push(...places);
   }
   const unique = new Map<string, any>();
+  const rejected = { missingId: 0, missingLocation: 0, closed: 0, outside75Miles: 0, invalidDistance: 0 };
+  const measuredDistances: number[] = [];
   for (const place of all) {
-    if (!place.id || place.businessStatus === "CLOSED_PERMANENTLY" || !place.location) continue;
+    if (!place.id) { rejected.missingId++; continue; }
+    if (place.businessStatus === "CLOSED_PERMANENTLY") { rejected.closed++; continue; }
+    if (!place.location) { rejected.missingLocation++; continue; }
     const miles = distanceMiles(HOTEL_LOCATION.latitude, HOTEL_LOCATION.longitude, place.location.latitude, place.location.longitude);
-    if (miles > 75) continue;
+    if (!Number.isFinite(miles)) { rejected.invalidDistance++; continue; }
+    measuredDistances.push(miles);
+    if (miles > 75) { rejected.outside75Miles++; continue; }
     const industry = place.primaryTypeDisplayName?.text || "Business";
     const signals = ["Regional employer or business location identified through Google Places; training demand is not yet verified"];
     unique.set(place.id, {
@@ -122,6 +135,11 @@ export async function discoverRegionalBusinesses() {
       queriesRun: queries.length,
       placesReturned: all.length,
       uniquePlacesInRange: unique.size,
+      closestDistanceMiles: measuredDistances.length ? Math.min(...measuredDistances) : null,
+      farthestDistanceMiles: measuredDistances.length ? Math.max(...measuredDistances) : null,
+      hotelLocation: HOTEL_LOCATION,
+      usedCanonicalHotelLocationFallback: resolvedHotelLocation.usedCanonicalFallback,
+      rejected,
       queryResults,
     },
   };

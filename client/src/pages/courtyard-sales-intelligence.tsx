@@ -80,6 +80,7 @@ async function json(url: string, init?: RequestInit) {
   if (!r.ok)
     throw Object.assign(new Error(body?.error || "Request failed"), {
       code: body?.code,
+      status: r.status,
     });
   return body;
 }
@@ -104,6 +105,12 @@ export default function CourtyardSalesIntelligence() {
   const [reportType, setReportType] = useState(
     "marriott_mint_group_account_tracking",
   );
+  const [accessPin, setAccessPin] = useState("");
+  const pinLogin = useMutation({
+    mutationFn: () => json("/api/opsreport/pin-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: accessPin }) }),
+    onSuccess: () => { setAccessPin(""); qc.invalidateQueries({ queryKey: ["/api/courtyard/sales-intelligence/me"] }); },
+    onError: (error: Error) => toast({ title: "Could not unlock Sales Intelligence", description: error.message, variant: "destructive" }),
+  });
   useEffect(() => {
     const stayTypes = [
       "stay_revenue_by_market_segment_with_groups",
@@ -481,6 +488,15 @@ export default function CourtyardSalesIntelligence() {
     return (
       <div className={`min-h-screen p-8 ${C.page}`}>
         Loading Sales Intelligence…
+      </div>
+    );
+  if (me.error && (me.error as any).status === 401)
+    return (
+      <div className={`flex min-h-screen items-center justify-center p-6 ${C.page}`}>
+        <Card className={`w-full max-w-md ${C.shell}`}>
+          <CardHeader><CardTitle>Sales Intelligence</CardTitle><CardDescription>Enter the same five-digit operations PIN used for the Ops Report. No account registration is required.</CardDescription></CardHeader>
+          <CardContent className="space-y-4"><div><Label>Operations PIN</Label><Input type="password" inputMode="numeric" autoComplete="one-time-code" maxLength={5} value={accessPin} onChange={(event) => setAccessPin(event.target.value.replace(/\D/g, "").slice(0, 5))} onKeyDown={(event) => { if (event.key === "Enter" && accessPin.length === 5) pinLogin.mutate(); }} /></div><Button className={C.green} disabled={accessPin.length !== 5 || pinLogin.isPending} onClick={() => pinLogin.mutate()}>{pinLogin.isPending ? "Unlocking…" : "Open Sales Intelligence"}</Button><p className="text-xs text-[#5f5247]">Regional access is limited to Courtyard Austin Northwest/Lakeline and is identified as Regional VP access.</p></CardContent>
+        </Card>
       </div>
     );
   if (me.error)

@@ -143,6 +143,14 @@ const admin = (user: any) =>
 async function auth(req: any, res: any, next: any) {
   try {
     const id = req.session?.tipsUserId;
+    if (!id && req.session?.opsReportUnlocked) {
+      const hotels = await db.select().from(courtyardHotels).where(eq(courtyardHotels.id, DEFAULT_HOTEL_ID));
+      if (!hotels.length) return res.status(503).json({ error: "The Sales Intelligence property is not configured." });
+      req.salesUser = { id: null, email: "sultan@globiwest.com", employeeDisplayName: "Regional VP", role: "regional_viewer", toolAccessJson: { salesintelligence: true } };
+      req.salesHotels = hotels;
+      req.salesPinAccess = true;
+      return next();
+    }
     if (!id)
       return res.status(401).json({ error: "Courtyard login is required." });
     const [user] = await db

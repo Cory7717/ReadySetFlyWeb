@@ -684,11 +684,18 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         });
       const marketSegments = [
         ...new Set(
-          allMarketRows.map(
-            (row) =>
-              String(row.marketSegment || "Unspecified").trim() ||
-              "Unspecified",
-          ),
+          allMarketRows
+            .map(
+              (row) =>
+                String(row.marketSegment || "Unspecified").trim() ||
+                "Unspecified",
+            )
+            .concat(groupRows.length ? ["Group"] : [])
+            .concat(
+              companyNameRows.map((row) =>
+                normalizeSalesMarketSegment(row.marketSegment),
+              ),
+            ),
         ),
       ].sort((a, b) => a.localeCompare(b));
       const accounts = [
@@ -709,18 +716,21 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         })),
         ...marketSegments.flatMap((segment) =>
           summarize(
-            allMarketRows
-              .filter(
-                (row) =>
-                  (String(row.marketSegment || "Unspecified").trim() ||
-                    "Unspecified") === segment,
-              )
-              .concat(
-                companyNameRows.filter(
-                  (row) =>
-                    normalizeSalesMarketSegment(row.marketSegment) === segment,
-                ),
-              ),
+            segment === "Group"
+              ? groupRows
+              : allMarketRows
+                  .filter(
+                    (row) =>
+                      (String(row.marketSegment || "Unspecified").trim() ||
+                        "Unspecified") === segment,
+                  )
+                  .concat(
+                    companyNameRows.filter(
+                      (row) =>
+                        normalizeSalesMarketSegment(row.marketSegment) ===
+                        segment,
+                    ),
+                  ),
           ).map((account) => ({
             ...account,
             reportCategory: `segment:${segment}`,

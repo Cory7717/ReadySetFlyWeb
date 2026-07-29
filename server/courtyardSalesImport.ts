@@ -606,7 +606,11 @@ export function parseStayGroupSummaryImport(buffer: Buffer) {
   };
 }
 
-export function parseStayReservationsCompanyImport(buffer: Buffer) {
+export function parseStayReservationsCompanyImport(
+  buffer: Buffer,
+  reportYear?: number,
+  reportMonth?: number,
+) {
   buffer = workbookToDelimitedBuffer(buffer);
   if (!buffer.length) throw new Error("The selected file is empty.");
   const text = buffer.toString("utf8").replace(/^\uFEFF/, "");
@@ -623,56 +627,141 @@ export function parseStayReservationsCompanyImport(buffer: Buffer) {
   const headerIndexes = new Map(
     rawHeaders.map((h, i) => [normalizeHeader(h), i]),
   );
-  for (const required of ["company", "group", "rate($)"])
+  for (const required of [
+    "company",
+    "group",
+    "rate($)",
+    "status",
+    "nights",
+    "arrive",
+    "depart",
+  ])
     if (!headerIndexes.has(required))
       throw new Error(
-        "This does not appear to be a STAY Reservations Report. Required columns include COMPANY, GROUP, and RATE($).",
+        "This does not appear to be a STAY Reservations Report. Required columns include COMPANY, GROUP, STATUS, NIGHTS, ARRIVE, DEPART, and RATE($).",
       );
   const companies = new Map<string, any>();
-  let duplicateRowCount = 0;
+  const seenRows = new Set<string>();
+  let duplicateRowCount = 0,
+    ignoredRowCount = 0;
   lines.slice(1).forEach((line, index) => {
     const cells = parseDelimitedLine(line, delimiter);
     const company = clean(cells[headerIndexes.get("company")!]);
     const group = clean(cells[headerIndexes.get("group")!]);
     const rate = clean(cells[headerIndexes.get("rate($)")!]);
-    if (!company || /^aaa$/i.test(company) || group) return;
+    if (!company || /^aaa$/i.test(company) || group) {
+      ignoredRowCount++;
+      return;
+    }
+    const rowHash = crypto
+      .createHash("sha256")
+      .update(JSON.stringify(cells))
+      .digest("hex");
+    if (seenRows.has(rowHash)) {
+      duplicateRowCount++;
+      return;
+    }
+    seenRows.add(rowHash);
     const key = company.toLowerCase().replace(/\s+/g, " ");
     const marketSegment = /\bgov(?:ernment|t)|military/i.test(
       `${company} ${rate}`,
     )
       ? "Government"
       : "Special Corp";
-    if (companies.has(key)) {
-      duplicateRowCount++;
-      if (marketSegment === "Government")
-        companies.get(key).marketSegment = marketSegment;
-      return;
+    const status = clean(cells[headerIndexes.get("status")!]).toUpperCase();
+    const stayed = status === "DPT" || status === "INH";
+    const arrivalDate = stayed
+      ? safeSourceDate(cells[headerIndexes.get("arrive")!])
+      : null;
+    const departureDate = stayed
+      ? safeSourceDate(cells[headerIndexes.get("depart")!])
+      : null;
+    let nights = stayed
+      ? numberValue(cells[headerIndexes.get("nights")!]) || 0
+      : 0;
+    if (
+      stayed &&
+      arrivalDate &&
+      departureDate &&
+      Number.isInteger(reportYear) &&
+      Number.isInteger(reportMonth)
+    ) {
+      const arrival = new Date(`${arrivalDate}T00:00:00Z`).getTime();
+      const departure = new Date(`${departureDate}T00:00:00Z`).getTime();
+      const monthStart = Date.UTC(reportYear!, reportMonth! - 1, 1);
+      const monthEnd = Date.UTC(reportYear!, reportMonth!, 1);
+      const overlapDays = Math.max(
+        0,
+        (Math.min(departure, monthEnd) - Math.max(arrival, monthStart)) /
+          86_400_000,
+      );
+      nights = Math.min(nights, overlapDays);
     }
+    const displayedRate = numberValue(rate.split(/\s+-\s+/).at(-1)) || 0;
+    const estimatedRevenue = nights * displayedRate;
     const raw = Object.fromEntries(
       rawHeaders.map((h, i) => [h, cells[i] || ""]),
     );
-    companies.set(key, {
-      globalUltimateAccountName: company,
-      accountName: company,
-      accountType: "Company name reference",
-      marketCategory: marketSegment,
-      marketSegment,
-      roomNights: 0,
-      roomRevenue: 0,
-      roomAdr: 0,
-      totalRevenue: 0,
-      totalAdr: 0,
-      averageLos: 0,
-      fees: 0,
-      taxes: 0,
-      addOns: 0,
-      raw,
-      sourceRowNumber: index + 2,
-      normalizedRowHash: crypto.createHash("sha256").update(key).digest("hex"),
-      normalizedAccountKey: `stay-company:${key}`,
-    });
+    const existing = companies.get(key);
+    if (!existing) {
+      companies.set(key, {
+        globalUltimateAccountName: company,
+        accountName: company,
+        accountType:
+          "Observed company activity; revenue estimated from displayed rate",
+        marketCategory: marketSegment,
+        marketSegment,
+        roomNights: nights,
+        roomRevenue: estimatedRevenue,
+        roomAdr: nights ? displayedRate : 0,
+        totalRevenue: estimatedRevenue,
+        totalAdr: nights ? displayedRate : 0,
+        averageLos: nights,
+        observedReservations: nights > 0 ? 1 : 0,
+        fees: 0,
+        taxes: 0,
+        addOns: 0,
+        stayArrivalDate: nights > 0 ? arrivalDate : null,
+        stayDepartureDate: nights > 0 ? departureDate : null,
+        raw,
+        sourceRowNumber: index + 2,
+        normalizedRowHash: crypto
+          .createHash("sha256")
+          .update(key)
+          .digest("hex"),
+        normalizedAccountKey: `stay-company:${key}`,
+      });
+      return;
+    }
+    if (marketSegment === "Government") {
+      existing.marketCategory = marketSegment;
+      existing.marketSegment = marketSegment;
+    }
+    existing.roomNights += nights;
+    existing.roomRevenue += estimatedRevenue;
+    existing.totalRevenue += estimatedRevenue;
+    existing.observedReservations += nights > 0 ? 1 : 0;
+    if (nights > 0 && arrivalDate)
+      existing.stayArrivalDate = existing.stayArrivalDate
+        ? [existing.stayArrivalDate, arrivalDate].sort()[0]
+        : arrivalDate;
+    if (nights > 0 && departureDate)
+      existing.stayDepartureDate = existing.stayDepartureDate
+        ? [existing.stayDepartureDate, departureDate].sort().at(-1)
+        : departureDate;
   });
-  const accepted = Array.from(companies.values());
+  const accepted = Array.from(companies.values()).map((company) => ({
+    ...company,
+    roomAdr:
+      company.roomNights > 0 ? company.roomRevenue / company.roomNights : 0,
+    totalAdr:
+      company.roomNights > 0 ? company.roomRevenue / company.roomNights : 0,
+    averageLos:
+      company.observedReservations > 0
+        ? company.roomNights / company.observedReservations
+        : 0,
+    observedReservations: undefined,
+  }));
   return {
     delimiter: delimiter === "\t" ? "tab" : "comma",
     rawHeaders,
@@ -680,7 +769,7 @@ export function parseStayReservationsCompanyImport(buffer: Buffer) {
     accepted,
     rejected: [],
     duplicateRowCount,
-    ignoredRowCount: lines.length - 1 - accepted.length - duplicateRowCount,
+    ignoredRowCount,
     warnings: [],
     reportDateRange: null,
   };

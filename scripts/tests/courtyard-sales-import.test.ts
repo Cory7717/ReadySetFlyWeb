@@ -196,18 +196,35 @@ test("aggregates the current daily-detail Group Summary layout by booking code",
   assert.equal(result.accepted[0].roomRevenue, 300);
 });
 
-test("Reservations Report retains company names without adding production", () => {
+test("Reservations Report calculates observed company activity without becoming hotel production", () => {
   const input = Buffer.from(
-    "GUEST NAME,ARRIVE,DEPART,RATE($),COMPANY,GROUP\nPerson One,2026-01-01,2026-01-02,RFP1 - 100,Acme Corp,\nPerson Two,2026-01-02,2026-01-03,GOV1 - 110,Government of The United States,\nPerson Three,2026-01-03,2026-01-04,AAA - 90,AAA,\n",
+    "GUEST NAME,ARRIVE,DEPART,NIGHTS,STATUS,RATE($),COMPANY,GROUP\nPerson One,2026-01-01,2026-01-03,2,DPT,RFP1 - 100,Acme Corp,\nPerson Two,2026-01-02,2026-01-03,1,INH,GOV1 - 110,Government of The United States,\nCancelled Person,2026-01-04,2026-01-07,3,CXL,RFP1 - 100,Acme Corp,\nPerson Three,2026-01-03,2026-01-04,1,DPT,AAA - 90,AAA,\n",
   );
   const result = parseStayReservationsCompanyImport(input);
   assert.equal(result.accepted.length, 2);
   assert.equal(
+    result.accepted.reduce((sum, row) => sum + row.roomNights, 0),
+    3,
+  );
+  assert.equal(
     result.accepted.reduce((sum, row) => sum + row.roomRevenue, 0),
-    0,
+    310,
+  );
+  assert.equal(
+    isAuthoritativeHotelProductionReport("stay_reservations_company_names"),
+    false,
   );
   assert.deepEqual(result.accepted.map((row) => row.marketSegment).sort(), [
     "Government",
     "Special Corp",
   ]);
+});
+
+test("Reservations activity allocates cross-month stays to the selected month", () => {
+  const input = Buffer.from(
+    "GUEST NAME,ARRIVE,DEPART,NIGHTS,STATUS,RATE($),COMPANY,GROUP\nPerson One,2025-12-30,2026-01-03,4,DPT,RFP1 - 100,Acme Corp,\n",
+  );
+  const january = parseStayReservationsCompanyImport(input, 2026, 1);
+  assert.equal(january.accepted[0].roomNights, 2);
+  assert.equal(january.accepted[0].roomRevenue, 200);
 });

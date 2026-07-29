@@ -213,7 +213,9 @@ export default function CourtyardSalesIntelligence() {
         title: `${r.label} imported successfully`,
         description: r.reports
           ? `${r.reports.length} report sources imported together. Hotel totals remain sourced only from Hotel Production.`
-          : `${r.accounts} accounts · ${r.roomNights.toLocaleString()} room nights · ${money.format(r.roomRevenue)}`,
+          : r.sourceReportType === "stay_reservations_company_names"
+            ? `${r.accounts} companies · ${r.roomNights.toLocaleString()} observed room nights · ${money.format(r.roomRevenue)} estimated revenue`
+            : `${r.accounts} accounts · ${r.roomNights.toLocaleString()} room nights · ${money.format(r.roomRevenue)}`,
       });
       setUploadOpen(false);
       setPreview(null);
@@ -357,20 +359,33 @@ export default function CourtyardSalesIntelligence() {
         ? accounts.filter((account) => account.reportCategory === view)
         : groupAccounts;
   const totals = useMemo(() => {
-    const roomNights = visibleAccounts.reduce((s, a) => s + a.roomNights, 0),
-      roomRevenue = visibleAccounts.reduce((s, a) => s + a.roomRevenue, 0);
+    const isCompanyView =
+      activeYear >= 2026 &&
+      ["segment:Special Corp", "segment:Government"].includes(view);
+    const companyAccounts = visibleAccounts.filter((account) =>
+      String(account.key).startsWith("stay-company:"),
+    );
+    const metricAccounts = isCompanyView
+      ? visibleAccounts.filter(
+          (account) => !String(account.key).startsWith("stay-company:"),
+        )
+      : visibleAccounts;
+    const roomNights = metricAccounts.reduce((s, a) => s + a.roomNights, 0),
+      roomRevenue = metricAccounts.reduce((s, a) => s + a.roomRevenue, 0);
     return {
-      accounts: visibleAccounts.length,
-      recurring: visibleAccounts.filter((account) => account.recurring).length,
+      accounts: isCompanyView ? companyAccounts.length : visibleAccounts.length,
+      recurring: (isCompanyView ? companyAccounts : visibleAccounts).filter(
+        (account) => account.recurring,
+      ).length,
       roomNights,
       roomRevenue,
       adr: roomNights ? roomRevenue / roomNights : 0,
       los: roomNights
-        ? visibleAccounts.reduce((s, a) => s + a.averageLos * a.roomNights, 0) /
+        ? metricAccounts.reduce((s, a) => s + a.averageLos * a.roomNights, 0) /
           roomNights
         : 0,
     };
-  }, [visibleAccounts]);
+  }, [activeYear, view, visibleAccounts]);
   const entityLabel =
     view === "total"
       ? "Segments"
@@ -718,6 +733,9 @@ function AccountTable({
   recovery = false,
   title = "Account Production",
 }: any) {
+  const hasObservedCompanies = accounts.some((account: any) =>
+    String(account.key).startsWith("stay-company:"),
+  );
   return (
     <Card
       className={recovery ? "border-0 bg-transparent shadow-none" : C.shell}
@@ -726,8 +744,9 @@ function AccountTable({
         <CardHeader>
           <CardTitle>{title}</CardTitle>
           <CardDescription>
-            Source rows are aggregated to stable account identities. Default
-            sort is room revenue.
+            {hasObservedCompanies
+              ? "The segment row is official Hotel Production. Company rows are observed stayed/in-house reservations; company revenue is estimated from displayed rate × nights and is not added to official totals."
+              : "Source rows are aggregated to stable account identities. Default sort is room revenue."}
           </CardDescription>
         </CardHeader>
       )}
@@ -760,6 +779,9 @@ function AccountTable({
                 <SelectItem value="Identified Prospect">
                   Identified Prospect
                 </SelectItem>
+                <SelectItem value="Observed Activity">
+                  Observed Activity
+                </SelectItem>
                 <SelectItem value="Growing">Growing</SelectItem>
                 <SelectItem value="Stable">Stable</SelectItem>
                 <SelectItem value="Declining">Declining</SelectItem>
@@ -776,7 +798,9 @@ function AccountTable({
               <tr className="border-b text-left text-[#6e5d50]">
                 <th className="p-3">Account / Segment</th>
                 <th className="p-3 text-right">Room Nights</th>
-                <th className="p-3 text-right">Room Revenue</th>
+                <th className="p-3 text-right">
+                  {hasObservedCompanies ? "Revenue / Est.*" : "Room Revenue"}
+                </th>
                 <th className="p-3 text-right">ADR</th>
                 <th className="p-3 text-right">Avg LOS</th>
                 <th className="p-3">Last Production</th>
@@ -800,9 +824,9 @@ function AccountTable({
                       {a.displayName}
                     </button>
                     <div className="text-xs text-[#7b6a5d]">
-                      {a.highestLevelAccountId &&
-                        `UAID ${a.highestLevelAccountId} · `}
-                      {a.marketSegment || a.rateProgram || "Account production"}
+                      {String(a.key).startsWith("stay-company:")
+                        ? "Observed company activity · estimated revenue"
+                        : `${a.highestLevelAccountId ? `UAID ${a.highestLevelAccountId} · ` : ""}${a.marketSegment || a.rateProgram || "Account production"}`}
                     </div>
                   </td>
                   <td className="p-3 text-right">
@@ -813,7 +837,13 @@ function AccountTable({
                   </td>
                   <td className="p-3 text-right">{money2.format(a.adr)}</td>
                   <td className="p-3 text-right">{a.averageLos.toFixed(1)}</td>
-                  <td className="p-3">{a.history.at(-1)?.label}</td>
+                  <td className="p-3">
+                    {String(a.key).startsWith("stay-company:") && a.lastStayDate
+                      ? new Date(
+                          `${a.lastStayDate}T00:00:00`,
+                        ).toLocaleDateString()
+                      : a.history.at(-1)?.label}
+                  </td>
                   <td className="p-3">
                     {recovery ? (
                       <div>
@@ -1990,14 +2020,20 @@ function PlanningDetailDialog({ account, onClose }: any) {
         <DialogHeader>
           <DialogTitle>{account.displayName}</DialogTitle>
           <DialogDescription>
-            Read-only production history for planning and prospect research.
-            Sales activity remains in IVY.
+            {String(account.key).startsWith("stay-company:")
+              ? "Observed stayed/in-house reservation activity. Revenue is estimated from displayed rate × nights and remains separate from official Hotel Production."
+              : "Read-only production history for planning and prospect research. Sales activity remains in IVY."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           {[
             ["Room Nights", Math.round(account.roomNights).toLocaleString()],
-            ["Room Revenue", money.format(account.roomRevenue)],
+            [
+              String(account.key).startsWith("stay-company:")
+                ? "Estimated Revenue"
+                : "Room Revenue",
+              money.format(account.roomRevenue),
+            ],
             ["ADR", money2.format(account.adr)],
             ["Average LOS", account.averageLos.toFixed(1)],
             ["First Production", account.history[0]?.label || "—"],

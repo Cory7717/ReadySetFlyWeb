@@ -241,6 +241,7 @@ function summarize(rows: any[]) {
         months: new Map(),
         bookingOffices: new Set(),
         bookings: [],
+        lastStayDate: null,
       };
       map.set(r.normalizedAccountKey, a);
     }
@@ -248,6 +249,11 @@ function summarize(rows: any[]) {
     a.roomRevenue += n(r.roomRevenue);
     a.losNumerator += n(r.averageLos) * n(r.roomNights);
     a.bookingOffices.add(r.bookingOffice);
+    if (
+      r.stayDepartureDate &&
+      (!a.lastStayDate || r.stayDepartureDate > a.lastStayDate)
+    )
+      a.lastStayDate = r.stayDepartureDate;
     if (r.groupBookingCode)
       a.bookings.push({
         bookingCode: r.groupBookingCode,
@@ -370,6 +376,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       if (!req.file)
         return res.status(400).json({ error: "Choose a report file." });
       const reportYear = Number(req.body.reportYear);
+      const reportMonth = Number(req.body.reportMonth);
       const isStayFormat = Number.isInteger(reportYear) && reportYear >= 2026;
       const requestedReportType = String(req.body.reportType || "");
       const detectedStayReportType = isStayFormat
@@ -383,7 +390,11 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         isStayFormat &&
         detectedStayReportType === STAY_RESERVATIONS_REPORT_TYPE;
       const p = isReservationsReport
-        ? parseStayReservationsCompanyImport(req.file.buffer)
+        ? parseStayReservationsCompanyImport(
+            req.file.buffer,
+            reportYear,
+            reportMonth,
+          )
         : isGroupSummary
           ? parseStayGroupSummaryImport(req.file.buffer)
           : isStayFormat
@@ -491,7 +502,11 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           .json({ error: "Choose a valid report month and year." });
       const p =
         reportYear >= 2026 && sourceReportType === STAY_RESERVATIONS_REPORT_TYPE
-          ? parseStayReservationsCompanyImport(req.file.buffer)
+          ? parseStayReservationsCompanyImport(
+              req.file.buffer,
+              reportYear,
+              reportMonth,
+            )
           : reportYear >= 2026 &&
               sourceReportType === STAY_GROUP_SUMMARY_REPORT_TYPE
             ? parseStayGroupSummaryImport(req.file.buffer)
@@ -630,6 +645,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         .size;
       res.status(201).json({
         batchId: batch.id,
+        sourceReportType,
         label: periodLabel(reportYear, reportMonth),
         accounts,
         acceptedRows: p.accepted.length,
@@ -680,7 +696,11 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
             );
           const parsed =
             sourceReportType === STAY_RESERVATIONS_REPORT_TYPE
-              ? parseStayReservationsCompanyImport(file.buffer)
+              ? parseStayReservationsCompanyImport(
+                  file.buffer,
+                  reportYear,
+                  reportMonth,
+                )
               : sourceReportType === STAY_GROUP_SUMMARY_REPORT_TYPE
                 ? parseStayGroupSummaryImport(file.buffer)
                 : parseStayMarketSegmentImport(file.buffer);
@@ -1053,7 +1073,8 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         const monthsSince = latest === null ? 0 : latest - a.lastPeriod;
         a.monthsSinceLast = monthsSince;
         if (String(a.key).startsWith("stay-company:")) {
-          a.status = "Identified Prospect";
+          a.status =
+            a.roomNights > 0 ? "Observed Activity" : "Identified Prospect";
         } else if (
           a.reportCategory === "total" ||
           String(a.key).startsWith("stay-segment:")

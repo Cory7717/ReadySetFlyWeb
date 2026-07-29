@@ -387,6 +387,69 @@ export default function CourtyardSalesIntelligence() {
         : 0,
     };
   }, [activeYear, view, visibleAccounts]);
+  const priorYearPerformance = useMemo(() => {
+    const sourceAccounts = ((dashboard.data?.accounts || []) as Account[]).filter(
+      (account) => account.reportCategory === "total",
+    );
+    const selectedMonths =
+      activePeriodValue === "total"
+        ? Array.from(
+            new Set<number>(
+              sourceAccounts.flatMap((account) =>
+                account.history
+                  .filter((item: any) => item.year === activeYear)
+                  .map((item: any) => item.month),
+              ),
+            ),
+          ).sort((a, b) => a - b)
+        : [Number(activePeriodValue)];
+    const aggregate = (year: number, segments?: string[]) => {
+      const rows = sourceAccounts
+        .filter(
+          (account) =>
+            !segments?.length || segments.includes(account.marketSegment),
+        )
+        .flatMap((account) =>
+          account.history.filter(
+            (item: any) =>
+              item.year === year && selectedMonths.includes(item.month),
+          ),
+        );
+      const roomNights = rows.reduce(
+        (sum: number, item: any) => sum + item.roomNights,
+        0,
+      );
+      const roomRevenue = rows.reduce(
+        (sum: number, item: any) => sum + item.roomRevenue,
+        0,
+      );
+      return { roomNights, roomRevenue, months: new Set(rows.map((item: any) => item.month)).size };
+    };
+    const comparison = (segments?: string[]) => {
+      const current = aggregate(activeYear, segments);
+      const prior = aggregate(activeYear - 1, segments);
+      return {
+        current,
+        prior,
+        revenueVariance: current.roomRevenue - prior.roomRevenue,
+        revenueVariancePercent:
+          prior.roomRevenue > 0
+            ? ((current.roomRevenue - prior.roomRevenue) / prior.roomRevenue) * 100
+            : null,
+        roomVariance: current.roomNights - prior.roomNights,
+        roomVariancePercent:
+          prior.roomNights > 0
+            ? ((current.roomNights - prior.roomNights) / prior.roomNights) * 100
+            : null,
+      };
+    };
+    return {
+      months: selectedMonths,
+      total: comparison(),
+      group: comparison(["Group"]),
+      specialGovernment: comparison(["Special Corp", "Government"]),
+    };
+  }, [activePeriodValue, activeYear, dashboard.data?.accounts]);
   const entityLabel =
     view === "total"
       ? "Segments"
@@ -640,6 +703,103 @@ export default function CourtyardSalesIntelligence() {
               </CardContent>
             </Card>
           ))}
+        </section>
+        <section className="grid gap-3 lg:grid-cols-3">
+          {[
+            {
+              title: "Revenue vs Last Year",
+              value: money.format(priorYearPerformance.total.current.roomRevenue),
+              prior: priorYearPerformance.total.prior.roomRevenue,
+              variance: priorYearPerformance.total.revenueVariance,
+              variancePercent:
+                priorYearPerformance.total.revenueVariancePercent,
+              rooms: null,
+              roomVariance: null,
+            },
+            {
+              title: "Group Production",
+              value: money.format(priorYearPerformance.group.current.roomRevenue),
+              prior: priorYearPerformance.group.prior.roomRevenue,
+              variance: priorYearPerformance.group.revenueVariance,
+              variancePercent:
+                priorYearPerformance.group.revenueVariancePercent,
+              rooms: priorYearPerformance.group.current.roomNights,
+              roomVariance: priorYearPerformance.group.roomVariance,
+            },
+            {
+              title: "Special Corp / Govt Production",
+              value: money.format(
+                priorYearPerformance.specialGovernment.current.roomRevenue,
+              ),
+              prior: priorYearPerformance.specialGovernment.prior.roomRevenue,
+              variance:
+                priorYearPerformance.specialGovernment.revenueVariance,
+              variancePercent:
+                priorYearPerformance.specialGovernment.revenueVariancePercent,
+              rooms:
+                priorYearPerformance.specialGovernment.current.roomNights,
+              roomVariance:
+                priorYearPerformance.specialGovernment.roomVariance,
+            },
+          ].map((card) => {
+            const favorable = card.variance >= 0;
+            const hasPrior = card.variancePercent !== null;
+            return (
+              <Card className={C.shell} key={card.title}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className={`text-sm font-medium ${C.muted}`}>
+                        {card.title}
+                      </div>
+                      <div className="mt-1 text-2xl font-semibold">
+                        {card.value}
+                      </div>
+                    </div>
+                    <Badge
+                      className={
+                        !hasPrior
+                          ? "!bg-[#eadfce] !text-[#5f5247]"
+                          : favorable
+                            ? "!bg-[#dcebdd] !text-[#1f5a35]"
+                            : "!bg-[#f5dddd] !text-[#8b2929]"
+                      }
+                    >
+                      {!hasPrior
+                        ? "No LY comparison"
+                        : `${favorable ? "+" : ""}${card.variancePercent!.toFixed(1)}% vs LY`}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-[#deceba] pt-3 text-sm text-[#5f5247]">
+                    <span>
+                      LY revenue: <strong>{money.format(card.prior)}</strong>
+                    </span>
+                    {hasPrior && (
+                      <span>
+                        Variance:{" "}
+                        <strong
+                          className={
+                            favorable ? "text-[#1f5a35]" : "text-[#8b2929]"
+                          }
+                        >
+                          {card.variance >= 0 ? "+" : ""}
+                          {money.format(card.variance)}
+                        </strong>
+                      </span>
+                    )}
+                    {card.rooms !== null && (
+                      <span>
+                        Rooms: <strong>{Math.round(card.rooms).toLocaleString()}</strong>
+                        {hasPrior && card.roomVariance !== null
+                          ? ` (${card.roomVariance >= 0 ? "+" : ""}${Math.round(card.roomVariance).toLocaleString()} vs LY)`
+                          : ""}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </section>
         <Tabs value={view} onValueChange={setView}>
           <TabsList className="h-auto flex-wrap justify-start bg-[#eadfce]">

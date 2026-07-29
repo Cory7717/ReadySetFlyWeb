@@ -633,7 +633,6 @@ export default function CourtyardSalesIntelligence() {
                 {segment}
               </TabsTrigger>
             ))}
-            <TabsTrigger value="crm">Sales CRM</TabsTrigger>
             <TabsTrigger value="annual">Annual Planning</TabsTrigger>
           </TabsList>
           <TabsContent value="total">
@@ -660,12 +659,6 @@ export default function CourtyardSalesIntelligence() {
               />
             </TabsContent>
           ))}
-          <TabsContent value="crm">
-            <SalesCrm
-              hotelId={selectedHotel}
-              accounts={dashboard.data?.accounts || []}
-            />
-          </TabsContent>
           <TabsContent value="annual">
             <AnnualPlanning
               accounts={dashboard.data?.accounts || []}
@@ -696,11 +689,7 @@ export default function CourtyardSalesIntelligence() {
         reportType={reportType}
         setReportType={setReportType}
       />
-      <DetailDialog
-        account={detail}
-        hotelId={selectedHotel}
-        onClose={() => setDetail(null)}
-      />
+      <PlanningDetailDialog account={detail} onClose={() => setDetail(null)} />
       <HistoryDialog
         open={historyOpen}
         setOpen={setHistoryOpen}
@@ -1993,6 +1982,115 @@ function UploadDialog(p: any) {
     </Dialog>
   );
 }
+function PlanningDetailDialog({ account, onClose }: any) {
+  if (!account) return null;
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{account.displayName}</DialogTitle>
+          <DialogDescription>
+            Read-only production history for planning and prospect research.
+            Sales activity remains in IVY.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          {[
+            ["Room Nights", Math.round(account.roomNights).toLocaleString()],
+            ["Room Revenue", money.format(account.roomRevenue)],
+            ["ADR", money2.format(account.adr)],
+            ["Average LOS", account.averageLos.toFixed(1)],
+            ["First Production", account.history[0]?.label || "—"],
+            ["Most Recent", account.history.at(-1)?.label || "—"],
+            ["Market Segment", account.marketSegment || "—"],
+            ["Planning Status", account.status || "—"],
+          ].map(([label, value]) => (
+            <div className="rounded border bg-[#f7f1e7] p-3" key={label}>
+              <div className="text-xs text-[#6e5d50]">{label}</div>
+              <div className="font-semibold">{value}</div>
+            </div>
+          ))}
+        </div>
+        {account.bookings?.length > 0 && (
+          <div>
+            <h3 className="mb-2 font-semibold">STAY Group Bookings</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="p-2">Stay Dates</th>
+                    <th>Booking Code</th>
+                    <th className="text-right">Contracted</th>
+                    <th className="text-right">Blocked</th>
+                    <th className="text-right">Picked Up</th>
+                    <th className="p-2 text-right">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {account.bookings.map((booking: any, index: number) => (
+                    <tr
+                      className="border-b"
+                      key={`${booking.bookingCode}-${index}`}
+                    >
+                      <td className="p-2">
+                        {booking.arrivalDate} – {booking.departureDate}
+                      </td>
+                      <td>{booking.bookingCode || "—"}</td>
+                      <td className="text-right">
+                        {booking.contractedRoomNights}
+                      </td>
+                      <td className="text-right">
+                        {booking.blockedRoomNights}
+                      </td>
+                      <td className="text-right font-medium">
+                        {booking.pickedUpRoomNights}
+                      </td>
+                      <td className="p-2 text-right">
+                        {money.format(booking.roomRevenue)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        <div>
+          <h3 className="mb-2 font-semibold">Monthly Production History</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="p-2">Month</th>
+                  <th className="text-right">Room Nights</th>
+                  <th className="text-right">Revenue</th>
+                  <th className="p-2 text-right">ADR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {account.history.map((history: any) => (
+                  <tr className="border-b" key={history.index}>
+                    <td className="p-2">{history.label}</td>
+                    <td className="text-right">
+                      {Math.round(history.roomNights)}
+                    </td>
+                    <td className="text-right">
+                      {money.format(history.roomRevenue)}
+                    </td>
+                    <td className="p-2 text-right">
+                      {money2.format(history.adr)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DetailDialog({ account, hotelId, onClose }: any) {
   const { toast } = useToast();
   const qc = useQueryClient();

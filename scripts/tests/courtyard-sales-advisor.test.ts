@@ -6,6 +6,12 @@ import {
   compactAdvisorContext,
   salesAdvisorFingerprint,
 } from "../../server/courtyardSalesAdvisor";
+import {
+  distanceBand,
+  distanceMiles,
+  prospectScore,
+  targetRoles,
+} from "../../server/courtyardSalesDemand";
 
 const batch = (id: string, month: number, sourceReportType = "stay_group_summary") => ({
   id,
@@ -145,4 +151,20 @@ test("monthly target progress uses authoritative actual production when loaded",
   assert.equal(group.actual?.roomNights, 60);
   assert.equal(group.actual?.revenue, 6600);
   assert.ok(Number(group.actual?.roomNightsAttainmentPercent) > 0);
+});
+
+test("regional lead scoring prioritizes proximity and proven hotel history", () => {
+  const proven = prospectScore({ distanceMiles: 20, evidenceClass: "proven_producer", signals: ["Recurring training"], industry: "Construction", historicalRevenue: 25000 });
+  const unqualified = prospectScore({ distanceMiles: 60, evidenceClass: "regional_strategic", signals: [], industry: "Retail" });
+  assert.ok(proven > unqualified);
+  assert.equal(distanceBand(8), "0–10 miles");
+  assert.equal(distanceBand(74), "50–75 miles");
+});
+
+test("distance calculation and target roles are deterministic", () => {
+  const miles = distanceMiles(30.4654, -97.7987, 29.8833, -97.9414);
+  assert.ok(miles > 35 && miles < 50);
+  const roles = targetRoles("Construction", ["Regional training and project crews"]);
+  assert.ok(roles.includes("Learning & Development or Training Coordinator"));
+  assert.ok(roles.includes("Operations or Project Manager"));
 });

@@ -12,6 +12,8 @@ import {
   courtyardSalesAccountNotes,
   courtyardSalesAdvisorAnalyses,
   courtyardSalesMonthlyTargets,
+  courtyardSalesDemandEvents,
+  courtyardSalesRegionalProspects,
   courtyardSalesAccountProfiles,
   courtyardSalesActivities,
   courtyardSalesImportBatches,
@@ -44,6 +46,12 @@ import {
 } from "../courtyardSalesAdvisor";
 import { generateSalesAdvisorNarrative } from "../courtyardSalesAdvisorAi";
 import { salesAdvisorModel } from "../openaiClient";
+import {
+  discoverRegionalBusinesses,
+  prospectScore,
+  targetRoles,
+} from "../courtyardSalesDemand";
+import { researchDemandEvents } from "../courtyardSalesDemandResearch";
 
 const DEFAULT_HOTEL_ID = "courtyard-austin-lakeline";
 const RECOVERY_MONTHS = 3;
@@ -1534,6 +1542,130 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
     } catch (error: any) {
       if (error?.message?.startsWith("Choose") || error?.message?.startsWith("Target"))
         return res.status(400).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.get("/advisor/demand", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.query.hotelId || req.salesHotels[0]?.id || "");
+      if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "You do not have access to that property." });
+      const { targetYear, targetMonth } = monthlyTargetPeriod(req.query);
+      const start = `${targetYear}-${String(targetMonth).padStart(2, "0")}-01`;
+      const next = new Date(Date.UTC(targetYear, targetMonth, 1));
+      const end = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-01`;
+      const [events, persisted, source] = await Promise.all([
+        db.select().from(courtyardSalesDemandEvents).where(and(eq(courtyardSalesDemandEvents.hotelId, hotelId), gte(courtyardSalesDemandEvents.startDate, start), lt(courtyardSalesDemandEvents.startDate, end))).orderBy(courtyardSalesDemandEvents.startDate),
+        db.select().from(courtyardSalesRegionalProspects).where(eq(courtyardSalesRegionalProspects.hotelId, hotelId)).orderBy(desc(courtyardSalesRegionalProspects.opportunityScore)).limit(150),
+        advisorSourceData(hotelId),
+      ]);
+      const historical = buildSalesAdvisorPreview({ ...source, lookbackMonths: 36, businessTypes: ["Groups", "Special Corp", "Government", "Corporate Accounts"], analysisType: "full_plan" } as any)
+        .candidates.filter((candidate) => candidate.typicalMonths.includes(targetMonth))
+        .slice(0, 30)
+        .map((candidate) => ({
+          id: `historical:${candidate.businessType}:${candidate.key}`,
+          companyName: candidate.name,
+          distanceMiles: null,
+          distanceBand: "Hotel production history",
+          industry: candidate.businessType,
+          evidenceClass: candidate.status === "Recovery Opportunity" ? "former_producer" : "proven_producer",
+          sourceType: "hotel_history",
+          opportunitySignalsJson: [`Produced during ${new Date(2020, targetMonth - 1, 1).toLocaleDateString("en-US", { month: "long" })} in imported hotel history`, candidate.status],
+          targetRolesJson: targetRoles(candidate.businessType, []),
+          historicalAccountKey: candidate.key,
+          historicalRoomNights: candidate.totalRoomNights,
+          historicalRevenue: candidate.totalRevenue,
+          opportunityScore: Math.max(70, candidate.scores.overall),
+          rationale: `${candidate.status}. ${candidate.confidence} confidence from imported production history.`,
+          status: "new",
+        }));
+      res.json({ targetYear, targetMonth, events, prospects: [...historical, ...persisted].sort((a: any, b: any) => Number(b.opportunityScore) - Number(a.opportunityScore)), configuration: { webResearch: !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY), places: !!process.env.GOOGLE_PLACES_API_KEY } });
+    } catch (error: any) {
+      if (error?.message?.startsWith("Choose a valid")) return res.status(400).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.post("/advisor/demand/events", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || "");
+      if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "You do not have access to that property." });
+      const eventName = String(req.body.eventName || "").trim();
+      const startDate = String(req.body.startDate || "");
+      if (!eventName || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return res.status(400).json({ error: "Enter an event name and valid start date." });
+      const [event] = await db.insert(courtyardSalesDemandEvents).values({
+        hotelId, eventName: eventName.slice(0, 240), category: String(req.body.category || "Other"), startDate,
+        endDate: /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.endDate || "")) ? req.body.endDate : null,
+        venue: String(req.body.venue || "").slice(0, 240) || null, city: String(req.body.city || "").slice(0, 120) || null,
+        demandLevel: ["low", "medium", "high"].includes(req.body.demandLevel) ? req.body.demandLevel : "medium",
+        opportunityTypesJson: Array.isArray(req.body.opportunityTypes) ? req.body.opportunityTypes.slice(0, 8) : [],
+        targetRolesJson: Array.isArray(req.body.targetRoles) ? req.body.targetRoles.slice(0, 12) : [],
+        recommendedAction: String(req.body.recommendedAction || "").slice(0, 1000) || null,
+        bookingWindowDays: Number(req.body.bookingWindowDays || 90), sourceName: String(req.body.sourceName || "DOS knowledge").slice(0, 200),
+        sourceUrl: /^https:\/\//.test(String(req.body.sourceUrl || "")) ? req.body.sourceUrl : null,
+        evidenceStatus: "manual", confidence: "medium", sourceLastVerifiedAt: new Date(), createdByUserId: req.salesUser.id,
+      }).returning();
+      res.status(201).json({ event });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/advisor/demand/prospects", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || "");
+      if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "You do not have access to that property." });
+      const companyName = String(req.body.companyName || "").trim();
+      if (!companyName) return res.status(400).json({ error: "Enter a company name." });
+      const miles = Math.max(0, Math.min(75, Number(req.body.distanceMiles || 0)));
+      const signals = Array.isArray(req.body.opportunitySignals) ? req.body.opportunitySignals.slice(0, 12) : [];
+      const industry = String(req.body.industry || "Business").slice(0, 160);
+      const evidenceClass = "manually_identified";
+      const [prospect] = await db.insert(courtyardSalesRegionalProspects).values({
+        hotelId, companyName: companyName.slice(0, 240), address: String(req.body.address || "").slice(0, 500) || null,
+        city: String(req.body.city || "").slice(0, 120) || null, distanceMiles: String(miles),
+        distanceBand: miles <= 10 ? "0–10 miles" : miles <= 25 ? "10–25 miles" : miles <= 50 ? "25–50 miles" : "50–75 miles",
+        industry, website: /^https:\/\//.test(String(req.body.website || "")) ? req.body.website : null,
+        evidenceClass, sourceType: "manual", sourceId: crypto.randomUUID(), opportunitySignalsJson: signals,
+        targetRolesJson: targetRoles(industry, signals), opportunityScore: prospectScore({ distanceMiles: miles, evidenceClass, signals, industry }),
+        rationale: String(req.body.rationale || "Manually identified by the onsite sales team; travel potential requires qualification.").slice(0, 2000),
+        lastVerifiedAt: new Date(), createdByUserId: req.salesUser.id,
+      }).returning();
+      res.status(201).json({ prospect });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/advisor/demand/research", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || "");
+      if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "You do not have access to that property." });
+      const { targetYear, targetMonth } = monthlyTargetPeriod(req.body);
+      const discovered = await researchDemandEvents(targetYear, targetMonth);
+      const start = `${targetYear}-${String(targetMonth).padStart(2, "0")}-01`;
+      const next = new Date(Date.UTC(targetYear, targetMonth, 1));
+      const end = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-01`;
+      const existing = await db.select().from(courtyardSalesDemandEvents).where(and(eq(courtyardSalesDemandEvents.hotelId, hotelId), gte(courtyardSalesDemandEvents.startDate, start), lt(courtyardSalesDemandEvents.startDate, end)));
+      const keys = new Set(existing.map((event) => `${event.eventName.toLowerCase()}|${event.startDate}|${event.sourceUrl}`));
+      const fresh = discovered.filter((event: any) => !keys.has(`${event.eventName.toLowerCase()}|${event.startDate}|${event.sourceUrl}`));
+      const inserted = fresh.length ? await db.insert(courtyardSalesDemandEvents).values(fresh.map((event: any) => ({ hotelId, ...event, opportunityTypesJson: event.opportunityTypes, targetRolesJson: event.targetRoles, evidenceStatus: "verified_source", sourceLastVerifiedAt: new Date(), createdByUserId: req.salesUser.id }))).returning() : [];
+      res.json({ discovered: discovered.length, added: inserted.length });
+    } catch (error: any) {
+      if (error?.statusCode) return res.status(error.statusCode).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.post("/advisor/demand/discover-businesses", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || "");
+      if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "You do not have access to that property." });
+      const discovered = await discoverRegionalBusinesses();
+      const saved = [];
+      for (const prospect of discovered) {
+        const [row] = await db.insert(courtyardSalesRegionalProspects).values({ hotelId, ...prospect, latitude: String(prospect.latitude), longitude: String(prospect.longitude), distanceMiles: String(prospect.distanceMiles), sourceType: "google_places", lastVerifiedAt: new Date(), createdByUserId: req.salesUser.id }).onConflictDoUpdate({ target: [courtyardSalesRegionalProspects.hotelId, courtyardSalesRegionalProspects.sourceType, courtyardSalesRegionalProspects.sourceId], set: { companyName: prospect.companyName, address: prospect.address, latitude: String(prospect.latitude), longitude: String(prospect.longitude), distanceMiles: String(prospect.distanceMiles), distanceBand: prospect.distanceBand, industry: prospect.industry, website: prospect.website, phone: prospect.phone, sourceUrl: prospect.sourceUrl, opportunitySignalsJson: prospect.opportunitySignalsJson, targetRolesJson: prospect.targetRolesJson, evidenceClass: prospect.evidenceClass, opportunityScore: prospect.opportunityScore, rationale: prospect.rationale, lastVerifiedAt: new Date(), updatedAt: new Date() } }).returning();
+        saved.push(row);
+      }
+      res.json({ discovered: discovered.length, saved: saved.length });
+    } catch (error: any) {
+      if (error?.statusCode) return res.status(error.statusCode).json({ error: error.message });
       next(error);
     }
   });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Copy, Download, Lock, RefreshCw, Save, Sparkles } from "lucide-react";
+import { CalendarDays, Copy, Download, ExternalLink, Lock, MapPin, Plus, RefreshCw, Save, Search, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -112,6 +112,77 @@ function MonthlySalesTargets({ hotelId }: { hotelId: string }) {
   </Card>;
 }
 
+function FutureDemandPipeline({ hotelId }: { hotelId: string }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const initial = useMemo(() => { const date = new Date(); date.setMonth(date.getMonth() + 1); return { year: date.getFullYear(), month: date.getMonth() + 1 }; }, []);
+  const [year, setYear] = useState(String(initial.year));
+  const [month, setMonth] = useState(String(initial.month));
+  const [showAdd, setShowAdd] = useState(false);
+  const [showEvent, setShowEvent] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [city, setCity] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [distance, setDistance] = useState("");
+  const [signals, setSignals] = useState("");
+  const [eventName, setEventName] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [eventVenue, setEventVenue] = useState("");
+  const [eventAction, setEventAction] = useState("");
+  const demand = useQuery({
+    queryKey: ["sales-demand", hotelId, year, month],
+    queryFn: () => request(`/api/courtyard/sales-intelligence/advisor/demand?hotelId=${encodeURIComponent(hotelId)}&targetYear=${year}&targetMonth=${month}`),
+    enabled: !!hotelId,
+  });
+  const refresh = () => qc.invalidateQueries({ queryKey: ["sales-demand", hotelId, year, month] });
+  const research = useMutation({
+    mutationFn: () => request("/api/courtyard/sales-intelligence/advisor/demand/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId, targetYear: Number(year), targetMonth: Number(month) }) }),
+    onSuccess: (result) => { refresh(); toast({ title: "Demand research complete", description: `${result.added} newly verified events added.` }); },
+    onError: (error: Error) => toast({ title: "Demand research needs attention", description: error.message, variant: "destructive" }),
+  });
+  const discover = useMutation({
+    mutationFn: () => request("/api/courtyard/sales-intelligence/advisor/demand/discover-businesses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId }) }),
+    onSuccess: (result) => { refresh(); toast({ title: "Regional discovery complete", description: `${result.saved} businesses scored within the 75-mile program.` }); },
+    onError: (error: Error) => toast({ title: "Business discovery needs attention", description: error.message, variant: "destructive" }),
+  });
+  const addProspect = useMutation({
+    mutationFn: () => request("/api/courtyard/sales-intelligence/advisor/demand/prospects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId, companyName, city, industry, distanceMiles: Number(distance), opportunitySignals: signals.split("\n").map((item) => item.trim()).filter(Boolean) }) }),
+    onSuccess: () => { refresh(); setShowAdd(false); setCompanyName(""); setCity(""); setIndustry(""); setDistance(""); setSignals(""); toast({ title: "Known prospect added" }); },
+    onError: (error: Error) => toast({ title: "Could not add prospect", description: error.message, variant: "destructive" }),
+  });
+  const addEvent = useMutation({
+    mutationFn: () => request("/api/courtyard/sales-intelligence/advisor/demand/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId, eventName, startDate: eventDate, venue: eventVenue, category: "Other", demandLevel: "medium", recommendedAction: eventAction, targetRoles: ["Event or Program Coordinator", "Group Housing Coordinator"], opportunityTypes: ["Group", "Special Corp"], bookingWindowDays: 90 }) }),
+    onSuccess: () => { refresh(); setShowEvent(false); setEventName(""); setEventDate(""); setEventVenue(""); setEventAction(""); toast({ title: "Known demand event added" }); },
+    onError: (error: Error) => toast({ title: "Could not add event", description: error.message, variant: "destructive" }),
+  });
+  const addCrm = useMutation({
+    mutationFn: (prospect: any) => request("/api/courtyard/sales-intelligence/opportunities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId, normalizedAccountKey: prospect.historicalAccountKey || `regional:${prospect.id}`, accountName: prospect.companyName, marketSegment: prospect.industry, stage: "prospect", estimatedRoomNights: 0, estimatedRevenue: 0, nextAction: "Qualify travel, training, meeting, or project lodging need", notes: `${prospect.rationale || "Added from regional prospecting pipeline"} Evidence: ${String(prospect.evidenceClass).replace(/_/g, " ")}.` }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-crm", hotelId] }); toast({ title: "Lead added to Backup CRM" }); },
+    onError: (error: Error) => toast({ title: "Could not add lead", description: error.message, variant: "destructive" }),
+  });
+  const years = [initial.year, initial.year + 1, initial.year + 2];
+  return <Card className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]">
+    <CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5 text-[#2f5f46]" />Future Demand & Regional Lead Pipeline</CardTitle><CardDescription className="!text-[#5f5247]">Connect upcoming demand generators with proven hotel accounts and qualified business prospects within 75 miles.</CardDescription></CardHeader>
+    <CardContent className="space-y-5">
+      <div className="flex flex-wrap gap-2">
+        <Select value={year} onValueChange={setYear}><SelectTrigger className="w-28 bg-white"><SelectValue /></SelectTrigger><SelectContent>{years.map((item) => <SelectItem key={item} value={String(item)}>{item}</SelectItem>)}</SelectContent></Select>
+        <Select value={month} onValueChange={setMonth}><SelectTrigger className="w-44 bg-white"><SelectValue /></SelectTrigger><SelectContent>{Array.from({ length: 12 }, (_, i) => i + 1).map((item) => <SelectItem key={item} value={String(item)}>{new Date(2020, item - 1, 1).toLocaleDateString("en-US", { month: "long" })}</SelectItem>)}</SelectContent></Select>
+        <Button variant="outline" className="border-[#8d765a] bg-white text-[#201814]" disabled={research.isPending || !demand.data?.configuration?.webResearch} onClick={() => research.mutate()}><Search className="mr-2 h-4 w-4" />{research.isPending ? "Researching…" : "Research Official Events"}</Button>
+        <Button variant="outline" className="border-[#8d765a] bg-white text-[#201814]" disabled={discover.isPending || !demand.data?.configuration?.places} onClick={() => discover.mutate()}><MapPin className="mr-2 h-4 w-4" />{discover.isPending ? "Discovering…" : "Discover Regional Businesses"}</Button>
+        <Button className="!bg-[#2f5f46] !text-white" onClick={() => setShowAdd(!showAdd)}><Plus className="mr-2 h-4 w-4" />Add Known Prospect</Button>
+        <Button variant="outline" className="border-[#8d765a] bg-white text-[#201814]" onClick={() => setShowEvent(!showEvent)}><Plus className="mr-2 h-4 w-4" />Add Known Event</Button>
+      </div>
+      {demand.data && (!demand.data.configuration.webResearch || !demand.data.configuration.places) && <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Core planning and hotel-history leads are active. {!demand.data.configuration.webResearch ? "OpenAI is required for official event research. " : ""}{!demand.data.configuration.places ? "GOOGLE_PLACES_API_KEY is required for regional business discovery." : ""}</div>}
+      {showAdd && <div className="grid gap-3 rounded-md border border-[#cdbda8] bg-white p-4 sm:grid-cols-2"><div><Label>Company</Label><Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="McCoy’s Building Supply" /></div><div><Label>City</Label><Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="San Marcos" /></div><div><Label>Industry</Label><Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Building supply / training" /></div><div><Label>Approx. miles from hotel</Label><Input type="number" min="0" max="75" value={distance} onChange={(e) => setDistance(e.target.value)} /></div><div className="sm:col-span-2"><Label>Known opportunity signals</Label><Textarea rows={3} value={signals} onChange={(e) => setSignals(e.target.value)} placeholder={"Regional training program\nRecurring multi-night classes\nOperations based in Central Texas"} /></div><div><Button className="!bg-[#2f5f46] !text-white" disabled={!companyName.trim() || addProspect.isPending} onClick={() => addProspect.mutate()}>Save Prospect</Button></div></div>}
+      {showEvent && <div className="grid gap-3 rounded-md border border-[#cdbda8] bg-white p-4 sm:grid-cols-2"><div><Label>Event or demand generator</Label><Input value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="Regional training week" /></div><div><Label>Start date</Label><Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} /></div><div><Label>Venue</Label><Input value={eventVenue} onChange={(e) => setEventVenue(e.target.value)} placeholder="H-E-B Center" /></div><div><Label>Recommended sales action</Label><Input value={eventAction} onChange={(e) => setEventAction(e.target.value)} placeholder="Contact organizer and participating teams" /></div><div><Button className="!bg-[#2f5f46] !text-white" disabled={!eventName.trim() || !eventDate || addEvent.isPending} onClick={() => addEvent.mutate()}>Save Event</Button></div></div>}
+      <div><div className="mb-2 flex items-center justify-between"><h3 className="text-lg font-semibold">Upcoming Demand Generators</h3><Badge variant="outline">{demand.data?.events?.length || 0} verified/manual</Badge></div>
+        <div className="grid gap-3 lg:grid-cols-2">{(demand.data?.events || []).map((event: any) => <div key={event.id} className="rounded-md border border-[#deceba] bg-white p-4"><div className="flex items-start justify-between gap-2"><div><div className="font-semibold">{event.eventName}</div><div className="text-sm text-[#5f5247]">{new Date(`${event.startDate}T12:00:00`).toLocaleDateString()} · {event.venue || event.city || "Venue pending"}</div></div><Badge className={event.demandLevel === "high" ? "!bg-[#2f5f46] !text-white" : "!bg-[#eadfce] !text-[#4f4339]"}>{event.demandLevel} demand</Badge></div><p className="mt-2 text-sm">{event.recommendedAction}</p><div className="mt-2 text-xs text-[#6e5d50]">Target: {(event.targetRolesJson || []).join(" · ")}</div>{event.sourceUrl && <a className="mt-2 inline-flex items-center text-sm text-[#2f5f46] underline" href={event.sourceUrl} target="_blank" rel="noreferrer">{event.sourceName || "Official source"}<ExternalLink className="ml-1 h-3 w-3" /></a>}</div>)}{!demand.isLoading && !demand.data?.events?.length && <div className="rounded-md border border-dashed border-[#cdbda8] bg-white p-5 text-sm text-[#5f5247] lg:col-span-2">No demand events are stored for this month yet. Run official event research or add a known event above.</div>}</div>
+      </div>
+      <div><div className="mb-2 flex items-center justify-between"><h3 className="text-lg font-semibold">Prioritized Outreach Pipeline</h3><Badge variant="outline">{demand.data?.prospects?.length || 0} leads</Badge></div><div className="overflow-x-auto rounded-md border border-[#deceba] bg-white"><table className="w-full min-w-[900px] text-sm"><thead className="bg-[#f7f1e7]"><tr><th className="p-3 text-left">Priority / Company</th><th className="text-left">Evidence</th><th className="text-left">Distance</th><th className="text-left">Why pursue</th><th className="text-left">Target roles</th><th className="p-3"></th></tr></thead><tbody>{(demand.data?.prospects || []).slice(0, 50).map((prospect: any) => <tr key={prospect.id} className="border-t border-[#deceba]"><td className="p-3"><div className="font-semibold">{prospect.opportunityScore} · {prospect.companyName}</div><div className="text-xs text-[#6e5d50]">{prospect.industry || "Business"}{prospect.historicalRevenue ? ` · ${money.format(Number(prospect.historicalRevenue))} history` : ""}</div></td><td><Badge variant="outline" className="capitalize">{String(prospect.evidenceClass).replace(/_/g, " ")}</Badge></td><td>{prospect.distanceMiles == null ? prospect.distanceBand : `${Number(prospect.distanceMiles).toFixed(1)} mi · ${prospect.distanceBand}`}</td><td className="max-w-xs p-2 text-[#5f5247]">{prospect.rationale}</td><td className="max-w-xs p-2 text-xs">{(prospect.targetRolesJson || []).slice(0, 3).join(" · ")}</td><td className="p-3"><Button size="sm" variant="outline" disabled={addCrm.isPending} onClick={() => addCrm.mutate(prospect)}>Add to CRM</Button></td></tr>)}</tbody></table></div></div>
+    </CardContent>
+  </Card>;
+}
+
 export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -186,6 +257,7 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
   return (
     <div className="space-y-4">
       <MonthlySalesTargets hotelId={hotelId} />
+      <FutureDemandPipeline hotelId={hotelId} />
       <Card className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-[#2f5f46]" />Sales Advisor</CardTitle>

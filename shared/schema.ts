@@ -2025,6 +2025,73 @@ export const courtyardSalesMonthlyTargets = pgTable(
   ],
 );
 
+export const courtyardSalesDemandEvents = pgTable(
+  "courtyard_sales_demand_events",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+    eventName: text("event_name").notNull(),
+    category: text("category").notNull(),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date"),
+    venue: text("venue"),
+    city: text("city"),
+    distanceMiles: numeric("distance_miles", { precision: 8, scale: 2 }),
+    demandLevel: text("demand_level").notNull().default("medium"),
+    opportunityTypesJson: jsonb("opportunity_types_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    targetRolesJson: jsonb("target_roles_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    recommendedAction: text("recommended_action"),
+    bookingWindowDays: integer("booking_window_days"),
+    sourceName: text("source_name"),
+    sourceUrl: text("source_url"),
+    evidenceStatus: text("evidence_status").notNull().default("manual"),
+    confidence: text("confidence").notNull().default("medium"),
+    sourceLastVerifiedAt: timestamp("source_last_verified_at"),
+    createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [index("idx_courtyard_sales_demand_period").on(table.hotelId, table.startDate)],
+);
+
+export const courtyardSalesRegionalProspects = pgTable(
+  "courtyard_sales_regional_prospects",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+    companyName: text("company_name").notNull(),
+    address: text("address"),
+    city: text("city"),
+    latitude: numeric("latitude", { precision: 10, scale: 7 }),
+    longitude: numeric("longitude", { precision: 10, scale: 7 }),
+    distanceMiles: numeric("distance_miles", { precision: 8, scale: 2 }),
+    distanceBand: text("distance_band"),
+    industry: text("industry"),
+    website: text("website"),
+    phone: text("phone"),
+    evidenceClass: text("evidence_class").notNull().default("local_prospect"),
+    sourceType: text("source_type").notNull().default("manual"),
+    sourceId: text("source_id"),
+    sourceUrl: text("source_url"),
+    opportunitySignalsJson: jsonb("opportunity_signals_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    targetRolesJson: jsonb("target_roles_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    historicalAccountKey: text("historical_account_key"),
+    historicalRoomNights: numeric("historical_room_nights", { precision: 14, scale: 2 }),
+    historicalRevenue: numeric("historical_revenue", { precision: 16, scale: 2 }),
+    opportunityScore: integer("opportunity_score").notNull().default(0),
+    rationale: text("rationale"),
+    status: text("status").notNull().default("new"),
+    lastVerifiedAt: timestamp("last_verified_at"),
+    createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_courtyard_sales_regional_score").on(table.hotelId, table.opportunityScore),
+    uniqueIndex("idx_courtyard_sales_regional_source").on(table.hotelId, table.sourceType, table.sourceId),
+  ],
+);
+
 export const courtyardIncidentReports = pgTable(
   "courtyard_incident_reports",
   {

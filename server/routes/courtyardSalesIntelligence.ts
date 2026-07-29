@@ -22,6 +22,7 @@ import {
 import {
   MAX_SALES_IMPORT_BYTES,
   parseSalesImport,
+  parseStayMarketSegmentImport,
   recoveryPriority,
 } from "../courtyardSalesImport";
 
@@ -30,6 +31,7 @@ const RECOVERY_MONTHS = 3;
 const GROUP_REPORT_TYPE = "marriott_mint_group_account_tracking";
 const SPECIAL_REPORT_TYPE = "marriott_mint_special_corp_government";
 const ALL_MARKET_REPORT_TYPE = "marriott_mint_all_market_segments";
+const STAY_MARKET_REPORT_TYPE = "stay_revenue_by_market_segment_with_groups";
 const OPPORTUNITY_STAGES = [
   "prospect",
   "contact_attempted",
@@ -250,7 +252,11 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
     try {
       if (!req.file)
         return res.status(400).json({ error: "Choose a report file." });
-      const p = parseSalesImport(req.file.buffer);
+      const reportYear = Number(req.body.reportYear);
+      const isStayFormat = Number.isInteger(reportYear) && reportYear >= 2026;
+      const p = isStayFormat
+        ? parseStayMarketSegmentImport(req.file.buffer)
+        : parseSalesImport(req.file.buffer);
       const segments = new Set(
         p.accepted.map((row) => String(row.marketSegment || "").toLowerCase()),
       );
@@ -262,8 +268,11 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         rejectedRows: p.rejected.length,
         duplicateRows: p.duplicateRowCount,
         warnings: p.warnings,
-        suggestedReportType:
-          segments.size > 2
+        isStayFormat,
+        reportDateRange: (p as any).reportDateRange || null,
+        suggestedReportType: isStayFormat
+          ? STAY_MARKET_REPORT_TYPE
+          : segments.size > 2
             ? ALL_MARKET_REPORT_TYPE
             : [...segments].some(
                   (value) =>
@@ -274,6 +283,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         preview: p.accepted.slice(0, 5).map((r) => ({
           account: r.globalUltimateAccountName || r.accountName,
           bookingOffice: r.bookingOffice,
+          sourceDetail: isStayFormat ? r.accountType : r.bookingOffice,
           roomNights: r.roomNights,
           roomRevenue: r.roomRevenue,
         })),
@@ -287,7 +297,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       if (!req.file)
         return res.status(400).json({ error: "Choose a report file." });
       const hotelId = String(req.body.hotelId || "");
-      const sourceReportType = String(req.body.reportType || "");
+      const requestedReportType = String(req.body.reportType || "");
       const reportYear = Number(req.body.reportYear),
         reportMonth = Number(req.body.reportMonth),
         replace = String(req.body.replace) === "true";
@@ -295,7 +305,10 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         return res
           .status(403)
           .json({ error: "You do not have access to that property." });
+      const sourceReportType =
+        reportYear >= 2026 ? STAY_MARKET_REPORT_TYPE : requestedReportType;
       if (
+        reportYear < 2026 &&
         ![
           GROUP_REPORT_TYPE,
           SPECIAL_REPORT_TYPE,
@@ -317,6 +330,24 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         return res
           .status(400)
           .json({ error: "Choose a valid report month and year." });
+      const p =
+        reportYear >= 2026
+          ? parseStayMarketSegmentImport(req.file.buffer)
+          : parseSalesImport(req.file.buffer);
+      if (reportYear >= 2026) {
+        const mismatched = p.accepted.filter((row: any) => {
+          const [year, month] = String(row.stayDate || "")
+            .split("-")
+            .map(Number);
+          return year !== reportYear || month !== reportMonth;
+        });
+        if (mismatched.length)
+          return res
+            .status(400)
+            .json({
+              error: `The STAY report contains ${mismatched.length} row(s) outside the selected ${reportYear}-${String(reportMonth).padStart(2, "0")}. Upload one complete calendar month at a time.`,
+            });
+      }
       const checksum = crypto
         .createHash("sha256")
         .update(req.file.buffer)
@@ -370,7 +401,6 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
             ),
           );
       }
-      const p = parseSalesImport(req.file.buffer);
       const [batch] = await db
         .insert(courtyardSalesImportBatches)
         .values({
@@ -468,7 +498,13 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           desc(courtyardSalesImportBatches.reportMonth),
           desc(courtyardSalesImportBatches.createdAt),
         );
-      const active = batches.filter((b) => b.status === "completed");
+      const active = batches.filter(
+        (batch) =>
+          batch.status === "completed" &&
+          (batch.reportYear >= 2026
+            ? batch.sourceReportType === STAY_MARKET_REPORT_TYPE
+            : batch.sourceReportType !== STAY_MARKET_REPORT_TYPE),
+      );
       const batchIds = active.map((b) => b.id);
       const rows = batchIds.length
         ? await db
@@ -477,21 +513,47 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
             .where(inArray(courtyardSalesProduction.importBatchId, batchIds))
         : [];
       const batchById = new Map(active.map((batch) => [batch.id, batch]));
-      const groupRows = rows.filter(
-        (row) =>
-          batchById.get(row.importBatchId)?.sourceReportType !==
-          SPECIAL_REPORT_TYPE,
-      );
-      const specialRows = rows.filter(
+      const stayRows = rows.filter(
         (row) =>
           batchById.get(row.importBatchId)?.sourceReportType ===
-          SPECIAL_REPORT_TYPE,
+          STAY_MARKET_REPORT_TYPE,
       );
-      const allMarketRows = rows.filter(
-        (row) =>
-          batchById.get(row.importBatchId)?.sourceReportType ===
-          ALL_MARKET_REPORT_TYPE,
-      );
+      const groupRows = rows
+        .filter((row) => {
+          const type = batchById.get(row.importBatchId)?.sourceReportType;
+          return (
+            type === GROUP_REPORT_TYPE ||
+            type === "marriott_mint_analytical_account_tracking"
+          );
+        })
+        .concat(
+          stayRows.filter((row) =>
+            ["Group Corporate", "Group Other", "Group Contract"].includes(
+              String(row.marketSegment || ""),
+            ),
+          ),
+        );
+      const specialRows = rows
+        .filter(
+          (row) =>
+            batchById.get(row.importBatchId)?.sourceReportType ===
+            SPECIAL_REPORT_TYPE,
+        )
+        .concat(
+          stayRows.filter((row) =>
+            [
+              "Local Special Corp",
+              "Centrally Priced Special Corp",
+              "Government",
+            ].includes(String(row.marketSegment || "")),
+          ),
+        );
+      const allMarketRows = rows.filter((row) => {
+        const type = batchById.get(row.importBatchId)?.sourceReportType;
+        return (
+          type === ALL_MARKET_REPORT_TYPE || type === STAY_MARKET_REPORT_TYPE
+        );
+      });
       const marketSegments = [
         ...new Set(
           allMarketRows.map(

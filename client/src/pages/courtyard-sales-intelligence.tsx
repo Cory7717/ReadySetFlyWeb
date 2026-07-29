@@ -122,6 +122,8 @@ export default function CourtyardSalesIntelligence() {
       if (!file) throw new Error("Choose a report file.");
       const f = new FormData();
       f.append("file", file);
+      f.append("reportYear", year);
+      f.append("reportMonth", month);
       return json("/api/courtyard/sales-intelligence/preview", {
         method: "POST",
         body: f,
@@ -478,12 +480,15 @@ export default function CourtyardSalesIntelligence() {
         </Card>
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {[
-            ["Accounts", totals.accounts],
+            [activeYear >= 2026 ? "Segments" : "Accounts", totals.accounts],
             ["Room Nights", Math.round(totals.roomNights).toLocaleString()],
             ["Room Revenue", money.format(totals.roomRevenue)],
             ["ADR", money2.format(totals.adr)],
             ["Average Length of Stay", totals.los.toFixed(1)],
-            ["Recurring Accounts", totals.recurring],
+            [
+              activeYear >= 2026 ? "Recurring Segments" : "Recurring Accounts",
+              totals.recurring,
+            ],
           ].map(([k, v]) => (
             <Card className={C.shell} key={k}>
               <CardContent className="p-4">
@@ -693,7 +698,7 @@ function AccountTable({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-[#6e5d50]">
-                <th className="p-3">Account</th>
+                <th className="p-3">Account / Segment</th>
                 <th className="p-3 text-right">Room Nights</th>
                 <th className="p-3 text-right">Room Revenue</th>
                 <th className="p-3 text-right">ADR</th>
@@ -827,7 +832,11 @@ function SalesCrm({ hotelId, accounts }: any) {
   const accountOptions = useMemo(() => {
     const options = new Map<string, any>(
       accounts
-        .filter((a: any) => ["group", "special"].includes(a.reportCategory))
+        .filter(
+          (a: any) =>
+            ["group", "special"].includes(a.reportCategory) &&
+            !String(a.key).startsWith("stay-segment:"),
+        )
         .map((a: any) => [a.key, a]),
     );
     for (const opportunity of crm.data?.opportunities || []) {
@@ -1562,45 +1571,67 @@ function AnnualPlanning({ accounts, marketSegments }: any) {
 }
 
 function UploadDialog(p: any) {
+  const usesStayFormat = Number(p.year) >= 2026;
   return (
     <Dialog open={p.open} onOpenChange={p.setOpen}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Upload MINT Report</DialogTitle>
+          <DialogTitle>
+            {usesStayFormat
+              ? "Upload STAY Market Segment Report"
+              : "Upload MINT Report"}
+          </DialogTitle>
           <DialogDescription>
-            Analytical Account Tracking exports may use .xls even when they
-            contain tab-delimited text. Parsing happens securely on the server.
+            {usesStayFormat
+              ? "Upload one complete monthly Revenue by Market Segment with Groups CSV from STAY PMS."
+              : "Analytical Account Tracking exports may use .xls even when they contain tab-delimited text. Parsing happens securely on the server."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Label>Production report type</Label>
-            <Select value={p.reportType} onValueChange={p.setReportType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="marriott_mint_group_account_tracking">
-                  Group Account Production
-                </SelectItem>
-                <SelectItem value="marriott_mint_special_corp_government">
-                  Special Corp/Govt Production
-                </SelectItem>
-                <SelectItem value="marriott_mint_all_market_segments">
-                  All Market Segments
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            {usesStayFormat ? (
+              <div className="rounded-md border border-[#2f5f46] bg-[#e7f0e9] p-3 text-sm text-[#173b2a]">
+                <div className="font-semibold">
+                  STAY Revenue by Market Segment with Groups
+                </div>
+                <div>
+                  Required for January 2026 and later. This becomes the
+                  authoritative source for Total, Groups, Special Corp/Govt, and
+                  each market-segment tab.
+                </div>
+              </div>
+            ) : (
+              <Select value={p.reportType} onValueChange={p.setReportType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="marriott_mint_group_account_tracking">
+                    Group Account Production
+                  </SelectItem>
+                  <SelectItem value="marriott_mint_special_corp_government">
+                    Special Corp/Govt Production
+                  </SelectItem>
+                  <SelectItem value="marriott_mint_all_market_segments">
+                    All Market Segments
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             {p.preview && (
               <p className="mt-1 text-xs text-[#5f5247]">
                 Suggested from the report's Market Segment:{" "}
                 {p.preview.suggestedReportType ===
-                "marriott_mint_all_market_segments"
-                  ? "All Market Segments"
+                "stay_revenue_by_market_segment_with_groups"
+                  ? "STAY Revenue by Market Segment with Groups"
                   : p.preview.suggestedReportType ===
-                      "marriott_mint_special_corp_government"
-                    ? "Special Corp/Govt"
-                    : "Group Account Production"}
+                      "marriott_mint_all_market_segments"
+                    ? "All Market Segments"
+                    : p.preview.suggestedReportType ===
+                        "marriott_mint_special_corp_government"
+                      ? "Special Corp/Govt"
+                      : "Group Account Production"}
                 .
               </p>
             )}
@@ -1629,14 +1660,22 @@ function UploadDialog(p: any) {
               min="2000"
               max="2100"
               value={p.year}
-              onChange={(e) => p.setYear(e.target.value)}
+              onChange={(e) => {
+                p.setYear(e.target.value);
+                p.setFile(null);
+              }}
             />
           </div>
           <div className="sm:col-span-2">
-            <Label>File (.xls, .csv, .tsv, .txt)</Label>
+            <Label>
+              {usesStayFormat
+                ? "STAY CSV file"
+                : "File (.xls, .csv, .tsv, .txt)"}
+            </Label>
             <Input
+              key={usesStayFormat ? "stay-upload" : "mint-upload"}
               type="file"
-              accept=".xls,.csv,.tsv,.txt"
+              accept={usesStayFormat ? ".csv" : ".xls,.csv,.tsv,.txt"}
               onChange={(e) => p.setFile(e.target.files?.[0] || null)}
             />
           </div>
@@ -1663,7 +1702,9 @@ function UploadDialog(p: any) {
                 <thead>
                   <tr>
                     <th className="p-2 text-left">Account</th>
-                    <th>Booking Office</th>
+                    <th>
+                      {p.preview.isStayFormat ? "Guest Type" : "Booking Office"}
+                    </th>
                     <th>Room Nights</th>
                     <th>Revenue</th>
                   </tr>
@@ -1672,7 +1713,7 @@ function UploadDialog(p: any) {
                   {p.preview.preview.map((r: any, i: number) => (
                     <tr key={i}>
                       <td className="p-2">{r.account}</td>
-                      <td>{r.bookingOffice}</td>
+                      <td>{r.sourceDetail || r.bookingOffice || "—"}</td>
                       <td className="text-right">{r.roomNights}</td>
                       <td className="text-right">
                         {money.format(r.roomRevenue)}
@@ -1741,7 +1782,9 @@ function DetailDialog({ account, hotelId, onClose }: any) {
   const crm = useQuery({
     queryKey: ["sales-account-crm", hotelId, account?.key],
     queryFn: () => json(`${accountUrl}?hotelId=${encodeURIComponent(hotelId)}`),
-    enabled: Boolean(account && hotelId),
+    enabled: Boolean(
+      account && hotelId && !String(account.key).startsWith("stay-segment:"),
+    ),
   });
   useEffect(() => {
     if (!crm.data?.profile) return;
@@ -1802,85 +1845,100 @@ function DetailDialog({ account, hotelId, onClose }: any) {
               : "Matched using normalized account name"}
           </DialogDescription>
         </DialogHeader>
-        <Card className={C.shell}>
-          <CardHeader>
-            <CardTitle className="text-xl">Sales Contact</CardTitle>
-            <CardDescription>
-              Contact details and dated outreach activity are shared across this
-              account's production history.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div>
-                <Label>Contact name</Label>
-                <Input
-                  value={contactName}
-                  onChange={(event) => setContactName(event.target.value)}
-                  placeholder="Name"
-                />
-              </div>
-              <div>
-                <Label>Phone number</Label>
-                <Input
-                  type="tel"
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  placeholder="(512) 555-0123"
-                />
-              </div>
-              <div>
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="contact@company.com"
-                />
-              </div>
+        {String(account.key).startsWith("stay-segment:") ? (
+          <div className="rounded-md border border-[#b98435] bg-[#fff4dc] p-4 text-sm text-[#4d3514]">
+            <div className="font-semibold">STAY segment-level production</div>
+            <div>
+              This report does not contain individual company or group names.
+              Use the historical MINT accounts or add a manual CRM prospect for
+              contact tracking.
             </div>
-            <Button
-              className={C.green}
-              disabled={saveContact.isPending}
-              onClick={() => saveContact.mutate()}
-            >
-              {saveContact.isPending ? "Saving…" : "Save Contact"}
-            </Button>
-            <div className="border-t border-[#deceba] pt-4">
-              <Label>New contact note</Label>
-              <Textarea
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                placeholder="Called and left a voicemail regarding fall group dates…"
-                rows={3}
-              />
-              <Button
-                className={`mt-2 ${C.green}`}
-                disabled={!note.trim() || addNote.isPending}
-                onClick={() => addNote.mutate()}
-              >
-                {addNote.isPending ? "Adding…" : "Add Dated Note"}
-              </Button>
-            </div>
-            <div className="space-y-2">
-              <h3 className="font-semibold">Contact History</h3>
-              {crm.data?.notes?.map((item: any) => (
-                <div
-                  key={item.id}
-                  className="rounded-md border border-[#deceba] bg-white p-3"
-                >
-                  <div className="mb-1 text-xs font-medium text-[#6e5d50]">
-                    {new Date(item.createdAt).toLocaleString()}
-                  </div>
-                  <div className="whitespace-pre-wrap text-sm">{item.note}</div>
+          </div>
+        ) : (
+          <Card className={C.shell}>
+            <CardHeader>
+              <CardTitle className="text-xl">Sales Contact</CardTitle>
+              <CardDescription>
+                Contact details and dated outreach activity are shared across
+                this account's production history.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <Label>Contact name</Label>
+                  <Input
+                    value={contactName}
+                    onChange={(event) => setContactName(event.target.value)}
+                    placeholder="Name"
+                  />
                 </div>
-              ))}
-              {!crm.isLoading && !crm.data?.notes?.length && (
-                <p className="text-sm text-[#6e5d50]">No outreach notes yet.</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                <div>
+                  <Label>Phone number</Label>
+                  <Input
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    placeholder="(512) 555-0123"
+                  />
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="contact@company.com"
+                  />
+                </div>
+              </div>
+              <Button
+                className={C.green}
+                disabled={saveContact.isPending}
+                onClick={() => saveContact.mutate()}
+              >
+                {saveContact.isPending ? "Saving…" : "Save Contact"}
+              </Button>
+              <div className="border-t border-[#deceba] pt-4">
+                <Label>New contact note</Label>
+                <Textarea
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="Called and left a voicemail regarding fall group dates…"
+                  rows={3}
+                />
+                <Button
+                  className={`mt-2 ${C.green}`}
+                  disabled={!note.trim() || addNote.isPending}
+                  onClick={() => addNote.mutate()}
+                >
+                  {addNote.isPending ? "Adding…" : "Add Dated Note"}
+                </Button>
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-semibold">Contact History</h3>
+                {crm.data?.notes?.map((item: any) => (
+                  <div
+                    key={item.id}
+                    className="rounded-md border border-[#deceba] bg-white p-3"
+                  >
+                    <div className="mb-1 text-xs font-medium text-[#6e5d50]">
+                      {new Date(item.createdAt).toLocaleString()}
+                    </div>
+                    <div className="whitespace-pre-wrap text-sm">
+                      {item.note}
+                    </div>
+                  </div>
+                ))}
+                {!crm.isLoading && !crm.data?.notes?.length && (
+                  <p className="text-sm text-[#6e5d50]">
+                    No outreach notes yet.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
         <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           {[
             [
@@ -1989,12 +2047,15 @@ function HistoryDialog({ open, setOpen, imports, isAdmin, onDelete }: any) {
                     </div>
                     <div className="text-xs font-medium text-[#2f5f46]">
                       {x.sourceReportType ===
-                      "marriott_mint_all_market_segments"
-                        ? "All Market Segments"
+                      "stay_revenue_by_market_segment_with_groups"
+                        ? "STAY Market Segments"
                         : x.sourceReportType ===
-                            "marriott_mint_special_corp_government"
-                          ? "Special Corp/Govt"
-                          : "Group Account Production"}
+                            "marriott_mint_all_market_segments"
+                          ? "All Market Segments"
+                          : x.sourceReportType ===
+                              "marriott_mint_special_corp_government"
+                            ? "Special Corp/Govt"
+                            : "Group Account Production"}
                     </div>
                   </td>
                   <td>

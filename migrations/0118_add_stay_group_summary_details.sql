@@ -1,0 +1,10 @@
+ALTER TABLE courtyard_sales_production ADD COLUMN IF NOT EXISTS stay_arrival_date date;
+ALTER TABLE courtyard_sales_production ADD COLUMN IF NOT EXISTS stay_departure_date date;
+ALTER TABLE courtyard_sales_production ADD COLUMN IF NOT EXISTS group_booking_code text;
+ALTER TABLE courtyard_sales_production ADD COLUMN IF NOT EXISTS source_profile text;
+ALTER TABLE courtyard_sales_production ADD COLUMN IF NOT EXISTS contracted_room_nights numeric(14,2);
+ALTER TABLE courtyard_sales_production ADD COLUMN IF NOT EXISTS blocked_room_nights numeric(14,2);
+ALTER TABLE courtyard_sales_production ADD COLUMN IF NOT EXISTS cancelled_room_nights numeric(14,2);
+ALTER TABLE courtyard_sales_production ADD COLUMN IF NOT EXISTS no_show_room_nights numeric(14,2);
+ALTER TABLE courtyard_sales_production ADD COLUMN IF NOT EXISTS cutoff_date date;
+ALTER TABLE courtyard_sales_production ADD COLUMN IF NOT EXISTS released boolean;

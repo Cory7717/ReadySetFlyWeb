@@ -1727,6 +1727,28 @@ export const courtyardSalesProduction = pgTable(
     fees: numeric("fees", { precision: 16, scale: 2 }),
     taxes: numeric("taxes", { precision: 16, scale: 2 }),
     addOns: numeric("add_ons", { precision: 16, scale: 2 }),
+    stayArrivalDate: date("stay_arrival_date"),
+    stayDepartureDate: date("stay_departure_date"),
+    groupBookingCode: text("group_booking_code"),
+    sourceProfile: text("source_profile"),
+    contractedRoomNights: numeric("contracted_room_nights", {
+      precision: 14,
+      scale: 2,
+    }),
+    blockedRoomNights: numeric("blocked_room_nights", {
+      precision: 14,
+      scale: 2,
+    }),
+    cancelledRoomNights: numeric("cancelled_room_nights", {
+      precision: 14,
+      scale: 2,
+    }),
+    noShowRoomNights: numeric("no_show_room_nights", {
+      precision: 14,
+      scale: 2,
+    }),
+    cutoffDate: date("cutoff_date"),
+    released: boolean("released"),
     sourceRowNumber: integer("source_row_number").notNull(),
     normalizedAccountKey: text("normalized_account_key").notNull(),
     normalizedRowHash: text("normalized_row_hash").notNull(),

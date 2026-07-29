@@ -307,6 +307,161 @@ export function parseStayMarketSegmentImport(buffer: Buffer) {
       : null,
   };
 }
+const groupSummaryAliases: Record<string, string> = {
+  group: "sourceGroupName",
+  profile: "sourceProfile",
+  dates: "stayDates",
+  contracted: "contractedRoomNights",
+  "total blocked": "blockedRoomNights",
+  "picked up": "roomNights",
+  remaining: "remainingRoomNights",
+  cancelled: "cancelledRoomNights",
+  "no show": "noShowRoomNights",
+  "room revenue ($)": "roomRevenue",
+  "adr ($)": "roomAdr",
+  "cut off date": "cutoffDate",
+  released: "released",
+};
+function safeSourceDate(value: unknown) {
+  const source = clean(value);
+  if (!source) return null;
+  const parsed = new Date(source);
+  return Number.isNaN(parsed.getTime())
+    ? null
+    : parsed.toISOString().slice(0, 10);
+}
+
+export function parseStayGroupSummaryImport(buffer: Buffer) {
+  if (!buffer.length) throw new Error("The selected file is empty.");
+  if (buffer.includes(0))
+    throw new Error("This file appears to be binary and cannot be imported.");
+  const text = buffer.toString("utf8").replace(/^\uFEFF/, ""),
+    lines = text.split(/\r?\n/).filter((line) => line.trim().length);
+  if (lines.length < 2)
+    throw new Error("The Group Summary has headers but no data rows.");
+  const delimiter =
+    (lines[0].match(/\t/g) || []).length > (lines[0].match(/,/g) || []).length
+      ? "\t"
+      : ",";
+  const rawHeaders = parseDelimitedLine(lines[0], delimiter).map((header) =>
+    header.trim().replace(/^\uFEFF/, ""),
+  );
+  const mapped = rawHeaders.map(
+      (header) => groupSummaryAliases[normalizeHeader(header)] || null,
+    ),
+    found = new Set(mapped.filter(Boolean));
+  for (const required of [
+    "sourceGroupName",
+    "stayDates",
+    "roomNights",
+    "roomRevenue",
+    "roomAdr",
+  ])
+    if (!found.has(required))
+      throw new Error(
+        "This does not appear to be the STAY Groups Summary export. Required columns include Group, Dates, Picked Up, Room Revenue ($), and ADR ($).",
+      );
+  const accepted: any[] = [],
+    rejected: any[] = [],
+    seen = new Set<string>();
+  let duplicateRowCount = 0,
+    ignoredRowCount = 0;
+  lines.slice(1).forEach((line, index) => {
+    const cells = parseDelimitedLine(line, delimiter),
+      raw: Record<string, string> = {},
+      row: any = {};
+    rawHeaders.forEach((header, cellIndex) => {
+      raw[header] = cells[cellIndex] ?? "";
+      if (mapped[cellIndex]) row[mapped[cellIndex]!] = clean(cells[cellIndex]);
+    });
+    if (!clean(row.sourceGroupName)) {
+      ignoredRowCount++;
+      return;
+    }
+    const roomNights = numberValue(row.roomNights),
+      roomRevenue = numberValue(row.roomRevenue),
+      suppliedAdr = numberValue(row.roomAdr);
+    if (roomNights === null || roomRevenue === null || suppliedAdr === null) {
+      rejected.push({
+        row: index + 2,
+        reason: "Invalid picked-up rooms, revenue, or ADR",
+      });
+      return;
+    }
+    const dateParts = clean(row.stayDates).split(/\s+-\s+/),
+      stayArrivalDate = safeSourceDate(dateParts[0]),
+      stayDepartureDate = safeSourceDate(dateParts[1]);
+    if (!stayArrivalDate || !stayDepartureDate) {
+      rejected.push({ row: index + 2, reason: "Invalid stay date range" });
+      return;
+    }
+    const originalName = clean(row.sourceGroupName),
+      withoutTags = originalName.replace(/\s*\[[^\]]*\]\s*$/, "").trim();
+    const identityMatch = withoutTags.match(/^(.*?)\s+-\s+([A-Z0-9]+)$/i),
+      displayName = clean(identityMatch?.[1] || withoutTags),
+      groupBookingCode = clean(identityMatch?.[2]);
+    const normalizedRowHash = crypto
+      .createHash("sha256")
+      .update(JSON.stringify(rawHeaders.map((header) => raw[header])))
+      .digest("hex");
+    if (seen.has(normalizedRowHash)) {
+      duplicateRowCount++;
+      return;
+    }
+    seen.add(normalizedRowHash);
+    accepted.push({
+      globalUltimateAccountName: displayName,
+      accountName: displayName,
+      accountId: groupBookingCode || null,
+      accountType: "Group",
+      marketCategory: "Group",
+      marketSegment: "Group",
+      roomNights,
+      roomRevenue,
+      roomAdr: roomNights > 0 ? roomRevenue / roomNights : suppliedAdr,
+      totalRevenue: roomRevenue,
+      totalAdr: suppliedAdr,
+      averageLos: 0,
+      fees: 0,
+      taxes: 0,
+      addOns: 0,
+      stayArrivalDate,
+      stayDepartureDate,
+      groupBookingCode: groupBookingCode || null,
+      sourceProfile: clean(row.sourceProfile) || null,
+      contractedRoomNights: numberValue(row.contractedRoomNights),
+      blockedRoomNights: numberValue(row.blockedRoomNights),
+      cancelledRoomNights: numberValue(row.cancelledRoomNights),
+      noShowRoomNights: numberValue(row.noShowRoomNights),
+      cutoffDate: safeSourceDate(row.cutoffDate),
+      released: /^y(es)?$/i.test(clean(row.released)),
+      raw,
+      sourceRowNumber: index + 2,
+      normalizedRowHash,
+      normalizedAccountKey: `stay-group:${displayName.toLowerCase().replace(/\s+/g, " ")}`,
+    });
+  });
+  return {
+    delimiter: delimiter === "\t" ? "tab" : "comma",
+    rawHeaders,
+    rowsFound: lines.length - 1,
+    accepted,
+    rejected,
+    duplicateRowCount,
+    ignoredRowCount,
+    warnings: [],
+    reportDateRange: accepted.length
+      ? {
+          start: accepted.map((row) => row.stayArrivalDate).sort()[0],
+          end: accepted
+            .map((row) => row.stayDepartureDate)
+            .sort()
+            .at(-1),
+        }
+      : null,
+  };
+}
+
 export function recoveryPriority(
   revenue: number,
   nights: number,

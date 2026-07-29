@@ -104,6 +104,16 @@ export default function CourtyardSalesIntelligence() {
   const [reportType, setReportType] = useState(
     "marriott_mint_group_account_tracking",
   );
+  useEffect(() => {
+    const stayTypes = [
+      "stay_revenue_by_market_segment_with_groups",
+      "stay_group_summary",
+    ];
+    if (Number(year) >= 2026 && !stayTypes.includes(reportType))
+      setReportType("stay_revenue_by_market_segment_with_groups");
+    if (Number(year) < 2026 && stayTypes.includes(reportType))
+      setReportType("marriott_mint_group_account_tracking");
+  }, [year, reportType]);
   const me = useQuery({
     queryKey: ["/api/courtyard/sales-intelligence/me"],
     queryFn: () => json("/api/courtyard/sales-intelligence/me"),
@@ -124,6 +134,7 @@ export default function CourtyardSalesIntelligence() {
       f.append("file", file);
       f.append("reportYear", year);
       f.append("reportMonth", month);
+      f.append("reportType", reportType);
       return json("/api/courtyard/sales-intelligence/preview", {
         method: "POST",
         body: f,
@@ -480,13 +491,22 @@ export default function CourtyardSalesIntelligence() {
         </Card>
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {[
-            [activeYear >= 2026 ? "Segments" : "Accounts", totals.accounts],
+            [
+              activeYear >= 2026 &&
+              !["production", "recovery", "crm"].includes(view)
+                ? "Segments"
+                : "Accounts",
+              totals.accounts,
+            ],
             ["Room Nights", Math.round(totals.roomNights).toLocaleString()],
             ["Room Revenue", money.format(totals.roomRevenue)],
             ["ADR", money2.format(totals.adr)],
             ["Average Length of Stay", totals.los.toFixed(1)],
             [
-              activeYear >= 2026 ? "Recurring Segments" : "Recurring Accounts",
+              activeYear >= 2026 &&
+              !["production", "recovery", "crm"].includes(view)
+                ? "Recurring Segments"
+                : "Recurring Accounts",
               totals.recurring,
             ],
           ].map(([k, v]) => (
@@ -1578,12 +1598,14 @@ function UploadDialog(p: any) {
         <DialogHeader>
           <DialogTitle>
             {usesStayFormat
-              ? "Upload STAY Market Segment Report"
+              ? p.reportType === "stay_group_summary"
+                ? "Upload STAY Group Summary"
+                : "Upload STAY Hotel Production"
               : "Upload MINT Report"}
           </DialogTitle>
           <DialogDescription>
             {usesStayFormat
-              ? "Upload one complete monthly Revenue by Market Segment with Groups CSV from STAY PMS."
+              ? "Upload the selected monthly STAY report. Hotel Production controls totals; Named Groups builds the prospecting history."
               : "Analytical Account Tracking exports may use .xls even when they contain tab-delimited text. Parsing happens securely on the server."}
           </DialogDescription>
         </DialogHeader>
@@ -1591,14 +1613,30 @@ function UploadDialog(p: any) {
           <div className="sm:col-span-2">
             <Label>Production report type</Label>
             {usesStayFormat ? (
-              <div className="rounded-md border border-[#2f5f46] bg-[#e7f0e9] p-3 text-sm text-[#173b2a]">
-                <div className="font-semibold">
-                  STAY Revenue by Market Segment with Groups
-                </div>
-                <div>
-                  Required for January 2026 and later. This becomes the
-                  authoritative source for Total, Groups, Special Corp/Govt, and
-                  each market-segment tab.
+              <div className="space-y-2">
+                <Select
+                  value={p.reportType}
+                  onValueChange={(value) => {
+                    p.setReportType(value);
+                    p.setFile(null);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="stay_revenue_by_market_segment_with_groups">
+                      Hotel Production — Market Segments
+                    </SelectItem>
+                    <SelectItem value="stay_group_summary">
+                      Named Groups — Group Summary
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="rounded-md border border-[#2f5f46] bg-[#e7f0e9] p-3 text-sm text-[#173b2a]">
+                  {p.reportType === "stay_group_summary"
+                    ? "Imports group names, booking codes, stay dates, picked-up rooms, revenue, ADR, cutoff dates, and block performance. It does not affect hotel totals."
+                    : "Authoritative source for Total, Special Corp/Govt rollups, and every market-segment tab."}
                 </div>
               </div>
             ) : (
@@ -1622,16 +1660,18 @@ function UploadDialog(p: any) {
             {p.preview && (
               <p className="mt-1 text-xs text-[#5f5247]">
                 Suggested from the report's Market Segment:{" "}
-                {p.preview.suggestedReportType ===
-                "stay_revenue_by_market_segment_with_groups"
-                  ? "STAY Revenue by Market Segment with Groups"
+                {p.preview.suggestedReportType === "stay_group_summary"
+                  ? "STAY Named Groups — Group Summary"
                   : p.preview.suggestedReportType ===
-                      "marriott_mint_all_market_segments"
-                    ? "All Market Segments"
+                      "stay_revenue_by_market_segment_with_groups"
+                    ? "STAY Revenue by Market Segment with Groups"
                     : p.preview.suggestedReportType ===
-                        "marriott_mint_special_corp_government"
-                      ? "Special Corp/Govt"
-                      : "Group Account Production"}
+                        "marriott_mint_all_market_segments"
+                      ? "All Market Segments"
+                      : p.preview.suggestedReportType ===
+                          "marriott_mint_special_corp_government"
+                        ? "Special Corp/Govt"
+                        : "Group Account Production"}
                 .
               </p>
             )}
@@ -1673,7 +1713,7 @@ function UploadDialog(p: any) {
                 : "File (.xls, .csv, .tsv, .txt)"}
             </Label>
             <Input
-              key={usesStayFormat ? "stay-upload" : "mint-upload"}
+              key={`${usesStayFormat ? "stay" : "mint"}-${p.reportType}`}
               type="file"
               accept={usesStayFormat ? ".csv" : ".xls,.csv,.tsv,.txt"}
               onChange={(e) => p.setFile(e.target.files?.[0] || null)}
@@ -1703,7 +1743,11 @@ function UploadDialog(p: any) {
                   <tr>
                     <th className="p-2 text-left">Account</th>
                     <th>
-                      {p.preview.isStayFormat ? "Guest Type" : "Booking Office"}
+                      {p.preview.isGroupSummary
+                        ? "Booking Code"
+                        : p.preview.isStayFormat
+                          ? "Guest Type"
+                          : "Booking Office"}
                     </th>
                     <th>Room Nights</th>
                     <th>Revenue</th>
@@ -1960,6 +2004,56 @@ function DetailDialog({ account, hotelId, onClose }: any) {
           ))}
         </div>
         <div>
+          {account.bookings?.length > 0 && (
+            <div className="mb-5">
+              <h3 className="mb-2 font-semibold">STAY Group Bookings</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left">
+                      <th className="p-2">Stay Dates</th>
+                      <th>Booking Code</th>
+                      <th>Profile</th>
+                      <th className="text-right">Contracted</th>
+                      <th className="text-right">Blocked</th>
+                      <th className="text-right">Picked Up</th>
+                      <th className="text-right">Revenue</th>
+                      <th className="p-2">Released</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {account.bookings.map((booking: any, index: number) => (
+                      <tr
+                        className="border-b"
+                        key={`${booking.bookingCode}-${booking.arrivalDate}-${index}`}
+                      >
+                        <td className="p-2">
+                          {booking.arrivalDate} – {booking.departureDate}
+                        </td>
+                        <td>{booking.bookingCode || "—"}</td>
+                        <td>{booking.profile || "—"}</td>
+                        <td className="text-right">
+                          {booking.contractedRoomNights}
+                        </td>
+                        <td className="text-right">
+                          {booking.blockedRoomNights}
+                        </td>
+                        <td className="text-right font-medium">
+                          {booking.pickedUpRoomNights}
+                        </td>
+                        <td className="text-right">
+                          {money.format(booking.roomRevenue)}
+                        </td>
+                        <td className="p-2">
+                          {booking.released ? "Yes" : "No"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           <h3 className="mb-2 font-semibold">Monthly Room Revenue</h3>
           <div className="h-56">
             <ResponsiveContainer>
@@ -2046,16 +2140,18 @@ function HistoryDialog({ open, setOpen, imports, isAdmin, onDelete }: any) {
                       {x.originalFilename}
                     </div>
                     <div className="text-xs font-medium text-[#2f5f46]">
-                      {x.sourceReportType ===
-                      "stay_revenue_by_market_segment_with_groups"
-                        ? "STAY Market Segments"
+                      {x.sourceReportType === "stay_group_summary"
+                        ? "STAY Named Groups"
                         : x.sourceReportType ===
-                            "marriott_mint_all_market_segments"
-                          ? "All Market Segments"
+                            "stay_revenue_by_market_segment_with_groups"
+                          ? "STAY Market Segments"
                           : x.sourceReportType ===
-                              "marriott_mint_special_corp_government"
-                            ? "Special Corp/Govt"
-                            : "Group Account Production"}
+                              "marriott_mint_all_market_segments"
+                            ? "All Market Segments"
+                            : x.sourceReportType ===
+                                "marriott_mint_special_corp_government"
+                              ? "Special Corp/Govt"
+                              : "Group Account Production"}
                     </div>
                   </td>
                   <td>

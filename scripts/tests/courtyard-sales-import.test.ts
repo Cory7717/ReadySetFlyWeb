@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   parseSalesImport,
+  parseStayGroupSummaryImport,
   parseStayMarketSegmentImport,
   recoveryPriority,
 } from "../../server/courtyardSalesImport";
@@ -66,4 +67,19 @@ test("parses STAY daily market-segment production and preserves adjustments", ()
     start: "2026-01-05",
     end: "2026-01-06",
   });
+});
+
+test("parses parent Group Summary rows and uses picked up as room production", () => {
+  const input = Buffer.from(
+    'Group,Profile,Dates,Room Type,CONTRACTED,Total Blocked,Picked Up,remaining,Cancelled,No show,Room Revenue ($),ADR ($),Cut Off Date,released\n"Example Volleyball - AS123ABC[Self Payment | Self Booking]",Example Profile,Jan 11 2026 - Jan 15 2026,,20,18,16,2,1,0,1600,100,"Jan 09, 2026",Y\n,,"Jan 11, 2026",2 Queen Beds,5,5,5,0,0,0,500,100,,\n',
+  );
+  const result = parseStayGroupSummaryImport(input);
+  assert.equal(result.rowsFound, 2);
+  assert.equal(result.accepted.length, 1);
+  assert.equal(result.ignoredRowCount, 1);
+  assert.equal(result.accepted[0].accountName, "Example Volleyball");
+  assert.equal(result.accepted[0].groupBookingCode, "AS123ABC");
+  assert.equal(result.accepted[0].roomNights, 16);
+  assert.equal(result.accepted[0].blockedRoomNights, 18);
+  assert.equal(result.accepted[0].released, true);
 });

@@ -12,6 +12,7 @@ import {
   prospectScore,
   targetRoles,
 } from "../../server/courtyardSalesDemand";
+import { isDemandEventHotelFit } from "../../server/courtyardSalesDemandResearch";
 
 const batch = (id: string, month: number, sourceReportType = "stay_group_summary") => ({
   id,
@@ -167,4 +168,12 @@ test("distance calculation and target roles are deterministic", () => {
   const roles = targetRoles("Construction", ["Regional training and project crews"]);
   assert.ok(roles.includes("Learning & Development or Training Coordinator"));
   assert.ok(roles.includes("Operations or Project Manager"));
+});
+
+test("demand-event fit uses a short construction radius and a broader event radius", () => {
+  assert.equal(isDemandEventHotelFit({ category: "Construction", distanceMiles: 10 }), true);
+  assert.equal(isDemandEventHotelFit({ category: "Construction", distanceMiles: 16 }), false);
+  assert.equal(isDemandEventHotelFit({ category: "Construction", distanceMiles: null }), false);
+  assert.equal(isDemandEventHotelFit({ category: "Youth Sports", distanceMiles: 25 }), true);
+  assert.equal(isDemandEventHotelFit({ category: "Youth Sports", distanceMiles: 76 }), false);
 });

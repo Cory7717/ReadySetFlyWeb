@@ -162,7 +162,7 @@ function FutureDemandPipeline({ hotelId }: { hotelId: string }) {
   });
   const years = [initial.year, initial.year + 1, initial.year + 2];
   return <Card className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]">
-    <CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5 text-[#2f5f46]" />Future Demand & Regional Lead Pipeline</CardTitle><CardDescription className="!text-[#5f5247]">Connect upcoming demand generators with proven hotel accounts and qualified business prospects within 75 miles.</CardDescription></CardHeader>
+    <CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5 text-[#2f5f46]" />Future Demand & Regional Lead Pipeline</CardTitle><CardDescription className="!text-[#5f5247]">Connect upcoming demand generators with proven hotel accounts and qualified business prospects within 75 miles. Construction crew leads are limited to 15 miles; traveling youth sports receive a dedicated tournament search.</CardDescription></CardHeader>
     <CardContent className="space-y-5">
       <div className="flex flex-wrap gap-2">
         <Select value={year} onValueChange={setYear}><SelectTrigger className="w-28 bg-white"><SelectValue /></SelectTrigger><SelectContent>{years.map((item) => <SelectItem key={item} value={String(item)}>{item}</SelectItem>)}</SelectContent></Select>

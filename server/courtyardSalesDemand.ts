@@ -69,11 +69,18 @@ export async function discoverRegionalBusinesses() {
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.primaryTypeDisplayName,places.websiteUri,places.nationalPhoneNumber,places.googleMapsUri,places.businessStatus",
+        "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.primaryTypeDisplayName,places.googleMapsUri,places.businessStatus",
       },
-      body: JSON.stringify({ textQuery: query, maxResultCount: 20, rankPreference: "RELEVANCE", locationBias: { circle: { center: HOTEL_LOCATION, radius: 50000 } } }),
+      body: JSON.stringify({ textQuery: query, pageSize: 20, rankPreference: "RELEVANCE", locationBias: { circle: { center: HOTEL_LOCATION, radius: 50000 } } }),
     });
-    if (!response.ok) throw new Error(`Google Places discovery failed (${response.status}).`);
+    if (!response.ok) {
+      const errorBody: any = await response.json().catch(() => ({}));
+      const googleMessage = String(errorBody?.error?.message || "").replace(/AIza[\w-]+/g, "[redacted]");
+      const setupHint = response.status === 403
+        ? " Confirm that Places API (New) is enabled in the same billed Google Cloud project as the key, the key's API restriction allows Places API (New), and the key is not HTTP-referrer restricted. Render calls this as a server, so browser/referrer restrictions will be rejected."
+        : "";
+      throw Object.assign(new Error(`Google Places discovery failed (${response.status}).${googleMessage ? ` Google says: ${googleMessage}` : ""}${setupHint}`), { statusCode: response.status === 403 ? 503 : 502 });
+    }
     const body: any = await response.json();
     all.push(...(body.places || []));
   }
@@ -94,8 +101,8 @@ export async function discoverRegionalBusinesses() {
       distanceMiles: miles,
       distanceBand: distanceBand(miles),
       industry,
-      website: place.websiteUri || null,
-      phone: place.nationalPhoneNumber || null,
+      website: null,
+      phone: null,
       sourceUrl: place.googleMapsUri || null,
       opportunitySignalsJson: signals,
       targetRolesJson: targetRoles(industry, signals),

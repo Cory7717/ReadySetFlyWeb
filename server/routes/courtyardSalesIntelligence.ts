@@ -44,7 +44,7 @@ import {
   compactAdvisorContext,
   salesAdvisorFingerprint,
 } from "../courtyardSalesAdvisor";
-import { generateSalesAdvisorNarrative } from "../courtyardSalesAdvisorAi";
+import { generateSalesAdvisorAssistance, generateSalesAdvisorNarrative } from "../courtyardSalesAdvisorAi";
 import { salesAdvisorModel } from "../openaiClient";
 import {
   discoverRegionalBusinesses,
@@ -1579,7 +1579,9 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           rationale: `${candidate.status}. ${candidate.confidence} confidence from imported production history.`,
           status: "new",
         }));
-      res.json({ targetYear, targetMonth, events, prospects: [...historical, ...persisted].sort((a: any, b: any) => Number(b.opportunityScore) - Number(a.opportunityScore)), configuration: { webResearch: !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY), places: !!process.env.GOOGLE_PLACES_API_KEY } });
+      const projectLeads = persisted.filter((item) => item.sourceType === "public_project");
+      const prospects = [...historical, ...persisted.filter((item) => item.sourceType !== "public_project")].sort((a: any, b: any) => Number(b.opportunityScore) - Number(a.opportunityScore));
+      res.json({ targetYear, targetMonth, events, prospects, projectLeads, configuration: { webResearch: !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY), places: !!process.env.GOOGLE_PLACES_API_KEY } });
     } catch (error: any) {
       if (error?.message?.startsWith("Choose a valid")) return res.status(400).json({ error: error.message });
       next(error);
@@ -1630,6 +1632,52 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         lastVerifiedAt: new Date(), createdByUserId: req.salesUser.id,
       }).returning();
       res.status(201).json({ prospect });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/advisor/demand/project-leads", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || "");
+      if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "You do not have access to that property." });
+      const projectName = String(req.body.projectName || "").trim();
+      const sourceUrl = String(req.body.sourceUrl || "").trim();
+      if (!projectName) return res.status(400).json({ error: "Enter a project name." });
+      if (sourceUrl && !/^https:\/\//i.test(sourceUrl)) return res.status(400).json({ error: "Project source must be a secure web address." });
+      const date = (value: unknown) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : null;
+      const demandTypes = Array.isArray(req.body.demandTypes) ? req.body.demandTypes.map(String).filter(Boolean).slice(0, 12) : [];
+      const subcontractors = Array.isArray(req.body.knownSubcontractors) ? req.body.knownSubcontractors.map(String).filter(Boolean).slice(0, 30) : [];
+      const [project] = await db.insert(courtyardSalesRegionalProspects).values({
+        hotelId,
+        companyName: projectName.slice(0, 240),
+        address: String(req.body.projectLocation || "").slice(0, 500) || null,
+        city: String(req.body.sourceCity || "Cedar Park").slice(0, 120),
+        industry: String(req.body.projectCategory || "Public project").slice(0, 160),
+        evidenceClass: sourceUrl ? "user_entered_public_source" : "manually_identified",
+        sourceType: "public_project",
+        sourceId: crypto.randomUUID(),
+        sourceUrl: sourceUrl || null,
+        opportunitySignalsJson: demandTypes,
+        targetRolesJson: targetRoles(String(req.body.projectCategory || "Project"), demandTypes),
+        opportunityScore: Math.max(20, Math.min(100, Number(req.body.opportunityScore || 45))),
+        rationale: "User-entered project lead. Lodging demand, contractors, dates, and travel needs remain unverified unless supported by the linked public source.",
+        status: ["new", "researching", "contractor_identified", "contact_identified", "outreach_started", "meeting_scheduled", "proposal_sent", "won", "lost", "not_qualified"].includes(String(req.body.status)) ? String(req.body.status) : "new",
+        projectStatus: String(req.body.projectStatus || "Unknown").slice(0, 120),
+        estimatedStartDate: date(req.body.estimatedStartDate),
+        estimatedCompletionDate: date(req.body.estimatedCompletionDate),
+        primeContractor: String(req.body.primeContractor || "").slice(0, 240) || null,
+        engineeringFirm: String(req.body.engineeringFirm || "").slice(0, 240) || null,
+        architect: String(req.body.architect || "").slice(0, 240) || null,
+        projectManager: String(req.body.projectManager || "").slice(0, 240) || null,
+        knownSubcontractorsJson: subcontractors,
+        demandTypesJson: demandTypes,
+        notes: String(req.body.notes || "").slice(0, 4000) || null,
+        nextAction: String(req.body.nextAction || "Verify the project schedule and identify awarded firms").slice(0, 500),
+        followUpDate: date(req.body.followUpDate),
+        assignedUserId: req.salesUser.id,
+        lastVerifiedAt: null,
+        createdByUserId: req.salesUser.id,
+      }).returning();
+      res.status(201).json({ project });
     } catch (error) { next(error); }
   });
 
@@ -1684,6 +1732,36 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
     }
   });
 
+  router.post("/advisor/assist", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || "");
+      if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "You do not have access to that property." });
+      const assistanceType = String(req.body.assistanceType || "");
+      if (!["email", "call_script", "research_checklist"].includes(assistanceType)) return res.status(400).json({ error: "Choose a valid Sales Advisor assistance type." });
+      const accountKey = String(req.body.accountKey || "");
+      const projectId = String(req.body.projectId || "");
+      let evidence: any;
+      if (accountKey) {
+        const source = await advisorSourceData(hotelId);
+        const preview = buildSalesAdvisorPreview({ ...source, lookbackMonths: 36, businessTypes: [...SALES_ADVISOR_BUSINESS_TYPES], analysisType: "full_plan" } as any);
+        const candidate = preview.candidates.find((item) => item.key === accountKey);
+        if (!candidate) return res.status(404).json({ error: "Sales opportunity not found in the authorized hotel data." });
+        const [crm] = await db.select().from(courtyardSalesOpportunities).where(and(eq(courtyardSalesOpportunities.hotelId, hotelId), eq(courtyardSalesOpportunities.normalizedAccountKey, accountKey))).orderBy(desc(courtyardSalesOpportunities.updatedAt)).limit(1);
+        const { history, ...summary } = candidate;
+        evidence = { source: "hotel production data", opportunity: { ...summary, recentHistory: history.slice(-6) }, crm: crm ? { stage: crm.stage, nextAction: crm.nextAction, nextActionAt: crm.nextActionAt, notes: crm.notes } : null };
+      } else if (projectId) {
+        const [project] = await db.select().from(courtyardSalesRegionalProspects).where(and(eq(courtyardSalesRegionalProspects.hotelId, hotelId), eq(courtyardSalesRegionalProspects.id, projectId), eq(courtyardSalesRegionalProspects.sourceType, "public_project"))).limit(1);
+        if (!project) return res.status(404).json({ error: "Project lead not found." });
+        evidence = { source: project.sourceUrl ? "user-entered project information with a linked public source" : "user-entered project information", project: { name: project.companyName, city: project.city, category: project.industry, projectStatus: project.projectStatus, estimatedStartDate: project.estimatedStartDate, estimatedCompletionDate: project.estimatedCompletionDate, location: project.address, primeContractor: project.primeContractor, engineeringFirm: project.engineeringFirm, architect: project.architect, projectManager: project.projectManager, knownSubcontractors: project.knownSubcontractorsJson, demandTypes: project.demandTypesJson, notes: project.notes, nextAction: project.nextAction, sourceUrl: project.sourceUrl }, warning: "A linked URL is not proof that every user-entered field was verified." };
+      } else return res.status(400).json({ error: "Choose a named opportunity or project lead." });
+      const result = await generateSalesAdvisorAssistance(evidence, assistanceType as any);
+      res.json({ assistanceType, result });
+    } catch (error: any) {
+      if (error?.statusCode) return res.status(error.statusCode).json({ error: error.message });
+      next(error);
+    }
+  });
+
   router.get("/advisor/analyses", async (req: any, res, next) => {
     try {
       const hotelId = String(req.query.hotelId || req.salesHotels[0]?.id || "");
@@ -1711,7 +1789,15 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const preview = buildSalesAdvisorPreview({ ...source, ...parameters } as any);
       if (!preview.candidates.length)
         return res.status(400).json({ error: "No named prospects match these filters. Import or broaden the source data first." });
-      const sourceFingerprint = salesAdvisorFingerprint(source.batches as any, parameters);
+      const [crmOpportunities, projectLeads] = await Promise.all([
+        db.select().from(courtyardSalesOpportunities).where(eq(courtyardSalesOpportunities.hotelId, hotelId)).orderBy(desc(courtyardSalesOpportunities.updatedAt)).limit(150),
+        db.select().from(courtyardSalesRegionalProspects).where(eq(courtyardSalesRegionalProspects.hotelId, hotelId)).orderBy(desc(courtyardSalesRegionalProspects.updatedAt)).limit(150),
+      ]);
+      const executionState = {
+        crm: crmOpportunities.map((item) => [item.id, item.normalizedAccountKey, item.stage, item.nextActionAt, item.updatedAt]),
+        projects: projectLeads.filter((item) => item.sourceType === "public_project").map((item) => [item.id, item.status, item.followUpDate, item.updatedAt]),
+      };
+      const sourceFingerprint = salesAdvisorFingerprint(source.batches as any, { ...parameters, executionState });
       if (!req.body.regenerate) {
         const [cached] = await db
           .select()
@@ -1727,7 +1813,12 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           .limit(1);
         if (cached) return res.json({ ...cached, cached: true });
       }
-      const context = compactAdvisorContext(preview);
+      const candidateKeys = new Set(preview.topPriorities.map((candidate) => candidate.key));
+      const context = {
+        ...compactAdvisorContext(preview),
+        crmExecution: crmOpportunities.filter((item) => candidateKeys.has(item.normalizedAccountKey)).map((item) => ({ accountKey: item.normalizedAccountKey, stage: item.stage, nextAction: item.nextAction, nextActionAt: item.nextActionAt })),
+        publicProjects: projectLeads.filter((item) => item.sourceType === "public_project").slice(0, 20).map((item) => ({ name: item.companyName, status: item.status, projectStatus: item.projectStatus, sourceUrl: item.sourceUrl, demandTypes: item.demandTypesJson, nextAction: item.nextAction, followUpDate: item.followUpDate, evidence: item.sourceUrl ? "user-entered with public source" : "user-entered" })),
+      };
       const narrative = await generateSalesAdvisorNarrative(context as any);
       const validKeys = new Set(preview.candidates.map((candidate) => candidate.key));
       const result = {

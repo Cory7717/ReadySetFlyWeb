@@ -4,8 +4,8 @@ import {
   normalizeSalesMarketSegment,
 } from "./courtyardSalesImport";
 
-export const SALES_ADVISOR_PROMPT_VERSION = "sales-advisor-v2-onsite";
-export const SALES_ADVISOR_CALCULATION_VERSION = "sales-advisor-calculation-v1";
+export const SALES_ADVISOR_PROMPT_VERSION = "sales-advisor-v3-daily-execution";
+export const SALES_ADVISOR_CALCULATION_VERSION = "sales-advisor-calculation-v2";
 export const SALES_ADVISOR_BUSINESS_TYPES = [
   "Groups",
   "Special Corp",
@@ -112,6 +112,24 @@ function demandDriver(name: string) {
   return match ? String(match[1]) : "Business purpose is not identifiable from the account name";
 }
 
+function recommendedExecution(candidate: any) {
+  if (candidate.status === "Recovery Opportunity") return {
+    recommendedAction: `Identify the current decision-maker and confirm whether ${candidate.name} expects to return during ${candidate.typicalMonthLabels.join(" or ") || "its prior travel period"}.`,
+    successMeasure: "Decision-maker contacted and next sourcing or travel date confirmed.",
+    followUpDays: 2,
+  };
+  if (candidate.status === "Declining") return {
+    recommendedAction: `Contact ${candidate.name} to understand the verified production decline and identify business the hotel can recover.`,
+    successMeasure: "Reason for decline documented and a specific recovery next step agreed.",
+    followUpDays: 3,
+  };
+  return {
+    recommendedAction: `Review ${candidate.name}'s production pattern and verify the next expected need before the usual booking window closes.`,
+    successMeasure: "Next travel period, decision-maker, and qualification status recorded.",
+    followUpDays: 5,
+  };
+}
+
 export function buildSalesAdvisorPreview(args: {
   batches: AdvisorBatch[];
   rows: AdvisorProductionRow[];
@@ -210,6 +228,10 @@ export function buildSalesAdvisorPreview(args: {
       dataComplete,
       missingComparableMonths,
       possibleDemandDriver: demandDriver(account.name),
+      monthsUntilTypicalProduction: 12,
+      recommendedAction: "",
+      successMeasure: "",
+      followUpDays: 3,
       history: history.map((item) => ({
         year: Math.floor(item.index / 12),
         month: (item.index % 12) + 1,
@@ -238,6 +260,8 @@ export function buildSalesAdvisorPreview(args: {
       timingUrgency,
       overall: clamp(historicalValue * 0.35 + recoverability * 0.3 + timingUrgency * 0.2 + statusWeight * 0.15),
     };
+    candidate.monthsUntilTypicalProduction = nextTypicalDistance;
+    Object.assign(candidate, recommendedExecution(candidate));
   }
   const filtered = candidates
     .filter((item) =>
@@ -253,6 +277,7 @@ export function buildSalesAdvisorPreview(args: {
   if (filtered.some((item) => !item.dataComplete)) limitations.push("Missing source months are treated as unknown, never as zero production.");
   if (filtered.some((item) => item.productionBasis === "estimated")) limitations.push("STAY Reservations company revenue is estimated from observed stays and rates.");
   if (activeBatches.length < args.lookbackMonths) limitations.push("The requested lookback exceeds the number of imported source months.");
+  const topPriorities = filtered.slice(0, 5);
   return {
     generatedThrough: latestPeriod == null ? null : { year: Math.floor(latestPeriod / 12), month: (latestPeriod % 12) + 1 },
     lookbackMonths: args.lookbackMonths,
@@ -265,6 +290,10 @@ export function buildSalesAdvisorPreview(args: {
       estimatedRecoveryRevenue: filtered.reduce((sum, item) => sum + item.estimatedRecoveryRevenue, 0),
     },
     candidates: filtered.slice(0, 50),
+    topPriorities,
+    lostBusiness: filtered.filter((item) => item.status === "Recovery Opportunity").slice(0, 12),
+    decliningBusiness: filtered.filter((item) => item.status === "Declining").slice(0, 12),
+    seasonalOpportunities: filtered.filter((item) => item.typicalMonths.length && item.monthsUntilTypicalProduction <= 4).slice(0, 12),
     limitations,
   };
 }
@@ -290,7 +319,7 @@ export function compactAdvisorContext(preview: ReturnType<typeof buildSalesAdvis
     analysisType: preview.analysisType,
     businessTypes: preview.businessTypes,
     summary: preview.summary,
-    candidates: preview.candidates.slice(0, 20).map(({ history, ...candidate }) => ({
+    candidates: preview.topPriorities.map(({ history, ...candidate }) => ({
       ...candidate,
       recentHistory: history.slice(-6),
     })),

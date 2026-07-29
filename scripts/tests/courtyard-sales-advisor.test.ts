@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import {
   buildSalesAdvisorPreview,
   buildMonthlySalesTargets,
@@ -68,6 +69,20 @@ test("three imported zero-production months produce a recovery opportunity", () 
   });
   assert.equal(preview.candidates[0].status, "Recovery Opportunity");
   assert.equal(preview.candidates[0].dataComplete, true);
+  assert.equal(preview.lostBusiness[0].name, "Acme Meeting");
+  assert.match(preview.topPriorities[0].recommendedAction, /decision-maker/i);
+  assert.ok(preview.topPriorities[0].successMeasure.length > 0);
+});
+
+test("today's priority list contains no more than five named accounts", () => {
+  const preview = buildSalesAdvisorPreview({
+    batches: [batch("jan", 1)],
+    rows: Array.from({ length: 9 }, (_, index) => row("jan", 1, `group-${index}`, `Group ${index}`, 10 + index, 1000 + index * 100)),
+    ...parameters,
+  });
+  assert.equal(preview.candidates.length, 9);
+  assert.equal(preview.topPriorities.length, 5);
+  assert.ok(preview.topPriorities.every((item) => !item.key.startsWith("stay-segment:")));
 });
 
 test("STAY Reservations revenue remains explicitly estimated", () => {
@@ -98,8 +113,17 @@ test("cache fingerprint changes with source data and filter parameters", () => {
   const first = salesAdvisorFingerprint([batch("jan", 1)], parameters);
   const changedSource = salesAdvisorFingerprint([{ ...batch("jan", 1), fileChecksum: "new" }], parameters);
   const changedFilter = salesAdvisorFingerprint([batch("jan", 1)], { ...parameters, lookbackMonths: 24 });
+  const changedExecution = salesAdvisorFingerprint([batch("jan", 1)], { ...parameters, executionState: { crm: [["one", "called"]] } });
   assert.notEqual(first, changedSource);
   assert.notEqual(first, changedFilter);
+  assert.notEqual(first, changedExecution);
+});
+
+test("public Cedar Park resources use safe external-link handling", () => {
+  const source = readFileSync("client/src/components/courtyard-sales-advisor.tsx", "utf8");
+  assert.match(source, /cedarparktexas\.gov\/167\/City-Projects/);
+  assert.match(source, /cedarparktexas\.gov\/427\/Purchasing-RFPs-RFQs/);
+  assert.match(source, /target="_blank" rel="noopener noreferrer"/);
 });
 
 test("monthly targets grow prior-year Group and Special Corp rooms and revenue", () => {

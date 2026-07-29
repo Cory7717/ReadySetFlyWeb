@@ -190,6 +190,36 @@ function FutureDemandPipeline({ hotelId }: { hotelId: string }) {
   </Card>;
 }
 
+const PUBLIC_MARKET_RESOURCES = [
+  { name: "Cedar Park City Projects", url: "https://www.cedarparktexas.gov/167/City-Projects", description: "Capital projects, locations, timelines, budgets, and infrastructure activity.", use: "Identify contractors, engineers, inspectors, consultants, utility crews, and vendors that may need weekday lodging." },
+  { name: "Cedar Park Purchasing — RFPs and RFQs", url: "https://www.cedarparktexas.gov/427/Purchasing-RFPs-RFQs", description: "Official purchasing information and public solicitation resources.", use: "Research likely bidders and awarded firms whose project teams may need accommodations." },
+];
+
+function PublicProjectLeads({ hotelId }: { hotelId: string }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const now = new Date();
+  const [open, setOpen] = useState(false);
+  const [assistance, setAssistance] = useState<any>(null);
+  const [form, setForm] = useState({ projectName: "", sourceCity: "Cedar Park", sourceUrl: "", projectCategory: "Infrastructure", projectStatus: "Unknown", estimatedStartDate: "", estimatedCompletionDate: "", projectLocation: "", primeContractor: "", engineeringFirm: "", architect: "", projectManager: "", knownSubcontractors: "", demandTypes: "Construction crew\nEngineering\nInspection\nVendor travel", notes: "", nextAction: "Verify the project schedule and identify awarded firms", followUpDate: "" });
+  const set = (key: string, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  const projects = useQuery({ queryKey: ["sales-project-leads", hotelId], queryFn: () => request(`/api/courtyard/sales-intelligence/advisor/demand?hotelId=${encodeURIComponent(hotelId)}&targetYear=${now.getFullYear()}&targetMonth=${now.getMonth() + 1}`), enabled: !!hotelId });
+  const save = useMutation({
+    mutationFn: () => request("/api/courtyard/sales-intelligence/advisor/demand/project-leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId, ...form, knownSubcontractors: form.knownSubcontractors.split("\n").map((x) => x.trim()).filter(Boolean), demandTypes: form.demandTypes.split("\n").map((x) => x.trim()).filter(Boolean) }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-project-leads", hotelId] }); setOpen(false); setForm((current) => ({ ...current, projectName: "", sourceUrl: "", projectLocation: "", primeContractor: "", engineeringFirm: "", architect: "", projectManager: "", knownSubcontractors: "", notes: "", followUpDate: "" })); toast({ title: "Local project lead saved" }); },
+    onError: (error: Error) => toast({ title: "Could not save project lead", description: error.message, variant: "destructive" }),
+  });
+  const assist = useMutation({ mutationFn: (projectId: string) => request("/api/courtyard/sales-intelligence/advisor/assist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId, projectId, assistanceType: "research_checklist" }) }), onSuccess: (value) => setAssistance(value.result), onError: (error: Error) => toast({ title: "Could not build project checklist", description: error.message, variant: "destructive" }) });
+  const rows = projects.data?.projectLeads || [];
+  return <Card className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]"><CardHeader><CardTitle>Public Market Resources & Local Projects</CardTitle><CardDescription className="!text-[#5f5247]">Use official sources to identify project teams that may need rooms. The hotel is researching lodging demand—not bidding on city work.</CardDescription></CardHeader><CardContent className="space-y-4">
+    <div className="grid gap-3 md:grid-cols-2">{PUBLIC_MARKET_RESOURCES.map((resource) => <div key={resource.url} className="rounded-md border border-[#deceba] bg-white p-4"><a className="inline-flex font-semibold text-[#20543a] underline" href={resource.url} target="_blank" rel="noopener noreferrer">{resource.name}<ExternalLink className="ml-1 h-4 w-4" /></a><p className="mt-2 text-sm text-[#5f5247]">{resource.description}</p><p className="mt-2 text-sm"><strong>Sales use:</strong> {resource.use}</p></div>)}</div>
+    <Button className="!bg-[#2f5f46] !text-white" onClick={() => setOpen(!open)}><Plus className="mr-2 h-4 w-4" />Add Project Lead</Button>
+    {open && <div className="grid gap-3 rounded-md border border-[#cdbda8] bg-white p-4 md:grid-cols-2"><div><Label>Project name</Label><Input value={form.projectName} onChange={(e) => set("projectName", e.target.value)} /></div><div><Label>Source city</Label><Input value={form.sourceCity} onChange={(e) => set("sourceCity", e.target.value)} /></div><div className="md:col-span-2"><Label>Official source URL</Label><Input type="url" value={form.sourceUrl} onChange={(e) => set("sourceUrl", e.target.value)} placeholder="https://..." /></div><div><Label>Project category</Label><Input value={form.projectCategory} onChange={(e) => set("projectCategory", e.target.value)} /></div><div><Label>Project status</Label><Input value={form.projectStatus} onChange={(e) => set("projectStatus", e.target.value)} placeholder="Planned, bidding, awarded, underway..." /></div><div><Label>Estimated start</Label><Input type="date" value={form.estimatedStartDate} onChange={(e) => set("estimatedStartDate", e.target.value)} /></div><div><Label>Estimated completion</Label><Input type="date" value={form.estimatedCompletionDate} onChange={(e) => set("estimatedCompletionDate", e.target.value)} /></div><div className="md:col-span-2"><Label>Project location</Label><Input value={form.projectLocation} onChange={(e) => set("projectLocation", e.target.value)} /></div><div><Label>Prime contractor</Label><Input value={form.primeContractor} onChange={(e) => set("primeContractor", e.target.value)} placeholder="Unknown until verified" /></div><div><Label>Engineering firm</Label><Input value={form.engineeringFirm} onChange={(e) => set("engineeringFirm", e.target.value)} /></div><div><Label>Architect</Label><Input value={form.architect} onChange={(e) => set("architect", e.target.value)} /></div><div><Label>Project manager</Label><Input value={form.projectManager} onChange={(e) => set("projectManager", e.target.value)} /></div><div><Label>Known subcontractors (one per line)</Label><Textarea value={form.knownSubcontractors} onChange={(e) => set("knownSubcontractors", e.target.value)} /></div><div><Label>Potential demand types (one per line)</Label><Textarea value={form.demandTypes} onChange={(e) => set("demandTypes", e.target.value)} /></div><div className="md:col-span-2"><Label>Verified facts and notes</Label><Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Record what the source confirms; leave unknown details blank." /></div><div><Label>Next action</Label><Input value={form.nextAction} onChange={(e) => set("nextAction", e.target.value)} /></div><div><Label>Follow-up date</Label><Input type="date" value={form.followUpDate} onChange={(e) => set("followUpDate", e.target.value)} /></div><div><Button className="!bg-[#2f5f46] !text-white" disabled={!form.projectName.trim() || save.isPending} onClick={() => save.mutate()}>{save.isPending ? "Saving…" : "Save Project Lead"}</Button></div></div>}
+    {!!rows.length && <div className="space-y-2"><h3 className="font-semibold">Saved Project Leads</h3>{rows.map((item: any) => <div key={item.id} className="rounded-md border border-[#deceba] bg-white p-3"><div className="flex flex-wrap justify-between gap-2"><strong>{item.companyName}</strong><Badge variant="outline" className="capitalize">{String(item.status).replace(/_/g, " ")}</Badge></div><div className="mt-1 text-sm text-[#5f5247]">{item.projectStatus || "Status unknown"}{item.city ? ` · ${item.city}` : ""}{item.followUpDate ? ` · Follow up ${new Date(`${item.followUpDate}T12:00:00`).toLocaleDateString()}` : ""}</div><p className="mt-2 text-sm"><strong>Next:</strong> {item.nextAction || "Verify project details"}</p><div className="mt-2 flex flex-wrap gap-2">{item.sourceUrl && <a className="inline-flex text-sm text-[#20543a] underline" href={item.sourceUrl} target="_blank" rel="noopener noreferrer">User-provided public source<ExternalLink className="ml-1 h-3 w-3" /></a>}<Button size="sm" variant="outline" disabled={assist.isPending} onClick={() => assist.mutate(item.id)}>Build Research Checklist</Button></div></div>)}</div>}
+    {assistance && <div className="rounded-md border border-[#8eaa96] bg-[#edf5ef] p-4"><h3 className="font-semibold">{assistance.title}</h3><p className="mt-2 whitespace-pre-wrap text-sm">{assistance.content}</p><div className="mt-3 grid gap-3 text-xs md:grid-cols-3"><div><strong>Verified facts</strong><ul className="list-disc pl-4">{assistance.verifiedFacts.map((x: string) => <li key={x}>{x}</li>)}</ul></div><div><strong>Inferences</strong><ul className="list-disc pl-4">{assistance.inferences.map((x: string) => <li key={x}>{x}</li>)}</ul></div><div><strong>Unknowns to verify</strong><ul className="list-disc pl-4">{assistance.unknownsToVerify.map((x: string) => <li key={x}>{x}</li>)}</ul></div></div></div>}
+  </CardContent></Card>;
+}
+
 export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -197,6 +227,7 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
   const [analysisType, setAnalysisType] = useState("full_plan");
   const [businessTypes, setBusinessTypes] = useState(TYPES);
   const [analysis, setAnalysis] = useState<any>(null);
+  const [assistance, setAssistance] = useState<any>(null);
   const query = new URLSearchParams({
     hotelId,
     lookbackMonths,
@@ -213,6 +244,7 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
     queryFn: () => request(`/api/courtyard/sales-intelligence/advisor/analyses?hotelId=${encodeURIComponent(hotelId)}`),
     enabled: !!hotelId,
   });
+  const crm = useQuery({ queryKey: ["sales-crm", hotelId], queryFn: () => request(`/api/courtyard/sales-intelligence/crm?hotelId=${encodeURIComponent(hotelId)}`), enabled: !!hotelId });
   const generate = useMutation({
     mutationFn: (regenerate: boolean) => request("/api/courtyard/sales-intelligence/advisor/generate", {
       method: "POST",
@@ -229,6 +261,11 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
   const activePreview = analysis?.inputSnapshotJson || preview.data;
   const narrative = analysis?.resultJson;
   const priorities = useMemo(() => new Map((narrative?.priorities || []).map((item: any) => [item.accountKey, item])), [narrative]);
+  const crmByKey = useMemo(() => new Map((crm.data?.opportunities || []).map((item: any) => [item.normalizedAccountKey, item])), [crm.data]);
+  const topPriorities = activePreview?.topPriorities || activePreview?.candidates?.slice(0, 5) || [];
+  const lostBusiness = activePreview?.lostBusiness || activePreview?.candidates?.filter((item: any) => item.status === "Recovery Opportunity") || [];
+  const decliningBusiness = activePreview?.decliningBusiness || activePreview?.candidates?.filter((item: any) => item.status === "Declining") || [];
+  const seasonalOpportunities = activePreview?.seasonalOpportunities || activePreview?.candidates?.filter((item: any) => Number(item.monthsUntilTypicalProduction) <= 4) || [];
   const planText = useMemo(() => {
     if (!analysis) return "";
     return [
@@ -249,7 +286,8 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
         stage: "prospect",
         estimatedRoomNights: candidate.totalRoomNights,
         estimatedRevenue: candidate.estimatedRecoveryRevenue,
-        nextAction: "Review Sales Advisor history and identify the best contact",
+        nextAction: candidate.recommendedAction || "Review Sales Advisor history and identify the best contact",
+        nextActionAt: new Date(Date.now() + Number(candidate.followUpDays || 3) * 86400000).toISOString(),
         notes: `Added from Sales Advisor. ${candidate.status}; ${candidate.confidence} confidence; ${candidate.productionBasis} production basis.`,
       }),
     }),
@@ -259,12 +297,23 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
     },
     onError: (error: Error) => toast({ title: "Could not add prospect", description: error.message, variant: "destructive" }),
   });
+  const updateTracking = useMutation({
+    mutationFn: ({ id, stage }: { id: string; stage: string }) => request(`/api/courtyard/sales-intelligence/opportunities/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage }) }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["sales-crm", hotelId] }); toast({ title: "Sales priority status updated" }); },
+    onError: (error: Error) => toast({ title: "Could not update status", description: error.message, variant: "destructive" }),
+  });
+  const assist = useMutation({
+    mutationFn: ({ accountKey, assistanceType }: { accountKey: string; assistanceType: string }) => request("/api/courtyard/sales-intelligence/advisor/assist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId, accountKey, assistanceType }) }),
+    onSuccess: (value) => setAssistance(value.result),
+    onError: (error: Error) => toast({ title: "Could not create sales assistance", description: error.message, variant: "destructive" }),
+  });
   const toggleType = (type: string) => setBusinessTypes((current) => current.includes(type) ? current.filter((item) => item !== type) : [...current, type]);
 
   return (
     <div className="space-y-4">
       <MonthlySalesTargets hotelId={hotelId} />
       <FutureDemandPipeline hotelId={hotelId} />
+      <PublicProjectLeads hotelId={hotelId} />
       <Card className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-[#2f5f46]" />Sales Advisor</CardTitle>
@@ -304,21 +353,32 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
         </CardContent>
       </Card>}
 
-      {!!activePreview?.candidates?.length && <Card className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]">
-        <CardHeader><CardTitle>Priority Prospects</CardTitle><CardDescription className="!text-[#5f5247]">Scores combine historical value, recoverability, timing, and current status. Missing months do not count as zero.</CardDescription></CardHeader>
+      {!!topPriorities.length && <Card className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]">
+        <CardHeader><CardTitle>Today’s Top 5 Sales Priorities</CardTitle><CardDescription className="!text-[#5f5247]">A deliberately short work list ranked by historical value, recoverability, timing, and verified data completeness.</CardDescription></CardHeader>
         <CardContent className="space-y-3">
-          {activePreview.candidates.slice(0, 12).map((candidate: any, index: number) => {
+          {topPriorities.map((candidate: any, index: number) => {
             const item: any = priorities.get(candidate.key);
+            const tracked: any = crmByKey.get(candidate.key);
             return <div key={`${candidate.businessType}:${candidate.key}`} className="rounded-md border border-[#deceba] bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="font-semibold">{index + 1}. {candidate.name}</div><div className="text-sm text-[#5f5247]">{candidate.businessType} · {candidate.status}</div></div><div className="flex gap-2"><Badge className="!bg-[#2f5f46] !text-white">Score {candidate.scores.overall}</Badge><Badge variant="outline" className="border-[#8d765a] text-[#3f3329]">{candidate.confidence} confidence</Badge></div></div>
               <div className="mt-3 grid gap-2 text-sm sm:grid-cols-4"><span><strong>{candidate.totalRoomNights}</strong> room nights</span><span><strong>{money.format(candidate.totalRevenue)}</strong> revenue</span><span><strong>{money.format(candidate.estimatedRecoveryRevenue)}</strong> potential</span><span><strong className="capitalize">{candidate.productionBasis}</strong> basis</span></div>
               <p className="mt-3 text-sm text-[#4f4339]">{item?.rationale || `${candidate.possibleDemandDriver}. Generate the plan for a tailored outreach recommendation.`}</p>
               {item?.planningNote && <div className="mt-2 rounded bg-[#f7f1e7] p-2 text-sm"><strong>Planning note:</strong> {item.planningNote}</div>}
-              <Button size="sm" variant="outline" className="mt-3 border-[#8d765a] bg-white text-[#201814]" disabled={addToCrm.isPending} onClick={() => addToCrm.mutate(candidate)}>Add to Backup CRM</Button>
+              <div className="mt-3 rounded bg-[#f7f1e7] p-3 text-sm"><strong>Action today:</strong> {item?.recommendedApproach || candidate.recommendedAction}<br /><strong>Success measure:</strong> {item?.successMeasure || candidate.successMeasure}<br /><strong>Follow-up:</strong> {item?.followUpTiming || `within ${candidate.followUpDays || 3} days`}</div>
+              <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={assist.isPending} onClick={() => assist.mutate({ accountKey: candidate.key, assistanceType: "email" })}>Draft Email</Button><Button size="sm" variant="outline" disabled={assist.isPending} onClick={() => assist.mutate({ accountKey: candidate.key, assistanceType: "call_script" })}>Create Call Script</Button><Button size="sm" variant="outline" disabled={assist.isPending} onClick={() => assist.mutate({ accountKey: candidate.key, assistanceType: "research_checklist" })}>Research Checklist</Button></div>
+              {tracked ? <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-medium text-[#405f4b]"><span>Tracked in Backup CRM{tracked.nextActionAt ? ` · Follow up ${new Date(tracked.nextActionAt).toLocaleDateString()}` : ""}</span><Select value={tracked.stage} onValueChange={(stage) => updateTracking.mutate({ id: tracked.id, stage })}><SelectTrigger className="h-8 w-44 bg-white text-[#201814]"><SelectValue /></SelectTrigger><SelectContent>{["prospect", "contact_attempted", "connected", "qualified", "proposal_sent", "tentative", "definite", "lost", "nurture"].map((stage) => <SelectItem key={stage} value={stage}>{stage.replace(/_/g, " ")}</SelectItem>)}</SelectContent></Select></div> : <Button size="sm" variant="outline" className="mt-3 border-[#8d765a] bg-white text-[#201814]" disabled={addToCrm.isPending} onClick={() => addToCrm.mutate(candidate)}>Track in Backup CRM</Button>}
             </div>;
           })}
         </CardContent>
       </Card>}
+
+      {assistance && <Card className="!border-[#8eaa96] !bg-[#edf5ef] !text-[#173b2a]"><CardHeader><CardTitle>{assistance.title}</CardTitle></CardHeader><CardContent><p className="whitespace-pre-wrap text-sm">{assistance.content}</p><div className="mt-4 grid gap-3 text-xs md:grid-cols-3"><div><strong>Verified facts</strong><ul className="list-disc pl-4">{assistance.verifiedFacts.map((x: string) => <li key={x}>{x}</li>)}</ul></div><div><strong>Inferences</strong><ul className="list-disc pl-4">{assistance.inferences.map((x: string) => <li key={x}>{x}</li>)}</ul></div><div><strong>Unknowns to verify</strong><ul className="list-disc pl-4">{assistance.unknownsToVerify.map((x: string) => <li key={x}>{x}</li>)}</ul></div></div></CardContent></Card>}
+
+      {!!activePreview?.candidates?.length && <div className="grid gap-4 lg:grid-cols-3">{[
+        { title: "Lost Business", rows: lostBusiness, empty: "No defensible lost-business classifications." },
+        { title: "Declining Business", rows: decliningBusiness, empty: "No materially declining named accounts." },
+        { title: "Upcoming Seasonal Opportunities", rows: seasonalOpportunities, empty: "No recurring opportunity is inside the four-month planning window." },
+      ].map((section) => <Card key={section.title} className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]"><CardHeader><CardTitle className="text-lg">{section.title}</CardTitle></CardHeader><CardContent className="space-y-2">{section.rows.slice(0, 6).map((item: any) => <div key={`${section.title}:${item.key}`} className="rounded border border-[#deceba] bg-white p-3"><div className="font-semibold">{item.name}</div><div className="text-xs text-[#5f5247]">{item.businessType} · {money.format(item.totalRevenue)} history · Score {item.scores.overall}</div>{section.title === "Upcoming Seasonal Opportunities" && <div className="mt-1 text-xs">Typical: {item.typicalMonthLabels.join(", ")}</div>}</div>)}{!section.rows.length && <p className="text-sm text-[#5f5247]">{section.empty}</p>}</CardContent></Card>)}</div>}
 
       {narrative?.weeklyPlan?.length > 0 && <Card className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]"><CardHeader><CardTitle>This Week’s Onsite Action Plan</CardTitle></CardHeader><CardContent className="space-y-3">{narrative.weeklyPlan.map((item: any, index: number) => <div key={index} className="rounded-md border border-[#deceba] bg-white p-3"><strong>{item.dayOrSequence}: {item.focus}</strong><p className="mt-1 text-sm text-[#5f5247]">{item.actionPlanEntry || "Complete the planned outreach and record the outcome onsite."}</p></div>)}</CardContent></Card>}
 

@@ -1979,6 +1979,52 @@ export const courtyardSalesAdvisorAnalyses = pgTable(
   ],
 );
 
+export const courtyardSalesMonthlyTargets = pgTable(
+  "courtyard_sales_monthly_targets",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    hotelId: varchar("hotel_id")
+      .notNull()
+      .references(() => courtyardHotels.id, { onDelete: "cascade" }),
+    targetYear: integer("target_year").notNull(),
+    targetMonth: integer("target_month").notNull(),
+    segment: text("segment").notNull(),
+    targetRoomNights: numeric("target_room_nights", { precision: 14, scale: 2 }).notNull(),
+    targetRevenue: numeric("target_revenue", { precision: 16, scale: 2 }).notNull(),
+    targetAdr: numeric("target_adr", { precision: 14, scale: 2 }).notNull(),
+    stretchRoomNights: numeric("stretch_room_nights", { precision: 14, scale: 2 }).notNull(),
+    stretchRevenue: numeric("stretch_revenue", { precision: 16, scale: 2 }).notNull(),
+    stretchAdr: numeric("stretch_adr", { precision: 14, scale: 2 }).notNull(),
+    baselineJson: jsonb("baseline_json")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    rationale: text("rationale"),
+    status: text("status").notNull().default("draft"),
+    sourceFingerprint: text("source_fingerprint").notNull(),
+    lockedAt: timestamp("locked_at"),
+    createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+    updatedByUserId: varchar("updated_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_courtyard_sales_monthly_target_unique").on(
+      table.hotelId,
+      table.targetYear,
+      table.targetMonth,
+      table.segment,
+    ),
+    index("idx_courtyard_sales_monthly_target_period").on(
+      table.hotelId,
+      table.targetYear,
+      table.targetMonth,
+    ),
+  ],
+);
+
 export const courtyardIncidentReports = pgTable(
   "courtyard_incident_reports",
   {

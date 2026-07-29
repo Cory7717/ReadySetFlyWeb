@@ -11,6 +11,7 @@ import {
   courtyardHotels,
   courtyardSalesAccountNotes,
   courtyardSalesAdvisorAnalyses,
+  courtyardSalesMonthlyTargets,
   courtyardSalesAccountProfiles,
   courtyardSalesActivities,
   courtyardSalesImportBatches,
@@ -37,6 +38,7 @@ import {
   SALES_ADVISOR_BUSINESS_TYPES,
   SALES_ADVISOR_PROMPT_VERSION,
   buildSalesAdvisorPreview,
+  buildMonthlySalesTargets,
   compactAdvisorContext,
   salesAdvisorFingerprint,
 } from "../courtyardSalesAdvisor";
@@ -390,6 +392,16 @@ function advisorParameters(input: any) {
       ? businessTypes
       : [...SALES_ADVISOR_BUSINESS_TYPES],
   };
+}
+
+function monthlyTargetPeriod(input: any) {
+  const targetYear = Number(input.targetYear);
+  const targetMonth = Number(input.targetMonth);
+  if (!Number.isInteger(targetYear) || targetYear < 2020 || targetYear > 2100)
+    throw new Error("Choose a valid target year.");
+  if (!Number.isInteger(targetMonth) || targetMonth < 1 || targetMonth > 12)
+    throw new Error("Choose a valid target month.");
+  return { targetYear, targetMonth };
 }
 
 async function advisorSourceData(hotelId: string) {
@@ -1390,6 +1402,142 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       next(e);
     }
   });
+  router.get("/advisor/monthly-targets", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.query.hotelId || req.salesHotels[0]?.id || "");
+      if (!hasHotel(req, hotelId))
+        return res.status(403).json({ error: "You do not have access to that property." });
+      const period = monthlyTargetPeriod(req.query);
+      const source = await advisorSourceData(hotelId);
+      const recommendation = buildMonthlySalesTargets({ ...source, ...period } as any);
+      const saved = await db
+        .select()
+        .from(courtyardSalesMonthlyTargets)
+        .where(
+          and(
+            eq(courtyardSalesMonthlyTargets.hotelId, hotelId),
+            eq(courtyardSalesMonthlyTargets.targetYear, period.targetYear),
+            eq(courtyardSalesMonthlyTargets.targetMonth, period.targetMonth),
+          ),
+        );
+      const savedBySegment = new Map(saved.map((row) => [row.segment, row]));
+      res.json({
+        ...recommendation,
+        segments: recommendation.segments.map((segment) => ({
+          ...segment,
+          saved: savedBySegment.get(segment.segment) || null,
+        })),
+      });
+    } catch (error: any) {
+      if (error?.message?.startsWith("Choose a valid"))
+        return res.status(400).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.put("/advisor/monthly-targets", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || req.salesHotels[0]?.id || "");
+      if (!hasHotel(req, hotelId))
+        return res.status(403).json({ error: "You do not have access to that property." });
+      const period = monthlyTargetPeriod(req.body);
+      const requested = Array.isArray(req.body.segments) ? req.body.segments : [];
+      if (requested.length !== 2)
+        return res.status(400).json({ error: "Save both Group and Special Corp targets together." });
+      const source = await advisorSourceData(hotelId);
+      const recommendation = buildMonthlySalesTargets({ ...source, ...period } as any);
+      const sourceFingerprint = salesAdvisorFingerprint(source.batches as any, {
+        ...period,
+        purpose: "monthly-sales-target",
+      });
+      const existing = await db
+        .select()
+        .from(courtyardSalesMonthlyTargets)
+        .where(
+          and(
+            eq(courtyardSalesMonthlyTargets.hotelId, hotelId),
+            eq(courtyardSalesMonthlyTargets.targetYear, period.targetYear),
+            eq(courtyardSalesMonthlyTargets.targetMonth, period.targetMonth),
+          ),
+        );
+      if (existing.some((row) => row.status === "locked") && !admin(req.salesUser))
+        return res.status(409).json({ error: "This monthly target plan is locked. A manager must unlock it before changes can be saved." });
+      const status = req.body.status === "locked" ? "locked" : "draft";
+      const values = requested.map((item: any) => {
+        const segment = String(item.segment || "");
+        if (!["Group", "Special Corp"].includes(segment))
+          throw new Error("Choose valid target segments.");
+        const suggested = recommendation.segments.find((row) => row.segment === segment)!;
+        const targetRoomNights = Number(item.targetRoomNights);
+        const targetRevenue = Number(item.targetRevenue);
+        const stretchRoomNights = Number(item.stretchRoomNights);
+        const stretchRevenue = Number(item.stretchRevenue);
+        if (![targetRoomNights, targetRevenue, stretchRoomNights, stretchRevenue].every((value) => Number.isFinite(value) && value >= 0))
+          throw new Error("Target rooms and revenue must be valid non-negative numbers.");
+        const targetAdr = targetRoomNights > 0 ? targetRevenue / targetRoomNights : 0;
+        const stretchAdr = stretchRoomNights > 0 ? stretchRevenue / stretchRoomNights : 0;
+        return {
+          hotelId,
+          ...period,
+          segment,
+          targetRoomNights: String(targetRoomNights),
+          targetRevenue: String(targetRevenue),
+          targetAdr: String(targetAdr),
+          stretchRoomNights: String(stretchRoomNights),
+          stretchRevenue: String(stretchRevenue),
+          stretchAdr: String(stretchAdr),
+          baselineJson: suggested.baseline,
+          rationale: String(item.rationale || suggested.rationale).slice(0, 4000),
+          status,
+          sourceFingerprint,
+          lockedAt: status === "locked" ? new Date() : null,
+          createdByUserId: req.salesUser.id,
+          updatedByUserId: req.salesUser.id,
+          updatedAt: new Date(),
+        };
+      });
+      const saved = await db.transaction(async (tx) => {
+        const rows = [];
+        for (const value of values) {
+          const [row] = await tx
+            .insert(courtyardSalesMonthlyTargets)
+            .values(value)
+            .onConflictDoUpdate({
+              target: [
+                courtyardSalesMonthlyTargets.hotelId,
+                courtyardSalesMonthlyTargets.targetYear,
+                courtyardSalesMonthlyTargets.targetMonth,
+                courtyardSalesMonthlyTargets.segment,
+              ],
+              set: {
+                targetRoomNights: value.targetRoomNights,
+                targetRevenue: value.targetRevenue,
+                targetAdr: value.targetAdr,
+                stretchRoomNights: value.stretchRoomNights,
+                stretchRevenue: value.stretchRevenue,
+                stretchAdr: value.stretchAdr,
+                baselineJson: value.baselineJson,
+                rationale: value.rationale,
+                status: value.status,
+                sourceFingerprint: value.sourceFingerprint,
+                lockedAt: value.lockedAt,
+                updatedByUserId: value.updatedByUserId,
+                updatedAt: value.updatedAt,
+              },
+            })
+            .returning();
+          rows.push(row);
+        }
+        return rows;
+      });
+      res.json({ targets: saved, status });
+    } catch (error: any) {
+      if (error?.message?.startsWith("Choose") || error?.message?.startsWith("Target"))
+        return res.status(400).json({ error: error.message });
+      next(error);
+    }
+  });
+
   router.get("/advisor/preview", async (req: any, res, next) => {
     try {
       const hotelId = String(req.query.hotelId || req.salesHotels[0]?.id || "");

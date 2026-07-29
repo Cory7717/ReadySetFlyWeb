@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildSalesAdvisorPreview,
+  buildMonthlySalesTargets,
   compactAdvisorContext,
   salesAdvisorFingerprint,
 } from "../../server/courtyardSalesAdvisor";
@@ -91,4 +92,57 @@ test("cache fingerprint changes with source data and filter parameters", () => {
   const changedFilter = salesAdvisorFingerprint([batch("jan", 1)], { ...parameters, lookbackMonths: 24 });
   assert.notEqual(first, changedSource);
   assert.notEqual(first, changedFilter);
+});
+
+test("monthly targets grow prior-year Group and Special Corp rooms and revenue", () => {
+  const batches = [
+    { ...batch("aug-2025", 8, "marriott_mint_all_market_segments"), reportYear: 2025 },
+  ];
+  const rows = [
+    { ...row("aug-2025", 8, "mint-segment:group", "Group", 240, 28800, "Group"), reportYear: 2025 },
+    { ...row("aug-2025", 8, "mint-segment:special", "Special Corp", 180, 21600, "Special Corp"), reportYear: 2025 },
+  ];
+  const plan = buildMonthlySalesTargets({ batches, rows, targetYear: 2026, targetMonth: 8 } as any);
+  const group = plan.segments.find((item) => item.segment === "Group")!;
+  const special = plan.segments.find((item) => item.segment === "Special Corp")!;
+  assert.equal(group.baseline.roomNights, 240);
+  assert.ok(group.recommended.roomNights > 240);
+  assert.ok(group.recommended.revenue > 28800);
+  assert.ok(special.recommended.roomNights > 180);
+  assert.ok(special.recommended.revenue > 21600);
+});
+
+test("named-account estimates support prospecting but never change official target baseline", () => {
+  const batches = [
+    { ...batch("official", 8, "marriott_mint_all_market_segments"), reportYear: 2025 },
+    { ...batch("named", 8, "stay_group_summary"), reportYear: 2025 },
+  ];
+  const rows = [
+    { ...row("official", 8, "segment:group", "Group", 100, 10000, "Group"), reportYear: 2025 },
+    { ...row("official", 8, "segment:special", "Special Corp", 50, 5000, "Special Corp"), reportYear: 2025 },
+    { ...row("named", 8, "stay-group:large", "Large Named Group", 999, 999999, "Group"), reportYear: 2025 },
+  ];
+  const plan = buildMonthlySalesTargets({ batches, rows, targetYear: 2026, targetMonth: 8 } as any);
+  const group = plan.segments.find((item) => item.segment === "Group")!;
+  assert.equal(group.baseline.roomNights, 100);
+  assert.equal(group.baseline.revenue, 10000);
+  assert.equal(group.namedProspects[0].name, "Large Named Group");
+});
+
+test("monthly target progress uses authoritative actual production when loaded", () => {
+  const batches = [
+    { ...batch("prior", 8, "marriott_mint_all_market_segments"), reportYear: 2025 },
+    { ...batch("actual", 8, "stay_revenue_by_market_segment_with_groups"), reportYear: 2026 },
+  ];
+  const rows = [
+    { ...row("prior", 8, "segment:group", "Group", 100, 10000, "Group"), reportYear: 2025 },
+    { ...row("prior", 8, "segment:special", "Special Corp", 50, 5000, "Special Corp"), reportYear: 2025 },
+    { ...row("actual", 8, "stay-segment:group", "Group", 60, 6600, "Group"), reportYear: 2026 },
+    { ...row("actual", 8, "stay-segment:special", "Special Corp", 20, 2200, "Special Corp"), reportYear: 2026 },
+  ];
+  const plan = buildMonthlySalesTargets({ batches, rows, targetYear: 2026, targetMonth: 8 } as any);
+  const group = plan.segments.find((item) => item.segment === "Group")!;
+  assert.equal(group.actual?.roomNights, 60);
+  assert.equal(group.actual?.revenue, 6600);
+  assert.ok(Number(group.actual?.roomNightsAttainmentPercent) > 0);
 });

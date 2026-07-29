@@ -1,5 +1,8 @@
 import crypto from "crypto";
-import { normalizeSalesMarketSegment } from "./courtyardSalesImport";
+import {
+  isAuthoritativeHotelProductionReport,
+  normalizeSalesMarketSegment,
+} from "./courtyardSalesImport";
 
 export const SALES_ADVISOR_PROMPT_VERSION = "sales-advisor-v2-onsite";
 export const SALES_ADVISOR_CALCULATION_VERSION = "sales-advisor-calculation-v1";
@@ -292,5 +295,155 @@ export function compactAdvisorContext(preview: ReturnType<typeof buildSalesAdvis
       recentHistory: history.slice(-6),
     })),
     limitations: preview.limitations,
+  };
+}
+
+const targetRound = (value: number) => Math.round(value * 100) / 100;
+const bounded = (value: number, minimum: number, maximum: number) =>
+  Math.max(minimum, Math.min(maximum, value));
+
+export function buildMonthlySalesTargets(args: {
+  batches: AdvisorBatch[];
+  rows: AdvisorProductionRow[];
+  targetYear: number;
+  targetMonth: number;
+}) {
+  const active = args.batches.filter((batch) => batch.status === "completed");
+  const batchById = new Map(active.map((batch) => [batch.id, batch]));
+  const official = new Map<string, { roomNights: number; roomRevenue: number }>();
+  for (const row of args.rows) {
+    const batch = batchById.get(row.importBatchId);
+    if (!batch || !isAuthoritativeHotelProductionReport(batch.sourceReportType)) continue;
+    const segment = normalizeSalesMarketSegment(row.marketSegment);
+    if (!["Group", "Special Corp"].includes(segment)) continue;
+    const key = `${segment}:${row.reportYear}-${row.reportMonth}`;
+    const value = official.get(key) || { roomNights: 0, roomRevenue: 0 };
+    value.roomNights += number(row.roomNights);
+    value.roomRevenue += number(row.roomRevenue);
+    official.set(key, value);
+  }
+  const advisor = buildSalesAdvisorPreview({
+    batches: active,
+    rows: args.rows,
+    lookbackMonths: 36,
+    businessTypes: ["Groups", "Special Corp"],
+    analysisType: "full_plan",
+  });
+  const targetPeriod = periodIndex(args.targetYear, args.targetMonth);
+  const results = ["Group", "Special Corp"].map((segment) => {
+    const monthlyHistory = Array.from(official.entries())
+      .filter(([key]) => key.startsWith(`${segment}:`))
+      .map(([key, value]) => {
+        const [year, month] = key.slice(segment.length + 1).split("-").map(Number);
+        return { year, month, index: periodIndex(year, month), ...value };
+      })
+      .filter((item) => item.index < targetPeriod)
+      .sort((a, b) => a.index - b.index);
+    const sameMonthHistory = monthlyHistory
+      .filter((item) => item.month === args.targetMonth)
+      .sort((a, b) => b.year - a.year)
+      .slice(0, 3);
+    const priorYear = sameMonthHistory.find((item) => item.year === args.targetYear - 1);
+    const weighted = sameMonthHistory.reduce(
+      (totals, item, index) => {
+        const weight = [0.6, 0.25, 0.15][index] || 0;
+        return {
+          roomNights: totals.roomNights + item.roomNights * weight,
+          roomRevenue: totals.roomRevenue + item.roomRevenue * weight,
+          weight: totals.weight + weight,
+        };
+      },
+      { roomNights: 0, roomRevenue: 0, weight: 0 },
+    );
+    const recentSix = monthlyHistory.slice(-6);
+    const fallback = recentSix.reduce(
+      (totals, item) => ({ roomNights: totals.roomNights + item.roomNights, roomRevenue: totals.roomRevenue + item.roomRevenue }),
+      { roomNights: 0, roomRevenue: 0 },
+    );
+    const baselineRoomNights = priorYear?.roomNights ??
+      (weighted.weight ? weighted.roomNights / weighted.weight : recentSix.length ? fallback.roomNights / recentSix.length : 0);
+    const baselineRevenue = priorYear?.roomRevenue ??
+      (weighted.weight ? weighted.roomRevenue / weighted.weight : recentSix.length ? fallback.roomRevenue / recentSix.length : 0);
+    const previousThree = monthlyHistory.slice(-6, -3);
+    const latestThree = monthlyHistory.slice(-3);
+    const average = (rows: typeof monthlyHistory, key: "roomNights" | "roomRevenue") =>
+      rows.length ? rows.reduce((sum, item) => sum + item[key], 0) / rows.length : 0;
+    const previousRoomAverage = average(previousThree, "roomNights");
+    const recentRoomAverage = average(latestThree, "roomNights");
+    const trend = previousRoomAverage > 0 && latestThree.length === 3 && previousThree.length === 3
+      ? recentRoomAverage / previousRoomAverage - 1
+      : 0;
+    const roomGrowthRate = bounded(0.08 + trend * 0.25, 0.05, 0.13);
+    const adrGrowthRate = bounded(0.03 + trend * 0.1, 0.02, 0.05);
+    const baselineAdr = baselineRoomNights > 0 ? baselineRevenue / baselineRoomNights : 0;
+    const targetRoomNights = Math.ceil(baselineRoomNights * (1 + roomGrowthRate));
+    const targetAdr = targetRound(baselineAdr * (1 + adrGrowthRate));
+    const targetRevenue = Math.round(targetRoomNights * targetAdr);
+    const stretchRoomNights = Math.ceil(targetRoomNights * 1.05);
+    const stretchAdr = targetRound(targetAdr * 1.02);
+    const stretchRevenue = Math.round(stretchRoomNights * stretchAdr);
+    const actual = official.get(`${segment}:${args.targetYear}-${args.targetMonth}`) || null;
+    const namedType = segment === "Group" ? "Groups" : "Special Corp";
+    const prospects = advisor.candidates
+      .filter((candidate) => candidate.businessType === namedType && candidate.typicalMonths.includes(args.targetMonth))
+      .slice(0, 5)
+      .map((candidate) => ({
+        key: candidate.key,
+        name: candidate.name,
+        historicalRoomNights: candidate.totalRoomNights,
+        historicalRevenue: candidate.totalRevenue,
+        status: candidate.status,
+        confidence: candidate.confidence,
+      }));
+    const confidence = priorYear && monthlyHistory.length >= 6
+      ? "High"
+      : (priorYear || sameMonthHistory.length >= 2 || recentSix.length >= 4)
+        ? "Medium"
+        : "Low";
+    const baselineSource = priorYear
+      ? `Same month prior year (${args.targetMonth}/${args.targetYear - 1})`
+      : sameMonthHistory.length
+        ? `Weighted same-month history from ${sameMonthHistory.map((item) => item.year).join(", ")}`
+        : recentSix.length
+          ? `Average of ${recentSix.length} recent imported months`
+          : "No authoritative segment baseline available";
+    return {
+      segment,
+      baseline: {
+        source: baselineSource,
+        roomNights: targetRound(baselineRoomNights),
+        revenue: targetRound(baselineRevenue),
+        adr: targetRound(baselineAdr),
+        priorYear: priorYear || null,
+        sameMonthHistory,
+        recentTrendPercent: Math.round(trend * 1000) / 10,
+      },
+      recommended: { roomNights: targetRoomNights, revenue: targetRevenue, adr: targetAdr },
+      stretch: { roomNights: stretchRoomNights, revenue: stretchRevenue, adr: stretchAdr },
+      growth: {
+        roomNightsPercent: Math.round(roomGrowthRate * 1000) / 10,
+        adrPercent: Math.round(adrGrowthRate * 1000) / 10,
+        revenuePercent: baselineRevenue > 0 ? Math.round((targetRevenue / baselineRevenue - 1) * 1000) / 10 : null,
+      },
+      actual: actual
+        ? {
+            roomNights: targetRound(actual.roomNights),
+            revenue: targetRound(actual.roomRevenue),
+            adr: actual.roomNights > 0 ? targetRound(actual.roomRevenue / actual.roomNights) : 0,
+            roomNightsAttainmentPercent: targetRoomNights > 0 ? Math.round((actual.roomNights / targetRoomNights) * 1000) / 10 : null,
+            revenueAttainmentPercent: targetRevenue > 0 ? Math.round((actual.roomRevenue / targetRevenue) * 1000) / 10 : null,
+          }
+        : null,
+      confidence,
+      namedProspects: prospects,
+      rationale: `${baselineSource}. Recommended room-night growth is ${Math.round(roomGrowthRate * 1000) / 10}% and ADR growth is ${Math.round(adrGrowthRate * 1000) / 10}%, adjusted within conservative planning limits using recent segment trend.`,
+    };
+  });
+  return {
+    targetYear: args.targetYear,
+    targetMonth: args.targetMonth,
+    periodLabel: new Date(Date.UTC(args.targetYear, args.targetMonth - 1, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }),
+    segments: results,
+    methodology: "Official Group and Special Corp segment totals establish the financial baseline. Named-account reports support prospect selection only. Recommended targets increase rooms and ADR while incorporating bounded recent-trend adjustments.",
   };
 }

@@ -39,15 +39,23 @@
 }
 
 .sales-intelligence-content input,
+.sales-intelligence-content textarea,
 .sales-intelligence-content button[role="combobox"] {
   color: #201814 !important;
   background: #ffffff !important;
   border-color: #8d765a !important;
 }
 
-.sales-intelligence-content input::placeholder {
+.sales-intelligence-content input::placeholder,
+.sales-intelligence-content textarea::placeholder {
   color: #6b7280 !important;
   opacity: 1;
+}
+
+.sales-intelligence-content textarea:focus-visible {
+  border-color: #2f5f46 !important;
+  outline: 2px solid rgba(47, 95, 70, 0.25) !important;
+  outline-offset: 1px;
 }
 
 .sales-intelligence-content [role="tablist"] {

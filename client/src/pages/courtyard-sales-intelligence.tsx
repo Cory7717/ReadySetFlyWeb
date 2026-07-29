@@ -202,6 +202,19 @@ export default function CourtyardSalesIntelligence() {
     [dashboard.data?.periods],
   );
   const latestImportedYear = importedYears[0];
+  const activeYear =
+    period === "all"
+      ? latestImportedYear
+      : period.startsWith("year:")
+        ? Number(period.slice(5))
+        : Number(period.split("-")[0]);
+  const activePeriodValue =
+    period === "all" || period.startsWith("year:")
+      ? "total"
+      : period.split("-")[1];
+  const importedMonthsForYear = (dashboard.data?.periods || []).filter(
+    (item: any) => item.year === activeYear,
+  );
   const accounts = useMemo(() => {
     let rows = (dashboard.data?.accounts || []) as Account[];
     if (period === "all" || period.startsWith("year:")) {
@@ -385,26 +398,43 @@ export default function CourtyardSalesIntelligence() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-52 bg-white">
+          <Select
+            value={activeYear ? String(activeYear) : undefined}
+            onValueChange={(value) => setPeriod(`year:${value}`)}
+          >
+            <SelectTrigger className="w-32 bg-white">
               <Calendar className="mr-2 h-4 w-4" />
-              <SelectValue />
+              <SelectValue placeholder="Year" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">
-                All months in {latestImportedYear || "latest year"}
-              </SelectItem>
-              {importedYears.slice(1).map((year) => (
-                <SelectItem key={year} value={`year:${year}`}>
-                  All months in {year}
+              {importedYears.map((year) => (
+                <SelectItem key={year} value={String(year)}>
+                  {year}
                 </SelectItem>
               ))}
-              {dashboard.data?.periods.map((p: any) => (
-                <SelectItem
-                  key={`${p.year}-${p.month}`}
-                  value={`${p.year}-${p.month}`}
-                >
-                  {p.label}
+            </SelectContent>
+          </Select>
+          <Select
+            value={activePeriodValue}
+            onValueChange={(value) =>
+              setPeriod(
+                value === "total"
+                  ? `year:${activeYear}`
+                  : `${activeYear}-${value}`,
+              )
+            }
+          >
+            <SelectTrigger className="w-48 bg-white">
+              <SelectValue placeholder="Period" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="total">Total Year</SelectItem>
+              {importedMonthsForYear.map((item: any) => (
+                <SelectItem key={item.month} value={String(item.month)}>
+                  {new Date(item.year, item.month - 1, 1).toLocaleDateString(
+                    "en-US",
+                    { month: "long" },
+                  )}
                 </SelectItem>
               ))}
             </SelectContent>

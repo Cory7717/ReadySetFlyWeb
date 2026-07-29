@@ -160,6 +160,7 @@ export default function CourtyardSalesIntelligence() {
       setPreview(null);
       setFile(null);
       setReplace(false);
+      setPeriod(`${year}-${Number(month)}`);
       qc.invalidateQueries({
         queryKey: ["/api/courtyard/sales-intelligence/dashboard"],
       });
@@ -258,6 +259,15 @@ export default function CourtyardSalesIntelligence() {
         : 0,
     };
   }, [visibleAccounts]);
+  const selectedPeriodLabel =
+    period === "all"
+      ? "All Imported Months"
+      : new Date(
+          Number(period.split("-")[0]),
+          Number(period.split("-")[1]) - 1,
+          1,
+        ).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const latestImportedLabel = dashboard.data?.periods?.[0]?.label;
   if (me.isLoading)
     return (
       <div className={`min-h-screen p-8 ${C.page}`}>
@@ -367,6 +377,23 @@ export default function CourtyardSalesIntelligence() {
             </SelectContent>
           </Select>
         </div>
+        <Card className="!border-[#2f5f46] !bg-[#e7f0e9] !bg-none !text-[#173b2a]">
+          <CardContent className="flex flex-col gap-1 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-[#52705e]">
+                Reporting Period
+              </div>
+              <div className="text-2xl font-semibold">
+                {selectedPeriodLabel}
+              </div>
+            </div>
+            {period === "all" && latestImportedLabel && (
+              <div className="text-sm font-medium text-[#405f4b]">
+                Latest imported month: {latestImportedLabel}
+              </div>
+            )}
+          </CardContent>
+        </Card>
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {[
             ["Accounts", totals.accounts],

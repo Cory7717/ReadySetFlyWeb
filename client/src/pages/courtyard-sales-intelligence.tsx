@@ -234,7 +234,15 @@ export default function CourtyardSalesIntelligence() {
   const specialAccounts = accounts.filter(
     (account) => account.reportCategory === "special",
   );
-  const visibleAccounts = view === "special" ? specialAccounts : groupAccounts;
+  const marketSegments = dashboard.data?.marketSegments || [];
+  const visibleAccounts =
+    view === "special"
+      ? specialAccounts
+      : view === "total"
+        ? accounts.filter((account) => account.reportCategory === "total")
+        : view.startsWith("segment:")
+          ? accounts.filter((account) => account.reportCategory === view)
+          : groupAccounts;
   const totals = useMemo(() => {
     const roomNights = visibleAccounts.reduce((s, a) => s + a.roomNights, 0),
       roomRevenue = visibleAccounts.reduce((s, a) => s + a.roomRevenue, 0);
@@ -340,6 +348,24 @@ export default function CourtyardSalesIntelligence() {
               ))}
             </SelectContent>
           </Select>
+          <Select
+            value={view.startsWith("segment:") ? view : "all-segments"}
+            onValueChange={(value) =>
+              setView(value === "all-segments" ? "total" : value)
+            }
+          >
+            <SelectTrigger className="w-56 bg-white">
+              <SelectValue placeholder="Filter market segment" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all-segments">All Market Segments</SelectItem>
+              {marketSegments.map((segment: string) => (
+                <SelectItem key={segment} value={`segment:${segment}`}>
+                  {segment}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {[
@@ -359,10 +385,16 @@ export default function CourtyardSalesIntelligence() {
           ))}
         </section>
         <Tabs value={view} onValueChange={setView}>
-          <TabsList className="bg-[#eadfce]">
-            <TabsTrigger value="production">Account Production</TabsTrigger>
+          <TabsList className="h-auto flex-wrap justify-start bg-[#eadfce]">
+            <TabsTrigger value="production">Groups</TabsTrigger>
             <TabsTrigger value="recovery">Recovery Opportunities</TabsTrigger>
             <TabsTrigger value="special">Special Corp/Govt</TabsTrigger>
+            <TabsTrigger value="total">Total</TabsTrigger>
+            {marketSegments.map((segment: string) => (
+              <TabsTrigger key={segment} value={`segment:${segment}`}>
+                {segment}
+              </TabsTrigger>
+            ))}
           </TabsList>
           <TabsContent value="production">
             <AccountTable
@@ -413,6 +445,30 @@ export default function CourtyardSalesIntelligence() {
               title="Special Corp/Govt Production"
             />
           </TabsContent>
+          <TabsContent value="total">
+            <AccountTable
+              accounts={visibleAccounts}
+              search={search}
+              setSearch={setSearch}
+              status={status}
+              setStatus={setStatus}
+              onDetail={setDetail}
+              title="Total Market Production"
+            />
+          </TabsContent>
+          {marketSegments.map((segment: string) => (
+            <TabsContent key={segment} value={`segment:${segment}`}>
+              <AccountTable
+                accounts={visibleAccounts}
+                search={search}
+                setSearch={setSearch}
+                status={status}
+                setStatus={setStatus}
+                onDetail={setDetail}
+                title={`${segment} Production`}
+              />
+            </TabsContent>
+          ))}
         </Tabs>
       </main>
       <UploadDialog
@@ -632,15 +688,21 @@ function UploadDialog(p: any) {
                 <SelectItem value="marriott_mint_special_corp_government">
                   Special Corp/Govt Production
                 </SelectItem>
+                <SelectItem value="marriott_mint_all_market_segments">
+                  All Market Segments
+                </SelectItem>
               </SelectContent>
             </Select>
             {p.preview && (
               <p className="mt-1 text-xs text-[#5f5247]">
                 Suggested from the report's Market Segment:{" "}
                 {p.preview.suggestedReportType ===
-                "marriott_mint_special_corp_government"
-                  ? "Special Corp/Govt"
-                  : "Group Account Production"}
+                "marriott_mint_all_market_segments"
+                  ? "All Market Segments"
+                  : p.preview.suggestedReportType ===
+                      "marriott_mint_special_corp_government"
+                    ? "Special Corp/Govt"
+                    : "Group Account Production"}
                 .
               </p>
             )}
@@ -1028,9 +1090,13 @@ function HistoryDialog({ open, setOpen, imports, isAdmin, onDelete }: any) {
                       {x.originalFilename}
                     </div>
                     <div className="text-xs font-medium text-[#2f5f46]">
-                      {x.sourceReportType === "marriott_mint_special_corp_government"
-                        ? "Special Corp/Govt"
-                        : "Group Account Production"}
+                      {x.sourceReportType ===
+                      "marriott_mint_all_market_segments"
+                        ? "All Market Segments"
+                        : x.sourceReportType ===
+                            "marriott_mint_special_corp_government"
+                          ? "Special Corp/Govt"
+                          : "Group Account Production"}
                     </div>
                   </td>
                   <td>

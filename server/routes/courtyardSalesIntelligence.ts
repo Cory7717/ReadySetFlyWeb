@@ -25,6 +25,7 @@ const DEFAULT_HOTEL_ID = "courtyard-austin-lakeline";
 const RECOVERY_MONTHS = 3;
 const GROUP_REPORT_TYPE = "marriott_mint_group_account_tracking";
 const SPECIAL_REPORT_TYPE = "marriott_mint_special_corp_government";
+const ALL_MARKET_REPORT_TYPE = "marriott_mint_all_market_segments";
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_SALES_IMPORT_BYTES, files: 1 },
@@ -189,11 +190,15 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         rejectedRows: p.rejected.length,
         duplicateRows: p.duplicateRowCount,
         warnings: p.warnings,
-        suggestedReportType: [...segments].some(
-          (value) => value.includes("special corp") || value.includes("govt"),
-        )
-          ? SPECIAL_REPORT_TYPE
-          : GROUP_REPORT_TYPE,
+        suggestedReportType:
+          segments.size > 2
+            ? ALL_MARKET_REPORT_TYPE
+            : [...segments].some(
+                  (value) =>
+                    value.includes("special corp") || value.includes("govt"),
+                )
+              ? SPECIAL_REPORT_TYPE
+              : GROUP_REPORT_TYPE,
         preview: p.accepted.slice(0, 5).map((r) => ({
           account: r.globalUltimateAccountName || r.accountName,
           bookingOffice: r.bookingOffice,
@@ -218,13 +223,17 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         return res
           .status(403)
           .json({ error: "You do not have access to that property." });
-      if (![GROUP_REPORT_TYPE, SPECIAL_REPORT_TYPE].includes(sourceReportType))
-        return res
-          .status(400)
-          .json({
-            error:
-              "Choose Group Account Production or Special Corp/Govt before importing.",
-          });
+      if (
+        ![
+          GROUP_REPORT_TYPE,
+          SPECIAL_REPORT_TYPE,
+          ALL_MARKET_REPORT_TYPE,
+        ].includes(sourceReportType)
+      )
+        return res.status(400).json({
+          error:
+            "Choose Group Account Production or Special Corp/Govt before importing.",
+        });
       if (
         !Number.isInteger(reportYear) ||
         reportYear < 2000 ||
@@ -406,6 +415,20 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           batchById.get(row.importBatchId)?.sourceReportType ===
           SPECIAL_REPORT_TYPE,
       );
+      const allMarketRows = rows.filter(
+        (row) =>
+          batchById.get(row.importBatchId)?.sourceReportType ===
+          ALL_MARKET_REPORT_TYPE,
+      );
+      const marketSegments = [
+        ...new Set(
+          allMarketRows.map(
+            (row) =>
+              String(row.marketSegment || "Unspecified").trim() ||
+              "Unspecified",
+          ),
+        ),
+      ].sort((a, b) => a.localeCompare(b));
       const accounts = [
         ...summarize(groupRows).map((account) => ({
           ...account,
@@ -417,6 +440,24 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           reportCategory: "special",
           recurring: account.history.length >= 2,
         })),
+        ...summarize(allMarketRows).map((account) => ({
+          ...account,
+          reportCategory: "total",
+          recurring: account.history.length >= 2,
+        })),
+        ...marketSegments.flatMap((segment) =>
+          summarize(
+            allMarketRows.filter(
+              (row) =>
+                (String(row.marketSegment || "Unspecified").trim() ||
+                  "Unspecified") === segment,
+            ),
+          ).map((account) => ({
+            ...account,
+            reportCategory: `segment:${segment}`,
+            recurring: account.history.length >= 2,
+          })),
+        ),
       ];
       const latest = accounts.length
         ? Math.max(...accounts.map((a) => a.lastPeriod))
@@ -449,6 +490,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         periods,
         latestPeriod: latest,
         accounts,
+        marketSegments,
         imports: batches.map((b) => ({
           ...b,
           accounts: new Set(

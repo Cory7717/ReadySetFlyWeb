@@ -169,6 +169,18 @@ export default function CourtyardSalesIntelligence() {
   const importMutation = useMutation({
     mutationFn: async () => {
       if (!files.length) throw new Error("Choose one or more report files.");
+      if (files.length > 1) {
+        const form = new FormData();
+        files.forEach((file) => form.append("files", file));
+        form.append("hotelId", selectedHotel);
+        form.append("reportMonth", month);
+        form.append("reportYear", year);
+        form.append("replace", String(replace));
+        return json("/api/courtyard/sales-intelligence/imports", {
+          method: "POST",
+          body: form,
+        });
+      }
       const results = [];
       for (let index = 0; index < files.length; index++) {
         const file = files[index];
@@ -199,7 +211,9 @@ export default function CourtyardSalesIntelligence() {
     onSuccess: (r) => {
       toast({
         title: `${r.label} imported successfully`,
-        description: `${r.accounts} accounts · ${r.roomNights.toLocaleString()} room nights · ${money.format(r.roomRevenue)}`,
+        description: r.reports
+          ? `${r.reports.length} report sources imported together. Hotel totals remain sourced only from Hotel Production.`
+          : `${r.accounts} accounts · ${r.roomNights.toLocaleString()} room nights · ${money.format(r.roomRevenue)}`,
       });
       setUploadOpen(false);
       setPreview(null);
@@ -928,6 +942,7 @@ function SalesCrm({ hotelId, accounts }: any) {
     );
   }, [accounts, crm.data?.opportunities]);
   const [accountKey, setAccountKey] = useState("");
+  const [crmTab, setCrmTab] = useState("queue");
   const [addingAccount, setAddingAccount] = useState(false);
   const [newAccountName, setNewAccountName] = useState("");
   const selected = accountOptions.find((a: any) => a.key === accountKey);
@@ -1137,12 +1152,17 @@ function SalesCrm({ hotelId, accounts }: any) {
               </div>
               <div className="space-y-1 text-sm">
                 {items.slice(0, 5).map((item: any) => (
-                  <div
+                  <button
+                    type="button"
                     key={item.id || item.key}
-                    className="truncate text-[#405f4b]"
+                    className="block w-full truncate text-left text-[#405f4b] underline-offset-2 hover:underline"
+                    onClick={() => {
+                      setActivityAccount(item.normalizedAccountKey || item.key);
+                      setCrmTab("activity");
+                    }}
                   >
                     {item[nameField]}
-                  </div>
+                  </button>
                 ))}
                 {!items.length && <div className="text-[#6e5d50]">None</div>}
               </div>
@@ -1150,7 +1170,7 @@ function SalesCrm({ hotelId, accounts }: any) {
           ))}
         </CardContent>
       </Card>
-      <Tabs defaultValue="queue">
+      <Tabs value={crmTab} onValueChange={setCrmTab}>
         <TabsList>
           <TabsTrigger value="queue">Follow-Up Queue</TabsTrigger>
           <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
@@ -1617,17 +1637,24 @@ function AnnualPlanning({ accounts, marketSegments }: any) {
   );
   const segmentRows = marketSegments
     .map((segment: string) => {
-      const segmentAccounts = accounts.filter(
-        (a: any) => a.reportCategory === `segment:${segment}`,
+      const segmentAccounts = totalAccounts.filter(
+        (account: any) => account.marketSegment === segment,
       );
       const history = segmentAccounts.flatMap((a: any) =>
         a.history.filter((h: any) => String(h.year) === year),
+      );
+      const priorHistory = segmentAccounts.flatMap((a: any) =>
+        a.history.filter((h: any) => h.year === Number(year) - 1),
       );
       const roomNights = history.reduce(
           (s: number, h: any) => s + h.roomNights,
           0,
         ),
         roomRevenue = history.reduce(
+          (s: number, h: any) => s + h.roomRevenue,
+          0,
+        ),
+        priorRoomRevenue = priorHistory.reduce(
           (s: number, h: any) => s + h.roomRevenue,
           0,
         );
@@ -1637,6 +1664,11 @@ function AnnualPlanning({ accounts, marketSegments }: any) {
         roomRevenue,
         adr: roomNights ? roomRevenue / roomNights : 0,
         months: new Set(history.map((h: any) => h.month)).size,
+        priorRoomRevenue,
+        revenueChange:
+          priorRoomRevenue > 0
+            ? (roomRevenue - priorRoomRevenue) / priorRoomRevenue
+            : null,
       };
     })
     .sort((a: any, b: any) => b.roomRevenue - a.roomRevenue);
@@ -1703,6 +1735,8 @@ function AnnualPlanning({ accounts, marketSegments }: any) {
                 <th className="text-right">Months Loaded</th>
                 <th className="text-right">Room Nights</th>
                 <th className="text-right">Room Revenue</th>
+                <th className="text-right">Prior Year Revenue</th>
+                <th className="text-right">YoY Change</th>
                 <th className="p-3 text-right">ADR</th>
               </tr>
             </thead>
@@ -1716,6 +1750,14 @@ function AnnualPlanning({ accounts, marketSegments }: any) {
                   </td>
                   <td className="text-right">
                     {money.format(row.roomRevenue)}
+                  </td>
+                  <td className="text-right">
+                    {money.format(row.priorRoomRevenue)}
+                  </td>
+                  <td className="text-right">
+                    {row.revenueChange == null
+                      ? "—"
+                      : `${row.revenueChange >= 0 ? "+" : ""}${(row.revenueChange * 100).toFixed(1)}%`}
                   </td>
                   <td className="p-3 text-right">{money2.format(row.adr)}</td>
                 </tr>
@@ -1844,13 +1886,13 @@ function UploadDialog(p: any) {
           <div className="sm:col-span-2">
             <Label>
               {usesStayFormat
-                ? "STAY CSV files (select one or more)"
-                : "File (.xls, .csv, .tsv, .txt)"}
+                ? "STAY report files (select one or more)"
+                : "File (.xls, .xlsx, .csv, .tsv, .txt)"}
             </Label>
             <Input
               key={`${usesStayFormat ? "stay" : "mint"}-${p.reportType}`}
               type="file"
-              accept={usesStayFormat ? ".csv" : ".xls,.csv,.tsv,.txt"}
+              accept=".xls,.xlsx,.csv,.tsv,.txt"
               multiple={usesStayFormat}
               onChange={(e) => p.setFiles(Array.from(e.target.files || []))}
             />

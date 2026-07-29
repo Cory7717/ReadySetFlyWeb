@@ -1,7 +1,22 @@
 import crypto from "crypto";
+import * as XLSX from "@e965/xlsx";
 
 export const MAX_SALES_IMPORT_BYTES = 5 * 1024 * 1024;
 export const MAX_SALES_IMPORT_ROWS = 25_000;
+export function isAuthoritativeHotelProductionReport(sourceReportType: string) {
+  return [
+    "marriott_mint_all_market_segments",
+    "stay_revenue_by_market_segment_with_groups",
+  ].includes(sourceReportType);
+}
+export function salesImportReplacementScope(
+  hotelId: string,
+  reportYear: number,
+  reportMonth: number,
+  sourceReportType: string,
+) {
+  return `${hotelId}:${reportYear}-${String(reportMonth).padStart(2, "0")}:${sourceReportType}`;
+}
 export function consecutiveComparableMonths(
   lastPeriod: number,
   latestPeriod: number,
@@ -35,6 +50,25 @@ const aliases: Record<string, string> = {
   taxes: "taxes",
   "add ons": "addOns",
 };
+export function workbookToDelimitedBuffer(buffer: Buffer) {
+  const isOle = buffer[0] === 0xd0 && buffer[1] === 0xcf;
+  const isZip = buffer[0] === 0x50 && buffer[1] === 0x4b;
+  if (!isOle && !isZip) return buffer;
+  try {
+    const workbook = XLSX.read(buffer, { type: "buffer", cellDates: false });
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) throw new Error("Workbook has no worksheets.");
+    const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[firstSheetName], {
+      blankrows: false,
+    });
+    if (!csv.trim()) throw new Error("The first worksheet is empty.");
+    return Buffer.from(csv, "utf8");
+  } catch (error: any) {
+    throw new Error(
+      `The Excel workbook could not be read: ${error?.message || "invalid workbook"}`,
+    );
+  }
+}
 export function normalizeHeader(value: string) {
   return value
     .replace(/\u00a0/g, " ")
@@ -88,14 +122,8 @@ function parseDelimitedLine(line: string, delimiter: string) {
   return cells;
 }
 export function parseSalesImport(buffer: Buffer) {
+  buffer = workbookToDelimitedBuffer(buffer);
   if (!buffer.length) throw new Error("The selected file is empty.");
-  if (
-    (buffer[0] === 0xd0 && buffer[1] === 0xcf) ||
-    (buffer[0] === 0x50 && buffer[1] === 0x4b)
-  )
-    throw new Error(
-      "This is a binary Excel workbook. Export Analytical Account Tracking as tab-delimited text, CSV, TSV, or TXT.",
-    );
   if (buffer.includes(0))
     throw new Error("This file appears to be binary and cannot be imported.");
   const text = buffer.toString("utf8").replace(/^\uFEFF/, "");
@@ -216,6 +244,7 @@ export function normalizeSalesMarketSegment(value: unknown) {
 }
 
 export function parseStayMarketSegmentImport(buffer: Buffer) {
+  buffer = workbookToDelimitedBuffer(buffer);
   if (!buffer.length) throw new Error("The selected file is empty.");
   if (buffer.includes(0))
     throw new Error("This file appears to be binary and cannot be imported.");
@@ -354,6 +383,7 @@ const groupSummaryAliases: Record<string, string> = {
   released: "released",
 };
 export function detectStaySalesReportType(buffer: Buffer) {
+  buffer = workbookToDelimitedBuffer(buffer);
   const firstLine =
     buffer
       .toString("utf8")
@@ -401,6 +431,7 @@ function safeSourceDate(value: unknown) {
 }
 
 export function parseStayGroupSummaryImport(buffer: Buffer) {
+  buffer = workbookToDelimitedBuffer(buffer);
   if (!buffer.length) throw new Error("The selected file is empty.");
   if (buffer.includes(0))
     throw new Error("This file appears to be binary and cannot be imported.");
@@ -576,6 +607,7 @@ export function parseStayGroupSummaryImport(buffer: Buffer) {
 }
 
 export function parseStayReservationsCompanyImport(buffer: Buffer) {
+  buffer = workbookToDelimitedBuffer(buffer);
   if (!buffer.length) throw new Error("The selected file is empty.");
   const text = buffer.toString("utf8").replace(/^\uFEFF/, "");
   const lines = text.split(/\r?\n/).filter((line) => line.trim());

@@ -1,15 +1,44 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as XLSX from "@e965/xlsx";
 import {
   consecutiveComparableMonths,
   detectStaySalesReportType,
+  isAuthoritativeHotelProductionReport,
   normalizeSalesMarketSegment,
   parseSalesImport,
   parseStayGroupSummaryImport,
   parseStayMarketSegmentImport,
   parseStayReservationsCompanyImport,
   recoveryPriority,
+  salesImportReplacementScope,
 } from "../../server/courtyardSalesImport";
+
+test("authoritative totals and replacement scopes remain source-isolated", () => {
+  assert.equal(
+    isAuthoritativeHotelProductionReport(
+      "stay_revenue_by_market_segment_with_groups",
+    ),
+    true,
+  );
+  assert.equal(
+    isAuthoritativeHotelProductionReport("stay_group_summary"),
+    false,
+  );
+  assert.equal(
+    isAuthoritativeHotelProductionReport("stay_reservations_company_names"),
+    false,
+  );
+  assert.notEqual(
+    salesImportReplacementScope("hotel", 2026, 1, "stay_group_summary"),
+    salesImportReplacementScope(
+      "hotel",
+      2026,
+      1,
+      "stay_revenue_by_market_segment_with_groups",
+    ),
+  );
+});
 
 test("recovery aging stops when a comparable monthly source is missing", () => {
   assert.equal(
@@ -71,10 +100,10 @@ test("parses tab-delimited text with an xls-style report payload and normalized 
   );
 });
 
-test("rejects binary workbooks and missing required headers", () => {
+test("rejects malformed workbooks and missing required headers", () => {
   assert.throws(
     () => parseSalesImport(Buffer.from([0xd0, 0xcf, 0x11, 0xe0])),
-    /binary Excel workbook/,
+    /workbook could not be read|headers but no data rows/,
   );
   assert.throws(
     () =>
@@ -83,6 +112,33 @@ test("rejects binary workbooks and missing required headers", () => {
       ),
     /Required columns/,
   );
+});
+
+test("parses native Excel workbooks through the existing import pipeline", () => {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.aoa_to_sheet([
+      [
+        "Global Ultimate Account Name",
+        "Current Room Nights",
+        "Current Room Revenue",
+      ],
+      ["Native Workbook Account", 4, 520],
+    ]),
+    "Report",
+  );
+  for (const bookType of ["xlsx", "biff8"] as const) {
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType });
+    const result = parseSalesImport(Buffer.from(buffer));
+    assert.equal(result.accepted.length, 1);
+    assert.equal(result.accepted[0].accountName, undefined);
+    assert.equal(
+      result.accepted[0].globalUltimateAccountName,
+      "Native Workbook Account",
+    );
+    assert.equal(result.accepted[0].roomRevenue, 520);
+  }
 });
 
 test("recovery priority is deterministic and rises with opportunity factors", () => {

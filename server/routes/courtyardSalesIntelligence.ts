@@ -23,6 +23,7 @@ import {
   MAX_SALES_IMPORT_BYTES,
   consecutiveComparableMonths,
   detectStaySalesReportType,
+  isAuthoritativeHotelProductionReport,
   parseSalesImport,
   parseStayGroupSummaryImport,
   parseStayMarketSegmentImport,
@@ -101,7 +102,7 @@ const ACTIVITY_TYPES = [
 ];
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_SALES_IMPORT_BYTES, files: 1 },
+  limits: { fileSize: MAX_SALES_IMPORT_BYTES, files: 3 },
 });
 const accessMap = (user: any) =>
   user?.toolAccessJson && typeof user.toolAccessJson === "object"
@@ -157,6 +158,58 @@ async function auth(req: any, res: any, next: any) {
 }
 function hasHotel(req: any, id: string) {
   return req.salesHotels.some((h: any) => h.id === id);
+}
+function productionInsertValue(
+  row: any,
+  batchId: string,
+  hotelId: string,
+  reportYear: number,
+  reportMonth: number,
+) {
+  return {
+    importBatchId: batchId,
+    hotelId,
+    reportYear,
+    reportMonth,
+    globalUltimateAccountName: row.globalUltimateAccountName || null,
+    highestLevelAccountId: row.highestLevelAccountId || null,
+    accountName: row.accountName || null,
+    accountId: row.accountId || null,
+    accountType: row.accountType || null,
+    marketCategory: row.marketCategory || null,
+    marketSegment: row.marketSegment || null,
+    rateProgramCode: row.rateProgramCode || null,
+    rateProgram: row.rateProgram || null,
+    bookingOffice: row.bookingOffice || null,
+    roomNights: String(row.roomNights),
+    roomRevenue: String(row.roomRevenue),
+    roomAdr: String(row.roomAdr),
+    totalRevenue: String(row.totalRevenue),
+    totalAdr: String(row.totalAdr),
+    averageLos: String(row.averageLos),
+    fees: String(row.fees),
+    taxes: String(row.taxes),
+    addOns: String(row.addOns),
+    stayArrivalDate: row.stayArrivalDate || null,
+    stayDepartureDate: row.stayDepartureDate || null,
+    groupBookingCode: row.groupBookingCode || null,
+    sourceProfile: row.sourceProfile || null,
+    contractedRoomNights:
+      row.contractedRoomNights == null
+        ? null
+        : String(row.contractedRoomNights),
+    blockedRoomNights:
+      row.blockedRoomNights == null ? null : String(row.blockedRoomNights),
+    cancelledRoomNights:
+      row.cancelledRoomNights == null ? null : String(row.cancelledRoomNights),
+    noShowRoomNights:
+      row.noShowRoomNights == null ? null : String(row.noShowRoomNights),
+    cutoffDate: row.cutoffDate || null,
+    released: row.released == null ? null : Boolean(row.released),
+    sourceRowNumber: row.sourceRowNumber,
+    normalizedAccountKey: row.normalizedAccountKey,
+    normalizedRowHash: row.normalizedRowHash,
+  };
 }
 const n = (v: any) => Number(v || 0);
 const periodIndex = (y: number, m: number) => y * 12 + m - 1;
@@ -559,54 +612,19 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
             normalizedRowHash: r.normalizedRowHash,
           })),
         );
-        await db.insert(courtyardSalesProduction).values(
-          p.accepted.map((r) => ({
-            importBatchId: batch.id,
-            hotelId,
-            reportYear,
-            reportMonth,
-            globalUltimateAccountName: r.globalUltimateAccountName || null,
-            highestLevelAccountId: r.highestLevelAccountId || null,
-            accountName: r.accountName || null,
-            accountId: r.accountId || null,
-            accountType: r.accountType || null,
-            marketCategory: r.marketCategory || null,
-            marketSegment: r.marketSegment || null,
-            rateProgramCode: r.rateProgramCode || null,
-            rateProgram: r.rateProgram || null,
-            bookingOffice: r.bookingOffice || null,
-            roomNights: String(r.roomNights),
-            roomRevenue: String(r.roomRevenue),
-            roomAdr: String(r.roomAdr),
-            totalRevenue: String(r.totalRevenue),
-            totalAdr: String(r.totalAdr),
-            averageLos: String(r.averageLos),
-            fees: String(r.fees),
-            taxes: String(r.taxes),
-            addOns: String(r.addOns),
-            stayArrivalDate: r.stayArrivalDate || null,
-            stayDepartureDate: r.stayDepartureDate || null,
-            groupBookingCode: r.groupBookingCode || null,
-            sourceProfile: r.sourceProfile || null,
-            contractedRoomNights:
-              r.contractedRoomNights == null
-                ? null
-                : String(r.contractedRoomNights),
-            blockedRoomNights:
-              r.blockedRoomNights == null ? null : String(r.blockedRoomNights),
-            cancelledRoomNights:
-              r.cancelledRoomNights == null
-                ? null
-                : String(r.cancelledRoomNights),
-            noShowRoomNights:
-              r.noShowRoomNights == null ? null : String(r.noShowRoomNights),
-            cutoffDate: r.cutoffDate || null,
-            released: r.released == null ? null : Boolean(r.released),
-            sourceRowNumber: r.sourceRowNumber,
-            normalizedAccountKey: r.normalizedAccountKey,
-            normalizedRowHash: r.normalizedRowHash,
-          })),
-        );
+        await db
+          .insert(courtyardSalesProduction)
+          .values(
+            p.accepted.map((r) =>
+              productionInsertValue(
+                r,
+                batch.id,
+                hotelId,
+                reportYear,
+                reportMonth,
+              ),
+            ),
+          );
       }
       const accounts = new Set(p.accepted.map((r) => r.normalizedAccountKey))
         .size;
@@ -628,6 +646,212 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       next(e);
     }
   });
+  router.post(
+    "/imports",
+    upload.array("files", 3),
+    async (req: any, res, next) => {
+      try {
+        const files = (req.files || []) as Express.Multer.File[];
+        const hotelId = String(req.body.hotelId || "");
+        const reportYear = Number(req.body.reportYear);
+        const reportMonth = Number(req.body.reportMonth);
+        const replace = String(req.body.replace) === "true";
+        if (!files.length)
+          return res.status(400).json({ error: "Choose one or more reports." });
+        if (!hasHotel(req, hotelId))
+          return res
+            .status(403)
+            .json({ error: "You do not have access to that property." });
+        if (
+          reportYear < 2026 ||
+          !Number.isInteger(reportMonth) ||
+          reportMonth < 1 ||
+          reportMonth > 12
+        )
+          return res.status(400).json({
+            error:
+              "Coordinated multi-file imports require a valid STAY month in 2026 or later.",
+          });
+        const prepared = files.map((file) => {
+          const sourceReportType = detectStaySalesReportType(file.buffer);
+          if (!sourceReportType)
+            throw new Error(
+              `${file.originalname} is not a recognized STAY report.`,
+            );
+          const parsed =
+            sourceReportType === STAY_RESERVATIONS_REPORT_TYPE
+              ? parseStayReservationsCompanyImport(file.buffer)
+              : sourceReportType === STAY_GROUP_SUMMARY_REPORT_TYPE
+                ? parseStayGroupSummaryImport(file.buffer)
+                : parseStayMarketSegmentImport(file.buffer);
+          if (sourceReportType === STAY_MARKET_REPORT_TYPE) {
+            const mismatched = parsed.accepted.filter((row: any) => {
+              const [year, month] = String(row.stayDate || "")
+                .split("-")
+                .map(Number);
+              return year !== reportYear || month !== reportMonth;
+            });
+            if (mismatched.length)
+              throw new Error(
+                `${file.originalname} contains ${mismatched.length} production row(s) outside the selected month.`,
+              );
+          }
+          if (sourceReportType === STAY_GROUP_SUMMARY_REPORT_TYPE) {
+            const monthStart = `${reportYear}-${String(reportMonth).padStart(2, "0")}-01`;
+            const followingMonth = new Date(
+              Date.UTC(reportYear, reportMonth, 1),
+            )
+              .toISOString()
+              .slice(0, 10);
+            const outside = parsed.accepted.filter(
+              (row: any) =>
+                row.stayDepartureDate < monthStart ||
+                row.stayArrivalDate >= followingMonth,
+            );
+            if (outside.length)
+              throw new Error(
+                `${file.originalname} contains ${outside.length} group(s) outside the selected month.`,
+              );
+          }
+          return {
+            file,
+            sourceReportType,
+            parsed,
+            checksum: crypto
+              .createHash("sha256")
+              .update(file.buffer)
+              .digest("hex"),
+          };
+        });
+        const selectedTypes = new Set(
+          prepared.map((item) => item.sourceReportType),
+        );
+        if (selectedTypes.size !== prepared.length)
+          return res.status(400).json({
+            error: "Select only one file of each STAY report type for a month.",
+          });
+        const conflicts = [] as any[];
+        for (const item of prepared) {
+          const existing = await db
+            .select()
+            .from(courtyardSalesImportBatches)
+            .where(
+              and(
+                eq(courtyardSalesImportBatches.hotelId, hotelId),
+                eq(courtyardSalesImportBatches.reportYear, reportYear),
+                eq(courtyardSalesImportBatches.reportMonth, reportMonth),
+                eq(
+                  courtyardSalesImportBatches.sourceReportType,
+                  item.sourceReportType,
+                ),
+                eq(courtyardSalesImportBatches.status, "completed"),
+              ),
+            );
+          conflicts.push(...existing);
+        }
+        if (conflicts.length && !replace)
+          return res.status(409).json({
+            error:
+              "One or more selected report types already exist for this month. Confirm Replace Month to replace only those matching sources.",
+            code: "duplicate_month",
+          });
+        if (conflicts.length && replace && !admin(req.salesUser))
+          return res.status(403).json({
+            error: "Manager access is required to replace an import.",
+          });
+        const results = await db.transaction(async (tx) => {
+          if (conflicts.length)
+            await tx
+              .update(courtyardSalesImportBatches)
+              .set({ status: "replaced", replacedAt: new Date() })
+              .where(
+                inArray(
+                  courtyardSalesImportBatches.id,
+                  conflicts.map((item) => item.id),
+                ),
+              );
+          const imported = [] as any[];
+          for (const item of prepared) {
+            const p = item.parsed;
+            const [batch] = await tx
+              .insert(courtyardSalesImportBatches)
+              .values({
+                hotelId,
+                reportYear,
+                reportMonth,
+                originalFilename: item.file.originalname,
+                detectedDelimiter: p.delimiter,
+                sourceReportType: item.sourceReportType,
+                uploadedBy: req.salesUser.id,
+                rowCount: p.rowsFound,
+                acceptedRowCount: p.accepted.length,
+                rejectedRowCount: p.rejected.length,
+                duplicateRowCount: p.duplicateRowCount,
+                fileChecksum: item.checksum,
+                validationSummaryJson: {
+                  warnings: p.warnings,
+                  rejected: p.rejected.slice(0, 100),
+                  ignoredDetailRows: p.ignoredRowCount || 0,
+                },
+              })
+              .returning();
+            if (p.accepted.length) {
+              await tx.insert(courtyardSalesRawRows).values(
+                p.accepted.map((row: any) => ({
+                  importBatchId: batch.id,
+                  sourceRowNumber: row.sourceRowNumber,
+                  rawPayloadJson: row.raw,
+                  normalizedRowHash: row.normalizedRowHash,
+                })),
+              );
+              await tx
+                .insert(courtyardSalesProduction)
+                .values(
+                  p.accepted.map((row: any) =>
+                    productionInsertValue(
+                      row,
+                      batch.id,
+                      hotelId,
+                      reportYear,
+                      reportMonth,
+                    ),
+                  ),
+                );
+            }
+            imported.push({
+              batchId: batch.id,
+              sourceReportType: item.sourceReportType,
+              accounts: new Set(
+                p.accepted.map((row: any) => row.normalizedAccountKey),
+              ).size,
+              roomNights: p.accepted.reduce(
+                (sum: number, row: any) => sum + row.roomNights,
+                0,
+              ),
+              roomRevenue: p.accepted.reduce(
+                (sum: number, row: any) => sum + row.roomRevenue,
+                0,
+              ),
+            });
+          }
+          return imported;
+        });
+        res.status(201).json({
+          label: periodLabel(reportYear, reportMonth),
+          reports: results,
+          accounts: results.reduce((sum, item) => sum + item.accounts, 0),
+          roomNights: results.reduce((sum, item) => sum + item.roomNights, 0),
+          roomRevenue: results.reduce((sum, item) => sum + item.roomRevenue, 0),
+        });
+      } catch (error: any) {
+        if (error?.code === "LIMIT_FILE_SIZE")
+          return res
+            .status(413)
+            .json({ error: "A selected file exceeds the 5 MB upload limit." });
+        res.status(400).json({ error: error.message || "Import failed." });
+      }
+    },
+  );
   router.get("/dashboard", async (req: any, res, next) => {
     try {
       const hotelId = String(req.query.hotelId || req.salesHotels[0]?.id || "");
@@ -721,9 +945,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const allMarketRows = rows
         .filter((row) => {
           const type = batchById.get(row.importBatchId)?.sourceReportType;
-          return (
-            type === ALL_MARKET_REPORT_TYPE || type === STAY_MARKET_REPORT_TYPE
-          );
+          return isAuthoritativeHotelProductionReport(String(type || ""));
         })
         .map((row) => {
           const segment = normalizeSalesMarketSegment(row.marketSegment);

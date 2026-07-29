@@ -192,9 +192,49 @@ export default function CourtyardSalesIntelligence() {
         variant: "destructive",
       }),
   });
+  const importedYears = useMemo(
+    () =>
+      Array.from(
+        new Set<number>(
+          (dashboard.data?.periods || []).map((item: any) => item.year),
+        ),
+      ).sort((a, b) => b - a),
+    [dashboard.data?.periods],
+  );
+  const latestImportedYear = importedYears[0];
   const accounts = useMemo(() => {
     let rows = (dashboard.data?.accounts || []) as Account[];
-    if (period !== "all") {
+    if (period === "all" || period.startsWith("year:")) {
+      const selectedYear =
+        period === "all" ? latestImportedYear : Number(period.slice(5));
+      rows = rows
+        .map((account) => {
+          const history = account.history.filter(
+            (item: any) => item.year === selectedYear,
+          );
+          if (!history.length) return null;
+          const roomNights = history.reduce(
+            (sum: number, item: any) => sum + item.roomNights,
+            0,
+          );
+          const roomRevenue = history.reduce(
+            (sum: number, item: any) => sum + item.roomRevenue,
+            0,
+          );
+          const losNumerator = history.reduce(
+            (sum: number, item: any) => sum + item.averageLos * item.roomNights,
+            0,
+          );
+          return {
+            ...account,
+            roomNights,
+            roomRevenue,
+            adr: roomNights ? roomRevenue / roomNights : 0,
+            averageLos: roomNights ? losNumerator / roomNights : 0,
+          };
+        })
+        .filter(Boolean);
+    } else {
       const [y, m] = period.split("-").map(Number);
       rows = rows
         .map((a) => {
@@ -230,7 +270,7 @@ export default function CourtyardSalesIntelligence() {
       );
     if (status !== "all") rows = rows.filter((a) => a.status === status);
     return rows.sort((a, b) => b.roomRevenue - a.roomRevenue);
-  }, [dashboard.data, period, search, status]);
+  }, [dashboard.data, latestImportedYear, period, search, status]);
   const groupAccounts = accounts.filter(
     (account) => account.reportCategory === "group",
   );
@@ -263,12 +303,14 @@ export default function CourtyardSalesIntelligence() {
   }, [visibleAccounts]);
   const selectedPeriodLabel =
     period === "all"
-      ? "All Imported Months"
-      : new Date(
-          Number(period.split("-")[0]),
-          Number(period.split("-")[1]) - 1,
-          1,
-        ).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+      ? `Calendar Year ${latestImportedYear || ""}`
+      : period.startsWith("year:")
+        ? `Calendar Year ${period.slice(5)}`
+        : new Date(
+            Number(period.split("-")[0]),
+            Number(period.split("-")[1]) - 1,
+            1,
+          ).toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const latestImportedLabel = dashboard.data?.periods?.[0]?.label;
   if (me.isLoading)
     return (
@@ -349,7 +391,14 @@ export default function CourtyardSalesIntelligence() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All imported months</SelectItem>
+              <SelectItem value="all">
+                All months in {latestImportedYear || "latest year"}
+              </SelectItem>
+              {importedYears.slice(1).map((year) => (
+                <SelectItem key={year} value={`year:${year}`}>
+                  All months in {year}
+                </SelectItem>
+              ))}
               {dashboard.data?.periods.map((p: any) => (
                 <SelectItem
                   key={`${p.year}-${p.month}`}
@@ -389,11 +438,12 @@ export default function CourtyardSalesIntelligence() {
                 {selectedPeriodLabel}
               </div>
             </div>
-            {period === "all" && latestImportedLabel && (
-              <div className="text-sm font-medium text-[#405f4b]">
-                Latest imported month: {latestImportedLabel}
-              </div>
-            )}
+            {(period === "all" || period.startsWith("year:")) &&
+              latestImportedLabel && (
+                <div className="text-sm font-medium text-[#405f4b]">
+                  Calendar-year totals from imported monthly reports
+                </div>
+              )}
           </CardContent>
         </Card>
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">

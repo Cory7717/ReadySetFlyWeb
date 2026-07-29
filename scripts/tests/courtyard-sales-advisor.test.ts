@@ -9,6 +9,7 @@ import {
 import {
   distanceBand,
   distanceMiles,
+  discoverRegionalBusinesses,
   prospectScore,
   targetRoles,
 } from "../../server/courtyardSalesDemand";
@@ -176,4 +177,28 @@ test("demand-event fit uses a short construction radius and a broader event radi
   assert.equal(isDemandEventHotelFit({ category: "Construction", distanceMiles: null }), false);
   assert.equal(isDemandEventHotelFit({ category: "Youth Sports", distanceMiles: 25 }), true);
   assert.equal(isDemandEventHotelFit({ category: "Youth Sports", distanceMiles: 76 }), false);
+});
+
+test("regional discovery reports Google result diagnostics and creates prospects", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.GOOGLE_PLACES_API_KEY;
+  process.env.GOOGLE_PLACES_API_KEY = "test-key";
+  globalThis.fetch = (async () => new Response(JSON.stringify({ places: [{
+    id: "place-1",
+    displayName: { text: "Acme Training Center" },
+    formattedAddress: "Cedar Park, TX",
+    location: { latitude: 30.50, longitude: -97.82 },
+    primaryTypeDisplayName: { text: "Corporate office" },
+    businessStatus: "OPERATIONAL",
+  }] }), { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+  try {
+    const result = await discoverRegionalBusinesses();
+    assert.equal(result.diagnostics.queriesRun, 8);
+    assert.equal(result.diagnostics.placesReturned, 8);
+    assert.equal(result.prospects.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey == null) delete process.env.GOOGLE_PLACES_API_KEY;
+    else process.env.GOOGLE_PLACES_API_KEY = originalKey;
+  }
 });

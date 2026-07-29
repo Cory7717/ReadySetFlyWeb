@@ -55,14 +55,17 @@ export async function discoverRegionalBusinesses() {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey) throw Object.assign(new Error("Google Places is not configured. Add GOOGLE_PLACES_API_KEY to enable regional business discovery."), { statusCode: 503 });
   const queries = [
-    "corporate headquarters and regional offices near Cedar Park Texas",
-    "corporate training centers near Round Rock Texas",
-    "manufacturing and distribution companies near Georgetown Texas",
-    "construction engineering companies near Austin Texas",
-    "corporate headquarters near San Marcos Texas",
-    "major employers near Temple Texas",
+    "corporate office near Cedar Park Texas",
+    "training center near Cedar Park Texas",
+    "corporate office near Round Rock Texas",
+    "manufacturer near Round Rock Texas",
+    "distribution center near Georgetown Texas",
+    "engineering firm near North Austin Texas",
+    "corporate office near San Marcos Texas",
+    "manufacturer near Temple Texas",
   ];
   const all: any[] = [];
+  const queryResults: Array<{ query: string; returned: number }> = [];
   for (const query of queries) {
     const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
@@ -82,7 +85,9 @@ export async function discoverRegionalBusinesses() {
       throw Object.assign(new Error(`Google Places discovery failed (${response.status}).${googleMessage ? ` Google says: ${googleMessage}` : ""}${setupHint}`), { statusCode: response.status === 403 ? 503 : 502 });
     }
     const body: any = await response.json();
-    all.push(...(body.places || []));
+    const places = Array.isArray(body.places) ? body.places : [];
+    queryResults.push({ query, returned: places.length });
+    all.push(...places);
   }
   const unique = new Map<string, any>();
   for (const place of all) {
@@ -111,5 +116,13 @@ export async function discoverRegionalBusinesses() {
       rationale: "Location and business category are verified by Google Places. Travel, training, meeting, and room-night potential require DOS qualification.",
     });
   }
-  return Array.from(unique.values()).sort((a, b) => b.opportunityScore - a.opportunityScore);
+  return {
+    prospects: Array.from(unique.values()).sort((a, b) => b.opportunityScore - a.opportunityScore),
+    diagnostics: {
+      queriesRun: queries.length,
+      placesReturned: all.length,
+      uniquePlacesInRange: unique.size,
+      queryResults,
+    },
+  };
 }

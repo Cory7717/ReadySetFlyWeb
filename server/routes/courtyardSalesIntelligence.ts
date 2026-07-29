@@ -1657,13 +1657,14 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
     try {
       const hotelId = String(req.body.hotelId || "");
       if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "You do not have access to that property." });
-      const discovered = await discoverRegionalBusinesses();
+      const discovery = await discoverRegionalBusinesses();
+      const discovered = discovery.prospects;
       const saved = [];
       for (const prospect of discovered) {
         const [row] = await db.insert(courtyardSalesRegionalProspects).values({ hotelId, ...prospect, latitude: String(prospect.latitude), longitude: String(prospect.longitude), distanceMiles: String(prospect.distanceMiles), sourceType: "google_places", lastVerifiedAt: new Date(), createdByUserId: req.salesUser.id }).onConflictDoUpdate({ target: [courtyardSalesRegionalProspects.hotelId, courtyardSalesRegionalProspects.sourceType, courtyardSalesRegionalProspects.sourceId], set: { companyName: prospect.companyName, address: prospect.address, latitude: String(prospect.latitude), longitude: String(prospect.longitude), distanceMiles: String(prospect.distanceMiles), distanceBand: prospect.distanceBand, industry: prospect.industry, website: prospect.website, phone: prospect.phone, sourceUrl: prospect.sourceUrl, opportunitySignalsJson: prospect.opportunitySignalsJson, targetRolesJson: prospect.targetRolesJson, evidenceClass: prospect.evidenceClass, opportunityScore: prospect.opportunityScore, rationale: prospect.rationale, lastVerifiedAt: new Date(), updatedAt: new Date() } }).returning();
         saved.push(row);
       }
-      res.json({ discovered: discovered.length, saved: saved.length });
+      res.json({ discovered: discovered.length, saved: saved.length, diagnostics: discovery.diagnostics });
     } catch (error: any) {
       if (error?.statusCode) return res.status(error.statusCode).json({ error: error.message });
       next(error);

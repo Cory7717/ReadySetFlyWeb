@@ -142,7 +142,14 @@ function FutureDemandPipeline({ hotelId }: { hotelId: string }) {
   });
   const discover = useMutation({
     mutationFn: () => request("/api/courtyard/sales-intelligence/advisor/demand/discover-businesses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId }) }),
-    onSuccess: (result) => { refresh(); toast({ title: "Regional discovery complete", description: `${result.saved} businesses scored within the 75-mile program.` }); },
+    onSuccess: (result) => {
+      refresh();
+      const returned = Number(result?.diagnostics?.placesReturned || 0);
+      const saved = Number(result?.saved || 0);
+      toast(saved > 0
+        ? { title: "Regional discovery complete", description: `${saved} businesses scored and saved from ${returned} Google Places results.` }
+        : { title: "No regional businesses found", description: `Google returned ${returned} place records, but none qualified within the 75-mile program.`, variant: "destructive" });
+    },
     onError: (error: Error) => toast({ title: "Business discovery needs attention", description: error.message, variant: "destructive" }),
   });
   const addProspect = useMutation({

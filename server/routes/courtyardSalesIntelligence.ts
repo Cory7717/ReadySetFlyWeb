@@ -21,6 +21,7 @@ import {
 } from "@shared/schema";
 import {
   MAX_SALES_IMPORT_BYTES,
+  detectStaySalesReportType,
   parseSalesImport,
   parseStayGroupSummaryImport,
   parseStayMarketSegmentImport,
@@ -274,8 +275,13 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const reportYear = Number(req.body.reportYear);
       const isStayFormat = Number.isInteger(reportYear) && reportYear >= 2026;
       const requestedReportType = String(req.body.reportType || "");
+      const detectedStayReportType = isStayFormat
+        ? detectStaySalesReportType(req.file.buffer)
+        : null;
       const isGroupSummary =
-        isStayFormat && requestedReportType === STAY_GROUP_SUMMARY_REPORT_TYPE;
+        isStayFormat &&
+        (detectedStayReportType || requestedReportType) ===
+          STAY_GROUP_SUMMARY_REPORT_TYPE;
       const p = isGroupSummary
         ? parseStayGroupSummaryImport(req.file.buffer)
         : isStayFormat
@@ -336,7 +342,10 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         return res
           .status(403)
           .json({ error: "You do not have access to that property." });
-      const sourceReportType = requestedReportType;
+      const sourceReportType =
+        reportYear >= 2026
+          ? detectStaySalesReportType(req.file.buffer) || requestedReportType
+          : requestedReportType;
       if (
         reportYear >= 2026 &&
         ![STAY_MARKET_REPORT_TYPE, STAY_GROUP_SUMMARY_REPORT_TYPE].includes(

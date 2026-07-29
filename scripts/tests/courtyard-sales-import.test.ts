@@ -1,11 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  detectStaySalesReportType,
   parseSalesImport,
   parseStayGroupSummaryImport,
   parseStayMarketSegmentImport,
   recoveryPriority,
 } from "../../server/courtyardSalesImport";
+
+test("detects each STAY report format from its headers", () => {
+  assert.equal(
+    detectStaySalesReportType(
+      Buffer.from("Group,Profile,Dates,Picked Up,Room Revenue ($),ADR ($)\n"),
+    ),
+    "stay_group_summary",
+  );
+  assert.equal(
+    detectStaySalesReportType(
+      Buffer.from("CATEGORY,DATE,MARKET SEGMENT,ROOMS SOLD,ROOM REVENUE\n"),
+    ),
+    "stay_revenue_by_market_segment_with_groups",
+  );
+});
 
 test("parses tab-delimited text with an xls-style report payload and normalized headers", () => {
   const input = Buffer.from(

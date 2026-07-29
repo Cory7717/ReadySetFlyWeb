@@ -318,10 +318,41 @@ const groupSummaryAliases: Record<string, string> = {
   cancelled: "cancelledRoomNights",
   "no show": "noShowRoomNights",
   "room revenue ($)": "roomRevenue",
+  "room revenue": "roomRevenue",
   "adr ($)": "roomAdr",
+  adr: "roomAdr",
   "cut off date": "cutoffDate",
   released: "released",
 };
+export function detectStaySalesReportType(buffer: Buffer) {
+  const firstLine =
+    buffer
+      .toString("utf8")
+      .replace(/^\uFEFF/, "")
+      .split(/\r?\n/, 1)[0] || "";
+  const delimiter =
+    (firstLine.match(/\t/g) || []).length > (firstLine.match(/,/g) || []).length
+      ? "\t"
+      : ",";
+  const headers = new Set(
+    parseDelimitedLine(firstLine, delimiter).map(normalizeHeader),
+  );
+  if (
+    headers.has("group") &&
+    headers.has("dates") &&
+    headers.has("picked up") &&
+    (headers.has("room revenue ($)") || headers.has("room revenue"))
+  )
+    return "stay_group_summary" as const;
+  if (
+    headers.has("market segment") &&
+    headers.has("date") &&
+    headers.has("rooms sold") &&
+    headers.has("room revenue")
+  )
+    return "stay_revenue_by_market_segment_with_groups" as const;
+  return null;
+}
 function safeSourceDate(value: unknown) {
   const source = clean(value);
   if (!source) return null;

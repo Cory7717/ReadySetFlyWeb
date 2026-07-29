@@ -94,7 +94,7 @@ export default function CourtyardSalesIntelligence() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [detail, setDetail] = useState<Account | null>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const now = new Date();
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(now.getFullYear()));
@@ -107,6 +107,7 @@ export default function CourtyardSalesIntelligence() {
     const stayTypes = [
       "stay_revenue_by_market_segment_with_groups",
       "stay_group_summary",
+      "stay_reservations_company_names",
     ];
     if (Number(year) >= 2026 && !stayTypes.includes(reportType))
       setReportType("stay_revenue_by_market_segment_with_groups");
@@ -128,20 +129,35 @@ export default function CourtyardSalesIntelligence() {
   });
   const previewMutation = useMutation({
     mutationFn: async () => {
-      if (!file) throw new Error("Choose a report file.");
-      const f = new FormData();
-      f.append("file", file);
-      f.append("reportYear", year);
-      f.append("reportMonth", month);
-      f.append("reportType", reportType);
-      return json("/api/courtyard/sales-intelligence/preview", {
-        method: "POST",
-        body: f,
-      });
+      if (!files.length) throw new Error("Choose one or more report files.");
+      const reports = await Promise.all(
+        files.map((file) => {
+          const f = new FormData();
+          f.append("file", file);
+          f.append("reportYear", year);
+          f.append("reportMonth", month);
+          f.append("reportType", reportType);
+          return json("/api/courtyard/sales-intelligence/preview", {
+            method: "POST",
+            body: f,
+          }).then((result) => ({ ...result, filename: file.name }));
+        }),
+      );
+      return {
+        reports,
+        detectedDelimiter: "auto",
+        rowsFound: reports.reduce((sum, r) => sum + r.rowsFound, 0),
+        acceptedRows: reports.reduce((sum, r) => sum + r.acceptedRows, 0),
+        rejectedRows: reports.reduce((sum, r) => sum + r.rejectedRows, 0),
+        duplicateRows: reports.reduce((sum, r) => sum + r.duplicateRows, 0),
+        warnings: reports.flatMap((r) => r.warnings || []),
+        preview: reports.flatMap((r) =>
+          r.preview.map((row: any) => ({ ...row, filename: r.filename })),
+        ),
+      };
     },
     onSuccess: (result) => {
       setPreview(result);
-      setReportType(result.suggestedReportType);
     },
     onError: (e: Error) =>
       toast({
@@ -152,18 +168,33 @@ export default function CourtyardSalesIntelligence() {
   });
   const importMutation = useMutation({
     mutationFn: async () => {
-      if (!file) throw new Error("Choose a report file.");
-      const f = new FormData();
-      f.append("file", file);
-      f.append("hotelId", selectedHotel);
-      f.append("reportMonth", month);
-      f.append("reportYear", year);
-      f.append("reportType", reportType);
-      f.append("replace", String(replace));
-      return json("/api/courtyard/sales-intelligence/import", {
-        method: "POST",
-        body: f,
-      });
+      if (!files.length) throw new Error("Choose one or more report files.");
+      const results = [];
+      for (let index = 0; index < files.length; index++) {
+        const file = files[index];
+        const f = new FormData();
+        f.append("file", file);
+        f.append("hotelId", selectedHotel);
+        f.append("reportMonth", month);
+        f.append("reportYear", year);
+        f.append(
+          "reportType",
+          preview?.reports?.[index]?.suggestedReportType || reportType,
+        );
+        f.append("replace", String(replace));
+        results.push(
+          await json("/api/courtyard/sales-intelligence/import", {
+            method: "POST",
+            body: f,
+          }),
+        );
+      }
+      return {
+        label: `${results.length} report${results.length === 1 ? "" : "s"}`,
+        accounts: results.reduce((sum, r) => sum + r.accounts, 0),
+        roomNights: results.reduce((sum, r) => sum + r.roomNights, 0),
+        roomRevenue: results.reduce((sum, r) => sum + r.roomRevenue, 0),
+      };
     },
     onSuccess: (r) => {
       toast({
@@ -172,7 +203,7 @@ export default function CourtyardSalesIntelligence() {
       });
       setUploadOpen(false);
       setPreview(null);
-      setFile(null);
+      setFiles([]);
       setReplace(false);
       setPeriod(`${year}-${Number(month)}`);
       qc.invalidateQueries({
@@ -564,9 +595,9 @@ export default function CourtyardSalesIntelligence() {
       <UploadDialog
         open={uploadOpen}
         setOpen={setUploadOpen}
-        file={file}
-        setFile={(f: File | null) => {
-          setFile(f);
+        files={files}
+        setFiles={(selected: File[]) => {
+          setFiles(selected);
           setPreview(null);
           setReplace(false);
         }}
@@ -1560,7 +1591,7 @@ function UploadDialog(p: any) {
                   value={p.reportType}
                   onValueChange={(value) => {
                     p.setReportType(value);
-                    p.setFile(null);
+                    p.setFiles([]);
                   }}
                 >
                   <SelectTrigger>
@@ -1569,6 +1600,9 @@ function UploadDialog(p: any) {
                   <SelectContent>
                     <SelectItem value="stay_revenue_by_market_segment_with_groups">
                       Hotel Production — Market Segments
+                    </SelectItem>
+                    <SelectItem value="stay_reservations_company_names">
+                      Company Names — Reservations Report
                     </SelectItem>
                     <SelectItem value="stay_group_summary">
                       Named Groups — Group Summary
@@ -1599,7 +1633,7 @@ function UploadDialog(p: any) {
                 </SelectContent>
               </Select>
             )}
-            {p.preview && (
+            {p.preview && !usesStayFormat && (
               <p className="mt-1 text-xs text-[#5f5247]">
                 Suggested from the report's Market Segment:{" "}
                 {p.preview.suggestedReportType === "stay_group_summary"
@@ -1644,21 +1678,22 @@ function UploadDialog(p: any) {
               value={p.year}
               onChange={(e) => {
                 p.setYear(e.target.value);
-                p.setFile(null);
+                p.setFiles([]);
               }}
             />
           </div>
           <div className="sm:col-span-2">
             <Label>
               {usesStayFormat
-                ? "STAY CSV file"
+                ? "STAY CSV files (select one or more)"
                 : "File (.xls, .csv, .tsv, .txt)"}
             </Label>
             <Input
               key={`${usesStayFormat ? "stay" : "mint"}-${p.reportType}`}
               type="file"
               accept={usesStayFormat ? ".csv" : ".xls,.csv,.tsv,.txt"}
-              onChange={(e) => p.setFile(e.target.files?.[0] || null)}
+              multiple={usesStayFormat}
+              onChange={(e) => p.setFiles(Array.from(e.target.files || []))}
             />
           </div>
         </div>
@@ -1685,11 +1720,13 @@ function UploadDialog(p: any) {
                   <tr>
                     <th className="p-2 text-left">Account</th>
                     <th>
-                      {p.preview.isGroupSummary
-                        ? "Booking Code"
-                        : p.preview.isStayFormat
-                          ? "Guest Type"
-                          : "Booking Office"}
+                      {p.preview.reports
+                        ? "Source"
+                        : p.preview.isGroupSummary
+                          ? "Booking Code"
+                          : p.preview.isStayFormat
+                            ? "Guest Type"
+                            : "Booking Office"}
                     </th>
                     <th>Room Nights</th>
                     <th>Revenue</th>
@@ -1732,7 +1769,7 @@ function UploadDialog(p: any) {
           {!p.preview ? (
             <Button
               className={C.green}
-              disabled={!p.file || p.previewing}
+              disabled={!p.files?.length || p.previewing}
               onClick={p.onPreview}
             >
               {p.previewing ? "Reading report…" : "Validate & Preview"}

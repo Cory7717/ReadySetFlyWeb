@@ -320,14 +320,20 @@ export function parseStayMarketSegmentImport(buffer: Buffer) {
 }
 const groupSummaryAliases: Record<string, string> = {
   group: "sourceGroupName",
+  "group name": "sourceGroupName",
+  "group code": "groupBookingCode",
   profile: "sourceProfile",
   dates: "stayDates",
+  "arrival date": "arrivalDate",
+  "departure date": "departureDate",
   contracted: "contractedRoomNights",
   "total blocked": "blockedRoomNights",
+  blocked: "blockedRoomNights",
   "picked up": "roomNights",
   remaining: "remainingRoomNights",
   cancelled: "cancelledRoomNights",
   "no show": "noShowRoomNights",
+  "no shows": "noShowRoomNights",
   "room revenue ($)": "roomRevenue",
   "room revenue": "roomRevenue",
   "adr ($)": "roomAdr",
@@ -349,8 +355,9 @@ export function detectStaySalesReportType(buffer: Buffer) {
     parseDelimitedLine(firstLine, delimiter).map(normalizeHeader),
   );
   if (
-    headers.has("group") &&
-    headers.has("dates") &&
+    (headers.has("group") || headers.has("group name")) &&
+    (headers.has("dates") ||
+      (headers.has("arrival date") && headers.has("departure date"))) &&
     headers.has("picked up") &&
     (headers.has("room revenue ($)") || headers.has("room revenue"))
   )
@@ -362,6 +369,14 @@ export function detectStaySalesReportType(buffer: Buffer) {
     headers.has("room revenue")
   )
     return "stay_revenue_by_market_segment_with_groups" as const;
+  if (
+    headers.has("company") &&
+    headers.has("guest name") &&
+    headers.has("arrive") &&
+    headers.has("depart") &&
+    headers.has("rate($)")
+  )
+    return "stay_reservations_company_names" as const;
   return null;
 }
 function safeSourceDate(value: unknown) {
@@ -394,15 +409,20 @@ export function parseStayGroupSummaryImport(buffer: Buffer) {
     found = new Set(mapped.filter(Boolean));
   for (const required of [
     "sourceGroupName",
-    "stayDates",
     "roomNights",
     "roomRevenue",
     "roomAdr",
   ])
     if (!found.has(required))
       throw new Error(
-        "This does not appear to be the STAY Groups Summary export. Required columns include Group, Dates, Picked Up, Room Revenue ($), and ADR ($).",
+        "This does not appear to be a STAY Group Summary export. Required columns include Group/Group Name, Picked Up, Room Revenue, and ADR.",
       );
+  const hasDateRange = found.has("stayDates");
+  const hasDateColumns = found.has("arrivalDate") && found.has("departureDate");
+  if (!hasDateRange && !hasDateColumns)
+    throw new Error(
+      "This Group Summary needs either DATES or ARRIVAL DATE and DEPARTURE DATE columns.",
+    );
   const accepted: any[] = [],
     rejected: any[] = [],
     seen = new Set<string>();
@@ -431,8 +451,8 @@ export function parseStayGroupSummaryImport(buffer: Buffer) {
       return;
     }
     const dateParts = clean(row.stayDates).split(/\s+-\s+/),
-      stayArrivalDate = safeSourceDate(dateParts[0]),
-      stayDepartureDate = safeSourceDate(dateParts[1]);
+      stayArrivalDate = safeSourceDate(row.arrivalDate || dateParts[0]),
+      stayDepartureDate = safeSourceDate(row.departureDate || dateParts[1]);
     if (!stayArrivalDate || !stayDepartureDate) {
       rejected.push({ row: index + 2, reason: "Invalid stay date range" });
       return;
@@ -441,7 +461,7 @@ export function parseStayGroupSummaryImport(buffer: Buffer) {
       withoutTags = originalName.replace(/\s*\[[^\]]*\]\s*$/, "").trim();
     const identityMatch = withoutTags.match(/^(.*?)\s+-\s+([A-Z0-9]+)$/i),
       displayName = clean(identityMatch?.[1] || withoutTags),
-      groupBookingCode = clean(identityMatch?.[2]);
+      groupBookingCode = clean(row.groupBookingCode || identityMatch?.[2]);
     const normalizedRowHash = crypto
       .createHash("sha256")
       .update(JSON.stringify(rawHeaders.map((header) => raw[header])))
@@ -483,24 +503,142 @@ export function parseStayGroupSummaryImport(buffer: Buffer) {
       normalizedAccountKey: `stay-group:${displayName.toLowerCase().replace(/\s+/g, " ")}`,
     });
   });
+  const grouped = new Map<string, any>();
+  for (const row of accepted) {
+    const key = row.groupBookingCode
+      ? `code:${String(row.groupBookingCode).toLowerCase()}`
+      : row.normalizedAccountKey;
+    const current = grouped.get(key);
+    if (!current) {
+      grouped.set(key, { ...row });
+      continue;
+    }
+    current.roomNights += row.roomNights;
+    current.roomRevenue += row.roomRevenue;
+    current.totalRevenue += row.totalRevenue;
+    for (const field of [
+      "contractedRoomNights",
+      "blockedRoomNights",
+      "cancelledRoomNights",
+      "noShowRoomNights",
+    ])
+      current[field] = (current[field] || 0) + (row[field] || 0);
+    current.stayArrivalDate = [
+      current.stayArrivalDate,
+      row.stayArrivalDate,
+    ].sort()[0];
+    current.stayDepartureDate = [
+      current.stayDepartureDate,
+      row.stayDepartureDate,
+    ]
+      .sort()
+      .at(-1);
+    current.released = current.released || row.released;
+  }
+  const aggregated = Array.from(grouped.values()).map((row) => ({
+    ...row,
+    roomAdr:
+      row.roomNights > 0 ? row.roomRevenue / row.roomNights : row.roomAdr,
+    totalAdr:
+      row.roomNights > 0 ? row.roomRevenue / row.roomNights : row.totalAdr,
+  }));
   return {
     delimiter: delimiter === "\t" ? "tab" : "comma",
     rawHeaders,
     rowsFound: lines.length - 1,
-    accepted,
+    accepted: aggregated,
     rejected,
     duplicateRowCount,
     ignoredRowCount,
     warnings: [],
-    reportDateRange: accepted.length
+    reportDateRange: aggregated.length
       ? {
-          start: accepted.map((row) => row.stayArrivalDate).sort()[0],
-          end: accepted
+          start: aggregated.map((row) => row.stayArrivalDate).sort()[0],
+          end: aggregated
             .map((row) => row.stayDepartureDate)
             .sort()
             .at(-1),
         }
       : null,
+  };
+}
+
+export function parseStayReservationsCompanyImport(buffer: Buffer) {
+  if (!buffer.length) throw new Error("The selected file is empty.");
+  const text = buffer.toString("utf8").replace(/^\uFEFF/, "");
+  const lines = text.split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2)
+    throw new Error("The Reservations Report has headers but no data rows.");
+  const delimiter =
+    (lines[0].match(/\t/g) || []).length > (lines[0].match(/,/g) || []).length
+      ? "\t"
+      : ",";
+  const rawHeaders = parseDelimitedLine(lines[0], delimiter).map((h) =>
+    h.trim(),
+  );
+  const headerIndexes = new Map(
+    rawHeaders.map((h, i) => [normalizeHeader(h), i]),
+  );
+  for (const required of ["company", "group", "rate($)"])
+    if (!headerIndexes.has(required))
+      throw new Error(
+        "This does not appear to be a STAY Reservations Report. Required columns include COMPANY, GROUP, and RATE($).",
+      );
+  const companies = new Map<string, any>();
+  let duplicateRowCount = 0;
+  lines.slice(1).forEach((line, index) => {
+    const cells = parseDelimitedLine(line, delimiter);
+    const company = clean(cells[headerIndexes.get("company")!]);
+    const group = clean(cells[headerIndexes.get("group")!]);
+    const rate = clean(cells[headerIndexes.get("rate($)")!]);
+    if (!company || /^aaa$/i.test(company) || group) return;
+    const key = company.toLowerCase().replace(/\s+/g, " ");
+    const marketSegment = /\bgov(?:ernment|t)|military/i.test(
+      `${company} ${rate}`,
+    )
+      ? "Government"
+      : "Special Corp";
+    if (companies.has(key)) {
+      duplicateRowCount++;
+      if (marketSegment === "Government")
+        companies.get(key).marketSegment = marketSegment;
+      return;
+    }
+    const raw = Object.fromEntries(
+      rawHeaders.map((h, i) => [h, cells[i] || ""]),
+    );
+    companies.set(key, {
+      globalUltimateAccountName: company,
+      accountName: company,
+      accountType: "Company name reference",
+      marketCategory: marketSegment,
+      marketSegment,
+      roomNights: 0,
+      roomRevenue: 0,
+      roomAdr: 0,
+      totalRevenue: 0,
+      totalAdr: 0,
+      averageLos: 0,
+      fees: 0,
+      taxes: 0,
+      addOns: 0,
+      raw,
+      sourceRowNumber: index + 2,
+      normalizedRowHash: crypto.createHash("sha256").update(key).digest("hex"),
+      normalizedAccountKey: `stay-company:${key}`,
+    });
+  });
+  const accepted = Array.from(companies.values());
+  return {
+    delimiter: delimiter === "\t" ? "tab" : "comma",
+    rawHeaders,
+    rowsFound: lines.length - 1,
+    accepted,
+    rejected: [],
+    duplicateRowCount,
+    ignoredRowCount: lines.length - 1 - accepted.length - duplicateRowCount,
+    warnings: [],
+    reportDateRange: null,
   };
 }
 

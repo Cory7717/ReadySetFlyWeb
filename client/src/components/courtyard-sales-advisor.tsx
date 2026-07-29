@@ -114,7 +114,7 @@ function MonthlySalesTargets({ hotelId }: { hotelId: string }) {
   </Card>;
 }
 
-function FutureDemandPipeline({ hotelId }: { hotelId: string }) {
+function FutureDemandPipeline({ hotelId, onOpenCrm }: { hotelId: string; onOpenCrm: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const initial = useMemo(() => { const date = new Date(); date.setMonth(date.getMonth() + 1); return { year: date.getFullYear(), month: date.getMonth() + 1 }; }, []);
@@ -165,9 +165,14 @@ function FutureDemandPipeline({ hotelId }: { hotelId: string }) {
     onError: (error: Error) => toast({ title: "Could not add event", description: error.message, variant: "destructive" }),
   });
   const addCrm = useMutation({
-    mutationFn: (prospect: any) => request("/api/courtyard/sales-intelligence/opportunities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId, normalizedAccountKey: prospect.historicalAccountKey || `regional:${prospect.id}`, accountName: prospect.companyName, marketSegment: prospect.industry, stage: "prospect", estimatedRoomNights: 0, estimatedRevenue: 0, nextAction: "Qualify travel, training, meeting, or project lodging need", notes: `${prospect.rationale || "Added from regional prospecting pipeline"} Evidence: ${String(prospect.evidenceClass).replace(/_/g, " ")}.` }) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-crm", hotelId] }); toast({ title: "Lead added to Backup CRM" }); },
+    mutationFn: (prospect: any) => request("/api/courtyard/sales-intelligence/opportunities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId, normalizedAccountKey: prospect.historicalAccountKey || `regional:${prospect.id}`, accountName: prospect.companyName, marketSegment: prospect.industry, stage: "prospect", estimatedRoomNights: 0, estimatedRevenue: 0, nextAction: "Qualify travel, training, meeting, or project lodging need", notes: `${prospect.rationale || "Added from regional prospecting pipeline"} Evidence: ${String(prospect.evidenceClass).replace(/_/g, " ")}.${prospect.address ? ` Address: ${prospect.address}.` : ""}${prospect.phone ? ` Phone: ${prospect.phone}.` : ""}${prospect.website ? ` Website: ${prospect.website}.` : ""}` }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-crm", hotelId] }); toast({ title: "Lead added to Backup CRM", description: "Opening the CRM so you can continue the follow-up." }); onOpenCrm(); },
     onError: (error: Error) => toast({ title: "Could not add lead", description: error.message, variant: "destructive" }),
+  });
+  const enrich = useMutation({
+    mutationFn: (prospect: any) => request(`/api/courtyard/sales-intelligence/advisor/demand/prospects/${prospect.id}/enrich`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId }) }),
+    onSuccess: () => { refresh(); toast({ title: "Business contact details updated" }); },
+    onError: (error: Error) => toast({ title: "Could not retrieve contact details", description: error.message, variant: "destructive" }),
   });
   const years = [initial.year, initial.year + 1, initial.year + 2];
   return <Card className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]">
@@ -188,6 +193,7 @@ function FutureDemandPipeline({ hotelId }: { hotelId: string }) {
         <div className="grid gap-3 lg:grid-cols-2">{(demand.data?.events || []).map((event: any) => <div key={event.id} className="rounded-md border border-[#deceba] bg-white p-4"><div className="flex items-start justify-between gap-2"><div><div className="font-semibold">{event.eventName}</div><div className="text-sm text-[#5f5247]">{new Date(`${event.startDate}T12:00:00`).toLocaleDateString()} · {event.venue || event.city || "Venue pending"}</div></div><Badge className={event.demandLevel === "high" ? "!bg-[#2f5f46] !text-white" : "!bg-[#eadfce] !text-[#4f4339]"}>{event.demandLevel} demand</Badge></div><p className="mt-2 text-sm">{event.recommendedAction}</p><div className="mt-2 text-xs text-[#6e5d50]">Target: {(event.targetRolesJson || []).join(" · ")}</div>{event.sourceUrl && <a className="mt-2 inline-flex items-center text-sm text-[#2f5f46] underline" href={event.sourceUrl} target="_blank" rel="noreferrer">{event.sourceName || "Official source"}<ExternalLink className="ml-1 h-3 w-3" /></a>}</div>)}{!demand.isLoading && !demand.data?.events?.length && <div className="rounded-md border border-dashed border-[#cdbda8] bg-white p-5 text-sm text-[#5f5247] lg:col-span-2">No demand events are stored for this month yet. Run official event research or add a known event above.</div>}</div>
       </div>
       <div><div className="mb-2 flex items-center justify-between"><h3 className="text-lg font-semibold">Prioritized Outreach Pipeline</h3><Badge variant="outline">{demand.data?.prospects?.length || 0} leads</Badge></div><div className="overflow-x-auto rounded-md border border-[#deceba] bg-white"><table className="w-full min-w-[900px] text-sm"><thead className="bg-[#f7f1e7]"><tr><th className="p-3 text-left">Priority / Company</th><th className="text-left">Evidence</th><th className="text-left">Distance</th><th className="text-left">Why pursue</th><th className="text-left">Target roles</th><th className="p-3"></th></tr></thead><tbody>{(demand.data?.prospects || []).slice(0, 50).map((prospect: any) => <tr key={prospect.id} className="border-t border-[#deceba]"><td className="p-3"><div className="font-semibold">{prospect.opportunityScore} · {prospect.companyName}</div><div className="text-xs text-[#6e5d50]">{prospect.industry || "Business"}{prospect.historicalRevenue ? ` · ${money.format(Number(prospect.historicalRevenue))} history` : ""}</div></td><td><Badge variant="outline" className="capitalize">{String(prospect.evidenceClass).replace(/_/g, " ")}</Badge></td><td>{prospect.distanceMiles == null ? prospect.distanceBand : `${Number(prospect.distanceMiles).toFixed(1)} mi · ${prospect.distanceBand}`}</td><td className="max-w-xs p-2 text-[#5f5247]">{prospect.rationale}</td><td className="max-w-xs p-2 text-xs">{(prospect.targetRolesJson || []).slice(0, 3).join(" · ")}</td><td className="p-3"><Button size="sm" variant="outline" disabled={addCrm.isPending} onClick={() => addCrm.mutate(prospect)}>Add to CRM</Button></td></tr>)}</tbody></table></div></div>
+      {!!demand.data?.prospects?.length && <div><h3 className="mb-2 text-lg font-semibold">Business Contact Details</h3><div className="grid gap-3 md:grid-cols-2">{demand.data.prospects.slice(0, 50).map((prospect: any) => <div key={`contact:${prospect.id}`} className="rounded-md border border-[#deceba] bg-white p-3"><div className="font-semibold">{prospect.companyName}</div><div className="mt-1 text-sm text-[#5f5247]">{prospect.address || "Address not available"}</div><div className="mt-1 text-sm">{prospect.phone || "Phone not retrieved"}{prospect.website && <> · <a className="text-[#20543a] underline" href={prospect.website} target="_blank" rel="noopener noreferrer">Website</a></>}</div>{prospect.sourceType === "google_places" && (!prospect.phone || !prospect.website) && <Button size="sm" variant="outline" className={`mt-2 ${ADVISOR_BUTTON}`} disabled={enrich.isPending} onClick={() => enrich.mutate(prospect)}>Get Phone & Website</Button>}</div>)}</div></div>}
     </CardContent>
   </Card>;
 }
@@ -222,7 +228,7 @@ function PublicProjectLeads({ hotelId }: { hotelId: string }) {
   </CardContent></Card>;
 }
 
-export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
+export function CourtyardSalesAdvisor({ hotelId, onOpenCrm }: { hotelId: string; onOpenCrm: () => void }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [lookbackMonths, setLookbackMonths] = useState("24");
@@ -295,7 +301,8 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sales-crm", hotelId] });
-      toast({ title: "Prospect added to Backup CRM" });
+      toast({ title: "Prospect added to Backup CRM", description: "Opening the CRM so you can continue the follow-up." });
+      onOpenCrm();
     },
     onError: (error: Error) => toast({ title: "Could not add prospect", description: error.message, variant: "destructive" }),
   });
@@ -314,7 +321,8 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
   return (
     <div className="space-y-4">
       <MonthlySalesTargets hotelId={hotelId} />
-      <FutureDemandPipeline hotelId={hotelId} />
+      <div className="flex justify-end"><Button className={ADVISOR_BUTTON} onClick={onOpenCrm}>Open Backup CRM</Button></div>
+      <FutureDemandPipeline hotelId={hotelId} onOpenCrm={onOpenCrm} />
       <PublicProjectLeads hotelId={hotelId} />
       <Card className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]">
         <CardHeader>

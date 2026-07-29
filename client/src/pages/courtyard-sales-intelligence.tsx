@@ -825,7 +825,7 @@ export default function CourtyardSalesIntelligence() {
             />
           </TabsContent>
           <TabsContent value="advisor">
-            <CourtyardSalesAdvisor hotelId={selectedHotel} />
+            <CourtyardSalesAdvisor hotelId={selectedHotel} onOpenCrm={() => setView("crm")} />
           </TabsContent>
           <TabsContent value="crm">
             <SalesCrm

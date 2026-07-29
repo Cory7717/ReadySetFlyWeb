@@ -144,3 +144,22 @@ export async function discoverRegionalBusinesses() {
     },
   };
 }
+
+export async function fetchRegionalBusinessContactDetails(placeId: string) {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) throw Object.assign(new Error("Google Places is not configured."), { statusCode: 503 });
+  if (!placeId) throw Object.assign(new Error("This prospect does not have a Google Place ID."), { statusCode: 400 });
+  const response = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": apiKey,
+      "X-Goog-FieldMask": "id,formattedAddress,nationalPhoneNumber,websiteUri,googleMapsUri",
+    },
+  });
+  if (!response.ok) {
+    const body: any = await response.json().catch(() => ({}));
+    throw Object.assign(new Error(`Google Place Details failed (${response.status}).${body?.error?.message ? ` Google says: ${String(body.error.message).replace(/AIza[\w-]+/g, "[redacted]")}` : ""}`), { statusCode: response.status === 403 ? 503 : 502 });
+  }
+  const place: any = await response.json();
+  return { address: place.formattedAddress || null, phone: place.nationalPhoneNumber || null, website: place.websiteUri || null, sourceUrl: place.googleMapsUri || null };
+}

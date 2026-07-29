@@ -11,6 +11,7 @@ import {
   distanceBand,
   distanceMiles,
   discoverRegionalBusinesses,
+  fetchRegionalBusinessContactDetails,
   prospectScore,
   resolveHotelLocation,
   targetRoles,
@@ -229,6 +230,23 @@ test("regional discovery reports Google result diagnostics and creates prospects
     assert.equal(result.diagnostics.placesReturned, 8);
     assert.equal(result.prospects.length, 1);
     assert.equal(result.diagnostics.rejected.outside75Miles, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey == null) delete process.env.GOOGLE_PLACES_API_KEY;
+    else process.env.GOOGLE_PLACES_API_KEY = originalKey;
+  }
+});
+
+test("selected regional prospects can retrieve phone, address, and website details", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.GOOGLE_PLACES_API_KEY;
+  process.env.GOOGLE_PLACES_API_KEY = "test-key";
+  globalThis.fetch = (async () => new Response(JSON.stringify({ formattedAddress: "100 Main St, Cedar Park, TX", nationalPhoneNumber: "(512) 555-0100", websiteUri: "https://example.com", googleMapsUri: "https://maps.google.com/example" }), { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+  try {
+    const details = await fetchRegionalBusinessContactDetails("place-1");
+    assert.equal(details.phone, "(512) 555-0100");
+    assert.equal(details.address, "100 Main St, Cedar Park, TX");
+    assert.equal(details.website, "https://example.com");
   } finally {
     globalThis.fetch = originalFetch;
     if (originalKey == null) delete process.env.GOOGLE_PLACES_API_KEY;

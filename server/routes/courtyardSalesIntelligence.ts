@@ -48,6 +48,7 @@ import { generateSalesAdvisorAssistance, generateSalesAdvisorNarrative } from ".
 import { salesAdvisorModel } from "../openaiClient";
 import {
   discoverRegionalBusinesses,
+  fetchRegionalBusinessContactDetails,
   prospectScore,
   targetRoles,
 } from "../courtyardSalesDemand";
@@ -1633,6 +1634,22 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       }).returning();
       res.status(201).json({ prospect });
     } catch (error) { next(error); }
+  });
+
+  router.post("/advisor/demand/prospects/:id/enrich", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || "");
+      if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "You do not have access to that property." });
+      const [existing] = await db.select().from(courtyardSalesRegionalProspects).where(and(eq(courtyardSalesRegionalProspects.id, req.params.id), eq(courtyardSalesRegionalProspects.hotelId, hotelId))).limit(1);
+      if (!existing) return res.status(404).json({ error: "Regional prospect not found." });
+      if (existing.sourceType !== "google_places" || !existing.sourceId) return res.status(400).json({ error: "Contact enrichment is available for Google Places prospects." });
+      const details = await fetchRegionalBusinessContactDetails(existing.sourceId);
+      const [prospect] = await db.update(courtyardSalesRegionalProspects).set({ ...details, lastVerifiedAt: new Date(), updatedAt: new Date() }).where(eq(courtyardSalesRegionalProspects.id, existing.id)).returning();
+      res.json({ prospect });
+    } catch (error: any) {
+      if (error?.statusCode) return res.status(error.statusCode).json({ error: error.message });
+      next(error);
+    }
   });
 
   router.post("/advisor/demand/project-leads", async (req: any, res, next) => {

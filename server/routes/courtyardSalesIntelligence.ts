@@ -96,7 +96,7 @@ async function auth(req: any, res: any, next: any) {
         eq(courtyardHotelUserAccess.hotelId, courtyardHotels.id),
       )
       .where(eq(courtyardHotelUserAccess.userId, user.id));
-    if (!hotels.length && admin(user)) {
+    if (!hotels.length && allowed(user)) {
       const fallback = await db
         .select()
         .from(courtyardHotels)
@@ -343,12 +343,9 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           sourceReportType,
         )
       )
-        return res
-          .status(400)
-          .json({
-            error:
-              "Choose Hotel Production or Named Groups for the STAY upload.",
-          });
+        return res.status(400).json({
+          error: "Choose Hotel Production or Named Groups for the STAY upload.",
+        });
       if (
         reportYear < 2026 &&
         ![
@@ -405,11 +402,9 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
             row.stayArrivalDate >= followingMonth,
         );
         if (outsideMonth.length)
-          return res
-            .status(400)
-            .json({
-              error: `The Group Summary contains ${outsideMonth.length} booking(s) that do not overlap the selected month. Confirm the report filters and reporting period.`,
-            });
+          return res.status(400).json({
+            error: `The Group Summary contains ${outsideMonth.length} booking(s) that do not overlap the selected month. Confirm the report filters and reporting period.`,
+          });
       }
       const checksum = crypto
         .createHash("sha256")

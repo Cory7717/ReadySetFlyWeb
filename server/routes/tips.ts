@@ -32,9 +32,15 @@ const TIPS_SUPER_ADMIN_EMAILS = new Set(
 );
 
 // TODO: set the actual Courtyard Bistro current pay period start date in env/admin settings.
-const TIPS_PAY_PERIOD_SEED = process.env.TIPS_PAY_PERIOD_START_DATE || "2026-05-16";
-const TIPS_SUBMISSION_RECIPIENT = process.env.TIPS_SUBMISSION_RECIPIENT || "cory.armer@marriott.com";
-const PRIVATE_TIPS_ROOT = path.resolve(process.cwd(), "private-uploads", "tips");
+const TIPS_PAY_PERIOD_SEED =
+  process.env.TIPS_PAY_PERIOD_START_DATE || "2026-05-16";
+const TIPS_SUBMISSION_RECIPIENT =
+  process.env.TIPS_SUBMISSION_RECIPIENT || "cory.armer@marriott.com";
+const PRIVATE_TIPS_ROOT = path.resolve(
+  process.cwd(),
+  "private-uploads",
+  "tips",
+);
 const REPORTS_DIR = path.join(PRIVATE_TIPS_ROOT, "reports");
 const PDFS_DIR = path.join(PRIVATE_TIPS_ROOT, "pdfs");
 
@@ -54,20 +60,35 @@ type TipsUserSession = {
   disabledAt: Date | string | null;
 };
 
-const COURTYARD_TOOL_KEYS = ["schedule", "tips", "opsreport", "dosreporting", "incidentreport", "bankdeposit", "budget", "comptroller"] as const;
-type CourtyardToolKey = typeof COURTYARD_TOOL_KEYS[number];
+const COURTYARD_TOOL_KEYS = [
+  "schedule",
+  "tips",
+  "opsreport",
+  "dosreporting",
+  "salesintelligence",
+  "incidentreport",
+  "bankdeposit",
+  "budget",
+  "comptroller",
+] as const;
+type CourtyardToolKey = (typeof COURTYARD_TOOL_KEYS)[number];
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
 function isCourtyardPlaceholderEmail(email: unknown) {
-  return /^tips-[^@]+@courtyard-tips\.local$/i.test(normalizeEmail(String(email || "")));
+  return /^tips-[^@]+@courtyard-tips\.local$/i.test(
+    normalizeEmail(String(email || "")),
+  );
 }
 
 function isDeliverableEmail(email: unknown) {
   const normalized = normalizeEmail(String(email || ""));
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) && !isCourtyardPlaceholderEmail(normalized);
+  return (
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) &&
+    !isCourtyardPlaceholderEmail(normalized)
+  );
 }
 
 function normalizePersonName(value: unknown) {
@@ -82,34 +103,52 @@ function normalizePersonName(value: unknown) {
 function findScheduleEmployeeForTipsUser(user: any, employees: any[]) {
   const email = normalizeEmail(String(user?.email || ""));
   if (email && !isCourtyardPlaceholderEmail(email)) {
-    const byEmail = employees.find((employee) => normalizeEmail(String(employee.email || "")) === email);
+    const byEmail = employees.find(
+      (employee) => normalizeEmail(String(employee.email || "")) === email,
+    );
     if (byEmail) return byEmail;
   }
 
   const first = normalizePersonName(user?.firstName);
   const last = normalizePersonName(user?.lastName);
-  const display = normalizePersonName(user?.employeeDisplayName || [user?.firstName, user?.lastName].filter(Boolean).join(" "));
+  const display = normalizePersonName(
+    user?.employeeDisplayName ||
+      [user?.firstName, user?.lastName].filter(Boolean).join(" "),
+  );
   const matches = employees.filter((employee) => {
     const employeeFirst = normalizePersonName(employee.firstName);
     const employeeLast = normalizePersonName(employee.lastName);
     const employeeDisplay = normalizePersonName(employee.displayName);
     return Boolean(
-      (first && last && employeeFirst === first && employeeLast === last)
-      || (display && employeeDisplay === display)
+      (first && last && employeeFirst === first && employeeLast === last) ||
+      (display && employeeDisplay === display),
     );
   });
   return matches.length === 1 ? matches[0] : null;
 }
 
-async function reconcileTipsUserScheduleEmail(user: any, employees?: any[], users?: any[]) {
+async function reconcileTipsUserScheduleEmail(
+  user: any,
+  employees?: any[],
+  users?: any[],
+) {
   if (!user || !isCourtyardPlaceholderEmail(user.email)) return user;
-  const scheduleRows = employees || await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
+  const scheduleRows =
+    employees ||
+    (await db
+      .select()
+      .from(scheduleEmployees)
+      .where(eq(scheduleEmployees.active, true)));
   const employee = findScheduleEmployeeForTipsUser(user, scheduleRows);
   const scheduleEmail = normalizeEmail(String(employee?.email || ""));
   if (!isDeliverableEmail(scheduleEmail)) return user;
 
-  const allUsers = users || await db.select().from(tipsUsers);
-  const emailOwner = allUsers.find((item) => item.id !== user.id && normalizeEmail(String(item.email || "")) === scheduleEmail);
+  const allUsers = users || (await db.select().from(tipsUsers));
+  const emailOwner = allUsers.find(
+    (item) =>
+      item.id !== user.id &&
+      normalizeEmail(String(item.email || "")) === scheduleEmail,
+  );
   if (emailOwner) return user;
 
   const [updated] = await db
@@ -121,10 +160,17 @@ async function reconcileTipsUserScheduleEmail(user: any, employees?: any[], user
 }
 
 async function reconcileTipsUsersWithSchedule(users: any[]) {
-  const employees = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.active, true));
+  const employees = await db
+    .select()
+    .from(scheduleEmployees)
+    .where(eq(scheduleEmployees.active, true));
   const reconciled: any[] = [];
   for (const user of users) {
-    const updated = await reconcileTipsUserScheduleEmail(user, employees, users);
+    const updated = await reconcileTipsUserScheduleEmail(
+      user,
+      employees,
+      users,
+    );
     reconciled.push(updated);
     const index = users.findIndex((item) => item.id === updated.id);
     if (index >= 0) users[index] = updated;
@@ -151,7 +197,8 @@ function addUtcDays(date: Date, days: number) {
 }
 
 function getPayPeriodForDate(date = new Date()) {
-  const seed = parseDateKey(TIPS_PAY_PERIOD_SEED) || parseDateKey("2026-05-16")!;
+  const seed =
+    parseDateKey(TIPS_PAY_PERIOD_SEED) || parseDateKey("2026-05-16")!;
   const target = parseDateKey(toDateKey(date)) || date;
   const diffDays = Math.floor((target.getTime() - seed.getTime()) / 86_400_000);
   const offset = ((diffDays % 14) + 14) % 14;
@@ -161,7 +208,9 @@ function getPayPeriodForDate(date = new Date()) {
     start: toDateKey(start),
     end: toDateKey(end),
     dayNumber: offset + 1,
-    days: Array.from({ length: 14 }, (_, index) => toDateKey(addUtcDays(start, index))),
+    days: Array.from({ length: 14 }, (_, index) =>
+      toDateKey(addUtcDays(start, index)),
+    ),
   };
 }
 
@@ -181,7 +230,9 @@ function moneyString(value: unknown) {
 }
 
 function sumMoney(rows: any[], field: string) {
-  return moneyString(rows.reduce((sum, row) => sum + moneyNumber(row[field]), 0));
+  return moneyString(
+    rows.reduce((sum, row) => sum + moneyNumber(row[field]), 0),
+  );
 }
 
 function resolveTipsRole(user: any): "employee" | "manager" | "super_admin" {
@@ -202,7 +253,9 @@ function isTipsSuperAdmin(user: any) {
 
 function getToolAccess(user: any): Record<string, boolean> {
   const access = user?.toolAccessJson;
-  return access && typeof access === "object" && !Array.isArray(access) ? access as Record<string, boolean> : {};
+  return access && typeof access === "object" && !Array.isArray(access)
+    ? (access as Record<string, boolean>)
+    : {};
 }
 
 function getExplicitToolAccess(user: any, tool: CourtyardToolKey) {
@@ -221,31 +274,62 @@ async function hasBistroTipsAccess(user: any) {
   const explicit = getExplicitToolAccess(user, "tips");
   if (explicit !== null) return explicit;
   if (hasBistroText(user.position)) return true;
-  const [employee] = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.email, normalizeEmail(String(user.email || "")))).limit(1);
-  return Boolean(employee && (
-    hasBistroText(employee.department) ||
-    hasBistroText(employee.position) ||
-    hasBistroText(Array.isArray(employee.rolesJson) ? employee.rolesJson.join(", ") : employee.rolesJson)
-  ));
+  const [employee] = await db
+    .select()
+    .from(scheduleEmployees)
+    .where(
+      eq(scheduleEmployees.email, normalizeEmail(String(user.email || ""))),
+    )
+    .limit(1);
+  return Boolean(
+    employee &&
+    (hasBistroText(employee.department) ||
+      hasBistroText(employee.position) ||
+      hasBistroText(
+        Array.isArray(employee.rolesJson)
+          ? employee.rolesJson.join(", ")
+          : employee.rolesJson,
+      )),
+  );
 }
 
 function scheduleEmployeeHasBistroRole(employee: any) {
-  return Boolean(employee && (
-    hasBistroText(employee.department) ||
-    hasBistroText(employee.position) ||
-    hasBistroText(Array.isArray(employee.rolesJson) ? employee.rolesJson.join(", ") : employee.rolesJson)
-  ));
+  return Boolean(
+    employee &&
+    (hasBistroText(employee.department) ||
+      hasBistroText(employee.position) ||
+      hasBistroText(
+        Array.isArray(employee.rolesJson)
+          ? employee.rolesJson.join(", ")
+          : employee.rolesJson,
+      )),
+  );
 }
 
 async function canManageTipsSales(user: any) {
   if (!user || user.disabledAt || user.mustChangePassword) return false;
   if (isTipsManager(user)) return true;
-  const text = `${user.position || ""} ${user.employeeDisplayName || ""}`.toLowerCase();
+  const text =
+    `${user.position || ""} ${user.employeeDisplayName || ""}`.toLowerCase();
   if (text.includes("gm") || text.includes("general manager")) return true;
-  if (text.includes("bistro") && (text.includes("manager") || text.includes("supervisor"))) return true;
-  const [employee] = await db.select().from(scheduleEmployees).where(eq(scheduleEmployees.email, normalizeEmail(String(user.email || "")))).limit(1);
-  const employeeText = `${employee?.department || ""} ${employee?.position || ""} ${Array.isArray(employee?.rolesJson) ? employee.rolesJson.join(" ") : employee?.rolesJson || ""}`.toLowerCase();
-  return Boolean(employeeText.includes("bistro") && (employeeText.includes("manager") || employeeText.includes("supervisor")));
+  if (
+    text.includes("bistro") &&
+    (text.includes("manager") || text.includes("supervisor"))
+  )
+    return true;
+  const [employee] = await db
+    .select()
+    .from(scheduleEmployees)
+    .where(
+      eq(scheduleEmployees.email, normalizeEmail(String(user.email || ""))),
+    )
+    .limit(1);
+  const employeeText =
+    `${employee?.department || ""} ${employee?.position || ""} ${Array.isArray(employee?.rolesJson) ? employee.rolesJson.join(" ") : employee?.rolesJson || ""}`.toLowerCase();
+  return Boolean(
+    employeeText.includes("bistro") &&
+    (employeeText.includes("manager") || employeeText.includes("supervisor")),
+  );
 }
 
 async function getBistroTipsUsers() {
@@ -253,11 +337,19 @@ async function getBistroTipsUsers() {
     db.select().from(tipsUsers).orderBy(asc(tipsUsers.employeeDisplayName)),
     db.select().from(scheduleEmployees),
   ]);
-  const scheduleByEmail = new Map(scheduleRows.map((employee) => [normalizeEmail(String(employee.email || "")), employee]));
+  const scheduleByEmail = new Map(
+    scheduleRows.map((employee) => [
+      normalizeEmail(String(employee.email || "")),
+      employee,
+    ]),
+  );
   return users.filter((user) => {
-    if (user.disabledAt || resolveTipsRole(user) === "super_admin") return false;
+    if (user.disabledAt || resolveTipsRole(user) === "super_admin")
+      return false;
     if (hasBistroText(user.position)) return true;
-    const scheduleEmployee = scheduleByEmail.get(normalizeEmail(String(user.email || "")));
+    const scheduleEmployee = scheduleByEmail.get(
+      normalizeEmail(String(user.email || "")),
+    );
     return scheduleEmployeeHasBistroRole(scheduleEmployee);
   });
 }
@@ -267,7 +359,10 @@ async function getBanquetTipAssociates() {
     .select()
     .from(scheduleEmployees)
     .where(eq(scheduleEmployees.active, true))
-    .orderBy(asc(scheduleEmployees.department), asc(scheduleEmployees.displayName));
+    .orderBy(
+      asc(scheduleEmployees.department),
+      asc(scheduleEmployees.displayName),
+    );
   return employees.map((employee) => ({
     id: employee.id,
     employeeDisplayName: employee.displayName,
@@ -276,7 +371,9 @@ async function getBanquetTipAssociates() {
   }));
 }
 
-function publicTipsUser(user: any): TipsUserSession & { isAdmin: boolean; isSuperAdmin: boolean } {
+function publicTipsUser(
+  user: any,
+): TipsUserSession & { isAdmin: boolean; isSuperAdmin: boolean } {
   const email = String(user.email || "");
   const role = resolveTipsRole(user);
   return {
@@ -298,7 +395,11 @@ function publicTipsUser(user: any): TipsUserSession & { isAdmin: boolean; isSupe
 async function getTipsUserBySession(req: any) {
   const userId = req.session?.tipsUserId;
   if (!userId) return null;
-  const [user] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, String(userId))).limit(1);
+  const [user] = await db
+    .select()
+    .from(tipsUsers)
+    .where(eq(tipsUsers.id, String(userId)))
+    .limit(1);
   return user || null;
 }
 
@@ -306,7 +407,8 @@ const requireTipsAuth: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getTipsUserBySession(req);
     if (!user) return res.status(401).json({ error: "Tips login required" });
-    if (user.disabledAt) return res.status(403).json({ error: "This Tips account is disabled." });
+    if (user.disabledAt)
+      return res.status(403).json({ error: "This Tips account is disabled." });
     req.tipsUser = user;
     next();
   } catch (error) {
@@ -316,7 +418,12 @@ const requireTipsAuth: RequestHandler = async (req: any, res, next) => {
 
 const requireTipsReady: RequestHandler = async (req: any, res, next) => {
   if (req.tipsUser?.mustChangePassword) {
-    return res.status(403).json({ error: "Password change required before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
+    return res
+      .status(403)
+      .json({
+        error: "Password change required before continuing.",
+        code: "PASSWORD_CHANGE_REQUIRED",
+      });
   }
   next();
 };
@@ -325,8 +432,15 @@ const requireTipsAdmin: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getTipsUserBySession(req);
     if (!user) return res.status(401).json({ error: "Tips login required" });
-    if (user.disabledAt) return res.status(403).json({ error: "This Tips account is disabled." });
-    if (user.mustChangePassword) return res.status(403).json({ error: "Password change required before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
+    if (user.disabledAt)
+      return res.status(403).json({ error: "This Tips account is disabled." });
+    if (user.mustChangePassword)
+      return res
+        .status(403)
+        .json({
+          error: "Password change required before continuing.",
+          code: "PASSWORD_CHANGE_REQUIRED",
+        });
     if (!isTipsManager(user)) {
       return res.status(403).json({ error: "Tips manager access required" });
     }
@@ -341,9 +455,19 @@ const requireTipsSuperAdmin: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getTipsUserBySession(req);
     if (!user) return res.status(401).json({ error: "Tips login required" });
-    if (user.disabledAt) return res.status(403).json({ error: "This Tips account is disabled." });
-    if (user.mustChangePassword) return res.status(403).json({ error: "Password change required before continuing.", code: "PASSWORD_CHANGE_REQUIRED" });
-    if (!isTipsSuperAdmin(user)) return res.status(403).json({ error: "Tips super admin access required" });
+    if (user.disabledAt)
+      return res.status(403).json({ error: "This Tips account is disabled." });
+    if (user.mustChangePassword)
+      return res
+        .status(403)
+        .json({
+          error: "Password change required before continuing.",
+          code: "PASSWORD_CHANGE_REQUIRED",
+        });
+    if (!isTipsSuperAdmin(user))
+      return res
+        .status(403)
+        .json({ error: "Tips super admin access required" });
     req.tipsUser = user;
     next();
   } catch (error) {
@@ -354,12 +478,22 @@ const requireTipsSuperAdmin: RequestHandler = async (req: any, res, next) => {
 const requireTipsGridAccess: RequestHandler = async (req: any, res, next) => {
   try {
     const user = await getTipsUserBySession(req);
-    if (user && !user.disabledAt && !user.mustChangePassword && (isTipsManager(user) || getExplicitToolAccess(user, "tips") === true) && await hasBistroTipsAccess(user)) {
+    if (
+      user &&
+      !user.disabledAt &&
+      !user.mustChangePassword &&
+      (isTipsManager(user) || getExplicitToolAccess(user, "tips") === true) &&
+      (await hasBistroTipsAccess(user))
+    ) {
       req.tipsUser = user;
       return next();
     }
-    if (!user) return res.status(401).json({ error: "Courtyard login required" });
-    if (!(await hasBistroTipsAccess(user))) return res.status(403).json({ error: "Bistro role required for tips access" });
+    if (!user)
+      return res.status(401).json({ error: "Courtyard login required" });
+    if (!(await hasBistroTipsAccess(user)))
+      return res
+        .status(403)
+        .json({ error: "Bistro role required for tips access" });
     if (req.session?.tipsKioskUnlocked) {
       req.tipsUser = user;
       return next();
@@ -401,14 +535,16 @@ const passwordResetRequestSchema = z.object({
   email: z.string().email(),
 });
 
-const changePasswordSchema = z.object({
-  temporaryPassword: z.string().min(1),
-  newPassword: z.string().min(8).max(200),
-  confirmPassword: z.string().min(8).max(200),
-}).refine((value) => value.newPassword === value.confirmPassword, {
-  message: "New passwords do not match",
-  path: ["confirmPassword"],
-});
+const changePasswordSchema = z
+  .object({
+    temporaryPassword: z.string().min(1),
+    newPassword: z.string().min(8).max(200),
+    confirmPassword: z.string().min(8).max(200),
+  })
+  .refine((value) => value.newPassword === value.confirmPassword, {
+    message: "New passwords do not match",
+    path: ["confirmPassword"],
+  });
 
 const entrySchema = z.object({
   entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -417,12 +553,17 @@ const entrySchema = z.object({
   creditTips: z.coerce.number().min(0).max(100000).default(0),
   grossSales: z.coerce.number().min(0).max(1000000).default(0),
   coversServed: z.coerce.number().int().min(0).max(10000).optional().nullable(),
-  shiftType: z.enum(["breakfast", "lunch", "dinner", "bar", "other"]).default("other"),
+  shiftType: z
+    .enum(["breakfast", "lunch", "dinner", "bar", "other"])
+    .default("other"),
   notes: z.string().max(2000).optional().nullable(),
 });
 
 const periodSchema = z.object({
-  start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  start: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 const updateTipsUserPositionSchema = z.object({
@@ -488,18 +629,23 @@ const gridAssociateSchema = z.object({
 
 const banquetReportSchema = z.object({
   eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  reportType: z.enum(["banquet_service", "group_breakfast"]).default("banquet_service"),
+  reportType: z
+    .enum(["banquet_service", "group_breakfast"])
+    .default("banquet_service"),
   eventName: z.string().trim().min(1).max(160),
   grossSales: z.coerce.number().min(0).max(1000000),
   banquetTips: z.coerce.number().min(0).max(100000).optional(),
-  assignedUserIds: z.preprocess((value) => {
-    if (typeof value !== "string") return value;
-    try {
-      return JSON.parse(value);
-    } catch {
-      return [];
-    }
-  }, z.array(z.string().trim().min(1)).max(20).default([])),
+  assignedUserIds: z.preprocess(
+    (value) => {
+      if (typeof value !== "string") return value;
+      try {
+        return JSON.parse(value);
+      } catch {
+        return [];
+      }
+    },
+    z.array(z.string().trim().min(1)).max(20).default([]),
+  ),
   notes: z.string().trim().max(1000).optional().nullable(),
 });
 
@@ -507,8 +653,17 @@ function serviceRateForReportType(reportType: string) {
   return reportType === "group_breakfast" ? 0.18 : 0.21;
 }
 
-function resolveBanquetTipAmount(input: { reportType: string; grossSales: number; banquetTips?: number | null }) {
-  if (typeof input.banquetTips === "number" && Number.isFinite(input.banquetTips) && input.banquetTips > 0) return input.banquetTips;
+function resolveBanquetTipAmount(input: {
+  reportType: string;
+  grossSales: number;
+  banquetTips?: number | null;
+}) {
+  if (
+    typeof input.banquetTips === "number" &&
+    Number.isFinite(input.banquetTips) &&
+    input.banquetTips > 0
+  )
+    return input.banquetTips;
   return input.grossSales * serviceRateForReportType(input.reportType);
 }
 
@@ -517,12 +672,18 @@ const upload = multer({
     destination: (_req, _file, cb) => cb(null, REPORTS_DIR),
     filename: (req: any, file, cb) => {
       const ext = path.extname(file.originalname || "").toLowerCase() || ".jpg";
-      cb(null, `${req.tipsUser?.id || "kiosk"}-${Date.now()}-${crypto.randomBytes(8).toString("hex")}${ext}`);
+      cb(
+        null,
+        `${req.tipsUser?.id || "kiosk"}-${Date.now()}-${crypto.randomBytes(8).toString("hex")}${ext}`,
+      );
     },
   }),
   limits: { fileSize: 12 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith("image/") || file.mimetype === "application/pdf") {
+    if (
+      file.mimetype.startsWith("image/") ||
+      file.mimetype === "application/pdf"
+    ) {
       cb(null, true);
     } else {
       cb(new Error("Only image or PDF sales reports are allowed"));
@@ -533,15 +694,30 @@ const upload = multer({
 const salesReportUpload: RequestHandler = (req, res, next) => {
   upload.single("salesReport")(req, res, (error: any) => {
     if (!error) return next();
-    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
-      return res.status(413).json({ error: "Sales report image is too large. Retake the photo farther back, crop it, or choose a smaller image." });
+    if (
+      error instanceof multer.MulterError &&
+      error.code === "LIMIT_FILE_SIZE"
+    ) {
+      return res
+        .status(413)
+        .json({
+          error:
+            "Sales report image is too large. Retake the photo farther back, crop it, or choose a smaller image.",
+        });
     }
-    return res.status(400).json({ error: error?.message || "Sales report upload failed." });
+    return res
+      .status(400)
+      .json({ error: error?.message || "Sales report upload failed." });
   });
 };
 
-function computeTotals(entries: any[], period: ReturnType<typeof getPayPeriodForDate>) {
-  const byDate = new Map(entries.map((entry) => [String(entry.entryDate), entry]));
+function computeTotals(
+  entries: any[],
+  period: ReturnType<typeof getPayPeriodForDate>,
+) {
+  const byDate = new Map(
+    entries.map((entry) => [String(entry.entryDate), entry]),
+  );
   let week1Total = 0;
   let week2Total = 0;
   const days = period.days.map((date, index) => {
@@ -576,14 +752,25 @@ async function getEntriesForPeriod(userId: string, start: string, end: string) {
   const rows = await db
     .select()
     .from(tipEntries)
-    .where(and(eq(tipEntries.userId, userId), gte(tipEntries.entryDate, start), lte(tipEntries.entryDate, end)))
+    .where(
+      and(
+        eq(tipEntries.userId, userId),
+        gte(tipEntries.entryDate, start),
+        lte(tipEntries.entryDate, end),
+      ),
+    )
     .orderBy(asc(tipEntries.entryDate));
 
   const attachments = rows.length
     ? await db
         .select()
         .from(tipEntryAttachments)
-        .where(inArray(tipEntryAttachments.tipEntryId, rows.map((row) => row.id)))
+        .where(
+          inArray(
+            tipEntryAttachments.tipEntryId,
+            rows.map((row) => row.id),
+          ),
+        )
     : [];
   const attachmentsByEntry = new Map<string, any[]>();
   for (const attachment of attachments) {
@@ -605,27 +792,51 @@ async function getSubmission(userId: string, start: string, end: string) {
   const [submission] = await db
     .select()
     .from(tipPeriodSubmissions)
-    .where(and(eq(tipPeriodSubmissions.userId, userId), eq(tipPeriodSubmissions.payPeriodStart, start), eq(tipPeriodSubmissions.payPeriodEnd, end)))
+    .where(
+      and(
+        eq(tipPeriodSubmissions.userId, userId),
+        eq(tipPeriodSubmissions.payPeriodStart, start),
+        eq(tipPeriodSubmissions.payPeriodEnd, end),
+      ),
+    )
     .limit(1);
   return submission || null;
 }
 
 async function buildDashboard(userId: string, requestedStart?: string) {
   const period = requestedStart
-    ? { ...getPayPeriodForDate(parseDateKey(requestedStart) || new Date()), start: requestedStart }
+    ? {
+        ...getPayPeriodForDate(parseDateKey(requestedStart) || new Date()),
+        start: requestedStart,
+      }
     : getPayPeriodForDate();
   const entries = await getEntriesForPeriod(userId, period.start, period.end);
   const submission = await getSubmission(userId, period.start, period.end);
   const totals = computeTotals(entries, period);
   return {
-    period: { start: period.start, end: period.end, dayNumber: period.dayNumber },
+    period: {
+      start: period.start,
+      end: period.end,
+      dayNumber: period.dayNumber,
+    },
     entries,
-    submission: submission ? { ...submission, week1Total: moneyString(submission.week1Total), week2Total: moneyString(submission.week2Total), totalTips: moneyString(submission.totalTips) } : null,
+    submission: submission
+      ? {
+          ...submission,
+          week1Total: moneyString(submission.week1Total),
+          week2Total: moneyString(submission.week2Total),
+          totalTips: moneyString(submission.totalTips),
+        }
+      : null,
     ...totals,
   };
 }
 
-async function generateTipsPdf(user: any, dashboard: any, submission: any | null) {
+async function generateTipsPdf(
+  user: any,
+  dashboard: any,
+  submission: any | null,
+) {
   const pdf = await PDFDocument.create();
   let page = pdf.addPage([612, 792]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -636,17 +847,36 @@ async function generateTipsPdf(user: any, dashboard: any, submission: any | null
       page = pdf.addPage([612, 792]);
       y = 742;
     }
-    page.drawText(text.slice(0, 105), { x, y, size, font: isBold ? bold : font, color: rgb(0.08, 0.09, 0.11) });
+    page.drawText(text.slice(0, 105), {
+      x,
+      y,
+      size,
+      font: isBold ? bold : font,
+      color: rgb(0.08, 0.09, 0.11),
+    });
     y -= size + 8;
   };
 
   draw("Courtyard Tips Tracker", 48, 18, true);
-  draw(`Employee: ${user.employeeDisplayName} (${user.firstName} ${user.lastName})`, 48, 11);
+  draw(
+    `Employee: ${user.employeeDisplayName} (${user.firstName} ${user.lastName})`,
+    48,
+    11,
+  );
   draw(`Position: ${user.position || "Unassigned"}`, 48, 11);
   draw(`Email: ${user.email}`, 48, 11);
-  draw(`Pay period: ${dashboard.period.start} to ${dashboard.period.end}`, 48, 11);
+  draw(
+    `Pay period: ${dashboard.period.start} to ${dashboard.period.end}`,
+    48,
+    11,
+  );
   draw(`Submission status: ${submission?.status || "draft"}`, 48, 11);
-  if (submission?.submittedAt) draw(`Submitted: ${new Date(submission.submittedAt).toLocaleString()}`, 48, 11);
+  if (submission?.submittedAt)
+    draw(
+      `Submitted: ${new Date(submission.submittedAt).toLocaleString()}`,
+      48,
+      11,
+    );
   y -= 8;
   draw("Daily Tips", 48, 13, true);
   draw("Date          CC Tips    Sales      Shift      Photo", 48, 9, true);
@@ -657,7 +887,8 @@ async function generateTipsPdf(user: any, dashboard: any, submission: any | null
       48,
       9,
     );
-    if (entry?.notes) draw(`Notes: ${String(entry.notes).replace(/\s+/g, " ")}`, 64, 8);
+    if (entry?.notes)
+      draw(`Notes: ${String(entry.notes).replace(/\s+/g, " ")}`, 64, 8);
   });
   y -= 8;
   draw(`Week 1 total: $${dashboard.week1Total}`, 48, 12, true);
@@ -665,9 +896,17 @@ async function generateTipsPdf(user: any, dashboard: any, submission: any | null
   draw(`Grand total: $${dashboard.totalTips}`, 48, 13, true);
   y -= 8;
   draw("Employee confirmation:", 48, 11, true);
-  draw("I confirm these tip amounts are accurate to the best of my knowledge and match the uploaded sales reports.", 48, 9);
+  draw(
+    "I confirm these tip amounts are accurate to the best of my knowledge and match the uploaded sales reports.",
+    48,
+    9,
+  );
   y -= 16;
-  draw("Manager review: ________________________________  Date: ________________", 48, 10);
+  draw(
+    "Manager review: ________________________________  Date: ________________",
+    48,
+    10,
+  );
 
   const bytes = await pdf.save();
   const fileName = `${user.id}-${dashboard.period.start}-${dashboard.period.end}.pdf`;
@@ -685,7 +924,10 @@ async function sendTipsSubmissionEmail(user: any, dashboard: any) {
     })
     .join("\n");
   const subject = `Tips Submission - ${user.employeeDisplayName} - ${dashboard.period.start} to ${dashboard.period.end}`;
-  const adminUrl = new URL("/tips/admin", process.env.FRONTEND_BASE_URL || "https://readysetfly.us").toString();
+  const adminUrl = new URL(
+    "/tips/admin",
+    process.env.FRONTEND_BASE_URL || "https://readysetfly.us",
+  ).toString();
 
   await client.emails.send({
     from: fromEmail,
@@ -718,7 +960,10 @@ async function sendTipsAssociateCreatedEmail(params: {
   createdByName: string;
 }) {
   const { client, fromEmail } = await getUncachableResendClient();
-  const tipsUrl = new URL("/tips", process.env.FRONTEND_BASE_URL || "https://readysetfly.us").toString();
+  const tipsUrl = new URL(
+    "/tips",
+    process.env.FRONTEND_BASE_URL || "https://readysetfly.us",
+  ).toString();
 
   await client.emails.send({
     from: fromEmail,
@@ -745,7 +990,10 @@ async function sendTipsPasswordResetEmail(params: {
   requestedByName: string;
 }) {
   const { client, fromEmail } = await getUncachableResendClient();
-  const tipsUrl = new URL("/courtyard", process.env.FRONTEND_BASE_URL || "https://readysetfly.us").toString();
+  const tipsUrl = new URL(
+    "/courtyard",
+    process.env.FRONTEND_BASE_URL || "https://readysetfly.us",
+  ).toString();
 
   await client.emails.send({
     from: fromEmail,
@@ -771,21 +1019,32 @@ function resolvePrivateFile(storagePath: string) {
 }
 
 async function getKioskPinHash() {
-  const [row] = await db.select().from(tipsKioskSettings).where(eq(tipsKioskSettings.key, "pin_hash")).limit(1);
+  const [row] = await db
+    .select()
+    .from(tipsKioskSettings)
+    .where(eq(tipsKioskSettings.key, "pin_hash"))
+    .limit(1);
   return row?.value || "";
 }
 
 async function verifyKioskPin(pin: string) {
   const hash = await getKioskPinHash();
   if (hash) return bcrypt.compare(pin, hash);
-  return Boolean(process.env.TIPS_KIOSK_PIN && process.env.TIPS_KIOSK_PIN === pin);
+  return Boolean(
+    process.env.TIPS_KIOSK_PIN && process.env.TIPS_KIOSK_PIN === pin,
+  );
 }
 
 async function getDailyReportsForPeriod(start: string, end: string) {
   const reports = await db
     .select()
     .from(tipDailyReportAttachments)
-    .where(and(gte(tipDailyReportAttachments.reportDate, start), lte(tipDailyReportAttachments.reportDate, end)))
+    .where(
+      and(
+        gte(tipDailyReportAttachments.reportDate, start),
+        lte(tipDailyReportAttachments.reportDate, end),
+      ),
+    )
     .orderBy(asc(tipDailyReportAttachments.reportDate));
   return reports;
 }
@@ -794,7 +1053,12 @@ async function getGridDaySummariesForPeriod(start: string, end: string) {
   return db
     .select()
     .from(tipGridDaySummaries)
-    .where(and(gte(tipGridDaySummaries.summaryDate, start), lte(tipGridDaySummaries.summaryDate, end)))
+    .where(
+      and(
+        gte(tipGridDaySummaries.summaryDate, start),
+        lte(tipGridDaySummaries.summaryDate, end),
+      ),
+    )
     .orderBy(asc(tipGridDaySummaries.summaryDate));
 }
 
@@ -802,13 +1066,21 @@ async function getGridSubmission(start: string, end: string) {
   const [submission] = await db
     .select()
     .from(tipGridSubmissions)
-    .where(and(eq(tipGridSubmissions.payPeriodStart, start), eq(tipGridSubmissions.payPeriodEnd, end)))
+    .where(
+      and(
+        eq(tipGridSubmissions.payPeriodStart, start),
+        eq(tipGridSubmissions.payPeriodEnd, end),
+      ),
+    )
     .limit(1);
   return submission || null;
 }
 
 function gridSubmissionLocksPeriod(
-  submission: { status?: string | null; submittedAt?: Date | string | null } | null,
+  submission: {
+    status?: string | null;
+    submittedAt?: Date | string | null;
+  } | null,
   start: string,
   end: string,
 ) {
@@ -816,7 +1088,9 @@ function gridSubmissionLocksPeriod(
   const currentPeriod = getPayPeriodForDate();
   if (start !== currentPeriod.start) return true;
 
-  const submittedAt = submission.submittedAt ? new Date(submission.submittedAt) : null;
+  const submittedAt = submission.submittedAt
+    ? new Date(submission.submittedAt)
+    : null;
   if (!submittedAt || Number.isNaN(submittedAt.getTime())) return false;
   return toDateKey(submittedAt) >= end;
 }
@@ -828,24 +1102,49 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
         start: toDateKey(startDate),
         end: toDateKey(addUtcDays(startDate, 13)),
         dayNumber: Math.max(1, Math.min(14, getPayPeriodForDate().dayNumber)),
-        days: Array.from({ length: 14 }, (_, index) => toDateKey(addUtcDays(startDate, index))),
+        days: Array.from({ length: 14 }, (_, index) =>
+          toDateKey(addUtcDays(startDate, index)),
+        ),
       }
     : getPayPeriodForDate();
-  const [users, entries, reports, daySummaries, submission] = await Promise.all([
-    getBistroTipsUsers(),
-    db.select().from(tipEntries).where(and(gte(tipEntries.entryDate, period.start), lte(tipEntries.entryDate, period.end))).orderBy(asc(tipEntries.entryDate)),
-    getDailyReportsForPeriod(period.start, period.end),
-    getGridDaySummariesForPeriod(period.start, period.end),
-    getGridSubmission(period.start, period.end),
-  ]);
+  const [users, entries, reports, daySummaries, submission] = await Promise.all(
+    [
+      getBistroTipsUsers(),
+      db
+        .select()
+        .from(tipEntries)
+        .where(
+          and(
+            gte(tipEntries.entryDate, period.start),
+            lte(tipEntries.entryDate, period.end),
+          ),
+        )
+        .orderBy(asc(tipEntries.entryDate)),
+      getDailyReportsForPeriod(period.start, period.end),
+      getGridDaySummariesForPeriod(period.start, period.end),
+      getGridSubmission(period.start, period.end),
+    ],
+  );
   const banquetAssociates = await getBanquetTipAssociates();
   const associates = users
-    .filter((user) => !user.disabledAt && resolveTipsRole(user) !== "super_admin")
+    .filter(
+      (user) => !user.disabledAt && resolveTipsRole(user) !== "super_admin",
+    )
     .map(publicTipsUser);
-  const entryByUserDate = new Map(entries.map((entry) => [`${entry.userId}:${entry.entryDate}`, entry]));
-  const reportsByDate = new Map(reports.map((report) => [String(report.reportDate), report]));
-  const summariesByDate = new Map(daySummaries.map((summary) => [String(summary.summaryDate), summary]));
-  const locked = gridSubmissionLocksPeriod(submission, period.start, period.end);
+  const entryByUserDate = new Map(
+    entries.map((entry) => [`${entry.userId}:${entry.entryDate}`, entry]),
+  );
+  const reportsByDate = new Map(
+    reports.map((report) => [String(report.reportDate), report]),
+  );
+  const summariesByDate = new Map(
+    daySummaries.map((summary) => [String(summary.summaryDate), summary]),
+  );
+  const locked = gridSubmissionLocksPeriod(
+    submission,
+    period.start,
+    period.end,
+  );
   const rows = associates.map((associate) => {
     let total = 0;
     const cells = period.days.map((date) => {
@@ -857,21 +1156,39 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
         entryId: entry?.id || null,
         tipAmount: moneyString(amount),
         grossSales: moneyString(entry?.grossSales),
-        personalTipPercent: moneyNumber(entry?.grossSales) > 0 ? (amount / moneyNumber(entry?.grossSales)) * 100 : 0,
+        personalTipPercent:
+          moneyNumber(entry?.grossSales) > 0
+            ? (amount / moneyNumber(entry?.grossSales)) * 100
+            : 0,
         notes: entry?.notes || "",
         status: entry?.status || "draft",
-        confirmed: entry?.status === "confirmed" || (entry?.status === "submitted" && locked),
+        confirmed:
+          entry?.status === "confirmed" ||
+          (entry?.status === "submitted" && locked),
       };
     });
     return { associate, cells, totalTips: moneyString(total) };
   });
   const dayTotals = period.days.map((date) => {
-    const totalTips = rows.reduce((sum, row) => sum + moneyNumber(row.cells.find((cell) => cell.date === date)?.tipAmount), 0);
-    const shiftGrossSales = rows.reduce((sum, row) => sum + moneyNumber(row.cells.find((cell) => cell.date === date)?.grossSales), 0);
+    const totalTips = rows.reduce(
+      (sum, row) =>
+        sum +
+        moneyNumber(row.cells.find((cell) => cell.date === date)?.tipAmount),
+      0,
+    );
+    const shiftGrossSales = rows.reduce(
+      (sum, row) =>
+        sum +
+        moneyNumber(row.cells.find((cell) => cell.date === date)?.grossSales),
+      0,
+    );
     const activeCells = rows
       .map((row) => row.cells.find((cell) => cell.date === date))
       .filter((cell) => moneyNumber(cell?.tipAmount) > 0);
-    const grossSales = shiftGrossSales > 0 ? shiftGrossSales : moneyNumber(summariesByDate.get(date)?.grossSales);
+    const grossSales =
+      shiftGrossSales > 0
+        ? shiftGrossSales
+        : moneyNumber(summariesByDate.get(date)?.grossSales);
     const summary = summariesByDate.get(date);
     const taxAmount = moneyNumber(summary?.taxAmount);
     const netSales = Math.max(0, grossSales - taxAmount);
@@ -891,8 +1208,12 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
       report: reportsByDate.get(date) || null,
     };
   });
-  const week1Total = dayTotals.slice(0, 7).reduce((sum, day) => sum + moneyNumber(day.totalTips), 0);
-  const week2Total = dayTotals.slice(7).reduce((sum, day) => sum + moneyNumber(day.totalTips), 0);
+  const week1Total = dayTotals
+    .slice(0, 7)
+    .reduce((sum, day) => sum + moneyNumber(day.totalTips), 0);
+  const week2Total = dayTotals
+    .slice(7)
+    .reduce((sum, day) => sum + moneyNumber(day.totalTips), 0);
   const monthStart = `${period.start.slice(0, 7)}-01`;
   const monthProbe = addUtcDays(parseDateKey(monthStart)!, 32);
   const nextMonthStart = `${monthProbe.toISOString().slice(0, 7)}-01`;
@@ -901,29 +1222,61 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
   const [monthEntries, monthSummaries] = await Promise.all([
     bistroUserIds.length
       ? db
-          .select({ entryDate: tipEntries.entryDate, grossSales: tipEntries.grossSales })
+          .select({
+            entryDate: tipEntries.entryDate,
+            grossSales: tipEntries.grossSales,
+          })
           .from(tipEntries)
-          .where(and(gte(tipEntries.entryDate, monthStart), lte(tipEntries.entryDate, monthEnd), inArray(tipEntries.userId, bistroUserIds)))
+          .where(
+            and(
+              gte(tipEntries.entryDate, monthStart),
+              lte(tipEntries.entryDate, monthEnd),
+              inArray(tipEntries.userId, bistroUserIds),
+            ),
+          )
       : Promise.resolve([]),
     db
       .select()
       .from(tipGridDaySummaries)
-      .where(and(gte(tipGridDaySummaries.summaryDate, monthStart), lte(tipGridDaySummaries.summaryDate, monthEnd))),
+      .where(
+        and(
+          gte(tipGridDaySummaries.summaryDate, monthStart),
+          lte(tipGridDaySummaries.summaryDate, monthEnd),
+        ),
+      ),
   ]);
   const monthEntrySalesByDate = new Map<string, number>();
   monthEntries.forEach((entry) => {
     const date = String(entry.entryDate);
-    monthEntrySalesByDate.set(date, (monthEntrySalesByDate.get(date) || 0) + moneyNumber(entry.grossSales));
+    monthEntrySalesByDate.set(
+      date,
+      (monthEntrySalesByDate.get(date) || 0) + moneyNumber(entry.grossSales),
+    );
   });
-  const monthGrossSales = monthSummaries.reduce((sum, summary) => {
-    const entrySales = monthEntrySalesByDate.get(String(summary.summaryDate)) || 0;
-    return sum + (entrySales > 0 ? entrySales : moneyNumber(summary.grossSales));
-  }, 0) + Array.from(monthEntrySalesByDate.entries()).reduce((sum, [date, grossSales]) => (
-    monthSummaries.some((summary) => String(summary.summaryDate) === date) ? sum : sum + grossSales
-  ), 0);
+  const monthGrossSales =
+    monthSummaries.reduce((sum, summary) => {
+      const entrySales =
+        monthEntrySalesByDate.get(String(summary.summaryDate)) || 0;
+      return (
+        sum + (entrySales > 0 ? entrySales : moneyNumber(summary.grossSales))
+      );
+    }, 0) +
+    Array.from(monthEntrySalesByDate.entries()).reduce(
+      (sum, [date, grossSales]) =>
+        monthSummaries.some((summary) => String(summary.summaryDate) === date)
+          ? sum
+          : sum + grossSales,
+      0,
+    );
   const salesTotal = (rows: any[]) => {
-    const grossSales = rows.reduce((sum, row) => sum + moneyNumber(row.grossSales), 0);
-    const taxAmount = rows.reduce((sum, row) => sum + moneyNumber(row.taxAmount), 0);
+    const grossSales = rows.reduce(
+      (sum, row) => sum + moneyNumber(row.grossSales),
+      0,
+    );
+    const taxAmount = rows.reduce(
+      (sum, row) => sum + moneyNumber(row.taxAmount),
+      0,
+    );
     return {
       grossSales: moneyString(grossSales),
       taxAmount: moneyString(taxAmount),
@@ -937,11 +1290,27 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
   const banquetReports = await db
     .select()
     .from(tipBanquetReports)
-    .where(and(gte(tipBanquetReports.eventDate, period.start), lte(tipBanquetReports.eventDate, period.end)))
-    .orderBy(asc(tipBanquetReports.eventDate), asc(tipBanquetReports.eventName));
-  const banquetTotal = banquetReports.reduce((sum, report) => sum + moneyNumber(report.banquetTips), 0);
+    .where(
+      and(
+        gte(tipBanquetReports.eventDate, period.start),
+        lte(tipBanquetReports.eventDate, period.end),
+      ),
+    )
+    .orderBy(
+      asc(tipBanquetReports.eventDate),
+      asc(tipBanquetReports.eventName),
+    );
+  const banquetTotal = banquetReports.reduce(
+    (sum, report) => sum + moneyNumber(report.banquetTips),
+    0,
+  );
   return {
-    period: { start: period.start, end: period.end, dayNumber: period.dayNumber, days: period.days },
+    period: {
+      start: period.start,
+      end: period.end,
+      dayNumber: period.dayNumber,
+      days: period.days,
+    },
     rows,
     dayTotals,
     week1Total: moneyString(week1Total),
@@ -950,9 +1319,13 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
     banquetReports: banquetReports.map((report) => ({
       ...report,
       grossSales: moneyString(report.grossSales),
-      serviceRate: String(report.serviceRate ?? serviceRateForReportType(report.reportType)),
+      serviceRate: String(
+        report.serviceRate ?? serviceRateForReportType(report.reportType),
+      ),
       banquetTips: moneyString(report.banquetTips),
-      assignedAssociatesJson: Array.isArray(report.assignedAssociatesJson) ? report.assignedAssociatesJson : [],
+      assignedAssociatesJson: Array.isArray(report.assignedAssociatesJson)
+        ? report.assignedAssociatesJson
+        : [],
     })),
     banquetAssociates,
     banquetTotal: moneyString(banquetTotal),
@@ -971,7 +1344,14 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
       },
     },
     canManageSales: await canManageTipsSales(viewerUser),
-    submission: submission ? { ...submission, week1Total: moneyString(submission.week1Total), week2Total: moneyString(submission.week2Total), totalTips: moneyString(submission.totalTips) } : null,
+    submission: submission
+      ? {
+          ...submission,
+          week1Total: moneyString(submission.week1Total),
+          week2Total: moneyString(submission.week2Total),
+          totalTips: moneyString(submission.totalTips),
+        }
+      : null,
     isCurrentPeriod: period.start === getPayPeriodForDate().start,
     lockReason: locked ? "submitted" : null,
     locked,
@@ -989,35 +1369,86 @@ async function generateTipsGridPdf(grid: any, submission: any | null) {
       page = pdf.addPage([792, 612]);
       y = 568;
     }
-    page.drawText(String(text).slice(0, 150), { x, y, size, font: isBold ? bold : font, color: rgb(0.08, 0.09, 0.11) });
+    page.drawText(String(text).slice(0, 150), {
+      x,
+      y,
+      size,
+      font: isBold ? bold : font,
+      color: rgb(0.08, 0.09, 0.11),
+    });
   };
   draw("Courtyard Tips Tracker", 36, 16, true);
   draw(`Pay period: ${grid.period.start} to ${grid.period.end}`, 36, 10);
-  if (submission?.submittedAt) draw(`Submitted: ${new Date(submission.submittedAt).toLocaleString()}`, 520, 8);
+  if (submission?.submittedAt)
+    draw(
+      `Submitted: ${new Date(submission.submittedAt).toLocaleString()}`,
+      520,
+      8,
+    );
   y -= 28;
-  draw(["Associate", ...grid.period.days.map((day: string) => day.slice(5)), "Total"].join(" | "), 36, 7, true);
+  draw(
+    [
+      "Associate",
+      ...grid.period.days.map((day: string) => day.slice(5)),
+      "Total",
+    ].join(" | "),
+    36,
+    7,
+    true,
+  );
   y -= 12;
   for (const row of grid.rows) {
-    draw([row.associate.employeeDisplayName, ...row.cells.map((cell: any) => `$${cell.tipAmount}`), `$${row.totalTips}`].join(" | "), 36, 6);
+    draw(
+      [
+        row.associate.employeeDisplayName,
+        ...row.cells.map((cell: any) => `$${cell.tipAmount}`),
+        `$${row.totalTips}`,
+      ].join(" | "),
+      36,
+      6,
+    );
     y -= 10;
   }
   y -= 10;
-  draw(["Daily totals", ...grid.dayTotals.map((day: any) => `$${day.totalTips}`), `$${grid.totalTips}`].join(" | "), 36, 7, true);
+  draw(
+    [
+      "Daily totals",
+      ...grid.dayTotals.map((day: any) => `$${day.totalTips}`),
+      `$${grid.totalTips}`,
+    ].join(" | "),
+    36,
+    7,
+    true,
+  );
   y -= 16;
-  draw(`Week 1 total: $${grid.week1Total}   Week 2 total: $${grid.week2Total}   Grand total: $${grid.totalTips}`, 36, 10, true);
+  draw(
+    `Week 1 total: $${grid.week1Total}   Week 2 total: $${grid.week2Total}   Grand total: $${grid.totalTips}`,
+    36,
+    10,
+    true,
+  );
   y -= 16;
   draw("Gross sales and tip percentage:", 36, 10, true);
   y -= 12;
   grid.dayTotals.forEach((day: any) => {
-    const split = day.splitCount === 2 ? ` | 50/50 split $${day.splitAmount}` : "";
-    draw(`${day.date}: gross $${day.grossSales} | tips $${day.totalTips} | ${Number(day.tipPercent || 0).toFixed(1)}%${split}`, 44, 7);
+    const split =
+      day.splitCount === 2 ? ` | 50/50 split $${day.splitAmount}` : "";
+    draw(
+      `${day.date}: gross $${day.grossSales} | tips $${day.totalTips} | ${Number(day.tipPercent || 0).toFixed(1)}%${split}`,
+      44,
+      7,
+    );
     y -= 10;
   });
   y -= 6;
   draw("Daily sales report photos:", 36, 10, true);
   y -= 12;
   grid.dayTotals.forEach((day: any) => {
-    draw(`${day.date}: ${day.report ? day.report.originalFileName : "Missing"}`, 44, 7);
+    draw(
+      `${day.date}: ${day.report ? day.report.originalFileName : "Missing"}`,
+      44,
+      7,
+    );
     y -= 10;
   });
   if (grid.banquetReports?.length) {
@@ -1025,11 +1456,21 @@ async function generateTipsGridPdf(grid: any, submission: any | null) {
     draw("Banquet tips report:", 36, 10, true);
     y -= 12;
     grid.banquetReports.forEach((report: any) => {
-      draw(`${report.eventDate}: ${report.eventName} | sales $${report.grossSales} | tips $${report.banquetTips}`, 44, 7);
+      draw(
+        `${report.eventDate}: ${report.eventName} | sales $${report.grossSales} | tips $${report.banquetTips}`,
+        44,
+        7,
+      );
       y -= 10;
-      const assigned = Array.isArray(report.assignedAssociatesJson) ? report.assignedAssociatesJson : [];
+      const assigned = Array.isArray(report.assignedAssociatesJson)
+        ? report.assignedAssociatesJson
+        : [];
       if (assigned.length) {
-        draw(`Split: ${assigned.map((associate: any) => `${associate.displayName} $${associate.splitAmount}`).join(" | ")}`, 52, 7);
+        draw(
+          `Split: ${assigned.map((associate: any) => `${associate.displayName} $${associate.splitAmount}`).join(" | ")}`,
+          52,
+          7,
+        );
         y -= 10;
       }
     });
@@ -1045,15 +1486,31 @@ async function generateTipsGridPdf(grid: any, submission: any | null) {
 
 async function sendTipsGridSubmissionEmail(grid: any) {
   const { client, fromEmail } = await getUncachableResendClient();
-  const rows = grid.rows.map((row: any) => `${row.associate.employeeDisplayName}: $${row.totalTips}`).join("\n");
-  const daily = grid.dayTotals.map((day: any) => `${day.date}: tips $${day.totalTips} | gross $${day.grossSales} | tip ${Number(day.tipPercent || 0).toFixed(1)}% | report ${day.report ? "yes" : "no"}${day.splitCount === 2 ? ` | 50/50 split $${day.splitAmount}` : ""}`).join("\n");
-  const banquet = (grid.banquetReports || []).map((report: any) => {
-    const assigned = Array.isArray(report.assignedAssociatesJson) && report.assignedAssociatesJson.length
-      ? ` | split ${report.assignedAssociatesJson.map((associate: any) => `${associate.displayName} $${associate.splitAmount}`).join("; ")}`
-      : "";
-    return `${report.eventDate}: ${report.eventName} | tips $${report.banquetTips} | sales $${report.grossSales}${assigned}`;
-  }).join("\n");
-  const adminUrl = new URL("/tips/admin", process.env.FRONTEND_BASE_URL || "https://readysetfly.us").toString();
+  const rows = grid.rows
+    .map(
+      (row: any) => `${row.associate.employeeDisplayName}: $${row.totalTips}`,
+    )
+    .join("\n");
+  const daily = grid.dayTotals
+    .map(
+      (day: any) =>
+        `${day.date}: tips $${day.totalTips} | gross $${day.grossSales} | tip ${Number(day.tipPercent || 0).toFixed(1)}% | report ${day.report ? "yes" : "no"}${day.splitCount === 2 ? ` | 50/50 split $${day.splitAmount}` : ""}`,
+    )
+    .join("\n");
+  const banquet = (grid.banquetReports || [])
+    .map((report: any) => {
+      const assigned =
+        Array.isArray(report.assignedAssociatesJson) &&
+        report.assignedAssociatesJson.length
+          ? ` | split ${report.assignedAssociatesJson.map((associate: any) => `${associate.displayName} $${associate.splitAmount}`).join("; ")}`
+          : "";
+      return `${report.eventDate}: ${report.eventName} | tips $${report.banquetTips} | sales $${report.grossSales}${assigned}`;
+    })
+    .join("\n");
+  const adminUrl = new URL(
+    "/tips/admin",
+    process.env.FRONTEND_BASE_URL || "https://readysetfly.us",
+  ).toString();
   await client.emails.send({
     from: fromEmail,
     to: TIPS_SUBMISSION_RECIPIENT,
@@ -1083,116 +1540,197 @@ async function sendTipsGridSubmissionEmail(grid: any) {
 export function registerTipsRoutes(app: Express) {
   const router = express.Router();
 
-  router.post("/auth/register", tipsAuthRateLimiter, async (req: any, res, next) => {
-    try {
-      const parsed = registerSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid registration details", validation: parsed.error.format() });
-      const email = normalizeEmail(parsed.data.email);
-      const existing = await db.select({ id: tipsUsers.id }).from(tipsUsers).where(eq(tipsUsers.email, email)).limit(1);
-      if (existing.length) return res.status(409).json({ error: "An account already exists for this email." });
-      const hashedPassword = await bcrypt.hash(parsed.data.password, 12);
-      const displayName = parsed.data.employeeDisplayName?.trim() || `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
-      const [user] = await db
-        .insert(tipsUsers)
-        .values({
-          firstName: parsed.data.firstName,
-          lastName: parsed.data.lastName,
-          email,
-          employeeDisplayName: displayName,
-          role: TIPS_SUPER_ADMIN_EMAILS.has(email) ? "super_admin" : "employee",
-          hashedPassword,
-          mustChangePassword: false,
-        })
-        .returning();
-      req.session.tipsUserId = user.id;
-      req.session.save(() => res.status(201).json({ user: publicTipsUser(user) }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.post("/auth/login", tipsAuthRateLimiter, async (req: any, res, next) => {
-    try {
-      const parsed = loginSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid login details" });
-      const [user] = await db.select().from(tipsUsers).where(eq(tipsUsers.email, normalizeEmail(parsed.data.email))).limit(1);
-      const loginPassword = parsed.data.password.trim();
-      if (!user || !(await bcrypt.compare(loginPassword, user.hashedPassword))) {
-        return res.status(401).json({ error: "Invalid email or password" });
-      }
-      if (user.disabledAt) {
-        return res.status(403).json({ error: "This Tips account is disabled. Contact your manager." });
-      }
-      req.session.tipsUserId = user.id;
-      req.session.save(() => res.json({ user: publicTipsUser(user) }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.post("/auth/password-reset-request", tipsAuthRateLimiter, async (req: any, res, next) => {
-    try {
-      const parsed = passwordResetRequestSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Enter a valid email address." });
-      const email = normalizeEmail(parsed.data.email);
-      const [user] = await db.select().from(tipsUsers).where(eq(tipsUsers.email, email)).limit(1);
-      if (user && !user.disabledAt) {
-        const temporaryPassword = `Temp${crypto.randomInt(100000, 999999)}!`;
-        const [updated] = await db
-          .update(tipsUsers)
-          .set({
-            hashedPassword: await bcrypt.hash(temporaryPassword, 12),
-            mustChangePassword: true,
-            updatedAt: new Date(),
+  router.post(
+    "/auth/register",
+    tipsAuthRateLimiter,
+    async (req: any, res, next) => {
+      try {
+        const parsed = registerSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res
+            .status(400)
+            .json({
+              error: "Invalid registration details",
+              validation: parsed.error.format(),
+            });
+        const email = normalizeEmail(parsed.data.email);
+        const existing = await db
+          .select({ id: tipsUsers.id })
+          .from(tipsUsers)
+          .where(eq(tipsUsers.email, email))
+          .limit(1);
+        if (existing.length)
+          return res
+            .status(409)
+            .json({ error: "An account already exists for this email." });
+        const hashedPassword = await bcrypt.hash(parsed.data.password, 12);
+        const displayName =
+          parsed.data.employeeDisplayName?.trim() ||
+          `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
+        const [user] = await db
+          .insert(tipsUsers)
+          .values({
+            firstName: parsed.data.firstName,
+            lastName: parsed.data.lastName,
+            email,
+            employeeDisplayName: displayName,
+            role: TIPS_SUPER_ADMIN_EMAILS.has(email)
+              ? "super_admin"
+              : "employee",
+            hashedPassword,
+            mustChangePassword: false,
           })
-          .where(eq(tipsUsers.id, user.id))
           .returning();
-        try {
-          await sendTipsPasswordResetEmail({
-            email: updated.email,
-            firstName: updated.firstName,
-            temporaryPassword,
-            requestedByName: "Courtyard Associate Portal",
-          });
-        } catch (error) {
-          console.error("Failed to send public Courtyard password reset email:", error);
-        }
+        req.session.tipsUserId = user.id;
+        req.session.save(() =>
+          res.status(201).json({ user: publicTipsUser(user) }),
+        );
+      } catch (error) {
+        next(error);
       }
-      res.json({ ok: true });
-    } catch (error) {
-      next(error);
-    }
-  });
+    },
+  );
+
+  router.post(
+    "/auth/login",
+    tipsAuthRateLimiter,
+    async (req: any, res, next) => {
+      try {
+        const parsed = loginSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res.status(400).json({ error: "Invalid login details" });
+        const [user] = await db
+          .select()
+          .from(tipsUsers)
+          .where(eq(tipsUsers.email, normalizeEmail(parsed.data.email)))
+          .limit(1);
+        const loginPassword = parsed.data.password.trim();
+        if (
+          !user ||
+          !(await bcrypt.compare(loginPassword, user.hashedPassword))
+        ) {
+          return res.status(401).json({ error: "Invalid email or password" });
+        }
+        if (user.disabledAt) {
+          return res
+            .status(403)
+            .json({
+              error: "This Tips account is disabled. Contact your manager.",
+            });
+        }
+        req.session.tipsUserId = user.id;
+        req.session.save(() => res.json({ user: publicTipsUser(user) }));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    "/auth/password-reset-request",
+    tipsAuthRateLimiter,
+    async (req: any, res, next) => {
+      try {
+        const parsed = passwordResetRequestSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res
+            .status(400)
+            .json({ error: "Enter a valid email address." });
+        const email = normalizeEmail(parsed.data.email);
+        const [user] = await db
+          .select()
+          .from(tipsUsers)
+          .where(eq(tipsUsers.email, email))
+          .limit(1);
+        if (user && !user.disabledAt) {
+          const temporaryPassword = `Temp${crypto.randomInt(100000, 999999)}!`;
+          const [updated] = await db
+            .update(tipsUsers)
+            .set({
+              hashedPassword: await bcrypt.hash(temporaryPassword, 12),
+              mustChangePassword: true,
+              updatedAt: new Date(),
+            })
+            .where(eq(tipsUsers.id, user.id))
+            .returning();
+          try {
+            await sendTipsPasswordResetEmail({
+              email: updated.email,
+              firstName: updated.firstName,
+              temporaryPassword,
+              requestedByName: "Courtyard Associate Portal",
+            });
+          } catch (error) {
+            console.error(
+              "Failed to send public Courtyard password reset email:",
+              error,
+            );
+          }
+        }
+        res.json({ ok: true });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   router.post("/auth/logout", (req: any, res) => {
     if (req.session) delete req.session.tipsUserId;
     req.session?.save(() => res.json({ ok: true }));
   });
 
-  router.post("/auth/change-password", requireTipsAuth, tipsAuthRateLimiter, async (req: any, res, next) => {
-    try {
-      const parsed = changePasswordSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid password details", validation: parsed.error.format() });
-      if (!(await bcrypt.compare(parsed.data.temporaryPassword, req.tipsUser.hashedPassword))) {
-        return res.status(400).json({ error: "Temporary password is incorrect." });
+  router.post(
+    "/auth/change-password",
+    requireTipsAuth,
+    tipsAuthRateLimiter,
+    async (req: any, res, next) => {
+      try {
+        const parsed = changePasswordSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res
+            .status(400)
+            .json({
+              error: "Invalid password details",
+              validation: parsed.error.format(),
+            });
+        if (
+          !(await bcrypt.compare(
+            parsed.data.temporaryPassword,
+            req.tipsUser.hashedPassword,
+          ))
+        ) {
+          return res
+            .status(400)
+            .json({ error: "Temporary password is incorrect." });
+        }
+        if (
+          await bcrypt.compare(
+            parsed.data.newPassword,
+            req.tipsUser.hashedPassword,
+          )
+        ) {
+          return res
+            .status(400)
+            .json({
+              error:
+                "New password must be different from the temporary password.",
+            });
+        }
+        const [updated] = await db
+          .update(tipsUsers)
+          .set({
+            hashedPassword: await bcrypt.hash(parsed.data.newPassword, 12),
+            mustChangePassword: false,
+            updatedAt: new Date(),
+          })
+          .where(eq(tipsUsers.id, req.tipsUser.id))
+          .returning();
+        res.json({ user: publicTipsUser(updated) });
+      } catch (error) {
+        next(error);
       }
-      if (await bcrypt.compare(parsed.data.newPassword, req.tipsUser.hashedPassword)) {
-        return res.status(400).json({ error: "New password must be different from the temporary password." });
-      }
-      const [updated] = await db
-        .update(tipsUsers)
-        .set({
-          hashedPassword: await bcrypt.hash(parsed.data.newPassword, 12),
-          mustChangePassword: false,
-          updatedAt: new Date(),
-        })
-        .where(eq(tipsUsers.id, req.tipsUser.id))
-        .returning();
-      res.json({ user: publicTipsUser(updated) });
-    } catch (error) {
-      next(error);
-    }
-  });
+    },
+  );
 
   router.get("/auth/me", async (req: any, res, next) => {
     try {
@@ -1207,52 +1745,74 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
-  router.get("/dashboard", requireTipsAuth, requireTipsReady, async (req: any, res, next) => {
-    try {
-      const parsed = periodSchema.safeParse(req.query);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
-      res.json(await buildDashboard(req.tipsUser.id, parsed.data.start));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.post("/entries", requireTipsAuth, requireTipsReady, async (req: any, res, next) => {
-    try {
-      const parsed = entrySchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid tip entry", validation: parsed.error.format() });
-      const period = getPayPeriodForEntryDate(parsed.data.entryDate);
-      if (!period) return res.status(400).json({ error: "Invalid entry date" });
-      const currentPeriod = getPayPeriodForDate();
-      if (period.start !== currentPeriod.start) {
-        const existingSubmission = await getSubmission(req.tipsUser.id, period.start, period.end);
-        if (!existingSubmission || existingSubmission.status !== "reopened") {
-          return res.status(400).json({ error: "Tip date must be in the active pay period unless a manager reopened it." });
-        }
+  router.get(
+    "/dashboard",
+    requireTipsAuth,
+    requireTipsReady,
+    async (req: any, res, next) => {
+      try {
+        const parsed = periodSchema.safeParse(req.query);
+        if (!parsed.success)
+          return res.status(400).json({ error: "Invalid pay period" });
+        res.json(await buildDashboard(req.tipsUser.id, parsed.data.start));
+      } catch (error) {
+        next(error);
       }
-      const submission = await getSubmission(req.tipsUser.id, period.start, period.end);
-      if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
-      const reportedCcTips = parsed.data.creditTips > 0 ? parsed.data.creditTips : parsed.data.tipAmount;
+    },
+  );
 
-      const [entry] = await db
-        .insert(tipEntries)
-        .values({
-          userId: req.tipsUser.id,
-          entryDate: parsed.data.entryDate,
-          payPeriodStart: period.start,
-          payPeriodEnd: period.end,
-          tipAmount: reportedCcTips.toFixed(2),
-          cashTips: "0.00",
-          creditTips: reportedCcTips.toFixed(2),
-          grossSales: parsed.data.grossSales.toFixed(2),
-          coversServed: null,
-          shiftType: parsed.data.shiftType,
-          notes: parsed.data.notes || null,
-          status: "saved",
-        })
-        .onConflictDoUpdate({
-          target: [tipEntries.userId, tipEntries.entryDate],
-          set: {
+  router.post(
+    "/entries",
+    requireTipsAuth,
+    requireTipsReady,
+    async (req: any, res, next) => {
+      try {
+        const parsed = entrySchema.safeParse(req.body);
+        if (!parsed.success)
+          return res
+            .status(400)
+            .json({
+              error: "Invalid tip entry",
+              validation: parsed.error.format(),
+            });
+        const period = getPayPeriodForEntryDate(parsed.data.entryDate);
+        if (!period)
+          return res.status(400).json({ error: "Invalid entry date" });
+        const currentPeriod = getPayPeriodForDate();
+        if (period.start !== currentPeriod.start) {
+          const existingSubmission = await getSubmission(
+            req.tipsUser.id,
+            period.start,
+            period.end,
+          );
+          if (!existingSubmission || existingSubmission.status !== "reopened") {
+            return res
+              .status(400)
+              .json({
+                error:
+                  "Tip date must be in the active pay period unless a manager reopened it.",
+              });
+          }
+        }
+        const submission = await getSubmission(
+          req.tipsUser.id,
+          period.start,
+          period.end,
+        );
+        if (submission && submission.status !== "reopened")
+          return res.status(423).json({ error: "This pay period is locked." });
+        const reportedCcTips =
+          parsed.data.creditTips > 0
+            ? parsed.data.creditTips
+            : parsed.data.tipAmount;
+
+        const [entry] = await db
+          .insert(tipEntries)
+          .values({
+            userId: req.tipsUser.id,
+            entryDate: parsed.data.entryDate,
+            payPeriodStart: period.start,
+            payPeriodEnd: period.end,
             tipAmount: reportedCcTips.toFixed(2),
             cashTips: "0.00",
             creditTips: reportedCcTips.toFixed(2),
@@ -1261,193 +1821,324 @@ export function registerTipsRoutes(app: Express) {
             shiftType: parsed.data.shiftType,
             notes: parsed.data.notes || null,
             status: "saved",
-            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: [tipEntries.userId, tipEntries.entryDate],
+            set: {
+              tipAmount: reportedCcTips.toFixed(2),
+              cashTips: "0.00",
+              creditTips: reportedCcTips.toFixed(2),
+              grossSales: parsed.data.grossSales.toFixed(2),
+              coversServed: null,
+              shiftType: parsed.data.shiftType,
+              notes: parsed.data.notes || null,
+              status: "saved",
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+        res.json({
+          entry: {
+            ...entry,
+            tipAmount: moneyString(entry.tipAmount),
+            cashTips: moneyString(entry.cashTips),
+            creditTips: moneyString(entry.creditTips),
+            grossSales: moneyString(entry.grossSales),
           },
-        })
-        .returning();
-      res.json({
-        entry: {
-          ...entry,
-          tipAmount: moneyString(entry.tipAmount),
-          cashTips: moneyString(entry.cashTips),
-          creditTips: moneyString(entry.creditTips),
-          grossSales: moneyString(entry.grossSales),
-        },
-      });
-    } catch (error) {
-      next(error);
-    }
-  });
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
-  router.post("/entries/:entryId/attachment", requireTipsAuth, requireTipsReady, tipsUploadRateLimiter, salesReportUpload, async (req: any, res, next) => {
-    try {
-      const [entry] = await db
-        .select()
-        .from(tipEntries)
-        .where(and(eq(tipEntries.id, req.params.entryId), eq(tipEntries.userId, req.tipsUser.id)))
-        .limit(1);
-      if (!entry) return res.status(404).json({ error: "Tip entry not found" });
-      const submission = await getSubmission(req.tipsUser.id, entry.payPeriodStart, entry.payPeriodEnd);
-      if (submission && submission.status !== "reopened") return res.status(423).json({ error: "This pay period is locked." });
-      if (!req.file) return res.status(400).json({ error: "Sales report file is required" });
+  router.post(
+    "/entries/:entryId/attachment",
+    requireTipsAuth,
+    requireTipsReady,
+    tipsUploadRateLimiter,
+    salesReportUpload,
+    async (req: any, res, next) => {
+      try {
+        const [entry] = await db
+          .select()
+          .from(tipEntries)
+          .where(
+            and(
+              eq(tipEntries.id, req.params.entryId),
+              eq(tipEntries.userId, req.tipsUser.id),
+            ),
+          )
+          .limit(1);
+        if (!entry)
+          return res.status(404).json({ error: "Tip entry not found" });
+        const submission = await getSubmission(
+          req.tipsUser.id,
+          entry.payPeriodStart,
+          entry.payPeriodEnd,
+        );
+        if (submission && submission.status !== "reopened")
+          return res.status(423).json({ error: "This pay period is locked." });
+        if (!req.file)
+          return res
+            .status(400)
+            .json({ error: "Sales report file is required" });
 
-      await db.delete(tipEntryAttachments).where(eq(tipEntryAttachments.tipEntryId, entry.id));
-      const [attachment] = await db
-        .insert(tipEntryAttachments)
-        .values({
-          tipEntryId: entry.id,
-          storagePath: path.relative(process.cwd(), req.file.path),
-          originalFileName: req.file.originalname,
-          mimeType: req.file.mimetype,
-          size: req.file.size,
-        })
-        .returning();
-      res.status(201).json({ attachment });
-    } catch (error) {
-      next(error);
-    }
-  });
+        await db
+          .delete(tipEntryAttachments)
+          .where(eq(tipEntryAttachments.tipEntryId, entry.id));
+        const [attachment] = await db
+          .insert(tipEntryAttachments)
+          .values({
+            tipEntryId: entry.id,
+            storagePath: path.relative(process.cwd(), req.file.path),
+            originalFileName: req.file.originalname,
+            mimeType: req.file.mimetype,
+            size: req.file.size,
+          })
+          .returning();
+        res.status(201).json({ attachment });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
-  router.get("/attachments/:attachmentId/view", requireTipsAuth, requireTipsReady, async (req: any, res, next) => {
-    try {
-      const [row] = await db
-        .select({ attachment: tipEntryAttachments, entry: tipEntries })
-        .from(tipEntryAttachments)
-        .innerJoin(tipEntries, eq(tipEntryAttachments.tipEntryId, tipEntries.id))
-        .where(eq(tipEntryAttachments.id, req.params.attachmentId))
-        .limit(1);
-      if (!row) return res.status(404).json({ error: "Attachment not found" });
-      const isOwner = row.entry.userId === req.tipsUser.id;
-      const isAdmin = isTipsManager(req.tipsUser);
-      if (!isOwner && !isAdmin) return res.status(403).json({ error: "Forbidden" });
-      const absolute = resolvePrivateFile(row.attachment.storagePath);
-      if (!absolute || !fs.existsSync(absolute)) return res.status(404).json({ error: "Attachment file not found" });
-      res.type(row.attachment.mimeType);
-      res.sendFile(absolute);
-    } catch (error) {
-      next(error);
-    }
-  });
+  router.get(
+    "/attachments/:attachmentId/view",
+    requireTipsAuth,
+    requireTipsReady,
+    async (req: any, res, next) => {
+      try {
+        const [row] = await db
+          .select({ attachment: tipEntryAttachments, entry: tipEntries })
+          .from(tipEntryAttachments)
+          .innerJoin(
+            tipEntries,
+            eq(tipEntryAttachments.tipEntryId, tipEntries.id),
+          )
+          .where(eq(tipEntryAttachments.id, req.params.attachmentId))
+          .limit(1);
+        if (!row)
+          return res.status(404).json({ error: "Attachment not found" });
+        const isOwner = row.entry.userId === req.tipsUser.id;
+        const isAdmin = isTipsManager(req.tipsUser);
+        if (!isOwner && !isAdmin)
+          return res.status(403).json({ error: "Forbidden" });
+        const absolute = resolvePrivateFile(row.attachment.storagePath);
+        if (!absolute || !fs.existsSync(absolute))
+          return res.status(404).json({ error: "Attachment file not found" });
+        res.type(row.attachment.mimeType);
+        res.sendFile(absolute);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
-  router.post("/submissions", requireTipsAuth, requireTipsReady, async (req: any, res, next) => {
-    try {
-      const parsed = periodSchema.safeParse(req.body || {});
-      if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
-      const dashboard = await buildDashboard(req.tipsUser.id, parsed.data.start);
-      const missingImages = dashboard.days.filter((day: any) => day.entry && (!day.entry.attachments || day.entry.attachments.length === 0));
-      if (missingImages.length > 0) return res.status(400).json({ error: "Every saved tip entry needs a sales report photo before final submission." });
-      const existing = await getSubmission(req.tipsUser.id, dashboard.period.start, dashboard.period.end);
-      if (existing && existing.status !== "reopened") return res.status(409).json({ error: "This pay period has already been submitted." });
+  router.post(
+    "/submissions",
+    requireTipsAuth,
+    requireTipsReady,
+    async (req: any, res, next) => {
+      try {
+        const parsed = periodSchema.safeParse(req.body || {});
+        if (!parsed.success)
+          return res.status(400).json({ error: "Invalid pay period" });
+        const dashboard = await buildDashboard(
+          req.tipsUser.id,
+          parsed.data.start,
+        );
+        const missingImages = dashboard.days.filter(
+          (day: any) =>
+            day.entry &&
+            (!day.entry.attachments || day.entry.attachments.length === 0),
+        );
+        if (missingImages.length > 0)
+          return res
+            .status(400)
+            .json({
+              error:
+                "Every saved tip entry needs a sales report photo before final submission.",
+            });
+        const existing = await getSubmission(
+          req.tipsUser.id,
+          dashboard.period.start,
+          dashboard.period.end,
+        );
+        if (existing && existing.status !== "reopened")
+          return res
+            .status(409)
+            .json({ error: "This pay period has already been submitted." });
 
-      let [submission] = await db
-        .insert(tipPeriodSubmissions)
-        .values({
-          userId: req.tipsUser.id,
-          payPeriodStart: dashboard.period.start,
-          payPeriodEnd: dashboard.period.end,
-          week1Total: dashboard.week1Total,
-          week2Total: dashboard.week2Total,
-          totalTips: dashboard.totalTips,
-          status: "submitted",
-          submittedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [tipPeriodSubmissions.userId, tipPeriodSubmissions.payPeriodStart, tipPeriodSubmissions.payPeriodEnd],
-          set: {
+        let [submission] = await db
+          .insert(tipPeriodSubmissions)
+          .values({
+            userId: req.tipsUser.id,
+            payPeriodStart: dashboard.period.start,
+            payPeriodEnd: dashboard.period.end,
             week1Total: dashboard.week1Total,
             week2Total: dashboard.week2Total,
             totalTips: dashboard.totalTips,
             status: "submitted",
             submittedAt: new Date(),
-            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: [
+              tipPeriodSubmissions.userId,
+              tipPeriodSubmissions.payPeriodStart,
+              tipPeriodSubmissions.payPeriodEnd,
+            ],
+            set: {
+              week1Total: dashboard.week1Total,
+              week2Total: dashboard.week2Total,
+              totalTips: dashboard.totalTips,
+              status: "submitted",
+              submittedAt: new Date(),
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+
+        const pdfPath = await generateTipsPdf(
+          req.tipsUser,
+          dashboard,
+          submission,
+        );
+        [submission] = await db
+          .update(tipPeriodSubmissions)
+          .set({ pdfPath, updatedAt: new Date() })
+          .where(eq(tipPeriodSubmissions.id, submission.id))
+          .returning();
+        await db
+          .update(tipEntries)
+          .set({ status: "submitted", updatedAt: new Date() })
+          .where(
+            and(
+              eq(tipEntries.userId, req.tipsUser.id),
+              eq(tipEntries.payPeriodStart, dashboard.period.start),
+              eq(tipEntries.payPeriodEnd, dashboard.period.end),
+            ),
+          );
+
+        let emailSent = true;
+        let emailWarning: string | undefined;
+        try {
+          await sendTipsSubmissionEmail(req.tipsUser, dashboard);
+        } catch (error) {
+          emailSent = false;
+          emailWarning =
+            "Pay period was submitted, but the email notification could not be sent.";
+          console.error("Failed to send tips submission email:", error);
+        }
+
+        res.status(emailSent ? 201 : 202).json({
+          submission: {
+            ...submission,
+            week1Total: moneyString(submission.week1Total),
+            week2Total: moneyString(submission.week2Total),
+            totalTips: moneyString(submission.totalTips),
           },
-        })
-        .returning();
-
-      const pdfPath = await generateTipsPdf(req.tipsUser, dashboard, submission);
-      [submission] = await db
-        .update(tipPeriodSubmissions)
-        .set({ pdfPath, updatedAt: new Date() })
-        .where(eq(tipPeriodSubmissions.id, submission.id))
-        .returning();
-      await db
-        .update(tipEntries)
-        .set({ status: "submitted", updatedAt: new Date() })
-        .where(and(eq(tipEntries.userId, req.tipsUser.id), eq(tipEntries.payPeriodStart, dashboard.period.start), eq(tipEntries.payPeriodEnd, dashboard.period.end)));
-
-      let emailSent = true;
-      let emailWarning: string | undefined;
-      try {
-        await sendTipsSubmissionEmail(req.tipsUser, dashboard);
+          emailSent,
+          warning: emailWarning,
+        });
       } catch (error) {
-        emailSent = false;
-        emailWarning = "Pay period was submitted, but the email notification could not be sent.";
-        console.error("Failed to send tips submission email:", error);
+        next(error);
       }
+    },
+  );
 
-      res.status(emailSent ? 201 : 202).json({
-        submission: { ...submission, week1Total: moneyString(submission.week1Total), week2Total: moneyString(submission.week2Total), totalTips: moneyString(submission.totalTips) },
-        emailSent,
-        warning: emailWarning,
-      });
-    } catch (error) {
-      next(error);
-    }
-  });
+  router.get(
+    "/submissions/pdf",
+    requireTipsAuth,
+    requireTipsReady,
+    async (req: any, res, next) => {
+      try {
+        const parsed = periodSchema.safeParse(req.query);
+        if (!parsed.success)
+          return res.status(400).json({ error: "Invalid pay period" });
+        const dashboard = await buildDashboard(
+          req.tipsUser.id,
+          parsed.data.start,
+        );
+        const submission = await getSubmission(
+          req.tipsUser.id,
+          dashboard.period.start,
+          dashboard.period.end,
+        );
+        const pdfPath =
+          submission?.pdfPath ||
+          (await generateTipsPdf(req.tipsUser, dashboard, submission));
+        const absolute = resolvePrivateFile(pdfPath);
+        if (!absolute || !fs.existsSync(absolute))
+          return res.status(404).json({ error: "PDF not found" });
+        res.download(
+          absolute,
+          `courtyard-tips-${dashboard.period.start}-${dashboard.period.end}.pdf`,
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
-  router.get("/submissions/pdf", requireTipsAuth, requireTipsReady, async (req: any, res, next) => {
-    try {
-      const parsed = periodSchema.safeParse(req.query);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
-      const dashboard = await buildDashboard(req.tipsUser.id, parsed.data.start);
-      const submission = await getSubmission(req.tipsUser.id, dashboard.period.start, dashboard.period.end);
-      const pdfPath = submission?.pdfPath || (await generateTipsPdf(req.tipsUser, dashboard, submission));
-      const absolute = resolvePrivateFile(pdfPath);
-      if (!absolute || !fs.existsSync(absolute)) return res.status(404).json({ error: "PDF not found" });
-      res.download(absolute, `courtyard-tips-${dashboard.period.start}-${dashboard.period.end}.pdf`);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.get("/admin/submissions", requireTipsAdmin, async (_req: any, res, next) => {
-    try {
-      const [rows, gridRows] = await Promise.all([
-        db
-        .select({ submission: tipPeriodSubmissions, user: tipsUsers })
-        .from(tipPeriodSubmissions)
-        .innerJoin(tipsUsers, eq(tipPeriodSubmissions.userId, tipsUsers.id))
-        .orderBy(desc(tipPeriodSubmissions.payPeriodStart), asc(tipsUsers.employeeDisplayName)),
-        db.select().from(tipGridSubmissions).orderBy(desc(tipGridSubmissions.payPeriodStart)),
-      ]);
-      const submissions = [
-        ...gridRows.map((submission) => ({
-          ...submission,
-          type: "grid",
-          user: {
-            id: "tips-grid",
-            email: TIPS_SUBMISSION_RECIPIENT,
-            firstName: "Courtyard",
-            lastName: "Bistro",
-            employeeDisplayName: "Shared Tips Grid",
-            position: "All associates",
-            role: "manager",
-            mustChangePassword: false,
-            disabledAt: null,
-            isAdmin: true,
-            isSuperAdmin: false,
-          },
-          week1Total: moneyString(submission.week1Total),
-          week2Total: moneyString(submission.week2Total),
-          totalTips: moneyString(submission.totalTips),
-        })),
-        ...rows.map((row) => ({ ...row.submission, type: "individual", user: publicTipsUser(row.user), week1Total: moneyString(row.submission.week1Total), week2Total: moneyString(row.submission.week2Total), totalTips: moneyString(row.submission.totalTips) })),
-      ].sort((a, b) => String(b.payPeriodStart).localeCompare(String(a.payPeriodStart)));
-      res.json({ submissions });
-    } catch (error) {
-      next(error);
-    }
-  });
+  router.get(
+    "/admin/submissions",
+    requireTipsAdmin,
+    async (_req: any, res, next) => {
+      try {
+        const [rows, gridRows] = await Promise.all([
+          db
+            .select({ submission: tipPeriodSubmissions, user: tipsUsers })
+            .from(tipPeriodSubmissions)
+            .innerJoin(tipsUsers, eq(tipPeriodSubmissions.userId, tipsUsers.id))
+            .orderBy(
+              desc(tipPeriodSubmissions.payPeriodStart),
+              asc(tipsUsers.employeeDisplayName),
+            ),
+          db
+            .select()
+            .from(tipGridSubmissions)
+            .orderBy(desc(tipGridSubmissions.payPeriodStart)),
+        ]);
+        const submissions = [
+          ...gridRows.map((submission) => ({
+            ...submission,
+            type: "grid",
+            user: {
+              id: "tips-grid",
+              email: TIPS_SUBMISSION_RECIPIENT,
+              firstName: "Courtyard",
+              lastName: "Bistro",
+              employeeDisplayName: "Shared Tips Grid",
+              position: "All associates",
+              role: "manager",
+              mustChangePassword: false,
+              disabledAt: null,
+              isAdmin: true,
+              isSuperAdmin: false,
+            },
+            week1Total: moneyString(submission.week1Total),
+            week2Total: moneyString(submission.week2Total),
+            totalTips: moneyString(submission.totalTips),
+          })),
+          ...rows.map((row) => ({
+            ...row.submission,
+            type: "individual",
+            user: publicTipsUser(row.user),
+            week1Total: moneyString(row.submission.week1Total),
+            week2Total: moneyString(row.submission.week2Total),
+            totalTips: moneyString(row.submission.totalTips),
+          })),
+        ].sort((a, b) =>
+          String(b.payPeriodStart).localeCompare(String(a.payPeriodStart)),
+        );
+        res.json({ submissions });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   router.get("/admin/users", requireTipsAdmin, async (_req: any, res, next) => {
     try {
@@ -1457,41 +2148,75 @@ export function registerTipsRoutes(app: Express) {
       ]);
       const reconciledUsers = await reconcileTipsUsersWithSchedule(allUsers);
       const bistroIds = new Set(bistroUsers.map((user) => user.id));
-      const users = reconciledUsers.filter((user) => bistroIds.has(user.id) || isTipsManager(user));
+      const users = reconciledUsers.filter(
+        (user) => bistroIds.has(user.id) || isTipsManager(user),
+      );
       res.json({ users: users.map(publicTipsUser) });
     } catch (error) {
       next(error);
     }
   });
 
-  router.get("/admin/tool-access-users", requireTipsSuperAdmin, async (_req: any, res, next) => {
-    try {
-      const users = await db.select().from(tipsUsers).orderBy(asc(tipsUsers.employeeDisplayName));
-      const reconciledUsers = await reconcileTipsUsersWithSchedule(users);
-      res.json({ users: reconciledUsers.map(publicTipsUser), tools: COURTYARD_TOOL_KEYS });
-    } catch (error) {
-      next(error);
-    }
-  });
+  router.get(
+    "/admin/tool-access-users",
+    requireTipsSuperAdmin,
+    async (_req: any, res, next) => {
+      try {
+        const users = await db
+          .select()
+          .from(tipsUsers)
+          .orderBy(asc(tipsUsers.employeeDisplayName));
+        const reconciledUsers = await reconcileTipsUsersWithSchedule(users);
+        res.json({
+          users: reconciledUsers.map(publicTipsUser),
+          tools: COURTYARD_TOOL_KEYS,
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   router.post("/admin/users", requireTipsAdmin, async (req: any, res, next) => {
     try {
       const parsed = adminCreateTipsUserSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid associate details", validation: parsed.error.format() });
+      if (!parsed.success)
+        return res
+          .status(400)
+          .json({
+            error: "Invalid associate details",
+            validation: parsed.error.format(),
+          });
       const email = normalizeEmail(parsed.data.email);
-      const existing = await db.select({ id: tipsUsers.id }).from(tipsUsers).where(eq(tipsUsers.email, email)).limit(1);
-      if (existing.length) return res.status(409).json({ error: "An associate already exists for this email." });
-      const requestedRole = isTipsSuperAdmin(req.tipsUser) ? parsed.data.role : "employee";
-      const [created] = await db.insert(tipsUsers).values({
-        firstName: parsed.data.firstName,
-        lastName: parsed.data.lastName,
-        email,
-        employeeDisplayName: parsed.data.employeeDisplayName?.trim() || `${parsed.data.firstName} ${parsed.data.lastName}`.trim(),
-        position: parsed.data.position?.trim() || null,
-        role: TIPS_SUPER_ADMIN_EMAILS.has(email) ? "super_admin" : requestedRole,
-        hashedPassword: await bcrypt.hash(parsed.data.password, 12),
-        mustChangePassword: true,
-      }).returning();
+      const existing = await db
+        .select({ id: tipsUsers.id })
+        .from(tipsUsers)
+        .where(eq(tipsUsers.email, email))
+        .limit(1);
+      if (existing.length)
+        return res
+          .status(409)
+          .json({ error: "An associate already exists for this email." });
+      const requestedRole = isTipsSuperAdmin(req.tipsUser)
+        ? parsed.data.role
+        : "employee";
+      const [created] = await db
+        .insert(tipsUsers)
+        .values({
+          firstName: parsed.data.firstName,
+          lastName: parsed.data.lastName,
+          email,
+          employeeDisplayName:
+            parsed.data.employeeDisplayName?.trim() ||
+            `${parsed.data.firstName} ${parsed.data.lastName}`.trim(),
+          position: parsed.data.position?.trim() || null,
+          role: TIPS_SUPER_ADMIN_EMAILS.has(email)
+            ? "super_admin"
+            : requestedRole,
+          hashedPassword: await bcrypt.hash(parsed.data.password, 12),
+          mustChangePassword: true,
+        })
+        .returning();
       await db.insert(tipAdminActions).values({
         actorUserId: req.tipsUser.id,
         targetUserId: created.id,
@@ -1510,439 +2235,732 @@ export function registerTipsRoutes(app: Express) {
         });
       } catch (error) {
         emailSent = false;
-        emailWarning = "Associate was created, but the email notification could not be sent.";
+        emailWarning =
+          "Associate was created, but the email notification could not be sent.";
         console.error("Failed to send tips associate created email:", error);
       }
-      res.status(emailSent ? 201 : 202).json({ user: publicTipsUser(created), emailSent, warning: emailWarning });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.post("/admin/users/:id/password-reset", requireTipsSuperAdmin, async (req: any, res, next) => {
-    try {
-      const parsed = adminPasswordResetSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Temporary password must be at least 8 characters." });
-      const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
-      if (!target) return res.status(404).json({ error: "Tips user not found" });
-      if (target.disabledAt) return res.status(400).json({ error: "Enable this associate before requesting a password change." });
-
-      const [updated] = await db
-        .update(tipsUsers)
-        .set({
-          hashedPassword: await bcrypt.hash(parsed.data.temporaryPassword, 12),
-          mustChangePassword: true,
-          updatedAt: new Date(),
-        })
-        .where(eq(tipsUsers.id, target.id))
-        .returning();
-      await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser.id,
-        targetUserId: updated.id,
-        action: "user_password_reset_requested",
-        metadataJson: { email: updated.email },
-      });
-
-      let emailSent = true;
-      let emailWarning: string | undefined;
-      try {
-        await sendTipsPasswordResetEmail({
-          email: updated.email,
-          firstName: updated.firstName,
-          temporaryPassword: parsed.data.temporaryPassword,
-          requestedByName: req.tipsUser.employeeDisplayName || req.tipsUser.email,
+      res
+        .status(emailSent ? 201 : 202)
+        .json({
+          user: publicTipsUser(created),
+          emailSent,
+          warning: emailWarning,
         });
-      } catch (error) {
-        emailSent = false;
-        emailWarning = "Password change was required, but the email notification could not be sent.";
-        console.error("Failed to send tips password reset email:", error);
-      }
-      res.status(emailSent ? 200 : 202).json({ user: publicTipsUser(updated), emailSent, warning: emailWarning });
     } catch (error) {
       next(error);
     }
   });
 
-  router.post("/admin/users/:id/password-reset-email", requireTipsSuperAdmin, async (req: any, res, next) => {
-    try {
-      const [storedTarget] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
-      if (!storedTarget) return res.status(404).json({ error: "Associate account not found" });
-      const target = await reconcileTipsUserScheduleEmail(storedTarget);
-      if (target.disabledAt) return res.status(400).json({ error: "Enable this associate before sending a password reset." });
-      const email = normalizeEmail(String(target.email || ""));
-      if (!isDeliverableEmail(email)) {
-        return res.status(400).json({ error: "This associate does not have a deliverable email address on file. Update the email in the Schedule employee profile and try again." });
-      }
-
-      const temporaryPassword = `Temp${crypto.randomInt(100000, 999999)}!`;
-      const [updated] = await db
-        .update(tipsUsers)
-        .set({
-          hashedPassword: await bcrypt.hash(temporaryPassword, 12),
-          mustChangePassword: true,
-          updatedAt: new Date(),
-        })
-        .where(eq(tipsUsers.id, target.id))
-        .returning();
-      await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser.id,
-        targetUserId: updated.id,
-        action: "user_password_reset_email_sent",
-        metadataJson: { email: updated.email },
-      });
-
+  router.post(
+    "/admin/users/:id/password-reset",
+    requireTipsSuperAdmin,
+    async (req: any, res, next) => {
       try {
-        await sendTipsPasswordResetEmail({
-          email: updated.email,
-          firstName: updated.firstName,
-          temporaryPassword,
-          requestedByName: req.tipsUser.employeeDisplayName || req.tipsUser.email,
+        const parsed = adminPasswordResetSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res
+            .status(400)
+            .json({
+              error: "Temporary password must be at least 8 characters.",
+            });
+        const [target] = await db
+          .select()
+          .from(tipsUsers)
+          .where(eq(tipsUsers.id, req.params.id))
+          .limit(1);
+        if (!target)
+          return res.status(404).json({ error: "Tips user not found" });
+        if (target.disabledAt)
+          return res
+            .status(400)
+            .json({
+              error:
+                "Enable this associate before requesting a password change.",
+            });
+
+        const [updated] = await db
+          .update(tipsUsers)
+          .set({
+            hashedPassword: await bcrypt.hash(
+              parsed.data.temporaryPassword,
+              12,
+            ),
+            mustChangePassword: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(tipsUsers.id, target.id))
+          .returning();
+        await db.insert(tipAdminActions).values({
+          actorUserId: req.tipsUser.id,
+          targetUserId: updated.id,
+          action: "user_password_reset_requested",
+          metadataJson: { email: updated.email },
         });
-      } catch (error) {
-        console.error("Failed to send Courtyard password reset email:", error);
-        return res.status(502).json({ error: "The password was reset, but the email could not be delivered. Send another reset after checking the email address." });
-      }
-      res.json({ user: publicTipsUser(updated), emailSent: true });
-    } catch (error) {
-      next(error);
-    }
-  });
 
-  router.patch("/admin/users/:id/disabled", requireTipsAdmin, async (req: any, res, next) => {
-    try {
-      const parsed = adminDisableUserSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid disabled state" });
-      const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
-      if (!target) return res.status(404).json({ error: "Tips user not found" });
-      if (isTipsSuperAdmin(target)) return res.status(400).json({ error: "The Tips super admin cannot be disabled." });
-      if (!isTipsSuperAdmin(req.tipsUser) && isTipsManager(target)) {
-        return res.status(403).json({ error: "Only the super admin can disable managers." });
-      }
-      const [updated] = await db
-        .update(tipsUsers)
-        .set({
-          disabledAt: parsed.data.disabled ? new Date() : null,
-          disabledBy: parsed.data.disabled ? req.tipsUser.id : null,
-          updatedAt: new Date(),
-        })
-        .where(eq(tipsUsers.id, target.id))
-        .returning();
-      await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser.id,
-        targetUserId: updated.id,
-        action: parsed.data.disabled ? "user_disabled" : "user_enabled",
-        metadataJson: { email: updated.email },
-      });
-      res.json({ user: publicTipsUser(updated) });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.patch("/admin/users/:id/tool-access", requireTipsSuperAdmin, async (req: any, res, next) => {
-    try {
-      const parsed = updateToolAccessSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid tool access change" });
-      const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
-      if (!target) return res.status(404).json({ error: "Courtyard user not found" });
-      if (isTipsSuperAdmin(target) && !parsed.data.enabled) {
-        return res.status(400).json({ error: "Super admin tool access cannot be withdrawn." });
-      }
-      const nextAccess = { ...getToolAccess(target), [parsed.data.tool]: parsed.data.enabled };
-      const [updated] = await db
-        .update(tipsUsers)
-        .set({ toolAccessJson: nextAccess, updatedAt: new Date() } as any)
-        .where(eq(tipsUsers.id, target.id))
-        .returning();
-      await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser.id,
-        targetUserId: updated.id,
-        action: "courtyard_tool_access_updated",
-        metadataJson: { tool: parsed.data.tool, enabled: parsed.data.enabled },
-      });
-      res.json({ user: publicTipsUser(updated) });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.patch("/admin/users/:id/position", requireTipsAdmin, async (req: any, res, next) => {
-    try {
-      const parsed = updateTipsUserPositionSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid position" });
-      const normalizedPosition = parsed.data.position?.trim() || null;
-      const [updated] = await db
-        .update(tipsUsers)
-        .set({ position: normalizedPosition, updatedAt: new Date() })
-        .where(eq(tipsUsers.id, req.params.id))
-        .returning();
-      if (!updated) return res.status(404).json({ error: "Tips user not found" });
-      await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser.id,
-        targetUserId: updated.id,
-        action: "user_position_updated",
-        metadataJson: { position: normalizedPosition },
-      });
-      res.json({ user: publicTipsUser(updated) });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.patch("/admin/users/:id/role", requireTipsSuperAdmin, async (req: any, res, next) => {
-    try {
-      const parsed = updateTipsUserRoleSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid role" });
-      const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
-      if (!target) return res.status(404).json({ error: "Tips user not found" });
-      const targetEmail = String(target.email || "").toLowerCase();
-      const nextRole = TIPS_SUPER_ADMIN_EMAILS.has(targetEmail) ? "super_admin" : parsed.data.role;
-      const [updated] = await db.update(tipsUsers).set({ role: nextRole, updatedAt: new Date() }).where(eq(tipsUsers.id, target.id)).returning();
-      await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser.id,
-        targetUserId: updated.id,
-        action: "user_role_updated",
-        metadataJson: { role: nextRole },
-      });
-      res.json({ user: publicTipsUser(updated) });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.delete("/admin/users/:id", requireTipsSuperAdmin, async (req: any, res, next) => {
-    try {
-      const [target] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, req.params.id)).limit(1);
-      if (!target) return res.status(404).json({ error: "Tips user not found" });
-      if (isTipsSuperAdmin(target)) return res.status(400).json({ error: "The Tips super admin cannot be deleted." });
-      await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser.id,
-        targetUserId: null,
-        action: "user_deleted",
-        metadataJson: { deletedUserId: target.id, email: target.email },
-      });
-      await db.delete(tipsUsers).where(eq(tipsUsers.id, target.id));
-      res.json({ ok: true });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.post("/admin/submissions/:id/status", requireTipsAdmin, async (req: any, res, next) => {
-    try {
-      const status = z.enum(["reopened", "approved", "exported"]).parse(req.body?.status);
-      let [submission] = await db.update(tipPeriodSubmissions).set({
-        status,
-        reviewedAt: new Date(),
-        reviewedBy: req.tipsUser.id,
-        updatedAt: new Date(),
-      }).where(eq(tipPeriodSubmissions.id, req.params.id)).returning();
-      if (!submission) {
-        const [gridSubmission] = await db.update(tipGridSubmissions).set({
-          status,
-          reviewedAt: new Date(),
-          reviewedBy: req.tipsUser.id,
-          updatedAt: new Date(),
-        }).where(eq(tipGridSubmissions.id, req.params.id)).returning();
-        if (!gridSubmission) return res.status(404).json({ error: "Submission not found" });
-        if (status === "reopened") {
-          await db.update(tipEntries).set({ status: "saved", updatedAt: new Date() }).where(and(eq(tipEntries.payPeriodStart, gridSubmission.payPeriodStart), eq(tipEntries.payPeriodEnd, gridSubmission.payPeriodEnd)));
+        let emailSent = true;
+        let emailWarning: string | undefined;
+        try {
+          await sendTipsPasswordResetEmail({
+            email: updated.email,
+            firstName: updated.firstName,
+            temporaryPassword: parsed.data.temporaryPassword,
+            requestedByName:
+              req.tipsUser.employeeDisplayName || req.tipsUser.email,
+          });
+        } catch (error) {
+          emailSent = false;
+          emailWarning =
+            "Password change was required, but the email notification could not be sent.";
+          console.error("Failed to send tips password reset email:", error);
         }
+        res
+          .status(emailSent ? 200 : 202)
+          .json({
+            user: publicTipsUser(updated),
+            emailSent,
+            warning: emailWarning,
+          });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    "/admin/users/:id/password-reset-email",
+    requireTipsSuperAdmin,
+    async (req: any, res, next) => {
+      try {
+        const [storedTarget] = await db
+          .select()
+          .from(tipsUsers)
+          .where(eq(tipsUsers.id, req.params.id))
+          .limit(1);
+        if (!storedTarget)
+          return res.status(404).json({ error: "Associate account not found" });
+        const target = await reconcileTipsUserScheduleEmail(storedTarget);
+        if (target.disabledAt)
+          return res
+            .status(400)
+            .json({
+              error: "Enable this associate before sending a password reset.",
+            });
+        const email = normalizeEmail(String(target.email || ""));
+        if (!isDeliverableEmail(email)) {
+          return res
+            .status(400)
+            .json({
+              error:
+                "This associate does not have a deliverable email address on file. Update the email in the Schedule employee profile and try again.",
+            });
+        }
+
+        const temporaryPassword = `Temp${crypto.randomInt(100000, 999999)}!`;
+        const [updated] = await db
+          .update(tipsUsers)
+          .set({
+            hashedPassword: await bcrypt.hash(temporaryPassword, 12),
+            mustChangePassword: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(tipsUsers.id, target.id))
+          .returning();
+        await db.insert(tipAdminActions).values({
+          actorUserId: req.tipsUser.id,
+          targetUserId: updated.id,
+          action: "user_password_reset_email_sent",
+          metadataJson: { email: updated.email },
+        });
+
+        try {
+          await sendTipsPasswordResetEmail({
+            email: updated.email,
+            firstName: updated.firstName,
+            temporaryPassword,
+            requestedByName:
+              req.tipsUser.employeeDisplayName || req.tipsUser.email,
+          });
+        } catch (error) {
+          console.error(
+            "Failed to send Courtyard password reset email:",
+            error,
+          );
+          return res
+            .status(502)
+            .json({
+              error:
+                "The password was reset, but the email could not be delivered. Send another reset after checking the email address.",
+            });
+        }
+        res.json({ user: publicTipsUser(updated), emailSent: true });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.patch(
+    "/admin/users/:id/disabled",
+    requireTipsAdmin,
+    async (req: any, res, next) => {
+      try {
+        const parsed = adminDisableUserSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res.status(400).json({ error: "Invalid disabled state" });
+        const [target] = await db
+          .select()
+          .from(tipsUsers)
+          .where(eq(tipsUsers.id, req.params.id))
+          .limit(1);
+        if (!target)
+          return res.status(404).json({ error: "Tips user not found" });
+        if (isTipsSuperAdmin(target))
+          return res
+            .status(400)
+            .json({ error: "The Tips super admin cannot be disabled." });
+        if (!isTipsSuperAdmin(req.tipsUser) && isTipsManager(target)) {
+          return res
+            .status(403)
+            .json({ error: "Only the super admin can disable managers." });
+        }
+        const [updated] = await db
+          .update(tipsUsers)
+          .set({
+            disabledAt: parsed.data.disabled ? new Date() : null,
+            disabledBy: parsed.data.disabled ? req.tipsUser.id : null,
+            updatedAt: new Date(),
+          })
+          .where(eq(tipsUsers.id, target.id))
+          .returning();
+        await db.insert(tipAdminActions).values({
+          actorUserId: req.tipsUser.id,
+          targetUserId: updated.id,
+          action: parsed.data.disabled ? "user_disabled" : "user_enabled",
+          metadataJson: { email: updated.email },
+        });
+        res.json({ user: publicTipsUser(updated) });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.patch(
+    "/admin/users/:id/tool-access",
+    requireTipsSuperAdmin,
+    async (req: any, res, next) => {
+      try {
+        const parsed = updateToolAccessSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res.status(400).json({ error: "Invalid tool access change" });
+        const [target] = await db
+          .select()
+          .from(tipsUsers)
+          .where(eq(tipsUsers.id, req.params.id))
+          .limit(1);
+        if (!target)
+          return res.status(404).json({ error: "Courtyard user not found" });
+        if (isTipsSuperAdmin(target) && !parsed.data.enabled) {
+          return res
+            .status(400)
+            .json({ error: "Super admin tool access cannot be withdrawn." });
+        }
+        const nextAccess = {
+          ...getToolAccess(target),
+          [parsed.data.tool]: parsed.data.enabled,
+        };
+        const [updated] = await db
+          .update(tipsUsers)
+          .set({ toolAccessJson: nextAccess, updatedAt: new Date() } as any)
+          .where(eq(tipsUsers.id, target.id))
+          .returning();
+        await db.insert(tipAdminActions).values({
+          actorUserId: req.tipsUser.id,
+          targetUserId: updated.id,
+          action: "courtyard_tool_access_updated",
+          metadataJson: {
+            tool: parsed.data.tool,
+            enabled: parsed.data.enabled,
+          },
+        });
+        res.json({ user: publicTipsUser(updated) });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.patch(
+    "/admin/users/:id/position",
+    requireTipsAdmin,
+    async (req: any, res, next) => {
+      try {
+        const parsed = updateTipsUserPositionSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res.status(400).json({ error: "Invalid position" });
+        const normalizedPosition = parsed.data.position?.trim() || null;
+        const [updated] = await db
+          .update(tipsUsers)
+          .set({ position: normalizedPosition, updatedAt: new Date() })
+          .where(eq(tipsUsers.id, req.params.id))
+          .returning();
+        if (!updated)
+          return res.status(404).json({ error: "Tips user not found" });
+        await db.insert(tipAdminActions).values({
+          actorUserId: req.tipsUser.id,
+          targetUserId: updated.id,
+          action: "user_position_updated",
+          metadataJson: { position: normalizedPosition },
+        });
+        res.json({ user: publicTipsUser(updated) });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.patch(
+    "/admin/users/:id/role",
+    requireTipsSuperAdmin,
+    async (req: any, res, next) => {
+      try {
+        const parsed = updateTipsUserRoleSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res.status(400).json({ error: "Invalid role" });
+        const [target] = await db
+          .select()
+          .from(tipsUsers)
+          .where(eq(tipsUsers.id, req.params.id))
+          .limit(1);
+        if (!target)
+          return res.status(404).json({ error: "Tips user not found" });
+        const targetEmail = String(target.email || "").toLowerCase();
+        const nextRole = TIPS_SUPER_ADMIN_EMAILS.has(targetEmail)
+          ? "super_admin"
+          : parsed.data.role;
+        const [updated] = await db
+          .update(tipsUsers)
+          .set({ role: nextRole, updatedAt: new Date() })
+          .where(eq(tipsUsers.id, target.id))
+          .returning();
+        await db.insert(tipAdminActions).values({
+          actorUserId: req.tipsUser.id,
+          targetUserId: updated.id,
+          action: "user_role_updated",
+          metadataJson: { role: nextRole },
+        });
+        res.json({ user: publicTipsUser(updated) });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.delete(
+    "/admin/users/:id",
+    requireTipsSuperAdmin,
+    async (req: any, res, next) => {
+      try {
+        const [target] = await db
+          .select()
+          .from(tipsUsers)
+          .where(eq(tipsUsers.id, req.params.id))
+          .limit(1);
+        if (!target)
+          return res.status(404).json({ error: "Tips user not found" });
+        if (isTipsSuperAdmin(target))
+          return res
+            .status(400)
+            .json({ error: "The Tips super admin cannot be deleted." });
         await db.insert(tipAdminActions).values({
           actorUserId: req.tipsUser.id,
           targetUserId: null,
-          action: `grid_submission_${status}`,
-          metadataJson: { submissionId: gridSubmission.id, payPeriodStart: gridSubmission.payPeriodStart, payPeriodEnd: gridSubmission.payPeriodEnd },
+          action: "user_deleted",
+          metadataJson: { deletedUserId: target.id, email: target.email },
         });
-        return res.json({ submission: gridSubmission });
+        await db.delete(tipsUsers).where(eq(tipsUsers.id, target.id));
+        res.json({ ok: true });
+      } catch (error) {
+        next(error);
       }
-      if (status === "reopened") {
-        await db.update(tipEntries).set({ status: "saved", updatedAt: new Date() }).where(and(eq(tipEntries.userId, submission.userId), eq(tipEntries.payPeriodStart, submission.payPeriodStart), eq(tipEntries.payPeriodEnd, submission.payPeriodEnd)));
-      }
-      await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser.id,
-        targetUserId: submission.userId,
-        action: `submission_${status}`,
-        metadataJson: { submissionId: submission.id, payPeriodStart: submission.payPeriodStart, payPeriodEnd: submission.payPeriodEnd },
-      });
-      res.json({ submission });
-    } catch (error) {
-      next(error);
-    }
-  });
+    },
+  );
 
-  router.get("/admin/submissions/:id/pdf", requireTipsAdmin, async (req: any, res, next) => {
-    try {
-      const [row] = await db
-        .select({ submission: tipPeriodSubmissions, user: tipsUsers })
-        .from(tipPeriodSubmissions)
-        .innerJoin(tipsUsers, eq(tipPeriodSubmissions.userId, tipsUsers.id))
-        .where(eq(tipPeriodSubmissions.id, req.params.id))
-        .limit(1);
-      if (!row) {
-        const [gridSubmission] = await db.select().from(tipGridSubmissions).where(eq(tipGridSubmissions.id, req.params.id)).limit(1);
-        if (!gridSubmission) return res.status(404).json({ error: "Submission not found" });
-        const grid = await buildTipsGrid(gridSubmission.payPeriodStart);
-        const pdfPath = gridSubmission.pdfPath || (await generateTipsGridPdf(grid, gridSubmission));
+  router.post(
+    "/admin/submissions/:id/status",
+    requireTipsAdmin,
+    async (req: any, res, next) => {
+      try {
+        const status = z
+          .enum(["reopened", "approved", "exported"])
+          .parse(req.body?.status);
+        let [submission] = await db
+          .update(tipPeriodSubmissions)
+          .set({
+            status,
+            reviewedAt: new Date(),
+            reviewedBy: req.tipsUser.id,
+            updatedAt: new Date(),
+          })
+          .where(eq(tipPeriodSubmissions.id, req.params.id))
+          .returning();
+        if (!submission) {
+          const [gridSubmission] = await db
+            .update(tipGridSubmissions)
+            .set({
+              status,
+              reviewedAt: new Date(),
+              reviewedBy: req.tipsUser.id,
+              updatedAt: new Date(),
+            })
+            .where(eq(tipGridSubmissions.id, req.params.id))
+            .returning();
+          if (!gridSubmission)
+            return res.status(404).json({ error: "Submission not found" });
+          if (status === "reopened") {
+            await db
+              .update(tipEntries)
+              .set({ status: "saved", updatedAt: new Date() })
+              .where(
+                and(
+                  eq(tipEntries.payPeriodStart, gridSubmission.payPeriodStart),
+                  eq(tipEntries.payPeriodEnd, gridSubmission.payPeriodEnd),
+                ),
+              );
+          }
+          await db.insert(tipAdminActions).values({
+            actorUserId: req.tipsUser.id,
+            targetUserId: null,
+            action: `grid_submission_${status}`,
+            metadataJson: {
+              submissionId: gridSubmission.id,
+              payPeriodStart: gridSubmission.payPeriodStart,
+              payPeriodEnd: gridSubmission.payPeriodEnd,
+            },
+          });
+          return res.json({ submission: gridSubmission });
+        }
+        if (status === "reopened") {
+          await db
+            .update(tipEntries)
+            .set({ status: "saved", updatedAt: new Date() })
+            .where(
+              and(
+                eq(tipEntries.userId, submission.userId),
+                eq(tipEntries.payPeriodStart, submission.payPeriodStart),
+                eq(tipEntries.payPeriodEnd, submission.payPeriodEnd),
+              ),
+            );
+        }
+        await db.insert(tipAdminActions).values({
+          actorUserId: req.tipsUser.id,
+          targetUserId: submission.userId,
+          action: `submission_${status}`,
+          metadataJson: {
+            submissionId: submission.id,
+            payPeriodStart: submission.payPeriodStart,
+            payPeriodEnd: submission.payPeriodEnd,
+          },
+        });
+        res.json({ submission });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    "/admin/submissions/:id/pdf",
+    requireTipsAdmin,
+    async (req: any, res, next) => {
+      try {
+        const [row] = await db
+          .select({ submission: tipPeriodSubmissions, user: tipsUsers })
+          .from(tipPeriodSubmissions)
+          .innerJoin(tipsUsers, eq(tipPeriodSubmissions.userId, tipsUsers.id))
+          .where(eq(tipPeriodSubmissions.id, req.params.id))
+          .limit(1);
+        if (!row) {
+          const [gridSubmission] = await db
+            .select()
+            .from(tipGridSubmissions)
+            .where(eq(tipGridSubmissions.id, req.params.id))
+            .limit(1);
+          if (!gridSubmission)
+            return res.status(404).json({ error: "Submission not found" });
+          const grid = await buildTipsGrid(gridSubmission.payPeriodStart);
+          const pdfPath =
+            gridSubmission.pdfPath ||
+            (await generateTipsGridPdf(grid, gridSubmission));
+          const absolute = resolvePrivateFile(pdfPath);
+          if (!absolute || !fs.existsSync(absolute))
+            return res.status(404).json({ error: "PDF not found" });
+          return res.download(
+            absolute,
+            `courtyard-tips-grid-${gridSubmission.payPeriodStart}.pdf`,
+          );
+        }
+        const dashboard = await buildDashboard(
+          row.user.id,
+          row.submission.payPeriodStart,
+        );
+        const pdfPath =
+          row.submission.pdfPath ||
+          (await generateTipsPdf(row.user, dashboard, row.submission));
         const absolute = resolvePrivateFile(pdfPath);
-        if (!absolute || !fs.existsSync(absolute)) return res.status(404).json({ error: "PDF not found" });
-        return res.download(absolute, `courtyard-tips-grid-${gridSubmission.payPeriodStart}.pdf`);
+        if (!absolute || !fs.existsSync(absolute))
+          return res.status(404).json({ error: "PDF not found" });
+        res.download(
+          absolute,
+          `courtyard-tips-${row.user.employeeDisplayName}-${row.submission.payPeriodStart}.pdf`,
+        );
+      } catch (error) {
+        next(error);
       }
-      const dashboard = await buildDashboard(row.user.id, row.submission.payPeriodStart);
-      const pdfPath = row.submission.pdfPath || (await generateTipsPdf(row.user, dashboard, row.submission));
-      const absolute = resolvePrivateFile(pdfPath);
-      if (!absolute || !fs.existsSync(absolute)) return res.status(404).json({ error: "PDF not found" });
-      res.download(absolute, `courtyard-tips-${row.user.employeeDisplayName}-${row.submission.payPeriodStart}.pdf`);
-    } catch (error) {
-      next(error);
-    }
-  });
+    },
+  );
 
-  router.get("/admin/export.csv", requireTipsAdmin, async (_req: any, res, next) => {
-    try {
-      const [rows, gridRows] = await Promise.all([
-        db
-        .select({ submission: tipPeriodSubmissions, user: tipsUsers })
-        .from(tipPeriodSubmissions)
-        .innerJoin(tipsUsers, eq(tipPeriodSubmissions.userId, tipsUsers.id))
-        .orderBy(desc(tipPeriodSubmissions.payPeriodStart), asc(tipsUsers.employeeDisplayName)),
-        db.select().from(tipGridSubmissions).orderBy(desc(tipGridSubmissions.payPeriodStart)),
-      ]);
-      const csv = [
-        ["employee", "email", "position", "period_start", "period_end", "week1_total", "week2_total", "total_tips", "status", "submitted_at"].join(","),
-        ...gridRows.map((submission) =>
+  router.get(
+    "/admin/export.csv",
+    requireTipsAdmin,
+    async (_req: any, res, next) => {
+      try {
+        const [rows, gridRows] = await Promise.all([
+          db
+            .select({ submission: tipPeriodSubmissions, user: tipsUsers })
+            .from(tipPeriodSubmissions)
+            .innerJoin(tipsUsers, eq(tipPeriodSubmissions.userId, tipsUsers.id))
+            .orderBy(
+              desc(tipPeriodSubmissions.payPeriodStart),
+              asc(tipsUsers.employeeDisplayName),
+            ),
+          db
+            .select()
+            .from(tipGridSubmissions)
+            .orderBy(desc(tipGridSubmissions.payPeriodStart)),
+        ]);
+        const csv = [
           [
-            JSON.stringify("Shared Tips Grid"),
-            JSON.stringify(TIPS_SUBMISSION_RECIPIENT),
-            JSON.stringify("All associates"),
-            submission.payPeriodStart,
-            submission.payPeriodEnd,
-            moneyString(submission.week1Total),
-            moneyString(submission.week2Total),
-            moneyString(submission.totalTips),
-            submission.status,
-            submission.submittedAt ? new Date(submission.submittedAt).toISOString() : "",
+            "employee",
+            "email",
+            "position",
+            "period_start",
+            "period_end",
+            "week1_total",
+            "week2_total",
+            "total_tips",
+            "status",
+            "submitted_at",
           ].join(","),
-        ),
-        ...rows.map((row) =>
-          [
-            JSON.stringify(row.user.employeeDisplayName),
-            JSON.stringify(row.user.email),
-            JSON.stringify(row.user.position || ""),
-            row.submission.payPeriodStart,
-            row.submission.payPeriodEnd,
-            moneyString(row.submission.week1Total),
-            moneyString(row.submission.week2Total),
-            moneyString(row.submission.totalTips),
-            row.submission.status,
-            row.submission.submittedAt ? new Date(row.submission.submittedAt).toISOString() : "",
-          ].join(","),
-        ),
-      ].join("\n");
-      res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", "attachment; filename=\"courtyard-tips-export.csv\"");
-      res.send(csv);
-    } catch (error) {
-      next(error);
-    }
-  });
+          ...gridRows.map((submission) =>
+            [
+              JSON.stringify("Shared Tips Grid"),
+              JSON.stringify(TIPS_SUBMISSION_RECIPIENT),
+              JSON.stringify("All associates"),
+              submission.payPeriodStart,
+              submission.payPeriodEnd,
+              moneyString(submission.week1Total),
+              moneyString(submission.week2Total),
+              moneyString(submission.totalTips),
+              submission.status,
+              submission.submittedAt
+                ? new Date(submission.submittedAt).toISOString()
+                : "",
+            ].join(","),
+          ),
+          ...rows.map((row) =>
+            [
+              JSON.stringify(row.user.employeeDisplayName),
+              JSON.stringify(row.user.email),
+              JSON.stringify(row.user.position || ""),
+              row.submission.payPeriodStart,
+              row.submission.payPeriodEnd,
+              moneyString(row.submission.week1Total),
+              moneyString(row.submission.week2Total),
+              moneyString(row.submission.totalTips),
+              row.submission.status,
+              row.submission.submittedAt
+                ? new Date(row.submission.submittedAt).toISOString()
+                : "",
+            ].join(","),
+          ),
+        ].join("\n");
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader(
+          "Content-Disposition",
+          'attachment; filename="courtyard-tips-export.csv"',
+        );
+        res.send(csv);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
-  router.get("/admin/export-daily.csv", requireTipsAdmin, async (_req: any, res, next) => {
-    try {
-      const rows = await db
-        .select({ entry: tipEntries, user: tipsUsers })
-        .from(tipEntries)
-        .innerJoin(tipsUsers, eq(tipEntries.userId, tipsUsers.id))
-        .orderBy(desc(tipEntries.payPeriodStart), asc(tipsUsers.employeeDisplayName), asc(tipEntries.entryDate));
-      const csv = [
-        ["employee", "email", "position", "entry_date", "period_start", "period_end", "shift_type", "gross_sales", "cc_tips", "notes", "status"].join(","),
-        ...rows.map((row) =>
+  router.get(
+    "/admin/export-daily.csv",
+    requireTipsAdmin,
+    async (_req: any, res, next) => {
+      try {
+        const rows = await db
+          .select({ entry: tipEntries, user: tipsUsers })
+          .from(tipEntries)
+          .innerJoin(tipsUsers, eq(tipEntries.userId, tipsUsers.id))
+          .orderBy(
+            desc(tipEntries.payPeriodStart),
+            asc(tipsUsers.employeeDisplayName),
+            asc(tipEntries.entryDate),
+          );
+        const csv = [
           [
-            JSON.stringify(row.user.employeeDisplayName),
-            JSON.stringify(row.user.email),
-            JSON.stringify(row.user.position || ""),
-            row.entry.entryDate,
-            row.entry.payPeriodStart,
-            row.entry.payPeriodEnd,
-            row.entry.shiftType || "other",
-            moneyString(row.entry.grossSales),
-            moneyString(row.entry.creditTips),
-            JSON.stringify(row.entry.notes || ""),
-            row.entry.status,
+            "employee",
+            "email",
+            "position",
+            "entry_date",
+            "period_start",
+            "period_end",
+            "shift_type",
+            "gross_sales",
+            "cc_tips",
+            "notes",
+            "status",
           ].join(","),
-        ),
-      ].join("\n");
-      res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", "attachment; filename=\"courtyard-tips-daily-export.csv\"");
-      res.send(csv);
-    } catch (error) {
-      next(error);
-    }
-  });
+          ...rows.map((row) =>
+            [
+              JSON.stringify(row.user.employeeDisplayName),
+              JSON.stringify(row.user.email),
+              JSON.stringify(row.user.position || ""),
+              row.entry.entryDate,
+              row.entry.payPeriodStart,
+              row.entry.payPeriodEnd,
+              row.entry.shiftType || "other",
+              moneyString(row.entry.grossSales),
+              moneyString(row.entry.creditTips),
+              JSON.stringify(row.entry.notes || ""),
+              row.entry.status,
+            ].join(","),
+          ),
+        ].join("\n");
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader(
+          "Content-Disposition",
+          'attachment; filename="courtyard-tips-daily-export.csv"',
+        );
+        res.send(csv);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   router.get("/kiosk/status", async (req: any, res, next) => {
     try {
       const user = await getTipsUserBySession(req);
       if (!user || user.disabledAt || user.mustChangePassword) {
-        return res.json({ unlocked: false, hasPin: Boolean(await getKioskPinHash() || process.env.TIPS_KIOSK_PIN), requiresLogin: true });
+        return res.json({
+          unlocked: false,
+          hasPin: Boolean(
+            (await getKioskPinHash()) || process.env.TIPS_KIOSK_PIN,
+          ),
+          requiresLogin: true,
+        });
       }
       if (!(await hasBistroTipsAccess(user))) {
-        return res.status(403).json({ error: "Bistro role required for tips access" });
+        return res
+          .status(403)
+          .json({ error: "Bistro role required for tips access" });
       }
       const adminUnlocked = Boolean(isTipsManager(user));
       res.json({
         unlocked: Boolean(req.session?.tipsKioskUnlocked || adminUnlocked),
-        hasPin: Boolean(await getKioskPinHash() || process.env.TIPS_KIOSK_PIN),
+        hasPin: Boolean(
+          (await getKioskPinHash()) || process.env.TIPS_KIOSK_PIN,
+        ),
       });
     } catch (error) {
       next(error);
     }
   });
 
-  router.post("/kiosk/login", tipsAuthRateLimiter, async (req: any, res, next) => {
-    try {
-      const user = await getTipsUserBySession(req);
-      if (!user || user.disabledAt || user.mustChangePassword) return res.status(401).json({ error: "Courtyard login required before entering the Tips PIN." });
-      if (!(await hasBistroTipsAccess(user))) return res.status(403).json({ error: "Bistro role required for tips access." });
-      const parsed = kioskPinSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Enter the 5 digit PIN." });
-      if (!(await verifyKioskPin(parsed.data.pin))) return res.status(401).json({ error: "Invalid PIN." });
-      req.session.tipsKioskUnlocked = true;
-      req.session.save(() => res.json({ unlocked: true }));
-    } catch (error) {
-      next(error);
-    }
-  });
+  router.post(
+    "/kiosk/login",
+    tipsAuthRateLimiter,
+    async (req: any, res, next) => {
+      try {
+        const user = await getTipsUserBySession(req);
+        if (!user || user.disabledAt || user.mustChangePassword)
+          return res
+            .status(401)
+            .json({
+              error: "Courtyard login required before entering the Tips PIN.",
+            });
+        if (!(await hasBistroTipsAccess(user)))
+          return res
+            .status(403)
+            .json({ error: "Bistro role required for tips access." });
+        const parsed = kioskPinSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res.status(400).json({ error: "Enter the 5 digit PIN." });
+        if (!(await verifyKioskPin(parsed.data.pin)))
+          return res.status(401).json({ error: "Invalid PIN." });
+        req.session.tipsKioskUnlocked = true;
+        req.session.save(() => res.json({ unlocked: true }));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   router.get("/shared-pin/status", async (req: any, res, next) => {
     try {
       const user = await getTipsUserBySession(req);
       if (!user || user.disabledAt || user.mustChangePassword) {
-        return res.json({ unlocked: false, hasPin: Boolean(await getKioskPinHash() || process.env.TIPS_KIOSK_PIN), requiresLogin: true });
+        return res.json({
+          unlocked: false,
+          hasPin: Boolean(
+            (await getKioskPinHash()) || process.env.TIPS_KIOSK_PIN,
+          ),
+          requiresLogin: true,
+        });
       }
       const adminUnlocked = Boolean(isTipsManager(user));
       res.json({
-        unlocked: Boolean(req.session?.courtyardSharedPinUnlocked || adminUnlocked),
-        hasPin: Boolean(await getKioskPinHash() || process.env.TIPS_KIOSK_PIN),
+        unlocked: Boolean(
+          req.session?.courtyardSharedPinUnlocked || adminUnlocked,
+        ),
+        hasPin: Boolean(
+          (await getKioskPinHash()) || process.env.TIPS_KIOSK_PIN,
+        ),
       });
     } catch (error) {
       next(error);
     }
   });
 
-  router.post("/shared-pin/login", tipsAuthRateLimiter, async (req: any, res, next) => {
-    try {
-      const user = await getTipsUserBySession(req);
-      if (!user || user.disabledAt || user.mustChangePassword) return res.status(401).json({ error: "Courtyard login required before entering the PIN." });
-      const parsed = kioskPinSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Enter the 5 digit PIN." });
-      if (!(await verifyKioskPin(parsed.data.pin))) return res.status(401).json({ error: "Invalid PIN." });
-      req.session.courtyardSharedPinUnlocked = true;
-      req.session.save(() => res.json({ unlocked: true }));
-    } catch (error) {
-      next(error);
-    }
-  });
+  router.post(
+    "/shared-pin/login",
+    tipsAuthRateLimiter,
+    async (req: any, res, next) => {
+      try {
+        const user = await getTipsUserBySession(req);
+        if (!user || user.disabledAt || user.mustChangePassword)
+          return res
+            .status(401)
+            .json({
+              error: "Courtyard login required before entering the PIN.",
+            });
+        const parsed = kioskPinSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res.status(400).json({ error: "Enter the 5 digit PIN." });
+        if (!(await verifyKioskPin(parsed.data.pin)))
+          return res.status(401).json({ error: "Invalid PIN." });
+        req.session.courtyardSharedPinUnlocked = true;
+        req.session.save(() => res.json({ unlocked: true }));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   router.post("/kiosk/logout", (req: any, res) => {
     if (req.session) delete req.session.tipsKioskUnlocked;
@@ -1950,28 +2968,52 @@ export function registerTipsRoutes(app: Express) {
     req.session?.save(() => res.json({ ok: true }));
   });
 
-  router.post("/admin/kiosk-pin", requireTipsSuperAdmin, tipsAuthRateLimiter, async (req: any, res, next) => {
-    try {
-      const parsed = kioskPinSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "PIN must be exactly 5 digits." });
-      await db
-        .insert(tipsKioskSettings)
-        .values({ key: "pin_hash", value: await bcrypt.hash(parsed.data.pin, 12), updatedBy: req.tipsUser.id, updatedAt: new Date() })
-        .onConflictDoUpdate({
-          target: tipsKioskSettings.key,
-          set: { value: await bcrypt.hash(parsed.data.pin, 12), updatedBy: req.tipsUser.id, updatedAt: new Date() },
-        });
-      await db.insert(tipAdminActions).values({ actorUserId: req.tipsUser.id, action: "kiosk_pin_updated", metadataJson: {} });
-      res.json({ ok: true });
-    } catch (error) {
-      next(error);
-    }
-  });
+  router.post(
+    "/admin/kiosk-pin",
+    requireTipsSuperAdmin,
+    tipsAuthRateLimiter,
+    async (req: any, res, next) => {
+      try {
+        const parsed = kioskPinSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res
+            .status(400)
+            .json({ error: "PIN must be exactly 5 digits." });
+        await db
+          .insert(tipsKioskSettings)
+          .values({
+            key: "pin_hash",
+            value: await bcrypt.hash(parsed.data.pin, 12),
+            updatedBy: req.tipsUser.id,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: tipsKioskSettings.key,
+            set: {
+              value: await bcrypt.hash(parsed.data.pin, 12),
+              updatedBy: req.tipsUser.id,
+              updatedAt: new Date(),
+            },
+          });
+        await db
+          .insert(tipAdminActions)
+          .values({
+            actorUserId: req.tipsUser.id,
+            action: "kiosk_pin_updated",
+            metadataJson: {},
+          });
+        res.json({ ok: true });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   router.get("/grid", requireTipsGridAccess, async (req: any, res, next) => {
     try {
       const parsed = periodSchema.safeParse(req.query);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
+      if (!parsed.success)
+        return res.status(400).json({ error: "Invalid pay period" });
       res.setHeader("Cache-Control", "no-store");
       res.json(await buildTipsGrid(parsed.data.start, req.tipsUser));
     } catch (error) {
@@ -1979,187 +3021,297 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
-  router.get("/grid/periods", requireTipsGridAccess, async (_req: any, res, next) => {
-    try {
-      res.setHeader("Cache-Control", "no-store");
-      const current = getPayPeriodForDate();
-      const submissions = await db
-        .select({
-          start: tipGridSubmissions.payPeriodStart,
-          end: tipGridSubmissions.payPeriodEnd,
-          status: tipGridSubmissions.status,
-          submittedAt: tipGridSubmissions.submittedAt,
-        })
-        .from(tipGridSubmissions)
-        .orderBy(desc(tipGridSubmissions.payPeriodStart));
-      const periods = new Map<string, { start: string; end: string; status: string; submittedAt: Date | null; current: boolean }>();
-      for (let offset = 0; offset < 12; offset += 1) {
-        const startDate = addUtcDays(parseDateKey(current.start)!, offset * -14);
-        const start = toDateKey(startDate);
-        periods.set(start, {
-          start,
-          end: toDateKey(addUtcDays(startDate, 13)),
-          status: offset === 0 ? "open" : "historical",
-          submittedAt: null,
-          current: offset === 0,
+  router.get(
+    "/grid/periods",
+    requireTipsGridAccess,
+    async (_req: any, res, next) => {
+      try {
+        res.setHeader("Cache-Control", "no-store");
+        const current = getPayPeriodForDate();
+        const submissions = await db
+          .select({
+            start: tipGridSubmissions.payPeriodStart,
+            end: tipGridSubmissions.payPeriodEnd,
+            status: tipGridSubmissions.status,
+            submittedAt: tipGridSubmissions.submittedAt,
+          })
+          .from(tipGridSubmissions)
+          .orderBy(desc(tipGridSubmissions.payPeriodStart));
+        const periods = new Map<
+          string,
+          {
+            start: string;
+            end: string;
+            status: string;
+            submittedAt: Date | null;
+            current: boolean;
+          }
+        >();
+        for (let offset = 0; offset < 12; offset += 1) {
+          const startDate = addUtcDays(
+            parseDateKey(current.start)!,
+            offset * -14,
+          );
+          const start = toDateKey(startDate);
+          periods.set(start, {
+            start,
+            end: toDateKey(addUtcDays(startDate, 13)),
+            status: offset === 0 ? "open" : "historical",
+            submittedAt: null,
+            current: offset === 0,
+          });
+        }
+        submissions.forEach((submission) => {
+          const start = toDateKey(
+            parseDateKey(String(submission.start)) ||
+              new Date(String(submission.start)),
+          );
+          const end = toDateKey(
+            parseDateKey(String(submission.end)) ||
+              new Date(String(submission.end)),
+          );
+          const locked = gridSubmissionLocksPeriod(submission, start, end);
+          periods.set(start, {
+            start,
+            end,
+            status: locked ? submission.status : "open",
+            submittedAt: submission.submittedAt || null,
+            current: start === current.start,
+          });
         });
-      }
-      submissions.forEach((submission) => {
-        const start = toDateKey(parseDateKey(String(submission.start)) || new Date(String(submission.start)));
-        const end = toDateKey(parseDateKey(String(submission.end)) || new Date(String(submission.end)));
-        const locked = gridSubmissionLocksPeriod(submission, start, end);
-        periods.set(start, {
-          start,
-          end,
-          status: locked ? submission.status : "open",
-          submittedAt: submission.submittedAt || null,
-          current: start === current.start,
+        res.json({
+          periods: Array.from(periods.values()).sort((a, b) =>
+            b.start.localeCompare(a.start),
+          ),
         });
-      });
-      res.json({ periods: Array.from(periods.values()).sort((a, b) => b.start.localeCompare(a.start)) });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.post("/grid/associates", requireTipsGridAccess, tipsAuthRateLimiter, async (req: any, res, next) => {
-    try {
-      const parsed = gridAssociateSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid associate details", validation: parsed.error.format() });
-      const explicitEmail = parsed.data.email ? normalizeEmail(parsed.data.email) : "";
-      const email = explicitEmail || `tips-${crypto.randomUUID()}@courtyard-tips.local`;
-      const existing = await db.select({ id: tipsUsers.id }).from(tipsUsers).where(eq(tipsUsers.email, email)).limit(1);
-      if (existing.length) return res.status(409).json({ error: "An associate already exists for this email." });
-      const displayName = parsed.data.employeeDisplayName?.trim() || `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
-      const position = parsed.data.position?.trim() || "Bistro attendant";
-      if (!hasBistroText(position)) return res.status(400).json({ error: "Only Bistro or Breakfast associates can be added to the tips grid." });
-      const [created] = await db
-        .insert(tipsUsers)
-        .values({
-          firstName: parsed.data.firstName,
-          lastName: parsed.data.lastName,
-          email,
-          employeeDisplayName: displayName,
-          position,
-          role: "employee",
-          hashedPassword: await bcrypt.hash(crypto.randomBytes(18).toString("hex"), 12),
-          mustChangePassword: false,
-        })
-        .returning();
-      await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser?.id || null,
-        targetUserId: created.id,
-        action: "grid_associate_created",
-        metadataJson: { selfAdded: true, emailProvided: Boolean(explicitEmail), position: created.position },
-      });
-      res.status(201).json({ user: publicTipsUser(created) });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.post("/grid/entries", requireTipsGridAccess, async (req: any, res, next) => {
-    try {
-      const parsed = gridEntrySchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid grid entry", validation: parsed.error.format() });
-      const period = getPayPeriodForEntryDate(parsed.data.entryDate);
-      if (!period) return res.status(400).json({ error: "Invalid entry date" });
-      const submission = await getGridSubmission(period.start, period.end);
-      if (gridSubmissionLocksPeriod(submission, period.start, period.end)) return res.status(423).json({ error: "This pay period is locked." });
-      const allowedUsers = await getBistroTipsUsers();
-      if (!allowedUsers.some((user) => user.id === parsed.data.userId)) {
-        return res.status(403).json({ error: "Only Bistro or Breakfast associates can be entered on the tips grid." });
+      } catch (error) {
+        next(error);
       }
-      const [existingEntry] = await db
-        .select()
-        .from(tipEntries)
-        .where(and(eq(tipEntries.userId, parsed.data.userId), eq(tipEntries.entryDate, parsed.data.entryDate)))
-        .limit(1);
-      if (existingEntry?.status === "confirmed" || (existingEntry?.status === "submitted" && gridSubmissionLocksPeriod(submission, period.start, period.end))) {
-        return res.status(423).json({ error: "This associate/day is confirmed. Reopen it before making changes." });
+    },
+  );
+
+  router.post(
+    "/grid/associates",
+    requireTipsGridAccess,
+    tipsAuthRateLimiter,
+    async (req: any, res, next) => {
+      try {
+        const parsed = gridAssociateSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res
+            .status(400)
+            .json({
+              error: "Invalid associate details",
+              validation: parsed.error.format(),
+            });
+        const explicitEmail = parsed.data.email
+          ? normalizeEmail(parsed.data.email)
+          : "";
+        const email =
+          explicitEmail || `tips-${crypto.randomUUID()}@courtyard-tips.local`;
+        const existing = await db
+          .select({ id: tipsUsers.id })
+          .from(tipsUsers)
+          .where(eq(tipsUsers.email, email))
+          .limit(1);
+        if (existing.length)
+          return res
+            .status(409)
+            .json({ error: "An associate already exists for this email." });
+        const displayName =
+          parsed.data.employeeDisplayName?.trim() ||
+          `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
+        const position = parsed.data.position?.trim() || "Bistro attendant";
+        if (!hasBistroText(position))
+          return res
+            .status(400)
+            .json({
+              error:
+                "Only Bistro or Breakfast associates can be added to the tips grid.",
+            });
+        const [created] = await db
+          .insert(tipsUsers)
+          .values({
+            firstName: parsed.data.firstName,
+            lastName: parsed.data.lastName,
+            email,
+            employeeDisplayName: displayName,
+            position,
+            role: "employee",
+            hashedPassword: await bcrypt.hash(
+              crypto.randomBytes(18).toString("hex"),
+              12,
+            ),
+            mustChangePassword: false,
+          })
+          .returning();
+        await db.insert(tipAdminActions).values({
+          actorUserId: req.tipsUser?.id || null,
+          targetUserId: created.id,
+          action: "grid_associate_created",
+          metadataJson: {
+            selfAdded: true,
+            emailProvided: Boolean(explicitEmail),
+            position: created.position,
+          },
+        });
+        res.status(201).json({ user: publicTipsUser(created) });
+      } catch (error) {
+        next(error);
       }
-      const amount = parsed.data.tipAmount.toFixed(2);
-      const grossSales = parsed.data.grossSales.toFixed(2);
-      const [entry] = await db
-        .insert(tipEntries)
-        .values({
-          userId: parsed.data.userId,
-          entryDate: parsed.data.entryDate,
-          payPeriodStart: period.start,
-          payPeriodEnd: period.end,
-          tipAmount: amount,
-          cashTips: "0.00",
-          creditTips: amount,
-          grossSales,
-          coversServed: null,
-          shiftType: "other",
-          notes: parsed.data.notes || null,
-          status: "saved",
-        })
-        .onConflictDoUpdate({
-          target: [tipEntries.userId, tipEntries.entryDate],
-          set: {
+    },
+  );
+
+  router.post(
+    "/grid/entries",
+    requireTipsGridAccess,
+    async (req: any, res, next) => {
+      try {
+        const parsed = gridEntrySchema.safeParse(req.body);
+        if (!parsed.success)
+          return res
+            .status(400)
+            .json({
+              error: "Invalid grid entry",
+              validation: parsed.error.format(),
+            });
+        const period = getPayPeriodForEntryDate(parsed.data.entryDate);
+        if (!period)
+          return res.status(400).json({ error: "Invalid entry date" });
+        const submission = await getGridSubmission(period.start, period.end);
+        if (gridSubmissionLocksPeriod(submission, period.start, period.end))
+          return res.status(423).json({ error: "This pay period is locked." });
+        const allowedUsers = await getBistroTipsUsers();
+        if (!allowedUsers.some((user) => user.id === parsed.data.userId)) {
+          return res
+            .status(403)
+            .json({
+              error:
+                "Only Bistro or Breakfast associates can be entered on the tips grid.",
+            });
+        }
+        const [existingEntry] = await db
+          .select()
+          .from(tipEntries)
+          .where(
+            and(
+              eq(tipEntries.userId, parsed.data.userId),
+              eq(tipEntries.entryDate, parsed.data.entryDate),
+            ),
+          )
+          .limit(1);
+        if (
+          existingEntry?.status === "confirmed" ||
+          (existingEntry?.status === "submitted" &&
+            gridSubmissionLocksPeriod(submission, period.start, period.end))
+        ) {
+          return res
+            .status(423)
+            .json({
+              error:
+                "This associate/day is confirmed. Reopen it before making changes.",
+            });
+        }
+        const amount = parsed.data.tipAmount.toFixed(2);
+        const grossSales = parsed.data.grossSales.toFixed(2);
+        const [entry] = await db
+          .insert(tipEntries)
+          .values({
+            userId: parsed.data.userId,
+            entryDate: parsed.data.entryDate,
+            payPeriodStart: period.start,
+            payPeriodEnd: period.end,
             tipAmount: amount,
             cashTips: "0.00",
             creditTips: amount,
             grossSales,
+            coversServed: null,
+            shiftType: "other",
             notes: parsed.data.notes || null,
             status: "saved",
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
-      const dateEntries = await db.select({ grossSales: tipEntries.grossSales }).from(tipEntries).where(eq(tipEntries.entryDate, parsed.data.entryDate));
-      const dailyGrossSales = dateEntries.reduce((sum, row) => sum + moneyNumber(row.grossSales), 0);
-      await db
-        .insert(tipGridDaySummaries)
-        .values({
-          summaryDate: parsed.data.entryDate,
-          payPeriodStart: period.start,
-          payPeriodEnd: period.end,
-          grossSales: dailyGrossSales.toFixed(2),
-          updatedBy: req.tipsUser?.id || null,
-        })
-        .onConflictDoUpdate({
-          target: tipGridDaySummaries.summaryDate,
-          set: {
+          })
+          .onConflictDoUpdate({
+            target: [tipEntries.userId, tipEntries.entryDate],
+            set: {
+              tipAmount: amount,
+              cashTips: "0.00",
+              creditTips: amount,
+              grossSales,
+              notes: parsed.data.notes || null,
+              status: "saved",
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+        const dateEntries = await db
+          .select({ grossSales: tipEntries.grossSales })
+          .from(tipEntries)
+          .where(eq(tipEntries.entryDate, parsed.data.entryDate));
+        const dailyGrossSales = dateEntries.reduce(
+          (sum, row) => sum + moneyNumber(row.grossSales),
+          0,
+        );
+        await db
+          .insert(tipGridDaySummaries)
+          .values({
+            summaryDate: parsed.data.entryDate,
+            payPeriodStart: period.start,
+            payPeriodEnd: period.end,
             grossSales: dailyGrossSales.toFixed(2),
             updatedBy: req.tipsUser?.id || null,
-            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: tipGridDaySummaries.summaryDate,
+            set: {
+              grossSales: dailyGrossSales.toFixed(2),
+              updatedBy: req.tipsUser?.id || null,
+              updatedAt: new Date(),
+            },
+          });
+        res.json({
+          entry: {
+            ...entry,
+            tipAmount: moneyString(entry.tipAmount),
+            creditTips: moneyString(entry.creditTips),
+            grossSales: moneyString(entry.grossSales),
           },
         });
-      res.json({ entry: { ...entry, tipAmount: moneyString(entry.tipAmount), creditTips: moneyString(entry.creditTips), grossSales: moneyString(entry.grossSales) } });
-    } catch (error) {
-      next(error);
-    }
-  });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
-  router.post("/grid/days", requireTipsGridAccess, async (req: any, res, next) => {
-    try {
-      const parsed = gridDaySummarySchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid day summary", validation: parsed.error.format() });
-      if (!(await canManageTipsSales(req.tipsUser))) return res.status(403).json({ error: "Manager access is required to update Bistro sales." });
-      const period = getPayPeriodForEntryDate(parsed.data.date);
-      if (!period) return res.status(400).json({ error: "Invalid day date" });
-      const submission = await getGridSubmission(period.start, period.end);
-      if (gridSubmissionLocksPeriod(submission, period.start, period.end)) return res.status(423).json({ error: "This pay period is locked." });
-      const [summary] = await db
-        .insert(tipGridDaySummaries)
-        .values({
-          summaryDate: parsed.data.date,
-          payPeriodStart: period.start,
-          payPeriodEnd: period.end,
-          grossSales: parsed.data.grossSales.toFixed(2),
-          taxAmount: parsed.data.taxAmount.toFixed(2),
-          beerSales: parsed.data.beerSales.toFixed(2),
-          liquorSales: parsed.data.liquorSales.toFixed(2),
-          foodSales: parsed.data.foodSales.toFixed(2),
-          wineSales: parsed.data.wineSales.toFixed(2),
-          updatedBy: req.tipsUser?.id || null,
-        })
-        .onConflictDoUpdate({
-          target: tipGridDaySummaries.summaryDate,
-          set: {
+  router.post(
+    "/grid/days",
+    requireTipsGridAccess,
+    async (req: any, res, next) => {
+      try {
+        const parsed = gridDaySummarySchema.safeParse(req.body);
+        if (!parsed.success)
+          return res
+            .status(400)
+            .json({
+              error: "Invalid day summary",
+              validation: parsed.error.format(),
+            });
+        if (!(await canManageTipsSales(req.tipsUser)))
+          return res
+            .status(403)
+            .json({
+              error: "Manager access is required to update Bistro sales.",
+            });
+        const period = getPayPeriodForEntryDate(parsed.data.date);
+        if (!period) return res.status(400).json({ error: "Invalid day date" });
+        const submission = await getGridSubmission(period.start, period.end);
+        if (gridSubmissionLocksPeriod(submission, period.start, period.end))
+          return res.status(423).json({ error: "This pay period is locked." });
+        const [summary] = await db
+          .insert(tipGridDaySummaries)
+          .values({
+            summaryDate: parsed.data.date,
+            payPeriodStart: period.start,
+            payPeriodEnd: period.end,
             grossSales: parsed.data.grossSales.toFixed(2),
             taxAmount: parsed.data.taxAmount.toFixed(2),
             beerSales: parsed.data.beerSales.toFixed(2),
@@ -2167,304 +3319,627 @@ export function registerTipsRoutes(app: Express) {
             foodSales: parsed.data.foodSales.toFixed(2),
             wineSales: parsed.data.wineSales.toFixed(2),
             updatedBy: req.tipsUser?.id || null,
-            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: tipGridDaySummaries.summaryDate,
+            set: {
+              grossSales: parsed.data.grossSales.toFixed(2),
+              taxAmount: parsed.data.taxAmount.toFixed(2),
+              beerSales: parsed.data.beerSales.toFixed(2),
+              liquorSales: parsed.data.liquorSales.toFixed(2),
+              foodSales: parsed.data.foodSales.toFixed(2),
+              wineSales: parsed.data.wineSales.toFixed(2),
+              updatedBy: req.tipsUser?.id || null,
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+        res.json({
+          summary: {
+            ...summary,
+            grossSales: moneyString(summary.grossSales),
+            taxAmount: moneyString(summary.taxAmount),
+            beerSales: moneyString(summary.beerSales),
+            liquorSales: moneyString(summary.liquorSales),
+            foodSales: moneyString(summary.foodSales),
+            wineSales: moneyString(summary.wineSales),
           },
-        })
-        .returning();
-      res.json({ summary: { ...summary, grossSales: moneyString(summary.grossSales), taxAmount: moneyString(summary.taxAmount), beerSales: moneyString(summary.beerSales), liquorSales: moneyString(summary.liquorSales), foodSales: moneyString(summary.foodSales), wineSales: moneyString(summary.wineSales) } });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.post("/grid/banquet-reports", requireTipsGridAccess, tipsUploadRateLimiter, (req: any, res, next) => {
-    upload.single("banquetReport")(req, res, (error: any) => {
-      if (!error) return next();
-      if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
-        return res.status(413).json({ error: "Banquet report file is too large. Use a smaller image or PDF." });
+        });
+      } catch (error) {
+        next(error);
       }
-      return res.status(400).json({ error: error?.message || "Banquet report upload failed." });
-    });
-  }, async (req: any, res, next) => {
-    try {
-      const parsed = banquetReportSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid banquet report", validation: parsed.error.format() });
-      const period = getPayPeriodForEntryDate(parsed.data.eventDate);
-      if (!period) return res.status(400).json({ error: "Invalid event date" });
-      const submission = await getGridSubmission(period.start, period.end);
-      if (gridSubmissionLocksPeriod(submission, period.start, period.end)) return res.status(423).json({ error: "This pay period is locked." });
-      const banquetAssociates = await getBanquetTipAssociates();
-      const selectedAssociates = banquetAssociates.filter((user) => parsed.data.assignedUserIds.includes(user.id));
-      if (parsed.data.assignedUserIds.length !== selectedAssociates.length) {
-        return res.status(400).json({ error: "One or more selected banquet associates are not active Schedule associates." });
-      }
-      const banquetTipAmount = resolveBanquetTipAmount(parsed.data);
-      const serviceRate = serviceRateForReportType(parsed.data.reportType);
-      const splitAmount = selectedAssociates.length ? banquetTipAmount / selectedAssociates.length : 0;
-      const assignedAssociatesJson = selectedAssociates.map((user) => ({
-        userId: user.id,
-        displayName: user.employeeDisplayName,
-        department: user.department,
-        position: user.position,
-        splitAmount: splitAmount.toFixed(2),
-      }));
-      const [report] = await db.insert(tipBanquetReports).values({
-        eventDate: parsed.data.eventDate,
-        payPeriodStart: period.start,
-        payPeriodEnd: period.end,
-        reportType: parsed.data.reportType,
-        eventName: parsed.data.eventName,
-        grossSales: parsed.data.grossSales.toFixed(2),
-        serviceRate: serviceRate.toFixed(4),
-        banquetTips: banquetTipAmount.toFixed(2),
-        assignedAssociatesJson,
-        notes: parsed.data.notes || null,
-        storagePath: req.file ? path.relative(process.cwd(), req.file.path) : null,
-        originalFileName: req.file?.originalname || null,
-        mimeType: req.file?.mimetype || null,
-        size: req.file?.size || null,
-        updatedBy: req.tipsUser?.id || null,
-      } as any).returning();
-      await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser?.id || null,
-        action: "banquet_tip_report_created",
-        metadataJson: { reportId: report.id, reportType: report.reportType, eventDate: report.eventDate, eventName: report.eventName, assignedAssociates: assignedAssociatesJson },
-      });
-      res.status(201).json({ report: { ...report, grossSales: moneyString(report.grossSales), serviceRate: String(report.serviceRate), banquetTips: moneyString(report.banquetTips), assignedAssociatesJson } });
-    } catch (error) {
-      next(error);
-    }
-  });
+    },
+  );
 
-  router.patch("/grid/banquet-reports/:id", requireTipsGridAccess, async (req: any, res, next) => {
-    try {
-      const parsed = banquetReportSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid banquet report", validation: parsed.error.format() });
-      const [existing] = await db.select().from(tipBanquetReports).where(eq(tipBanquetReports.id, req.params.id)).limit(1);
-      if (!existing) return res.status(404).json({ error: "Banquet report not found." });
-      const period = getPayPeriodForEntryDate(parsed.data.eventDate);
-      if (!period) return res.status(400).json({ error: "Invalid event date" });
-      const submission = await getGridSubmission(existing.payPeriodStart, existing.payPeriodEnd);
-      if (gridSubmissionLocksPeriod(submission, existing.payPeriodStart, existing.payPeriodEnd)) return res.status(423).json({ error: "This pay period is locked." });
-      const banquetAssociates = await getBanquetTipAssociates();
-      const selectedAssociates = banquetAssociates.filter((user) => parsed.data.assignedUserIds.includes(user.id));
-      if (parsed.data.assignedUserIds.length !== selectedAssociates.length) {
-        return res.status(400).json({ error: "One or more selected banquet associates are not active Schedule associates." });
-      }
-      const banquetTipAmount = resolveBanquetTipAmount(parsed.data);
-      const serviceRate = serviceRateForReportType(parsed.data.reportType);
-      const splitAmount = selectedAssociates.length ? banquetTipAmount / selectedAssociates.length : 0;
-      const assignedAssociatesJson = selectedAssociates.map((user) => ({
-        userId: user.id,
-        displayName: user.employeeDisplayName,
-        department: user.department,
-        position: user.position,
-        splitAmount: splitAmount.toFixed(2),
-      }));
-      const [updated] = await db.update(tipBanquetReports).set({
-        eventDate: parsed.data.eventDate,
-        payPeriodStart: period.start,
-        payPeriodEnd: period.end,
-        reportType: parsed.data.reportType,
-        eventName: parsed.data.eventName,
-        grossSales: parsed.data.grossSales.toFixed(2),
-        serviceRate: serviceRate.toFixed(4),
-        banquetTips: banquetTipAmount.toFixed(2),
-        assignedAssociatesJson,
-        notes: parsed.data.notes || null,
-        updatedBy: req.tipsUser?.id || null,
-        updatedAt: new Date(),
-      } as any).where(eq(tipBanquetReports.id, existing.id)).returning();
-      await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser?.id || null,
-        action: "banquet_tip_report_updated",
-        metadataJson: { reportId: updated.id, reportType: updated.reportType, eventDate: updated.eventDate, eventName: updated.eventName, assignedAssociates: assignedAssociatesJson },
-      });
-      res.json({ report: { ...updated, grossSales: moneyString(updated.grossSales), serviceRate: String(updated.serviceRate), banquetTips: moneyString(updated.banquetTips), assignedAssociatesJson } });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.get("/grid/banquet-reports/:id/view", requireTipsGridAccess, async (req: any, res, next) => {
-    try {
-      const [report] = await db.select().from(tipBanquetReports).where(eq(tipBanquetReports.id, req.params.id)).limit(1);
-      if (!report?.storagePath || !report.mimeType) return res.status(404).json({ error: "Banquet report file not found" });
-      const absolute = resolvePrivateFile(report.storagePath);
-      if (!absolute || !fs.existsSync(absolute)) return res.status(404).json({ error: "Banquet report file not found" });
-      res.type(report.mimeType);
-      res.sendFile(absolute);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.post("/grid/entries/:id/confirm", requireTipsGridAccess, async (req: any, res, next) => {
-    try {
-      const [entry] = await db.select().from(tipEntries).where(eq(tipEntries.id, req.params.id)).limit(1);
-      if (!entry) return res.status(404).json({ error: "Tip entry not found" });
-      if (moneyNumber(entry.tipAmount) > 0) {
-        const bistroUsers = await getBistroTipsUsers();
-        const bistroUserIds = bistroUsers.map((user) => user.id);
-        const dayEntries = bistroUserIds.length
-          ? await db
-              .select({ grossSales: tipEntries.grossSales })
-              .from(tipEntries)
-              .where(and(eq(tipEntries.entryDate, entry.entryDate), inArray(tipEntries.userId, bistroUserIds)))
-          : [];
-        const sharedDaySales = dayEntries.reduce((sum, row) => sum + moneyNumber(row.grossSales), 0);
-        if (sharedDaySales <= 0) {
-          return res.status(409).json({ error: "Enter gross sales under one associate sharing this card before confirming the day's tip entries." });
+  router.post(
+    "/grid/banquet-reports",
+    requireTipsGridAccess,
+    tipsUploadRateLimiter,
+    (req: any, res, next) => {
+      upload.single("banquetReport")(req, res, (error: any) => {
+        if (!error) return next();
+        if (
+          error instanceof multer.MulterError &&
+          error.code === "LIMIT_FILE_SIZE"
+        ) {
+          return res
+            .status(413)
+            .json({
+              error:
+                "Banquet report file is too large. Use a smaller image or PDF.",
+            });
         }
-      }
-      const submission = await getGridSubmission(entry.payPeriodStart, entry.payPeriodEnd);
-      if (gridSubmissionLocksPeriod(submission, entry.payPeriodStart, entry.payPeriodEnd)) return res.status(423).json({ error: "This pay period is locked." });
-      const [updated] = await db.update(tipEntries).set({ status: "confirmed", updatedAt: new Date() }).where(eq(tipEntries.id, entry.id)).returning();
-      res.json({ entry: { ...updated, tipAmount: moneyString(updated.tipAmount), creditTips: moneyString(updated.creditTips) } });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.post("/grid/entries/:id/unlock", requireTipsGridAccess, async (req: any, res, next) => {
-    try {
-      const [entry] = await db.select().from(tipEntries).where(eq(tipEntries.id, req.params.id)).limit(1);
-      if (!entry) return res.status(404).json({ error: "Tip entry not found" });
-      const submission = await getGridSubmission(entry.payPeriodStart, entry.payPeriodEnd);
-      if (gridSubmissionLocksPeriod(submission, entry.payPeriodStart, entry.payPeriodEnd)) return res.status(423).json({ error: "This pay period is locked." });
-      const [updated] = await db.update(tipEntries).set({ status: "saved", updatedAt: new Date() }).where(eq(tipEntries.id, entry.id)).returning();
-      await db.insert(tipAdminActions).values({
-        actorUserId: req.tipsUser?.id || null,
-        targetUserId: updated.userId,
-        action: "tip_grid_entry_unlocked",
-        metadataJson: {
-          entryId: updated.id,
-          entryDate: updated.entryDate,
-          accessType: isTipsManager(req.tipsUser) ? "admin" : req.tipsUser ? "user" : "kiosk",
-        },
+        return res
+          .status(400)
+          .json({ error: error?.message || "Banquet report upload failed." });
       });
-      res.json({ entry: { ...updated, tipAmount: moneyString(updated.tipAmount), creditTips: moneyString(updated.creditTips) } });
-    } catch (error) {
-      next(error);
-    }
-  });
+    },
+    async (req: any, res, next) => {
+      try {
+        const parsed = banquetReportSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res
+            .status(400)
+            .json({
+              error: "Invalid banquet report",
+              validation: parsed.error.format(),
+            });
+        const period = getPayPeriodForEntryDate(parsed.data.eventDate);
+        if (!period)
+          return res.status(400).json({ error: "Invalid event date" });
+        const submission = await getGridSubmission(period.start, period.end);
+        if (gridSubmissionLocksPeriod(submission, period.start, period.end))
+          return res.status(423).json({ error: "This pay period is locked." });
+        const banquetAssociates = await getBanquetTipAssociates();
+        const selectedAssociates = banquetAssociates.filter((user) =>
+          parsed.data.assignedUserIds.includes(user.id),
+        );
+        if (parsed.data.assignedUserIds.length !== selectedAssociates.length) {
+          return res
+            .status(400)
+            .json({
+              error:
+                "One or more selected banquet associates are not active Schedule associates.",
+            });
+        }
+        const banquetTipAmount = resolveBanquetTipAmount(parsed.data);
+        const serviceRate = serviceRateForReportType(parsed.data.reportType);
+        const splitAmount = selectedAssociates.length
+          ? banquetTipAmount / selectedAssociates.length
+          : 0;
+        const assignedAssociatesJson = selectedAssociates.map((user) => ({
+          userId: user.id,
+          displayName: user.employeeDisplayName,
+          department: user.department,
+          position: user.position,
+          splitAmount: splitAmount.toFixed(2),
+        }));
+        const [report] = await db
+          .insert(tipBanquetReports)
+          .values({
+            eventDate: parsed.data.eventDate,
+            payPeriodStart: period.start,
+            payPeriodEnd: period.end,
+            reportType: parsed.data.reportType,
+            eventName: parsed.data.eventName,
+            grossSales: parsed.data.grossSales.toFixed(2),
+            serviceRate: serviceRate.toFixed(4),
+            banquetTips: banquetTipAmount.toFixed(2),
+            assignedAssociatesJson,
+            notes: parsed.data.notes || null,
+            storagePath: req.file
+              ? path.relative(process.cwd(), req.file.path)
+              : null,
+            originalFileName: req.file?.originalname || null,
+            mimeType: req.file?.mimetype || null,
+            size: req.file?.size || null,
+            updatedBy: req.tipsUser?.id || null,
+          } as any)
+          .returning();
+        await db.insert(tipAdminActions).values({
+          actorUserId: req.tipsUser?.id || null,
+          action: "banquet_tip_report_created",
+          metadataJson: {
+            reportId: report.id,
+            reportType: report.reportType,
+            eventDate: report.eventDate,
+            eventName: report.eventName,
+            assignedAssociates: assignedAssociatesJson,
+          },
+        });
+        res
+          .status(201)
+          .json({
+            report: {
+              ...report,
+              grossSales: moneyString(report.grossSales),
+              serviceRate: String(report.serviceRate),
+              banquetTips: moneyString(report.banquetTips),
+              assignedAssociatesJson,
+            },
+          });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
-  router.post("/grid/reports/:date", requireTipsGridAccess, tipsUploadRateLimiter, salesReportUpload, async (req: any, res, next) => {
-    try {
-      const reportDate = String(req.params.date || "");
-      const period = getPayPeriodForEntryDate(reportDate);
-      if (!period) return res.status(400).json({ error: "Invalid report date" });
-      const submission = await getGridSubmission(period.start, period.end);
-      if (gridSubmissionLocksPeriod(submission, period.start, period.end)) return res.status(423).json({ error: "This pay period is locked." });
-      if (!req.file) return res.status(400).json({ error: "Sales report file is required" });
-      const [existing] = await db.select().from(tipDailyReportAttachments).where(eq(tipDailyReportAttachments.reportDate, reportDate)).limit(1);
-      if (existing) await db.delete(tipDailyReportAttachments).where(eq(tipDailyReportAttachments.id, existing.id));
-      const [report] = await db
-        .insert(tipDailyReportAttachments)
-        .values({
-          reportDate,
-          payPeriodStart: period.start,
-          payPeriodEnd: period.end,
-          storagePath: path.relative(process.cwd(), req.file.path),
-          originalFileName: req.file.originalname,
-          mimeType: req.file.mimetype,
-          size: req.file.size,
-          uploadedBy: req.tipsUser?.id || null,
-        })
-        .returning();
-      res.status(201).json({ report });
-    } catch (error) {
-      next(error);
-    }
-  });
+  router.patch(
+    "/grid/banquet-reports/:id",
+    requireTipsGridAccess,
+    async (req: any, res, next) => {
+      try {
+        const parsed = banquetReportSchema.safeParse(req.body);
+        if (!parsed.success)
+          return res
+            .status(400)
+            .json({
+              error: "Invalid banquet report",
+              validation: parsed.error.format(),
+            });
+        const [existing] = await db
+          .select()
+          .from(tipBanquetReports)
+          .where(eq(tipBanquetReports.id, req.params.id))
+          .limit(1);
+        if (!existing)
+          return res.status(404).json({ error: "Banquet report not found." });
+        const period = getPayPeriodForEntryDate(parsed.data.eventDate);
+        if (!period)
+          return res.status(400).json({ error: "Invalid event date" });
+        const submission = await getGridSubmission(
+          existing.payPeriodStart,
+          existing.payPeriodEnd,
+        );
+        if (
+          gridSubmissionLocksPeriod(
+            submission,
+            existing.payPeriodStart,
+            existing.payPeriodEnd,
+          )
+        )
+          return res.status(423).json({ error: "This pay period is locked." });
+        const banquetAssociates = await getBanquetTipAssociates();
+        const selectedAssociates = banquetAssociates.filter((user) =>
+          parsed.data.assignedUserIds.includes(user.id),
+        );
+        if (parsed.data.assignedUserIds.length !== selectedAssociates.length) {
+          return res
+            .status(400)
+            .json({
+              error:
+                "One or more selected banquet associates are not active Schedule associates.",
+            });
+        }
+        const banquetTipAmount = resolveBanquetTipAmount(parsed.data);
+        const serviceRate = serviceRateForReportType(parsed.data.reportType);
+        const splitAmount = selectedAssociates.length
+          ? banquetTipAmount / selectedAssociates.length
+          : 0;
+        const assignedAssociatesJson = selectedAssociates.map((user) => ({
+          userId: user.id,
+          displayName: user.employeeDisplayName,
+          department: user.department,
+          position: user.position,
+          splitAmount: splitAmount.toFixed(2),
+        }));
+        const [updated] = await db
+          .update(tipBanquetReports)
+          .set({
+            eventDate: parsed.data.eventDate,
+            payPeriodStart: period.start,
+            payPeriodEnd: period.end,
+            reportType: parsed.data.reportType,
+            eventName: parsed.data.eventName,
+            grossSales: parsed.data.grossSales.toFixed(2),
+            serviceRate: serviceRate.toFixed(4),
+            banquetTips: banquetTipAmount.toFixed(2),
+            assignedAssociatesJson,
+            notes: parsed.data.notes || null,
+            updatedBy: req.tipsUser?.id || null,
+            updatedAt: new Date(),
+          } as any)
+          .where(eq(tipBanquetReports.id, existing.id))
+          .returning();
+        await db.insert(tipAdminActions).values({
+          actorUserId: req.tipsUser?.id || null,
+          action: "banquet_tip_report_updated",
+          metadataJson: {
+            reportId: updated.id,
+            reportType: updated.reportType,
+            eventDate: updated.eventDate,
+            eventName: updated.eventName,
+            assignedAssociates: assignedAssociatesJson,
+          },
+        });
+        res.json({
+          report: {
+            ...updated,
+            grossSales: moneyString(updated.grossSales),
+            serviceRate: String(updated.serviceRate),
+            banquetTips: moneyString(updated.banquetTips),
+            assignedAssociatesJson,
+          },
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
-  router.get("/grid/reports/:id/view", requireTipsGridAccess, async (req: any, res, next) => {
-    try {
-      const [report] = await db.select().from(tipDailyReportAttachments).where(eq(tipDailyReportAttachments.id, req.params.id)).limit(1);
-      if (!report) return res.status(404).json({ error: "Report not found" });
-      const absolute = resolvePrivateFile(report.storagePath);
-      if (!absolute || !fs.existsSync(absolute)) return res.status(404).json({ error: "Report file not found" });
-      res.type(report.mimeType);
-      res.sendFile(absolute);
-    } catch (error) {
-      next(error);
-    }
-  });
+  router.get(
+    "/grid/banquet-reports/:id/view",
+    requireTipsGridAccess,
+    async (req: any, res, next) => {
+      try {
+        const [report] = await db
+          .select()
+          .from(tipBanquetReports)
+          .where(eq(tipBanquetReports.id, req.params.id))
+          .limit(1);
+        if (!report?.storagePath || !report.mimeType)
+          return res
+            .status(404)
+            .json({ error: "Banquet report file not found" });
+        const absolute = resolvePrivateFile(report.storagePath);
+        if (!absolute || !fs.existsSync(absolute))
+          return res
+            .status(404)
+            .json({ error: "Banquet report file not found" });
+        res.type(report.mimeType);
+        res.sendFile(absolute);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
-  router.post("/grid/submit", requireTipsGridAccess, async (req: any, res, next) => {
-    try {
-      const parsed = periodSchema.safeParse(req.body || {});
-      if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
-      const grid = await buildTipsGrid(parsed.data.start, req.tipsUser);
-      const existing = await getGridSubmission(grid.period.start, grid.period.end);
-      if (gridSubmissionLocksPeriod(existing, grid.period.start, grid.period.end)) return res.status(409).json({ error: "This pay period has already been submitted." });
-      const daysWithTips = grid.dayTotals.filter((day: any) => moneyNumber(day.totalTips) > 0);
-      const missingReports = daysWithTips.filter((day: any) => !day.report);
-      if (missingReports.length > 0) return res.status(400).json({ error: "Every day with entered tips needs a sales report image before final submission." });
-      const missingSalesDays = grid.dayTotals.filter((day: any) => moneyNumber(day.totalTips) > 0 && moneyNumber(day.grossSales) <= 0);
-      if (missingSalesDays.length > 0) return res.status(400).json({ error: "Every day with tips needs gross sales entered under at least one associate sharing the card." });
-      const unconfirmedEntries = grid.rows.flatMap((row: any) => row.cells.filter((cell: any) => moneyNumber(cell.tipAmount) > 0 && !cell.confirmed));
-      if (unconfirmedEntries.length > 0) return res.status(400).json({ error: "Every associate tip amount must be confirmed before final submission." });
-      let [submission] = await db
-        .insert(tipGridSubmissions)
-        .values({
-          payPeriodStart: grid.period.start,
-          payPeriodEnd: grid.period.end,
-          week1Total: grid.week1Total,
-          week2Total: grid.week2Total,
-          totalTips: grid.totalTips,
-          status: "submitted",
-          submittedAt: new Date(),
-          reviewedBy: req.tipsUser?.id || null,
-        })
-        .onConflictDoUpdate({
-          target: [tipGridSubmissions.payPeriodStart, tipGridSubmissions.payPeriodEnd],
-          set: {
+  router.post(
+    "/grid/entries/:id/confirm",
+    requireTipsGridAccess,
+    async (req: any, res, next) => {
+      try {
+        const [entry] = await db
+          .select()
+          .from(tipEntries)
+          .where(eq(tipEntries.id, req.params.id))
+          .limit(1);
+        if (!entry)
+          return res.status(404).json({ error: "Tip entry not found" });
+        if (moneyNumber(entry.tipAmount) > 0) {
+          const bistroUsers = await getBistroTipsUsers();
+          const bistroUserIds = bistroUsers.map((user) => user.id);
+          const dayEntries = bistroUserIds.length
+            ? await db
+                .select({ grossSales: tipEntries.grossSales })
+                .from(tipEntries)
+                .where(
+                  and(
+                    eq(tipEntries.entryDate, entry.entryDate),
+                    inArray(tipEntries.userId, bistroUserIds),
+                  ),
+                )
+            : [];
+          const sharedDaySales = dayEntries.reduce(
+            (sum, row) => sum + moneyNumber(row.grossSales),
+            0,
+          );
+          if (sharedDaySales <= 0) {
+            return res
+              .status(409)
+              .json({
+                error:
+                  "Enter gross sales under one associate sharing this card before confirming the day's tip entries.",
+              });
+          }
+        }
+        const submission = await getGridSubmission(
+          entry.payPeriodStart,
+          entry.payPeriodEnd,
+        );
+        if (
+          gridSubmissionLocksPeriod(
+            submission,
+            entry.payPeriodStart,
+            entry.payPeriodEnd,
+          )
+        )
+          return res.status(423).json({ error: "This pay period is locked." });
+        const [updated] = await db
+          .update(tipEntries)
+          .set({ status: "confirmed", updatedAt: new Date() })
+          .where(eq(tipEntries.id, entry.id))
+          .returning();
+        res.json({
+          entry: {
+            ...updated,
+            tipAmount: moneyString(updated.tipAmount),
+            creditTips: moneyString(updated.creditTips),
+          },
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    "/grid/entries/:id/unlock",
+    requireTipsGridAccess,
+    async (req: any, res, next) => {
+      try {
+        const [entry] = await db
+          .select()
+          .from(tipEntries)
+          .where(eq(tipEntries.id, req.params.id))
+          .limit(1);
+        if (!entry)
+          return res.status(404).json({ error: "Tip entry not found" });
+        const submission = await getGridSubmission(
+          entry.payPeriodStart,
+          entry.payPeriodEnd,
+        );
+        if (
+          gridSubmissionLocksPeriod(
+            submission,
+            entry.payPeriodStart,
+            entry.payPeriodEnd,
+          )
+        )
+          return res.status(423).json({ error: "This pay period is locked." });
+        const [updated] = await db
+          .update(tipEntries)
+          .set({ status: "saved", updatedAt: new Date() })
+          .where(eq(tipEntries.id, entry.id))
+          .returning();
+        await db.insert(tipAdminActions).values({
+          actorUserId: req.tipsUser?.id || null,
+          targetUserId: updated.userId,
+          action: "tip_grid_entry_unlocked",
+          metadataJson: {
+            entryId: updated.id,
+            entryDate: updated.entryDate,
+            accessType: isTipsManager(req.tipsUser)
+              ? "admin"
+              : req.tipsUser
+                ? "user"
+                : "kiosk",
+          },
+        });
+        res.json({
+          entry: {
+            ...updated,
+            tipAmount: moneyString(updated.tipAmount),
+            creditTips: moneyString(updated.creditTips),
+          },
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    "/grid/reports/:date",
+    requireTipsGridAccess,
+    tipsUploadRateLimiter,
+    salesReportUpload,
+    async (req: any, res, next) => {
+      try {
+        const reportDate = String(req.params.date || "");
+        const period = getPayPeriodForEntryDate(reportDate);
+        if (!period)
+          return res.status(400).json({ error: "Invalid report date" });
+        const submission = await getGridSubmission(period.start, period.end);
+        if (gridSubmissionLocksPeriod(submission, period.start, period.end))
+          return res.status(423).json({ error: "This pay period is locked." });
+        if (!req.file)
+          return res
+            .status(400)
+            .json({ error: "Sales report file is required" });
+        const [existing] = await db
+          .select()
+          .from(tipDailyReportAttachments)
+          .where(eq(tipDailyReportAttachments.reportDate, reportDate))
+          .limit(1);
+        if (existing)
+          await db
+            .delete(tipDailyReportAttachments)
+            .where(eq(tipDailyReportAttachments.id, existing.id));
+        const [report] = await db
+          .insert(tipDailyReportAttachments)
+          .values({
+            reportDate,
+            payPeriodStart: period.start,
+            payPeriodEnd: period.end,
+            storagePath: path.relative(process.cwd(), req.file.path),
+            originalFileName: req.file.originalname,
+            mimeType: req.file.mimetype,
+            size: req.file.size,
+            uploadedBy: req.tipsUser?.id || null,
+          })
+          .returning();
+        res.status(201).json({ report });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.get(
+    "/grid/reports/:id/view",
+    requireTipsGridAccess,
+    async (req: any, res, next) => {
+      try {
+        const [report] = await db
+          .select()
+          .from(tipDailyReportAttachments)
+          .where(eq(tipDailyReportAttachments.id, req.params.id))
+          .limit(1);
+        if (!report) return res.status(404).json({ error: "Report not found" });
+        const absolute = resolvePrivateFile(report.storagePath);
+        if (!absolute || !fs.existsSync(absolute))
+          return res.status(404).json({ error: "Report file not found" });
+        res.type(report.mimeType);
+        res.sendFile(absolute);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  router.post(
+    "/grid/submit",
+    requireTipsGridAccess,
+    async (req: any, res, next) => {
+      try {
+        const parsed = periodSchema.safeParse(req.body || {});
+        if (!parsed.success)
+          return res.status(400).json({ error: "Invalid pay period" });
+        const grid = await buildTipsGrid(parsed.data.start, req.tipsUser);
+        const existing = await getGridSubmission(
+          grid.period.start,
+          grid.period.end,
+        );
+        if (
+          gridSubmissionLocksPeriod(
+            existing,
+            grid.period.start,
+            grid.period.end,
+          )
+        )
+          return res
+            .status(409)
+            .json({ error: "This pay period has already been submitted." });
+        const daysWithTips = grid.dayTotals.filter(
+          (day: any) => moneyNumber(day.totalTips) > 0,
+        );
+        const missingReports = daysWithTips.filter((day: any) => !day.report);
+        if (missingReports.length > 0)
+          return res
+            .status(400)
+            .json({
+              error:
+                "Every day with entered tips needs a sales report image before final submission.",
+            });
+        const missingSalesDays = grid.dayTotals.filter(
+          (day: any) =>
+            moneyNumber(day.totalTips) > 0 && moneyNumber(day.grossSales) <= 0,
+        );
+        if (missingSalesDays.length > 0)
+          return res
+            .status(400)
+            .json({
+              error:
+                "Every day with tips needs gross sales entered under at least one associate sharing the card.",
+            });
+        const unconfirmedEntries = grid.rows.flatMap((row: any) =>
+          row.cells.filter(
+            (cell: any) => moneyNumber(cell.tipAmount) > 0 && !cell.confirmed,
+          ),
+        );
+        if (unconfirmedEntries.length > 0)
+          return res
+            .status(400)
+            .json({
+              error:
+                "Every associate tip amount must be confirmed before final submission.",
+            });
+        let [submission] = await db
+          .insert(tipGridSubmissions)
+          .values({
+            payPeriodStart: grid.period.start,
+            payPeriodEnd: grid.period.end,
             week1Total: grid.week1Total,
             week2Total: grid.week2Total,
             totalTips: grid.totalTips,
             status: "submitted",
             submittedAt: new Date(),
-            updatedAt: new Date(),
             reviewedBy: req.tipsUser?.id || null,
-          },
-        })
-        .returning();
-      const pdfPath = await generateTipsGridPdf(grid, submission);
-      [submission] = await db.update(tipGridSubmissions).set({ pdfPath, updatedAt: new Date() }).where(eq(tipGridSubmissions.id, submission.id)).returning();
-      const bistroUserIds = grid.rows.map((row: any) => row.associate.id).filter(Boolean);
-      if (bistroUserIds.length) {
-        await db.update(tipEntries).set({ status: "submitted", updatedAt: new Date() }).where(and(eq(tipEntries.payPeriodStart, grid.period.start), eq(tipEntries.payPeriodEnd, grid.period.end), inArray(tipEntries.userId, bistroUserIds)));
-      }
-      let emailSent = true;
-      let emailWarning: string | undefined;
-      try {
-        await sendTipsGridSubmissionEmail(grid);
+          })
+          .onConflictDoUpdate({
+            target: [
+              tipGridSubmissions.payPeriodStart,
+              tipGridSubmissions.payPeriodEnd,
+            ],
+            set: {
+              week1Total: grid.week1Total,
+              week2Total: grid.week2Total,
+              totalTips: grid.totalTips,
+              status: "submitted",
+              submittedAt: new Date(),
+              updatedAt: new Date(),
+              reviewedBy: req.tipsUser?.id || null,
+            },
+          })
+          .returning();
+        const pdfPath = await generateTipsGridPdf(grid, submission);
+        [submission] = await db
+          .update(tipGridSubmissions)
+          .set({ pdfPath, updatedAt: new Date() })
+          .where(eq(tipGridSubmissions.id, submission.id))
+          .returning();
+        const bistroUserIds = grid.rows
+          .map((row: any) => row.associate.id)
+          .filter(Boolean);
+        if (bistroUserIds.length) {
+          await db
+            .update(tipEntries)
+            .set({ status: "submitted", updatedAt: new Date() })
+            .where(
+              and(
+                eq(tipEntries.payPeriodStart, grid.period.start),
+                eq(tipEntries.payPeriodEnd, grid.period.end),
+                inArray(tipEntries.userId, bistroUserIds),
+              ),
+            );
+        }
+        let emailSent = true;
+        let emailWarning: string | undefined;
+        try {
+          await sendTipsGridSubmissionEmail(grid);
+        } catch (error) {
+          emailSent = false;
+          emailWarning =
+            "Pay period was submitted, but the email notification could not be sent.";
+          console.error("Failed to send tips grid submission email:", error);
+        }
+        res
+          .status(emailSent ? 201 : 202)
+          .json({ submission, emailSent, warning: emailWarning });
       } catch (error) {
-        emailSent = false;
-        emailWarning = "Pay period was submitted, but the email notification could not be sent.";
-        console.error("Failed to send tips grid submission email:", error);
+        next(error);
       }
-      res.status(emailSent ? 201 : 202).json({ submission, emailSent, warning: emailWarning });
-    } catch (error) {
-      next(error);
-    }
-  });
+    },
+  );
 
-  router.get("/grid/pdf", requireTipsGridAccess, async (req: any, res, next) => {
-    try {
-      const parsed = periodSchema.safeParse(req.query);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid pay period" });
-      const grid = await buildTipsGrid(parsed.data.start, req.tipsUser);
-      const submission = await getGridSubmission(grid.period.start, grid.period.end);
-      const pdfPath = submission?.pdfPath || (await generateTipsGridPdf(grid, submission));
-      const absolute = resolvePrivateFile(pdfPath);
-      if (!absolute || !fs.existsSync(absolute)) return res.status(404).json({ error: "PDF not found" });
-      res.download(absolute, `courtyard-tips-grid-${grid.period.start}-${grid.period.end}.pdf`);
-    } catch (error) {
-      next(error);
-    }
-  });
+  router.get(
+    "/grid/pdf",
+    requireTipsGridAccess,
+    async (req: any, res, next) => {
+      try {
+        const parsed = periodSchema.safeParse(req.query);
+        if (!parsed.success)
+          return res.status(400).json({ error: "Invalid pay period" });
+        const grid = await buildTipsGrid(parsed.data.start, req.tipsUser);
+        const submission = await getGridSubmission(
+          grid.period.start,
+          grid.period.end,
+        );
+        const pdfPath =
+          submission?.pdfPath || (await generateTipsGridPdf(grid, submission));
+        const absolute = resolvePrivateFile(pdfPath);
+        if (!absolute || !fs.existsSync(absolute))
+          return res.status(404).json({ error: "PDF not found" });
+        res.download(
+          absolute,
+          `courtyard-tips-grid-${grid.period.start}-${grid.period.end}.pdf`,
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   app.use("/api/tips", router);
 }

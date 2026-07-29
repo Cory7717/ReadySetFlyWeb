@@ -54,6 +54,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiUrl } from "@/lib/api";
+import { CourtyardSalesAdvisor } from "@/components/courtyard-sales-advisor";
 
 const C = {
   page: "!bg-[#f7f1e7] !text-[#201814]",
@@ -643,6 +644,7 @@ export default function CourtyardSalesIntelligence() {
         <Tabs value={view} onValueChange={setView}>
           <TabsList className="h-auto flex-wrap justify-start bg-[#eadfce]">
             <TabsTrigger value="total">Total</TabsTrigger>
+            <TabsTrigger value="advisor">Sales Advisor</TabsTrigger>
             {marketSegments.map((segment: string) => (
               <TabsTrigger key={segment} value={`segment:${segment}`}>
                 {segment}
@@ -660,6 +662,9 @@ export default function CourtyardSalesIntelligence() {
               onDetail={setDetail}
               title="Total Market Production"
             />
+          </TabsContent>
+          <TabsContent value="advisor">
+            <CourtyardSalesAdvisor hotelId={selectedHotel} />
           </TabsContent>
           {marketSegments.map((segment: string) => (
             <TabsContent key={segment} value={`segment:${segment}`}>

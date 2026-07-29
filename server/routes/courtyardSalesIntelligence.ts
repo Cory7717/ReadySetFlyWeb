@@ -10,6 +10,7 @@ import {
   courtyardHotelUserAccess,
   courtyardHotels,
   courtyardSalesAccountNotes,
+  courtyardSalesAdvisorAnalyses,
   courtyardSalesAccountProfiles,
   courtyardSalesActivities,
   courtyardSalesImportBatches,
@@ -31,6 +32,16 @@ import {
   normalizeSalesMarketSegment,
   recoveryPriority,
 } from "../courtyardSalesImport";
+import {
+  SALES_ADVISOR_ANALYSIS_TYPES,
+  SALES_ADVISOR_BUSINESS_TYPES,
+  SALES_ADVISOR_PROMPT_VERSION,
+  buildSalesAdvisorPreview,
+  compactAdvisorContext,
+  salesAdvisorFingerprint,
+} from "../courtyardSalesAdvisor";
+import { generateSalesAdvisorNarrative } from "../courtyardSalesAdvisorAi";
+import { salesAdvisorModel } from "../openaiClient";
 
 const DEFAULT_HOTEL_ID = "courtyard-austin-lakeline";
 const RECOVERY_MONTHS = 3;
@@ -355,6 +366,79 @@ function wrapText(text: string, max = 88) {
   }
   if (line) lines.push(line);
   return lines.length ? lines : ["Not entered."];
+}
+
+function advisorParameters(input: any) {
+  const lookbackMonths = [12, 24, 36].includes(Number(input.lookbackMonths))
+    ? Number(input.lookbackMonths)
+    : 24;
+  const analysisType = SALES_ADVISOR_ANALYSIS_TYPES.includes(input.analysisType)
+    ? input.analysisType
+    : "full_plan";
+  const requestedTypes = Array.isArray(input.businessTypes)
+    ? input.businessTypes
+    : String(input.businessTypes || "")
+        .split(",")
+        .filter(Boolean);
+  const businessTypes = requestedTypes.filter((value: string) =>
+    SALES_ADVISOR_BUSINESS_TYPES.includes(value as any),
+  );
+  return {
+    lookbackMonths,
+    analysisType,
+    businessTypes: businessTypes.length
+      ? businessTypes
+      : [...SALES_ADVISOR_BUSINESS_TYPES],
+  };
+}
+
+async function advisorSourceData(hotelId: string) {
+  const batches = await db
+    .select()
+    .from(courtyardSalesImportBatches)
+    .where(eq(courtyardSalesImportBatches.hotelId, hotelId));
+  const active = batches.filter((batch) => batch.status === "completed");
+  const ids = active.map((batch) => batch.id);
+  const rows = ids.length
+    ? await db
+        .select()
+        .from(courtyardSalesProduction)
+        .where(inArray(courtyardSalesProduction.importBatchId, ids))
+    : [];
+  return { batches: active, rows };
+}
+
+function advisorReportText(analysis: any) {
+  const preview = analysis.inputSnapshotJson || {};
+  const result = analysis.resultJson || {};
+  const candidates = preview.candidates || [];
+  const priorityByKey = new Map(
+    (result.priorities || []).map((item: any) => [item.accountKey, item]),
+  );
+  const lines = [
+    "SALES ADVISOR WEEKLY PLAN",
+    `Generated ${new Date(analysis.createdAt).toLocaleDateString("en-US")}`,
+    "",
+    "EXECUTIVE SUMMARY",
+    result.executiveSummary || "Deterministic opportunity review only.",
+    "",
+    "PRIORITY PROSPECTS",
+  ];
+  for (const candidate of candidates.slice(0, 12)) {
+    const narrative: any = priorityByKey.get(candidate.key);
+    lines.push(
+      `${candidate.name} | ${candidate.businessType} | Score ${candidate.scores.overall}`,
+      `${candidate.totalRoomNights} room nights | $${Number(candidate.totalRevenue).toLocaleString()} revenue | ${candidate.productionBasis} basis`,
+      narrative?.rationale || `${candidate.status}; ${candidate.confidence} confidence.`,
+      `IVY: ${narrative?.ivyActivity || "Review history and record outreach in IVY."}`,
+      "",
+    );
+  }
+  lines.push("WEEKLY PLAN");
+  for (const item of result.weeklyPlan || [])
+    lines.push(`${item.dayOrSequence}: ${item.focus}`, `IVY: ${item.ivyEntry}`, "");
+  lines.push("DATA LIMITATIONS", ...[...(preview.limitations || []), ...(result.additionalLimitations || [])]);
+  return lines;
 }
 
 export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
@@ -1218,6 +1302,131 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       next(e);
     }
   });
+  router.get("/advisor/preview", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.query.hotelId || req.salesHotels[0]?.id || "");
+      if (!hasHotel(req, hotelId))
+        return res.status(403).json({ error: "You do not have access to that property." });
+      const parameters = advisorParameters(req.query);
+      const source = await advisorSourceData(hotelId);
+      res.json(buildSalesAdvisorPreview({ ...source, ...parameters } as any));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/advisor/analyses", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.query.hotelId || req.salesHotels[0]?.id || "");
+      if (!hasHotel(req, hotelId))
+        return res.status(403).json({ error: "You do not have access to that property." });
+      const rows = await db
+        .select()
+        .from(courtyardSalesAdvisorAnalyses)
+        .where(eq(courtyardSalesAdvisorAnalyses.hotelId, hotelId))
+        .orderBy(desc(courtyardSalesAdvisorAnalyses.createdAt))
+        .limit(12);
+      res.json(rows);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/advisor/generate", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || req.salesHotels[0]?.id || "");
+      if (!hasHotel(req, hotelId))
+        return res.status(403).json({ error: "You do not have access to that property." });
+      const parameters = advisorParameters(req.body);
+      const source = await advisorSourceData(hotelId);
+      const preview = buildSalesAdvisorPreview({ ...source, ...parameters } as any);
+      if (!preview.candidates.length)
+        return res.status(400).json({ error: "No named prospects match these filters. Import or broaden the source data first." });
+      const sourceFingerprint = salesAdvisorFingerprint(source.batches as any, parameters);
+      if (!req.body.regenerate) {
+        const [cached] = await db
+          .select()
+          .from(courtyardSalesAdvisorAnalyses)
+          .where(
+            and(
+              eq(courtyardSalesAdvisorAnalyses.hotelId, hotelId),
+              eq(courtyardSalesAdvisorAnalyses.sourceFingerprint, sourceFingerprint),
+              eq(courtyardSalesAdvisorAnalyses.status, "completed"),
+            ),
+          )
+          .orderBy(desc(courtyardSalesAdvisorAnalyses.createdAt))
+          .limit(1);
+        if (cached) return res.json({ ...cached, cached: true });
+      }
+      const context = compactAdvisorContext(preview);
+      const narrative = await generateSalesAdvisorNarrative(context as any);
+      const validKeys = new Set(preview.candidates.map((candidate) => candidate.key));
+      const result = {
+        ...narrative,
+        priorities: narrative.priorities.filter((item) => validKeys.has(item.accountKey)),
+        demandDrivers: narrative.demandDrivers.filter((item) => validKeys.has(item.accountKey)),
+      };
+      const [analysis] = await db
+        .insert(courtyardSalesAdvisorAnalyses)
+        .values({
+          hotelId,
+          createdByUserId: req.salesUser.id,
+          analysisType: parameters.analysisType,
+          lookbackMonths: parameters.lookbackMonths,
+          businessTypesJson: parameters.businessTypes,
+          requestParametersJson: parameters,
+          sourceFingerprint,
+          inputSnapshotJson: preview,
+          resultJson: result,
+          model: salesAdvisorModel(),
+          promptVersion: SALES_ADVISOR_PROMPT_VERSION,
+          status: "completed",
+          updatedAt: new Date(),
+        })
+        .returning();
+      res.status(201).json({ ...analysis, cached: false });
+    } catch (error: any) {
+      if (error?.statusCode) return res.status(error.statusCode).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  router.get("/advisor/analyses/:id.pdf", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.query.hotelId || req.salesHotels[0]?.id || "");
+      if (!hasHotel(req, hotelId))
+        return res.status(403).json({ error: "You do not have access to that property." });
+      const [analysis] = await db
+        .select()
+        .from(courtyardSalesAdvisorAnalyses)
+        .where(and(eq(courtyardSalesAdvisorAnalyses.id, req.params.id), eq(courtyardSalesAdvisorAnalyses.hotelId, hotelId)))
+        .limit(1);
+      if (!analysis) return res.status(404).json({ error: "Analysis not found." });
+      const pdf = await PDFDocument.create();
+      const font = await pdf.embedFont(StandardFonts.Helvetica);
+      const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+      let page = pdf.addPage([612, 792]);
+      let y = 750;
+      for (const rawLine of advisorReportText(analysis)) {
+        const isHeading = /^[A-Z][A-Z ]+$/.test(rawLine);
+        for (const line of wrapText(rawLine, 92)) {
+          if (y < 52) {
+            page = pdf.addPage([612, 792]);
+            y = 750;
+          }
+          page.drawText(line, { x: 42, y, size: isHeading ? 12 : 9, font: isHeading ? bold : font, color: rgb(0.12, 0.09, 0.07) });
+          y -= isHeading ? 19 : 13;
+        }
+      }
+      const bytes = await pdf.save();
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="sales-advisor-${analysis.id}.pdf"`);
+      res.send(Buffer.from(bytes));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get("/accounts/:accountKey", async (req: any, res, next) => {
     try {
       const hotelId = String(req.query.hotelId || "");

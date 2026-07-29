@@ -1933,6 +1933,52 @@ export const courtyardSalesWeeklyReports = pgTable(
   ],
 );
 
+export const courtyardSalesAdvisorAnalyses = pgTable(
+  "courtyard_sales_advisor_analyses",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    hotelId: varchar("hotel_id")
+      .notNull()
+      .references(() => courtyardHotels.id, { onDelete: "cascade" }),
+    createdByUserId: varchar("created_by_user_id").references(
+      () => tipsUsers.id,
+      { onDelete: "set null" },
+    ),
+    analysisType: text("analysis_type").notNull(),
+    lookbackMonths: integer("lookback_months").notNull(),
+    businessTypesJson: jsonb("business_types_json")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    requestParametersJson: jsonb("request_parameters_json")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    sourceFingerprint: text("source_fingerprint").notNull(),
+    inputSnapshotJson: jsonb("input_snapshot_json")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    resultJson: jsonb("result_json").$type<Record<string, unknown>>(),
+    model: text("model").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    status: text("status").notNull().default("completed"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_courtyard_sales_advisor_recent").on(
+      table.hotelId,
+      table.createdAt,
+    ),
+    index("idx_courtyard_sales_advisor_fingerprint").on(
+      table.hotelId,
+      table.sourceFingerprint,
+    ),
+  ],
+);
+
 export const courtyardIncidentReports = pgTable(
   "courtyard_incident_reports",
   {

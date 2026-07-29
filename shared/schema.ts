@@ -1797,6 +1797,120 @@ export const courtyardSalesAccountNotes = pgTable(
   ],
 );
 
+export const courtyardSalesOpportunities = pgTable(
+  "courtyard_sales_opportunities",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    hotelId: varchar("hotel_id")
+      .notNull()
+      .references(() => courtyardHotels.id, { onDelete: "cascade" }),
+    normalizedAccountKey: text("normalized_account_key").notNull(),
+    accountName: text("account_name").notNull(),
+    stage: text("stage").notNull().default("prospect"),
+    arrivalDate: date("arrival_date"),
+    departureDate: date("departure_date"),
+    estimatedRoomNights: numeric("estimated_room_nights", {
+      precision: 14,
+      scale: 2,
+    })
+      .notNull()
+      .default("0"),
+    estimatedRevenue: numeric("estimated_revenue", { precision: 16, scale: 2 })
+      .notNull()
+      .default("0"),
+    marketSegment: text("market_segment"),
+    nextAction: text("next_action"),
+    nextActionAt: timestamp("next_action_at"),
+    ownerUserId: varchar("owner_user_id").references(() => tipsUsers.id, {
+      onDelete: "set null",
+    }),
+    notes: text("notes"),
+    createdBy: varchar("created_by").references(() => tipsUsers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_courtyard_sales_opportunity_hotel_stage").on(
+      table.hotelId,
+      table.stage,
+    ),
+    index("idx_courtyard_sales_opportunity_next_action").on(
+      table.hotelId,
+      table.nextActionAt,
+    ),
+  ],
+);
+
+export const courtyardSalesActivities = pgTable(
+  "courtyard_sales_activities",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    hotelId: varchar("hotel_id")
+      .notNull()
+      .references(() => courtyardHotels.id, { onDelete: "cascade" }),
+    normalizedAccountKey: text("normalized_account_key").notNull(),
+    accountName: text("account_name").notNull(),
+    opportunityId: varchar("opportunity_id").references(
+      () => courtyardSalesOpportunities.id,
+      { onDelete: "set null" },
+    ),
+    activityType: text("activity_type").notNull(),
+    outcome: text("outcome"),
+    details: text("details"),
+    nextFollowUpAt: timestamp("next_follow_up_at"),
+    createdBy: varchar("created_by").references(() => tipsUsers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_courtyard_sales_activity_hotel_created").on(
+      table.hotelId,
+      table.createdAt,
+    ),
+    index("idx_courtyard_sales_activity_account").on(
+      table.hotelId,
+      table.normalizedAccountKey,
+    ),
+  ],
+);
+
+export const courtyardSalesWeeklyReports = pgTable(
+  "courtyard_sales_weekly_reports",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    hotelId: varchar("hotel_id")
+      .notNull()
+      .references(() => courtyardHotels.id, { onDelete: "cascade" }),
+    weekStart: date("week_start").notNull(),
+    status: text("status").notNull().default("draft"),
+    narrativeJson: jsonb("narrative_json")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    submittedAt: timestamp("submitted_at"),
+    updatedBy: varchar("updated_by").references(() => tipsUsers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_courtyard_sales_weekly_report_period").on(
+      table.hotelId,
+      table.weekStart,
+    ),
+  ],
+);
+
 export const courtyardIncidentReports = pgTable(
   "courtyard_incident_reports",
   {

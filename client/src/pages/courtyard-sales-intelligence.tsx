@@ -6,10 +6,12 @@ import {
   BarChart3,
   Building2,
   Calendar,
+  Download,
   ChevronDown,
   Eye,
   FileClock,
   Search,
+  Plus,
   Trash2,
   TrendingUp,
   Upload,
@@ -422,6 +424,8 @@ export default function CourtyardSalesIntelligence() {
                 {segment}
               </TabsTrigger>
             ))}
+            <TabsTrigger value="crm">Sales CRM</TabsTrigger>
+            <TabsTrigger value="annual">Annual Planning</TabsTrigger>
           </TabsList>
           <TabsContent value="production">
             <AccountTable
@@ -496,6 +500,18 @@ export default function CourtyardSalesIntelligence() {
               />
             </TabsContent>
           ))}
+          <TabsContent value="crm">
+            <SalesCrm
+              hotelId={selectedHotel}
+              accounts={dashboard.data?.accounts || []}
+            />
+          </TabsContent>
+          <TabsContent value="annual">
+            <AnnualPlanning
+              accounts={dashboard.data?.accounts || []}
+              marketSegments={marketSegments}
+            />
+          </TabsContent>
         </Tabs>
       </main>
       <UploadDialog
@@ -684,6 +700,724 @@ function AccountTable({
               No accounts match the selected period and filters.
             </div>
           )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+const STAGES = [
+  ["prospect", "Prospect"],
+  ["contact_attempted", "Contact Attempted"],
+  ["connected", "Connected"],
+  ["qualified", "Qualified"],
+  ["proposal_sent", "Proposal Sent"],
+  ["tentative", "Tentative"],
+  ["definite", "Definite / Won"],
+  ["lost", "Lost"],
+  ["nurture", "Nurture"],
+];
+const ACTIVITY_TYPES = [
+  ["call", "Phone Call"],
+  ["email", "Email"],
+  ["meeting", "Meeting"],
+  ["site_tour", "Site Tour"],
+  ["proposal", "Proposal"],
+  ["follow_up", "Follow-Up"],
+  ["note", "Note"],
+];
+function mondayValue() {
+  const d = new Date();
+  const day = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - day);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function SalesCrm({ hotelId, accounts }: any) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const accountOptions = useMemo(
+    () =>
+      Array.from(
+        new Map<string, any>(
+          accounts
+            .filter((a: any) => ["group", "special"].includes(a.reportCategory))
+            .map((a: any) => [a.key, a]),
+        ).values(),
+      ).sort((a: any, b: any) => a.displayName.localeCompare(b.displayName)),
+    [accounts],
+  );
+  const [accountKey, setAccountKey] = useState("");
+  const selected = accountOptions.find((a: any) => a.key === accountKey);
+  const [stage, setStage] = useState("prospect"),
+    [nights, setNights] = useState(""),
+    [revenue, setRevenue] = useState(""),
+    [nextAction, setNextAction] = useState(""),
+    [nextActionAt, setNextActionAt] = useState("");
+  const [activityAccount, setActivityAccount] = useState(""),
+    [activityType, setActivityType] = useState("call"),
+    [outcome, setOutcome] = useState(""),
+    [details, setDetails] = useState(""),
+    [followUp, setFollowUp] = useState("");
+  const crm = useQuery({
+    queryKey: ["sales-crm", hotelId],
+    queryFn: () =>
+      json(
+        `/api/courtyard/sales-intelligence/crm?hotelId=${encodeURIComponent(hotelId)}`,
+      ),
+    enabled: !!hotelId,
+  });
+  const refresh = () =>
+    qc.invalidateQueries({ queryKey: ["sales-crm", hotelId] });
+  const createOpportunity = useMutation({
+    mutationFn: () =>
+      json("/api/courtyard/sales-intelligence/opportunities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hotelId,
+          normalizedAccountKey: accountKey,
+          accountName: selected?.displayName,
+          marketSegment: selected?.marketSegment,
+          stage,
+          estimatedRoomNights: nights,
+          estimatedRevenue: revenue,
+          nextAction,
+          nextActionAt,
+        }),
+      }),
+    onSuccess: () => {
+      refresh();
+      setAccountKey("");
+      setNights("");
+      setRevenue("");
+      setNextAction("");
+      setNextActionAt("");
+      toast({ title: "Opportunity added to pipeline" });
+    },
+    onError: (e: Error) =>
+      toast({
+        title: "Could not add opportunity",
+        description: e.message,
+        variant: "destructive",
+      }),
+  });
+  const updateOpportunity = useMutation({
+    mutationFn: ({ id, stage }: any) =>
+      json(`/api/courtyard/sales-intelligence/opportunities/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage }),
+      }),
+    onSuccess: refresh,
+  });
+  const logActivity = useMutation({
+    mutationFn: () => {
+      const account = accountOptions.find(
+        (a: any) => a.key === activityAccount,
+      );
+      return json("/api/courtyard/sales-intelligence/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hotelId,
+          normalizedAccountKey: activityAccount,
+          accountName: account?.displayName,
+          activityType,
+          outcome,
+          details,
+          nextFollowUpAt: followUp,
+        }),
+      });
+    },
+    onSuccess: () => {
+      refresh();
+      setOutcome("");
+      setDetails("");
+      setFollowUp("");
+      toast({ title: "Sales activity logged" });
+    },
+    onError: (e: Error) =>
+      toast({
+        title: "Could not log activity",
+        description: e.message,
+        variant: "destructive",
+      }),
+  });
+  return (
+    <div className="space-y-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          [
+            "Open Opportunities",
+            (crm.data?.opportunities || []).filter(
+              (x: any) => !["definite", "lost"].includes(x.stage),
+            ).length,
+          ],
+          [
+            "Overdue Follow-Ups",
+            (crm.data?.queue || []).filter((x: any) => x.overdue).length,
+          ],
+          [
+            "Pipeline Room Nights",
+            Math.round(
+              (crm.data?.opportunities || [])
+                .filter((x: any) => !["lost"].includes(x.stage))
+                .reduce(
+                  (s: number, x: any) => s + Number(x.estimatedRoomNights || 0),
+                  0,
+                ),
+            ).toLocaleString(),
+          ],
+          [
+            "Pipeline Revenue",
+            money.format(
+              (crm.data?.opportunities || [])
+                .filter((x: any) => !["lost"].includes(x.stage))
+                .reduce(
+                  (s: number, x: any) => s + Number(x.estimatedRevenue || 0),
+                  0,
+                ),
+            ),
+          ],
+        ].map(([k, v]) => (
+          <Card className={C.shell} key={k}>
+            <CardContent className="p-4">
+              <div className={C.muted}>{k}</div>
+              <div className="text-2xl font-semibold">{v}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
+      <Tabs defaultValue="queue">
+        <TabsList>
+          <TabsTrigger value="queue">Follow-Up Queue</TabsTrigger>
+          <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+          <TabsTrigger value="activity">Log Activity</TabsTrigger>
+          <TabsTrigger value="weekly">Weekly Report</TabsTrigger>
+        </TabsList>
+        <TabsContent value="queue">
+          <Card className={C.shell}>
+            <CardHeader>
+              <CardTitle>Follow-Up Queue</CardTitle>
+              <CardDescription>
+                Overdue items appear first. Every active opportunity should have
+                a clear next action.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {(crm.data?.queue || []).map((x: any) => (
+                  <div
+                    key={x.id}
+                    className={`grid gap-2 rounded border p-3 sm:grid-cols-[1fr_180px_180px] ${x.overdue ? "border-red-400 bg-red-50" : "border-[#deceba] bg-white"}`}
+                  >
+                    <div>
+                      <div className="font-semibold">{x.accountName}</div>
+                      <div className="text-sm text-[#5f5247]">
+                        {x.nextAction || "Next action not scheduled"}
+                      </div>
+                    </div>
+                    <div className="text-sm">
+                      <div className="text-[#5f5247]">Due</div>
+                      {x.nextActionAt
+                        ? new Date(x.nextActionAt).toLocaleString()
+                        : "Not scheduled"}
+                    </div>
+                    <Badge className="h-fit w-fit !bg-[#e7f0e9] !text-[#214f3a]">
+                      {STAGES.find(([key]) => key === x.stage)?.[1]}
+                    </Badge>
+                  </div>
+                ))}
+                {!crm.data?.queue?.length && (
+                  <p className={C.muted}>
+                    No follow-ups are currently scheduled.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="pipeline">
+          <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
+            <Card className={C.shell}>
+              <CardHeader>
+                <CardTitle>New Opportunity</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <AccountSelect
+                  accounts={accountOptions}
+                  value={accountKey}
+                  onChange={setAccountKey}
+                />
+                <FieldSelect
+                  label="Stage"
+                  value={stage}
+                  onChange={setStage}
+                  options={STAGES}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label>Est. room nights</Label>
+                    <Input
+                      type="number"
+                      value={nights}
+                      onChange={(e) => setNights(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Est. revenue</Label>
+                    <Input
+                      type="number"
+                      value={revenue}
+                      onChange={(e) => setRevenue(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Next action</Label>
+                  <Input
+                    value={nextAction}
+                    onChange={(e) => setNextAction(e.target.value)}
+                    placeholder="Call decision maker"
+                  />
+                </div>
+                <div>
+                  <Label>Next action date</Label>
+                  <Input
+                    type="datetime-local"
+                    value={nextActionAt}
+                    onChange={(e) => setNextActionAt(e.target.value)}
+                  />
+                </div>
+                <Button
+                  className={C.green}
+                  disabled={!accountKey || createOpportunity.isPending}
+                  onClick={() => createOpportunity.mutate()}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Opportunity
+                </Button>
+              </CardContent>
+            </Card>
+            <Card className={C.shell}>
+              <CardHeader>
+                <CardTitle>Sales Pipeline</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th className="p-2 text-left">Account</th>
+                        <th>Stage</th>
+                        <th className="text-right">Rooms</th>
+                        <th className="text-right">Revenue</th>
+                        <th className="p-2 text-left">Next Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(crm.data?.opportunities || []).map((x: any) => (
+                        <tr className="border-t" key={x.id}>
+                          <td className="p-2 font-medium">{x.accountName}</td>
+                          <td>
+                            <Select
+                              value={x.stage}
+                              onValueChange={(value) =>
+                                updateOpportunity.mutate({
+                                  id: x.id,
+                                  stage: value,
+                                })
+                              }
+                            >
+                              <SelectTrigger className="w-40">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {STAGES.map(([k, v]) => (
+                                  <SelectItem key={k} value={k}>
+                                    {v}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="text-right">
+                            {Number(x.estimatedRoomNights).toLocaleString()}
+                          </td>
+                          <td className="text-right">
+                            {money.format(Number(x.estimatedRevenue))}
+                          </td>
+                          <td className="p-2">{x.nextAction || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+        <TabsContent value="activity">
+          <Card className={C.shell}>
+            <CardHeader>
+              <CardTitle>Log Sales Activity</CardTitle>
+              <CardDescription>
+                Record the effort once; it will feed the account history and
+                weekly sales report.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              <AccountSelect
+                accounts={accountOptions}
+                value={activityAccount}
+                onChange={setActivityAccount}
+              />
+              <FieldSelect
+                label="Activity type"
+                value={activityType}
+                onChange={setActivityType}
+                options={ACTIVITY_TYPES}
+              />
+              <div>
+                <Label>Outcome</Label>
+                <Input
+                  value={outcome}
+                  onChange={(e) => setOutcome(e.target.value)}
+                  placeholder="Connected, voicemail, proposal requested…"
+                />
+              </div>
+              <div>
+                <Label>Next follow-up</Label>
+                <Input
+                  type="datetime-local"
+                  value={followUp}
+                  onChange={(e) => setFollowUp(e.target.value)}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Details</Label>
+                <Textarea
+                  value={details}
+                  onChange={(e) => setDetails(e.target.value)}
+                  rows={4}
+                />
+              </div>
+              <div>
+                <Button
+                  className={C.green}
+                  disabled={!activityAccount || logActivity.isPending}
+                  onClick={() => logActivity.mutate()}
+                >
+                  Log Activity
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="weekly">
+          <WeeklySalesReport hotelId={hotelId} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+function AccountSelect({ accounts, value, onChange }: any) {
+  return (
+    <div>
+      <Label>Account</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue placeholder="Choose an account" />
+        </SelectTrigger>
+        <SelectContent>
+          {accounts.map((a: any) => (
+            <SelectItem key={a.key} value={a.key}>
+              {a.displayName}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+function FieldSelect({ label, value, onChange, options }: any) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map(([k, v]: string[]) => (
+            <SelectItem key={k} value={k}>
+              {v}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function WeeklySalesReport({ hotelId }: any) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [weekStart, setWeekStart] = useState(mondayValue());
+  const blank: any = {
+    accomplishments: "",
+    wins: "",
+    challenges: "",
+    competitorInfo: "",
+    networking: "",
+    nextWeekPriorities: "",
+    supportNeeded: "",
+  };
+  const [narrative, setNarrative] = useState(blank);
+  const report = useQuery({
+    queryKey: ["weekly-sales-report", hotelId, weekStart],
+    queryFn: () =>
+      json(
+        `/api/courtyard/sales-intelligence/weekly-report?hotelId=${encodeURIComponent(hotelId)}&weekStart=${weekStart}`,
+      ),
+    enabled: !!hotelId && !!weekStart,
+  });
+  useEffect(
+    () =>
+      setNarrative({ ...blank, ...(report.data?.report?.narrativeJson || {}) }),
+    [report.data],
+  );
+  const save = useMutation({
+    mutationFn: (status: string) =>
+      json("/api/courtyard/sales-intelligence/weekly-report", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hotelId, weekStart, narrative, status }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ["weekly-sales-report", hotelId, weekStart],
+      });
+      toast({ title: "Weekly sales report saved" });
+    },
+    onError: (e: Error) =>
+      toast({
+        title: "Could not save report",
+        description: e.message,
+        variant: "destructive",
+      }),
+  });
+  const m = report.data?.metrics || { byType: {} };
+  const fields = [
+    ["Weekly Accomplishments", "accomplishments"],
+    ["Major Wins", "wins"],
+    ["Challenges / Lost Business", "challenges"],
+    ["Competitor Information", "competitorInfo"],
+    ["Community / Networking", "networking"],
+    ["Priorities for Next Week", "nextWeekPriorities"],
+    ["Support Needed from GM", "supportNeeded"],
+  ];
+  return (
+    <Card className={C.shell}>
+      <CardHeader>
+        <CardTitle>Weekly Sales Report</CardTitle>
+        <CardDescription>
+          Activity totals are assembled automatically. Add context, save, and
+          export the PDF.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <Label>Week starting</Label>
+            <Input
+              type="date"
+              value={weekStart}
+              onChange={(e) => setWeekStart(e.target.value)}
+            />
+          </div>
+          <Badge variant="outline">
+            {report.data?.report?.status || "New Draft"}
+          </Badge>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {[
+            ["Activities", m.totalActivities || 0],
+            ["Calls", m.byType?.call || 0],
+            ["Emails", m.byType?.email || 0],
+            [
+              "Meetings/Tours",
+              (m.byType?.meeting || 0) + (m.byType?.site_tour || 0),
+            ],
+            ["Pipeline Rooms", Math.round(m.pipelineRoomNights || 0)],
+            ["Pipeline Revenue", money.format(m.pipelineRevenue || 0)],
+          ].map(([k, v]) => (
+            <div className="rounded border bg-white p-3" key={k}>
+              <div className="text-xs text-[#5f5247]">{k}</div>
+              <div className="font-semibold">{v}</div>
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {fields.map(([label, key]) => (
+            <div key={key}>
+              <Label>{label}</Label>
+              <Textarea
+                rows={4}
+                value={narrative[key] || ""}
+                onChange={(e) =>
+                  setNarrative((old: any) => ({
+                    ...old,
+                    [key]: e.target.value,
+                  }))
+                }
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => save.mutate("draft")}>
+            Save Draft
+          </Button>
+          <Button className={C.green} onClick={() => save.mutate("submitted")}>
+            Submit Report
+          </Button>
+          <Button asChild variant="outline">
+            <a
+              href={apiUrl(
+                `/api/courtyard/sales-intelligence/weekly-report.pdf?hotelId=${encodeURIComponent(hotelId)}&weekStart=${weekStart}`,
+              )}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export PDF
+            </a>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AnnualPlanning({ accounts, marketSegments }: any) {
+  const totalAccounts = accounts.filter(
+    (a: any) => a.reportCategory === "total",
+  );
+  const years = Array.from(
+    new Set<number>(
+      totalAccounts.flatMap((a: any) => a.history.map((h: any) => h.year)),
+    ),
+  ).sort((a: any, b: any) => b - a);
+  const [year, setYear] = useState(
+    String(years[0] || new Date().getFullYear()),
+  );
+  const segmentRows = marketSegments
+    .map((segment: string) => {
+      const segmentAccounts = accounts.filter(
+        (a: any) => a.reportCategory === `segment:${segment}`,
+      );
+      const history = segmentAccounts.flatMap((a: any) =>
+        a.history.filter((h: any) => String(h.year) === year),
+      );
+      const roomNights = history.reduce(
+          (s: number, h: any) => s + h.roomNights,
+          0,
+        ),
+        roomRevenue = history.reduce(
+          (s: number, h: any) => s + h.roomRevenue,
+          0,
+        );
+      return {
+        segment,
+        roomNights,
+        roomRevenue,
+        adr: roomNights ? roomRevenue / roomNights : 0,
+        months: new Set(history.map((h: any) => h.month)).size,
+      };
+    })
+    .sort((a: any, b: any) => b.roomRevenue - a.roomRevenue);
+  const totals = segmentRows.reduce(
+    (o: any, row: any) => ({
+      roomNights: o.roomNights + row.roomNights,
+      roomRevenue: o.roomRevenue + row.roomRevenue,
+    }),
+    { roomNights: 0, roomRevenue: 0 },
+  );
+  return (
+    <Card className={C.shell}>
+      <CardHeader>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <CardTitle>Annual Market Segment Production</CardTitle>
+            <CardDescription>
+              Budget-planning reference sourced only from comprehensive All
+              Market Segments uploads.
+            </CardDescription>
+          </div>
+          <Select value={year} onValueChange={setYear}>
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {years.map((y: any) => (
+                <SelectItem key={y} value={String(y)}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded border bg-[#e7f0e9] p-4">
+            <div className={C.muted}>Yearly Room Nights</div>
+            <div className="text-2xl font-semibold">
+              {Math.round(totals.roomNights).toLocaleString()}
+            </div>
+          </div>
+          <div className="rounded border bg-[#e7f0e9] p-4">
+            <div className={C.muted}>Yearly Room Revenue</div>
+            <div className="text-2xl font-semibold">
+              {money.format(totals.roomRevenue)}
+            </div>
+          </div>
+          <div className="rounded border bg-[#e7f0e9] p-4">
+            <div className={C.muted}>Yearly ADR</div>
+            <div className="text-2xl font-semibold">
+              {money2.format(
+                totals.roomNights ? totals.roomRevenue / totals.roomNights : 0,
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr>
+                <th className="p-3 text-left">Market Segment</th>
+                <th className="text-right">Months Loaded</th>
+                <th className="text-right">Room Nights</th>
+                <th className="text-right">Room Revenue</th>
+                <th className="p-3 text-right">ADR</th>
+              </tr>
+            </thead>
+            <tbody>
+              {segmentRows.map((row: any) => (
+                <tr className="border-t" key={row.segment}>
+                  <td className="p-3 font-medium">{row.segment}</td>
+                  <td className="text-right">{row.months}</td>
+                  <td className="text-right">
+                    {Math.round(row.roomNights).toLocaleString()}
+                  </td>
+                  <td className="text-right">
+                    {money.format(row.roomRevenue)}
+                  </td>
+                  <td className="p-3 text-right">{money2.format(row.adr)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </CardContent>
     </Card>

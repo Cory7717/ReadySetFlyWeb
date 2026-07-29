@@ -3,16 +3,20 @@ import type { Express } from "express";
 import express from "express";
 import multer from "multer";
 import crypto from "crypto";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { db } from "../db";
 import {
   courtyardHotelUserAccess,
   courtyardHotels,
   courtyardSalesAccountNotes,
   courtyardSalesAccountProfiles,
+  courtyardSalesActivities,
   courtyardSalesImportBatches,
   courtyardSalesProduction,
   courtyardSalesRawRows,
+  courtyardSalesOpportunities,
+  courtyardSalesWeeklyReports,
   tipsUsers,
 } from "@shared/schema";
 import {
@@ -26,6 +30,26 @@ const RECOVERY_MONTHS = 3;
 const GROUP_REPORT_TYPE = "marriott_mint_group_account_tracking";
 const SPECIAL_REPORT_TYPE = "marriott_mint_special_corp_government";
 const ALL_MARKET_REPORT_TYPE = "marriott_mint_all_market_segments";
+const OPPORTUNITY_STAGES = [
+  "prospect",
+  "contact_attempted",
+  "connected",
+  "qualified",
+  "proposal_sent",
+  "tentative",
+  "definite",
+  "lost",
+  "nurture",
+];
+const ACTIVITY_TYPES = [
+  "call",
+  "email",
+  "meeting",
+  "site_tour",
+  "proposal",
+  "follow_up",
+  "note",
+];
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_SALES_IMPORT_BYTES, files: 1 },
@@ -158,6 +182,54 @@ function summarize(rows: any[]) {
       })),
     };
   });
+}
+
+function parseDateOrNull(value: unknown) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+function weekBounds(weekStart: string) {
+  const start = new Date(`${weekStart}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime()))
+    throw new Error("Choose a valid week start date.");
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 7);
+  return { start, end };
+}
+function activityMetrics(rows: any[], opportunities: any[]) {
+  const byType: Record<string, number> = {};
+  for (const row of rows)
+    byType[row.activityType] = (byType[row.activityType] || 0) + 1;
+  return {
+    totalActivities: rows.length,
+    byType,
+    newOpportunities: opportunities.length,
+    pipelineRoomNights: opportunities.reduce(
+      (s, row) => s + n(row.estimatedRoomNights),
+      0,
+    ),
+    pipelineRevenue: opportunities.reduce(
+      (s, row) => s + n(row.estimatedRevenue),
+      0,
+    ),
+    won: opportunities.filter((row) => row.stage === "definite").length,
+    lost: opportunities.filter((row) => row.stage === "lost").length,
+  };
+}
+function wrapText(text: string, max = 88) {
+  const words = String(text || "").split(/\s+/);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    if (`${line} ${word}`.trim().length > max) {
+      if (line) lines.push(line);
+      line = word;
+    } else line = `${line} ${word}`.trim();
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : ["Not entered."];
 }
 
 export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
@@ -648,6 +720,385 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       }
     },
   );
+  router.get("/crm", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.query.hotelId || "");
+      if (!hasHotel(req, hotelId))
+        return res
+          .status(403)
+          .json({ error: "You do not have access to that property." });
+      const [opportunities, activities] = await Promise.all([
+        db
+          .select()
+          .from(courtyardSalesOpportunities)
+          .where(eq(courtyardSalesOpportunities.hotelId, hotelId))
+          .orderBy(
+            asc(courtyardSalesOpportunities.nextActionAt),
+            desc(courtyardSalesOpportunities.updatedAt),
+          ),
+        db
+          .select()
+          .from(courtyardSalesActivities)
+          .where(eq(courtyardSalesActivities.hotelId, hotelId))
+          .orderBy(desc(courtyardSalesActivities.createdAt))
+          .limit(100),
+      ]);
+      const now = Date.now();
+      const queue = opportunities
+        .filter((row) => !["definite", "lost"].includes(row.stage))
+        .map((row) => ({
+          ...row,
+          overdue: row.nextActionAt
+            ? new Date(row.nextActionAt).getTime() < now
+            : false,
+        }))
+        .sort(
+          (a, b) =>
+            Number(b.overdue) - Number(a.overdue) ||
+            new Date(a.nextActionAt || "2999-01-01").getTime() -
+              new Date(b.nextActionAt || "2999-01-01").getTime(),
+        );
+      res.json({ opportunities, activities, queue });
+    } catch (e) {
+      next(e);
+    }
+  });
+  router.post("/opportunities", express.json(), async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || "");
+      if (!hasHotel(req, hotelId))
+        return res
+          .status(403)
+          .json({ error: "You do not have access to that property." });
+      const stage = String(req.body.stage || "prospect");
+      if (!OPPORTUNITY_STAGES.includes(stage))
+        return res.status(400).json({ error: "Choose a valid sales stage." });
+      const accountName = String(req.body.accountName || "").trim();
+      const accountKey = String(req.body.normalizedAccountKey || "").trim();
+      if (!accountName || !accountKey)
+        return res.status(400).json({ error: "Choose an account." });
+      const [row] = await db
+        .insert(courtyardSalesOpportunities)
+        .values({
+          hotelId,
+          normalizedAccountKey: accountKey,
+          accountName,
+          stage,
+          arrivalDate: req.body.arrivalDate || null,
+          departureDate: req.body.departureDate || null,
+          estimatedRoomNights: String(
+            Number(req.body.estimatedRoomNights || 0),
+          ),
+          estimatedRevenue: String(Number(req.body.estimatedRevenue || 0)),
+          marketSegment:
+            String(req.body.marketSegment || "").slice(0, 120) || null,
+          nextAction: String(req.body.nextAction || "").slice(0, 500) || null,
+          nextActionAt: parseDateOrNull(req.body.nextActionAt),
+          notes: String(req.body.notes || "").slice(0, 4000) || null,
+          ownerUserId: req.salesUser.id,
+          createdBy: req.salesUser.id,
+        })
+        .returning();
+      res.status(201).json({ opportunity: row });
+    } catch (e) {
+      next(e);
+    }
+  });
+  router.patch(
+    "/opportunities/:id",
+    express.json(),
+    async (req: any, res, next) => {
+      try {
+        const [existing] = await db
+          .select()
+          .from(courtyardSalesOpportunities)
+          .where(eq(courtyardSalesOpportunities.id, req.params.id))
+          .limit(1);
+        if (!existing || !hasHotel(req, existing.hotelId))
+          return res.status(404).json({ error: "Opportunity not found." });
+        const stage = String(req.body.stage || existing.stage);
+        if (!OPPORTUNITY_STAGES.includes(stage))
+          return res.status(400).json({ error: "Choose a valid sales stage." });
+        const [row] = await db
+          .update(courtyardSalesOpportunities)
+          .set({
+            stage,
+            nextAction:
+              req.body.nextAction === undefined
+                ? existing.nextAction
+                : String(req.body.nextAction || "").slice(0, 500) || null,
+            nextActionAt:
+              req.body.nextActionAt === undefined
+                ? existing.nextActionAt
+                : parseDateOrNull(req.body.nextActionAt),
+            estimatedRoomNights:
+              req.body.estimatedRoomNights === undefined
+                ? existing.estimatedRoomNights
+                : String(Number(req.body.estimatedRoomNights || 0)),
+            estimatedRevenue:
+              req.body.estimatedRevenue === undefined
+                ? existing.estimatedRevenue
+                : String(Number(req.body.estimatedRevenue || 0)),
+            updatedAt: new Date(),
+          })
+          .where(eq(courtyardSalesOpportunities.id, existing.id))
+          .returning();
+        res.json({ opportunity: row });
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
+  router.post("/activities", express.json(), async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || "");
+      if (!hasHotel(req, hotelId))
+        return res
+          .status(403)
+          .json({ error: "You do not have access to that property." });
+      const activityType = String(req.body.activityType || "");
+      if (!ACTIVITY_TYPES.includes(activityType))
+        return res.status(400).json({ error: "Choose a valid activity type." });
+      const accountName = String(req.body.accountName || "").trim();
+      const accountKey = String(req.body.normalizedAccountKey || "").trim();
+      if (!accountName || !accountKey)
+        return res.status(400).json({ error: "Choose an account." });
+      const [row] = await db
+        .insert(courtyardSalesActivities)
+        .values({
+          hotelId,
+          normalizedAccountKey: accountKey,
+          accountName,
+          opportunityId: req.body.opportunityId || null,
+          activityType,
+          outcome: String(req.body.outcome || "").slice(0, 250) || null,
+          details: String(req.body.details || "").slice(0, 4000) || null,
+          nextFollowUpAt: parseDateOrNull(req.body.nextFollowUpAt),
+          createdBy: req.salesUser.id,
+        })
+        .returning();
+      if (req.body.opportunityId && req.body.nextFollowUpAt)
+        await db
+          .update(courtyardSalesOpportunities)
+          .set({
+            nextAction: "Follow up after logged activity",
+            nextActionAt: parseDateOrNull(req.body.nextFollowUpAt),
+            updatedAt: new Date(),
+          })
+          .where(eq(courtyardSalesOpportunities.id, req.body.opportunityId));
+      res.status(201).json({ activity: row });
+    } catch (e) {
+      next(e);
+    }
+  });
+  router.get("/weekly-report", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.query.hotelId || ""),
+        weekStart = String(req.query.weekStart || "");
+      if (!hasHotel(req, hotelId))
+        return res
+          .status(403)
+          .json({ error: "You do not have access to that property." });
+      const { start, end } = weekBounds(weekStart);
+      const [saved, activities, opportunities] = await Promise.all([
+        db
+          .select()
+          .from(courtyardSalesWeeklyReports)
+          .where(
+            and(
+              eq(courtyardSalesWeeklyReports.hotelId, hotelId),
+              eq(courtyardSalesWeeklyReports.weekStart, weekStart),
+            ),
+          )
+          .limit(1),
+        db
+          .select()
+          .from(courtyardSalesActivities)
+          .where(
+            and(
+              eq(courtyardSalesActivities.hotelId, hotelId),
+              gte(courtyardSalesActivities.createdAt, start),
+              lt(courtyardSalesActivities.createdAt, end),
+            ),
+          ),
+        db
+          .select()
+          .from(courtyardSalesOpportunities)
+          .where(
+            and(
+              eq(courtyardSalesOpportunities.hotelId, hotelId),
+              gte(courtyardSalesOpportunities.createdAt, start),
+              lt(courtyardSalesOpportunities.createdAt, end),
+            ),
+          ),
+      ]);
+      res.json({
+        report: saved[0] || null,
+        metrics: activityMetrics(activities, opportunities),
+        activities,
+        opportunities,
+      });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+  router.put("/weekly-report", express.json(), async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || ""),
+        weekStart = String(req.body.weekStart || "");
+      if (!hasHotel(req, hotelId))
+        return res
+          .status(403)
+          .json({ error: "You do not have access to that property." });
+      weekBounds(weekStart);
+      const narrative =
+        req.body.narrative && typeof req.body.narrative === "object"
+          ? Object.fromEntries(
+              Object.entries(req.body.narrative).map(([k, v]) => [
+                k,
+                String(v || "").slice(0, 6000),
+              ]),
+            )
+          : {};
+      const status = req.body.status === "submitted" ? "submitted" : "draft";
+      const [row] = await db
+        .insert(courtyardSalesWeeklyReports)
+        .values({
+          hotelId,
+          weekStart,
+          status,
+          narrativeJson: narrative,
+          submittedAt: status === "submitted" ? new Date() : null,
+          updatedBy: req.salesUser.id,
+        })
+        .onConflictDoUpdate({
+          target: [
+            courtyardSalesWeeklyReports.hotelId,
+            courtyardSalesWeeklyReports.weekStart,
+          ],
+          set: {
+            status,
+            narrativeJson: narrative,
+            submittedAt: status === "submitted" ? new Date() : null,
+            updatedBy: req.salesUser.id,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+      res.json({ report: row });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+  router.get("/weekly-report.pdf", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.query.hotelId || ""),
+        weekStart = String(req.query.weekStart || "");
+      if (!hasHotel(req, hotelId))
+        return res
+          .status(403)
+          .json({ error: "You do not have access to that property." });
+      const { start, end } = weekBounds(weekStart);
+      const [hotelRows, reports, activities, opportunities] = await Promise.all(
+        [
+          db
+            .select()
+            .from(courtyardHotels)
+            .where(eq(courtyardHotels.id, hotelId))
+            .limit(1),
+          db
+            .select()
+            .from(courtyardSalesWeeklyReports)
+            .where(
+              and(
+                eq(courtyardSalesWeeklyReports.hotelId, hotelId),
+                eq(courtyardSalesWeeklyReports.weekStart, weekStart),
+              ),
+            )
+            .limit(1),
+          db
+            .select()
+            .from(courtyardSalesActivities)
+            .where(
+              and(
+                eq(courtyardSalesActivities.hotelId, hotelId),
+                gte(courtyardSalesActivities.createdAt, start),
+                lt(courtyardSalesActivities.createdAt, end),
+              ),
+            ),
+          db
+            .select()
+            .from(courtyardSalesOpportunities)
+            .where(
+              and(
+                eq(courtyardSalesOpportunities.hotelId, hotelId),
+                gte(courtyardSalesOpportunities.createdAt, start),
+                lt(courtyardSalesOpportunities.createdAt, end),
+              ),
+            ),
+        ],
+      );
+      const metrics = activityMetrics(activities, opportunities),
+        narrative: any = reports[0]?.narrativeJson || {};
+      const pdf = await PDFDocument.create();
+      const font = await pdf.embedFont(StandardFonts.Helvetica),
+        bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+      let page = pdf.addPage([612, 792]),
+        y = 748;
+      const draw = (text: string, size = 10, isBold = false) => {
+        for (const line of wrapText(text, size >= 16 ? 55 : 92)) {
+          if (y < 55) {
+            page = pdf.addPage([612, 792]);
+            y = 748;
+          }
+          page.drawText(line, {
+            x: 48,
+            y,
+            size,
+            font: isBold ? bold : font,
+            color: rgb(0.12, 0.09, 0.07),
+          });
+          y -= size + 5;
+        }
+      };
+      draw(hotelRows[0]?.name || "Courtyard", 18, true);
+      draw(`Weekly Sales Report | Week of ${weekStart}`, 14, true);
+      y -= 6;
+      draw(
+        `Activities: ${metrics.totalActivities}   Calls: ${metrics.byType.call || 0}   Emails: ${metrics.byType.email || 0}   Meetings/Site Tours: ${(metrics.byType.meeting || 0) + (metrics.byType.site_tour || 0)}`,
+        10,
+        true,
+      );
+      draw(
+        `New Opportunities: ${metrics.newOpportunities}   Pipeline Room Nights: ${metrics.pipelineRoomNights}   Pipeline Revenue: $${metrics.pipelineRevenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}`,
+        10,
+        true,
+      );
+      y -= 10;
+      for (const [label, key] of [
+        ["Weekly Accomplishments", "accomplishments"],
+        ["Major Wins", "wins"],
+        ["Challenges / Lost Business", "challenges"],
+        ["Competitor Information", "competitorInfo"],
+        ["Community / Networking", "networking"],
+        ["Priorities for Next Week", "nextWeekPriorities"],
+        ["Support Needed from GM", "supportNeeded"],
+      ]) {
+        draw(label, 12, true);
+        draw(narrative[key] || "Not entered.");
+        y -= 7;
+      }
+      const bytes = await pdf.save();
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="weekly-sales-report-${weekStart}.pdf"`,
+      );
+      res.send(Buffer.from(bytes));
+    } catch (e) {
+      next(e);
+    }
+  });
   router.delete("/imports/:id", async (req: any, res, next) => {
     try {
       if (!admin(req.salesUser))

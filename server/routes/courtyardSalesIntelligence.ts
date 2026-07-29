@@ -25,6 +25,7 @@ import {
   parseSalesImport,
   parseStayGroupSummaryImport,
   parseStayMarketSegmentImport,
+  normalizeSalesMarketSegment,
   recoveryPriority,
 } from "../courtyardSalesImport";
 
@@ -630,19 +631,33 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         )
         .concat(
           stayRows.filter((row) =>
-            [
-              "Local Special Corp",
-              "Centrally Priced Special Corp",
-              "Government",
-            ].includes(String(row.marketSegment || "")),
+            ["Special Corp", "Government"].includes(
+              normalizeSalesMarketSegment(row.marketSegment),
+            ),
           ),
         );
-      const allMarketRows = rows.filter((row) => {
-        const type = batchById.get(row.importBatchId)?.sourceReportType;
-        return (
-          type === ALL_MARKET_REPORT_TYPE || type === STAY_MARKET_REPORT_TYPE
-        );
-      });
+      const allMarketRows = rows
+        .filter((row) => {
+          const type = batchById.get(row.importBatchId)?.sourceReportType;
+          return (
+            type === ALL_MARKET_REPORT_TYPE || type === STAY_MARKET_REPORT_TYPE
+          );
+        })
+        .map((row) => {
+          const segment = normalizeSalesMarketSegment(row.marketSegment);
+          if (
+            batchById.get(row.importBatchId)?.sourceReportType !==
+            STAY_MARKET_REPORT_TYPE
+          )
+            return { ...row, marketSegment: segment };
+          return {
+            ...row,
+            marketSegment: segment,
+            globalUltimateAccountName: segment,
+            accountName: segment,
+            normalizedAccountKey: `stay-segment:${segment.toLowerCase().replace(/\s+/g, " ")}`,
+          };
+        });
       const marketSegments = [
         ...new Set(
           allMarketRows.map(

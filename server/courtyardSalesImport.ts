@@ -193,6 +193,16 @@ const stayAliases: Record<string, string> = {
   "total guests": "totalGuests",
 };
 
+export function normalizeSalesMarketSegment(value: unknown) {
+  const segment = clean(value).replace(/\s+/g, " ");
+  const normalized = segment.toLowerCase();
+  if (normalized === "group" || normalized.startsWith("group ")) return "Group";
+  if (normalized.includes("special corp")) return "Special Corp";
+  if (normalized === "government" || normalized === "govt/military")
+    return "Government";
+  return segment || "Unspecified";
+}
+
 export function parseStayMarketSegmentImport(buffer: Buffer) {
   if (!buffer.length) throw new Error("The selected file is empty.");
   if (buffer.includes(0))
@@ -267,12 +277,13 @@ export function parseStayMarketSegmentImport(buffer: Buffer) {
       return;
     }
     seen.add(normalizedRowHash);
-    const segment = clean(row.marketSegment);
+    const segment = normalizeSalesMarketSegment(row.marketSegment);
     accepted.push({
       ...row,
       stayDate: stayDate.toISOString().slice(0, 10),
       globalUltimateAccountName: segment,
       accountName: segment,
+      marketSegment: segment,
       roomNights,
       roomRevenue,
       roomAdr: roomAdr ?? (roomNights > 0 ? roomRevenue / roomNights : 0),

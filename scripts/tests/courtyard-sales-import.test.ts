@@ -2,11 +2,28 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   detectStaySalesReportType,
+  normalizeSalesMarketSegment,
   parseSalesImport,
   parseStayGroupSummaryImport,
   parseStayMarketSegmentImport,
   recoveryPriority,
 } from "../../server/courtyardSalesImport";
+
+test("combines related STAY market segments into sales families", () => {
+  assert.equal(normalizeSalesMarketSegment("Group Contract"), "Group");
+  assert.equal(normalizeSalesMarketSegment("Group Corporate"), "Group");
+  assert.equal(
+    normalizeSalesMarketSegment("Centrally Priced Special Corp"),
+    "Special Corp",
+  );
+  assert.equal(
+    normalizeSalesMarketSegment("Local Special Corp"),
+    "Special Corp",
+  );
+  assert.equal(normalizeSalesMarketSegment("Govt/Military"), "Government");
+  assert.equal(normalizeSalesMarketSegment("Government"), "Government");
+  assert.equal(normalizeSalesMarketSegment("Retail"), "Retail");
+});
 
 test("detects each STAY report format from its headers", () => {
   assert.equal(
@@ -67,10 +84,8 @@ test("parses STAY daily market-segment production and preserves adjustments", ()
   const result = parseStayMarketSegmentImport(input);
   assert.equal(result.delimiter, "comma");
   assert.equal(result.accepted.length, 2);
-  assert.equal(
-    result.accepted[0].normalizedAccountKey,
-    "stay-segment:group other",
-  );
+  assert.equal(result.accepted[0].normalizedAccountKey, "stay-segment:group");
+  assert.equal(result.accepted[0].marketSegment, "Group");
   assert.equal(
     result.accepted.reduce((sum, row) => sum + row.roomNights, 0),
     4,

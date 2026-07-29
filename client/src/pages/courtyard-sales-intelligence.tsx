@@ -13,7 +13,6 @@ import {
   Search,
   Plus,
   Trash2,
-  TrendingUp,
   Upload,
 } from "lucide-react";
 import {
@@ -91,7 +90,7 @@ export default function CourtyardSalesIntelligence() {
   const [period, setPeriod] = useState("all");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
-  const [view, setView] = useState("production");
+  const [view, setView] = useState("total");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [detail, setDetail] = useState<Account | null>(null);
@@ -300,18 +299,13 @@ export default function CourtyardSalesIntelligence() {
   const groupAccounts = accounts.filter(
     (account) => account.reportCategory === "group",
   );
-  const specialAccounts = accounts.filter(
-    (account) => account.reportCategory === "special",
-  );
   const marketSegments = dashboard.data?.marketSegments || [];
   const visibleAccounts =
-    view === "special"
-      ? specialAccounts
-      : view === "total"
-        ? accounts.filter((account) => account.reportCategory === "total")
-        : view.startsWith("segment:")
-          ? accounts.filter((account) => account.reportCategory === view)
-          : groupAccounts;
+    view === "total"
+      ? accounts.filter((account) => account.reportCategory === "total")
+      : view.startsWith("segment:")
+        ? accounts.filter((account) => account.reportCategory === view)
+        : groupAccounts;
   const totals = useMemo(() => {
     const roomNights = visibleAccounts.reduce((s, a) => s + a.roomNights, 0),
       roomRevenue = visibleAccounts.reduce((s, a) => s + a.roomRevenue, 0);
@@ -493,7 +487,7 @@ export default function CourtyardSalesIntelligence() {
           {[
             [
               activeYear >= 2026 &&
-              !["production", "recovery", "crm"].includes(view)
+              (view === "total" || view.startsWith("segment:"))
                 ? "Segments"
                 : "Accounts",
               totals.accounts,
@@ -504,7 +498,7 @@ export default function CourtyardSalesIntelligence() {
             ["Average Length of Stay", totals.los.toFixed(1)],
             [
               activeYear >= 2026 &&
-              !["production", "recovery", "crm"].includes(view)
+              (view === "total" || view.startsWith("segment:"))
                 ? "Recurring Segments"
                 : "Recurring Accounts",
               totals.recurring,
@@ -520,9 +514,6 @@ export default function CourtyardSalesIntelligence() {
         </section>
         <Tabs value={view} onValueChange={setView}>
           <TabsList className="h-auto flex-wrap justify-start bg-[#eadfce]">
-            <TabsTrigger value="production">Groups</TabsTrigger>
-            <TabsTrigger value="recovery">Recovery Opportunities</TabsTrigger>
-            <TabsTrigger value="special">Special Corp/Govt</TabsTrigger>
             <TabsTrigger value="total">Total</TabsTrigger>
             {marketSegments.map((segment: string) => (
               <TabsTrigger key={segment} value={`segment:${segment}`}>
@@ -532,55 +523,6 @@ export default function CourtyardSalesIntelligence() {
             <TabsTrigger value="crm">Sales CRM</TabsTrigger>
             <TabsTrigger value="annual">Annual Planning</TabsTrigger>
           </TabsList>
-          <TabsContent value="production">
-            <AccountTable
-              accounts={groupAccounts}
-              search={search}
-              setSearch={setSearch}
-              status={status}
-              setStatus={setStatus}
-              onDetail={setDetail}
-            />
-          </TabsContent>
-          <TabsContent value="recovery">
-            <Card className={C.shell}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-[#8a6b3f]" />
-                  Recovery Opportunities
-                </CardTitle>
-                <CardDescription>
-                  Accounts with no production in the last{" "}
-                  {me.data.recoveryThresholdMonths} completed imported months,
-                  ranked by transparent historical value and consistency.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <AccountTable
-                  accounts={groupAccounts
-                    .filter((a) => a.status === "Potential Recovery")
-                    .sort((a, b) => b.recoveryPriority - a.recoveryPriority)}
-                  search={search}
-                  setSearch={setSearch}
-                  status="all"
-                  setStatus={() => {}}
-                  onDetail={setDetail}
-                  recovery
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="special">
-            <AccountTable
-              accounts={specialAccounts}
-              search={search}
-              setSearch={setSearch}
-              status={status}
-              setStatus={setStatus}
-              onDetail={setDetail}
-              title="Special Corp/Govt Production"
-            />
-          </TabsContent>
           <TabsContent value="total">
             <AccountTable
               accounts={visibleAccounts}

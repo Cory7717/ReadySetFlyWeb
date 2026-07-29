@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { normalizeSalesMarketSegment } from "./courtyardSalesImport";
 
-export const SALES_ADVISOR_PROMPT_VERSION = "sales-advisor-v1";
+export const SALES_ADVISOR_PROMPT_VERSION = "sales-advisor-v2-onsite";
 export const SALES_ADVISOR_CALCULATION_VERSION = "sales-advisor-calculation-v1";
 export const SALES_ADVISOR_BUSINESS_TYPES = [
   "Groups",
@@ -146,8 +146,8 @@ export function buildSalesAdvisorPreview(args: {
     accounts.set(key, account);
   }
 
-  const candidates = [...accounts.values()].map((account) => {
-    const history = [...account.months.entries()]
+  const candidates = Array.from(accounts.values()).map((account) => {
+    const history = Array.from(account.months.entries())
       .map(([index, totals]: any) => ({ index, ...totals }))
       .sort((a, b) => a.index - b.index);
     const positive = history.filter((item) => item.roomNights > 0 || item.roomRevenue > 0);
@@ -168,7 +168,7 @@ export function buildSalesAdvisorPreview(args: {
     const totalRoomNights = positive.reduce((sum, item) => sum + item.roomNights, 0);
     const totalRevenue = positive.reduce((sum, item) => sum + item.roomRevenue, 0);
     const producingMonths = positive.length;
-    const typicalMonths = [...new Set(positive.map((item) => (item.index % 12) + 1))];
+    const typicalMonths = Array.from(new Set(positive.map((item) => (item.index % 12) + 1)));
     const recurring = producingMonths >= 2;
     const dataComplete = missingComparableMonths === 0;
     const status = !last

@@ -43,7 +43,7 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
     enabled: !!hotelId,
   });
   const generate = useMutation({
-    mutationFn: (regenerate = false) => request("/api/courtyard/sales-intelligence/advisor/generate", {
+    mutationFn: (regenerate: boolean) => request("/api/courtyard/sales-intelligence/advisor/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ hotelId, lookbackMonths: Number(lookbackMonths), analysisType, businessTypes, regenerate }),
@@ -51,21 +51,43 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
     onSuccess: (value) => {
       setAnalysis(value);
       queryClient.invalidateQueries({ queryKey: ["sales-advisor-analyses", hotelId] });
-      toast({ title: value.cached ? "Saved analysis reopened" : "Sales plan generated", description: value.cached ? "No additional AI call was needed." : "The plan is ready to copy into IVY or export." });
+      toast({ title: value.cached ? "Saved analysis reopened" : "Sales plan generated", description: value.cached ? "No additional AI call was needed." : "The onsite plan is ready to review or export." });
     },
     onError: (error: Error) => toast({ title: "Sales Advisor needs attention", description: error.message, variant: "destructive" }),
   });
   const activePreview = analysis?.inputSnapshotJson || preview.data;
   const narrative = analysis?.resultJson;
   const priorities = useMemo(() => new Map((narrative?.priorities || []).map((item: any) => [item.accountKey, item])), [narrative]);
-  const ivyText = useMemo(() => {
+  const planText = useMemo(() => {
     if (!analysis) return "";
     return [
       `Sales Advisor Plan - ${new Date(analysis.createdAt).toLocaleDateString()}`,
       narrative?.executiveSummary,
-      ...(narrative?.weeklyPlan || []).map((item: any) => `${item.dayOrSequence}: ${item.ivyEntry}`),
+      ...(narrative?.weeklyPlan || []).map((item: any) => `${item.dayOrSequence}: ${item.actionPlanEntry || "Complete the planned outreach and record the outcome onsite."}`),
     ].filter(Boolean).join("\n\n");
   }, [analysis, narrative]);
+  const addToCrm = useMutation({
+    mutationFn: (candidate: any) => request("/api/courtyard/sales-intelligence/opportunities", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        hotelId,
+        normalizedAccountKey: candidate.key,
+        accountName: candidate.name,
+        marketSegment: candidate.businessType,
+        stage: "prospect",
+        estimatedRoomNights: candidate.totalRoomNights,
+        estimatedRevenue: candidate.estimatedRecoveryRevenue,
+        nextAction: "Review Sales Advisor history and identify the best contact",
+        notes: `Added from Sales Advisor. ${candidate.status}; ${candidate.confidence} confidence; ${candidate.productionBasis} production basis.`,
+      }),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sales-crm", hotelId] });
+      toast({ title: "Prospect added to Backup CRM" });
+    },
+    onError: (error: Error) => toast({ title: "Could not add prospect", description: error.message, variant: "destructive" }),
+  });
   const toggleType = (type: string) => setBusinessTypes((current) => current.includes(type) ? current.filter((item) => item !== type) : [...current, type]);
 
   return (
@@ -104,7 +126,7 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
       {narrative && <Card className="!border-[#2f5f46] !bg-[#e7f0e9] !text-[#173b2a]">
         <CardHeader><CardTitle>Executive Summary</CardTitle><CardDescription className="!text-[#405f4b]">{narrative.executiveSummary}</CardDescription></CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button variant="outline" className="border-[#2f5f46] bg-white text-[#173b2a]" onClick={async () => { await navigator.clipboard.writeText(ivyText); toast({ title: "IVY-ready plan copied" }); }}><Copy className="mr-2 h-4 w-4" />Copy for IVY</Button>
+          <Button variant="outline" className="border-[#2f5f46] bg-white text-[#173b2a]" onClick={async () => { await navigator.clipboard.writeText(planText); toast({ title: "Onsite action plan copied" }); }}><Copy className="mr-2 h-4 w-4" />Copy Action Plan</Button>
           <Button asChild variant="outline" className="border-[#2f5f46] bg-white text-[#173b2a]"><a href={apiUrl(`/api/courtyard/sales-intelligence/advisor/analyses/${analysis.id}.pdf?hotelId=${encodeURIComponent(hotelId)}`)}><Download className="mr-2 h-4 w-4" />Download PDF</a></Button>
         </CardContent>
       </Card>}
@@ -118,13 +140,14 @@ export function CourtyardSalesAdvisor({ hotelId }: { hotelId: string }) {
               <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="font-semibold">{index + 1}. {candidate.name}</div><div className="text-sm text-[#5f5247]">{candidate.businessType} · {candidate.status}</div></div><div className="flex gap-2"><Badge className="!bg-[#2f5f46] !text-white">Score {candidate.scores.overall}</Badge><Badge variant="outline" className="border-[#8d765a] text-[#3f3329]">{candidate.confidence} confidence</Badge></div></div>
               <div className="mt-3 grid gap-2 text-sm sm:grid-cols-4"><span><strong>{candidate.totalRoomNights}</strong> room nights</span><span><strong>{money.format(candidate.totalRevenue)}</strong> revenue</span><span><strong>{money.format(candidate.estimatedRecoveryRevenue)}</strong> potential</span><span><strong className="capitalize">{candidate.productionBasis}</strong> basis</span></div>
               <p className="mt-3 text-sm text-[#4f4339]">{item?.rationale || `${candidate.possibleDemandDriver}. Generate the plan for a tailored outreach recommendation.`}</p>
-              {item?.ivyActivity && <div className="mt-2 rounded bg-[#f7f1e7] p-2 text-sm"><strong>IVY entry:</strong> {item.ivyActivity}</div>}
+              {item?.planningNote && <div className="mt-2 rounded bg-[#f7f1e7] p-2 text-sm"><strong>Planning note:</strong> {item.planningNote}</div>}
+              <Button size="sm" variant="outline" className="mt-3 border-[#8d765a] bg-white text-[#201814]" disabled={addToCrm.isPending} onClick={() => addToCrm.mutate(candidate)}>Add to Backup CRM</Button>
             </div>;
           })}
         </CardContent>
       </Card>}
 
-      {narrative?.weeklyPlan?.length > 0 && <Card className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]"><CardHeader><CardTitle>This Week’s IVY Plan</CardTitle></CardHeader><CardContent className="space-y-3">{narrative.weeklyPlan.map((item: any, index: number) => <div key={index} className="rounded-md border border-[#deceba] bg-white p-3"><strong>{item.dayOrSequence}: {item.focus}</strong><p className="mt-1 text-sm text-[#5f5247]">{item.ivyEntry}</p></div>)}</CardContent></Card>}
+      {narrative?.weeklyPlan?.length > 0 && <Card className="!border-[#cdbda8] !bg-[#fffaf2] !text-[#201814]"><CardHeader><CardTitle>This Week’s Onsite Action Plan</CardTitle></CardHeader><CardContent className="space-y-3">{narrative.weeklyPlan.map((item: any, index: number) => <div key={index} className="rounded-md border border-[#deceba] bg-white p-3"><strong>{item.dayOrSequence}: {item.focus}</strong><p className="mt-1 text-sm text-[#5f5247]">{item.actionPlanEntry || "Complete the planned outreach and record the outcome onsite."}</p></div>)}</CardContent></Card>}
 
       {!!activePreview?.limitations?.length && <Card className="border-amber-300 bg-amber-50 text-amber-950"><CardHeader><CardTitle className="text-base">Data Limitations</CardTitle></CardHeader><CardContent><ul className="list-disc space-y-1 pl-5 text-sm">{[...activePreview.limitations, ...(narrative?.additionalLimitations || [])].map((item: string, index: number) => <li key={index}>{item}</li>)}</ul></CardContent></Card>}
 

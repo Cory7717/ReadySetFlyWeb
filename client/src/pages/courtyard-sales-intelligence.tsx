@@ -645,6 +645,7 @@ export default function CourtyardSalesIntelligence() {
           <TabsList className="h-auto flex-wrap justify-start bg-[#eadfce]">
             <TabsTrigger value="total">Total</TabsTrigger>
             <TabsTrigger value="advisor">Sales Advisor</TabsTrigger>
+            <TabsTrigger value="crm">Backup CRM</TabsTrigger>
             {marketSegments.map((segment: string) => (
               <TabsTrigger key={segment} value={`segment:${segment}`}>
                 {segment}
@@ -665,6 +666,12 @@ export default function CourtyardSalesIntelligence() {
           </TabsContent>
           <TabsContent value="advisor">
             <CourtyardSalesAdvisor hotelId={selectedHotel} />
+          </TabsContent>
+          <TabsContent value="crm">
+            <SalesCrm
+              hotelId={selectedHotel}
+              accounts={dashboard.data?.accounts || []}
+            />
           </TabsContent>
           {marketSegments.map((segment: string) => (
             <TabsContent key={segment} value={`segment:${segment}`}>
@@ -1103,6 +1110,16 @@ function SalesCrm({ hotelId, accounts }: any) {
   });
   return (
     <div className="space-y-4">
+      <Card className="!border-[#2f5f46] !bg-[#e7f0e9] !text-[#173b2a]">
+        <CardContent className="p-4">
+          <div className="font-semibold">Optional Onsite Backup CRM</div>
+          <p className="mt-1 text-sm text-[#405f4b]">
+            Use this workspace only when it helps the property team retain
+            prospect notes, follow-ups, and pipeline details. It does not send
+            information to any external system.
+          </p>
+        </CardContent>
+      </Card>
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           [
@@ -2027,7 +2044,7 @@ function PlanningDetailDialog({ account, onClose }: any) {
           <DialogDescription>
             {String(account.key).startsWith("stay-company:")
               ? "Observed stayed/in-house reservation activity. Revenue is estimated from displayed rate × nights and remains separate from official Hotel Production."
-              : "Read-only production history for planning and prospect research. Sales activity remains in IVY."}
+              : "Production history for onsite planning and prospect research. Optional follow-up activity can be retained in the Backup CRM."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">

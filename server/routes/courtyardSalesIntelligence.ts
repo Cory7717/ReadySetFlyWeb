@@ -408,37 +408,125 @@ async function advisorSourceData(hotelId: string) {
   return { batches: active, rows };
 }
 
-function advisorReportText(analysis: any) {
+async function createAdvisorPdf(analysis: any, hotelName: string) {
   const preview = analysis.inputSnapshotJson || {};
   const result = analysis.resultJson || {};
   const candidates = preview.candidates || [];
   const priorityByKey = new Map(
     (result.priorities || []).map((item: any) => [item.accountKey, item]),
   );
-  const lines = [
-    "SALES ADVISOR WEEKLY PLAN",
-    `Generated ${new Date(analysis.createdAt).toLocaleDateString("en-US")}`,
-    "",
-    "EXECUTIVE SUMMARY",
-    result.executiveSummary || "Deterministic opportunity review only.",
-    "",
-    "PRIORITY PROSPECTS",
+  const pdf = await PDFDocument.create();
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const green = rgb(0.184, 0.373, 0.275);
+  const dark = rgb(0.125, 0.094, 0.078);
+  const tan = rgb(0.969, 0.945, 0.906);
+  const line = rgb(0.804, 0.741, 0.659);
+  const muted = rgb(0.373, 0.322, 0.278);
+  let page: any;
+  let y = 0;
+  const pages: any[] = [];
+  const addPage = () => {
+    page = pdf.addPage([612, 792]);
+    pages.push(page);
+    page.drawRectangle({ x: 0, y: 710, width: 612, height: 82, color: green });
+    page.drawText(String(hotelName || "Courtyard Hotel").toUpperCase(), {
+      x: 42, y: 765, size: 9, font: bold, color: rgb(0.91, 0.85, 0.72),
+    });
+    page.drawText("DIRECTOR OF SALES ACTION PLAN", {
+      x: 42, y: 737, size: 20, font: bold, color: rgb(1, 1, 1),
+    });
+    page.drawText(`Prepared ${new Date(analysis.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`, {
+      x: 430, y: 765, size: 8, font: regular, color: rgb(1, 1, 1),
+    });
+    y = 682;
+  };
+  const ensure = (height: number) => {
+    if (y - height < 48) addPage();
+  };
+  const paragraph = (text: string, options: any = {}) => {
+    const size = options.size || 9.5;
+    const max = options.max || 94;
+    const lines = wrapText(String(text || ""), max);
+    ensure(lines.length * (size + 4) + 4);
+    for (const item of lines) {
+      page.drawText(item, { x: options.x || 42, y, size, font: options.bold ? bold : regular, color: options.color || dark });
+      y -= size + 4;
+    }
+    y -= options.after ?? 3;
+  };
+  const section = (title: string, subtitle?: string) => {
+    ensure(subtitle ? 54 : 34);
+    y -= 5;
+    page.drawText(title.toUpperCase(), { x: 42, y, size: 12, font: bold, color: green });
+    page.drawRectangle({ x: 42, y: y - 8, width: 528, height: 1, color: line });
+    y -= 22;
+    if (subtitle) paragraph(subtitle, { size: 8.5, color: muted, after: 7 });
+  };
+  addPage();
+  const through = preview.generatedThrough
+    ? new Date(Date.UTC(preview.generatedThrough.year, preview.generatedThrough.month - 1, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
+    : "Latest imported month";
+  paragraph(`Planning window: Last ${preview.lookbackMonths || analysis.lookbackMonths} months through ${through}  |  Focus: ${String(analysis.analysisType || "full plan").replace(/_/g, " ")}`, { size: 9, color: muted, after: 10 });
+  section("Executive Direction");
+  paragraph(result.executiveSummary || "Production history has been ranked to identify the strongest onsite sales priorities.", { size: 10.5, max: 88, after: 10 });
+
+  const metrics = [
+    ["PROSPECTS REVIEWED", preview.summary?.prospectsReviewed || 0],
+    ["RECOVERY TARGETS", preview.summary?.recoveryOpportunities || 0],
+    ["DECLINING ACCOUNTS", preview.summary?.decliningAccounts || 0],
+    ["EST. RECOVERY", `$${Number(preview.summary?.estimatedRecoveryRevenue || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`],
   ];
-  for (const candidate of candidates.slice(0, 12)) {
+  ensure(66);
+  metrics.forEach(([label, value], index) => {
+    const x = 42 + index * 134;
+    page.drawRectangle({ x, y: y - 48, width: 124, height: 52, color: tan, borderColor: line, borderWidth: 0.7 });
+    page.drawText(String(label), { x: x + 9, y: y - 13, size: 6.8, font: bold, color: muted });
+    page.drawText(String(value), { x: x + 9, y: y - 36, size: 15, font: bold, color: dark });
+  });
+  y -= 68;
+
+  section("Priority Prospect Portfolio", "Ranked from imported named-account production. Scores combine historical value, recoverability, timing, and current production status.");
+  for (const [index, candidate] of candidates.slice(0, 10).entries()) {
     const narrative: any = priorityByKey.get(candidate.key);
-    lines.push(
-      `${candidate.name} | ${candidate.businessType} | Score ${candidate.scores.overall}`,
-      `${candidate.totalRoomNights} room nights | $${Number(candidate.totalRevenue).toLocaleString()} revenue | ${candidate.productionBasis} basis`,
-      narrative?.rationale || `${candidate.status}; ${candidate.confidence} confidence.`,
-      `IVY: ${narrative?.ivyActivity || "Review history and record outreach in IVY."}`,
-      "",
-    );
+    const rationale = narrative?.rationale || `${candidate.status}; ${candidate.confidence} confidence.`;
+    const action = narrative?.planningNote || "Review account history, identify the decision maker, and determine the best outreach approach.";
+    const needed = 100 + wrapText(rationale, 82).length * 11 + wrapText(action, 82).length * 11;
+    ensure(needed);
+    const top = y;
+    page.drawRectangle({ x: 42, y: top - needed + 8, width: 528, height: needed, color: index % 2 ? rgb(1, 1, 1) : tan, borderColor: line, borderWidth: 0.6 });
+    page.drawRectangle({ x: 42, y: top - needed + 8, width: 7, height: needed, color: green });
+    page.drawText(`#${index + 1}`, { x: 60, y: top - 20, size: 9, font: bold, color: green });
+    page.drawText(String(candidate.name).slice(0, 58), { x: 89, y: top - 20, size: 12, font: bold, color: dark });
+    page.drawText(`PRIORITY ${candidate.scores.overall}`, { x: 482, y: top - 20, size: 7.5, font: bold, color: green });
+    y = top - 39;
+    paragraph(`${candidate.businessType}  |  ${candidate.status}  |  ${candidate.confidence} confidence  |  ${candidate.productionBasis} production basis`, { x: 60, size: 8, color: muted, max: 90, after: 2 });
+    paragraph(`${Number(candidate.totalRoomNights).toLocaleString()} historical room nights  |  $${Number(candidate.totalRevenue).toLocaleString("en-US", { maximumFractionDigits: 0 })} historical revenue  |  $${Number(candidate.estimatedRecoveryRevenue).toLocaleString("en-US", { maximumFractionDigits: 0 })} estimated opportunity`, { x: 60, size: 8.5, bold: true, max: 88, after: 3 });
+    paragraph(rationale, { x: 60, size: 8.7, max: 88, after: 2 });
+    paragraph(`RECOMMENDED ACTION: ${action}`, { x: 60, size: 8.5, bold: true, color: green, max: 85, after: 8 });
+    y = top - needed - 5;
   }
-  lines.push("WEEKLY PLAN");
-  for (const item of result.weeklyPlan || [])
-    lines.push(`${item.dayOrSequence}: ${item.focus}`, `IVY: ${item.ivyEntry}`, "");
-  lines.push("DATA LIMITATIONS", ...[...(preview.limitations || []), ...(result.additionalLimitations || [])]);
-  return lines;
+
+  section("This Week's Onsite Action Plan", "A practical working sequence for the Director of Sales. Adjust timing around property priorities and customer availability.");
+  for (const [index, item] of (result.weeklyPlan || []).entries()) {
+    ensure(55);
+    page.drawRectangle({ x: 42, y: y - 9, width: 22, height: 22, color: green });
+    page.drawText(String(index + 1), { x: 50, y: y - 2, size: 9, font: bold, color: rgb(1, 1, 1) });
+    paragraph(`${item.dayOrSequence}: ${item.focus}`, { x: 75, size: 10, bold: true, max: 76, after: 1 });
+    paragraph(item.actionPlanEntry || "Complete the planned outreach and retain the result onsite.", { x: 75, size: 9, color: muted, max: 76, after: 8 });
+  }
+
+  const limitations = [...(preview.limitations || []), ...(result.additionalLimitations || [])];
+  if (limitations.length) {
+    section("Data Notes & Planning Guardrails");
+    for (const item of limitations) paragraph(`• ${item}`, { x: 50, size: 8.5, color: muted, max: 88, after: 2 });
+  }
+  pages.forEach((item, index) => {
+    item.drawRectangle({ x: 0, y: 0, width: 612, height: 30, color: tan });
+    item.drawText("CONFIDENTIAL · ONSITE SALES PLANNING", { x: 42, y: 11, size: 6.8, font: bold, color: muted });
+    item.drawText(`Page ${index + 1} of ${pages.length}`, { x: 520, y: 11, size: 7, font: regular, color: muted });
+  });
+  return pdf.save();
 }
 
 export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
@@ -1402,23 +1490,8 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         .where(and(eq(courtyardSalesAdvisorAnalyses.id, req.params.id), eq(courtyardSalesAdvisorAnalyses.hotelId, hotelId)))
         .limit(1);
       if (!analysis) return res.status(404).json({ error: "Analysis not found." });
-      const pdf = await PDFDocument.create();
-      const font = await pdf.embedFont(StandardFonts.Helvetica);
-      const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-      let page = pdf.addPage([612, 792]);
-      let y = 750;
-      for (const rawLine of advisorReportText(analysis)) {
-        const isHeading = /^[A-Z][A-Z ]+$/.test(rawLine);
-        for (const line of wrapText(rawLine, 92)) {
-          if (y < 52) {
-            page = pdf.addPage([612, 792]);
-            y = 750;
-          }
-          page.drawText(line, { x: 42, y, size: isHeading ? 12 : 9, font: isHeading ? bold : font, color: rgb(0.12, 0.09, 0.07) });
-          y -= isHeading ? 19 : 13;
-        }
-      }
-      const bytes = await pdf.save();
+      const hotelName = req.salesHotels.find((hotel: any) => hotel.id === hotelId)?.name || "Courtyard Hotel";
+      const bytes = await createAdvisorPdf(analysis, hotelName);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="sales-advisor-${analysis.id}.pdf"`);
       res.send(Buffer.from(bytes));

@@ -3,31 +3,31 @@ import { zodResponseFormat } from "openai/helpers/zod";
 import { getOpenAIClient, salesAdvisorModel } from "./openaiClient";
 
 const advisorNarrativeSchema = z.object({
-  executiveSummary: z.string(),
+  executiveSummary: z.string().max(1400),
   priorities: z.array(
     z.object({
       accountKey: z.string(),
-      rationale: z.string(),
-      recommendedApproach: z.string(),
-      ivyActivity: z.string(),
+      rationale: z.string().max(700),
+      recommendedApproach: z.string().max(700),
+      planningNote: z.string().max(700),
     }),
-  ),
+  ).max(20),
   demandDrivers: z.array(
     z.object({
       accountKey: z.string(),
-      inference: z.string(),
+      inference: z.string().max(500),
       confidence: z.enum(["low", "medium", "high"]),
     }),
-  ),
+  ).max(20),
   weeklyPlan: z.array(
     z.object({
-      dayOrSequence: z.string(),
-      focus: z.string(),
+      dayOrSequence: z.string().max(80),
+      focus: z.string().max(240),
       accounts: z.array(z.string()),
-      ivyEntry: z.string(),
+      actionPlanEntry: z.string().max(700),
     }),
-  ),
-  additionalLimitations: z.array(z.string()),
+  ).max(10),
+  additionalLimitations: z.array(z.string().max(500)).max(10),
 });
 
 export async function generateSalesAdvisorNarrative(context: Record<string, unknown>) {
@@ -43,7 +43,7 @@ export async function generateSalesAdvisorNarrative(context: Record<string, unkn
       {
         role: "system",
         content:
-          "You are a hotel Director of Sales planning advisor. Turn the supplied deterministic production analysis into a concise, evidence-based weekly prospecting plan. Never change, recalculate, or invent production figures. Treat missing months as unknown. Clearly label demand-driver statements as inferences. Do not create CRM tasks; write short IVY-ready activity text the DOS can copy. Reference only account keys supplied in the context.",
+          "You are an onsite hotel Director of Sales planning advisor. Turn the supplied deterministic production analysis into a polished, evidence-based weekly prospecting plan for the DOS to use at the property. Never change, recalculate, or invent production figures. Treat missing months as unknown. Clearly label demand-driver statements as inferences. Recommend concrete outreach and research actions, but do not imply that any external system was updated. Reference only account keys supplied in the context.",
       },
       {
         role: "user",

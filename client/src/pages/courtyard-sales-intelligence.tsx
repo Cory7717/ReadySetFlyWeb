@@ -786,18 +786,37 @@ function mondayValue() {
 function SalesCrm({ hotelId, accounts }: any) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const accountOptions = useMemo(
-    () =>
-      Array.from(
-        new Map<string, any>(
-          accounts
-            .filter((a: any) => ["group", "special"].includes(a.reportCategory))
-            .map((a: any) => [a.key, a]),
-        ).values(),
-      ).sort((a: any, b: any) => a.displayName.localeCompare(b.displayName)),
-    [accounts],
-  );
+  const crm = useQuery({
+    queryKey: ["sales-crm", hotelId],
+    queryFn: () =>
+      json(
+        `/api/courtyard/sales-intelligence/crm?hotelId=${encodeURIComponent(hotelId)}`,
+      ),
+    enabled: !!hotelId,
+  });
+  const accountOptions = useMemo(() => {
+    const options = new Map<string, any>(
+      accounts
+        .filter((a: any) => ["group", "special"].includes(a.reportCategory))
+        .map((a: any) => [a.key, a]),
+    );
+    for (const opportunity of crm.data?.opportunities || []) {
+      if (!options.has(opportunity.normalizedAccountKey)) {
+        options.set(opportunity.normalizedAccountKey, {
+          key: opportunity.normalizedAccountKey,
+          displayName: opportunity.accountName,
+          marketSegment: opportunity.marketSegment,
+          manual: true,
+        });
+      }
+    }
+    return Array.from(options.values()).sort((a: any, b: any) =>
+      a.displayName.localeCompare(b.displayName),
+    );
+  }, [accounts, crm.data?.opportunities]);
   const [accountKey, setAccountKey] = useState("");
+  const [addingAccount, setAddingAccount] = useState(false);
+  const [newAccountName, setNewAccountName] = useState("");
   const selected = accountOptions.find((a: any) => a.key === accountKey);
   const [stage, setStage] = useState("prospect"),
     [nights, setNights] = useState(""),
@@ -809,14 +828,7 @@ function SalesCrm({ hotelId, accounts }: any) {
     [outcome, setOutcome] = useState(""),
     [details, setDetails] = useState(""),
     [followUp, setFollowUp] = useState("");
-  const crm = useQuery({
-    queryKey: ["sales-crm", hotelId],
-    queryFn: () =>
-      json(
-        `/api/courtyard/sales-intelligence/crm?hotelId=${encodeURIComponent(hotelId)}`,
-      ),
-    enabled: !!hotelId,
-  });
+  const manualAccountKey = `manual:${newAccountName.trim().toLowerCase().replace(/\s+/g, " ")}`;
   const refresh = () =>
     qc.invalidateQueries({ queryKey: ["sales-crm", hotelId] });
   const createOpportunity = useMutation({
@@ -826,8 +838,10 @@ function SalesCrm({ hotelId, accounts }: any) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           hotelId,
-          normalizedAccountKey: accountKey,
-          accountName: selected?.displayName,
+          normalizedAccountKey: addingAccount ? manualAccountKey : accountKey,
+          accountName: addingAccount
+            ? newAccountName.trim()
+            : selected?.displayName,
           marketSegment: selected?.marketSegment,
           stage,
           estimatedRoomNights: nights,
@@ -839,6 +853,8 @@ function SalesCrm({ hotelId, accounts }: any) {
     onSuccess: () => {
       refresh();
       setAccountKey("");
+      setAddingAccount(false);
+      setNewAccountName("");
       setNights("");
       setRevenue("");
       setNextAction("");
@@ -995,11 +1011,49 @@ function SalesCrm({ hotelId, accounts }: any) {
                 <CardTitle>New Opportunity</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <AccountSelect
-                  accounts={accountOptions}
-                  value={accountKey}
-                  onChange={setAccountKey}
-                />
+                {addingAccount ? (
+                  <div className="rounded-md border border-[#cdbda8] bg-[#f7f1e7] p-3">
+                    <Label>New account name</Label>
+                    <Input
+                      autoFocus
+                      value={newAccountName}
+                      onChange={(event) =>
+                        setNewAccountName(event.target.value)
+                      }
+                      placeholder="Company or organization name"
+                    />
+                    <Button
+                      className="mt-2"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setAddingAccount(false);
+                        setNewAccountName("");
+                      }}
+                    >
+                      Choose Existing Account
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <AccountSelect
+                      accounts={accountOptions}
+                      value={accountKey}
+                      onChange={setAccountKey}
+                    />
+                    <Button
+                      className="w-full"
+                      variant="outline"
+                      onClick={() => {
+                        setAccountKey("");
+                        setAddingAccount(true);
+                      }}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add New Account
+                    </Button>
+                  </>
+                )}
                 <FieldSelect
                   label="Stage"
                   value={stage}
@@ -1042,7 +1096,10 @@ function SalesCrm({ hotelId, accounts }: any) {
                 </div>
                 <Button
                   className={C.green}
-                  disabled={!accountKey || createOpportunity.isPending}
+                  disabled={
+                    (addingAccount ? !newAccountName.trim() : !accountKey) ||
+                    createOpportunity.isPending
+                  }
                   onClick={() => createOpportunity.mutate()}
                 >
                   <Plus className="mr-2 h-4 w-4" />

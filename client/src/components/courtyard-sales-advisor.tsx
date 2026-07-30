@@ -15,8 +15,8 @@ import { apiUrl } from "@/lib/api";
 import { Textarea } from "@/components/ui/textarea";
 
 const TYPES = ["Groups", "Special Corp", "Government", "Corporate Accounts"];
-const ADVISOR_BUTTON = "!border-[#315e49] !bg-white !text-[#173b2a] hover:!bg-[#e7f0e9] disabled:!border-[#8d8278] disabled:!bg-[#e6ded3] disabled:!text-[#5a5048]";
-const ADVISOR_PRIMARY_BUTTON = "!border-[#244c38] !bg-[#2f5f46] !text-white hover:!bg-[#244c38] disabled:!border-[#8d8278] disabled:!bg-[#d8d0c6] disabled:!text-[#514941]";
+const ADVISOR_BUTTON = "!border-[#315e49] !bg-none !bg-white !text-[#173b2a] hover:!bg-none hover:!bg-[#e7f0e9] disabled:!border-[#8d8278] disabled:!bg-none disabled:!bg-[#e6ded3] disabled:!text-[#5a5048]";
+const ADVISOR_PRIMARY_BUTTON = "!border-[#244c38] !bg-none !bg-[#2f5f46] !text-white hover:!bg-none hover:!bg-[#244c38] disabled:!border-[#8d8278] disabled:!bg-none disabled:!bg-[#d8d0c6] disabled:!text-[#514941]";
 const ADVISOR_FLAG = "!border-[#6f5a43] !bg-[#fffaf2] !text-[#2b2119]";
 
 function Button({ className = "", variant, ...props }: ComponentProps<typeof BaseButton>) {

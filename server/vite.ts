@@ -38,7 +38,7 @@ const routeSeo: Record<string, SeoMeta> = {
   },
   "/graveside": {
     title: "Graveside | A Television Series",
-    description: "A trauma surgeon and a genealogist uncover forgotten stories hidden within America's most historic cemeteries, where memory, death, and buried history collide.",
+    description: "A trauma surgeon and a genealogist unlock the truth about the dead—and discover The Harrow Group will do almost anything to keep powerful families' history buried.",
     image: "/downloads/graveside-hero.png",
   },
   "/patriotprotocol": {

@@ -36,7 +36,7 @@ type Episode = {
   payoff: string;
 };
 
-const episodes: Episode[] = [
+const legacyEpisodes15: Episode[] = [
   {
     number: 1,
     title: "Plot",
@@ -214,6 +214,64 @@ const episodes: Episode[] = [
   },
 ];
 
+const episodes: Episode[] = [
+  {
+    number: 1, title: "Plot", type: "Special", era: "Concord, New Hampshire · 1887 / present day", label: "Pilot",
+    summary: "A context-free cold open drops Mara and Eli into the Bridie Halloran, Edmund Swenson, and Cora Reilly case before cutting six months earlier. Their intimacy, grief, and cemetery obsession build toward the first transport—and the cold open resumes with its true cost understood.",
+    payoff: "At Cora's grave, an anonymous call reaches an unmarked office. A woman logs CONCORD, SWENSON, COLE, and VOSS, then orders a file opened. The audience knows they have been noticed before Mara and Eli do.",
+  },
+  {
+    number: 2, title: "What the River Holds", type: "A", era: "1890s Northeast", label: "The pattern established",
+    summary: "Eli inhabits mill foreman Thomas Finch while Mara inhabits owner Augustus Vale. Margaret Finch's death was not accidental, but neither host holds the complete truth. The rules of transport, debrief, evidence recovery, and anonymous justice become explicit.",
+    evidence: "The instrument used in Margaret's death, wrapped in oilcloth and thrown into a specific bend in the mill river.",
+    payoff: "Margaret's cause of death is corrected after 130 years. In the OR, Mara answers a routine question half a second too late; Felix notices and quietly files it away. Harrow watches without acting.",
+  },
+  {
+    number: 3, title: "Republic", type: "A", era: "Republic of Texas · 1840s", label: "Harrow's first strike",
+    summary: "Eli becomes land commissioner James Whitmore Cade; Mara becomes Consuela Reyes, whose family claim he destroys through fraud. In one charged moment, Eli forces a signature while Mara's hand fights to resist.",
+    evidence: "The legitimate Reyes land grant, concealed in a strongbox beneath the floor of a building that is now a restaurant.",
+    payoff: "The grant surfaces and a public hero's legacy fractures. Margaux Croft hand-delivers a cease-and-desist to Eli on behalf of The Harrow Group—calm, cordial, and impossible to push against.",
+  },
+  {
+    number: 4, title: "Golden Spike", type: "A", era: "1860s American West", label: "Institutional pressure",
+    summary: "At a neglected railroad cemetery, Eli inhabits supervisor Cornelius Phelps and Mara inhabits laborer Wei Liang. They witness a covered-up act of violence against a Chinese labor camp. Dark humor disappears completely.",
+    evidence: "A company memorandum authorizing the violence, hidden in a locked case inside a surviving company building.",
+    payoff: "A congressional inquiry opens. Nora Vasquez questions the anonymous sourcing. Croft enters Mara's hospital as a compliance consultant, while Felix warns Mara about the complaint before it formally lands.",
+  },
+  {
+    number: 5, title: "The Voss Grave", type: "C", era: "Late 1800s Northeast", label: "First ancestor episode",
+    summary: "Mara finds her surname on Hildegard Voss's headstone. Eli inhabits August Cole—a name he will not consciously register until later. A deliberately obscured conflict between their families begins to surface.",
+    payoff: "The bloodline thread remains unresolved, Nora's board is revealed, and Mara's hospital privileges are suspended. She tells Eli she does not want to do this anymore—and means it—as an unmarked car watches their house.",
+  },
+  {
+    number: 6, title: "The Senator's Wife", type: "A", era: "Early 1900s Texas", label: "The season turns physical",
+    summary: "Eli inhabits Senator Harlan Cross, a celebrated reformer; Mara inhabits Dorothy Cross, the wife who knew his private conduct and made her own calculations. The season's sharpest dark humor comes from Cross's spectacular self-importance.",
+    evidence: "Dorothy Cross's diary, hidden behind a false panel in a trunk donated to a historical society.",
+    payoff: "A major biography is pulled and Nora isolates the impossibility of Eli's knowledge. Raymond's office is breached on Croft's orders: paper pressure has failed, and Harrow escalates.",
+  },
+  {
+    number: 7, title: "Salt", type: "B", era: "1600s Colonial New England", label: "The violent-phase peak",
+    summary: "Eli inhabits Magistrate Ezra Poole while Mara inhabits Patience Gray, the woman he condemns during a regional witch panic. The horror is institutional, concentrated, and entirely without humor.",
+    evidence: "Poole's private record of his doubts, hidden inside the foundation stone of a church that still stands.",
+    payoff: "An exoneration petition brings consequences to Raymond. Croft watches as he is injured in a sudden, personal assault tied to his work. Nora realizes another force is already circling her investigation.",
+  },
+  {
+    number: 8, title: "What August Cole Knew", type: "C", era: "Late 1800s Northeast", label: "Second ancestor episode",
+    summary: "Eli connects August Cole to Hildegard Voss and researches alone before telling Mara. He inhabits August directly; Mara becomes Clara Voss. For the first time, the pull between them inside the past is unmistakable.",
+    payoff: "They surface nothing. Mara says they need to talk about their families. Croft confronts them with intimate knowledge of their lives, and Nora calls Eli directly under a legitimate professional pretext.",
+  },
+  {
+    number: 9, title: "Ground Truth", type: "Special", era: "Present day", label: "No transport",
+    summary: "The Cole and Voss records prove incomplete and deliberately contradictory. Raymond returns visibly changed and nearly reveals his solo transport. Felix pushes Mara harder, and she gives him more than she intended.",
+    payoff: "Nora receives authorization for a formal inquiry. Harrow's deliberate silence tightens the pressure. Mara and Eli finally locate the cemetery they have been seeking and book flights.",
+  },
+  {
+    number: 10, title: "What the Dead Owe the Living", type: "C", era: "Late 1800s / present day", label: "Season finale",
+    summary: "At two deliberately adjacent headstones, Mara and Eli enter the original Cole-Voss conflict from opposing bloodlines. The same moments unfold from both sides until the morally ambiguous death at the center is finally witnessed completely.",
+    payoff: "They survive Harrow's most dangerous move and expose part of its client network. Nora finds proof of other paired bloodlines across decades. In the cemetery, a small impossible physical or emotional echo follows Mara and Eli home. Nora adds MARA VOSS and ELI COLE to her board. Black.",
+  },
+];
+
 const seriesTracks = [
   {
     number: "01",
@@ -228,7 +286,7 @@ const seriesTracks = [
   {
     number: "03",
     title: "The Conspiracy",
-    text: "They recover evidence no living person should be able to locate. Anonymous justice leaves a pattern, and Nora Vasquez has started to see it.",
+    text: "The Harrow Group notices the first impossible tip. Its precise, unnerving counsel Margaux Croft escalates from legal pressure and career sabotage to surveillance, break-ins, and violence—while Nora begins seeing someone else inside her investigation.",
   },
 ];
 
@@ -247,7 +305,7 @@ const seasonArc = [
   {
     season: "Season One",
     title: "The Door Opens",
-    text: "Discovery, first consequences, and the decision to use what they witness. Nora notices the pattern. Raymond moves toward them. The family connection emerges from the margins.",
+    text: "Discovery becomes retaliation. Harrow attacks their careers, safety, and closest ally while Nora follows the same buried pattern from the other side. The Cole-Voss connection emerges, and the season ends with Harrow wounded—but far larger than they imagined.",
   },
   {
     season: "Season Two",
@@ -330,7 +388,7 @@ export default function GravesidePage() {
               <div className="mb-5 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-[0.26em] text-[#cdc7b8]">
                 <span className="border border-white/20 bg-black/30 px-3 py-2 backdrop-blur">TV-MA</span>
                 <span className="border border-white/20 bg-black/30 px-3 py-2 backdrop-blur">60 minutes</span>
-                <span className="border border-white/20 bg-black/30 px-3 py-2 backdrop-blur">15 episodes</span>
+                <span className="border border-white/20 bg-black/30 px-3 py-2 backdrop-blur">10 episodes</span>
                 <span className="border border-white/20 bg-black/30 px-3 py-2 backdrop-blur">3-season arc</span>
               </div>
 
@@ -345,8 +403,8 @@ export default function GravesidePage() {
               </p>
 
               <p className="mt-6 max-w-2xl border-l-2 border-[#9d3a31] pl-5 text-base leading-8 text-[#d0ccc2] sm:text-lg">
-                Two people obsessed with cemetery history get exactly what they wished for - and spend three seasons
-                trying to survive what they found.
+                Two people obsessed with cemetery history unlock the truth about the dead—and discover the living will
+                do almost anything to keep it buried.
               </p>
 
               <div className="mt-7 flex w-fit items-center gap-4 border border-[#a94137]/65 bg-[linear-gradient(90deg,rgba(79,22,18,0.82),rgba(9,12,13,0.78))] px-5 py-4 shadow-[0_18px_55px_rgba(0,0,0,0.42)] backdrop-blur">
@@ -420,13 +478,13 @@ export default function GravesidePage() {
             <div className="space-y-7">
               <p className="text-xl leading-9 tracking-[-0.02em] text-[#e1ddd3] sm:text-2xl sm:leading-10">
                 A trauma surgeon and a genealogist discover that certain cemeteries hold a door neither of them chose
-                to open.
+                to open—and that an institution built to bury powerful families' secrets has noticed them.
               </p>
               <p className="text-base leading-8 text-[#aaa79f] sm:text-lg">
                 Pulled into the lives of the buried, they experience history's darkest stories from opposing sides,
                 powerless to change a single outcome but not powerless to act on what they witness. As they anonymously
-                surface buried crimes with living consequences, someone in the present starts noticing the impossible
-                specificity of what they know.
+                surface buried crimes with living consequences, The Harrow Group turns legal pressure into something
+                far more dangerous, while investigator Nora Vasquez starts seeing both sides of the hidden war.
               </p>
               <div className="grid gap-px overflow-hidden border border-white/10 bg-white/10 sm:grid-cols-3">
                 {seriesTracks.map((track) => (
@@ -597,8 +655,8 @@ export default function GravesidePage() {
               </h2>
             </div>
             <p className="max-w-2xl self-end text-base leading-8 text-[#aaa79f] sm:text-lg">
-              Fifteen hours move from first contact to full exposure: ten dark histories, three ancestor episodes, a
-              present-day collision, and an investigator who ends the season with their names.
+              Ten hours move from first contact to open retaliation: six dark historical cases, two ancestor episodes,
+              a present-day mythology bridge, and a three-layer finale that wounds Harrow while revealing a much older pattern.
             </p>
           </div>
 

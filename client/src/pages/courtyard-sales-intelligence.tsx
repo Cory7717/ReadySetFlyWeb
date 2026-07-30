@@ -95,6 +95,7 @@ export default function CourtyardSalesIntelligence() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [view, setView] = useState("total");
+  const [productionView, setProductionView] = useState("total");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [detail, setDetail] = useState<Account | null>(null);
@@ -363,15 +364,15 @@ export default function CourtyardSalesIntelligence() {
   );
   const marketSegments = dashboard.data?.marketSegments || [];
   const visibleAccounts =
-    view === "total"
+    productionView === "total"
       ? accounts.filter((account) => account.reportCategory === "total")
-      : view.startsWith("segment:")
-        ? accounts.filter((account) => account.reportCategory === view)
+      : productionView.startsWith("segment:")
+        ? accounts.filter((account) => account.reportCategory === productionView)
         : groupAccounts;
   const totals = useMemo(() => {
     const isCompanyView =
       activeYear >= 2026 &&
-      ["segment:Special Corp", "segment:Government"].includes(view);
+      ["segment:Special Corp", "segment:Government"].includes(productionView);
     const companyAccounts = visibleAccounts.filter((account) =>
       String(account.key).startsWith("stay-company:"),
     );
@@ -395,7 +396,7 @@ export default function CourtyardSalesIntelligence() {
           roomNights
         : 0,
     };
-  }, [activeYear, view, visibleAccounts]);
+  }, [activeYear, productionView, visibleAccounts]);
   const priorYearPerformance = useMemo(() => {
     const sourceAccounts = ((dashboard.data?.accounts || []) as Account[]).filter(
       (account) => account.reportCategory === "total",
@@ -460,13 +461,13 @@ export default function CourtyardSalesIntelligence() {
     };
   }, [activePeriodValue, activeYear, dashboard.data?.accounts]);
   const entityLabel =
-    view === "total"
+    productionView === "total"
       ? "Segments"
-      : view === "segment:Group"
+      : productionView === "segment:Group"
         ? "Groups"
-        : ["segment:Special Corp", "segment:Government"].includes(view)
+        : ["segment:Special Corp", "segment:Government"].includes(productionView)
           ? "Prospects"
-          : view.startsWith("segment:")
+          : productionView.startsWith("segment:")
             ? "Segments"
             : "Accounts";
   const selectedPeriodLabel =
@@ -610,10 +611,12 @@ export default function CourtyardSalesIntelligence() {
             </SelectContent>
           </Select>
           <Select
-            value={view.startsWith("segment:") ? view : "all-segments"}
-            onValueChange={(value) =>
-              setView(value === "all-segments" ? "total" : value)
-            }
+            value={productionView.startsWith("segment:") ? productionView : "all-segments"}
+            onValueChange={(value) => {
+              const nextView = value === "all-segments" ? "total" : value;
+              setProductionView(nextView);
+              setView(nextView);
+            }}
           >
             <SelectTrigger className="w-56 bg-white">
               <SelectValue placeholder="Filter market segment" />
@@ -833,7 +836,12 @@ export default function CourtyardSalesIntelligence() {
             );
           })}
         </section>
-        <Tabs value={view} onValueChange={setView}>
+        <Tabs value={view} onValueChange={(value) => {
+          setView(value);
+          if (value === "total" || value === "annual" || value.startsWith("segment:")) {
+            setProductionView(value === "annual" ? productionView : value);
+          }
+        }}>
           <TabsList className="h-auto flex-wrap justify-start bg-[#eadfce]">
             <TabsTrigger value="total">Total</TabsTrigger>
             {marketSegments.map((segment: string) => (

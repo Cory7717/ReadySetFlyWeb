@@ -10,7 +10,9 @@ import {
   ChevronDown,
   Eye,
   FileClock,
+  ContactRound,
   Search,
+  Sparkles,
   Plus,
   Trash2,
   Upload,
@@ -626,6 +628,20 @@ export default function CourtyardSalesIntelligence() {
             </SelectContent>
           </Select>
         </div>
+        <section className="flex flex-wrap items-center gap-3 rounded-xl border border-[#cdbda8] bg-[#fffaf2] p-3 shadow-sm" aria-label="Sales planning tools">
+          <div className="mr-1 min-w-48">
+            <div className="text-xs font-bold uppercase tracking-[0.16em] text-[#8a6b3f]">DOS Planning Tools</div>
+            <div className="text-sm text-[#5f5247]">Build the plan and manage follow-up.</div>
+          </div>
+          <Button className={view === "advisor" ? C.green : C.outline} variant={view === "advisor" ? "default" : "outline"} onClick={() => setView("advisor")}>
+            <Sparkles className="mr-2 h-4 w-4" />
+            Sales Advisor
+          </Button>
+          <Button className={view === "crm" ? C.green : C.outline} variant={view === "crm" ? "default" : "outline"} onClick={() => setView("crm")}>
+            <ContactRound className="mr-2 h-4 w-4" />
+            Backup CRM
+          </Button>
+        </section>
         <Card className="!border-[#2f5f46] !bg-[#e7f0e9] !bg-none !text-[#173b2a]">
           <CardContent className="flex flex-col gap-1 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -820,8 +836,6 @@ export default function CourtyardSalesIntelligence() {
         <Tabs value={view} onValueChange={setView}>
           <TabsList className="h-auto flex-wrap justify-start bg-[#eadfce]">
             <TabsTrigger value="total">Total</TabsTrigger>
-            <TabsTrigger value="advisor">Sales Advisor</TabsTrigger>
-            <TabsTrigger value="crm">Backup CRM</TabsTrigger>
             {marketSegments.map((segment: string) => (
               <TabsTrigger key={segment} value={`segment:${segment}`}>
                 {segment}

@@ -62,6 +62,27 @@ test("suite selector can run core, extended, or all cases without changing Core 
   assert.equal(all.slice(15).every((item) => item.suite === "extended"), true);
 });
 
+test("Core cases 8 and 9 keep SC equipment amendments free of unsupported PBN claims", () => {
+  const cases = buildCases(context, "core-amend-pbn-compliance");
+
+  for (const seed of [8, 9]) {
+    const testCase = cases.find((item) => item.seed === seed)!;
+    const mutation = amendMutationForCase(testCase)!;
+    const amendPlan = {
+      ...testCase.buildPlan(),
+      ...mutation,
+      filingStatus: "filed",
+      filingProviderPlanId: `provider-case-${seed}`,
+      filingProviderVersionStamp: `version-case-${seed}`,
+      plannedDepartureAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    } as any;
+
+    assert.doesNotMatch(String(amendPlan.filingEquipment), /R/);
+    assert.doesNotMatch(String(amendPlan.filingOtherInfo), /\bPBN\//);
+    assert.equal(validateFlightPlanForAction(amendPlan, "amend").ready, true);
+  }
+});
+
 test("extended edge pack covers cancellation, valid PBN, timezone, ZZZZ TYP, lifecycle, and future DOF edges", () => {
   const cases = buildExtendedEdgeCases(context, "edge-coverage");
   const namesBySeed = new Map(cases.map((item) => [item.seed, item.name]));

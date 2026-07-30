@@ -1122,7 +1122,7 @@ export const amendMutationForCase = (testCase: LiveLabCase): Partial<FlightPlan>
       route: "DCT ACT DCT",
       filingPlannedAltitudeFt: 9000,
       alternate: "KACT",
-      filingOtherInfo: `PBN/A1 ${providerSafeRmk(8, "AMENDED ROUTE ALT")}`,
+      filingOtherInfo: providerSafeRmk(8, "AMENDED ROUTE ALT"),
       filingRemarks: "RSF LAB TEST SEED 8 AMENDED",
     } as Partial<FlightPlan>;
   }
@@ -1131,7 +1131,7 @@ export const amendMutationForCase = (testCase: LiveLabCase): Partial<FlightPlan>
       route: "DCT ACT DCT",
       filingPlannedAltitudeFt: 6500,
       alternate: "KACT",
-      filingOtherInfo: `PBN/A1 ${providerSafeRmk(9, "AMENDED INTEGRITY")}`,
+      filingOtherInfo: providerSafeRmk(9, "AMENDED INTEGRITY"),
       filingRemarks: "RSF LAB TEST SEED 9 AMENDED",
     } as Partial<FlightPlan>;
   }

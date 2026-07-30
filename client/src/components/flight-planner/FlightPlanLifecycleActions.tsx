@@ -317,7 +317,7 @@ export function FlightPlanLifecycleActions({
   const liveProviderPlan = hasLiveProviderPlan(plan);
   const providerReviewPending = hasPendingProviderReview(plan);
   const providerUpdatesSummary = summarizeProviderUpdates(plan);
-  const providerAcknowledgementAvailable = providerReviewPending || providerUpdatesSummary.count > 0;
+  const providerAcknowledgementAvailable = providerReviewPending;
   const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
   const isVfr = rules === "VFR";
   const actionPending = Boolean(pending?.filingAction);
@@ -451,7 +451,7 @@ export function FlightPlanLifecycleActions({
           disabled={actionPending || syncPending || acceptPending || providerActionsPaused}
           title={providerActionsPausedReason || "Acknowledge that RSF applied the provider update shown here."}
         >
-          {acceptPending ? "Acknowledging..." : providerReviewPending ? "Acknowledge provider update" : "Acknowledge latest update"}
+          {acceptPending ? "Acknowledging..." : "Acknowledge provider update"}
         </Button>
       )}
       <Button

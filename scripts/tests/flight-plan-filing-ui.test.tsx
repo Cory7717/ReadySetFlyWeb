@@ -534,6 +534,28 @@ test("rendered lifecycle actions show acknowledge provider update when provider 
   assertButtonVisible(html, lifecycleLabels.cancel, { disabled: false });
 });
 
+test("rendered lifecycle actions do not offer repeated acknowledgement for historical provider updates", () => {
+  const html = renderLifecycleActions(lifecyclePlan({
+    filingProviderMessages: [{
+      id: "provider-review-accepted-1",
+      timestamp: "2026-07-30T16:16:24.000Z",
+      severity: "success",
+      title: "Provider update acknowledged",
+      details: "Pilot acknowledged the current provider version in RSF.",
+      source: "rsf",
+    }],
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "proposed",
+      providerStatus: "PROPOSED",
+      versionStamp: "20260730161111820",
+      providerPendingReview: false,
+    },
+  } as any));
+
+  assert.doesNotMatch(html, /Acknowledge (?:provider|latest) update/);
+  assertButtonVisible(html, "Provider updates", { disabled: false });
+});
+
 test("rendered lifecycle actions suppress mutation controls for terminal plans", () => {
   for (const status of ["cancelled", "closed"]) {
     const html = renderLifecycleActions(lifecyclePlan({

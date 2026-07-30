@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Copy, Download, ExternalLink, Lock, MapPin, Plus, RefreshCw, Save, Search, Sparkles } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge as BaseBadge } from "@/components/ui/badge";
+import { Button as BaseButton } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,18 @@ import { Textarea } from "@/components/ui/textarea";
 
 const TYPES = ["Groups", "Special Corp", "Government", "Corporate Accounts"];
 const ADVISOR_BUTTON = "!border-[#315e49] !bg-white !text-[#173b2a] hover:!bg-[#e7f0e9] disabled:!border-[#8d8278] disabled:!bg-[#e6ded3] disabled:!text-[#5a5048]";
+const ADVISOR_PRIMARY_BUTTON = "!border-[#244c38] !bg-[#2f5f46] !text-white hover:!bg-[#244c38] disabled:!border-[#8d8278] disabled:!bg-[#d8d0c6] disabled:!text-[#514941]";
 const ADVISOR_FLAG = "!border-[#6f5a43] !bg-[#fffaf2] !text-[#2b2119]";
+
+function Button({ className = "", variant, ...props }: ComponentProps<typeof BaseButton>) {
+  const contrastClass = variant === "outline" || variant === "ghost" ? ADVISOR_BUTTON : ADVISOR_PRIMARY_BUTTON;
+  return <BaseButton variant={variant} className={`${contrastClass} ${className}`} {...props} />;
+}
+
+function Badge({ className = "", ...props }: ComponentProps<typeof BaseBadge>) {
+  const hasExplicitColors = className.includes("!bg-") && className.includes("!text-");
+  return <BaseBadge className={`${hasExplicitColors ? "" : ADVISOR_FLAG} ${className}`} {...props} />;
+}
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 async function request(url: string, init?: RequestInit) {
   const response = await fetch(apiUrl(url), { credentials: "include", ...init });

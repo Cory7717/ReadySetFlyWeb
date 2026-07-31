@@ -172,7 +172,12 @@ export function registerAviationBriefingRoutes(app: Express) {
       const [row] = await db.insert(aviationBriefings).values({ ...mapInput(parsed.data, userId), createdByUserId: userId }).returning();
       res.status(201).json({ briefing: publicBriefing(row) });
     } catch (error: any) {
-      if (error?.code === "23505") return res.status(409).json({ error: "That slug is already in use." });
+      if (error?.code === "23505") {
+        const slug = typeof req.body?.slug === "string" ? req.body.slug : "";
+        const [existing] = slug ? await db.select().from(aviationBriefings).where(eq(aviationBriefings.slug, slug)).limit(1) : [];
+        if (existing) return res.status(200).json({ briefing: publicBriefing(existing), recoveredExisting: true });
+        return res.status(409).json({ error: "That slug is already in use." });
+      }
       next(error);
     }
   });

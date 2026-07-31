@@ -95,3 +95,12 @@ test("article blocks can be reordered without changing their content", () => {
   assert.match(editor, /Move \$\{block\.type\} block down/);
   assert.match(editor, /reordered\[destination\]/);
 });
+
+test("a completed first save can recover from a duplicate-slug retry", () => {
+  const routes = readFileSync(new URL("../../server/routes/aviationBriefings.ts", import.meta.url), "utf8");
+  const admin = readFileSync(new URL("../../client/src/pages/admin-aviation-briefings.tsx", import.meta.url), "utf8");
+  assert.match(routes, /recoveredExisting: true/);
+  assert.match(routes, /aviationBriefings\.slug, slug/);
+  assert.match(admin, /Existing briefing reopened/);
+  assert.match(admin, /setEditingId\(saved\.id\)/);
+});

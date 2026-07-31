@@ -5425,6 +5425,48 @@ export const aircraftProfiles = pgTable(
   ],
 );
 
+export const aviationBriefings = pgTable(
+  "aviation_briefings",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    title: text("title").notNull(),
+    slug: varchar("slug", { length: 180 }).notNull(),
+    excerpt: text("excerpt").notNull(),
+    contentType: text("content_type").notNull().default("article"),
+    category: text("category").notNull(),
+    status: text("status").notNull().default("draft"),
+    isFeatured: boolean("is_featured").notNull().default(false),
+    featuredImageUrl: text("featured_image_url"),
+    featuredImageStorageKey: text("featured_image_storage_key"),
+    featuredImageAlt: text("featured_image_alt"),
+    articleContentJson: jsonb("article_content_json").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
+    videoSourceType: text("video_source_type"),
+    videoUrl: text("video_url"),
+    videoStorageKey: text("video_storage_key"),
+    videoThumbnailUrl: text("video_thumbnail_url"),
+    videoDurationSeconds: integer("video_duration_seconds"),
+    videoTranscript: text("video_transcript"),
+    supportingContentJson: jsonb("supporting_content_json").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
+    contributorsJson: jsonb("contributors_json").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
+    relevantToolIdsJson: jsonb("relevant_tool_ids_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    seoTitle: text("seo_title"),
+    seoDescription: text("seo_description"),
+    publishedAt: timestamp("published_at"),
+    scheduledAt: timestamp("scheduled_at"),
+    createdByUserId: varchar("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    updatedByUserId: varchar("updated_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_aviation_briefings_slug").on(table.slug),
+    index("idx_aviation_briefings_visibility").on(table.status, table.publishedAt),
+    index("idx_aviation_briefings_category").on(table.category),
+    index("idx_aviation_briefings_type").on(table.contentType),
+    index("idx_aviation_briefings_featured").on(table.isFeatured),
+  ],
+);
+
 const logbookDecimalField = z
   .union([
     z.string().regex(/^\d+(\.\d{1,2})?$/),
@@ -6989,6 +7031,7 @@ export type AircraftType = typeof aircraftTypes.$inferSelect;
 export type InsertAircraftType = z.infer<typeof insertAircraftTypeSchema>;
 export type AircraftProfile = typeof aircraftProfiles.$inferSelect;
 export type InsertAircraftProfile = z.infer<typeof insertAircraftProfileSchema>;
+export type AviationBriefing = typeof aviationBriefings.$inferSelect;
 export type ApproachPlate = typeof approachPlates.$inferSelect;
 export type InsertApproachPlate = z.infer<typeof insertApproachPlateSchema>;
 

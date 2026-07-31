@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useState, useMemo, Fragment, useRef } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -3325,13 +3325,20 @@ export default function AdminDashboard() {
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2" data-testid="text-admin-title">
-          Admin Dashboard
-        </h1>
-        <p className="text-muted-foreground">
-          Manage users, aircraft listings, and marketplace content
-        </p>
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground mb-2" data-testid="text-admin-title">
+            Admin Dashboard
+          </h1>
+          <p className="text-muted-foreground">
+            Manage users, aircraft listings, marketplace content, and publishing
+          </p>
+        </div>
+        {isSuperAdmin && (
+          <Button asChild className="rsf-metal-button-primary">
+            <Link href="/admin/aviation-briefings"><FileText className="mr-2 h-4 w-4" />Manage Aviation Briefings</Link>
+          </Button>
+        )}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">

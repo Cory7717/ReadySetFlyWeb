@@ -323,6 +323,9 @@ export function Header() {
                       {user?.isSuperAdmin && (
                         <DropdownMenuItem asChild><Link href="/super-admin/membership-promotions">Membership Promotions</Link></DropdownMenuItem>
                       )}
+                      {user?.isSuperAdmin && (
+                        <DropdownMenuItem asChild><Link href="/admin/aviation-briefings">Aviation Briefings</Link></DropdownMenuItem>
+                      )}
                     </>
                   )}
                   <DropdownMenuSeparator />

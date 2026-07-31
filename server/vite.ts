@@ -21,6 +21,11 @@ const defaultSeo: SeoMeta = {
 };
 
 const routeSeo: Record<string, SeoMeta> = {
+  "/aviation-briefings": {
+    title: "Aviation Briefings | Ready Set Fly",
+    description: "Practical aviation insights, educational articles, expert perspectives, and Ready Set Fly platform walkthroughs.",
+    image: "/RSFOpaqueLogo.png",
+  },
   "/coryarmer": {
     title: "Cory Armer | Writer & Creator Portfolio",
     description: "Prestige television and elevated genre storytelling centered on legacy, identity, obsession, and the human cost of ambition.",
@@ -65,6 +70,9 @@ function escapeHtml(value: string) {
 
 function seoForPath(pathname: string) {
   const normalized = pathname.replace(/\/+$/, "") || "/";
+  if (normalized.startsWith("/aviation-briefings/") && !normalized.startsWith("/aviation-briefings/preview/")) {
+    return routeSeo["/aviation-briefings"];
+  }
   return routeSeo[normalized] || defaultSeo;
 }
 

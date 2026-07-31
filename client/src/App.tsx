@@ -106,6 +106,9 @@ import BankDepositPage from "@/pages/bank-deposit";
 import IncidentReportPage from "@/pages/incident-report";
 import IncidentReportSharePage from "@/pages/incident-report-share";
 import VwBeetlePage from "@/pages/vw-beetle";
+import AviationBriefingsPage from "@/pages/aviation-briefings";
+import AviationBriefingDetailPage from "@/pages/aviation-briefing-detail";
+import AdminAviationBriefingsPage from "@/pages/admin-aviation-briefings";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -264,6 +267,9 @@ function Router() {
       <Route path="/abs/redeem" component={AbsRedeem} />
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/faq" component={FaqPage} />
+      <Route path="/aviation-briefings" component={AviationBriefingsPage} />
+      <Route path="/aviation-briefings/preview/:id" component={AviationBriefingDetailPage} />
+      <Route path="/aviation-briefings/:slug" component={AviationBriefingDetailPage} />
       <Route path="/synthetic-vision" component={SyntheticVisionPage} />
       <Route path="/flight-demo" component={SyntheticVisionPage} />
       <Route path="/logbook/pro" component={() => <LogbookPro />} />
@@ -349,6 +355,7 @@ function Router() {
           <Route path="/owner-payout-setup" component={OwnerPayoutSetup} />
           <Route path="/owner-withdrawals" component={OwnerWithdrawals} />
           <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/aviation-briefings" component={AdminAviationBriefingsPage} />
           <Route path="/admin/certification" component={AdminDashboard} />
       <Route path="/super-admin/flight-service-ops" component={FlightServiceOpsPage} />
       <Route path="/super-admin/membership-promotions" component={MembershipPromotionsAdminPage} />
@@ -406,6 +413,7 @@ function Router() {
           <Route path="/owner-payout-setup" component={RequireAuth} />
           <Route path="/owner-withdrawals" component={RequireAuth} />
           <Route path="/admin" component={RequireAuth} />
+          <Route path="/admin/aviation-briefings" component={RequireAuth} />
           <Route path="/admin/certification" component={RequireAuth} />
           <Route path="/super-admin/flight-service-ops" component={RequireAuth} />
           <Route path="/super-admin/membership-promotions" component={RequireAuth} />

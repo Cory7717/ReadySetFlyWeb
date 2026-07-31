@@ -70,6 +70,7 @@ export const WORKFLOW_NAV_GROUPS: WorkflowNavGroup[] = [
       { label: "Written Test", href: "/student/written", description: "FAA written preparation." },
       { label: "Checklists", href: "/student/checklists", description: "Training and flight checklists." },
       { label: "Student Weather", href: "/student/weather", description: "Weather learning tools." },
+      { label: "Aviation Briefings", href: "/aviation-briefings", description: "Practical aviation articles, walkthroughs, and expert perspectives." },
     ],
   },
   {

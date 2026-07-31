@@ -25,6 +25,7 @@
     "test:membership-promotions": "tsx --test scripts/tests/membership-promotions.test.ts",
     "test:opsreport": "tsx --test scripts/tests/ops-report-parsers.test.ts",
     "test:tips": "tsx --test scripts/tests/tips-grid-persistence.test.ts",
+    "test:aviation-briefings": "tsx --test scripts/tests/aviation-briefings.test.ts",
     "test:airport-communications": "tsx --test scripts/tests/airport-communications.test.ts",
     "test:route-builder": "tsx --test scripts/tests/route-builder-navaids.test.ts",
     "test:flight-filing-readiness": "tsx --test scripts/tests/flight-filing-readiness-messages.test.ts",

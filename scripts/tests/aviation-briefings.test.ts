@@ -87,3 +87,11 @@ test("saved drafts remain open and the briefing library is directly accessible",
   assert.match(admin, /This briefing could not be saved/);
   assert.match(admin, /briefingValidationMessage/);
 });
+
+test("article blocks can be reordered without changing their content", () => {
+  const editor = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingEditor.tsx", import.meta.url), "utf8");
+  assert.match(editor, /const move = \(index: number, direction: -1 \| 1\)/);
+  assert.match(editor, /Move \$\{block\.type\} block up/);
+  assert.match(editor, /Move \$\{block\.type\} block down/);
+  assert.match(editor, /reordered\[destination\]/);
+});

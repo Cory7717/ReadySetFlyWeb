@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Trash2, Upload, UserRound, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2, Upload, UserRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,6 +36,16 @@ function BlockEditor({
     onChange(
       blocks.map((item, itemIndex) => (itemIndex === index ? block : item)),
     );
+  const move = (index: number, direction: -1 | 1) => {
+    const destination = index + direction;
+    if (destination < 0 || destination >= blocks.length) return;
+    const reordered = [...blocks];
+    [reordered[index], reordered[destination]] = [
+      reordered[destination],
+      reordered[index],
+    ];
+    onChange(reordered);
+  };
   return (
     <div className="space-y-3">
       {blocks.map((block, index) => (
@@ -45,17 +55,13 @@ function BlockEditor({
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[#8eb9ed]">
-              {block.type}
+              {block.type} · Block {index + 1}
             </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-[#ff9c9c]"
-              onClick={() => onChange(blocks.filter((_, i) => i !== index))}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-[#b9d6fb] disabled:text-[#65768a]" disabled={index === 0} aria-label={`Move ${block.type} block up`} title="Move block up" onClick={() => move(index, -1)}><ArrowUp className="h-4 w-4" /></Button>
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-[#b9d6fb] disabled:text-[#65768a]" disabled={index === blocks.length - 1} aria-label={`Move ${block.type} block down`} title="Move block down" onClick={() => move(index, 1)}><ArrowDown className="h-4 w-4" /></Button>
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-[#ff9c9c]" aria-label={`Delete ${block.type} block`} title="Delete block" onClick={() => onChange(blocks.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button>
+            </div>
           </div>
           {(block.type === "paragraph" ||
             block.type === "heading" ||

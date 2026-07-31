@@ -71,6 +71,8 @@ export const aviationBriefingInputSchema = z.object({
   featuredImageUrl: z.string().trim().max(2000).default(""),
   featuredImageStorageKey: z.string().trim().max(1000).default(""),
   featuredImageAlt: z.string().trim().max(500).default(""),
+  featuredImageCredit: z.string().trim().max(300).default(""),
+  featuredImageCreditUrl: z.string().trim().max(2000).refine((value) => !value || /^https?:\/\//i.test(value), "Use a valid HTTP or HTTPS credit URL.").default(""),
   articleContent: z.array(briefingBlockSchema).max(300).default([]),
   videoSourceType: z.enum(["youtube", "vimeo", "uploaded"]).nullable().default(null),
   videoUrl: z.string().trim().max(2000).default(""),

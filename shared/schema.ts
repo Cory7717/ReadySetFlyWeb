@@ -5439,6 +5439,8 @@ export const aviationBriefings = pgTable(
     featuredImageUrl: text("featured_image_url"),
     featuredImageStorageKey: text("featured_image_storage_key"),
     featuredImageAlt: text("featured_image_alt"),
+    featuredImageCredit: text("featured_image_credit"),
+    featuredImageCreditUrl: text("featured_image_credit_url"),
     articleContentJson: jsonb("article_content_json").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
     videoSourceType: text("video_source_type"),
     videoUrl: text("video_url"),

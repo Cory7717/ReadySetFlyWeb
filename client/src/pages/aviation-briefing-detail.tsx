@@ -420,11 +420,18 @@ export default function AviationBriefingDetailPage() {
               />
             </div>
           ) : image ? (
-            <img
-              src={image}
-              alt={briefing.featuredImageAlt || ""}
-              className="mb-10 max-h-[36rem] w-full rounded-2xl border border-[#58759b]/40 object-cover"
-            />
+            <figure className="mb-10">
+              <img
+                src={image}
+                alt={briefing.featuredImageAlt || ""}
+                className="max-h-[36rem] w-full rounded-2xl border border-[#58759b]/40 object-cover"
+              />
+              {briefing.featuredImageCredit && (
+                <figcaption className="mt-2 text-right text-sm text-[#91a4bc]">
+                  Photo credit: {briefing.featuredImageCreditUrl ? <a href={briefing.featuredImageCreditUrl} target="_blank" rel="noreferrer" className="text-[#8dbbfa] underline underline-offset-2">{briefing.featuredImageCredit}</a> : briefing.featuredImageCredit}
+                </figcaption>
+              )}
+            </figure>
           ) : null}
           <div className="mx-auto max-w-3xl">
             <Blocks

@@ -12,7 +12,7 @@ const base: AviationBriefingInput = {
   title: "Reading a METAR Without Guesswork", slug: "reading-a-metar-without-guesswork",
   excerpt: "A practical explanation of the weather report elements pilots encounter.",
   contentType: "article", category: "Weather", status: "draft", isFeatured: false,
-  featuredImageUrl: "", featuredImageStorageKey: "", featuredImageAlt: "",
+  featuredImageUrl: "", featuredImageStorageKey: "", featuredImageAlt: "", featuredImageCredit: "", featuredImageCreditUrl: "",
   articleContent: [{ type: "heading", level: 2, text: "Start with the observation" }, { type: "paragraph", text: "Use official weather sources." }],
   videoSourceType: null, videoUrl: "", videoStorageKey: "", videoThumbnailUrl: "",
   videoDurationSeconds: null, videoTranscript: "", supportingContent: [], contributors: [],
@@ -105,4 +105,15 @@ test("a completed first save can recover from a duplicate-slug retry", () => {
   assert.match(routes, /aviationBriefings\.slug, slug/);
   assert.match(admin, /Existing briefing reopened/);
   assert.match(admin, /setEditingId\(saved\.id\)/);
+});
+
+test("featured images can carry an optional linked photo credit", () => {
+  const parsed = aviationBriefingInputSchema.parse({ ...base, featuredImageCredit: "Jane Pilot", featuredImageCreditUrl: "https://example.com/jane" });
+  assert.equal(parsed.featuredImageCredit, "Jane Pilot");
+  assert.equal(aviationBriefingInputSchema.safeParse({ ...base, featuredImageCreditUrl: "javascript:alert(1)" }).success, false);
+  const editor = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingEditor.tsx", import.meta.url), "utf8");
+  const detail = readFileSync(new URL("../../client/src/pages/aviation-briefing-detail.tsx", import.meta.url), "utf8");
+  assert.match(editor, /Photo credit link \(optional\)/);
+  assert.match(detail, /Photo credit:/);
+  assert.match(detail, /featuredImageCreditUrl/);
 });

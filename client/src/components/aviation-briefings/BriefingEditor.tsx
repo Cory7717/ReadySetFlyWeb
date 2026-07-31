@@ -575,6 +575,25 @@ export function BriefingEditor({
               }
             />
           </div>
+          <div>
+            <Label>Photo credit</Label>
+            <Input
+              className={field}
+              placeholder="Photographer, organization, or image provider"
+              value={value.featuredImageCredit}
+              onChange={(event) => update("featuredImageCredit", event.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Photo credit link (optional)</Label>
+            <Input
+              className={field}
+              type="url"
+              placeholder="https://"
+              value={value.featuredImageCreditUrl}
+              onChange={(event) => update("featuredImageCreditUrl", event.target.value)}
+            />
+          </div>
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-[#6683a8] px-4 py-2 text-sm font-semibold">
             <Upload className="h-4 w-4" />
             {uploading ? "Uploading…" : "Upload image to S3"}

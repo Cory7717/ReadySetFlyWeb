@@ -124,7 +124,7 @@ type TipsGridRow = {
 type TipsGrid = {
   period: { start: string; end: string; dayNumber: number; days: string[] };
   rows: TipsGridRow[];
-  dayTotals: Array<{ date: string; totalTips: string; grossSales: string; taxAmount: string; netSales: string; beerSales: string; liquorSales: string; foodSales: string; wineSales: string; tipPercent: number; splitCount: number; splitAmount: string | null; report: DailyReport | null }>;
+  dayTotals: Array<{ date: string; totalTips: string; grossSales: string; taxAmount: string; netSales: string; beerSales: string; liquorSales: string; foodSales: string; wineSales: string; tipPercent: number; report: DailyReport | null }>;
   banquetReports: Array<{ id: string; eventDate: string; reportType?: "banquet_service" | "group_breakfast"; eventName: string; grossSales: string; serviceRate?: string; banquetTips: string; assignedAssociatesJson?: Array<{ userId: string; displayName: string; department?: string | null; position?: string | null; splitAmount: string }>; notes?: string | null; originalFileName?: string | null; storagePath?: string | null }>;
   banquetAssociates: Array<{ id: string; employeeDisplayName: string; department?: string | null; position?: string | null }>;
   banquetTotal: string;
@@ -767,11 +767,22 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
     onError: (error: Error) => toast({ title: "Unable to add associate", description: error.message, variant: "destructive" }),
   });
   const saveEntry = useMutation({
+    scope: { id: "tips-grid-entry-saves" },
     mutationFn: async ({ userId, entryDate, tipAmount, grossSales }: { userId: string; entryDate: string; tipAmount: string; grossSales: string }) => {
       const response = await apiRequest("POST", "/api/tips/grid/entries", { userId, entryDate, tipAmount, grossSales });
       return response.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] }),
+    onSuccess: (_data, variables) => {
+      const key = `${variables.userId}:${variables.entryDate}`;
+      setDrafts((current) => current[key] === variables.tipAmount
+        ? Object.fromEntries(Object.entries(current).filter(([itemKey]) => itemKey !== key))
+        : current);
+      setEntrySalesDrafts((current) => current[key] === variables.grossSales
+        ? Object.fromEntries(Object.entries(current).filter(([itemKey]) => itemKey !== key))
+        : current);
+      toast({ title: "Tips saved", description: "This associate's amount is stored." });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/grid"] });
+    },
     onError: (error: Error) => toast({ title: "Tip save failed", description: error.message, variant: "destructive" }),
   });
   const confirmEntry = useMutation({
@@ -993,11 +1004,6 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
           <span>Tip % {formatPercent(totalForDay?.tipPercent)}</span>
           <span>Tip % {formatPercent(totalForDay?.tipPercent)}</span>
         </div>
-        {totalForDay?.splitCount === 2 && (
-          <div className="rounded-md border border-[#bdd5c3] bg-[#e8f1ea] px-3 py-2 text-sm text-[#173c25]">
-            50/50 split: {formatMoney(totalForDay.splitAmount)} each
-          </div>
-        )}
         <label className={`flex cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-sm ${totalForDay?.report ? "border-emerald-300 bg-emerald-50 text-emerald-800" : Number(totalForDay?.totalTips || 0) > 0 ? "border-amber-300 bg-amber-50 text-amber-900" : "border-[#d7c8b5] bg-white text-[#5f5247]"}`}>
           <Camera className="mr-2 h-4 w-4" />
           {totalForDay?.report ? "Sales report attached" : "Upload sales report"}
@@ -1147,11 +1153,6 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                           <div className="flex justify-between gap-2 font-semibold text-[#201814]"><span>Tips</span><span>{formatMoney(totalForDay?.totalTips)}</span></div>
                         </div>
                         <div className="text-center text-xs text-[#5f5247]">Tip % {formatPercent(totalForDay?.tipPercent)}</div>
-                        {totalForDay?.splitCount === 2 && (
-                          <div className="rounded-md border border-[#bdd5c3] bg-[#e8f1ea] px-2 py-1 text-center text-xs text-[#173c25]">
-                            50/50: {formatMoney(totalForDay.splitAmount)}
-                          </div>
-                        )}
                         <label className={`flex cursor-pointer items-center justify-center rounded-md border px-2 py-1 text-xs ${totalForDay?.report ? "border-emerald-300 bg-emerald-50 text-emerald-800" : Number(totalForDay?.totalTips || 0) > 0 ? "border-amber-300 bg-amber-50 text-amber-900" : "border-[#d7c8b5] bg-white text-[#5f5247]"}`}>
                           <Camera className="mr-1 h-3 w-3" />
                           {totalForDay?.report ? "Report" : "Upload"}

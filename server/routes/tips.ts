@@ -1182,9 +1182,6 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
         moneyNumber(row.cells.find((cell) => cell.date === date)?.grossSales),
       0,
     );
-    const activeCells = rows
-      .map((row) => row.cells.find((cell) => cell.date === date))
-      .filter((cell) => moneyNumber(cell?.tipAmount) > 0);
     const grossSales =
       shiftGrossSales > 0
         ? shiftGrossSales
@@ -1203,8 +1200,6 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
       foodSales: moneyString(summary?.foodSales),
       wineSales: moneyString(summary?.wineSales),
       tipPercent: grossSales > 0 ? (totalTips / grossSales) * 100 : 0,
-      splitCount: activeCells.length,
-      splitAmount: activeCells.length === 2 ? moneyString(totalTips / 2) : null,
       report: reportsByDate.get(date) || null,
     };
   });
@@ -1431,10 +1426,8 @@ async function generateTipsGridPdf(grid: any, submission: any | null) {
   draw("Gross sales and tip percentage:", 36, 10, true);
   y -= 12;
   grid.dayTotals.forEach((day: any) => {
-    const split =
-      day.splitCount === 2 ? ` | 50/50 split $${day.splitAmount}` : "";
     draw(
-      `${day.date}: gross $${day.grossSales} | tips $${day.totalTips} | ${Number(day.tipPercent || 0).toFixed(1)}%${split}`,
+      `${day.date}: gross $${day.grossSales} | tips $${day.totalTips} | ${Number(day.tipPercent || 0).toFixed(1)}%`,
       44,
       7,
     );
@@ -1494,7 +1487,7 @@ async function sendTipsGridSubmissionEmail(grid: any) {
   const daily = grid.dayTotals
     .map(
       (day: any) =>
-        `${day.date}: tips $${day.totalTips} | gross $${day.grossSales} | tip ${Number(day.tipPercent || 0).toFixed(1)}% | report ${day.report ? "yes" : "no"}${day.splitCount === 2 ? ` | 50/50 split $${day.splitAmount}` : ""}`,
+        `${day.date}: tips $${day.totalTips} | gross $${day.grossSales} | tip ${Number(day.tipPercent || 0).toFixed(1)}% | report ${day.report ? "yes" : "no"}`,
     )
     .join("\n");
   const banquet = (grid.banquetReports || [])
@@ -3214,60 +3207,43 @@ export function registerTipsRoutes(app: Express) {
         }
         const amount = parsed.data.tipAmount.toFixed(2);
         const grossSales = parsed.data.grossSales.toFixed(2);
-        const [entry] = await db
-          .insert(tipEntries)
-          .values({
-            userId: parsed.data.userId,
-            entryDate: parsed.data.entryDate,
-            payPeriodStart: period.start,
-            payPeriodEnd: period.end,
-            tipAmount: amount,
-            cashTips: "0.00",
-            creditTips: amount,
-            grossSales,
-            coversServed: null,
-            shiftType: "other",
-            notes: parsed.data.notes || null,
-            status: "saved",
-          })
-          .onConflictDoUpdate({
-            target: [tipEntries.userId, tipEntries.entryDate],
-            set: {
+        // Each associate/day entry is the durable source of truth. Do not also
+        // rewrite the shared day-summary row here: simultaneous associate saves
+        // used to contend on that row and could surface a SQL error after the
+        // tip entry was submitted. Grid totals are derived from entry rows.
+        const [entry] = await db.transaction(async (tx) =>
+          tx
+            .insert(tipEntries)
+            .values({
+              userId: parsed.data.userId,
+              entryDate: parsed.data.entryDate,
+              payPeriodStart: period.start,
+              payPeriodEnd: period.end,
               tipAmount: amount,
               cashTips: "0.00",
               creditTips: amount,
               grossSales,
+              coversServed: null,
+              shiftType: "other",
               notes: parsed.data.notes || null,
               status: "saved",
-              updatedAt: new Date(),
-            },
-          })
-          .returning();
-        const dateEntries = await db
-          .select({ grossSales: tipEntries.grossSales })
-          .from(tipEntries)
-          .where(eq(tipEntries.entryDate, parsed.data.entryDate));
-        const dailyGrossSales = dateEntries.reduce(
-          (sum, row) => sum + moneyNumber(row.grossSales),
-          0,
+            })
+            .onConflictDoUpdate({
+              target: [tipEntries.userId, tipEntries.entryDate],
+              set: {
+                payPeriodStart: period.start,
+                payPeriodEnd: period.end,
+                tipAmount: amount,
+                cashTips: "0.00",
+                creditTips: amount,
+                grossSales,
+                notes: parsed.data.notes || null,
+                status: "saved",
+                updatedAt: new Date(),
+              },
+            })
+            .returning(),
         );
-        await db
-          .insert(tipGridDaySummaries)
-          .values({
-            summaryDate: parsed.data.entryDate,
-            payPeriodStart: period.start,
-            payPeriodEnd: period.end,
-            grossSales: dailyGrossSales.toFixed(2),
-            updatedBy: req.tipsUser?.id || null,
-          })
-          .onConflictDoUpdate({
-            target: tipGridDaySummaries.summaryDate,
-            set: {
-              grossSales: dailyGrossSales.toFixed(2),
-              updatedBy: req.tipsUser?.id || null,
-              updatedAt: new Date(),
-            },
-          });
         res.json({
           entry: {
             ...entry,

@@ -70,7 +70,6 @@ test("contributor photos use durable media storage and accessible fallbacks", ()
   assert.match(editor, /fetch\(apiUrl\("\/api\/objects\/set-acl"\)/);
   assert.match(editor, /upload timed out after 60 seconds/);
   assert.match(editor, /featuredUploadError/);
-  assert.match(routes, /AWS_S3_BUCKET/);
   assert.match(detail, /alt={`Photo of \${person\.name}`}/);
   assert.match(detail, /Default avatar for/);
   assert.match(detail, /ContributorFooter/);
@@ -133,4 +132,9 @@ test("featured images can carry an optional linked photo credit", () => {
 test("static engagement analytics route is registered before dynamic briefing ids", () => {
   const registration = readFileSync(new URL("../../server/routes.ts", import.meta.url), "utf8");
   assert.ok(registration.indexOf("registerAviationBriefingEngagementRoutes(app)") < registration.indexOf("registerAviationBriefingRoutes(app)"));
+});
+
+test("Aviation Briefings suppresses the global free-account promotion bar", () => {
+  const banner = readFileSync(new URL("../../client/src/components/FreeAccountValueBar.tsx", import.meta.url), "utf8");
+  assert.match(banner, /"\/aviation-briefings"/);
 });

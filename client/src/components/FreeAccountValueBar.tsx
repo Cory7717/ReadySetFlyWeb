@@ -27,6 +27,7 @@ const HIDE_PREFIXES = [
   "/verify-identity",
   "/delete-account",
   "/notifications",
+  "/aviation-briefings",
   "/404",
 ];
 

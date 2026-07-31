@@ -312,6 +312,7 @@ export function Header() {
                   <DropdownMenuItem asChild><Link href="/logbook">Pilot Logbook</Link></DropdownMenuItem>
                   <DropdownMenuItem asChild><Link href="/my-aircraft">My Aircraft</Link></DropdownMenuItem>
                   <DropdownMenuItem asChild><Link href="/tool-hub">Tool Hub</Link></DropdownMenuItem>
+                  <DropdownMenuItem asChild><Link href="/aviation-briefings/saved">Saved Briefings</Link></DropdownMenuItem>
                   {user?.isAdmin && (
                     <>
                       <DropdownMenuSeparator />

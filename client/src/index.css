@@ -24,6 +24,15 @@
   }
 }
 
+@media print {
+  header, footer, .rsf-engagement, button, nav { display: none !important; }
+  body, main, article { background: white !important; color: black !important; }
+  article { max-width: 7.5in; margin: 0 auto; }
+  article p, article li, article blockquote, article h1, article h2, article h3 { color: black !important; }
+  article img { max-height: 4in; object-fit: contain; break-inside: avoid; }
+  @page { margin: 0.65in; }
+}
+
 /* Courtyard Sales Intelligence uses a fixed, accessible light palette. The
    application theme otherwise gives shared cards a dark gradient in dark mode. */
 .sales-intelligence-content [data-slot="card"],

@@ -5483,6 +5483,30 @@ export const aviationBriefingSubmissions = pgTable("aviation_briefing_submission
   agreementAccepted: boolean("agreement_accepted").notNull().default(false), agreementVersion: text("agreement_version"), agreementAcceptedAt: timestamp("agreement_accepted_at"), submittedAt: timestamp("submitted_at"), reviewedAt: timestamp("reviewed_at"), approvedAt: timestamp("approved_at"), rejectedAt: timestamp("rejected_at"), withdrawnAt: timestamp("withdrawn_at"), publishedBriefingId: varchar("published_briefing_id").references(() => aviationBriefings.id, { onDelete: "set null" }), createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [uniqueIndex("idx_aviation_submission_invitation").on(table.invitationId), index("idx_aviation_submission_status").on(table.status, table.createdAt), index("idx_aviation_submission_email").on(table.contributorEmail), index("idx_aviation_submission_category").on(table.category), index("idx_aviation_submission_reviewer").on(table.assignedReviewerUserId), index("idx_aviation_submission_briefing").on(table.publishedBriefingId)]);
 
+export const aviationBriefingFeedback = pgTable("aviation_briefing_feedback", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  briefingId: varchar("briefing_id").notNull().references(() => aviationBriefings.id, { onDelete: "cascade" }),
+  readerHash: text("reader_hash").notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  responseType: text("response_type").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [uniqueIndex("idx_aviation_feedback_reader").on(table.briefingId, table.readerHash), index("idx_aviation_feedback_briefing").on(table.briefingId, table.createdAt)]);
+
+export const aviationBriefingSaves = pgTable("aviation_briefing_saves", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  briefingId: varchar("briefing_id").notNull().references(() => aviationBriefings.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [uniqueIndex("idx_aviation_save_user_briefing").on(table.userId, table.briefingId), index("idx_aviation_save_briefing").on(table.briefingId)]);
+
+export const aviationBriefingSuggestions = pgTable("aviation_briefing_suggestions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), name: text("name").notNull(), email: varchar("email").notNull(),
+  suggestedPerson: text("suggested_person").notNull(), organization: text("organization"), topic: text("topic").notNull(), reason: text("reason").notNull(), website: text("website"), notes: text("notes"),
+  status: text("status").notNull().default("new"), assignedAdminUserId: varchar("assigned_admin_user_id").references(() => users.id, { onDelete: "set null" }),
+  sourceBriefingId: varchar("source_briefing_id").references(() => aviationBriefings.id, { onDelete: "set null" }), convertedInvitationId: varchar("converted_invitation_id").references(() => aviationContributorInvitations.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [index("idx_aviation_suggestion_status").on(table.status, table.createdAt), index("idx_aviation_suggestion_assignee").on(table.assignedAdminUserId), index("idx_aviation_suggestion_email").on(table.email)]);
+
 const logbookDecimalField = z
   .union([
     z.string().regex(/^\d+(\.\d{1,2})?$/),

@@ -67,6 +67,9 @@ test("contributor photos use durable media storage and accessible fallbacks", ()
   assert.match(editor, /Remove photo/);
   assert.match(editor, /aria-label={`Upload photo for/);
   assert.match(editor, /\/api\/admin\/aviation-briefings\/upload-direct/);
+  assert.match(editor, /fetch\(apiUrl\("\/api\/admin\/aviation-briefings\/upload-direct"\)/);
+  assert.match(editor, /upload timed out after 60 seconds/);
+  assert.match(editor, /featuredUploadError/);
   assert.match(routes, /AWS_S3_BUCKET/);
   assert.match(routes, /express\.raw\(\{ type: \["image\/jpeg", "image\/png", "image\/webp"\], limit: "10mb" \}\)/);
   assert.match(routes, /uploadBytes/);
@@ -103,8 +106,17 @@ test("a completed first save can recover from a duplicate-slug retry", () => {
   const admin = readFileSync(new URL("../../client/src/pages/admin-aviation-briefings.tsx", import.meta.url), "utf8");
   assert.match(routes, /recoveredExisting: true/);
   assert.match(routes, /aviationBriefings\.slug, slug/);
+  assert.match(routes, /set\(mapInput\(recoveredInput\.data/);
   assert.match(admin, /Existing briefing reopened/);
   assert.match(admin, /setEditingId\(saved\.id\)/);
+});
+
+test("article typography preserves structured headings, quotes, and paragraph breaks", () => {
+  const detail = readFileSync(new URL("../../client/src/pages/aviation-briefing-detail.tsx", import.meta.url), "utf8");
+  assert.match(detail, /text-3xl font-extrabold/);
+  assert.match(detail, /block\.text\.split\(\/\\n\\s\*\\n\//);
+  assert.match(detail, /whitespace-pre-line/);
+  assert.match(detail, /blockquote/);
 });
 
 test("featured images can carry an optional linked photo credit", () => {

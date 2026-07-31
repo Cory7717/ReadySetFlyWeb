@@ -204,7 +204,7 @@ function ContributorEditor({
     setUploadingIndex(index);
     setUploadError("");
     try {
-      const uploaded = await fetch("/api/admin/aviation-briefings/upload-direct", {
+      const uploaded = await fetch(apiUrl("/api/admin/aviation-briefings/upload-direct"), {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": file.type },
@@ -432,18 +432,23 @@ export function BriefingEditor({
   saving: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
+  const [featuredUploadError, setFeaturedUploadError] = useState("");
   const update = <K extends keyof AviationBriefingInput>(
     key: K,
     next: AviationBriefingInput[K],
   ) => onChange({ ...value, [key]: next });
   const uploadImage = async (file: File) => {
     setUploading(true);
+    setFeaturedUploadError("");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 60_000);
     try {
-      const uploaded = await fetch("/api/admin/aviation-briefings/upload-direct", {
+      const uploaded = await fetch(apiUrl("/api/admin/aviation-briefings/upload-direct"), {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": file.type },
         body: file,
+        signal: controller.signal,
       });
       const prepared = await uploaded.json().catch(() => ({}));
       if (!uploaded.ok) throw new Error(prepared.error || "Image upload failed");
@@ -452,7 +457,10 @@ export function BriefingEditor({
         featuredImageStorageKey: prepared.key,
         featuredImageUrl: prepared.publicUrl,
       });
+    } catch (error: any) {
+      setFeaturedUploadError(error?.name === "AbortError" ? "The upload timed out after 60 seconds. Please check the connection and try again." : error?.message || "Featured image upload failed. Please try again.");
     } finally {
+      window.clearTimeout(timeout);
       setUploading(false);
     }
   };
@@ -555,6 +563,7 @@ export function BriefingEditor({
       <section>
         <h3 className="mb-4 text-xl font-bold">Featured media</h3>
         <div className="grid gap-4 sm:grid-cols-2">
+          {value.featuredImageUrl && <figure className="sm:col-span-2"><img src={apiUrl(value.featuredImageUrl)} alt={value.featuredImageAlt || "Featured image preview"} className="max-h-80 w-full rounded-xl border border-[#607895] object-cover" /><figcaption className="mt-2 text-sm text-[#9fb0c4]">Featured image preview</figcaption></figure>}
           <div>
             <Label>External image URL</Label>
             <Input
@@ -617,6 +626,7 @@ export function BriefingEditor({
             />
             Featured briefing
           </label>
+          {featuredUploadError && <p role="alert" className="sm:col-span-2 rounded-md border border-red-400/60 bg-red-950/50 p-3 text-sm text-red-100">{featuredUploadError}</p>}
         </div>
       </section>
       {value.contentType === "video" && (

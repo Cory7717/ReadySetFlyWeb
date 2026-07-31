@@ -62,11 +62,11 @@ function Blocks({ blocks }: { blocks: BriefingBlock[] }) {
       {blocks.map((block, index) => {
         if (block.type === "heading")
           return block.level === 2 ? (
-            <h2 key={index} className="pt-4 text-3xl font-bold text-white">
+            <h2 key={index} className="border-b border-[#526d94]/35 pb-3 pt-8 text-left text-3xl font-extrabold leading-tight tracking-tight text-white sm:text-4xl">
               <RichText text={block.text} />
             </h2>
           ) : (
-            <h3 key={index} className="pt-3 text-2xl font-bold text-white">
+            <h3 key={index} className="pt-6 text-left text-2xl font-bold leading-tight tracking-tight text-white sm:text-3xl">
               <RichText text={block.text} />
             </h3>
           );
@@ -76,7 +76,7 @@ function Blocks({ blocks }: { blocks: BriefingBlock[] }) {
               key={index}
               className="border-l-4 border-[#5595ea] bg-[#111e30] px-6 py-5 text-xl italic leading-8 text-[#dbe7f5]"
             >
-              <p>
+              <p className="whitespace-pre-line">
                 <RichText text={block.text} />
               </p>
               {block.attribution && (
@@ -118,11 +118,8 @@ function Blocks({ blocks }: { blocks: BriefingBlock[] }) {
           );
         if (block.type === "separator")
           return <hr key={index} className="border-[#526c8f]/40" />;
-        return (
-          <p key={index} className="text-lg leading-8 text-[#d0dbe8]">
-            <RichText text={block.text} />
-          </p>
-        );
+        const paragraphs = block.text.split(/\n\s*\n/).filter((text) => text.trim());
+        return <div key={index} className="space-y-5">{paragraphs.map((text, paragraphIndex) => <p key={paragraphIndex} className="whitespace-pre-line text-lg leading-8 text-[#d0dbe8]"><RichText text={text.trim()} /></p>)}</div>;
       })}
     </div>
   );

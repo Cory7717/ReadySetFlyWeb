@@ -192,7 +192,11 @@ export function registerAviationBriefingRoutes(app: Express) {
       if (error?.code === "23505") {
         const slug = typeof req.body?.slug === "string" ? req.body.slug : "";
         const [existing] = slug ? await db.select().from(aviationBriefings).where(eq(aviationBriefings.slug, slug)).limit(1) : [];
-        if (existing) return res.status(200).json({ briefing: publicBriefing(existing), recoveredExisting: true });
+        const recoveredInput = aviationBriefingInputSchema.safeParse(req.body);
+        if (existing && recoveredInput.success) {
+          const [updated] = await db.update(aviationBriefings).set(mapInput(recoveredInput.data, requestUserId(req))).where(eq(aviationBriefings.id, existing.id)).returning();
+          return res.status(200).json({ briefing: publicBriefing(updated), recoveredExisting: true });
+        }
         return res.status(409).json({ error: "That slug is already in use." });
       }
       next(error);

@@ -26,6 +26,7 @@ const HIDE_PREFIXES = [
   "/marketplace/listing/checkout",
   "/rental-payment",
   "/banner-ad-payment",
+  "/aviation-briefings",
   "/404",
 ];
 

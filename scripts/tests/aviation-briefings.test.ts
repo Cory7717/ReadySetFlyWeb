@@ -138,3 +138,8 @@ test("Aviation Briefings suppresses the global free-account promotion bar", () =
   const banner = readFileSync(new URL("../../client/src/components/FreeAccountValueBar.tsx", import.meta.url), "utf8");
   assert.match(banner, /"\/aviation-briefings"/);
 });
+
+test("Aviation Briefings suppresses the global weather announcement", () => {
+  const announcement = readFileSync(new URL("../../client/src/components/AiWeatherTranslatorAnnouncement.tsx", import.meta.url), "utf8");
+  assert.match(announcement, /"\/aviation-briefings"/);
+});

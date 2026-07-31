@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RSF_TOOLS } from "@/lib/tool-registry";
+import { apiUrl } from "@/lib/api";
 import {
   AVIATION_BRIEFING_CATEGORIES,
   AVIATION_BRIEFING_STATUSES,
@@ -300,7 +301,7 @@ function ContributorEditor({
             <div className="mt-2 flex flex-col gap-4 rounded-lg border border-[#526b8d]/40 bg-[#0b1624] p-4 sm:flex-row sm:items-center">
               {person.profileImageUrl ? (
                 <img
-                  src={person.profileImageUrl}
+                  src={apiUrl(person.profileImageUrl)}
                   alt={`Photo of ${person.name || "contributor"}`}
                   className="h-24 w-24 shrink-0 rounded-full border border-[#6683a8] object-cover"
                 />

@@ -73,6 +73,8 @@ test("contributor photos use durable media storage and accessible fallbacks", ()
   assert.match(detail, /alt={`Photo of \${person\.name}`}/);
   assert.match(detail, /Default avatar for/);
   assert.match(detail, /ContributorFooter/);
+  assert.match(detail, /src=\{apiUrl\(person\.profileImageUrl\)\}/);
+  assert.ok(routes.indexOf('app.get("/api/aviation-briefings/media"') < routes.indexOf('app.get("/api/aviation-briefings/:slug"'));
 });
 
 test("saved drafts remain open and the briefing library is directly accessible", () => {

@@ -1,4 +1,5 @@
 import type { BriefingBlock, BriefingContributor } from "@shared/config/aviationBriefings";
+import { apiUrl } from "@/lib/api";
 
 export type AviationBriefing = {
   id: string; title: string; slug: string; excerpt: string;
@@ -13,8 +14,9 @@ export type AviationBriefing = {
 };
 
 export function briefingImage(briefing: AviationBriefing) {
-  if (briefing.featuredImageStorageKey) return `/api/aviation-briefings/media?key=${encodeURIComponent(briefing.featuredImageStorageKey)}`;
-  return briefing.featuredImageUrl || briefing.videoThumbnailUrl || "";
+  if (briefing.featuredImageStorageKey) return apiUrl(`/api/aviation-briefings/media?key=${encodeURIComponent(briefing.featuredImageStorageKey)}`);
+  const image = briefing.featuredImageUrl || briefing.videoThumbnailUrl || "";
+  return image ? apiUrl(image) : "";
 }
 
 export function primaryContributor(briefing: AviationBriefing) {

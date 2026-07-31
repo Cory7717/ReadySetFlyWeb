@@ -103,7 +103,21 @@ function filtersFor(input: z.infer<typeof listSchema>, includeStatus?: string) {
   return filters;
 }
 
+async function serveBriefingMedia(req: any, res: any, next: any) {
+  try {
+    const key = String(req.query.key || "");
+    if (!key.startsWith("aviation-briefings/") || key.includes("..")) return res.status(400).json({ error: "Invalid media key" });
+    const object = await new S3StorageService().getObjectStream({ key });
+    res.setHeader("Content-Type", object.contentType || "application/octet-stream");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    object.stream.pipe(res);
+  } catch (error) { next(error); }
+}
+
 export function registerAviationBriefingRoutes(app: Express) {
+  // Keep this static route ahead of /:slug so "media" is never interpreted as an article slug.
+  app.get("/api/aviation-briefings/media", serveBriefingMedia);
+
   app.get("/api/aviation-briefings/categories", async (_req, res, next) => {
     try {
       const rows = await db.selectDistinct({ category: aviationBriefings.category }).from(aviationBriefings).orderBy(asc(aviationBriefings.category));
@@ -250,14 +264,4 @@ export function registerAviationBriefingRoutes(app: Express) {
     },
   );
 
-  app.get("/api/aviation-briefings/media", async (req, res, next) => {
-    try {
-      const key = String(req.query.key || "");
-      if (!key.startsWith("aviation-briefings/") || key.includes("..")) return res.status(400).json({ error: "Invalid media key" });
-      const object = await new S3StorageService().getObjectStream({ key });
-      res.setHeader("Content-Type", object.contentType || "application/octet-stream");
-      res.setHeader("Cache-Control", "public, max-age=86400");
-      object.stream.pipe(res);
-    } catch (error) { next(error); }
-  });
 }

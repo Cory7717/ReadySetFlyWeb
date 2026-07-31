@@ -162,7 +162,7 @@ function ContributorAvatar({
   if (person.profileImageUrl && !failed)
     return (
       <img
-        src={person.profileImageUrl}
+        src={apiUrl(person.profileImageUrl)}
         alt={`Photo of ${person.name}`}
         className={`${dimensions} shrink-0 rounded-full border border-[#6683a8]/70 object-cover`}
         onError={() => setFailed(true)}

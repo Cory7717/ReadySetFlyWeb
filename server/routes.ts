@@ -95,6 +95,7 @@ import { registerCourtyardSalesIntelligenceRoutes } from "./routes/courtyardSale
 import { registerComptrollerRoutes } from "./routes/comptroller";
 import { registerVehicleListingRoutes } from "./routes/vehicleListings";
 import { registerAviationBriefingRoutes } from "./routes/aviationBriefings";
+import { registerAviationBriefingSubmissionRoutes } from "./routes/aviationBriefingSubmissions";
 import {
   flightPlanFilingProvider,
   getLeidosFlightServiceDiagnostics,
@@ -5412,6 +5413,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerComptrollerRoutes(app);
   registerVehicleListingRoutes(app);
   registerAviationBriefingRoutes(app);
+  registerAviationBriefingSubmissionRoutes(app);
   app.use("/api/fuel-prices", fuelPricesRouter);
   app.use("/api/ai-tools", aiToolsRouter);
 

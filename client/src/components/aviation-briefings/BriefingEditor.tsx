@@ -48,7 +48,7 @@ function ContributorEditor({ contributors, onChange }: { contributors: BriefingC
     <div><Label>Profile URL</Label><Input className={field} value={person.profileUrl || ""} onChange={(event) => update(index, { profileUrl: event.target.value })} /></div>
     <div className="sm:col-span-2"><Label>Biography</Label><Textarea className={field} value={person.bio || ""} onChange={(event) => update(index, { bio: event.target.value })} /></div>
     <div className="sm:col-span-2 flex justify-end"><Button type="button" variant="destructive" size="sm" onClick={() => onChange(contributors.filter((_, i) => i !== index))}>Remove contributor</Button></div>
-  </div>)}<Button type="button" variant="outline" onClick={() => onChange([...contributors, { name: "", role: "Author", professionalTitle: "", aviationCredentials: "", bio: "", profileImageUrl: "", organization: "", profileUrl: "", credentialVerificationNote: "" }])}><Plus className="mr-1 h-4 w-4" />Add contributor</Button></div>;
+  </div>)}<Button type="button" variant="outline" onClick={() => onChange([...contributors, { name: "", role: "Author", professionalTitle: "", aviationCredentials: "", bio: "", profileImageUrl: "", organization: "", profileUrl: "", credentialVerificationNote: "", websiteUrl: "", youtubeUrl: "", vimeoUrl: "", linkedinUrl: "" }])}><Plus className="mr-1 h-4 w-4" />Add contributor</Button></div>;
 }
 
 export function BriefingEditor({ value, onChange, onSave, saving }: { value: AviationBriefingInput; onChange: (value: AviationBriefingInput) => void; onSave: () => void; saving: boolean }) {

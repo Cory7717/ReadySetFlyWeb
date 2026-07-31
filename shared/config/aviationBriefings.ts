@@ -9,6 +9,8 @@ export const AVIATION_BRIEFING_CATEGORIES = [
 export const AVIATION_BRIEFING_STATUSES = ["draft", "review", "scheduled", "published", "archived"] as const;
 export const AVIATION_BRIEFING_CONTENT_TYPES = ["article", "video"] as const;
 export const AVIATION_CONTRIBUTOR_ROLES = ["Author", "Host", "Presenter", "Guest", "Technical Reviewer", "Aviation Reviewer", "Contributor"] as const;
+export const AVIATION_SUBMISSION_STATUSES = ["draft", "submitted", "under_review", "revision_requested", "approved", "rejected", "published", "withdrawn", "archived"] as const;
+export const AVIATION_SUBMISSION_AGREEMENT_VERSION = "2026-07-31-v1";
 
 export const briefingBlockSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("paragraph"), text: z.string().max(10000) }),
@@ -29,7 +31,34 @@ export const briefingContributorSchema = z.object({
   organization: z.string().trim().max(300).optional().default(""),
   profileUrl: z.string().trim().max(2000).optional().default(""),
   credentialVerificationNote: z.string().trim().max(1000).optional().default(""),
+  websiteUrl: z.string().trim().max(2000).optional().default(""),
+  youtubeUrl: z.string().trim().max(2000).optional().default(""),
+  vimeoUrl: z.string().trim().max(2000).optional().default(""),
+  linkedinUrl: z.string().trim().max(2000).optional().default(""),
 });
+
+const optionalHttpUrl = z.string().trim().max(2000).refine((value) => !value || /^https?:\/\//i.test(value), "Use a valid HTTP or HTTPS URL.").default("");
+export const contributorSubmissionSchema = z.object({
+  contributorName: z.string().trim().min(2).max(200), contributorEmail: z.string().trim().email().max(320),
+  contributorTitle: z.string().trim().max(300).default(""), contributorCredentials: z.string().trim().max(500).default(""),
+  contributorOrganization: z.string().trim().max(300).default(""), contributorBio: z.string().trim().max(3000).default(""),
+  contributorProfileImageUrl: optionalHttpUrl, contributorWebsiteUrl: optionalHttpUrl, contributorYoutubeUrl: optionalHttpUrl,
+  contributorVimeoUrl: optionalHttpUrl, contributorLinkedinUrl: optionalHttpUrl, contributorOtherUrl: optionalHttpUrl,
+  title: z.string().trim().min(3).max(300), description: z.string().trim().min(10).max(2000), category: z.string().trim().min(2).max(120),
+  videoProvider: z.enum(["youtube", "vimeo"]), videoUrl: optionalHttpUrl,
+  originalPublicationUrl: optionalHttpUrl, thumbnailUrl: optionalHttpUrl, videoDurationSeconds: z.coerce.number().int().min(0).max(86400).nullable().default(null),
+  transcript: z.string().max(200000).default(""), contentOutline: z.string().max(30000).default(""), intendedAudience: z.string().max(2000).default(""),
+  relevantToolIds: z.array(z.string().max(100)).max(30).default([]), additionalNotes: z.string().max(10000).default(""),
+  isSponsored: z.boolean().default(false), sponsorName: z.string().max(500).default(""), hasAffiliateRelationship: z.boolean().default(false),
+  affiliateDisclosure: z.string().max(3000).default(""), promotesProductsOrServices: z.boolean().default(false),
+  receivedCompensation: z.boolean().default(false), commercialRelationshipNotes: z.string().max(5000).default(""),
+  agreementAccepted: z.boolean().default(false),
+}).superRefine((input, context) => {
+  const video = validateBriefingVideo({ ...({} as AviationBriefingInput), contentType: "video", videoSourceType: input.videoProvider, videoUrl: input.videoUrl });
+  if (video) context.addIssue({ code: z.ZodIssueCode.custom, path: ["videoUrl"], message: video });
+  if (input.isSponsored && !input.sponsorName.trim()) context.addIssue({ code: z.ZodIssueCode.custom, path: ["sponsorName"], message: "Sponsor name is required." });
+});
+export type ContributorSubmissionInput = z.infer<typeof contributorSubmissionSchema>;
 
 export const aviationBriefingInputSchema = z.object({
   title: z.string().trim().min(3).max(300),

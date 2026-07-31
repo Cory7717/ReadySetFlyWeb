@@ -109,6 +109,7 @@ import VwBeetlePage from "@/pages/vw-beetle";
 import AviationBriefingsPage from "@/pages/aviation-briefings";
 import AviationBriefingDetailPage from "@/pages/aviation-briefing-detail";
 import AdminAviationBriefingsPage from "@/pages/admin-aviation-briefings";
+import AviationBriefingSubmitPage from "@/pages/aviation-briefing-submit";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -269,6 +270,7 @@ function Router() {
       <Route path="/faq" component={FaqPage} />
       <Route path="/aviation-briefings" component={AviationBriefingsPage} />
       <Route path="/aviation-briefings/preview/:id" component={AviationBriefingDetailPage} />
+      <Route path="/aviation-briefings/submit/:token" component={AviationBriefingSubmitPage} />
       <Route path="/aviation-briefings/:slug" component={AviationBriefingDetailPage} />
       <Route path="/synthetic-vision" component={SyntheticVisionPage} />
       <Route path="/flight-demo" component={SyntheticVisionPage} />

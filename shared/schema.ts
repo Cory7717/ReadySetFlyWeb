@@ -5467,6 +5467,22 @@ export const aviationBriefings = pgTable(
   ],
 );
 
+export const aviationContributorInvitations = pgTable("aviation_contributor_invitations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), tokenHash: text("token_hash").notNull(),
+  contributorName: text("contributor_name").notNull(), contributorEmail: varchar("contributor_email").notNull(), organization: text("organization"),
+  internalNote: text("internal_note"), status: text("status").notNull().default("active"), reusableForRevisions: boolean("reusable_for_revisions").notNull().default(true),
+  expiresAt: timestamp("expires_at"), openedAt: timestamp("opened_at"), firstSubmissionAt: timestamp("first_submission_at"), revokedAt: timestamp("revoked_at"),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id, { onDelete: "set null" }), createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [uniqueIndex("idx_aviation_contributor_invite_token").on(table.tokenHash), index("idx_aviation_contributor_invite_status").on(table.status, table.expiresAt)]);
+
+export const aviationBriefingSubmissions = pgTable("aviation_briefing_submissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), invitationId: varchar("invitation_id").notNull().references(() => aviationContributorInvitations.id, { onDelete: "cascade" }),
+  contributorName: text("contributor_name").notNull(), contributorEmail: varchar("contributor_email").notNull(), contributorTitle: text("contributor_title"), contributorCredentials: text("contributor_credentials"), contributorOrganization: text("contributor_organization"), contributorBio: text("contributor_bio"), contributorProfileImageUrl: text("contributor_profile_image_url"), contributorLinksJson: jsonb("contributor_links_json").$type<Record<string,string>>().notNull().default(sql`'{}'::jsonb`),
+  title: text("title").notNull(), description: text("description").notNull(), category: text("category").notNull(), videoProvider: text("video_provider").notNull(), videoUrl: text("video_url").notNull(), originalPublicationUrl: text("original_publication_url"), thumbnailUrl: text("thumbnail_url"), videoDurationSeconds: integer("video_duration_seconds"), transcript: text("transcript"), contentOutline: text("content_outline"), intendedAudience: text("intended_audience"), relevantToolIdsJson: jsonb("relevant_tool_ids_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`), additionalNotes: text("additional_notes"), disclosuresJson: jsonb("disclosures_json").$type<Record<string,unknown>>().notNull().default(sql`'{}'::jsonb`),
+  status: text("status").notNull().default("draft"), revisionRequest: text("revision_request"), internalReviewNotes: text("internal_review_notes"), reviewChecklistJson: jsonb("review_checklist_json").$type<Record<string,boolean>>().notNull().default(sql`'{}'::jsonb`), credentialsReviewed: boolean("credentials_reviewed").notNull().default(false), aviationReviewRecommended: boolean("aviation_review_recommended").notNull().default(false), aviationReviewCompleted: boolean("aviation_review_completed").notNull().default(false), assignedReviewerUserId: varchar("assigned_reviewer_user_id").references(() => users.id, { onDelete: "set null" }),
+  agreementAccepted: boolean("agreement_accepted").notNull().default(false), agreementVersion: text("agreement_version"), agreementAcceptedAt: timestamp("agreement_accepted_at"), submittedAt: timestamp("submitted_at"), reviewedAt: timestamp("reviewed_at"), approvedAt: timestamp("approved_at"), rejectedAt: timestamp("rejected_at"), withdrawnAt: timestamp("withdrawn_at"), publishedBriefingId: varchar("published_briefing_id").references(() => aviationBriefings.id, { onDelete: "set null" }), createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [uniqueIndex("idx_aviation_submission_invitation").on(table.invitationId), index("idx_aviation_submission_status").on(table.status, table.createdAt), index("idx_aviation_submission_email").on(table.contributorEmail), index("idx_aviation_submission_category").on(table.category), index("idx_aviation_submission_reviewer").on(table.assignedReviewerUserId), index("idx_aviation_submission_briefing").on(table.publishedBriefingId)]);
+
 const logbookDecimalField = z
   .union([
     z.string().regex(/^\d+(\.\d{1,2})?$/),

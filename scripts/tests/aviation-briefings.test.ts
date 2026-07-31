@@ -77,8 +77,13 @@ test("contributor photos use durable media storage and accessible fallbacks", ()
 
 test("saved drafts remain open and the briefing library is directly accessible", () => {
   const admin = readFileSync(new URL("../../client/src/pages/admin-aviation-briefings.tsx", import.meta.url), "utf8");
+  const routes = readFileSync(new URL("../../server/routes/aviationBriefings.ts", import.meta.url), "utf8");
   assert.match(admin, /setEditingId\(saved\.id\)/);
   assert.match(admin, /Back to saved briefings/);
   assert.match(admin, /id="briefing-library"/);
   assert.match(admin, /Saved briefings \(\{data\?\.total \|\| 0\}\)/);
+  assert.match(admin, /videoStorageKey: item\.videoStorageKey/);
+  assert.match(routes, /videoStorageKey: row\.videoStorageKey/);
+  assert.match(admin, /This briefing could not be saved/);
+  assert.match(admin, /briefingValidationMessage/);
 });

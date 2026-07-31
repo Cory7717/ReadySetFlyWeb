@@ -79,7 +79,7 @@ function publicBriefing(row: typeof aviationBriefings.$inferSelect) {
     isFeatured: row.isFeatured, featuredImageUrl: row.featuredImageUrl,
     featuredImageStorageKey: row.featuredImageStorageKey,
     featuredImageAlt: row.featuredImageAlt, articleContent: row.articleContentJson,
-    videoSourceType: row.videoSourceType, videoUrl: row.videoUrl,
+    videoSourceType: row.videoSourceType, videoUrl: row.videoUrl, videoStorageKey: row.videoStorageKey,
     videoThumbnailUrl: row.videoThumbnailUrl, videoDurationSeconds: row.videoDurationSeconds,
     videoTranscript: row.videoTranscript, supportingContent: row.supportingContentJson,
     contributors: row.contributorsJson, relevantToolIds: row.relevantToolIdsJson,

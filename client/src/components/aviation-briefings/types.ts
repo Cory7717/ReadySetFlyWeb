@@ -5,7 +5,7 @@ export type AviationBriefing = {
   contentType: "article" | "video"; category: string; status: string;
   isFeatured: boolean; featuredImageUrl?: string | null; featuredImageStorageKey?: string | null;
   featuredImageAlt?: string | null; articleContent: BriefingBlock[];
-  videoSourceType?: "youtube" | "vimeo" | "uploaded" | null; videoUrl?: string | null;
+  videoSourceType?: "youtube" | "vimeo" | "uploaded" | null; videoUrl?: string | null; videoStorageKey?: string | null;
   videoThumbnailUrl?: string | null; videoDurationSeconds?: number | null; videoTranscript?: string | null;
   supportingContent: BriefingBlock[]; contributors: BriefingContributor[];
   relevantToolIds: string[]; seoTitle?: string | null; seoDescription?: string | null;

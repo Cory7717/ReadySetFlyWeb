@@ -13,8 +13,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RSF_TOOLS } from "@/lib/tool-registry";
-import { apiRequest } from "@/lib/queryClient";
-import { apiUrl } from "@/lib/api";
 import {
   AVIATION_BRIEFING_CATEGORIES,
   AVIATION_BRIEFING_STATUSES,
@@ -199,18 +197,14 @@ function ContributorEditor({
     setUploadingIndex(index);
     setUploadError("");
     try {
-      const response = await apiRequest(
-        "POST",
-        "/api/admin/aviation-briefings/upload",
-        { contentType: file.type, size: file.size },
-      );
-      const prepared = await response.json();
-      const uploaded = await fetch(prepared.uploadURL, {
-        method: "PUT",
+      const uploaded = await fetch("/api/admin/aviation-briefings/upload-direct", {
+        method: "POST",
+        credentials: "include",
         headers: { "Content-Type": file.type },
         body: file,
       });
-      if (!uploaded.ok) throw new Error("Photo upload failed");
+      const prepared = await uploaded.json().catch(() => ({}));
+      if (!uploaded.ok) throw new Error(prepared.error || "Photo upload failed");
       update(index, { profileImageUrl: prepared.publicUrl });
     } catch (error: any) {
       setUploadError(
@@ -438,18 +432,14 @@ export function BriefingEditor({
   const uploadImage = async (file: File) => {
     setUploading(true);
     try {
-      const response = await apiRequest(
-        "POST",
-        "/api/admin/aviation-briefings/upload",
-        { contentType: file.type, size: file.size },
-      );
-      const prepared = await response.json();
-      const uploaded = await fetch(prepared.uploadURL, {
-        method: "PUT",
+      const uploaded = await fetch("/api/admin/aviation-briefings/upload-direct", {
+        method: "POST",
+        credentials: "include",
         headers: { "Content-Type": file.type },
         body: file,
       });
-      if (!uploaded.ok) throw new Error("Image upload failed");
+      const prepared = await uploaded.json().catch(() => ({}));
+      if (!uploaded.ok) throw new Error(prepared.error || "Image upload failed");
       onChange({
         ...value,
         featuredImageStorageKey: prepared.key,

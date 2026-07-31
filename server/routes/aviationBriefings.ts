@@ -1,4 +1,5 @@
-import type { Express } from "express";
+import express, { type Express } from "express";
+import { randomUUID } from "crypto";
 import { and, asc, desc, eq, ilike, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { aviationBriefings } from "@shared/schema";
@@ -223,6 +224,26 @@ export function registerAviationBriefingRoutes(app: Express) {
       res.json({ ...upload, publicUrl: `/api/aviation-briefings/media?key=${encodeURIComponent(upload.key)}` });
     } catch (error) { next(error); }
   });
+
+  app.post(
+    "/api/admin/aviation-briefings/upload-direct",
+    isAuthenticated,
+    isSuperAdmin,
+    express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "10mb" }),
+    async (req, res, next) => {
+      try {
+        const contentType = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+        if (!["image/jpeg", "image/png", "image/webp"].includes(contentType) || !Buffer.isBuffer(req.body) || !req.body.length) {
+          return res.status(400).json({ error: "Use a JPG, PNG, or WebP image no larger than 10 MB." });
+        }
+        if (!process.env.AWS_S3_BUCKET) return res.status(503).json({ error: "Durable briefing media storage is not configured." });
+        const extension = contentType === "image/jpeg" ? "jpg" : contentType === "image/png" ? "png" : "webp";
+        const key = `aviation-briefings/${randomUUID()}.${extension}`;
+        await new S3StorageService().uploadBytes({ key, body: req.body, contentType });
+        res.status(201).json({ key, publicUrl: `/api/aviation-briefings/media?key=${encodeURIComponent(key)}` });
+      } catch (error) { next(error); }
+    },
+  );
 
   app.get("/api/aviation-briefings/media", async (req, res, next) => {
     try {

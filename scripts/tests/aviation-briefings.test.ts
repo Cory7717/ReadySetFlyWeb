@@ -66,8 +66,10 @@ test("contributor photos use durable media storage and accessible fallbacks", ()
   assert.match(editor, /Replace photo/);
   assert.match(editor, /Remove photo/);
   assert.match(editor, /aria-label={`Upload photo for/);
-  assert.match(editor, /\/api\/admin\/aviation-briefings\/upload/);
+  assert.match(editor, /\/api\/admin\/aviation-briefings\/upload-direct/);
   assert.match(routes, /AWS_S3_BUCKET/);
+  assert.match(routes, /express\.raw\(\{ type: \["image\/jpeg", "image\/png", "image\/webp"\], limit: "10mb" \}\)/);
+  assert.match(routes, /uploadBytes/);
   assert.match(detail, /alt={`Photo of \${person\.name}`}/);
   assert.match(detail, /Default avatar for/);
   assert.match(detail, /ContributorFooter/);

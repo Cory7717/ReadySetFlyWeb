@@ -51,7 +51,24 @@ test("route contract protects drafts and supports due scheduled content", () => 
 test("public rendering includes tools, disclaimer, attribution, and analytics", () => {
   const detail = readFileSync(new URL("../../client/src/pages/aviation-briefing-detail.tsx", import.meta.url), "utf8");
   assert.match(detail, /Try It in Ready Set Fly/);
-  assert.match(detail, /not a substitute for official FAA publications/);
+  assert.match(detail, /not a substitute for\s+official FAA publications/);
   assert.match(detail, /person\.aviationCredentials/);
   assert.match(detail, /aviation_briefing_opened/);
+});
+
+test("contributor photos use durable media storage and accessible fallbacks", () => {
+  const editor = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingEditor.tsx", import.meta.url), "utf8");
+  const detail = readFileSync(new URL("../../client/src/pages/aviation-briefing-detail.tsx", import.meta.url), "utf8");
+  const routes = readFileSync(new URL("../../server/routes/aviationBriefings.ts", import.meta.url), "utf8");
+  const parsed = briefingContributorSchema.parse({ name: "Cory Armer", role: "Author", profileImageUrl: "/api/aviation-briefings/media?key=aviation-briefings/photo.webp" });
+  assert.match(parsed.profileImageUrl, /aviation-briefings\/media/);
+  assert.match(editor, /Contributor Photo/);
+  assert.match(editor, /Replace photo/);
+  assert.match(editor, /Remove photo/);
+  assert.match(editor, /aria-label={`Upload photo for/);
+  assert.match(editor, /\/api\/admin\/aviation-briefings\/upload/);
+  assert.match(routes, /AWS_S3_BUCKET/);
+  assert.match(detail, /alt={`Photo of \${person\.name}`}/);
+  assert.match(detail, /Default avatar for/);
+  assert.match(detail, /ContributorFooter/);
 });

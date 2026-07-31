@@ -74,16 +74,6 @@ export class S3StorageService {
     await this.client.send(command);
   }
 
-  async uploadBytes(params: { key: string; body: Buffer; contentType: string }): Promise<void> {
-    const command = new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: params.key,
-      Body: params.body,
-      ContentType: params.contentType,
-    });
-    await this.client.send(command);
-  }
-
   async getObjectStream(params: { key: string }): Promise<{ stream: Readable; contentType?: string; contentLength?: number }> {
     const command = new GetObjectCommand({
       Bucket: this.bucket,

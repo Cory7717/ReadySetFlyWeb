@@ -26,6 +26,23 @@ import {
 const field =
   "border-[#607895] bg-[#0b1624] text-white placeholder:text-[#7f92aa]";
 
+async function uploadRsfImage(file: File) {
+  const prepareResponse = await fetch(apiUrl("/api/objects/upload"), { method: "POST", credentials: "include" });
+  if (!prepareResponse.ok) throw new Error("RSF could not prepare the image upload.");
+  const prepared = await prepareResponse.json() as { uploadURL?: string };
+  if (!prepared.uploadURL) throw new Error("RSF did not return an image upload destination.");
+  const uploadResponse = await fetch(prepared.uploadURL, { method: "PUT", body: file });
+  if (!uploadResponse.ok) throw new Error("The image could not be uploaded to RSF media storage.");
+  const aclResponse = await fetch(apiUrl("/api/objects/set-acl"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: prepared.uploadURL, access: "publicRead" }),
+  });
+  const acl = aclResponse.ok ? await aclResponse.json() : null;
+  return String(acl?.objectPath || prepared.uploadURL.split("?")[0]);
+}
+
 function BlockEditor({
   blocks,
   onChange,
@@ -204,15 +221,8 @@ function ContributorEditor({
     setUploadingIndex(index);
     setUploadError("");
     try {
-      const uploaded = await fetch(apiUrl("/api/admin/aviation-briefings/upload-direct"), {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      const prepared = await uploaded.json().catch(() => ({}));
-      if (!uploaded.ok) throw new Error(prepared.error || "Photo upload failed");
-      update(index, { profileImageUrl: prepared.publicUrl });
+      const publicUrl = await uploadRsfImage(file);
+      update(index, { profileImageUrl: publicUrl });
     } catch (error: any) {
       setUploadError(
         error?.message || "Contributor photo upload failed. Please try again.",
@@ -443,19 +453,14 @@ export function BriefingEditor({
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 60_000);
     try {
-      const uploaded = await fetch(apiUrl("/api/admin/aviation-briefings/upload-direct"), {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": file.type },
-        body: file,
-        signal: controller.signal,
-      });
-      const prepared = await uploaded.json().catch(() => ({}));
-      if (!uploaded.ok) throw new Error(prepared.error || "Image upload failed");
+      const publicUrl = await Promise.race([
+        uploadRsfImage(file),
+        new Promise<never>((_, reject) => controller.signal.addEventListener("abort", () => reject(new DOMException("Upload timed out", "AbortError")), { once: true })),
+      ]);
       onChange({
         ...value,
-        featuredImageStorageKey: prepared.key,
-        featuredImageUrl: prepared.publicUrl,
+        featuredImageStorageKey: "",
+        featuredImageUrl: publicUrl,
       });
     } catch (error: any) {
       setFeaturedUploadError(error?.name === "AbortError" ? "The upload timed out after 60 seconds. Please check the connection and try again." : error?.message || "Featured image upload failed. Please try again.");

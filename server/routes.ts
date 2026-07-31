@@ -5413,9 +5413,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerCourtyardSalesIntelligenceRoutes(app);
   registerComptrollerRoutes(app);
   registerVehicleListingRoutes(app);
+  registerAviationBriefingEngagementRoutes(app);
   registerAviationBriefingRoutes(app);
   registerAviationBriefingSubmissionRoutes(app);
-  registerAviationBriefingEngagementRoutes(app);
   app.use("/api/fuel-prices", fuelPricesRouter);
   app.use("/api/ai-tools", aiToolsRouter);
 

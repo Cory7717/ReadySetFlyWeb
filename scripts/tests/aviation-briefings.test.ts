@@ -91,6 +91,8 @@ test("saved drafts remain open and the briefing library is directly accessible",
   assert.match(routes, /videoStorageKey: row\.videoStorageKey/);
   assert.match(admin, /This briefing could not be saved/);
   assert.match(admin, /briefingValidationMessage/);
+  assert.match(admin, /fetch\(apiUrl\(path\)/);
+  assert.doesNotMatch(admin, /fetch\("\/api\/admin\/aviation-briefing/);
 });
 
 test("article blocks can be reordered without changing their content", () => {

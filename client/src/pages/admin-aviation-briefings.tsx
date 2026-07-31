@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 
 const emptyBriefing: AviationBriefingInput = { title: "", slug: "", excerpt: "", contentType: "article", category: "Flight Planning", status: "draft", isFeatured: false, featuredImageUrl: "", featuredImageStorageKey: "", featuredImageAlt: "", featuredImageCredit: "", featuredImageCreditUrl: "", articleContent: [{ type: "paragraph", text: "" }], videoSourceType: null, videoUrl: "", videoStorageKey: "", videoThumbnailUrl: "", videoDurationSeconds: null, videoTranscript: "", supportingContent: [], contributors: [], relevantToolIds: [], seoTitle: "", seoDescription: "", publishedAt: null, scheduledAt: null };
 
@@ -23,6 +24,15 @@ function briefingValidationMessage(value: AviationBriefingInput) {
   return parsed.error.issues.map((issue) => `${issue.path.length ? issue.path.join(" → ") + ": " : ""}${issue.message}`).join(" ");
 }
 
+async function fetchAdminJson(path: string) {
+  const response = await fetch(apiUrl(path), { credentials: "include" });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.error || "Unable to load Aviation Briefings administration data.");
+  }
+  return response.json();
+}
+
 export default function AdminAviationBriefingsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -32,11 +42,11 @@ export default function AdminAviationBriefingsPage() {
   const [saveError, setSaveError] = useState("");
   const [inviteForm, setInviteForm] = useState({ contributorName: "", contributorEmail: "", organization: "", internalNote: "", expiresAt: "" });
   const [lastInviteUrl, setLastInviteUrl] = useState("");
-  const { data, isLoading } = useQuery<{ briefings: AviationBriefing[]; total: number; summaryRows: Array<{ status: string; contentType: string; featured: boolean; count: number }> }>({ queryKey: ["/api/admin/aviation-briefings"], queryFn: async () => { const response = await fetch("/api/admin/aviation-briefings", { credentials: "include" }); if (!response.ok) throw new Error("Super Admin access required"); return response.json(); }, enabled: Boolean(user?.isSuperAdmin) });
-  const { data: inviteData } = useQuery<any>({ queryKey: ["/api/admin/aviation-briefing-invitations"], queryFn: async () => (await fetch("/api/admin/aviation-briefing-invitations", { credentials: "include" })).json(), enabled: Boolean(user?.isSuperAdmin) });
-  const { data: submissionData } = useQuery<any>({ queryKey: ["/api/admin/aviation-briefing-submissions"], queryFn: async () => (await fetch("/api/admin/aviation-briefing-submissions", { credentials: "include" })).json(), enabled: Boolean(user?.isSuperAdmin) });
-  const { data: engagementData } = useQuery<any>({ queryKey: ["/api/admin/aviation-briefings/engagement-analytics"], queryFn: async () => (await fetch("/api/admin/aviation-briefings/engagement-analytics", { credentials: "include" })).json(), enabled: Boolean(user?.isSuperAdmin) });
-  const { data: suggestionData } = useQuery<any>({ queryKey: ["/api/admin/aviation-briefing-suggestions"], queryFn: async () => (await fetch("/api/admin/aviation-briefing-suggestions", { credentials: "include" })).json(), enabled: Boolean(user?.isSuperAdmin) });
+  const { data, isLoading } = useQuery<{ briefings: AviationBriefing[]; total: number; summaryRows: Array<{ status: string; contentType: string; featured: boolean; count: number }> }>({ queryKey: ["/api/admin/aviation-briefings"], queryFn: () => fetchAdminJson("/api/admin/aviation-briefings"), enabled: Boolean(user?.isSuperAdmin) });
+  const { data: inviteData } = useQuery<any>({ queryKey: ["/api/admin/aviation-briefing-invitations"], queryFn: () => fetchAdminJson("/api/admin/aviation-briefing-invitations"), enabled: Boolean(user?.isSuperAdmin) });
+  const { data: submissionData } = useQuery<any>({ queryKey: ["/api/admin/aviation-briefing-submissions"], queryFn: () => fetchAdminJson("/api/admin/aviation-briefing-submissions"), enabled: Boolean(user?.isSuperAdmin) });
+  const { data: engagementData } = useQuery<any>({ queryKey: ["/api/admin/aviation-briefings/engagement-analytics"], queryFn: () => fetchAdminJson("/api/admin/aviation-briefings/engagement-analytics"), enabled: Boolean(user?.isSuperAdmin) });
+  const { data: suggestionData } = useQuery<any>({ queryKey: ["/api/admin/aviation-briefing-suggestions"], queryFn: () => fetchAdminJson("/api/admin/aviation-briefing-suggestions"), enabled: Boolean(user?.isSuperAdmin) });
   const createInvite = useMutation({ mutationFn: async () => { const response = await apiRequest("POST", "/api/admin/aviation-briefing-invitations", { ...inviteForm, expiresAt: inviteForm.expiresAt ? new Date(inviteForm.expiresAt).toISOString() : null }); return response.json(); }, onSuccess: (payload) => { setLastInviteUrl(payload.submissionUrl); setInviteForm({ contributorName: "", contributorEmail: "", organization: "", internalNote: "", expiresAt: "" }); queryClient.invalidateQueries({ queryKey: ["/api/admin/aviation-briefing-invitations"] }); } });
   const inviteAction = useMutation({ mutationFn: async ({ id, action }: { id: string; action: string }) => { const response = await apiRequest("POST", `/api/admin/aviation-briefing-invitations/${id}/${action}`); return response.json(); }, onSuccess: (payload) => { if (payload.submissionUrl) setLastInviteUrl(payload.submissionUrl); queryClient.invalidateQueries({ queryKey: ["/api/admin/aviation-briefing-invitations"] }); } });
   const reviewAction = useMutation({ mutationFn: ({ id, action, message }: { id: string; action: string; message?: string }) => apiRequest("POST", `/api/admin/aviation-briefing-submissions/${id}/${action}`, { message }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/aviation-briefing-submissions"] }) });

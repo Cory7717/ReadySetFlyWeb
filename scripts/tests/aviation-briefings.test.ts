@@ -152,3 +152,17 @@ test("public article links receive article-specific server-rendered social metad
   assert.match(server, /type: briefing\.contentType === "video" \? "video\.other" : "article"/);
   assert.match(server, /featuredImageStorageKey/);
 });
+
+test("private briefing performance reports anonymous readership and engagement", () => {
+  const routes = readFileSync(new URL("../../server/routes/aviationBriefingEngagement.ts", import.meta.url), "utf8");
+  const panel = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingPerformancePanel.tsx", import.meta.url), "utf8");
+  const admin = readFileSync(new URL("../../client/src/pages/admin-aviation-briefings.tsx", import.meta.url), "utf8");
+  assert.match(routes, /\/api\/admin\/aviation-briefings\/performance/);
+  assert.match(routes, /count\(DISTINCT "visitor_id"\)/);
+  assert.match(routes, /aviation_briefing_tool_clicked/);
+  assert.match(routes, /aviation_contributor_external_link_clicked/);
+  assert.match(panel, /Briefing Performance/);
+  assert.match(panel, /7 days/);
+  assert.match(panel, /Lifetime/);
+  assert.match(admin, /<BriefingPerformancePanel \/>/);
+});

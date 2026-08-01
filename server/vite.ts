@@ -5,6 +5,9 @@ import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
+import { and, eq, lte, or } from "drizzle-orm";
+import { aviationBriefings } from "@shared/schema";
+import { db } from "./db";
 
 const viteLogger = createLogger();
 
@@ -12,6 +15,7 @@ type SeoMeta = {
   title: string;
   description: string;
   image: string;
+  type?: "website" | "article" | "video.other";
 };
 
 const defaultSeo: SeoMeta = {
@@ -68,17 +72,53 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;");
 }
 
-function seoForPath(pathname: string) {
+async function seoForPath(pathname: string): Promise<SeoMeta> {
   const normalized = pathname.replace(/\/+$/, "") || "/";
   if (normalized.startsWith("/aviation-briefings/") && !normalized.startsWith("/aviation-briefings/preview/")) {
+    const slug = decodeURIComponent(normalized.slice("/aviation-briefings/".length));
+    if (slug && !slug.includes("/")) {
+      const now = new Date();
+      const [briefing] = await db
+        .select({
+          title: aviationBriefings.title,
+          excerpt: aviationBriefings.excerpt,
+          contentType: aviationBriefings.contentType,
+          featuredImageUrl: aviationBriefings.featuredImageUrl,
+          featuredImageStorageKey: aviationBriefings.featuredImageStorageKey,
+          videoThumbnailUrl: aviationBriefings.videoThumbnailUrl,
+          seoTitle: aviationBriefings.seoTitle,
+          seoDescription: aviationBriefings.seoDescription,
+        })
+        .from(aviationBriefings)
+        .where(and(
+          eq(aviationBriefings.slug, slug),
+          or(
+            and(eq(aviationBriefings.status, "published"), lte(aviationBriefings.publishedAt, now)),
+            and(eq(aviationBriefings.status, "scheduled"), lte(aviationBriefings.scheduledAt, now)),
+          ),
+        ))
+        .limit(1);
+
+      if (briefing) {
+        const storedImage = briefing.featuredImageStorageKey
+          ? `/api/aviation-briefings/media?key=${encodeURIComponent(briefing.featuredImageStorageKey)}`
+          : "";
+        return {
+          title: briefing.seoTitle || `${briefing.title} | Ready Set Fly`,
+          description: briefing.seoDescription || briefing.excerpt,
+          image: storedImage || briefing.featuredImageUrl || briefing.videoThumbnailUrl || routeSeo["/aviation-briefings"].image,
+          type: briefing.contentType === "video" ? "video.other" : "article",
+        };
+      }
+    }
     return routeSeo["/aviation-briefings"];
   }
   return routeSeo[normalized] || defaultSeo;
 }
 
-function injectSeoMeta(html: string, req: { path?: string; protocol?: string; get?: (header: string) => string | undefined; originalUrl?: string }) {
+async function injectSeoMeta(html: string, req: { path?: string; protocol?: string; get?: (header: string) => string | undefined; originalUrl?: string }) {
   const pathname = new URL(req.originalUrl || req.path || "/", "https://readysetfly.us").pathname;
-  const meta = seoForPath(pathname);
+  const meta = await seoForPath(pathname);
   const title = escapeHtml(meta.title);
   const description = escapeHtml(meta.description);
   const image = escapeHtml(absoluteUrl(req, meta.image));
@@ -86,7 +126,7 @@ function injectSeoMeta(html: string, req: { path?: string; protocol?: string; ge
   const tags = [
     `<title>${title}</title>`,
     `<meta name="description" content="${description}" />`,
-    `<meta property="og:type" content="website" />`,
+    `<meta property="og:type" content="${meta.type || "website"}" />`,
     `<meta property="og:site_name" content="Ready Set Fly" />`,
     `<meta property="og:title" content="${title}" />`,
     `<meta property="og:description" content="${description}" />`,
@@ -170,7 +210,7 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
-      template = injectSeoMeta(template, req);
+      template = await injectSeoMeta(template, req);
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
@@ -235,7 +275,7 @@ export function serveStatic(app: Express) {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
     const indexPath = path.resolve(distPath, "index.html");
     fs.promises.readFile(indexPath, "utf-8")
-      .then((html) => res.status(200).set({ "Content-Type": "text/html" }).end(injectSeoMeta(html, req)))
+      .then(async (html) => res.status(200).set({ "Content-Type": "text/html" }).end(await injectSeoMeta(html, req)))
       .catch(() => res.sendFile(indexPath));
   });
 }

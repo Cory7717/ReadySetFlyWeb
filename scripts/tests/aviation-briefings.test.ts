@@ -143,3 +143,12 @@ test("Aviation Briefings suppresses the global weather announcement", () => {
   const announcement = readFileSync(new URL("../../client/src/components/AiWeatherTranslatorAnnouncement.tsx", import.meta.url), "utf8");
   assert.match(announcement, /"\/aviation-briefings"/);
 });
+
+test("public article links receive article-specific server-rendered social metadata", () => {
+  const server = readFileSync(new URL("../../server/vite.ts", import.meta.url), "utf8");
+  assert.match(server, /eq\(aviationBriefings\.slug, slug\)/);
+  assert.match(server, /briefing\.seoTitle \|\| `\$\{briefing\.title\} \| Ready Set Fly`/);
+  assert.match(server, /briefing\.seoDescription \|\| briefing\.excerpt/);
+  assert.match(server, /type: briefing\.contentType === "video" \? "video\.other" : "article"/);
+  assert.match(server, /featuredImageStorageKey/);
+});

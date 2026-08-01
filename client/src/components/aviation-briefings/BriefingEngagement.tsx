@@ -1,16 +1,388 @@
-import { useState } from "react"; import { Link } from "wouter"; import { useMutation, useQuery } from "@tanstack/react-query";
-import { Bookmark, CheckCircle2, Copy, Facebook, Lightbulb, Linkedin, Mail, Printer, Share2, ThumbsUp } from "lucide-react";
-import { Button } from "@/components/ui/button"; import { Dialog,DialogContent,DialogDescription,DialogHeader,DialogTitle } from "@/components/ui/dialog"; import { Input } from "@/components/ui/input"; import { Textarea } from "@/components/ui/textarea"; import { Label } from "@/components/ui/label";
-import { apiRequest,queryClient } from "@/lib/queryClient"; import { trackEvent } from "@/lib/analytics"; import { useToast } from "@/hooks/use-toast"; import { BriefingCard } from "./BriefingCard"; import type { AviationBriefing } from "./types";
+import { useState } from "react";
+import { Link } from "wouter";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  Bookmark,
+  CheckCircle2,
+  Copy,
+  Facebook,
+  Instagram,
+  Lightbulb,
+  Linkedin,
+  Mail,
+  Printer,
+  Share2,
+  ThumbsUp,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { trackEvent } from "@/lib/analytics";
+import { useToast } from "@/hooks/use-toast";
+import { BriefingCard } from "./BriefingCard";
+import type { AviationBriefing } from "./types";
 
-export function BriefingEngagement({briefing,related}:{briefing:AviationBriefing;related:AviationBriefing[]}){const {toast}=useToast();const [suggestOpen,setSuggestOpen]=useState(false);const [suggestion,setSuggestion]=useState({name:"",email:"",suggestedPerson:"",organization:"",topic:"",reason:"",website:"",notes:"",company:"",sourceBriefingId:briefing.id});
- const {data}=useQuery<{feedback:string|null;saved:boolean;authenticated:boolean}>({queryKey:["briefing-engagement",briefing.id],queryFn:async()=>{const r=await fetch(`/api/aviation-briefings/${briefing.id}/engagement`,{credentials:"include"});return r.json();}});
- const feedback=useMutation({mutationFn:(responseType:"helpful"|"learn_more")=>apiRequest("POST",`/api/aviation-briefings/${briefing.id}/feedback`,{responseType}),onSuccess:(_,type)=>{trackEvent(type==="helpful"?"aviation_briefing_helpful":"aviation_briefing_learn_more",{briefingId:briefing.id,category:briefing.category,contributor:(briefing.contributors[0] as any)?.name});queryClient.invalidateQueries({queryKey:["briefing-engagement",briefing.id]});}});
- const save=useMutation({mutationFn:()=>apiRequest(data?.saved?"DELETE":"POST",`/api/aviation-briefings/${briefing.id}/save`),onSuccess:()=>{trackEvent(data?.saved?"aviation_briefing_unsaved":"aviation_briefing_saved",{briefingId:briefing.id});queryClient.invalidateQueries({queryKey:["briefing-engagement",briefing.id]});}});
- const submitSuggestion=useMutation({mutationFn:()=>apiRequest("POST","/api/aviation-briefings/suggestions",suggestion),onSuccess:()=>{toast({title:"Suggestion received",description:"Thank you for helping shape future Aviation Briefings."});trackEvent("aviation_briefing_suggestion_submitted",{briefingId:briefing.id});setSuggestOpen(false);}});
- const share=(network:string,url:string)=>{trackEvent("aviation_briefing_shared",{briefingId:briefing.id,network});if(network==="copy"){navigator.clipboard.writeText(location.href);toast({title:"Link copied"});}else window.open(url,"_blank","noopener,noreferrer");};const page=encodeURIComponent(location.href),title=encodeURIComponent(briefing.title);
- return <section className="rsf-engagement mt-14 space-y-8"><div className="rounded-2xl border border-[#55739b]/40 bg-[#0d1929] p-6 text-center sm:p-8"><h2 className="text-2xl font-bold">Was this Aviation Briefing helpful?</h2>{data?.feedback?<div className="mt-5 inline-flex items-center gap-2 text-[#a9d5b7]"><CheckCircle2 className="h-5 w-5"/>Thanks for your feedback!</div>:<div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row"><Button className="bg-[#2d73d5] text-white" onClick={()=>feedback.mutate("helpful")}><ThumbsUp className="mr-2 h-4 w-4"/>Yes, it was helpful</Button><Button variant="outline" onClick={()=>feedback.mutate("learn_more")}><Lightbulb className="mr-2 h-4 w-4"/>Show me more like this</Button></div>}</div>
- {data?.feedback==="learn_more"&&<div><h2 className="text-2xl font-bold">You may also enjoy…</h2>{related.length?<div className="mt-5 grid gap-5 md:grid-cols-3">{related.slice(0,5).map(x=><BriefingCard key={x.id} briefing={x}/>)}</div>:<p className="mt-3 text-[#aebdce]">More Aviation Briefings coming soon.</p>}</div>}
- <div className="rounded-2xl border border-[#55739b]/40 bg-[#0d1929] p-6"><h2 className="flex items-center text-xl font-bold"><Share2 className="mr-2 h-5 w-5"/>Save, share, or print</h2><div className="mt-4 flex flex-wrap gap-2">{data?.authenticated?<Button variant="outline" onClick={()=>save.mutate()}><Bookmark className={`mr-2 h-4 w-4 ${data.saved?"fill-current":""}`}/>{data.saved?"Saved":"Save Briefing"}</Button>:<Button asChild variant="outline"><Link href={`/register?returnTo=${encodeURIComponent(location.pathname)}`}><Bookmark className="mr-2 h-4 w-4"/>Create a free account to save</Link></Button>}<Button variant="outline" onClick={()=>share("copy","")}><Copy className="mr-2 h-4 w-4"/>Copy Link</Button><Button variant="outline" onClick={()=>share("email",`mailto:?subject=${title}&body=${page}`)}><Mail className="mr-2 h-4 w-4"/>Email</Button><Button variant="outline" aria-label="Share on Facebook" onClick={()=>share("facebook",`https://www.facebook.com/sharer/sharer.php?u=${page}`)}><Facebook className="h-4 w-4"/></Button><Button variant="outline" aria-label="Share on LinkedIn" onClick={()=>share("linkedin",`https://www.linkedin.com/sharing/share-offsite/?url=${page}`)}><Linkedin className="h-4 w-4"/></Button><Button variant="outline" aria-label="Share on X" onClick={()=>share("x",`https://twitter.com/intent/tweet?url=${page}&text=${title}`)}>X</Button><Button variant="outline" onClick={()=>{trackEvent("aviation_briefing_printed",{briefingId:briefing.id});window.print();}}><Printer className="mr-2 h-4 w-4"/>Print Briefing</Button></div></div>
- <div className="rounded-2xl border border-[#55739b]/40 bg-[#0d1929] p-6"><h2 className="text-xl font-bold">Know someone with an interesting aviation story or expertise?</h2><p className="mt-2 text-[#aebdce]">Help the RSF editorial team discover a future topic or contributor.</p><Button className="mt-4 bg-[#2d73d5] text-white" onClick={()=>setSuggestOpen(true)}>Suggest a Future Aviation Briefing</Button></div>
- <Dialog open={suggestOpen} onOpenChange={setSuggestOpen}><DialogContent className="max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Suggest a Future Aviation Briefing</DialogTitle><DialogDescription>This is an editorial suggestion, not a contributor application.</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2">{[["Your name","name"],["Your email","email"],["Suggested person or organization","suggestedPerson"],["Organization","organization"],["Topic","topic"],["Optional website","website"]].map(([label,key])=><div key={key}><Label>{label}</Label><Input value={(suggestion as any)[key]} type={key==="email"?"email":"text"} onChange={e=>setSuggestion({...suggestion,[key]:e.target.value})}/></div>)}<input className="hidden" tabIndex={-1} autoComplete="off" value={suggestion.company} onChange={e=>setSuggestion({...suggestion,company:e.target.value})}/><div className="sm:col-span-2"><Label>Why would this make a good briefing?</Label><Textarea value={suggestion.reason} onChange={e=>setSuggestion({...suggestion,reason:e.target.value})}/></div><div className="sm:col-span-2"><Label>Optional notes</Label><Textarea value={suggestion.notes} onChange={e=>setSuggestion({...suggestion,notes:e.target.value})}/></div></div><Button onClick={()=>submitSuggestion.mutate()} disabled={submitSuggestion.isPending||!suggestion.name||!suggestion.email||!suggestion.suggestedPerson||!suggestion.topic||suggestion.reason.length<10}>Submit suggestion</Button></DialogContent></Dialog></section>}
+export function BriefingEngagement({
+  briefing,
+  related,
+}: {
+  briefing: AviationBriefing;
+  related: AviationBriefing[];
+}) {
+  const { toast } = useToast();
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestion, setSuggestion] = useState({
+    name: "",
+    email: "",
+    suggestedPerson: "",
+    organization: "",
+    topic: "",
+    reason: "",
+    website: "",
+    notes: "",
+    company: "",
+    sourceBriefingId: briefing.id,
+  });
+  const { data } = useQuery<{
+    feedback: string | null;
+    saved: boolean;
+    authenticated: boolean;
+  }>({
+    queryKey: ["briefing-engagement", briefing.id],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/aviation-briefings/${briefing.id}/engagement`,
+        { credentials: "include" },
+      );
+      return r.json();
+    },
+  });
+  const feedback = useMutation({
+    mutationFn: (responseType: "helpful" | "learn_more") =>
+      apiRequest("POST", `/api/aviation-briefings/${briefing.id}/feedback`, {
+        responseType,
+      }),
+    onSuccess: (_, type) => {
+      trackEvent(
+        type === "helpful"
+          ? "aviation_briefing_helpful"
+          : "aviation_briefing_learn_more",
+        {
+          briefingId: briefing.id,
+          category: briefing.category,
+          contributor: (briefing.contributors[0] as any)?.name,
+        },
+      );
+      queryClient.invalidateQueries({
+        queryKey: ["briefing-engagement", briefing.id],
+      });
+    },
+  });
+  const save = useMutation({
+    mutationFn: () =>
+      apiRequest(
+        data?.saved ? "DELETE" : "POST",
+        `/api/aviation-briefings/${briefing.id}/save`,
+      ),
+    onSuccess: () => {
+      trackEvent(
+        data?.saved ? "aviation_briefing_unsaved" : "aviation_briefing_saved",
+        { briefingId: briefing.id },
+      );
+      queryClient.invalidateQueries({
+        queryKey: ["briefing-engagement", briefing.id],
+      });
+    },
+  });
+  const submitSuggestion = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", "/api/aviation-briefings/suggestions", suggestion),
+    onSuccess: () => {
+      toast({
+        title: "Suggestion received",
+        description: "Thank you for helping shape future Aviation Briefings.",
+      });
+      trackEvent("aviation_briefing_suggestion_submitted", {
+        briefingId: briefing.id,
+      });
+      setSuggestOpen(false);
+    },
+  });
+  const share = (network: string, url: string) => {
+    trackEvent("aviation_briefing_shared", {
+      briefingId: briefing.id,
+      network,
+    });
+    if (network === "copy") {
+      navigator.clipboard.writeText(location.href);
+      toast({ title: "Link copied" });
+    } else window.open(url, "_blank", "noopener,noreferrer");
+  };
+  const shareToInstagram = async () => {
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({
+          title: briefing.title,
+          text: briefing.excerpt,
+          url: location.href,
+        });
+        trackEvent("aviation_briefing_shared", {
+          briefingId: briefing.id,
+          network: "instagram",
+          method: "native_share",
+        });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    }
+    await navigator.clipboard.writeText(location.href);
+    trackEvent("aviation_briefing_shared", {
+      briefingId: briefing.id,
+      network: "instagram",
+      method: "copy_link",
+    });
+    toast({
+      title: "Article link copied",
+      description: "The link is ready to paste into Instagram.",
+    });
+  };
+  const page = encodeURIComponent(location.href),
+    title = encodeURIComponent(briefing.title);
+  return (
+    <section className="rsf-engagement mt-14 space-y-8">
+      <div className="rounded-2xl border border-[#55739b]/40 bg-[#0d1929] p-6 text-center sm:p-8">
+        <h2 className="text-2xl font-bold">
+          Was this Aviation Briefing helpful?
+        </h2>
+        {data?.feedback ? (
+          <div className="mt-5 inline-flex items-center gap-2 text-[#a9d5b7]">
+            <CheckCircle2 className="h-5 w-5" />
+            Thanks for your feedback!
+          </div>
+        ) : (
+          <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row">
+            <Button
+              className="bg-[#2d73d5] text-white"
+              onClick={() => feedback.mutate("helpful")}
+            >
+              <ThumbsUp className="mr-2 h-4 w-4" />
+              Yes, it was helpful
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => feedback.mutate("learn_more")}
+            >
+              <Lightbulb className="mr-2 h-4 w-4" />
+              Show me more like this
+            </Button>
+          </div>
+        )}
+      </div>
+      {data?.feedback === "learn_more" && (
+        <div>
+          <h2 className="text-2xl font-bold">You may also enjoy…</h2>
+          {related.length ? (
+            <div className="mt-5 grid gap-5 md:grid-cols-3">
+              {related.slice(0, 5).map((x) => (
+                <BriefingCard key={x.id} briefing={x} />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-[#aebdce]">
+              More Aviation Briefings coming soon.
+            </p>
+          )}
+        </div>
+      )}
+      <div className="rounded-2xl border border-[#55739b]/40 bg-[#0d1929] p-6">
+        <h2 className="flex items-center text-xl font-bold">
+          <Share2 className="mr-2 h-5 w-5" />
+          Save, share, or print
+        </h2>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {data?.authenticated ? (
+            <Button variant="outline" onClick={() => save.mutate()}>
+              <Bookmark
+                className={`mr-2 h-4 w-4 ${data.saved ? "fill-current" : ""}`}
+              />
+              {data.saved ? "Saved" : "Save Briefing"}
+            </Button>
+          ) : (
+            <Button asChild variant="outline">
+              <Link
+                href={`/register?returnTo=${encodeURIComponent(location.pathname)}`}
+              >
+                <Bookmark className="mr-2 h-4 w-4" />
+                Create a free account to save
+              </Link>
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => share("copy", "")}>
+            <Copy className="mr-2 h-4 w-4" />
+            Copy Link
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() =>
+              share("email", `mailto:?subject=${title}&body=${page}`)
+            }
+          >
+            <Mail className="mr-2 h-4 w-4" />
+            Email
+          </Button>
+          <Button
+            variant="outline"
+            aria-label="Share on Facebook"
+            onClick={() =>
+              share(
+                "facebook",
+                `https://www.facebook.com/sharer/sharer.php?u=${page}`,
+              )
+            }
+          >
+            <Facebook className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            aria-label="Share on LinkedIn"
+            onClick={() =>
+              share(
+                "linkedin",
+                `https://www.linkedin.com/sharing/share-offsite/?url=${page}`,
+              )
+            }
+          >
+            <Linkedin className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            aria-label="Share on Instagram"
+            title="Share on Instagram"
+            onClick={shareToInstagram}
+          >
+            <Instagram className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            aria-label="Share on X"
+            onClick={() =>
+              share(
+                "x",
+                `https://twitter.com/intent/tweet?url=${page}&text=${title}`,
+              )
+            }
+          >
+            X
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              trackEvent("aviation_briefing_printed", {
+                briefingId: briefing.id,
+              });
+              window.print();
+            }}
+          >
+            <Printer className="mr-2 h-4 w-4" />
+            Print Briefing
+          </Button>
+        </div>
+      </div>
+      <div className="rounded-2xl border border-[#55739b]/40 bg-[#0d1929] p-6">
+        <h2 className="text-xl font-bold">
+          Know someone with an interesting aviation story or expertise?
+        </h2>
+        <p className="mt-2 text-[#aebdce]">
+          Help the RSF editorial team discover a future topic or contributor.
+        </p>
+        <Button
+          className="mt-4 bg-[#2d73d5] text-white"
+          onClick={() => setSuggestOpen(true)}
+        >
+          Suggest a Future Aviation Briefing
+        </Button>
+      </div>
+      <Dialog open={suggestOpen} onOpenChange={setSuggestOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Suggest a Future Aviation Briefing</DialogTitle>
+            <DialogDescription>
+              This is an editorial suggestion, not a contributor application.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[
+              ["Your name", "name"],
+              ["Your email", "email"],
+              ["Suggested person or organization", "suggestedPerson"],
+              ["Organization", "organization"],
+              ["Topic", "topic"],
+              ["Optional website", "website"],
+            ].map(([label, key]) => (
+              <div key={key}>
+                <Label>{label}</Label>
+                <Input
+                  value={(suggestion as any)[key]}
+                  type={key === "email" ? "email" : "text"}
+                  onChange={(e) =>
+                    setSuggestion({ ...suggestion, [key]: e.target.value })
+                  }
+                />
+              </div>
+            ))}
+            <input
+              className="hidden"
+              tabIndex={-1}
+              autoComplete="off"
+              value={suggestion.company}
+              onChange={(e) =>
+                setSuggestion({ ...suggestion, company: e.target.value })
+              }
+            />
+            <div className="sm:col-span-2">
+              <Label>Why would this make a good briefing?</Label>
+              <Textarea
+                value={suggestion.reason}
+                onChange={(e) =>
+                  setSuggestion({ ...suggestion, reason: e.target.value })
+                }
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Optional notes</Label>
+              <Textarea
+                value={suggestion.notes}
+                onChange={(e) =>
+                  setSuggestion({ ...suggestion, notes: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <Button
+            onClick={() => submitSuggestion.mutate()}
+            disabled={
+              submitSuggestion.isPending ||
+              !suggestion.name ||
+              !suggestion.email ||
+              !suggestion.suggestedPerson ||
+              !suggestion.topic ||
+              suggestion.reason.length < 10
+            }
+          >
+            Submit suggestion
+          </Button>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}

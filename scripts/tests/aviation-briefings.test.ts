@@ -166,3 +166,12 @@ test("private briefing performance reports anonymous readership and engagement",
   assert.match(panel, /Lifetime/);
   assert.match(admin, /<BriefingPerformancePanel \/>/);
 });
+
+test("reader sharing identifies LinkedIn and provides an Instagram-safe fallback", () => {
+  const engagement = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingEngagement.tsx", import.meta.url), "utf8");
+  assert.match(engagement, /linkedin\.com\/sharing\/share-offsite/);
+  assert.match(engagement, /aria-label="Share on Instagram"/);
+  assert.match(engagement, /navigator\.share/);
+  assert.match(engagement, /network: "instagram"/);
+  assert.match(engagement, /The link is ready to paste into Instagram/);
+});
